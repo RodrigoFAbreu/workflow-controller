@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-3-followups",
+  "requirements": {
+    "REQ-1": {
+      "description": "Fix /approve-review plan's conditional fifth-member staging bug: replace the two-call staging sequence with one coherent guarded staging operation, preserving the empty-index/dirty-index protection, conditional fifth-member pinned-SHA verification, the durable approval journal, exact staged-set assertions before commit, and the current state-pin/staging order.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-2": {
+      "description": "Add a regression test exercising the real conditional fifth-member path with actual Git staging; verify the no-fifth-member approval path still behaves identically; verify rollback/retry semantics remain correct when staging or commit creation fails. Update _GOLDEN_COMMAND_FILE_SHA256[\"approve-review.md\"] to the new post-edit hash, with a rationale comment.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-3": {
+      "description": "Change /review-implementation so it writes the authoritative current REVIEW_FEEDBACK.md directly, following /review-plan's operator-facing writeback pattern, without importing plan-specific ledger/state-transition semantics.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-4": {
+      "description": "Add pre-write and immediate-pre-write freshness/rejection checks so a review cannot overwrite feedback after its subject becomes stale during the review; define safe replacement semantics for feedback belonging to an older implementation bundle, explicitly including the cross-work-item flat-feedback_dir case (decision, revised twice: round-6 GPT-FUP-R6-I01 first resolved this by making /review-implementation's own write target work-item scoped via ensure_scoped_feedback_dir; round-7 local plan review (LPR-R7-B01) rejected that fix as a silent-shadowing hazard against every operator-facing doc still naming the flat path, and this revision resolves it instead with a refusal guard, assert_feedback_not_owned_by_other_work_item, that leaves resolve_feedback_dir completely untouched -- see REQ-21). Split REVIEW_PROTOCOL.md's \"that choice is always the user's, never automatic\" sentence by command, and record the explicit decision not to add a Reviewer role: provenance field to /review-implementation's output, accepting that a locally-authored round can reach EXTERNAL_APPROVE with no on-disk authorship marker (LPR-R2-B01).",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-5": {
+      "description": "Add regression coverage proving newly written feedback binds successfully through parse_review_feedback_binding_fields/assert_feedback_matches_bundle; add regression proving stale prior feedback is replaced only by a successful review of the current bundle; add negative tests proving a stale/rejected/wrong-phase implementation review writes nothing. Update _GOLDEN_COMMAND_FILE_SHA256[\"review-implementation.md\"], rewrite TestReviewImplementationCommandStaticConformance's two report-only exact-literal assertions to the new narrower invariant, and update EXPECTED_ASSERTION_COUNT[\"...review-implementation.md\"] from 1 to 2 with its rationale comment -- verified by running workflow_state_demo_test.py within this checkpoint, not deferred to CP4. The plan-conformance doc-assertion test (REQ-6) is added as a further method on TestReviewImplementationCommandStaticConformance, not by mirroring workflow_integration_test.py:1342 (LPR-R2-O02).",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-6": {
+      "description": "Apply the deferred plan-conformance-read follow-up: add <bundle_dir>/PLAN.md and plan_path to /review-implementation's read list and a plan-conformance search arm to its verification step, mirroring /review-plan's existing instruction.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-7": {
+      "description": "Leave /review-functional completely unchanged; update shared documentation only to state its unchanged behavior unambiguously alongside /review-implementation's new behavior.",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "REQ-8": {
+      "description": "Normalize persisted review-role/review-stage identifiers (local_model_plan_review, manual_external_plan_review) to canonical SCREAMING_SNAKE_CASE for all new writes, while readers/parsers remain able to understand legacy lowercase values, immutable historical review evidence is not rewritten, and every live non-terminal work item's already-persisted legacy-cased ledger is migrated to canonical casing in the same checkpoint (LPR-R2-I02), refusing cleanly via AmbiguousPlanReviewStageKeyError rather than resolving by dict-iteration order if a work item's ledger ever holds two conflicting raw keys for one canonical stage (GPT-FUP-R6-I02; see REQ-22).",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-9": {
+      "description": "Update reviewer-role templates and exact-token validation (/review-plan, /record-manual-plan-review), live canonical operator documentation, and test fixtures wherever these tokens appear in active code paths -- without touching completed work items' immutable plan documents, dry-run evidence, or untracked concurrent scratch documentation. Extend the read-site inventory to /review-plan step 7's round-computation prose and /record-manual-plan-review's exact-match-expectation prose, both of which are model-performed reads outside the Python compatibility-normalization helper (LPR-R2-O01.1-.2).",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-10": {
+      "description": "Add regression tests proving canonical new values are written, legacy values remain readable where compatibility is required, malformed/ambiguous values still refuse cleanly -- including a mixed legacy+canonical duplicate with conflicting values, refused by normalize_plan_review_stages's AmbiguousPlanReviewStageKeyError, independent of dict key-iteration order, alongside a byte-identical duplicate collapsing cleanly (GPT-FUP-R6-I02; see REQ-22) -- historical evidence does not need mutation to remain readable, and a non-terminal work item holding legacy lowercase plan_review_stages keys reads correctly via the compatibility-read helper; add a regression proving migrate_plan_review_stage_keys migrates every live non-terminal work item's legacy-cased ledger to canonical casing, is idempotent, leaves terminal-phase records byte-unchanged, and produces a state that validates through _validate_work_item/validate_state; document the compatibility-aliasing removal/deprecation policy in terms of a real, checkable condition (\"no live non-terminal work item holds a legacy-cased key,\" true immediately after this checkpoint's migration) rather than an open-ended alias (LPR-R2-I02). Update _GOLDEN_COMMAND_FILE_SHA256[\"review-plan.md\"]/[\"record-manual-plan-review.md\"] to their new post-edit hashes, with rationale comments.",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-11": {
+      "description": "Do not add AWAITING_LOCAL_IMPLEMENTATION_REVIEW, new implementation-review lifecycle states or ledger stages, reviewer quorum, or controller-specific lifecycle redesign anywhere in this milestone -- including as an inert Reviewer role: provenance marker on /review-implementation's output (REQ-4's decision).",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "REQ-12": {
+      "description": "Re-run the full existing Python workflow test suite, including both real-repository demo suites, with zero regressions; keep this a focused maintenance milestone that preserves the proven lifecycle.",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "REQ-13": {
+      "description": "State the explicit disposition of WORKFLOW_V2_3_FOLLOWUPS.md item 2's required follow-up #8 and item 3's required follow-up #7's \"operator documentation, and the lifecycle/reference diagram\" half: both declined for this milestone (untracked, out-of-scope scratch content, per CLAUDE.md's git restrictions), and both recorded in the source document's own Status fields as remaining open against the \"before freezing the reusable workflow baseline\" step, not silently dropped (LPR-R2-I01).",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "REQ-14": {
+      "description": "Add the trailer final-paragraph requirement sentence to approve-review.md step 6.4, mirroring milestone-implement.md/bootstrap-workflow-v2.md verbatim, with a doc-assertion proving it; name the classify_plan_approval_outcome -> AMBIGUOUS -> \"stop immediately\" consequence in \"Executing this plan\"; decline accept-milestone.md's identical gap for this milestone and record it by name as an out-of-scope, same-defect-class gap (LPR-R3-B01).",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-15": {
+      "description": "Close the pre-existing workflow_state_demo_test.py red baseline at base_commit: add fb134ac4f7cdabb7861d170bb61331bb8d9f5a14 to _GRANDFATHERED_WORKFLOW_TRAILER_LOOKALIKE_VIOLATIONS with a rationale comment, and add docs/ai-workflow/WORKFLOW_V2_3_FOLLOWUPS_PLAN.md to docs/ai-workflow/registry/workflow-v2-1-core-artifacts.json's implementation-stage excluded_paths, matching commit aaa1247's precedent -- so CP2's and CP4's full-suite runs need no baseline-relative carve-out (LPR-R3-B01, LPR-R3-I01).",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-16": {
+      "description": "Correct \"Independent inspection\"'s \"never dispatched on by name\" claim about the step= label; name the merged staging window's own step label, \"step-5-stage-and-pin\", add it to PLAN_APPROVAL_ORDINARY_STEPS in the same commit as the command-choreography change, and add a regression test proving plan_approval_step_class(\"step-5-stage-and-pin\") returns \"ordinary\" and that the guard is acquired under it; leave the now-unacquired \"step-6.2-stage-ordinary\" and \"step-5-declaration-pin\" in place, documented as intentionally inert rather than removed, each with its own call-site count (LPR-R3-B02, LPR-R4-I03).",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-17": {
+      "description": "Add review-implementation.md's own step 6 and step 7 provenance statements to CP2's edit inventory alongside the REVIEW_PROTOCOL.md sentence, with the same per-command precision (/review-functional's equivalent language stays true and untouched); correct the \"existing step 6, unchanged in shape\" phrasing so it does not read as \"unchanged in text\"; add a doc-assertion proving neither sentence still reads as manual operator installation (LPR-R3-I02).",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-18": {
+      "description": "Rewrite \"Independent inspection\" item 3's migration paragraph so it states revision 3's actual disposition -- this item's own non-terminal plan_review_stages ledger is migrated in place by CP3's one-time migrate_plan_review_stage_keys run, workflow-v2-3's terminal record is not -- and adjust item (b)'s reader-tolerance justification to match; keep both cross-references to this paragraph (CP3's design, twice) pointed at the timing claim they actually rely on (LPR-R4-B01).",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-19": {
+      "description": "Add MILESTONE_WORKFLOW.md's AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW \"Allowed actions\" clause to CP2's doc-sync inventory alongside the \"Hard gates summary\" sentence, with the same precision (still non-gating, still advances no phase, still writes no WORKFLOW_STATE.json, but no longer \"writes nothing\"); state that /review-functional's own equivalent AWAITING_FUNCTIONAL_REVIEW clause stays true and untouched; extend CP4's coherence cross-check to cover it (LPR-R4-I01).",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "REQ-20": {
+      "description": "Add review-implementation.md's frontmatter description: line to CP2's edit inventory, narrowed the same way as the two report-only assertions; state explicitly that the frontmatter's state_writer: false and review-subject: bundle fields are verified-correct-and-unchanged rather than merely unmentioned (LPR-R4-I02).",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-21": {
+      "description": "Resolve GPT-FUP-R6-I01 without resolve_feedback_dir-side effects (LPR-R7-B01, round-7 local plan review, superseding revision 7's ensure_scoped_feedback_dir mechanism): immediately before /review-implementation's write, call the new workflow_fingerprint.assert_feedback_not_owned_by_other_work_item(existing_content, work_item_id=work_item_id) against whatever content already sits at the unmodified resolve_feedback_dir(repo_root, work_item_id) path, and refuse with FeedbackOwnedByOtherWorkItemError (scripts/workflow_fingerprint.py, beside MissingFeedbackBindingFieldError/FeedbackBundleMismatchError, LPR-R8-O01), naming both work item ids, when that content's own Work item: binding field names a different work item. resolve_feedback_dir itself, and every other command's resolution against it, are never touched. This guard runs only after the write's own other guards pass, so the four negative \"writes nothing\" paths still create nothing on disk. /review-plan's own inherited flat-fallback exposure for a work item that has not yet run /review-implementation is explicitly not changed. On a refusal from this guard, print the composed report in full exactly as step 7 already does, and state the refusal alongside it -- the operator loses only the write, not the completed review; on a refusal from the second assert_bundle_not_rejected call, suppress the report entirely, exactly as the existing step 4 call already does -- this checkpoint's write does not change that call's withdrawal invariant (LPR-R9-B01, round-9 local plan review, narrowing LPR-R8-I01, which had generalized report-printing to either guard). Hand-creating a scoped .ai-review/<work_item_id>/feedback/ directory is explicitly not an endorsed remedy (LPR-R7-B01); when the blocking file's own Work item: value names a work item A tracked in docs/ai-workflow/WORKFLOW_STATE.json and live -- its phase still advancing toward MILESTONE_COMPLETE on some scheduled cause, not dormant (LPR-R12-I01, round-12 local plan review, narrowing this rule so the dormant branch below reads as a disjoint case rather than a contradiction) -- the operator must leave it in place and wait. A's feedback is live for the entire span between the round that wrote it and A's own terminal phase, not just two phases (LPR-R10-B01, round-10 local plan review, correcting LPR-R9-I01's two-member consumption-keyed set, which inverted the guard's purpose): it is unconsumed while A's phase is AWAITING_EXTERNAL_PLAN_REVIEW, AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW, or AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW, and consumed-but-still-read while A's phase is REVISING_PLAN (MILESTONE_WORKFLOW.md's own entry condition for that phase is exactly \"REVIEW_FEEDBACK.md exists\"), APPLYING_REVIEW_FEEDBACK (entered only by /apply-implementation-review step 0's own enter_applying_review_feedback, scripts/workflow_state.py:9087-9107), or AWAITING_PLAN_APPROVAL/AWAITING_TECHNICAL_APPROVAL (approve-review.md step 1 reads REVIEW_FEEDBACK.md for the most recently reviewed round's status/bundle ID there too, and a deleted file forfeits A's EXTERNAL_APPROVE basis). AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is not an edge case: it is the exact phase this checkpoint's own new write leaves A in immediately after /review-implementation A runs, so the recovery must never call that phase spent. Only once a live A's phase independently reaches MILESTONE_COMPLETE -- the phase at which this plan is willing to guarantee no later command reads the file for A, not merely the only phase at which one happens to be absent (LPR-R11-O01, round-11 local plan review) -- may the operator delete it by hand and re-run; deletion, not the re-run alone, is what clears the refusal. Two work items both parked at AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW against the same flat path genuinely block each other until one reaches MILESTONE_COMPLETE, which can be a long wait. When the blocking file's own Work item: value names no entry in WORKFLOW_STATE.json at all, there is no phase to consult; the operator judges it by hand from the file's own Reviewed bundle ID:/Reviewed base commit: fields and may delete it if it is leftover (LPR-R10-O01, round-10 local plan review). When that value instead names an entry that is tracked but dormant -- its phase not advancing toward MILESTONE_COMPLETE on any scheduled cause, LEGACY_READY named explicitly since scripts/workflow_state.py:294-295 documents it as \"dormant, not terminal\" and milestone-8 occupies it today -- the phase signal is not a wait either; the operator judges the file by hand from its own Reviewed bundle ID:/Reviewed base commit: fields exactly as the untracked branch, and may delete it if it is leftover (LPR-R11-I02, round-11 local plan review). Add a regression proving one work item's pending flat-path feedback survives byte-identical across a different work item's refused /review-implementation write, and that the refused run creates no .ai-review/<work_item_id>/feedback/ directory as a side effect (LPR-R8-I01), plus the same-work-item and no-existing-file paths still succeed.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-22": {
+      "description": "Resolve GPT-FUP-R6-I02: replace the bare per-key dict-comprehension sketch for reading plan_review_stages with a dedicated normalize_plan_review_stages helper (scripts/workflow_state.py) used at all three read sites and by migrate_plan_review_stage_keys; when two raw keys normalize to the same canonical stage, collapse silently only if their values compare equal, otherwise raise AmbiguousPlanReviewStageKeyError (new exception, scripts/workflow_state.py, beside its ten sibling plan-review-stage exceptions -- corrected from eight, LPR-R12-O03, round-12 local plan review -- corrected from scripts/workflow_fingerprint.py, LPR-R7-I01) naming both raw keys -- never resolving by dict key-iteration order. Add regressions for both the conflicting-refusal and identical-collapse cases, exercised at both the read-helper and migration-function levels, with the refusal case proven independent of insertion order.",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-23": {
+      "description": "Add MILESTONE_WORKFLOW.md's \"Feedback file locations\" section to CP2's doc-sync inventory, correcting \"Both are read, never written, by Claude\" to state REVIEW_FEEDBACK.md is written by /review-plan (pre-existing) and, after this checkpoint, by /review-implementation too, while FUNCTIONAL_REVIEW.md stays read-only; extend CP4's coherence cross-check from three sites to four (LPR-R8-I02, round-8 local plan review).",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    }
+  }
+}

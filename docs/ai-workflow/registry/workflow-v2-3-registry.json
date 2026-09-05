@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-3",
+  "plan_revision": 13,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Add /review-implementation command",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": "1"
+    },
+    {
+      "id": "CP2",
+      "name": "Add /review-functional command, shared docs, final verification",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": "1"
+    }
+  ]
+}

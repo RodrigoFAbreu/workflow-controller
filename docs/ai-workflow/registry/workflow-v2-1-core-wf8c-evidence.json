@@ -1,0 +1,963 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-1-core",
+  "_comment": "WFR-68's companion evidence-binding artifact (WFO-LEDGER-COVERAGE property (ii)): binds a reconciliation-table item to the exact dotted unittest test id that discharges it, read by scripts/workflow_state.py's _reconciliation_evidence_by_item() alongside <work_item_id>-ledger-status.json's own per-entry evidence field. Populated incrementally, WF8c session by session (session_target: 'multiple sessions, deliberately not 1') -- this is the first evidence-backfill increment, covering items with an unambiguous, single-purpose test already naming that item number in its own docstring. Every entry below was independently verified (python3 -m unittest <evidence>) to resolve and pass before being recorded here. Items not yet listed here remain unresolved by _pre_flight_wfo_ledger_coverage until a later session adds their evidence -- expected and correct for a checkpoint whose own session_target is multiple sessions. Convergence pass 8 (ledger I10) re-pointed 37 entries (items 171-218 that named a scoped-remediation test) to workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface: /accept-scoped-remediation was retired as an unreachable dead contract and the tests that only proved it were deleted with it, so those items are now evidenced by the retirement's closure rather than by behaviour that no longer exists. Each re-pointed entry's note quotes the test id it named before. The reconciliation table's own (status, owner) pairs are deliberately unchanged -- those requirements were genuinely IMPLEMENTED under WF8b at the time, and the approved plan table is not rewritten after the fact.",
+  "generated_at_commit": "e3be7321a7ca06a8cda55f9fa667551dc1001a0f",
+  "entries": [
+    {
+      "item": 166,
+      "evidence": "workflow_integration_test.TestRequirementsMappingTableConformance.test_every_wfr_row_description_matches_json_exactly",
+      "note": "Requirements-table row-count conformance, now derived rather than a literal (WF8c clause (f))"
+    },
+    {
+      "item": 231,
+      "evidence": "workflow_state_test.TestRegistryReadBoundToCurrentPlanApproval",
+      "note": "Protected-document approval freshness for a non-registry plan-stage path (WF8c clause (i)), dirty half"
+    },
+    {
+      "item": 232,
+      "evidence": "workflow_state_test.TestRegistryReadBoundToCurrentPlanApproval",
+      "note": "Protected-document approval freshness for a non-registry plan-stage path (WF8c clause (i)), clean-committed-but-unapproved half"
+    },
+    {
+      "item": 267,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_forbidden_mutation_alongside_generation_record_refuses",
+      "note": "Cross-work-item forbidden-mutation check in the provenance interval (WF8c clause (d))"
+    },
+    {
+      "item": 318,
+      "evidence": "workflow_fingerprint_generalization_test.TestPrepareAiReviewShImplementationStageHeadGuard.test_interrupted_archive_write_leaves_previous_archive_intact",
+      "note": "Archive generation is temp-file-plus-rename, interruption-safe (WF8c clause (j))"
+    },
+    {
+      "item": 339,
+      "evidence": "workflow_fingerprint_test.TestGenerationDiagnosticMetadata.test_require_metadata_default_false_matches_pre_existing_behavior",
+      "note": "assert_local_generation_matches require_metadata default False (WF8c clause (k))"
+    },
+    {
+      "item": 340,
+      "evidence": "workflow_fingerprint_test.TestGenerationDiagnosticMetadata.test_current_worktree_root_and_head_ignores_worktree_identity_json",
+      "note": "current_worktree_root_and_head reads live Git, not WORKTREE_IDENTITY.json (WF8c clause (k))"
+    },
+    {
+      "item": 342,
+      "evidence": "workflow_integration_test.TestAssertLocalGenerationMatchesCallSiteConformance",
+      "note": "assert_local_generation_matches two-live-caller conformance (WF8c clause (k))"
+    },
+    {
+      "item": 343,
+      "evidence": "workflow_integration_test.TestGenerationDiagnosticMetadataCallerWordingConformance",
+      "note": "Caller-facing documentation names both live callers (WF8c clause (k))"
+    },
+    {
+      "item": 344,
+      "evidence": "workflow_fingerprint_demo_test.TestImplementationStageAgainstRealRepository.test_review_protocol_md_is_a_real_protected_path_not_excluded",
+      "note": "REVIEW_PROTOCOL.md is an implementation-stage protected path, not excluded (WF8c clause (k))"
+    },
+    {
+      "item": 349,
+      "evidence": "workflow_integration_test.TestPlanApprovalFailureAtomicityTransaction",
+      "note": "WFR-63 plan-approval failure-atomicity transaction: durable journal (WF8c clause (g), part 1)"
+    },
+    {
+      "item": 350,
+      "evidence": "workflow_integration_test.TestPlanApprovalFailureAtomicityTransaction",
+      "note": "WFR-63 plan-approval failure-atomicity transaction: outcome classifier + index-only rollback (WF8c clause (g), part 1)"
+    },
+    {
+      "item": 354,
+      "evidence": "workflow_state_completion_obligations_test.TestStateLock",
+      "note": "state_lock/state_transaction primitive, real concurrent-process serialization"
+    },
+    {
+      "item": 355,
+      "evidence": "workflow_state_demo_test.TestCheckpointReachabilityConformanceLive.test_holds_against_the_live_repository",
+      "note": "Checkpoint-reachability conformance, run against this repository's real live content (WF8c clause (m), part 2)"
+    },
+    {
+      "item": 356,
+      "evidence": "workflow_state_completion_obligations_test.TestCompleteWorkItemObligationGate",
+      "note": "complete_work_item's UnsatisfiedCompletionObligationError gate"
+    },
+    {
+      "item": 357,
+      "evidence": "workflow_state_completion_obligations_test.TestDiscoverStateWriters",
+      "note": "discover_state_writers: writer/publisher/non-writer classification"
+    },
+    {
+      "item": 358,
+      "evidence": "workflow_state_completion_obligations_test.TestResolveCompletionObligationsPipeline",
+      "note": "resolve_completion_obligations end-to-end pipeline"
+    },
+    {
+      "item": 360,
+      "evidence": "workflow_state_completion_obligations_test.TestResolveCompletionObligationsPipeline",
+      "note": "resolve_completion_obligations end-to-end pipeline"
+    },
+    {
+      "item": 361,
+      "evidence": "workflow_state_completion_obligations_test.TestIsolatedExecution",
+      "note": "Verifier isolated execution: -I mode, PYTHONPATH ignored, scratch-tree-only"
+    },
+    {
+      "item": 368,
+      "evidence": "workflow_state_test.TestRealProcessConcurrentTakeover",
+      "note": "Real-OS-process concurrent-takeover arm (WF8c clause (e))"
+    },
+    {
+      "item": 371,
+      "evidence": "workflow_state_test.TestPublishPlanRevision",
+      "note": "publish_plan_revision: v1/2.1 governed publication, idempotent retry"
+    },
+    {
+      "item": 376,
+      "evidence": "workflow_state_test.TestReconciliationTableParsing.test_resolve_owner_picks_leftmost_occurring_checkpoint_not_a_fixed_preference",
+      "note": "Reconciliation-table owner resolution picks the leftmost-occurring checkpoint"
+    },
+    {
+      "item": 222,
+      "evidence": "workflow_state_test.TestRecordBundleGenerationSameContentOutcome",
+      "note": "record_bundle_generation's same_content outcome leaves reviewed_implementation_head/implementation_revision unchanged (WF8c clause (c), same-content republication part 1)"
+    },
+    {
+      "item": 306,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_pinned_block_refuses_a_stale_bundle_revise_laundering_the_current_pin",
+      "note": "A stale-bundle REVISE round cannot launder a durably pinned current BLOCK into USER_OVERRIDE (WF8c clause (a), positive-membership half)"
+    },
+    {
+      "item": 320,
+      "evidence": "workflow_state_test.TestTechnicalReviewBlockPins",
+      "note": "D2a technical_review_block_pins ledger: durable per-bundle_id recording (WF8c clause (a), pin half)"
+    },
+    {
+      "item": 321,
+      "evidence": "workflow_state_test.TestTechnicalReviewBlockPins",
+      "note": "is_technical_review_block_pinned is scoped per bundle_id -- a stale pin never carries forward onto a distinct bundle (WF8c clause (a), pin half)"
+    },
+    {
+      "item": 322,
+      "evidence": "workflow_state_test.TestTechnicalReviewBlockPins",
+      "note": "record_technical_review_block_pin is idempotent per bundle_id -- a repeat observation records no duplicate entry (WF8c clause (a), pin half)"
+    },
+    {
+      "item": 328,
+      "evidence": "workflow_state_test.TestTechnicalReviewBlockPins",
+      "note": "PinLedgerMonotonicityError: removal/mutation of an existing pin refused, exactly-one-append allowed, duplicate bundle_id refused (WF8c clause (a), pin half)"
+    },
+    {
+      "item": 235,
+      "evidence": "workflow_state_test.TestRegistryReadBoundToCurrentPlanApproval.test_all_protected_paths_matching_approved_bytes_succeeds",
+      "note": "Regression guard: a multi-path manifest where nothing has drifted still succeeds -- the amended registry-approval-freshness check is not overly strict"
+    },
+    {
+      "item": 236,
+      "evidence": "workflow_state_test.TestRegistryReadBoundToCurrentPlanApproval.test_newly_plan_approved_registry_revision_succeeds",
+      "note": "Regression guard: a genuinely revised registry covered by its own fresh plan_approval is trusted, not treated as automatically stale"
+    },
+    {
+      "item": 237,
+      "evidence": "workflow_state_test.TestRegistryReadBoundToCurrentPlanApproval.test_terminal_routing_refuses_stale_plan_metadata",
+      "note": "The shared choke point (resolve_own_registry_completion_status) protects complete_work_item/`/accept-milestone`'s terminal routing identically to the non-terminal path"
+    },
+    {
+      "item": 238,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_first_implementation_stage_call_sets_head_and_revision_one",
+      "note": "implementation_revision advancement against a first-ever round (no prior reviewed_implementation_head) always advances from no revision to revision 1"
+    },
+    {
+      "item": 245,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_side_branch_merge_topology_refuses",
+      "note": "A non-first-parent (merge side-branch) edge anywhere in the interval makes it unenumerable and refuses (WFR-61's generalized provenance-interval gate)"
+    },
+    {
+      "item": 246,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_exact_reviewed_head_zero_gap_is_reachable",
+      "note": "An ordinary (non-recovered) round's interval -- exactly one commit, T = S -- continues to be accepted, the generalized interval definition's regression guard"
+    },
+    {
+      "item": 167,
+      "evidence": "workflow_state_test.TestRegistryCompletionStatusAndGates.test_milestone_complete_gate_reachable_truth_table",
+      "note": "milestone_complete_gate_reachable(phase=AWAITING_FUNCTIONAL_REVIEW, is_terminal=True) succeeds unchanged -- the regression guard proving the new scoped-remediation guard does not disturb the one path that must never break"
+    },
+    {
+      "item": 168,
+      "evidence": "workflow_state_test.TestRegistryCompletionStatusAndGates.test_non_terminal_names_next_selectable_checkpoint",
+      "note": "registry_completion_status names the actual next selectable (non-terminal, not blocked) checkpoint -- this finding's own reproduction shape"
+    },
+    {
+      "item": 169,
+      "evidence": "workflow_state_test.TestRegistryCompletionStatusAndGates.test_non_terminal_names_blocked_checkpoint_via_structured_attribute",
+      "note": "registry_completion_status names the blocked (dependency-missing) checkpoint identically to the selectable case, never a selectable one"
+    },
+    {
+      "item": 170,
+      "evidence": "workflow_state_test.TestCompleteWorkItemOwnRegistryGuard.test_raises_incomplete_own_checkpoints_when_own_registry_non_terminal",
+      "note": "complete_work_item itself (not only the command layer) raises IncompleteOwnCheckpointsError directly on a non-terminal on-disk registry -- direct unit test, defense-in-depth from the command-level guard"
+    },
+    {
+      "item": 171,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_first_scoped_acceptance_mirrors_wf8b_shape` -- /accept-scoped-remediation happy path: appends exactly one scoped_remediation_acceptance entry, sets phase to IMPLEMENTING, worktree clean after success"
+    },
+    {
+      "item": 191,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_first_scoped_acceptance_mirrors_wf8b_shape` -- End to end: the checklist-evidence-commit flow followed by scoped acceptance reaches scoped acceptance from a clean tree, with no manual out-of-contract commit (same test as item 171, which asserts the resulting record shape; this item's own claim is the clean-worktree/no-manual-commit property the same test also asserts)"
+    },
+    {
+      "item": 173,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_terminal_registry_refuses_scoped_gate` -- /accept-scoped-remediation refuses when the registry is actually terminal, naming /accept-milestone as the correct command instead -- scoped_remediation_gate_reachable is False, milestone_complete_gate_reachable is True, and complete_work_item succeeds directly"
+    },
+    {
+      "item": 176,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_exact_replay_on_second_invocation` -- A second invocation naming the identical round is recognized as an exact-round replay (via resolve_scoped_remediation_round's load-and-compare) and idempotently reports the existing acceptance commit"
+    },
+    {
+      "item": 186,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_cross_invocation_reviewed_implementation_head_changed` -- /accept-scoped-remediation refuses when the live reviewed_implementation_head disagrees with the value about to be recorded (one of the item's two OR'd conditions; the sibling test_cross_invocation_checklist_blob_changed covers the checklist-digest half, not separately bound here)"
+    },
+    {
+      "item": 187,
+      "evidence": "workflow_state_test.TestCompleteWorkItemOwnRegistryGuard.test_registry_coverage_cannot_be_satisfied_by_a_fabricated_caller_dict",
+      "note": "complete_work_item's signature carries no registry parameter at all -- asserted directly via inspect.signature, closing the fabricated-in-memory-dict bypass class"
+    },
+    {
+      "item": 190,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_dirty_checklist_path_refused` -- /accept-scoped-remediation refuses outright, before computing or recording any blob, when the functional-review checklist path has an uncommitted working-tree change"
+    },
+    {
+      "item": 192,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound` -- resolve_scoped_remediation_round reports ExactReplay only after loading and comparing recorded fields (test_exact_replay) -- a matching trailer whose recorded fields disagree is refused as ConflictingDuplicate instead (the test_conflicting_duplicate_* methods in the same class), never silently treated as a replay"
+    },
+    {
+      "item": 194,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_missing_evidence` -- /accept-scoped-remediation refuses outright, naming the missing round key, when no Workflow-Functional-Checklist evidence commit is discoverable for the exact live round (MissingFunctionalChecklistEvidenceError)"
+    },
+    {
+      "item": 197,
+      "evidence": "workflow_state_test.TestFunctionalChecklistTrailerDiscovery.test_ambiguous_functional_checklist_trailer_raises",
+      "note": "Two first-parent-reachable Workflow-Functional-Checklist commits sharing byte-identical checklist content are refused as ambiguous, never silently picked between"
+    },
+    {
+      "item": 198,
+      "evidence": "workflow_state_test.TestFunctionalChecklistTrailerDiscovery.test_corrected_checklist_produces_new_current_evidence_ahead_of_earlier",
+      "note": "Two evidence commits with genuinely distinct checklist content coexist without ambiguity; discover_current_functional_checklist_evidence reports the newer as the round's current evidence"
+    },
+    {
+      "item": 201,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_conflicting_duplicate_wrong_active_pointer` -- resolve_scoped_remediation_round refuses as ConflictingDuplicate when the recorded active_work_item_id_at_acceptance disagrees with the live global active_work_item_id -- the changed-active-pointer case"
+    },
+    {
+      "item": 202,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_conflicting_duplicate_wrong_checklist_path` -- resolve_scoped_remediation_round refuses as ConflictingDuplicate when the recorded functional_checklist_path disagrees with the live fixed constant -- the wrong-checklist-path case"
+    },
+    {
+      "item": 205,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_exact_replay` -- An exact replay with every one of the eight canonically compared fields matching the live values is still reported ExactReplay -- regression guard proving the widened comparison does not turn a genuine replay into a false ConflictingDuplicate refusal"
+    },
+    {
+      "item": 210,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationConfirmationParsing` -- parse_scoped_remediation_confirmation_binding_fields refuses a confirmation missing either required field, or carrying a malformed (non-40-hex) value for either, naming which field failed (docstring-confirmed: UserConfirmationRejectedError, naming which field is missing or malformed)"
+    },
+    {
+      "item": 211,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_malformed_evidence_trailer_blob_disagrees_with_actual_commit` -- The pre-commit evidence guard refuses when a confirmation names a discoverable commit whose actual committed content disagrees with both the confirmed blob and the trailer's own embedded blob component -- the hand-crafted-trailer case (MalformedFunctionalChecklistEvidenceError)"
+    },
+    {
+      "item": 212,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_wrong_work_item_confirmation_never_finds_evidence` -- The pre-commit evidence guard refuses when a confirmation names an evidence commit that does not belong to the exact live round (wrong work_item_id sub-case), refused identically to the missing-evidence case (MissingFunctionalChecklistEvidenceError)"
+    },
+    {
+      "item": 213,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_conflicting_duplicate_wrong_evidence_commit` -- resolve_scoped_remediation_round's exact-replay comparison validates functional_checklist_evidence_commit as one of the eight canonical fields -- a disagreement here is refused as ConflictingDuplicate, not reported ExactReplay"
+    },
+    {
+      "item": 221,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_second_unexpected_descendant_with_same_trailer_value_refuses",
+      "note": "Two distinct commits both carrying a Workflow-Bundle-Generation-Record trailer for the identical (work_item_id, implementation_revision) pair refuse as ambiguous, never silently picking the nearer one -- exact match to the item's own claim"
+    },
+    {
+      "item": 216,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval",
+      "note": "The provenance-interval gate's accept/refuse distinction from the plain SHA-equality rule it replaces: the class's own accept-case tests (e.g. test_exact_reviewed_head_zero_gap_is_reachable, test_one_excluded_commit_between_p_and_t_is_reachable) prove reviewed_implementation_head != live HEAD is accepted whenever the discovered provenance commit T exists; test_wrong_trailer_key_is_never_discovered_and_refuses proves the same inequality refuses when no such commit is discoverable at all"
+    },
+    {
+      "item": 242,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_single_recovery_then_full_interval_validates",
+      "note": "WFR-62 recovery command (WF8c clause (b)): P -> S -> U -> S2 real commit-graph shape, S2 created as first-parent child of U carrying the unchanged trailer plus Workflow-Supersedes, interval reachable/valid afterward, implementation_revision unchanged throughout"
+    },
+    {
+      "item": 243,
+      "evidence": "workflow_state_test.TestVerifyImplementationProvenanceRecovery.test_content_differs_not_applicable",
+      "note": "Recovery refuses (ImplementationProvenanceRecoveryNotApplicableError) outright when the candidate content genuinely differs from reviewed_implementation_head's -- a genuinely new round is never treated as recoverable staleness"
+    },
+    {
+      "item": 247,
+      "evidence": "workflow_state_test.TestVerifyImplementationProvenanceRecovery.test_protected_commit_in_interval_propagates_underlying_error",
+      "note": "GPT-R46-002 scenario A regression guard, exact reproduction: a protected-path edit followed by a byte-for-byte revert leaves endpoint content equal, but the recovery precondition still refuses (ProtectedPathInProvenanceIntervalError), naming the protected-path commit found mid-interval"
+    },
+    {
+      "item": 252,
+      "evidence": "workflow_state_test.TestApplyImplementationProvenanceRecovery.test_bumps_state_revision_and_last_transition_only",
+      "note": "apply_implementation_provenance_recovery's own contract, directly asserted: phase/reviewed_implementation_head/implementation_revision confirmed byte-identical before and after, state_revision advanced by exactly one -- the operation's 'no round-identity field changes' guarantee"
+    },
+    {
+      "item": 254,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_malformed_field_diff_recovered_commit_refuses",
+      "note": "A recovery commit S2 that touches a WORKFLOW_STATE.json field outside phase/state_revision/last_transition (reviewed_implementation_head, illegally changed) refuses the terminal-commit role-specific check, naming the offending commit and field"
+    },
+    {
+      "item": 262,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_exact_reviewed_head_zero_gap_is_reachable",
+      "note": "An ordinary generation-record commit S carrying exactly the canonical two-trailer set is discovered by the scoped lookup and validates as the terminal member of a one-commit interval (same regression-guard test already bound to item 246)"
+    },
+    {
+      "item": 268,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_second_sequential_recovery_chain_validates",
+      "note": "Two independent sequential recoveries (S -> S2, then S2 -> S3) both preserve implementation_revision unchanged; the resulting five-commit first-parent graph P -> S -> U1 -> S2 -> U2 -> S3 is produced and independently validated by verify_implementation_provenance_interval, with S3 the confirmed current terminus"
+    },
+    {
+      "item": 271,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_orphan_recovered_role_commit_with_no_predecessor_refuses",
+      "note": "A Workflow-Supersedes trailer naming a plausible-looking target (P) that is never itself a generation-record commit -- outside the matched set for this (work_item_id, implementation_revision) pair -- is refused as malformed provenance (MalformedProvenanceSupersessionChainError), never silently accepted"
+    },
+    {
+      "item": 280,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_second_sequential_recovery_chain_validates",
+      "note": "The canonical two-recovery chain P -> S -> U1 -> S2 -> U2 -> S3 succeeds end to end -- S and S2 both pass their own role-specific generation-record validation (not merely path classification) inside the same successful verify_implementation_provenance_interval call this test already asserts for item 268"
+    },
+    {
+      "item": 172,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestRegistryCompletionStatusAndGates.test_scoped_remediation_gate_reachable_truth_table` -- /accept-scoped-remediation's phase gate refuses whenever phase != AWAITING_FUNCTIONAL_REVIEW (single boolean-equality code path; phase='IMPLEMENTING' is the truth table's exercised negative case, the same branch AWAITING_TECHNICAL_APPROVAL/MILESTONE_COMPLETE would take)"
+    },
+    {
+      "item": 179,
+      "evidence": "workflow_state_test.TestCompleteWorkItemOwnRegistryGuard.test_raises_incomplete_own_checkpoints_when_own_registry_non_terminal",
+      "note": "End-to-end reproduction: technical_approval CURRENT with a non-terminal own registry still refuses MILESTONE_COMPLETE via complete_work_item directly, proving no documented path reaches it without first routing through /accept-scoped-remediation (same test bound to item 170, this item is its end-to-end framing)"
+    },
+    {
+      "item": 180,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestApplyScopedRemediationAcceptance.test_is_pure_no_side_effects_until_caller_persists_and_commits` -- apply_scoped_remediation_acceptance is a pure in-memory transform; a simulated interruption between the state write and the caller's own commit step leaves neither in effect (item 180's state-write/commit atomicity claim)"
+    },
+    {
+      "item": 183,
+      "evidence": "workflow_state_test.TestCompleteWorkItemOwnRegistryGuard",
+      "note": "RegistryCoverageError for every named sub-case: missing file, untracked file, malformed JSON, non-object JSON (test_registry_coverage_missing_file/_untracked_file/_malformed_json/_not_a_json_object)"
+    },
+    {
+      "item": 184,
+      "evidence": "workflow_state_test.TestCompleteWorkItemOwnRegistryGuard.test_registry_coverage_wrong_work_item_id",
+      "note": "RegistryCoverageError when the on-disk registry's own declared work_item_id disagrees with the work item being completed -- the foreign/mismatched-registry case"
+    },
+    {
+      "item": 185,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestApplyScopedRemediationAcceptance.test_entry_has_exactly_eleven_documented_fields` -- scoped_remediation_acceptance entry schema asserted against SCOPED_REMEDIATION_ACCEPTANCE_FIELDS, exactly eleven fields"
+    },
+    {
+      "item": 188,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_distinct_implementation_revision_is_a_new_round_not_a_replay` -- A genuinely new remediation round (distinct implementation_revision) against a checkpoint already scoped-accepted once resolves NoExistingRound, never a conflicting duplicate"
+    },
+    {
+      "item": 189,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound` -- Same-round collision refused as ConflictingDuplicate, naming the disagreeing field, across every documented field: active_work_item_id_at_acceptance, functional_checklist_evidence_commit, functional_checklist_path (revision 26 widened set)"
+    },
+    {
+      "item": 193,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_ambiguous_history` -- resolve_scoped_remediation_round reports AmbiguousHistory when discover_scoped_remediation_commits raises AmbiguousScopedRemediationTrailerError, from trailer matching alone before WORKFLOW_STATE.json content is read"
+    },
+    {
+      "item": 195,
+      "evidence": "workflow_state_test.TestFunctionalChecklistTrailerDiscovery",
+      "note": "Checklist-evidence discovery is idempotent by content: unchanged content re-committed twice resolves identically (test_interrupted_preparation_is_safe_to_retry), a genuinely corrected checklist produces a new distinct current commit ahead of the earlier one (test_corrected_checklist_produces_new_current_evidence_ahead_of_earlier)"
+    },
+    {
+      "item": 199,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_fresh_confirmation_for_corrected_evidence_succeeds` -- Pre-commit evidence guard binds to the round's current checklist-evidence commit only when the current-turn confirmation itself names that current commit -- positive half of item 199's narrowing claim (revision 27, GPT-R40-001)"
+    },
+    {
+      "item": 200,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_stale_confirmation_after_correction_wrong_commit` -- A confirmation naming a stale, superseded evidence commit is refused rather than silently upgraded to the newer current evidence -- discovery identifying the newer commit as current never alone authorizes an existing confirmation to it"
+    },
+    {
+      "item": 207,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_happy_path_returns_current_evidence` -- Ordinary happy path: confirmation names evidence commit A, A remains the round's current (only) checklist-evidence commit, verification succeeds"
+    },
+    {
+      "item": 208,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_wrong_evidence_commit_is_refused_as_stale` -- A second, distinct evidence commit created after the user's confirmation named the first makes that confirmation stale; /accept-scoped-remediation's own orchestration (not just the unit-level guard) refuses via StaleFunctionalChecklistConfirmationError"
+    },
+    {
+      "item": 209,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestFunctionalChecklistEvidenceGuard.test_fresh_confirmation_for_corrected_evidence_succeeds` -- After a fresh confirmation naming the corrected (current) evidence commit, verification succeeds and binds to it -- proving the prior refusal (item 208) is not a permanent block"
+    },
+    {
+      "item": 273,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_end_to_end_implementation_round_reaches_external_review_durably",
+      "note": "New this round (batch 7): a real pre-bundle SELF_REVIEWING_IMPLEMENTATION round exercises record_bundle_generation end to end -- durable post-S phase read, S independently passes validate_bundle_generation_record_commit, and a separately re-derived fresh-session read agrees"
+    },
+    {
+      "item": 274,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_post_fix_end_to_end_round_converges_on_the_same_target_phase",
+      "note": "New this round (batch 7): the same end-to-end flow from the post-fix source phase APPLYING_REVIEW_FEEDBACK after a REVISE round converges on the identical target phase and passes the same role validator"
+    },
+    {
+      "item": 275,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_illegal_source_phase_refused_naming_actual_and_legal_phases",
+      "note": "record_bundle_generation invoked from any phase other than the two legal source phases refuses outright, naming the actual phase and both legal ones"
+    },
+    {
+      "item": 276,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_terminal_commit_with_wrong_target_phase_refuses",
+      "note": "New this round (batch 7): an otherwise well-formed ordinary T that commits a hand-edited target phase other than AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is refused by validate_bundle_generation_record_commit's terminal-commit check"
+    },
+    {
+      "item": 304,
+      "evidence": "workflow_state_test.TestApprovalGateReachability.test_block_never_reaches_gate",
+      "note": "A current, bundle-matching, parse-valid BLOCK feedback file makes the gate unreachable -- approval_gate_reachable('BLOCK') is False, with no override path"
+    },
+    {
+      "item": 305,
+      "evidence": "workflow_state_test.TestApprovalGateReachability.test_missing_feedback_never_reaches_gate",
+      "note": "New this round (batch 7): a missing/unreadable current BLOCK feedback file yields no discoverable status (None), which approval_gate_reachable refuses identically to a literal BLOCK"
+    },
+    {
+      "item": 307,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_revise_round_with_no_override_text_refuses_to_write",
+      "note": "New this round (batch 7): a current, bundle-matching, parse-valid REVISE feedback file with no override text supplied refuses via the mechanism-independent confirmation guard, which runs before the APPROVE/REVISE branch"
+    },
+    {
+      "item": 308,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_revise_round_requires_override_text",
+      "note": "The same current REVISE state, with literal stage-and-work-item-named override text supplied, resolves basis USER_OVERRIDE"
+    },
+    {
+      "item": 309,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_pinned_block_refuses_even_with_no_feedback_file_at_all",
+      "note": "New this round (batch 7): feedback missing entirely (latest_round_status=None) is refused identically to BLOCK once a durable pin exists for the current bundle_id -- closing, together with item 306's stale-bundle case, the two cases revision 37's 'not BLOCK' rule left open"
+    },
+    {
+      "item": 345,
+      "evidence": "workflow_integration_test.TestPlanStageApprovalCommitMembership.test_declaration_never_committed_resolves_five_member_set",
+      "note": "The corrected commit step creates exactly one approval commit containing the artifacts declaration together with the four ordinary approval files, clean working tree, unchanged trailer shape, post-approval manifest verification still succeeds"
+    },
+    {
+      "item": 346,
+      "evidence": "workflow_integration_test.TestPlanStageApprovalCommitMembership",
+      "note": "Both boundary properties of the conditional-inclusion rule: (a) no gratuitous inclusion when the declaration is byte-identical to HEAD (test_declaration_already_committed_and_unchanged_resolves_four_member_set) and (b) bundle-freshness refusal when the declaration moved on again after bundle generation (test_stale_declaration_between_preflight_and_commit_refuses_before_any_mutation) -- bound to the whole class since no single test states both halves of this compound item"
+    },
+    {
+      "item": 175,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestUserConfirmationGuard.test_scoped_remediation_stage_confirmation_not_accepted_for_acceptance` -- New test (no prior coverage existed): extends the existing plan-vs-implementation non-interchangeability property to the fourth APPROVAL_STAGES member, scoped_remediation vs acceptance, in both directions"
+    },
+    {
+      "item": 178,
+      "evidence": "workflow_state_test.TestWorkItemCompletion.test_completing_active_item_resets_pointer",
+      "note": "_base_work_item's default carries no registry_path key (None via .get), and the test passes a non-repository repo_root=Path('.') that would fail any real registry load -- complete_work_item succeeds anyway, proving no registry load is attempted for the registry_path: null (legacy milestone-8) shape"
+    },
+    {
+      "item": 182,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_exact_replay` -- resolve_scoped_remediation_round's own signature carries no phase parameter at all, so its ExactReplay classification is structurally phase-independent by construction; this test exercises the exact-round-replay path (keyed by outstanding_checkpoint_id/implementation_revision, no new commit, existing commit reported) that item 182 requires 'regardless of the current phase'"
+    },
+    {
+      "item": 196,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_confirmation_validated_before_replay_classification_runs` -- New test (no prior coverage existed): a confirmation naming neither the work item nor the stage is refused identically whether a live round already exists (would otherwise resolve ExactReplay) or not (would otherwise proceed as a new acceptance), proving validate_user_confirmation's call site precedes resolve_scoped_remediation_round in both cases"
+    },
+    {
+      "item": 203,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_malformed_unsupported_schema_version` -- An entry with acceptance_record_version=1 (any value other than 2) resolves to MalformedAcceptanceRecord naming acceptance_record_version in its reason, exact match to item 203's claim"
+    },
+    {
+      "item": 359,
+      "evidence": "workflow_fingerprint_demo_test.TestImplementationStageAgainstRealRepository.test_real_diff_since_base_commit_classifies_exhaustively",
+      "note": "Real-repository conformance: every tracked-plus-untracked path changed since base_commit (currently including both docs/ai-workflow/dry-run/ files and, when dirty, docs/improvements/ paths) classifies under the implementation-stage declaration without raising UnclassifiedPathError, enumerated exhaustively via subTest rather than stopping at the first exception -- the exact totality property item 359 requires"
+    },
+    {
+      "item": 177,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_fresh_session_reselects_same_outstanding_checkpoint` -- New test (no prior coverage existed): after a real /accept-scoped-remediation acceptance, state and registry are both re-read from disk/Git alone (git show HEAD:<path>, no in-memory carryover) and select_next_checkpoint re-selects the same outstanding checkpoint -- no new pointer or marker file exists to read"
+    },
+    {
+      "item": 206,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_checklist_correction_first_confirmation_refused_second_succeeds` -- New test (no prior coverage existed): two distinct Workflow-Functional-Checklist evidence commits for the same round (a checklist correction); confirming the original, now-superseded evidence is refused as stale, and only a second confirmation naming the corrected evidence reaches scoped acceptance, bound to the corrected commit/blob"
+    },
+    {
+      "item": 214,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_checklist_correction_first_confirmation_refused_second_succeeds` -- Same test as item 206 (restates the identical GPT-R40-001 failure scenario as its own end-to-end reproduction) -- the checklist-correction-between-review-and-acceptance flow is refused on the stale confirmation and succeeds only on the corrected one"
+    },
+    {
+      "item": 229,
+      "evidence": "workflow_fingerprint_test.TestGenerationDiagnosticMetadata.test_local_staleness_unweakened_by_reviewed_head_generation_head_split",
+      "note": "New test (no prior coverage existed): assert_local_generation_matches still refuses a worktree_root mismatch, and still refuses once a genuine ancestor generation_head (verified via git merge-base --is-ancestor, not a fabricated hash) is left behind by an unrelated later commit -- the local-staleness check's original Milestone-8-incident coverage is unweakened by the reviewed_implementation_head/generation_head split"
+    },
+    {
+      "item": 241,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_bare_head_equality_with_no_generation_record_refuses",
+      "note": "New test (no prior coverage existed): live HEAD exactly equal to reviewed_implementation_head (bare equality genuinely holds), with zero commits made afterward and so no discoverable Workflow-Bundle-Generation-Record commit at all -- the pre-WF8B-003 bare-equality branch is confirmed gone even in the one shape where the old rule would have silently accepted"
+    },
+    {
+      "item": 223,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_post_fix_call_advances_head_and_increments_revision",
+      "note": "record_bundle_generation's implementation_revision write is a pure +1 on the prior value, independent of any Git history it is called against, so a genuinely new protected-content round always advances by exactly one, never more, regardless of how many metadata-only commits intervened first; combined with test_content_differs_resolves_ordinary (TestResolveBundleGenerationOutcome), which proves an intervening record-gen commit does not stop a later protected commit from classifying as a new ordinary round in the first place"
+    },
+    {
+      "item": 225,
+      "evidence": "workflow_state_test.TestResolveBundleGenerationOutcome.test_deleted_or_corrupted_manifest_does_not_affect_outcome",
+      "note": "New test (no prior coverage existed): resolve_bundle_generation_outcome never reads .ai-review/<work_item_id>/current/MANIFEST.md at all (confirmed by reading the function -- it derives its decision from approval_review_content_id and Git trailer discovery alone), so deleting it, replacing it with unparseable garbage, or deleting it again all leave the resolved (same_content, t) outcome byte-for-byte identical"
+    },
+    {
+      "item": 226,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_interrupted_before_durability_commit_resumes_deterministically",
+      "note": "New test (no prior coverage existed): record_bundle_generation is a pure state -> state mutator that never touches its input in place, so an interrupted first call (never persisted or committed) leaves the state a fresh session reads unchanged, and re-attempting the identical call from that same starting state is deterministic -- implementation_revision lands on exactly 1, never doubly advanced by the discarded first attempt"
+    },
+    {
+      "item": 270,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_forked_supersedes_trailer_is_genuine_ambiguity_refuses",
+      "note": "New test (no prior coverage existed): a forked Workflow-Supersedes trailer -- two distinct commits each claiming to recover the same prior generation-record commit T, rather than one recovering the other -- is refused as AmbiguousBundleGenerationRecordTrailerError by _bundle_generation_record_chain_tip's own tie-break, exactly as its docstring predicts for a fork (two candidates each unsuperseded); the only prior fork test (test_second_unexpected_descendant_with_same_trailer_value_refuses) forks the plain ordinary two-trailer role, never the three-trailer recovered one item 270 specifically describes"
+    },
+    {
+      "item": 269,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_second_sequential_recovery_chain_validates",
+      "note": "Pre-existing test: builds the exact P -> S -> U_1 -> S2 -> U_2 -> S3 chain item 269 describes (two sequential recoveries) and confirms verify_implementation_provenance_interval validates the full interval end to end -- S and S2 each satisfying their own generation-record role contract, U_1 and U_2 classified excluded-only -- rather than accepting a shortcut interval computed directly from P to S3; the refusal-side half of the item (any single non-terminal commit instead protected/unclassified/role-invalid) is covered generically by sibling tests in the same class and TestImplementationProvenanceInterval"
+    },
+    {
+      "item": 181,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestApplyScopedRemediationAcceptance.test_is_pure_no_side_effects_until_caller_persists_and_commits` -- New this round (batch 12): the same interrupted-acceptance atomicity property item 180 is already bound to, read from item 181's own resume-side framing -- apply_scoped_remediation_acceptance never mutates its input and produces no commit by itself, so a crash between the state write and the caller's own commit step leaves nothing persisted; a fresh session's checkpoint selection, which discovers acceptance only via a committed Workflow-Scoped-Remediation-Acceptance trailer, therefore treats the interrupted attempt exactly as if it never happened"
+    },
+    {
+      "item": 240,
+      "evidence": "workflow_state_test.TestResolveBundleGenerationOutcome.test_deleted_or_corrupted_manifest_does_not_affect_outcome",
+      "note": "New this round (batch 12): item 240 states outright that its own guarantee is 'consistent with existing item 225's own guarantee' -- same test, same underlying fact (resolve_bundle_generation_outcome never reads .ai-review/<work_item_id>/current/MANIFEST.md, so implementation_revision advancement never depends on it, deleted/corrupted or not)"
+    },
+    {
+      "item": 266,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_exact_reviewed_head_zero_gap_is_reachable",
+      "note": "New this round (batch 12): the same positive case item 262 is already bound to -- an ordinary S carrying exactly the canonical two-trailer set, discovered by the scoped lookup, is validated by verify_implementation_provenance_interval's own terminal-commit role-specific check, which item 266's revision-34 text restates over the corrected five-field set (phase/reviewed_implementation_head/implementation_revision/state_revision/last_transition); the test's t == result assertion is exactly that check succeeding"
+    },
+    {
+      "item": 215,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_full_sequence_reaches_awaiting_functional_review_via_technical_approval",
+      "note": "New this round (batch 13): composes the two already-separately-tested halves (the gate's own P..T interval check and apply_technical_approval's state write) into one real sequence -- P, record_bundle_generation's durability commit S, verify_implementation_provenance_interval confirming S, then apply_technical_approval -- reaching AWAITING_FUNCTIONAL_REVIEW with technical_approval.status == CURRENT, D-Approval-Commits' revised ordering exercised end to end rather than each half in isolation"
+    },
+    {
+      "item": 217,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_protected_commit_refused_at_both_preflight_and_gate_independently",
+      "note": "New this round (batch 13): a genuine protected commit landing between reviewed_implementation_head and the attempted generation/approval point is refused independently at both call sites sharing _classify_generation_record_interval -- verify_implementation_provenance_interval (the P..T gate, previously untested for this exact refusal shape in this class) and resolve_bundle_generation_outcome (the T..head preflight) -- each assertion checking the offending commit's own SHA appears in the raised exception message, the item's own 'naming the offending commit' requirement"
+    },
+    {
+      "item": 174,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd.test_stale_technical_approval_is_the_sole_remaining_blocker` -- New this round (batch 14): item 174's own refusal condition (technical_approval.status != \"CURRENT\") is checked only in accept-scoped-remediation.md's own step 6 prose, never through a named production function, so there is no call site to assert raises. The new test proves the condition is not vacuous: a fixture with every dedicated Python-level gate green (non-terminal registry, scoped_remediation_gate_reachable true, resolve_scoped_remediation_round == NoExistingRound) still has technical_approval.status == \"STALE\", confirming this prose condition is the sole remaining blocker in an otherwise fully-green state -- the superseded-implementation-revision case the item describes"
+    },
+    {
+      "item": 219,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_generation_record_trailer_naming_different_work_item_is_not_discovered",
+      "note": "New this round (batch 15): a well-formed Workflow-Bundle-Generation-Record: wi/1 value on a commit whose Workflow-Work-Item trailer names a different work item is filtered out by _discover_trailer_commits' exact-match scoping and never reaches matches_by_value for this work item -- refuses with BundleGenerationRecordNotFoundError, never an unscoped fallback match"
+    },
+    {
+      "item": 220,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_wrong_implementation_revision_names_both_expected_and_found",
+      "note": "New this round (batch 15): production fix -- verify_implementation_provenance_interval's BundleGenerationRecordNotFoundError previously named only the expected work_item_id/implementation_revision pair; added _other_revision_found_suffix() to also name any other revision's Workflow-Bundle-Generation-Record commit(s) actually discovered for this work item (e.g. a stale previous round), so the message now names both the expected and the found revision as the item requires"
+    },
+    {
+      "item": 248,
+      "evidence": "workflow_state_test.TestVerifyImplementationProvenanceRecovery.test_unclassified_path_added_then_removed_in_interval_refuses_naming_the_commit",
+      "note": "New this round (batch 16): production fix -- classify_path_implementation_stage fails closed by raising UnclassifiedPathError(path) rather than returning an 'unclassified' classification, so _classify_generation_record_interval's own if-classification!=excluded branch was unreachable for a genuinely unclassified path and never named the offending commit the way it already does for a protected one. Now catches UnclassifiedPathError and re-raises ProtectedPathInProvenanceIntervalError with the same commit+path context"
+    },
+    {
+      "item": 244,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_single_recovery_then_full_interval_validates",
+      "note": "New this round (batch 16): retrying verify_implementation_provenance_recovery once S2 is already the current tip raises ImplementationProvenanceRecoveryNotApplicableError (nothing to recover) rather than creating a second superseding commit, and repeated discovery via verify_implementation_provenance_interval still resolves to the same S2"
+    },
+    {
+      "item": 260,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_single_recovery_then_full_interval_validates",
+      "note": "New this round (batch 16): same assertion as item 244 -- the ImplementationProvenanceRecoveryNotApplicableError('already the current Workflow-Bundle-Generation-Record commit') branch only fires because resolve_bundle_generation_outcome correctly re-discovers the already-current S2 as t, proving exact idempotent replay with no commit and no working-tree write"
+    },
+    {
+      "item": 249,
+      "evidence": "workflow_state_test.TestResolveBundleGenerationOutcome.test_multiple_excluded_commits_between_t_and_head_still_resolves_same_content",
+      "note": "New this round (batch 16): several genuinely excluded-only commits between T and candidate head (not just one) are each individually classified and the interval still resolves same_content -- the shared _classify_generation_record_interval walk verify_implementation_provenance_recovery itself reuses (WF8c (b)'s own docstring: 'never a second, separately maintained copy')"
+    },
+    {
+      "item": 253,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_terminal_commit_touching_an_extra_unclassified_path_refuses",
+      "note": "New this round (batch 16): a terminal T carrying the correct trailer but also touching an extra unclassified path refuses via validate_bundle_generation_record_commit's own changed_paths != {state_rel} check -- a strict superset of the extra-protected-path case, naming the commit and the extra path"
+    },
+    {
+      "item": 261,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_malformed_field_diff_recovered_commit_refuses",
+      "note": "New this round (batch 16): a discovered Workflow-Supersedes-trailered commit whose own committed WORKFLOW_STATE.json content violates the recovered role's required field set (here, illegally changing reviewed_implementation_head) is refused as malformed via MalformedBundleGenerationRecordCommitError, naming the offending commit -- never silently accepted as a valid replay"
+    },
+    {
+      "item": 263,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_missing_work_item_trailer_entirely_is_not_discovered",
+      "note": "New this round (batch 16): an otherwise well-formed S missing the Workflow-Work-Item trailer entirely (not merely a wrong value) is not discovered by the scoped lookup at all"
+    },
+    {
+      "item": 264,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_own_work_item_generation_record_is_discoverable_by_its_own_lookup_only",
+      "note": "New this round (batch 16): a well-formed S for other-wi (both trailers self-consistently naming other-wi) is discovered by other-wi's own lookup, and self.WI's own lookup for the same implementation_revision finds nothing -- the trailer genuinely scopes to a positive match, not merely a decorative mismatch (item 219's own negative-half test)"
+    },
+    {
+      "item": 265,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_recovered_s2_missing_work_item_trailer_is_not_discovered",
+      "note": "New this round (batch 16): a recovered S2 carrying exactly the canonical three-trailer set is discovered and validates as the terminal member of its interval; the same S2 missing Workflow-Work-Item is not discovered at all, and live HEAD past the last genuinely discovered record refuses via HeadPastBundleGenerationRecordError"
+    },
+    {
+      "item": 278,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_malformed_ordinary_s_refuses_whole_interval_even_with_valid_recovery_after",
+      "note": "New this round (batch 16): a malformed ordinary S (extra forbidden technical_approval mutation) followed by an otherwise-valid recovery (U, then S2) refuses the whole interval at verify_implementation_provenance_interval, naming S -- the oldest-first walk validates every generation-record commit it encounters and cannot be healed by a later well-formed one (GPT-R50-002 scenario A)"
+    },
+    {
+      "item": 279,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_malformed_recovered_s2_refuses_whole_interval_even_with_valid_recovery_after",
+      "note": "New this round (batch 16): a valid ordinary S followed by a malformed recovered S2 (illegal reviewed_implementation_head mutation), followed by an otherwise-valid second recovery (U, then S3), refuses the whole interval naming S2, even though S3 itself is well-formed (GPT-R50-002 scenario B)"
+    },
+    {
+      "item": 281,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_one_excluded_commit_between_p_and_t_is_reachable",
+      "note": "New this round (batch 16): an unrelated excluded-only commit carrying no Workflow-Bundle-Generation-Record trailer at all remains permitted between provenance records under the generic excluded-only rule alone -- the role-based check in _classify_generation_record_interval only ever fires for a commit matching the trailer scope, confirming an ordinary unrelated commit is never held to role-specific field/trailer requirements"
+    },
+    {
+      "item": 204,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestResolveScopedRemediationRound.test_conflicting_duplicate_entry_implementation_revision_disagrees_with_live` -- New this round (batch 17): the hand-edited-entry-vs-round-key mismatch case -- an entry matching round key B/1 exactly, but live_fields' own current implementation_revision has since diverged, refuses as ConflictingDuplicate naming implementation_revision, rather than being accepted as a valid replay of a round live state has already moved past"
+    },
+    {
+      "item": 230,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_protected_commit_refused_at_both_preflight_and_gate_independently",
+      "note": "New this round (batch 17): a technical approval's own provenance gate refuses on a genuine protected-path commit inside the permitted metadata interval independently of content -- proving the interval itself, not merely content matching, is what the gate verifies, exactly item 230's 'cannot be reproduced by content matching alone if the metadata interval itself was wrong' claim"
+    },
+    {
+      "item": 239,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_post_fix_call_advances_head_and_increments_revision",
+      "note": "New this round (batch 17): implementation_revision advancement exercised against a previous round entered via APPLYING_REVIEW_FEEDBACK (a REVISE round with no technical_approval ever recorded for it) correctly recomputes from that round's own reviewed_implementation_head/implementation_revision (1 -> 2)"
+    },
+    {
+      "item": 277,
+      "evidence": "workflow_state_test.TestRecordBundleGenerationSameContentOutcome",
+      "note": "New this round (batch 17): the same-content outcome's own differentiated behavior -- creates exactly one new commit, transitions/reasserts phase, leaves head and revision unchanged -- as opposed to the caller-level bundle-publication-resume contract's separate no-commit-at-all sub-case when live HEAD already equals the current tip T"
+    },
+    {
+      "item": 362,
+      "evidence": "workflow_state_test.TestResolveCheckpointOwnership",
+      "note": "New this round (batch 17): the D-Checkpoint-Ownership standing regression -- a foreign worktree's step-1 procedure refuses rather than fresh-starting a checkpoint another worktree holds IN_PROGRESS, exercised uncontended/contended/adoption across the class's dedicated methods"
+    },
+    {
+      "item": 363,
+      "evidence": "workflow_state_test.TestCheckpointClaimRecord",
+      "note": "New this round (batch 17): claim/release acquisition and ordering -- claim publication and resolution, idempotent same-checkpoint re-claim, cross-worktree refusal, and release as compare-and-delete"
+    },
+    {
+      "item": 364,
+      "evidence": "workflow_state_test.TestCheckpointClaimRecord",
+      "note": "New this round (batch 17): the same claim/release primitives item 363 cites, exercising the crash-window-adjacent atomic operations (compare-and-swap claim, compare-and-delete release) whose defined outcomes are what item 364's crash-window guarantee rests on"
+    },
+    {
+      "item": 365,
+      "evidence": "workflow_state_test.TestCheckpointClaimRecord.test_claim_across_worktrees_raises_owned_by_other",
+      "note": "New this round (batch 17): the record's integrity property -- two claim attempts for the same work item produce exactly one winner and CheckpointOwnedByOtherWorktreeError for the other, via the atomic claim primitive's own compare-and-swap semantics (real concurrent-OS-process timing specifically is item 368(d)'s own separate, still-open gap, not this item's claim)"
+    },
+    {
+      "item": 366,
+      "evidence": "workflow_state_test.TestExplicitTakeover",
+      "note": "New this round (batch 17): no claim is released on an assumption -- a deleted holder worktree's claim is not automatically released, and explicit takeover is the sole sanctioned exception"
+    },
+    {
+      "item": 367,
+      "evidence": "workflow_state_test.TestResolveCheckpointOwnership.test_adoption_then_resume_when_origination_reference_is_silent",
+      "note": "New this round (batch 17): adoption, the migration path for a checkpoint left IN_PROGRESS before the ownership mechanism landed, resumes safely rather than being stolen or refused outright"
+    },
+    {
+      "item": 373,
+      "evidence": "workflow_state_test.TestAbandonedDestructiveGuardRecovery",
+      "note": "New this round (batch 17): the abandoned-window state (a 'destructive' guard's owner never releases it and its worktree is deleted) has exactly one documented, tested exit"
+    },
+    {
+      "item": 374,
+      "evidence": "workflow_state_test.TestWorktreeIdentityWriteAndResume",
+      "note": "New this round (batch 17): the local identity record's lifecycle -- write, resume, and the ownership key's own stability properties -- is asserted rather than assumed"
+    },
+    {
+      "item": 375,
+      "evidence": "workflow_state_test.TestCheckpointOriginationReference",
+      "note": "New this round (batch 17): the origination reference's own measured-strength limits, asserted rather than asserted away"
+    },
+    {
+      "item": 224,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_single_republication_then_full_interval_validates",
+      "note": "New this round (batch 18): live HEAD moved past T through a legitimate excluded-only commit resolves same_content and record_bundle_generation's same-content outcome creates exactly one new, non-revision-advancing commit S2 -- verified end to end through the approval gate itself"
+    },
+    {
+      "item": 228,
+      "evidence": "workflow_fingerprint_generalization_test.TestPrepareAiReviewShImplementationStageHeadGuard.test_repeat_generation_of_same_round_is_idempotent",
+      "note": "New this round (batch 18): real prepare-ai-review.sh execution -- regenerating the bundle a second time for the exact same durable round (unchanged head/revision) succeeds without any additional revision bump or WORKFLOW_STATE.json write"
+    },
+    {
+      "item": 218,
+      "evidence": "workflow_integration_test.TestRetiredScopedRemediationLeavesNoLiveSurface",
+      "note": "Retired with `/accept-scoped-remediation` (convergence pass 8, ledger `I10`): this item's subject no longer exists, so it is discharged by the retirement's own closure test rather than by behaviour that is gone -- the command, its gate and its single-caller helpers are absent, no live command or operator doc routes anyone to them, and the shared primitives the supported paths reach are asserted present. Original evidence, kept for the record: `workflow_state_test.TestScopedRemediationEndToEnd` -- New this round (batch 19): full /accept-scoped-remediation orchestration exercised end to end -- confirmation parsing, functional-checklist evidence binding against the live snapshot, registry-derived non-terminal resolution, and the resulting provenance commit"
+    },
+    {
+      "item": 370,
+      "evidence": "workflow_state_test.TestResolveCheckpointOwnership",
+      "note": "New this round (batch 19): the real crash window -- a self-owned claim on a checkpoint whose completion is already durable at HEAD is released by the next invocation, returning FRESH with the concrete next checkpoint id when one remains (370(b)) or NO_CHECKPOINT with a null id when the registry is exhausted (370(a)/(c)); no mutation branch is ever reached with a None checkpoint id"
+    },
+    {
+      "item": 233,
+      "evidence": "workflow_state_test.TestApprovalFreshnessAndEntry.test_forged_manifest_entry_with_no_durable_commit_is_never_reachable",
+      "note": "New this round (batch 20): the forged-manifest-entry case -- approved_review_content_id set directly in state to match a rewritten registry's freshly recomputed digest, with no Workflow-Plan-Approval commit ever carrying it; approval_is_current alone is fooled by the forged digest, but implementing_entry_reachable also requires discover_plan_approval_commit to find a real trailer commit and correctly refuses"
+    },
+    {
+      "item": 234,
+      "evidence": "workflow_state_test.TestApprovalFreshnessAndEntry.test_durable_commit_unreachable_from_head_is_never_reachable",
+      "note": "New this round (batch 20): the durable Workflow-Plan-Approval commit exists but is unreachable from live HEAD, isolated from item 233's missing-commit case and from an ordinary content mismatch by reproducing the approved content byte-identically on head -- approval_is_current is satisfied by content alone, but discover_plan_approval_commit still finds no reachable trailer commit and implementing_entry_reachable correctly refuses"
+    },
+    {
+      "item": 227,
+      "evidence": "workflow_fingerprint_generalization_test.TestPrepareAiReviewShImplementationStageHeadGuard.test_interrupted_after_durability_commit_resumes_without_a_second_commit",
+      "note": "New this round (batch 21): no existing test in this class committed a real durability commit S (every other fixture in TestPrepareAiReviewShImplementationStageHeadGuard writes WORKFLOW_STATE.json to the working tree only, uncommitted, via repo.write_workflow_state) with bundle files genuinely absent. The new test commits S for real (carrying the ordinary Workflow-Bundle-Generation-Record/Workflow-Work-Item trailer pair, landed on top of a baseline WORKFLOW_STATE.json commit so S's own role-validation sees only work_items.wi's fields changing, per item 267), confirms MANIFEST.md/review-bundle.tar.gz are genuinely unwritten, then runs prepare-ai-review.sh and confirms: the guard passes via the bounded provenance-interval path (implementation_provenance_interval_reachable, WF8B-003) since reviewed_implementation_head (impl_head) lags live HEAD (S) by exactly the legitimate generation-record commit itself; live HEAD is byte-identical before and after (no second durability commit -- prepare-ai-review.sh never calls git commit, confirmed by inspection, so this is also a structural guarantee, not merely an observed one); MANIFEST.md's own reviewed_implementation_head/generation_head fields both name S (write_manifest_...for_work_item's head parameter defaults to live git HEAD, which is S once S is committed -- this is item 227's own 'reusing the same generation_head and reviewed_implementation_head', not a copy of WORKFLOW_STATE.json's field of the same name); and the durable WORKFLOW_STATE.json at S is unchanged after the script runs (phase/implementation_revision identical -- the script never writes WORKFLOW_STATE.json, confirmed by inspection of its own state_writer: false header declaration)"
+    },
+    {
+      "item": 272,
+      "evidence": "workflow_fingerprint_test.TestGeneratorSideStageDocumentBinding.test_finalize_bundle_generation_withdraws_on_empty_test_results",
+      "note": "New this round (batch 22): genuinely unimplemented before this round -- TEST_RESULTS.md previously carried no machine-checked marker at all (unlike PLAN.md's '(Revision N)' or IMPLEMENTATION_SUMMARY.md's 'implementation_revision:'), so prepare-ai-review.sh's own empty-stub fallback published silently. Built assert_test_results_consistent_with_plan_review_request (workflow_fingerprint.py), requiring a plan-stage TEST_RESULTS.md to state 'stage: plan (revision N)' (N matching plan_revision -- this single check also catches carried-forward implementation-stage evidence, which never states that literal 'plan' stage word) and 'head: <sha>' (matching this generation's own HEAD), wired into finalize_bundle_generation's closing checks alongside the pre-existing PLAN.md byte-identity assertion, sharing its withdraw_bundle/REJECTED-marker failure path. The cited test reproduces the exact historical bug end to end: a real pinned bundle built through the real derive/pin/manifest/archive pipeline, with TEST_RESULTS.md left at its stub-created empty state, is withdrawn (never published) naming item 272 in the refusal message. Direct unit coverage of every sub-condition (missing file, empty file, stale revision, carried-forward implementation-stage content, missing/stale head) lives in the new TestTestResultsConsistencyCheck class (7 methods, all independently verified green); a second finalize-level test, test_finalize_bundle_generation_withdraws_on_carried_forward_test_results, additionally proves the wiring for a stale-revision TEST_RESULTS.md specifically. REVIEW_PROTOCOL.md's TEST_RESULTS.md format documentation updated to state the new required lines for future plan-stage rounds. Item 341 was investigated this session and left unresolved on the user's explicit instruction -- its own text is entirely about the token-grammar validation for the staging/current-symlink bundle-publication redesign the 314-338 reconciliation row already declared SUPERSEDED (never built), so its (status, owner) resolution under the 339-344 row's coarser grouping is structurally wrong (it should read SUPERSEDED/none, matching item 318's precedent), but fixing that requires editing WORKFLOW_V2_PLAN.md's reconciliation table, which stales plan_approval and forces AWAITING_EXTERNAL_PLAN_REVIEW -- deferred to a future bounded reconciliation revision covering the complete set of such stale dispositions, not resolved ad hoc this round."
+    },
+    {
+      "item": 282,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_ordinary_approve_path_never_durably_reads_awaiting_technical_approval",
+      "note": "New this round (batch 23): the real ordinary APPROVE path composed end to end -- P -> S, resolve_approval_basis resolving EXTERNAL_APPROVE against a matching bundle_id, apply_technical_approval landing on AWAITING_FUNCTIONAL_REVIEW -- with an explicit assertion that phase is never the literal string 'AWAITING_TECHNICAL_APPROVAL' at any point in the sequence (WF8c clause (m))."
+    },
+    {
+      "item": 283,
+      "evidence": "workflow_state_test.TestImplementationProvenanceInterval.test_fresh_session_restart_before_approval_leaves_gate_reachable_from_durable_state_alone",
+      "note": "New this round (batch 23): re-reads S's own committed WORKFLOW_STATE.json content directly via _read_json_at_commit_or_empty (never in-memory carryover), confirms phase durably AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW with no technical_approval record, and confirms technical_approval_gate_reachable is still reachable when fed only freshly re-derived values -- proving the gate depends on durable state alone."
+    },
+    {
+      "item": 286,
+      "evidence": "workflow_fingerprint_generalization_test.TestPrepareAiReviewShImplementationStageHeadGuard.test_matching_reviewed_implementation_head_succeeds",
+      "note": "New this round (batch 24): item 286 (amended revision 37) is the T-exactly-equals-HEAD crash-recovery case, distinct from item 227/301's T-lags-HEAD-by-one-legitimate-commit case. The cited test sets reviewed_implementation_head to exactly the live implementation HEAD and runs prepare-ai-review.sh, which succeeds and publishes the bundle -- structurally never invoking record_bundle_generation or git commit (prepare-ai-review.sh's own state_writer: false header, already relied on by item 227's evidence note), proving the 'publishes successfully, performing no commit and never invoking record_bundle_generation' claim."
+    },
+    {
+      "item": 297,
+      "evidence": "workflow_state_test.TestApprovalGateReachability.test_technical_gate_missing_or_block_feedback_never_reaches_regardless_of_other_conditions",
+      "note": "New this round (batch 24): new test added to TestApprovalGateReachability. test_technical_gate_reachable_when_clean_and_matching (pre-existing) already proves the REVISE-reaches-True half; the new test proves the complementary half item 297 itself adds -- latest_round_status=None (missing/stale/unparseable feedback, the same None convention item 305 uses) and latest_round_status='BLOCK' each still return False through technical_approval_gate_reachable even with protected_path_dirty=False/head_matches=True, i.e. every other predicate at its own reachable value."
+    },
+    {
+      "item": 298,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_revise_round_requires_override_text",
+      "note": "New this round (batch 24): item 298 restates item 308's own claim (current REVISE feedback + literal override text supplied -> resolve_approval_basis returns USER_OVERRIDE) at the composite /approve-review-implementation level; the same test already recorded as item 308's evidence discharges it directly -- resolve_approval_basis is the exact function apply_technical_approval's caller in .claude/commands/approve-review.md invokes to decide the basis it then writes into technical_approval.user_confirmation."
+    },
+    {
+      "item": 299,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_matching_approve_feedback_yields_external_approve",
+      "note": "New this round (batch 24): item 299's own text states it is a regression guard confirming items 13/296's already-covered unambiguous-APPROVE path is undisturbed by the REVISE-widened gate -- the cited pre-existing test (current, bundle-matching APPROVE -> EXTERNAL_APPROVE, no override text supplied) is exactly item 13's own claim and is stage-parametrized (resolve_approval_basis takes stage as a plain string with no APPROVE-path branching on its value), so it discharges item 299's identical claim at the implementation stage without needing a second, textually-duplicate test."
+    },
+    {
+      "item": 300,
+      "evidence": "workflow_state_test.TestApprovalBasisResolution.test_revise_round_with_no_override_text_refuses_to_write",
+      "note": "New this round (batch 24): item 300 restates item 307's own claim (current REVISE feedback, gate reachable, no override text supplied -> refuses to write, UserConfirmationRejectedError) framed as 'GPT-R51-002's no-automatic-progression invariant survives the gate's widened reachability' -- the same test already recorded as item 307's evidence discharges it directly."
+    },
+    {
+      "item": 301,
+      "evidence": "workflow_fingerprint_generalization_test.TestPrepareAiReviewShImplementationStageHeadGuard.test_interrupted_after_durability_commit_resumes_without_a_second_commit",
+      "note": "New this round (batch 24): item 301 restates item 227's own claim naming the specific source phase (SELF_REVIEWING_IMPLEMENTATION -> S committed -> crash -> fresh session) -- the same test already recorded as item 227's evidence commits S for real via the ordinary (non-recovered-role) Workflow-Bundle-Generation-Record trailer pair, i.e. the SELF_REVIEWING_IMPLEMENTATION-originated writer shape, and proves the fresh session resumes via the caller-level bundle-publication-resume contract alone with no second commit, no implementation_revision change and no phase rewrite."
+    },
+    {
+      "item": 302,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_single_republication_then_full_interval_validates",
+      "note": "New this round (batch 24): item 302 requires the same crash-boundary resume safety exercised from APPLYING_REVIEW_FEEDBACK after a same-content republication (S2 committed, then crash), confirming the resume path is uniform across both of record_bundle_generation's writer shapes. The cited test commits S2 via the recovered-role Workflow-Supersedes trailer (record_bundle_generation's same_content outcome) and then confirms, via implementation_provenance_interval_reachable/verify_implementation_provenance_interval fed only durably-committed state, that S2 is discovered as the current tip and the whole P->T->S2 chain validates -- exactly the fresh-session discovery a crash-then-resume would perform, for the second writer shape item 227/301's own test exercises for the first."
+    },
+    {
+      "item": 303,
+      "evidence": "workflow_state_test.TestRecordBundleGenerationSameContentOutcome.test_illegal_source_phase_refused_even_for_same_content_outcome",
+      "note": "New this round (batch 24): item 303 claims that invoking record_bundle_generation with live HEAD already at the round's content-verified tip T is unreachable from either legal source phase by construction, and that a hand-constructed harness forcing the call anyway is refused by the ordinary legal-source-phase check. The cited test is exactly that hand-constructed harness: phase=IMPLEMENTING (a phase that, by construction, is never live-current while HEAD sits at T for either legal writer shape) still reaches record_bundle_generation directly and is refused by IllegalBundleGenerationSourcePhaseError -- the same ordinary check, never a special-cased HEAD==T branch."
+    },
+    {
+      "item": 287,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_single_republication_then_full_interval_validates",
+      "note": "New this round (batch 25): pre-existing test, previously bound only to item 224's narrower 'resolves same_content, creates exactly one non-revision-advancing commit' claim. Item 287 restates the same scenario with the full compound claim: post-fix stage, resolve_bundle_generation_outcome resolving same_content against T, record_bundle_generation producing S2 with the three-trailer recovered shape (Workflow-Bundle-Generation-Record unchanged + Workflow-Work-Item + Workflow-Supersedes), reviewed_implementation_head/implementation_revision byte-identical before and after, and the real APPLYING_REVIEW_FEEDBACK -> AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW phase transition -- the last of which the test proves indirectly but conclusively: verify_implementation_provenance_interval (called via validate_bundle_generation_record_commit's own committed_phase == 'AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW' check for the recovered role) succeeds against s2_work_item exactly as committed, which is only possible if the committed phase is that exact value."
+    },
+    {
+      "item": 289,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_republication_then_recovery_chain_validates",
+      "note": "New this round (batch 25): two new tests added to TestSameContentRepublicationEndToEnd, exercising a mixed supersession chain containing one record_bundle_generation same-content-republication link (source phase APPLYING_REVIEW_FEEDBACK) and one standalone /recover-implementation-provenance link (source phase AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW). test_republication_then_recovery_chain_validates builds P -> T -> [republication S2] -> [recovery S3]; the sibling test_recovery_then_republication_chain_validates builds the opposite order, P -> T -> [recovery S2] -> [republication S3]. Both independently validate at verify_implementation_provenance_interval, confirming the chain mechanics never distinguish which of the two legal writers produced a given link."
+    },
+    {
+      "item": 295,
+      "evidence": "workflow_state_test.TestSameContentRepublicationEndToEnd.test_second_sequential_republication_chain_validates",
+      "note": "New this round (batch 25): pre-existing test, not previously bound. Item 295's regression-guard claim -- a matching content-verified generation-record commit reachable from live HEAD but not itself the current tip (a historical, already-superseded S/S2) must not be mistaken for idempotent success -- is exactly what this test's second resolve_bundle_generation_outcome call proves: after S2 supersedes T, a further excluded-only commit resolves outcome ('same_content', s2), never ('same_content', t) or an idempotent no-op against the older, still-reachable-but-superseded T."
+    },
+    {
+      "item": 296,
+      "evidence": "workflow_state_test.TestApprovalGateReachability.test_technical_gate_reachable_for_first_pass_approve_round",
+      "note": "New this round (batch 25): new test added to TestApprovalGateReachability, the APPROVE-round symmetric case to the pre-existing test_technical_gate_reachable_when_clean_and_matching's REVISE case. technical_approval_gate_reachable's own signature carries no phase-history parameter, so this and the REVISE case together confirm the gate's result depends only on the three/four directly-checkable predicates passed in, never on whether APPLYING_REVIEW_FEEDBACK ever occurred."
+    },
+    {
+      "item": 310,
+      "evidence": "workflow_state_test.TestRecordBundleGeneration.test_self_reviewing_implementation_with_changed_content_uses_ordinary_path",
+      "note": "New this round (batch 25): new test added to TestRecordBundleGeneration. Confirms record_bundle_generation's ordinary-outcome path (reviewed_implementation_head set to the new head, implementation_revision advanced by exactly one) is unchanged when invoked from SELF_REVIEWING_IMPLEMENTATION against a prior round's genuinely different content -- revision 38's widening of same-content legality to this source phase does not disturb the pre-existing ordinary case."
+    },
+    {
+      "item": 311,
+      "evidence": "workflow_state_test.TestSameContentRepublicationFromSelfReviewingImplementation.test_republication_from_self_reviewing_implementation_then_full_interval_validates",
+      "note": "New this round (batch 25): new test class TestSameContentRepublicationFromSelfReviewingImplementation, mirroring TestSameContentRepublicationEndToEnd's own APPLYING_REVIEW_FEEDBACK-sourced end-to-end pattern but re-entering SELF_REVIEWING_IMPLEMENTATION for a later checkpoint's own self-review round instead. Proves resolve_bundle_generation_outcome resolves same_content, record_bundle_generation produces a well-formed recovered-role S2 with a real SELF_REVIEWING_IMPLEMENTATION -> AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW transition and reviewed_implementation_head/implementation_revision unchanged, and the resulting chain validates end to end via verify_implementation_provenance_interval/implementation_provenance_interval_reachable -- the exact case revision 35-37 left with no legal outcome (a no-op implementation pass, a plan-only correction, or a fix reverted before publication)."
+    },
+    {
+      "item": 312,
+      "evidence": "workflow_state_test.TestSameContentRepublicationFromSelfReviewingImplementation.test_both_source_phases_independently_satisfy_the_role_contract",
+      "note": "New this round (batch 25): new test in the same new class, building one short same-content-republication chain from each of the two source phases (APPLYING_REVIEW_FEEDBACK/post-fix and SELF_REVIEWING_IMPLEMENTATION/implementation) from a common T, and validating each resulting terminal commit directly via validate_bundle_generation_record_commit -- confirming both independently satisfy condition 4's now-three-combination recovered-role contract, distinguished only by which real phase transition each records."
+    },
+    {
+      "item": 250,
+      "evidence": "workflow_state_test.TestVerifyImplementationProvenanceRecovery.test_illegal_source_phase_refused",
+      "note": "Phase-gate refusal, naming the actual phase and the (now single, per GPT-R51-001/revision 34, D-Commit-Provenance recovery topology) legal phase. Item 250's own text still carries its pre-revision-34 two-phase wording (revision 34's fix log promised an in-place correction to this item that was never mechanically applied to the item text) -- the installed IllegalImplementationProvenanceRecoverySourcePhaseError/verify_implementation_provenance_recovery genuinely enforce the corrected single-legal-phase design, and the cited test's assertion message names both the actual phase and the legal one, discharging the item's operative requirement."
+    },
+    {
+      "item": 251,
+      "evidence": "workflow_state_test.TestValidateImplementationProvenanceRecoveryConfirmation.test_exact_work_item_and_commit_accepted",
+      "note": "New this round: /recover-implementation-provenance previously had only a prose \"wait for go-ahead\" gate with no literal-text-matching guard at all. Added workflow_state.validate_implementation_provenance_recovery_confirmation (sibling to validate_user_confirmation, since recovery is not an APPROVAL_STAGES member) requiring the confirmation text to literally name both the exact work_item_id and the exact superseded commit SHA, and wired it into recover-implementation-provenance.md step 4. TestValidateImplementationProvenanceRecoveryConfirmation (5 tests) covers empty text, generic go-ahead with no SHA, missing work_item_id, wrong commit, and the accepting case."
+    },
+    {
+      "item": 255,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_single_recovery_then_full_interval_validates",
+      "note": "Recovered-role S2 half of the strengthened terminal-check regression guard (a well-formed recovered round passes). The ordinary-S half is already covered by items 245-246 (IMPLEMENTED/WF8b, TestImplementationProvenanceInterval's own regression coverage), so this test discharges the item's only genuinely WF8c-owed half."
+    },
+    {
+      "item": 256,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_single_recovery_then_full_interval_validates",
+      "note": "A bundle staled by a concurrent excluded-only commit while still AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW (before any technical-approval attempt) is recovered via /recover-implementation-provenance -- exactly this test's whole scenario, which never leaves that phase."
+    },
+    {
+      "item": 257,
+      "evidence": "workflow_state_test.TestApplyImplementationProvenanceRecovery.test_bumps_state_revision_and_last_transition_only",
+      "note": "Post-recovery phase reads AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW, never AWAITING_TECHNICAL_APPROVAL -- directly asserted. \"Regardless of which of the two legal source phases\" is vacuous under the corrected single-legal-phase design (see item 250's note); the invariant the item actually cares about (uniform post-recovery target) is what this test proves."
+    },
+    {
+      "item": 258,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryApprovalGateInteraction.test_full_round_trip_approve_recover_stale_refused_fresh_approve",
+      "note": "New this round: new test class tying together the pre-existing, generic resolve_approval_basis exact-bundle_id-match rule (D2/WFR-03) with a real recovery chain, proving B1's pre-recovery APPROVE is refused against B2 (the post-recovery bundle) with no new staleness mechanism -- the existing exact-match rule alone suffices."
+    },
+    {
+      "item": 259,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryApprovalGateInteraction.test_full_round_trip_approve_recover_stale_refused_fresh_approve",
+      "note": "New this round: same test's full round trip -- B1 APPROVE, excluded-only commit, recovery to B2, B1's stale feedback refused against B2, fresh B2 APPROVE succeeds via EXTERNAL_APPROVE -- with implementation_revision/reviewed_implementation_head asserted unchanged throughout."
+    },
+    {
+      "item": 288,
+      "evidence": "workflow_state_test.TestVerifyImplementationProvenanceRecovery.test_protected_commit_in_interval_propagates_underlying_error",
+      "note": "record_bundle_generation's same-content-republication branch and /recover-implementation-provenance both resolve their outcome via the identical, single resolve_bundle_generation_outcome/_classify_generation_record_interval function (WF8c (c)'s own \"never a second, separately maintained copy\" design) -- so the fail-closed backstop this test proves for a protected-path interval commit applies identically to both callers by construction, not by a second, separately-tested branch. The unclassified-path and role-invalid-historical-commit variants are the same function's test_unclassified_path_added_then_removed_in_interval_refuses_naming_the_commit and test_malformed_ordinary_s_refuses_whole_interval_even_with_valid_recovery_after respectively."
+    },
+    {
+      "item": 290,
+      "evidence": "workflow_state_test.TestResolveBundleGenerationOutcome.test_item_290_genuine_content_diff_resolves_ordinary_even_after_excluded_commits",
+      "note": "New this round: new test proving a genuine protected-content diff resolves (\"ordinary\", None) even when preceded by multiple legitimate excluded-only commits, never routed to the same-content-republication branch."
+    },
+    {
+      "item": 291,
+      "evidence": "workflow_state_test.TestImplementationProvenanceRecoveryEndToEnd.test_single_recovery_then_full_interval_validates",
+      "note": "The compound claim -- both post-fix outcomes independently reproducible after a fresh-session restart, plus the caller-level no-op resume outcome independently reproducible -- is discharged by composition: every TestResolveBundleGenerationOutcome test (test_content_differs_resolves_ordinary for the ordinary outcome, test_identical_content_with_clean_excluded_interval_resolves_same_content for same-content) is itself a fresh ScratchRepo plus one direct Git-derived call, i.e. a fresh-session read by construction; and this test's own lines proving a retry once S2 is already the current tip raises ImplementationProvenanceRecoveryNotApplicableError (idempotent no-op, no second superseding commit, re-resolves to the same S2) is exactly the caller-level resume contract's no-op outcome, reproduced from a fresh read each time."
+    },
+    {
+      "item": 292,
+      "evidence": "workflow_state_test.TestRecoveredRoleLegalParentPhaseCombinations.test_item_292_both_recovery_and_republication_parent_phases_independently_validate",
+      "note": "New this round: new test class TestRecoveredRoleLegalParentPhaseCombinations (renamed from TestRecoveredRoleThreeCombinationValidation by workflow-v2-3-followups's own continued scope, once a fourth legal parent phase -- AWAITING_FUNCTIONAL_REVIEW -- made the original count-based name stale; this evidence pointer repaired to match, the test's own behavior for items 292/293/294/313 unchanged), calling validate_bundle_generation_record_commit directly against hand-built recovered-role commits for both the recovery-shaped (parent phase AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW) and republication-shaped (parent phase APPLYING_REVIEW_FEEDBACK) combinations, both independently validating."
+    },
+    {
+      "item": 293,
+      "evidence": "workflow_state_test.TestRecoveredRoleLegalParentPhaseCombinations.test_item_293_awaiting_technical_approval_parent_phase_refused",
+      "note": "New this round: a recovered-role commit whose parent phase is the now-durably-unreachable AWAITING_TECHNICAL_APPROVAL is refused as malformed, naming the phase, even though its trailer/field set is otherwise well-formed."
+    },
+    {
+      "item": 294,
+      "evidence": "workflow_state_test.TestRecoveredRoleLegalParentPhaseCombinations.test_item_294_wrong_committed_phase_refused_despite_legal_parent",
+      "note": "New this round: a recovered-role commit with a legal republication parent phase (APPLYING_REVIEW_FEEDBACK) but a value-unchanged committed phase (the recovery shape, not the required real transition) is refused -- confirming the committed-phase requirement is unconditional and the validator has no notion of \"which command produced this,\" only committed parent/child state."
+    },
+    {
+      "item": 313,
+      "evidence": "workflow_state_test.TestRecoveredRoleLegalParentPhaseCombinations.test_item_313_self_reviewing_parent_wrong_committed_phase_and_illegal_parent_both_refused",
+      "note": "New this round: the symmetric SELF_REVIEWING_IMPLEMENTATION-parent mismatch (committed phase left value-unchanged instead of performing the real transition), plus a wholly illegal parent phase (IMPLEMENTING, outside every legal parent phase) -- both refused, the same-shaped analogue of item 294 (repaired alongside item 292's own note, workflow-v2-3-followups continued scope, external cross-model review round 4: the recovered-role legal set widened from three to four phases when AWAITING_FUNCTIONAL_REVIEW joined it, so a count-based description goes stale the same way the class name item 292 already explains did)."
+    },
+    {
+      "item": 284,
+      "evidence": "workflow_state_test.TestApprovalGateReachability.test_technical_gate_reachable_when_clean_and_matching",
+      "note": "Item 284's own text cites revision 35 (GPT-R51-002), which narrowed AWAITING_TECHNICAL_APPROVAL to APPROVE-only. That narrowing was itself walked back by revision 38 (GPT-R54-001, see D-States' own revision-history header): the entry condition is a positive-membership test admitting either REVISE or APPROVE (never BLOCK), unchanged through revision 90. Item 284's text was never mechanically updated to reflect the revision-38 reversal (the same class of drift as item 250's stale wording). The installed technical_approval_gate_reachable and this pre-existing test correctly implement the CURRENT design: a current, clean, matching REVISE round does reach the gate -- confirmed correct, not a gap."
+    },
+    {
+      "item": 285,
+      "evidence": "workflow_state_test.TestValidateTechnicalApprovalCommit.test_each_representative_forbidden_field_class_refused",
+      "note": "New this round: added workflow_state.validate_technical_approval_commit + MalformedTechnicalApprovalCommitError + TECHNICAL_APPROVAL_COMMIT_FIELDS, mirroring validate_bundle_generation_record_commit's exhaustive-field-set discipline for the technical-approval commit (apply_technical_approval's own exact {technical_approval, phase, state_revision, last_transition} set). The cited test exercises all seven representative forbidden fields item 285 names (plan_approval, active_work_item_id, a checkpoints entry, functional_acceptance_status, reviewed_implementation_head, implementation_revision, another work item's own state), each independently refused. Not yet wired into a live discovery-time caller (no analogue of verify_implementation_provenance_interval exists yet for technical-approval commits) -- a natural follow-up, deliberately left out of this round's scope to avoid touching the live WFO obligation-verification call graph without dedicated review."
+    },
+    {
+      "item": 341,
+      "evidence": "workflow_fingerprint_generalization_test.TestPrepareAiReviewShImplementationStageHeadGuard.test_item_341_archive_command_never_interpolates_a_variable_positional_argument",
+      "note": "New this round: the 339-344 reconciliation row's own rationale already states \"the token-grammar half of these items retires with it [the 314-338 supersession]... WF8c owes the assert_local_generation_matches three-caller/require_metadata half only\" -- but that retirement never got its own SUPERSEDED/none row (unlike item 318, which the same supersession split out explicitly), so the mechanical per-item resolution rule still requires evidence for item 341 specifically. The live flat current/ design has no token and no symlink, so item 341's literal concern cannot occur; verified directly (not assumed) that scripts/prepare-ai-review.sh's sole tar invocation passes the bare literal \"current\" as its positional argument, never a variable -- a real regression guard against this vulnerability class reappearing in a new form, standing in for the item's own inapplicable token-grammar check."
+    },
+    {
+      "item": 351,
+      "evidence": "workflow_integration_test.TestPlanStageApprovalCommitMembership.test_committed_path_set_mismatch_from_a_hook_editing_after_staging_is_caught",
+      "note": "New this round (linking a pre-existing, already-passing test): item 351's exact scenario -- a pre-commit hook that stages an additional path after stage_plan_approval_commit_paths already verified the index, so the resulting commit's changed-path set is wider than what was verified -- is exactly this test's own reproduction, proving assert_committed_path_set_matches (the load-bearing check positioned to catch it, since the pre-commit index checks structurally cannot see a post-staging hook edit) raises CommittedPathSetMismatchError."
+    },
+    {
+      "item": 353,
+      "evidence": "workflow_state_test.TestCanonicalStateSerialization.test_live_workflow_state_bytes_equal_canonical_serialization_of_its_own_parsed_content",
+      "note": "New this round: found and fixed a genuine bug -- _serialize_state used ensure_ascii=True (its own docstring self-contradictorily called this \"not the json.dumps default-by-accident it replaces\" while setting the exact value that default already is), while docs/ai-workflow/WORKFLOW_V2_PLAN.md states ensure_ascii=False as canonical consistently from revision 56 (GPT-R73-002) through revision 90, with no later reversal (three independent citations: line 1984, 10916-10919, and a literal ensure_ascii=False Python snippet at line 21544). Fixed _serialize_state; re-published the live WORKFLOW_STATE.json through state_transaction with an identity mutator to re-encode its own pre-existing escaped \\u2192/\\u2014 sequences into literal UTF-8 bytes (parsed content byte-for-byte unchanged, confirmed before/after; only the encoding changed). Since state_transaction is item 354's single required entry point for all twelve production writers, this one fix establishes the \"every writer\" property item 353 requires by construction. TestCanonicalStateSerialization extended with the two explicit \"obvious neighbour\" negative checks (ensure_ascii=True, sort_keys=True) item 353's own text names, plus a regression guard against the live file ever containing escaped sequences again."
+    },
+    {
+      "item": 369,
+      "evidence": "workflow_state_test.TestExplicitTakeover",
+      "note": "New this round (batch 27): TestExplicitTakeover already covered (d) (taken_over_from atomic displacement) and (f) (absent-observation race); this round adds the three remaining sub-scenarios and strengthens one in place. (a) test_takeover_authorization_binds_to_the_target_checkpoint: the literal is bound to both the observed record and the checkpoint being established -- a literal correctly formed for a different target checkpoint is refused, and the pre-GPT-R81-002 (revision 63) literal shape carrying no target-checkpoint binding at all is refused as the control arm proving the binding is load-bearing. (b) test_takeover_refuses_on_stale_evidence strengthened in place with a before/after byte-compare of the surviving claim record, proving zero mutation rather than inferring it from the exception alone. (c) test_takeover_authorization_not_replayable_against_its_own_rotation: a winning evidence/literal pair replayed unchanged against the claim its own rotation just produced refuses, since the record it names no longer exists. (e) test_takeover_of_corrupt_claim_record_requires_binding_to_that_exact_record: a generic literal is refused against a symlinked (replaceable-unreadable) claim record; a literal correctly bound to a different corrupt record (a symlink to different target bytes, hence a different observation id) does not carry over; the correctly bound literal recovers it and taken_over_from.unreadable_record records the recovery. All eleven TestExplicitTakeover tests independently verified green (python3 -m unittest workflow_state_test.TestExplicitTakeover)."
+    },
+    {
+      "item": 372,
+      "evidence": "workflow_state_test.TestGlobalLockOrderItem372h",
+      "note": "New this round (batch 28): item 372(h)'s own conformance test, not a backfill of pre-existing coverage -- (a)-(g) were already covered by TestGuardFailureSurfaceItem372, but that class's own docstring stated (h) 'is a separate, larger undertaking and is not attempted in this round,' and the plan's own text for both scripts this test wires in states explicitly that each is 'not WF8c's own eventual conformance test, which remains future implementation scope.' Built that eventual test: TestGlobalLockOrderItem372h dynamically loads docs/ai-workflow/dry-run/verify_372h_lock_primitive_predicate.py (completeness arm) and verify_372h_raw_edge_derivation.py (graph arm) from their real on-disk location via importlib, unmodified -- both scripts already implement the full mechanical AST discovery/resolution/releasable-predicate/edge-derivation logic, validated across five external plan-review rounds (revisions 91-96) -- and asserts the same zero-failures property their own main() reports (the eight-primitive forward comparison, the six-code-derivable-edge bidirectional comparison plus the four command-orchestrated edges against the plan's own parsed ten-edge table, blocking-suborder acyclicity, the call-chain-aware single-attempt discriminator, and all required non-vacuousness regressions), reading the live scripts/workflow_state.py and WORKFLOW_V2_PLAN.md exactly as both scripts always have. Both test methods independently verified green (python3 -m unittest workflow_state_test.TestGlobalLockOrderItem372h)."
+    },
+    {
+      "item": 352,
+      "evidence": "workflow_state_demo_test.TestCheckpointOriginationAgainstRealRepository.test_bootstrap_durability_guard_is_rebound_to_a_discovered_durable_commit",
+      "note": "New this round (batch 29): WF8c item 352, both halves. (a) /bootstrap-workflow-v2's step-2 durability guard rebound from the bare plan_approval.approved_review_content_id equality (which trivially agrees with a working-tree-only state write that has no approval commit behind it at all) to workflow_state.implementing_entry_reachable, which additionally requires discover_plan_approval_commit to find a real Workflow-Plan-Approval commit and confirms live HEAD is it or a checkpoint-commit descendant. (b) A new step 0, ownership-aware and guard-aware: reads workflow_state.plan_approval_takeover_evidence before step 1 and stops, naming owner_token/outcome/progress/guard, rather than ever resolving, replacing, or deleting a journal this invocation does not own -- the bare functions already existed (WF8c (g) parts 1-2, items 349-351/353) but were, per the reconciliation table's own evidence column, absent from scripts/ or .claude/commands/ entirely before this round. Bound test confirms both installed-text properties against the real command file and that this repository's own live work item actually satisfies implementing_entry_reachable at real HEAD -- not merely referencing it in prose. Sibling coverage: workflow_state_demo_test..test_bootstrap_step_0_journal_precondition_is_installed_and_ownership_guard_aware (step 0's installed text, ownership/guard phrasing) and workflow_integration_test.TestPlanApprovalMutationGuardAndTakeover.test_takeover_evidence_reports_a_fresh_unstarted_transaction_for_step_0 / .test_takeover_evidence_reports_last_completed_step_and_held_guard_for_step_0 (the underlying plan_approval_takeover_evidence read/observe behavior step 0 depends on, against real ScratchRepo history, including the held-guard/last-completed-step case a crashed transaction actually leaves). All four independently verified green."
+    },
+    {
+      "item": 347,
+      "evidence": "workflow_state_demo_test.TestCheckpointOriginationAgainstRealRepository.test_approve_review_permanent_site_carries_the_full_failure_atomicity_transaction",
+      "note": "New this round (batch 30): WF8c item 347, the permanent-site port. .claude/commands/approve-review.md's plan-stage steps 4a-6b (the old 'Conditional fifth commit member' hardening alone) rewritten as steps 4a-6d carrying the complete failure-atomicity transaction: 4b opens with the plan_approval_takeover_evidence precondition (item 352's own pattern, mirrored here); 4c opens the durable journal (items 347/349); 5/6.1/6.2 stage the fifth member, the ordinary members, and pin the WORKFLOW_STATE.json blob, with 6.2 running item 348(gg)'s own sub-step-6.1a compare-and-swap (plan_approval_state_matches_pre_transaction, new this round) before ever pinning; 6.3 is the staged-set assertion; 6.4 creates the commit under the step-6.5-commit destructive guard; 6a classifies the outcome from durable Git state alone (classify_plan_approval_outcome, item 350) and runs amend recovery (item 348(i)/(jj)/(nn)) on a post-commit verification failure; 6b is the guarded rollback on NOT_COMMITTED (deliberately not plan_approval_guarded_mutation, to avoid orphaning a progress record for a transaction rollback_plan_approval_transaction already closed); 6c materializes via a new target-scoped three-way classifier (classify_plan_approval_materialize_target, new this round, item 348(hh)/(mm)) plus the same fresh whole-file compare-and-swap immediately before the write, so a different work item's own legitimate concurrent write is structurally never discarded rather than merely detected-and-refused; 6d closes the journal. An interim scope guard keeps workflow-v2-1-core's own plan-stage approvals routed through /bootstrap-workflow-v2 until D-Approval-Commits' 'Bootstrap plan-approval procedure' section is withdrawn (the reconciliation table's own stated retirement condition) -- every other work item uses the new mechanism immediately. Two new library primitives (classify_plan_approval_materialize_target, plan_approval_state_matches_pre_transaction) built and unit-tested (TestPlanApprovalMaterializeTargetScopedClassification, 4 tests, including the decisive different-work-item-concurrent-write case). Full composed-procedure coverage: TestPlanApprovalPermanentSiteEndToEnd (4 tests -- happy path, NOT_COMMITTED rollback, 6.2's pre-commit staleness catch, 6c's full-stack concurrent-write refusal). Sibling evidence: workflow_state_demo_test..test_approve_review_refuses_workflow_v2_1_cores_own_plan_approval_until_retirement (the interim scope guard, installed text and live condition both checked). Golden command-file hash updated. Bound test confirms the stale pre-WF8c scope note is gone and every real primitive is named in the installed text."
+    },
+    {
+      "item": 348,
+      "evidence": "workflow_integration_test.TestPlanApprovalPermanentSiteEndToEnd",
+      "note": "New this round (batch 30): WF8c item 348, discharged via item 347's own permanent-site build rather than a separate bootstrap-only artifact. Item 348's own text describes the 'Bootstrap plan-approval procedure' as 'exercised as a live checklist rather than automated code... designed specifically not to require one' -- so its evidence is the same composed procedure item 347 builds and tests, exercised end to end: TestPlanApprovalPermanentSiteEndToEnd's four tests are that live checklist, followed in full against real ScratchRepo git history (open journal, stage fifth member, stage ordinary members, sub-step 6.1a compare-and-swap, pin state blob, staged-set assertion, commit, classify COMMITTED, post-commit verification set, target-scoped materialize classification, fresh compare-and-swap, materialize, close -- clauses (a)-(e)/(gg)/(hh)/(mm) of item 348's own text), plus the NOT_COMMITTED rollback path (clauses covering (q)-(z)'s rollback contract, exercised via rollback_plan_approval_transaction directly, already item-350-evidenced) and the decisive different-work-item concurrency case in full. Not a re-litigation of parts 1-3's own already-IMPLEMENTED per-primitive tests (items 349-351/353) -- this is the composition proof those items' own docstrings note remained a 'follow-up session's scope.'"
+    }
+  ]
+}

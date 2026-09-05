@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-1-core",
+  "plan_revision": 99,
+  "checkpoints": [
+    {
+      "id": "WF0",
+      "name": "Bootstrap: commit the already-reviewed prototype/CI/decision artifacts under Workflow v1, create the one-checkpoint bootstrap continuation command (D-Bootstrap)",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": "1"
+    },
+    {
+      "id": "WF1a",
+      "name": "State file schema: multi-item `WORKFLOW_STATE.json` (`active_work_item_id` + `work_items` map, `work_item_kind` field, `checkpoints` map as sole status source, `governing_workflow_version`, no `branch`/`last_updated`) + `WORKFLOW_CONFIG.json` (repository-level default, pre-activation fail-safe, `supported_versions` enforcement) + local-only `WORKTREE_IDENTITY.json` + validator core",
+      "depends_on": [
+        "WF0"
+      ],
+      "complexity": 5,
+      "session_target": "1"
+    },
+    {
+      "id": "WF1b",
+      "name": "Work-item routing (D1, full text), product/process-milestone init/reset writing into the multi-item map, machine-readable registry file (D-Registry), work-item-ID slug grammar, dual-mode branch for `/milestone-plan`",
+      "depends_on": [
+        "WF1a"
+      ],
+      "complexity": 5,
+      "session_target": "1"
+    },
+    {
+      "id": "WF4a-i",
+      "name": "Canonical fingerprint helpers (**built and twice-corrected as a prototype**: `compute_bundle_id()`, `compute_review_content_id()`, native-git manifest, path classification, test-vector table) \u2014 this checkpoint's remaining scope is wiring the already-working prototype into `prepare-ai-review.sh`/`/approve-review`, plus the deferred implementation-stage manifest and its real fixtures",
+      "depends_on": [
+        "WF1b"
+      ],
+      "complexity": 6,
+      "session_target": "1"
+    },
+    {
+      "id": "WF4a-ii",
+      "name": "Approval states (full D-States blocks applied to `MILESTONE_WORKFLOW.md`), entry/exit split for both new gates, mechanism-independent `/approve-review`/`/accept-milestone` guard (verified against both exposure paths), `REVISE`-with-resolved-findings-can-approve gate, dual-mode branching for `/approve-review`/`/accept-milestone`/`/apply-plan-review`/`/apply-implementation-review`, `CLAUDE.md` gate-count depointer",
+      "depends_on": [
+        "WF4a-i"
+      ],
+      "complexity": 6,
+      "session_target": "1"
+    },
+    {
+      "id": "WF4a-iii",
+      "name": "Approval/checkpoint-completion Git-lifecycle: exact scoped commit-trailer helper with the duplicate-trailer tie-break and recovery (D-Commit-Provenance), per-stage approval-freshness rule, post-approval manifest-match verification",
+      "depends_on": [
+        "WF4a-ii"
+      ],
+      "complexity": 6,
+      "session_target": "1"
+    },
+    {
+      "id": "WF4a-iv",
+      "name": "Two-stage local-then-manual-external plan-review protocol (D-Plan-Review-Stages): `AWAITING_LOCAL_PLAN_REVIEW`/`AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` states, durable `plan_review_stages` ledger, verdict/state transition table, model-independent `/review-plan` and `/record-manual-plan-review` commands, `\"2.1\"`-only revised `/apply-plan-review` exit step, concise `docs/ai-workflow/PLAN_REVIEW_WORKFLOW.md` operator guide. **Mandatory internal commit boundary** (resolves `GPT-R12-006`): states/ledger schema/validator/transition-table write-set land and pass tests first; `/review-plan`'s feedback-writing contract, `/record-manual-plan-review`, the operator guide, and their integration tests land second \u2014 a session may end at that boundary without leaving the checkpoint half-done",
+      "depends_on": [
+        "WF4a-ii"
+      ],
+      "complexity": 6,
+      "session_target": "1-2"
+    },
+    {
+      "id": "WF-M8a",
+      "name": "Milestone 8 legacy import (D-Legacy phase 1): dormant `LEGACY_READY` work-item entry, `LEGACY_V1` record with a real backfilled `approved_review_content_id` and `governing_workflow_version: \"1\"`, branch-reconciliation precondition, user-performed branch integration checklist",
+      "depends_on": [
+        "WF1b"
+      ],
+      "complexity": 4,
+      "session_target": "1"
+    },
+    {
+      "id": "WF-M8b",
+      "name": "Milestone 8 adoption (D-Legacy phase 2): explicit work-item-id selector argument and dormant-to-active promotion logic on `/prepare-functional-review`, version transition `\"1\"` \u2192 `\"2.1\"`, stale-legacy-approval-requires-fresh-review handling",
+      "depends_on": [
+        "WF-M8a",
+        "WF4a-ii",
+        "WF4a-iii"
+      ],
+      "complexity": 4,
+      "session_target": "1"
+    },
+    {
+      "id": "WF2",
+      "name": "Resumable `/milestone-implement`: the stated four-rule selection algorithm (D-Selection), entry validation, worktree-scoped dirty-in-progress resume safety, `WORKTREE_IDENTITY.json` writer, checkpoint-complete-vs-all-complete semantics, dual-mode branching, checkpoint-completion trailers via WF4a-iii's helper",
+      "depends_on": [
+        "WF1b",
+        "WF4a-iii"
+      ],
+      "complexity": 6,
+      "session_target": "1"
+    },
+    {
+      "id": "WF4b",
+      "name": "Requirements: immutable mapping file + mutable ledger doc physically separated (D4b), functional-resolution ledger",
+      "depends_on": [
+        "WF1b"
+      ],
+      "complexity": 4,
+      "session_target": "1"
+    },
+    {
+      "id": "WF4c",
+      "name": "General functional-remediation cycle (3-way branch; stale-before-edit ordering; regenerates the post-fix bundle that advances `reviewed_implementation_head`)",
+      "depends_on": [
+        "WF4a-iii"
+      ],
+      "complexity": 5,
+      "session_target": "1"
+    },
+    {
+      "id": "WF5",
+      "name": "Review bundle v2 hardening: manifest (both fingerprint fns, never themselves inputs; worktree_root/HEAD recorded for staleness), `.ai-review/<work_item_id>/` relayout with a stated compatibility migration, NUL-safe `-z` parsing in `prepare-ai-review.sh`, binaries/unusual-path test vectors, detached-HEAD + base-SHA script fixes, feedback bundle-ID/base-commit/work-item fields + stale-feedback rejection, source-proposal exclusion, stage-completeness validation",
+      "depends_on": [
+        "WF4a-i",
+        "WF4b"
+      ],
+      "complexity": 6,
+      "session_target": "1"
+    },
+    {
+      "id": "WF8a-i",
+      "name": "Automated conformance/fixture suite, part 1: CI wiring for the existing prototype suite (**done** \u2014 `.github/workflows/ci.yml`), plus fixture harness scaffolding for the remaining checkpoints' own test needs",
+      "depends_on": [
+        "WF1a",
+        "WF1b",
+        "WF4a-i"
+      ],
+      "complexity": 4,
+      "session_target": "1"
+    },
+    {
+      "id": "WF8a-ii",
+      "name": "Automated conformance/fixture suite, part 2: cross-checkpoint integration fixtures, dual-mode command behavior under both `governing_workflow_version` branches for every command in the completed enumeration, including the bootstrap command's own conformance test (`OPUS-R10-016`) and the two-stage plan-review protocol's integration coverage (`GPT-R11-009`)",
+      "depends_on": [
+        "WF8a-i",
+        "WF2",
+        "WF4a-ii",
+        "WF4a-iii",
+        "WF4a-iv",
+        "WF4b",
+        "WF4c",
+        "WF5",
+        "WF-M8a",
+        "WF-M8b"
+      ],
+      "complexity": 6,
+      "session_target": "1-2"
+    },
+    {
+      "id": "WF-Activate",
+      "name": "Sole activation boundary: validates WF8a-ii's conformance suite, flips `WORKFLOW_CONFIG.json`'s repository-level default to `2.1`, commits with a `Workflow-Activation` trailer; also owns the durable `Workflow-Rollback` trailer path and the latest-event missing-config recovery rule (D-Self-Governance)",
+      "depends_on": [
+        "WF8a-ii"
+      ],
+      "complexity": 3,
+      "session_target": "1"
+    },
+    {
+      "id": "WF8b",
+      "name": "Manual multi-session dry run: all round-1 scenarios + legacy-import + remediation-cycle + dirty-worktree-resume, run against the isolated synthetic `v2.1-dry-run` work item after activation",
+      "depends_on": [
+        "WF-Activate"
+      ],
+      "complexity": 7,
+      "session_target": "multiple sessions, deliberately not 1",
+      "completion_obligations": [
+        "WFO-STATE-SERIALIZATION"
+      ]
+    },
+    {
+      "id": "WF8c",
+      "name": "**(new, revision 81, `OPUS-R101-002`; scope expanded and corrected, revision 82, `OPUS-R102-*`)** Successor to `WF8b`, not a reopening of it: delivers the genuinely remaining `WF8b`-continued-scope obligations the revision-81/82 reconciliation confirms absent or partial. **(a)** The `BLOCK`-laundering protection, both halves together, reassigned from the `COMPLETE` `WF4a-ii` by revision 82 after both were confirmed absent \u2014 the implementation-stage gate's positive-membership rule (items 306/309: `resolve_approval_basis` still refuses only `BLOCK`, so a stale-bundle `REVISE` overwriting a current `BLOCK` yields `USER_OVERRIDE`; the standing test at `workflow_state_test.py:2281-2293` must be **updated, never deleted**) and `D2a`'s durable `BLOCK`-verdict pin (items 320-322/328: `technical_review_block_pins` recording, per-`bundle_id` scoping, idempotency, `PinLedgerMonotonicityError`). **(b)** `WFR-62`'s stale-`generation_head` recovery \u2014 `/recover-implementation-provenance`, the `Workflow-Supersedes` trailer, multi-recovery chains. **(c)** Same-content bundle-generation republication idempotency. **(d)** Item 267's cross-work-item forbidden-mutation check. **(e)** Item 368(d)'s real-OS-process concurrent-takeover arm. **(f)** Item 166's stale row-count literal, restated as a derived property rather than advanced 60\u219268. **(g)** `WFR-63`'s plan-approval failure-atomicity transaction, built **once at the permanent site** (`/approve-review` step 4a/6), after which the quiescence window and the bootstrap-site-specific index-pinning sub-scenarios retire on recorded evidence \u2014 revision 81's \"possibly already retirable\" premise was refuted and withdrawn. **(h)** `WFR-67`'s `REJECTED`-bundle lifecycle / `review-subject:` declarations / generator-side pinned-projection binding, plus item 272's plan-stage stage-document consistency check. **(i)** Items 231/232's protected-document approval freshness, reassigned from the `COMPLETE` `WF4c`. **(j)** Item 318's temp-file-plus-rename archive replacement. **(k)** Items 339-344's `assert_local_generation_matches` three-caller conformance and `require_metadata` strict mode. **(l)** The one-line `bootstrap-workflow-v2.md` driver-range edit, performed by this checkpoint's **own first invocation**, after which a fresh session is required. **(m)** (added revision 83, `OPUS-R103-001`) Item 355's own checkpoint-reachability conformance \u2014 the per-item `(status, owner)` resolution rule over clauses (a)-(d), including the (b1)/(b2) limbs \u2014 built together with `WFO-LEDGER-COVERAGE`'s `<work_item_id>-ledger-status.json` artifact below, since (b2) is a read of that same artifact and only becomes executable once it exists. Plus: builds and gets approved the `WFO-LEDGER-COVERAGE` obligation (`WFR-68`) itself, with revision 82's totality / evidence-for-`IMPLEMENTED` / monotonicity properties and revision 83's added entry-uniqueness property (`OPUS-R103-003`), so the ledger's subject is the plan's own item set rather than a self-declared label set \u2014 the mechanism that makes this checkpoint's own future completion safe to trust. **(n)** (added revision 85, `GPT-R106-002`, Important) Before its own final technical review, `WF8c` adds both `<work_item_id>-ledger-status.json`'s and `<work_item_id>-wf8c-evidence.json`'s exact concrete paths to `<work_item_id>-artifacts.json`'s `implementation_stage.protected_paths` \u2014 the same self-referential-carve-out pattern the artifacts file already applies to its own path (`OPUS-R25-006`/`OPUS-R26-004`) \u2014 so a post-approval edit to either artifact stales `technical_approval` instead of silently letting an obligation's evidence pointer be replaced with an unrelated already-green test while the prior approval remains usable; a regression test proves this before `WF8c` may complete: modifying either artifact after a current `technical_approval`, recomputing implementation approval freshness, confirms the approval is no longer usable, and confirms `WFO-LEDGER-COVERAGE` cannot rely on the modified artifact until a fresh implementation review/approval occurs. **(o)** (added revision 86, `GPT-R108-001`; restated revision 88, `OPUS-R110-002`, to match `WFR-69`'s corrected status-conditional, ownership-filter-free body) Builds `WFR-69`'s own pre-checkpoint-completion pre-flight in `complete_checkpoint(...)` alongside `WFR-68`'s approval-bound obligation, so a checkpoint carrying `completion_obligations` \u2014 `WF8c` itself included \u2014 cannot reach checkpoint-`COMPLETE` while any item in the item universe its own `completion_obligations` declare remains, per the approved reconciliation table's own recorded disposition, undischarged: the structural gap `OPUS-R101-002`'s original fix left one call site earlier than `complete_work_item`, closed the same way `WFR-68` was, by generalized mechanism rather than a `WF8c`-specific special case. **(p)** (added revision 86, `GPT-R108-002`) Extends `bootstrap-workflow-v2.md`'s own step 3 with a `NO_CHECKPOINT` / terminal-wrap-up branch: once `select_next_checkpoint` finds no remaining non-`COMPLETE` registry checkpoint \u2014 which only becomes true the moment `WF8c`'s own commit completes it \u2014 a fresh invocation performs the same tracked `SELF_REVIEWING_IMPLEMENTATION` \u2192 verification \u2192 `record_bundle_generation` \u2192 durability-commit \u2192 implementation-bundle-generation sequence `/milestone-implement`'s own equivalent step already performs for every other work item (`milestone-implement.md`'s `SELF_REVIEWING_IMPLEMENTATION`/verification/bundle-generation steps) \u2014 the verification step run here is this work item's own applicable suite, `python3 -m unittest workflow_integration_test workflow_state_test workflow_state_completion_obligations_test workflow_fingerprint_test workflow_test_harness_test workflow_fingerprint_generalization_test` (the last two added revision 88, `OPUS-R110-M01`, so the final pre-review run is the union of what this work item runs each round and what CI enforces) from `scripts/`, never `/milestone-implement`'s Android-specific `./gradlew spotlessCheck detekt lintDebug testDebugUnitTest` literal, with its real result recorded in this round's own `TEST_RESULTS.md` (added revision 87, `OPUS-R109-M01`) \u2014 then stops at `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` \u2014 the sole reachable path this work item has from its terminal checkpoint to external implementation review, since `/milestone-implement` itself remains never invoked for `workflow-v2-1-core` at any point (`D-Bootstrap`, unchanged: the branch lives inside `bootstrap-workflow-v2.md` itself, so it is an extension of the sole driver, never a hand-off to a second one). Performed in the same commit as item (l)'s one-line driver-range edit, since both touch the same file at the same checkpoint boundary; `D-Bootstrap`'s own \"Bootstrap sequence, exact\" text is amended in the identical edit to name this branch instead of narrating no further than `WF8b`. **(q)** (added revision 87, `OPUS-R109-004`) Item (l)\u2019s driver-range edit additionally binds `bootstrap-workflow-v2.md` step 6\u2019s checkpoint-completion state write to the named transition function, not merely to prose: step 6 reads `workflow_state.complete_checkpoint(state, \"workflow-v2-1-core\", checkpoint_id, registry, now, repo_root=repo_root)`, called inside `state_transaction` exactly as `milestone-implement.md` step 1f already does, so the sole call site that will ever complete `WF8c` is textually bound to `WFR-69`\u2019s guarded function rather than left as an unbound `checkpoints[id].status = COMPLETE` instruction a compliant-looking mutator could satisfy while bypassing the pre-flight entirely. See \"Revision 82 \u2014 external plan review of revision 81\" and \"Revision 81 \u2014 convergence\" below for the full reconciliation table and rationale, including which items are deliberately *not* carried forward (superseded at the design layer, not merely retired as conformance items). **(r)** (added revision 89, `GPT-R112-001`; restated revision 90, `OPUS-R113-001`/`-002`, after the original wording's \"Required regression / acceptance check\" was demonstrated unmet \u2014 `name` matched byte-for-byte on only 2 of 18 checkpoints against this same clause's own then-unstated rule \u2014 and its `completion_obligations` arm was found to name a field the view carries no column for) Extends item 72's registry/view conformance test (`workflow_state_demo_test.py::test_072_generated_markdown_registry_view_row_order_matches_json_array_order`), which today compares only the two tables' checkpoint-id order, into a full-field comparison across all 18 checkpoints between the authoritative registry JSON and the `## Checkpoint registry` Markdown table it is a generated view of, over exactly the five fields the table carries a column for, each under a stated rule: `id` \u2014 exact string match; `name` \u2014 exact string match against the table's own Name cell (revision 90 repairs every registry `name` field to be byte-identical to its own table row, the same by-field extraction this row's own repair already used, so no markup-stripping normalization is invented or needed); `depends_on` \u2014 the table's `none` maps to the JSON's `[]`, otherwise its comma-separated id list maps to the JSON array of the same ids in the same order; `complexity` \u2014 the table's leading integer maps to the JSON integer, its parenthetical band label ignored; `session_target` \u2014 exact string match. `completion_obligations` is deliberately **not** part of this comparison: the table carries no column for it (`OPUS-R113-002`), so there is nothing on the view side to compare it against \u2014 it remains registry-only structured metadata read by `WFO-LEDGER-COVERAGE`/`WFR-68`'s obligation-resolution machinery, unrelated to this human-readable-view conformance check. A checkpoint whose registry-JSON fields drift from its own plan row is mechanically caught rather than passing silently, exactly this revision's own `name`-field defect across sixteen checkpoints and revision 89's own defect for `WF8c` specifically",
+      "depends_on": [
+        "WF8b"
+      ],
+      "complexity": 7,
+      "session_target": "multiple sessions, deliberately not 1",
+      "completion_obligations": [
+        "WFO-LEDGER-COVERAGE"
+      ]
+    }
+  ]
+}

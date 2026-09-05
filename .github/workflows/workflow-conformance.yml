@@ -1,0 +1,43 @@
+# AI Workflow conformance suites (managed by workflow-manager).
+#
+# These are exactly the hermetic, stdlib-only suites the frozen Workflow
+# release runs on every pull request. The two `*_demo_test.py` suites are
+# deliberately absent: they classify content from a fixed historical base
+# commit, so an unrelated later change would fail them for reasons that are
+# not a Workflow regression. Run those explicitly when you want them.
+name: Workflow conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  workflow-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: workflow_fingerprint_test.py
+        working-directory: scripts
+        run: python3 workflow_fingerprint_test.py
+      - name: workflow_state_test.py
+        working-directory: scripts
+        run: python3 workflow_state_test.py
+      - name: workflow_test_harness_test.py
+        working-directory: scripts
+        run: python3 workflow_test_harness_test.py
+      - name: workflow_integration_test.py
+        working-directory: scripts
+        run: python3 workflow_integration_test.py
+      - name: workflow_acceptance_matrix_test.py
+        working-directory: scripts
+        run: python3 workflow_acceptance_matrix_test.py
+      - name: workflow_state_completion_obligations_test.py
+        working-directory: scripts
+        run: python3 workflow_state_completion_obligations_test.py
+      - name: workflow_fingerprint_generalization_test.py
+        working-directory: scripts
+        run: python3 workflow_fingerprint_generalization_test.py

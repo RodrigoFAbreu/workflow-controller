@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-3",
+  "requirements": {
+    "REQ-1": {
+      "description": "Add a model-independent /review-implementation <work-item-id> command, analogous in philosophy to /review-plan.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-2": {
+      "description": "Evaluate, and (found justified) add, a model-independent /review-functional <work-item-id> command for reviewer-side symmetry.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-3": {
+      "description": "Review commands must work with any capable model; never hard-code Opus/Sonnet/GPT/another provider or model.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "REQ-4": {
+      "description": "Do not add AWAITING_LOCAL_*, AWAITING_INTERNAL_*, AWAITING_MODEL_*, or equivalent new lifecycle states in this release.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "REQ-5": {
+      "description": "Reuse existing review states only: /review-implementation operates while AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW; /review-functional while AWAITING_FUNCTIONAL_REVIEW.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "REQ-6": {
+      "description": "Reviewer commands review and report only: never modify implementation/source/test content, approve the stage, apply findings, or advance workflow state.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "REQ-7": {
+      "description": "Preserve the existing apply-plan-review/apply-implementation-review/apply-functional-review commands, unmodified, as the sole authoritative remediation paths.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "REQ-8": {
+      "description": "Keep the change small and ergonomic; defer richer local-vs-external reviewer orchestration and controller-aware lifecycle states to Workflow v3.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

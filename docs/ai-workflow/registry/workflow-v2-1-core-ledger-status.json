@@ -1,0 +1,1485 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-1-core",
+  "_comment": "WFR-68's subject artifact (WFO-LEDGER-COVERAGE). One entry per item in the plan's 'Reconciliation table' universe {166} u {167..376} (211 items total), transcribed via scripts/workflow_state.py's parse_reconciliation_table() against WORKFLOW_V2_PLAN.md at the plan revision current when this file was generated (see docs/ai-workflow/WORKFLOW_V2_PLAN.md, 'Revision 81 -- convergence' / 'Revision 82' for the authoritative table and the per-item resolution rule this transcription follows). 'evidence' is null for every entry: WFR-68 property (ii) (evidence-for-IMPLEMENTED, resolvable and executable at the pinned commit), the companion <work_item_id>-wf8c-evidence.json binding WF8c-owned items to their discharging test/function, and the WFO-LEDGER-COVERAGE verifier itself (properties (i)-(iv), the four adversarial arms) are not yet built -- this file is WF8c item (m)'s first, data-only increment. Not yet wired into COMPLETION_OBLIGATION_CONFORMANCE, so WFO-LEDGER-COVERAGE correctly stays UNKNOWN_OBLIGATION (fail-closed) until a later WF8c session binds the full verifier.",
+  "generated_at_commit": "0b3745465b45059a1540b5e8b717044cda515682",
+  "entries": [
+    {
+      "item": 166,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Requirements-table row-count conformance",
+      "evidence": null
+    },
+    {
+      "item": 167,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 168,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 169,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 170,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 171,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 172,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 173,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 174,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 175,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 176,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 177,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 178,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 179,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 180,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 181,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 182,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 183,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 184,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 185,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 186,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 187,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 188,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 189,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 190,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 191,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 192,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 193,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 194,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 195,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 196,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 197,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 198,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 199,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 200,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 201,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 202,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 203,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 204,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 205,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 206,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 207,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 208,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 209,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 210,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 211,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 212,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 213,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 214,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 215,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 216,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 217,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 218,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 219,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 220,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 221,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Scoped-Remediation-Acceptance`: `/accept-scoped-remediation`, functional-checklist evidence binding, confirmation parsing, provenance commit",
+      "evidence": null
+    },
+    {
+      "item": 222,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 223,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 224,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 225,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 226,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 227,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 228,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle-generation republication idempotency (part 1)",
+      "evidence": null
+    },
+    {
+      "item": 229,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 230,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 231,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Registry-derived completion refuses when a **different** plan-stage protected document (the plan, the mapping, `TECHNICAL_DECISIONS.md`, the audit doc) is di...",
+      "evidence": null
+    },
+    {
+      "item": 232,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Registry-derived completion refuses when a **different** plan-stage protected document (the plan, the mapping, `TECHNICAL_DECISIONS.md`, the audit doc) is di...",
+      "evidence": null
+    },
+    {
+      "item": 233,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 234,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 235,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 236,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 237,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 238,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 239,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 240,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 241,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`WFR-53` registry-approval-freshness across all entry points; `implementation_revision` advancement source",
+      "evidence": null
+    },
+    {
+      "item": 242,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 243,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 244,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 245,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "Generalized provenance-interval gate: merge-anywhere-in-interval refusal, ordinary-round regression guard",
+      "evidence": null
+    },
+    {
+      "item": 246,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "Generalized provenance-interval gate: merge-anywhere-in-interval refusal, ordinary-round regression guard",
+      "evidence": null
+    },
+    {
+      "item": 247,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 248,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 249,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 250,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 251,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 252,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 253,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 254,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 255,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 256,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 257,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 258,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 259,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 260,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 261,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 262,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Canonical provenance trailer set; ordinary-role exact field-mutation contract; item 267's cross-work-item forbidden-mutation case",
+      "evidence": null
+    },
+    {
+      "item": 263,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Canonical provenance trailer set; ordinary-role exact field-mutation contract; item 267's cross-work-item forbidden-mutation case",
+      "evidence": null
+    },
+    {
+      "item": 264,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Canonical provenance trailer set; ordinary-role exact field-mutation contract; item 267's cross-work-item forbidden-mutation case",
+      "evidence": null
+    },
+    {
+      "item": 265,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Canonical provenance trailer set; ordinary-role exact field-mutation contract; item 267's cross-work-item forbidden-mutation case",
+      "evidence": null
+    },
+    {
+      "item": 266,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Canonical provenance trailer set; ordinary-role exact field-mutation contract; item 267's cross-work-item forbidden-mutation case",
+      "evidence": null
+    },
+    {
+      "item": 267,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Canonical provenance trailer set; ordinary-role exact field-mutation contract; item 267's cross-work-item forbidden-mutation case",
+      "evidence": null
+    },
+    {
+      "item": 268,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 269,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 270,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 271,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 272,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-stage bundle stage-document consistency: a plan-stage bundle's `TEST_RESULTS.md` is regenerated fresh for every plan-review round and is consistent with...",
+      "evidence": null
+    },
+    {
+      "item": 273,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`record_bundle_generation`'s phase contract",
+      "evidence": null
+    },
+    {
+      "item": 274,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`record_bundle_generation`'s phase contract",
+      "evidence": null
+    },
+    {
+      "item": 275,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`record_bundle_generation`'s phase contract",
+      "evidence": null
+    },
+    {
+      "item": 276,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`record_bundle_generation`'s phase contract",
+      "evidence": null
+    },
+    {
+      "item": 277,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`record_bundle_generation`'s phase contract",
+      "evidence": null
+    },
+    {
+      "item": 278,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 279,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 280,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 281,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`WFR-62`: `/recover-implementation-provenance` command, `Workflow-Supersedes` recovered-commit role, multi-recovery chains, forked-supersession refusal",
+      "evidence": null
+    },
+    {
+      "item": 282,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 283,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 284,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 285,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 286,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 287,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 288,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 289,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 290,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 291,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 292,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 293,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 294,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 295,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 296,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 297,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 298,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 299,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 300,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 301,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 302,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 303,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Approval-gate reachability under BLOCK/REVISE/APPROVE and crash-boundary resume",
+      "evidence": null
+    },
+    {
+      "item": 304,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "BLOCK/missing-feedback caller-level refusal; local worktree/HEAD staleness refusal",
+      "evidence": null
+    },
+    {
+      "item": 305,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "BLOCK/missing-feedback caller-level refusal; local worktree/HEAD staleness refusal",
+      "evidence": null
+    },
+    {
+      "item": 306,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Overwrite/corruption is not a path around the `BLOCK` refusal: feedback bound to a stale/different bundle is not, and cannot become, an override basis",
+      "evidence": null
+    },
+    {
+      "item": 307,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "BLOCK/missing-feedback caller-level refusal; local worktree/HEAD staleness refusal",
+      "evidence": null
+    },
+    {
+      "item": 308,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "BLOCK/missing-feedback caller-level refusal; local worktree/HEAD staleness refusal",
+      "evidence": null
+    },
+    {
+      "item": 309,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Overwrite/corruption is not a path around the `BLOCK` refusal: feedback bound to a stale/different bundle is not, and cannot become, an override basis",
+      "evidence": null
+    },
+    {
+      "item": 310,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 311,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 312,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 313,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Same-content bundle republication (part 2); recovered-role condition-4 combinations",
+      "evidence": null
+    },
+    {
+      "item": 314,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 315,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 316,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 317,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 318,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Archive replacement is temp-file-plus-rename, so an interrupted or failed archive write never replaces the previously valid `review-bundle.tar.gz`",
+      "evidence": null
+    },
+    {
+      "item": 319,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 320,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`D2a` durable `BLOCK`-verdict pin: `technical_review_block_pins` recording, per-`bundle_id` scoping, idempotency, `PinLedgerMonotonicityError` append-only en...",
+      "evidence": null
+    },
+    {
+      "item": 321,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`D2a` durable `BLOCK`-verdict pin: `technical_review_block_pins` recording, per-`bundle_id` scoping, idempotency, `PinLedgerMonotonicityError` append-only en...",
+      "evidence": null
+    },
+    {
+      "item": 322,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`D2a` durable `BLOCK`-verdict pin: `technical_review_block_pins` recording, per-`bundle_id` scoping, idempotency, `PinLedgerMonotonicityError` append-only en...",
+      "evidence": null
+    },
+    {
+      "item": 323,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 324,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 325,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 326,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 327,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 328,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "`D2a` durable `BLOCK`-verdict pin: `technical_review_block_pins` recording, per-`bundle_id` scoping, idempotency, `PinLedgerMonotonicityError` append-only en...",
+      "evidence": null
+    },
+    {
+      "item": 329,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 330,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 331,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 332,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 333,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 334,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 335,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 336,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 337,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 338,
+      "status": "SUPERSEDED",
+      "owner_checkpoint": "none",
+      "note": "Atomic/staged bundle publication: `staging/<token>/` → `bundles/<token>/` → `current` symlink promotion, legacy migration, token grammar",
+      "evidence": null
+    },
+    {
+      "item": 339,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Three-caller `assert_local_generation_matches` conformance; `require_metadata` strict mode; token grammar (dependent on 314-338's token concept)",
+      "evidence": null
+    },
+    {
+      "item": 340,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Three-caller `assert_local_generation_matches` conformance; `require_metadata` strict mode; token grammar (dependent on 314-338's token concept)",
+      "evidence": null
+    },
+    {
+      "item": 341,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Three-caller `assert_local_generation_matches` conformance; `require_metadata` strict mode; token grammar (dependent on 314-338's token concept)",
+      "evidence": null
+    },
+    {
+      "item": 342,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Three-caller `assert_local_generation_matches` conformance; `require_metadata` strict mode; token grammar (dependent on 314-338's token concept)",
+      "evidence": null
+    },
+    {
+      "item": 343,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Three-caller `assert_local_generation_matches` conformance; `require_metadata` strict mode; token grammar (dependent on 314-338's token concept)",
+      "evidence": null
+    },
+    {
+      "item": 344,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Three-caller `assert_local_generation_matches` conformance; `require_metadata` strict mode; token grammar (dependent on 314-338's token concept)",
+      "evidence": null
+    },
+    {
+      "item": 345,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`/approve-review plan`'s conditional fifth commit member",
+      "evidence": null
+    },
+    {
+      "item": 346,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`/approve-review plan`'s conditional fifth commit member",
+      "evidence": null
+    },
+    {
+      "item": 347,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 348,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 349,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 350,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 351,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 352,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 353,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Plan-approval failure-atomicity transaction: durable crash-resumable journal, `COMMITTED`/`NOT_COMMITTED`/`AMBIGUOUS` outcome classifier sourced from durable...",
+      "evidence": null
+    },
+    {
+      "item": 354,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 355,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Item 355's own checkpoint-reachability conformance: the per-item `(status, owner)` resolution rule (clauses (a)-(d), including the per-item (b1)/(b2) limbs t...",
+      "evidence": null
+    },
+    {
+      "item": 356,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 357,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 358,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 359,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 360,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 361,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D1` state-writer lock; `D-Completion-Obligations`; state-writer discovery; verifier-authority binding to durable technical approval",
+      "evidence": null
+    },
+    {
+      "item": 362,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Checkpoint-Ownership` core: standing regression test, acquisition/release ordering, record integrity, no-automatic-staleness, adoption",
+      "evidence": null
+    },
+    {
+      "item": 363,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Checkpoint-Ownership` core: standing regression test, acquisition/release ordering, record integrity, no-automatic-staleness, adoption",
+      "evidence": null
+    },
+    {
+      "item": 364,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Checkpoint-Ownership` core: standing regression test, acquisition/release ordering, record integrity, no-automatic-staleness, adoption",
+      "evidence": null
+    },
+    {
+      "item": 365,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Checkpoint-Ownership` core: standing regression test, acquisition/release ordering, record integrity, no-automatic-staleness, adoption",
+      "evidence": null
+    },
+    {
+      "item": 366,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Checkpoint-Ownership` core: standing regression test, acquisition/release ordering, record integrity, no-automatic-staleness, adoption",
+      "evidence": null
+    },
+    {
+      "item": 367,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`D-Checkpoint-Ownership` core: standing regression test, acquisition/release ordering, record integrity, no-automatic-staleness, adoption",
+      "evidence": null
+    },
+    {
+      "item": 368,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Ownership fencing, takeover authorization, terminal no-checkpoint outcome, single plan-revision writer, mutation-guard failure surface",
+      "evidence": null
+    },
+    {
+      "item": 369,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Ownership fencing, takeover authorization, terminal no-checkpoint outcome, single plan-revision writer, mutation-guard failure surface",
+      "evidence": null
+    },
+    {
+      "item": 370,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Ownership fencing, takeover authorization, terminal no-checkpoint outcome, single plan-revision writer, mutation-guard failure surface",
+      "evidence": null
+    },
+    {
+      "item": 371,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Ownership fencing, takeover authorization, terminal no-checkpoint outcome, single plan-revision writer, mutation-guard failure surface",
+      "evidence": null
+    },
+    {
+      "item": 372,
+      "status": "PARTIAL",
+      "owner_checkpoint": "WF8c",
+      "note": "Ownership fencing, takeover authorization, terminal no-checkpoint outcome, single plan-revision writer, mutation-guard failure surface",
+      "evidence": null
+    },
+    {
+      "item": 373,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`\"destructive\"` guard-class strength, abandoned-guard recovery; local identity record (`WORKTREE_IDENTITY.json`) lifecycle; origination-reference limits",
+      "evidence": null
+    },
+    {
+      "item": 374,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`\"destructive\"` guard-class strength, abandoned-guard recovery; local identity record (`WORKTREE_IDENTITY.json`) lifecycle; origination-reference limits",
+      "evidence": null
+    },
+    {
+      "item": 375,
+      "status": "IMPLEMENTED",
+      "owner_checkpoint": "WF8b",
+      "note": "`\"destructive\"` guard-class strength, abandoned-guard recovery; local identity record (`WORKTREE_IDENTITY.json`) lifecycle; origination-reference limits",
+      "evidence": null
+    },
+    {
+      "item": 376,
+      "status": "ABSENT",
+      "owner_checkpoint": "WF8c",
+      "note": "Generator-side stage-document binding; `review-subject: bundle\\|verdict\\|none`; `REJECTED`-bundle marker/quarantine lifecycle",
+      "evidence": null
+    }
+  ]
+}

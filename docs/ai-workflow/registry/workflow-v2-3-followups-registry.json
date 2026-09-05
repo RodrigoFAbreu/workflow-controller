@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-v2-3-followups",
+  "plan_revision": 13,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Fix /approve-review plan fifth-member staging bug",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": "1"
+    },
+    {
+      "id": "CP2",
+      "name": "/review-implementation writes canonical REVIEW_FEEDBACK.md + plan-conformance read",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": "2"
+    },
+    {
+      "id": "CP3",
+      "name": "Normalize review-role/review-stage identifiers to SCREAMING_SNAKE_CASE",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": "2"
+    },
+    {
+      "id": "CP4",
+      "name": "Final cross-cutting verification and protocol/workflow doc coherence check",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": "1"
+    }
+  ]
+}

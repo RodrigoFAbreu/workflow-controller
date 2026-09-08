@@ -758,9 +758,81 @@ one true end-to-end test driving a real `execute_step` worker in a
 separate process, `SIGKILL`-ed mid-run, confirming the `LAUNCHED` record
 lands on disk before `resume` reconciles it to `INTERRUPTED`.
 
-Next: `CP8` (generation handoff primitive: pending-handoff record,
-intentional stop, and enforced absence of hot reload in the running
-generation), depends on `CP7`.
+`CP8` (generation handoff primitive: pending-handoff record, intentional
+stop, and enforced absence of hot reload in the running generation) is
+**complete**, verified by `python3 -m unittest tests.test_handoff` (27
+tests, all green, including one real end-to-end test that starts the
+installed `workflow-controller` console script as a live subprocess,
+pauses it at its own orchestration boundary via the test-only
+`--pause-file`/`WORKFLOW_CONTROLLER_TEST_HOOKS=1` hook, bumps the origin
+checkout's `controller/GENERATION.json` and an observable source file
+while paused, unpauses, and asserts: exit code 50; `handoff.json` names
+`running`/`approved` generation and commit correctly; the process's own
+final `identity.json` still reports the *running* generation and commit,
+never the newer ones; and the paused snapshot directory still verifies
+against its own recorded tree digest and never picked up the observable
+source change) and by re-running the full suite (`python3 -m unittest
+discover -s tests -p "test_*.py"`: 285 tests, all green, no regressions).
+Delivered: `controller/handoff.py` (`Handoff`, a frozen dataclass carrying
+`from_generation`/`from_commit`/`to_generation`/`to_commit`/`source_root`;
+`detect(identity, source_root) -> Handoff | None`, comparing the running
+(pinned) generation against the approved generation read fresh from the
+origin source repository's own committed `HEAD` -- **never** the
+worktree, deliberately with no fallback, unlike `identity._read_generation`'s
+own bootstrap-state fallback, since an uncommitted `GENERATION.json` edit
+must never be read as an approved generation; three branches -- greater
+returns a `Handoff`, equal returns `None` (the branch that keeps ordinary
+in-generation development from tripping a handoff), lower raises
+`GenerationHandoffPendingError`; and `write_handoff_record`, which
+publishes `<runtime_root>/handoff.json` with exactly the milestone brief's
+own declared fields: running/approved generation and commit, the source
+root, the timestamp, the complete/open job-id lists (supplied by the
+caller, since classifying a job record's own status is `controller.job`'s
+closed enumeration and `job` is later than `handoff` in the package's own
+dependency order), and the exact command to start the next generation).
+One new `controller/errors.py` refusal, `GenerationHandoffPendingError`
+(the revert case only -- the ordinary "source moved forward" handoff never
+raises); `SourceSnapshotError`'s own docstring gains `detect` as its
+fourth named `raised_by` call site (malformed/unreadable
+`HEAD:controller/GENERATION.json` at the origin). `controller/__init__.py`'s
+eager-import literal gains `handoff` between `worker` and `job`, matching
+the plan's dependency order (`job -> {..., handoff} -> decision -> ...`).
+`controller/cli.py` is extended -- deliberately scoped to exactly what
+CP8's own end-to-end test needs, leaving `cmd_step`/`cmd_inspect`/
+`cmd_explain`/`cmd_resume` unwired for CP9 ("CLI completion") as before:
+the `run` loop (steps run bounded by `--max-steps`), checking, at one
+orchestration boundary per iteration (before every job it starts,
+including the first, never mid-job) -- the same boundary, together, per
+the plan's own text -- both the test-only `--pause-file` hook (inert
+unless `WORKFLOW_CONTROLLER_TEST_HOOKS=1`, with a one-line stderr note
+otherwise) and `handoff.detect()`; on a pending handoff, publishes
+`handoff.json` (job ids classified via `controller.job.TERMINAL_STATUSES`)
+and stops with exit 50 *before* any worker launches; otherwise calls
+`controller.job.execute_step` once and maps its reachable return shapes to
+this checkpoint's own slice of the exit-code contract (`GATE_BLOCKED`->10,
+`DECLINED`->15, `HANDOFF_PENDING`->50, `FAILED`->30, `INCOMPLETE`->35,
+`FINISHED`->loop continues, the no-action `Decision`->0); exhausting
+`--max-steps` with work still outstanding exits 16. The full exit-code
+table (0/10/15/16/30/35's remaining reachability, plus `step`/`resume`)
+is CP9's own concern, not restated here. `tests/test_handoff.py` (27
+tests) covers: `detect()`'s three branches plus the uncommitted-bump
+negative case, the worktree-kind `from_commit: None` carry-through, the
+unpinned-identity refusal, and the missing/malformed-`GENERATION.json`
+refusals (all four naming `raised_by: "detect"`); `write_handoff_record`'s
+full schema; `_classify_jobs`'s terminal/non-terminal partition; the
+`--pause-file`/`WORKFLOW_CONTROLLER_TEST_HOOKS` gate (inert with no flag,
+inert with the wrong value, blocks until the file is removed when
+enabled); the run loop's own exit-code mapping via a monkeypatched
+`job.execute_step` (every reachable status, the no-action `Decision`, a
+`FINISHED`-then-no-action two-step loop, `--max-steps` exhaustion, and
+that a detected handoff writes the record and stops before any launch is
+even attempted); the equal-generation/different-commit case exercised
+through the real run loop rather than only through `detect()`; and the
+real subprocess end-to-end test described above.
+
+Next: `CP9` (CLI completion, disposable managed-repository real-Workflow-
+action evidence, documentation, and full milestone verification), depends
+on `CP8`.
 
 ## Current blockers
 

@@ -80,7 +80,7 @@ class DirtyControllerSourceError(ControllerError):
 class SourceSnapshotError(ControllerError):
     """The immutable-source-snapshot mechanism refused.
 
-    Raised from three call sites only, each of which sets
+    Raised from four call sites, each of which sets
     ``evidence['raised_by']`` to name itself: ``"materialise"`` (a snapshot
     directory exists but fails re-verification, or the recorded/reused
     ``source_kind``/``source_commit`` disagree with the parent's exec
@@ -89,10 +89,14 @@ class SourceSnapshotError(ControllerError):
     already inside a snapshot finds its recomputed digest does not match
     both the directory's own name and its recorded ``tree_digest``, or an
     inherited ``WORKFLOW_CONTROLLER_EXEC_HANDOFF`` disagrees with what
-    ``pin()`` itself just read), or ``"cli.main"`` (the ``exec_depth >= 1``
+    ``pin()`` itself just read), ``"cli.main"`` (the ``exec_depth >= 1``
     fail-safe: a process reached the ``"unpinned"`` branch after already
     having been re-execed once, and refuses a second exec rather than
-    looping).
+    looping), or ``"detect"`` (``controller.handoff.detect``: the origin
+    source repository's committed ``HEAD`` carries no readable, well-formed
+    ``controller/GENERATION.json`` -- deliberately no worktree fallback
+    here, since an uncommitted edit must never be read as an approved
+    generation).
     """
 
     code = "SOURCE_SNAPSHOT_ERROR"
@@ -385,6 +389,28 @@ class UnreconcilableJobError(ControllerError):
     """
 
     code = "UNRECONCILABLE_JOB"
+
+
+class GenerationHandoffPendingError(ControllerError):
+    """The origin Controller source repository's committed ``HEAD``
+    declares a generation number **older** than the one currently
+    running -- a genuine revert, never the ordinary "source moved
+    forward" handoff (that case returns a :class:`~controller.handoff.
+    Handoff`, it never raises).
+
+    Raised by ``controller.handoff.detect``. Both the running (pinned)
+    and the approved generation are read from the *same* committed
+    ``HEAD`` (CP1's own generation-source rule -- see ``identity.
+    _read_generation`` and ``handoff._read_approved_generation``), so an
+    uncommitted local bump to ``controller/GENERATION.json`` can never by
+    itself make the two disagree; reaching this refusal means the origin
+    repository's own history moved backwards under a running process,
+    which means an assumption elsewhere is wrong, so this stops rather
+    than silently continuing. ``evidence`` names the pinned/approved
+    generation and commit pair.
+    """
+
+    code = "GENERATION_HANDOFF_PENDING"
 
 
 class UserOnlyCommandError(ControllerError):

@@ -13,11 +13,14 @@ raise ``NotImplementedError`` once dispatched.
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import sys
+import time
 from pathlib import Path
 
-from controller import identity, runtime
+from controller import handoff, identity, job, managed_repo, runtime
+from controller.decision import Decision
 from controller.errors import ControllerError, SourceSnapshotError
 
 #: The three read-only commands. Positive guard: everything not in this set
@@ -27,9 +30,29 @@ from controller.errors import ControllerError, SourceSnapshotError
 READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status"})
 ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume"})
 
+#: The `run` loop's own exit-code contract (CP8's slice of it -- the
+#: full table, including 10/15/16/30/35, is CP9's own "CLI completion").
 EXIT_OK = 0
 EXIT_USAGE = 2
+EXIT_GATE = 10
+EXIT_DECLINED = 15
+EXIT_MAX_STEPS = 16
 EXIT_FAIL_CLOSED = 20
+EXIT_WORKER_FAILED = 30
+EXIT_INCOMPLETE = 35
+EXIT_HANDOFF_PENDING = 50
+
+#: Test-support surface (CP8): `--pause-file` is inert unless this
+#: environment variable is also set to exactly `"1"`, so an ordinary
+#: invocation -- including one that passes the flag by accident or by
+#: copy-paste -- cannot pause.
+TEST_HOOKS_ENV = "WORKFLOW_CONTROLLER_TEST_HOOKS"
+
+_PAUSE_POLL_SECONDS = 0.05
+
+
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def require_pinned_execution() -> None:
@@ -193,9 +216,115 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     raise NotImplementedError("wired to job execution in CP6")
 
 
+def _classify_jobs(runtime_root: Path) -> tuple[list[str], list[str]]:
+    """The job ids under ``<runtime_root>/jobs/*.json``, partitioned by
+    ``controller.job``'s own closed terminal/non-terminal status
+    enumeration -- ``handoff.write_handoff_record``'s
+    ``jobs_complete``/``jobs_open`` lists. In the ordinary case this runs
+    at CP6's orchestration boundary, strictly between jobs, so
+    ``jobs_open`` is normally empty; it is computed properly regardless,
+    rather than assumed empty, so a record left non-terminal by an
+    out-of-band crash is still reported rather than silently dropped."""
+    jobs_dir = runtime_root / "jobs"
+    complete: list[str] = []
+    open_: list[str] = []
+    if jobs_dir.is_dir():
+        for path in sorted(jobs_dir.glob("*.json")):
+            record = runtime.read_json(path) or {}
+            status = record.get("status")
+            if status in job.TERMINAL_STATUSES:
+                complete.append(path.stem)
+            else:
+                open_.append(path.stem)
+    return complete, open_
+
+
+def _next_generation_command(runtime_root: Path, repo: str) -> str:
+    """The exact command to start the next generation: the same runtime
+    root (so the new generation's own run picks up this one's durable job
+    history) and the same target repository."""
+    return f"workflow-controller --runtime-dir {runtime_root} run {repo}"
+
+
+def _await_pause_file(pause_file: str | None) -> None:
+    """Block at the orchestration boundary while ``pause_file`` exists --
+    test-support surface only, inert unless ``WORKFLOW_CONTROLLER_TEST_HOOKS``
+    is set to exactly ``"1"``."""
+    if not pause_file or os.environ.get(TEST_HOOKS_ENV) != "1":
+        return
+    pause_path = Path(pause_file)
+    while pause_path.exists():
+        time.sleep(_PAUSE_POLL_SECONDS)
+
+
 def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
     require_pinned_execution()
-    raise NotImplementedError("wired to job execution in CP6/CP6B")
+
+    if args.pause_file and os.environ.get(TEST_HOOKS_ENV) != "1":
+        print(
+            "--pause-file is test-support surface, inert unless "
+            f"{TEST_HOOKS_ENV}=1 is also set",
+            file=sys.stderr,
+        )
+
+    target = managed_repo.inspect(args.repo, manager_bin=args.workflow_manager)
+    origin_source_root = ident.origin_source_root or ident.source_root
+
+    steps_run = 0
+    while steps_run < args.max_steps:
+        # The orchestration boundary: checked once before every job this
+        # loop starts, including the first -- never mid-job. Both halves
+        # (the test-support pause and the real handoff detection) are
+        # checked here, together, per the plan's own "the run loop checks
+        # for the file only at the same orchestration boundary where
+        # detect() runs".
+        _await_pause_file(args.pause_file)
+
+        pending = handoff.detect(ident, origin_source_root)
+        if pending is not None:
+            jobs_complete, jobs_open = _classify_jobs(runtime_root)
+            handoff.write_handoff_record(
+                runtime_root, pending,
+                jobs_complete=jobs_complete, jobs_open=jobs_open,
+                next_generation_command=_next_generation_command(runtime_root, args.repo),
+                now=_now(),
+            )
+            return EXIT_HANDOFF_PENDING
+
+        result = job.execute_step(
+            target,
+            work_item_id=args.work_item,
+            identity=ident,
+            runtime=runtime_root,
+            permission_mode=args.permission_mode or job.DEFAULT_PERMISSION_MODE,
+            timeout=args.timeout,
+            claude_bin=args.claude_binary,
+        )
+        steps_run += 1
+
+        if isinstance(result, Decision):
+            # LEGACY_READY / MILESTONE_COMPLETE: nothing ran, nothing is
+            # pending.
+            return EXIT_OK
+
+        status = result["status"]
+        if status == job.STATUS_GATE_BLOCKED:
+            return EXIT_GATE
+        if status == job.STATUS_DECLINED:
+            return EXIT_DECLINED
+        if status == job.STATUS_HANDOFF_PENDING:
+            # A handoff.json this loop did not itself write (e.g. left
+            # over from a prior invocation) -- execute_step's own step 3
+            # check caught it first.
+            return EXIT_HANDOFF_PENDING
+        if status == job.STATUS_FAILED:
+            return EXIT_WORKER_FAILED
+        if status == job.STATUS_INCOMPLETE:
+            return EXIT_INCOMPLETE
+        # STATUS_FINISHED: this checkpoint/action is done -- loop back to
+        # the orchestration boundary and decide the next one.
+
+    return EXIT_MAX_STEPS
 
 
 def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:

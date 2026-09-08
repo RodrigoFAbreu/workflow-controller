@@ -10,9 +10,9 @@ this literal always names exactly the modules that exist under
 ``controller/``.
 """
 
-from . import errors, runtime, identity, decision, managed_repo, target_state, evidence, worker, job, cli
+from . import errors, runtime, identity, decision, managed_repo, target_state, evidence, worker, handoff, job, cli
 
 __all__ = [
     "errors", "runtime", "identity", "decision", "managed_repo", "target_state", "evidence",
-    "worker", "job", "cli",
+    "worker", "handoff", "job", "cli",
 ]

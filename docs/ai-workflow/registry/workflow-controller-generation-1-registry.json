@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-generation-1",
+  "plan_revision": 62,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Package skeleton, packaging, ignored runtime layout, refusal taxonomy, and the pinned immutable Controller source identity",
+      "depends_on": [],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Managed-repository inspection: Workflow Manager status/verify integration, unmanaged/drifted/unsupported-installation refusals",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Read-only Workflow state reader: active work item, phase, checkpoints, review and approval state, fail-closed on malformed or ambiguous state",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Next-action decision engine part 1: the phase -> action mapping over frozen Workflow v2.3.1's seventeen phases, the user-only denylist, and the explainable Decision shape",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4B",
+      "name": "Next-action decision engine part 2: evidence-reading disambiguations -- feedback role and status, checklist trailer, consumed marker, incomplete children -- and human-gate classification",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Fresh Claude worker abstraction: bounded task launch, synchronous wait, success/failure/interruption/ambiguity classification",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Job execution part 1: durable Controller-owned job records, pre-state capture, persist-before-launch, worker launch and result recording",
+      "depends_on": [
+        "CP2",
+        "CP3",
+        "CP4B",
+        "CP5"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP6B",
+      "name": "Job execution part 2: fresh post-state re-read and expected-transition verification, with FINISHED written only after it passes",
+      "depends_on": [
+        "CP6"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Durable resume: restart reconciliation against authoritative Workflow/Git state, no replay of an already-completed action, stale-metadata rejection",
+      "depends_on": [
+        "CP6B"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP8",
+      "name": "Generation handoff primitive: pending-handoff record, intentional stop, and enforced absence of hot reload in the running generation",
+      "depends_on": [
+        "CP7"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP9",
+      "name": "CLI completion, disposable managed-repository real-Workflow-action evidence, documentation, and full milestone verification",
+      "depends_on": [
+        "CP8"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    }
+  ]
+}

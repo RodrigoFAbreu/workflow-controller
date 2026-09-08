@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-generation-1",
+  "requirements": {
+    "REQ-1": {
+      "description": "Managed repository inspection: accept a local repository path; integrate with Workflow Manager status/verify before doing anything else; refuse unmanaged repositories; refuse invalid or drifted Workflow installations where operation would be unsafe; record the installed Workflow version; do not reimplement Workflow Manager install/update/drift semantics.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-2": {
+      "description": "Workflow state reader: read the target's authoritative Workflow state and identify the active work item, its type/kind, current phase, checkpoint state, review state and approval state. Fail closed on malformed, ambiguous or unsupported state. Never repair Workflow state directly.",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-3": {
+      "description": "Next-action decision engine: a bounded phase -> next-action mapping derived from frozen Workflow v2.3.1's actual command/lifecycle contract. Every decision is explainable (observed phase, evidence, selected action, automatic vs manual, reason). Unsupported states fail closed with a useful explanation rather than guessing.",
+      "checkpoint_ids": [
+        "CP4",
+        "CP4B"
+      ]
+    },
+    "REQ-4": {
+      "description": "Fresh worker orchestration: launch a separate fresh Claude Code process with the proven `claude -p <task> --output-format json --permission-mode <mode> < /dev/null` mechanism and cwd set to the target repository; give it one bounded task; wait synchronously; capture result/exit status/output sufficient for Controller decisions. The supervising Controller process stays alive and retains its own state while the worker runs.",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "REQ-5": {
+      "description": "Real Workflow-action execution: prove the Controller can use a fresh worker to perform at least one genuine Workflow-owned operation in a disposable managed repository, producing a durable Workflow state change the Controller observes afterward. Record pre-state, launch the worker, wait, re-read the repository, validate post-state, and refuse to claim success if the expected transition did not happen.",
+      "checkpoint_ids": [
+        "CP6",
+        "CP6B",
+        "CP9"
+      ]
+    },
+    "REQ-6": {
+      "description": "Human-gate detection: distinguish automation-safe work from manual/user gates. Never fabricate manual external review, user plan approval, technical approval, or functional/user acceptance. At a human gate, stop cleanly and report repository, work item, phase, what is required, bundle/artifact path if relevant, and the safe resume command. Never use USER_OVERRIDE merely to achieve autonomy.",
+      "checkpoint_ids": [
+        "CP4",
+        "CP4B",
+        "CP6",
+        "CP6B",
+        "CP9"
+      ]
+    },
+    "REQ-7": {
+      "description": "Durable resume: start a job, persist state, be interrupted/exited, restart, reconcile Controller job state against authoritative Workflow/Git state, and continue or fail closed appropriately. Never blindly replay an operation that already succeeded before an interruption.",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    },
+    "REQ-8": {
+      "description": "Failure handling: worker non-zero exit is not success; worker termination/interruption is not success; a missing expected Workflow transition is not success; malformed state fails closed; unmanaged/drifted repositories fail closed; stale Controller execution metadata is reconciled or explicitly rejected.",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP5",
+        "CP6",
+        "CP6B",
+        "CP7"
+      ]
+    },
+    "REQ-9": {
+      "description": "Generation handoff primitive: a running Controller generation never mutates or reloads the implementation it is currently executing; every run that may write a job record or launch a worker executes from an immutable, content-verified snapshot of the Controller source, materialised under the Controller-owned runtime root and addressed by the SHA-256 digest of its own bytes, so the durable job record identifies the exact code that ran (a Git commit plus that digest, or the digest alone when --allow-dirty-source snapshots an uncommitted working tree) and a later import or resource read cannot reach the origin worktree. Restart is the upgrade mechanism and hot reload is forbidden -- no importlib.reload, no in-place package upgrade of the running environment, no source-change auto-reload, no late package-relative resource read. Generation A detects a different approved Controller source identity, keeps executing A until its current orchestration boundary, persists a pending-handoff record, stops intentionally, provides enough information to start the next generation, and never silently adopts the new code. Proven in a controlled test.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP8"
+      ]
+    },
+    "REQ-10": {
+      "description": "Minimal CLI: a practical command-line tool with the equivalent of inspect/status, run/step, resume, and explain/waiting. No daemon, GUI, web service, remote fleet scheduler or cloud worker system.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP9"
+      ]
+    },
+    "REQ-11": {
+      "description": "Execution isolation and Controller-owned state: the Controller records the exact source identity it started from, and its operational state does not depend on source files currently being edited by its workers. Workflow state remains authoritative for Workflow lifecycle state; Controller-owned orchestration/job state is persisted separately, never replaces WORKFLOW_STATE.json, and is sufficient to answer the eleven questions the milestone brief enumerates. Controller runtime state lives outside tracked development source, in an ignored runtime directory.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP6",
+        "CP6B",
+        "CP7"
+      ]
+    },
+    "REQ-12": {
+      "description": "Repository layout for this milestone: `controller/` holds the Controller package source, `tests/` the automated tests, `pyproject.toml` the packaging and CLI entry point -- all three implementation deliverables; `.controller/` holds Controller-owned runtime state and is gitignored, never tracked.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-13": {
+      "description": "Artifacts-declaration correctness: this work item's own <work_item_id>-artifacts.json must classify every one of this milestone's deliverable paths at both stages before the plan bundle is generated and before any approval exists; `.claude/commands/` and `scripts/` stay excluded at both stages as workflow-manager-managed frozen Workflow v2.3.1 files this milestone must never modify.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-14": {
+      "description": "Scope boundary: Generation 1 does not implement Generation 2, broad Controller lifecycle automation, review-convergence automation, RepFlow orchestration, remote fleet management, daemons, cloud workers, GUIs or web services. RepFlow is not used as the primary Generation 1 integration fixture.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP9"
+      ]
+    },
+    "REQ-15": {
+      "description": "Acceptance: the Controller is a real executable tool, not an experiment; automated tests are green; disposable integration evidence is green; the repository is clean and documented.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "REQ-T1": {
+      "description": "Automated test: managed repository verification.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-T2": {
+      "description": "Automated test: unmanaged repository refusal.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-T3": {
+      "description": "Automated test: drift/invalid install refusal.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-T4": {
+      "description": "Automated test: Workflow state parsing.",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-T5": {
+      "description": "Automated test: malformed/ambiguous Workflow state refusal.",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-T6": {
+      "description": "Automated test: supported phase -> action mapping.",
+      "checkpoint_ids": [
+        "CP4",
+        "CP4B"
+      ]
+    },
+    "REQ-T7": {
+      "description": "Automated test: manual gate detection.",
+      "checkpoint_ids": [
+        "CP4B"
+      ]
+    },
+    "REQ-T8": {
+      "description": "Automated test: worker launch success.",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "REQ-T9": {
+      "description": "Automated test: worker failure.",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "REQ-T10": {
+      "description": "Automated test: worker interruption.",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "REQ-T11": {
+      "description": "Automated test: pre/post Workflow state validation.",
+      "checkpoint_ids": [
+        "CP6",
+        "CP6B"
+      ]
+    },
+    "REQ-T12": {
+      "description": "Automated test: durable resume after interruption.",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    },
+    "REQ-T13": {
+      "description": "Automated test: no replay of an already-completed action.",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    },
+    "REQ-T14": {
+      "description": "Automated test: immutable generation identity -- the cached, never-re-resolved pin; the content-verified source snapshot every non-read-only command executes from, including its dirty-source refusal scoped to the snapshot's own pathspec, its content-addressed reuse, and its tamper refusal against both the recorded digest and the snapshot directory name; the re-exec's import root, asserted from the child's own recorded sys.path and from the exec count with a controller/ package present in the invoking working directory, so the at-most-one-exec bound is measured rather than argued; the positive guard that admits only the three read-only commands at an unpinned source; and the eager-load and no-late-resource-read properties that keep a first import after the source moves from reaching the origin worktree.",
+      "checkpoint_ids": [
+        "CP1",
+        "CP8"
+      ]
+    },
+    "REQ-T15": {
+      "description": "Automated test: Controller source changes while the old generation keeps running unchanged.",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "REQ-T16": {
+      "description": "Automated test: generation handoff.",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "REQ-T17": {
+      "description": "Automated test: Controller-owned runtime state surviving source-repository modification.",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "REQ-T18": {
+      "description": "Automated test: disposable managed-repository real Workflow action.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "REQ-16": {
+      "description": "CP1 implementation obligation (plan-stage walk, revision 52, moved from the open column per required acceptance criterion 4): state a delimiting/parsing rule for the eager-load import-graph literal's own text -- the `from . import ...` statement's source span and which module names it lists -- so the eager-load assertion reads a declared text model rather than an unstated one.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-17": {
+      "description": "CP1 implementation obligation (plan-stage walk, revision 52): declare the stdout surface form of the never-written-root 'ladder row' the status report names, so the assertion that stdout names the resolved root and the ladder row that chose it has a stated text model rather than an illustrative quotation.",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "REQ-18": {
+      "description": "CP2 implementation obligation (plan-stage walk, revision 52, OPUS-R48-B1): state the channel (ControllerError's evidence mapping vs. its human sentence), the stream (which of the two commands' stdout/stderr), the match semantics, and the delimiting/decoding rule for the drift-evidence content assertion ('the evidence contains the stub's output').",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-19": {
+      "description": "CP2 implementation obligation (plan-stage walk, revision 52, OPUS-R48-B1): state the channel and rendering rule for the 'naming the observed value and the supported set' assertion attached to UnsupportedWorkflowVersionError.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-20": {
+      "description": "CP2 implementation obligation (plan-stage walk, revision 52, OPUS-R48-B1): state the channel and a rendering rule for the 'naming the observed value and the supported set' assertion attached to UnsupportedInstallProfileError, including a stable rendering of SUPPORTED_INSTALLATIONS (a set of tuples whose repr order is not interpreter-stable).",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-21": {
+      "description": "CP2 implementation obligation (plan-stage walk, revision 52, OPUS-R48-B1): state a decode/strip/resolve rule for the --show-toplevel canonicalisation that turns git's stdout into 'the canonical repository root', with a stated answer for CP9's symlinked-mkdtemp() fixture.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-22": {
+      "description": "CP3 implementation obligation (plan-stage walk, revision 52, OPUS-R49-B2): state a text model for AmbiguousWorkItemError's 'naming all candidates' obligation -- an assertion over the refusal's own free text -- so the fail-closed test has a declared delimiting rule rather than an unstated one.",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-23": {
+      "description": "CP4 implementation obligation (plan-stage walk, revision 52): state a scope/casing/spacing rule for the companion proxy test ('deriving from disable-model-invocation alone yields two'), distinct from and comparable to the qualified-literal recogniser it is compared against.",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "REQ-24": {
+      "description": "CP4B implementation obligation (plan-stage walk, revision 52, source attribution corrected by OPUS-R51-I2 to the second source, an external process's byte stream): state a declared key, delimiting rule and first-parent-walk bound for the functional-checklist commit-trailer read (discover_current_functional_checklist_evidence's round-scoped, first-parent-verified commit trailer, read from git log's stdout).",
+      "checkpoint_ids": [
+        "CP4B"
+      ]
+    },
+    "REQ-25": {
+      "description": "CP4B implementation obligation (plan-stage walk, revision 52): state a shared token or enum grounding the 'three gate fields name the same sub-case' identity claim, so it is a checkable equality rather than a free-text identity claim.",
+      "checkpoint_ids": [
+        "CP4B"
+      ]
+    },
+    "REQ-26": {
+      "description": "CP5 implementation obligation (plan-stage walk, revision 52): delimit the worker-stdout JSON classification's candidate span over an external process's byte stream -- trailing newline handling, multiple JSON documents, non-UTF-8 decoding -- since the shape rule is stated but the span it runs over is not.",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "REQ-27": {
+      "description": "CP6 implementation obligation (plan-stage walk, revision 52): declare a JOB_RECORD_FIELDS set, comparable to CP2's PRE_STATE_FIELDS, so the job record's 'every field the milestone brief enumerates' test has an extraction rule over docs/ACTIVE_MILESTONE.md prose rather than none.",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "REQ-28": {
+      "description": "CP6B implementation obligation (plan-stage walk, revision 52): declare a writer-to-phase map so property 2 (pair-keyed writer reachability) can decide which phases a writer produces from a given entry phase without reading frozen-command control flow or workflow_state.py source ad hoc.",
+      "checkpoint_ids": [
+        "CP6B"
+      ]
+    },
+    "REQ-29": {
+      "description": "CP6B implementation obligation (plan-stage walk, revision 52): state a mechanism for property 6 (completion) to decide which write is the completing one, without reading frozen-command control flow or workflow_state.py source ad hoc.",
+      "checkpoint_ids": [
+        "CP6B"
+      ]
+    },
+    "REQ-30": {
+      "description": "CP6B implementation obligation (plan-stage walk, revision 52, source attribution corrected by OPUS-R51-I2 to the third source, a Markdown document): state a rule binding the to_any_of-from-MILESTONE_WORKFLOW.md-table derivation back to the table it is claimed to come from, rather than asserting only that the derived set is non-empty.",
+      "checkpoint_ids": [
+        "CP6B"
+      ]
+    },
+    "REQ-31": {
+      "description": "CP6B implementation obligation (plan-stage walk, revision 52, OPUS-R47-B2/OPUS-R48-I2): resolve row 5's declared branch, whose own span never contains its declared call because the branch names a step range rather than containing the step's own text -- either teach the branch model to follow a 'steps N-M execute' cross-reference to the step it names, or restate row 5's branch to point at that step directly. This is a required implementation choice; CP6B cannot be reported COMPLETE while it is unresolved.",
+      "checkpoint_ids": [
+        "CP6B"
+      ]
+    },
+    "REQ-32": {
+      "description": "CP7 implementation obligation (plan-stage walk, revision 52, OPUS-R49-B1): state a delimiting rule for the eleven 'raises/reports X naming Y' assertions, each reading ControllerError's own observable output (its structured evidence mapping's rendered values, or its free human sentence -- state which); in particular, restate TransitionNotObservedError's assertion as a rule rather than an illustrative quotation.",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    },
+    "REQ-33": {
+      "description": "CP8 implementation obligation (plan-stage walk, revision 52, OPUS-R49-B1): state a matching rule for the revert-branch refusal's exact message and for the test-hook's one-line stderr note, both currently illustrative quotations of the Controller's own observable output.",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "REQ-34": {
+      "description": "CP8 implementation obligation (plan-stage walk, revision 52): name an artifact or observation channel for the end-to-end 'observable behaviour' assertion (REQ-T15-T17), which currently names none.",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "REQ-35": {
+      "description": "CP8 implementation obligation (plan-stage walk, revision 52): pin README.md's 'documented CLI' requirement to a stated, checkable form rather than leaving it an unpinned prose requirement.",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "REQ-36": {
+      "description": "CP9 implementation obligation (plan-stage walk, revision 52): state the extraction discipline for the verification gate's runner-output-vs-baseline-table comparison, structurally identical in shape to the already-closed exit-code half but currently with none of its extraction discipline stated.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "REQ-37": {
+      "description": "CP9 implementation obligation (plan-stage walk, revision 52): state a text model for 'recorded verbatim' evidence in TEST_RESULTS.md and the functional checklist.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "REQ-38": {
+      "description": "CP9 implementation obligation (plan-stage walk, revision 52): state an assertion (or an explicit, stated rationale for none) for the ADR's 'four asymmetries'/'nine review rounds' content and README.md's four content sections, both declared out of scope for extraction but still stated as deliverable requirements.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "REQ-39": {
+      "description": "CP9 implementation obligation (plan-stage walk, revision 52, OPUS-R49-B1): state a matching rule for explain's free-text gate-instruction contract and for --json's 'same information' equivalence claim, both the Controller's own observable output.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    }
+  }
+}

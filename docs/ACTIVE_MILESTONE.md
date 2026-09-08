@@ -527,9 +527,78 @@ observed view; and a nonexistent `claude_bin` raising `WorkerLaunchError`.
 The real `claude` binary is deliberately not exercised here -- CP9's
 opt-in integration test is the only call site that does.
 
-Next: `CP6` (job execution part 1: durable Controller-owned job records,
+`CP6` (job execution part 1: durable Controller-owned job records,
 pre-state capture, persist-before-launch, worker launch and result
-recording), depends on `CP2`, `CP3`, `CP4B`, `CP5`.
+recording) is **complete**, verified by `python3 -m unittest tests.test_job`
+(11 tests, all green) and by re-running the full suite (`python3 -m
+unittest discover -s tests -p "test_*.py"`: 188 tests, all green, no
+regressions). Delivered: `controller/job.py` (`execute_step(managed_repo,
+*, work_item_id=None, identity, runtime, permission_mode="acceptEdits",
+timeout=None, claude_bin=None) -> JobRecord | Decision`, the single
+function CP6B/CP7 extend in place rather than replace -- **CP6 owns steps
+1-6**: inspect and capture `pre_state` per the single `PRE_STATE_FIELDS`
+declaration (sixteen fields, including the two Controller-owned
+derivations this checkpoint newly implements -- `bundle_generated_digest`,
+a SHA-256 over the generator-written subset of `<bundle_dir>`, and
+`functional_review_consumed_blob`, `FUNCTIONAL_REVIEW.md`'s current Git
+blob hash); decide (`controller.evidence.decide`) under the **positive**
+launch guard -- a worker is launched only when `decision.automatic` is
+`True`, so a gate, a decline, and the two-member no-action class
+(`LEGACY_READY`/`MILESTONE_COMPLETE`, which writes no job record at all
+and returns the bare `Decision`) each short-circuit before any launch is
+considered; a pending-generation-handoff check reading
+`<runtime_root>/handoff.json` directly through `runtime.read_json` (CP8's
+own `handoff` module does not exist yet); the job record written in two
+flushes -- `PLANNED` (the full identity block, `pre_state`, and
+`selected_action`, deliberately omitting `worker_outcome`, `worker`,
+`observed_phase_after`, `transition_verified` and `expected_transition`)
+then `LAUNCHED` (adding `expected_transition` only, looked up from a
+closed six-row `to_any_of` table transcribed from the plan's own CP6B
+`ExpectedOutcome` table) -- both flushed before the worker is spawned;
+`worker.launch`; and the `COMPLETED` record, which also durably captures
+the worker's raw stdout/stderr under
+`<runtime_root>/jobs/<job_id>/worker.std{out,err}` via a new
+`runtime.write_bytes` (added alongside `runtime.write_json`, sharing its
+atomic write/fsync/replace/containment-guard mechanics through a new
+private `_atomic_write` helper). `tests/test_job.py` (11 tests): the
+no-action class returns a `Decision` with the jobs directory left
+unchanged; a manual-gate phase (`APPLYING_REVIEW_FEEDBACK`) and a
+declined report-only phase (`IMPLEMENTING`) each write their own
+single-flush record with no worker process spawned (asserted via
+`FAKE_CLAUDE_DIAG_FILE`'s absence); a pending handoff pre-empts an
+otherwise-automatic `PLANNING` decision, again with no process spawned;
+the `LAUNCHED` record is confirmed durable on disk *before* the worker
+starts, from inside the worker itself via a new `FAKE_CLAUDE_REQUIRE_FILE`
+env var added to `tests/fake_claude.py` for exactly this assertion; the
+first three persisted `status` values for one `execute_step` are exactly
+`["PLANNED", "LAUNCHED", "COMPLETED"]`, spied through
+`controller.job.runtime.write_json`; the `PLANNED`-flush record is
+asserted two-sidedly (carries `schema_version`/`controller_generation`/
+`target_repo`/`work_item_id`/`status`/`selected_action` and
+`set(pre_state) == PRE_STATE_FIELDS`; omits `worker_outcome`/`worker`/
+`observed_phase_after`/`transition_verified`/`expected_transition` -- key
+absent, not present-and-null) and the `LAUNCHED` flush is confirmed to add
+only `expected_transition`; the final `COMPLETED` record's key set is
+asserted exactly equal to every field CP6 itself owns; and
+`controller_source_commit`/`controller_source_tree_digest` are recorded
+exactly as the passed-in `identity` resolved them, including the `None`
+commit a `"worktree"`-kind identity carries. `controller/__init__.py`'s
+eager-import literal gains `job` between `worker` and `cli`, matching the
+plan's dependency order (`job -> {managed_repo, target_state, evidence,
+worker, handoff} -> decision -> {identity, runtime, errors}`).
+`execute_step`'s own `identity`/`runtime` parameters deliberately shadow
+this module's `controller.identity`/`controller.runtime` imports inside
+that one function's body -- every helper that actually performs I/O is
+defined at module scope instead, taking the runtime root as an explicit
+`runtime_root` parameter, so `controller.job.runtime.write_json` stays the
+one thing ever called and stays spyable. CP6's own slice of
+`execute_step` ends at a `COMPLETED` record -- it does not yet read
+post-state, decide `transition_verified`, or write `FINISHED`/`FAILED`/
+`INCOMPLETE`; that is CP6B's extension of this same function.
+
+Next: `CP6B` (job execution part 2: fresh post-state re-read and
+expected-transition verification, with `FINISHED` written only after it
+passes), depends on `CP6`.
 
 ## Current blockers
 

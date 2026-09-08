@@ -41,6 +41,15 @@ Recognised environment variables (all optional):
     The exact stderr to write. Defaults to empty.
 ``FAKE_CLAUDE_EXIT``
     The exit code. Defaults to ``0``.
+``FAKE_CLAUDE_REQUIRE_FILE``
+    If set, this process checks that the file at this path exists
+    *before* producing any output. If it does not, this process fails
+    immediately (exit ``91``, stderr names the missing path) instead of
+    emitting its ordinary result. CP6's own "the ``LAUNCHED`` job record
+    is durable on disk before the worker starts" assertion is checked
+    this way -- from inside the worker itself, which can only ever run
+    after ``controller.job.execute_step`` has already flushed that
+    record, rather than by racing the parent process from the outside.
 """
 
 from __future__ import annotations
@@ -83,8 +92,16 @@ def _default_stdout() -> str:
     })
 
 
+def _check_required_file() -> None:
+    required = os.environ.get("FAKE_CLAUDE_REQUIRE_FILE")
+    if required and not os.path.isfile(required):
+        sys.stderr.write(f"FAKE_CLAUDE_REQUIRE_FILE: {required} does not exist\n")
+        sys.exit(91)
+
+
 def main() -> None:
     _write_diagnostics()
+    _check_required_file()
 
     if os.environ.get("FAKE_CLAUDE_SELF_TERM"):
         os.kill(os.getpid(), signal.SIGTERM)

@@ -106,22 +106,17 @@ def _assert_contained(runtime_root: Path, full_path: Path) -> None:
         ) from None
 
 
-def write_json(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
-    """Atomically write ``obj`` as canonical JSON to
-    ``<runtime_root>/<rel_path>``. Raises ``RuntimeContainmentError`` unless
-    the resolved destination is inside ``runtime_root`` -- this is the sole
-    write path in the package, so every writer in it (including snapshot
-    materialisation) is confined by this one guard.
-
-    Atomic: writes to a ``.tmp`` sibling in the same directory, ``fsync``s
-    it, then ``os.replace``s it onto the target -- an interruption never
-    leaves a half-written record."""
+def _atomic_write(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) -> Path:
+    """The shared atomic-write mechanics :func:`write_json` and
+    :func:`write_bytes` both use: containment-checked, written to a
+    ``.tmp`` sibling in the same directory, ``fsync``ed, then
+    ``os.replace``d onto the target -- an interruption never leaves a
+    half-written record."""
     full_path = (runtime_root / rel_path)
     _assert_contained(runtime_root, full_path)
     full_path = full_path.resolve()
     full_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = full_path.parent / f".{full_path.name}.{secrets.token_hex(8)}.tmp"
-    data = json.dumps(obj, indent=2, sort_keys=True).encode("utf-8") + b"\n"
     fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     try:
         with os.fdopen(fd, "wb") as fh:
@@ -132,6 +127,29 @@ def write_json(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Pa
     finally:
         tmp_path.unlink(missing_ok=True)
     return full_path
+
+
+def write_json(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
+    """Atomically write ``obj`` as canonical JSON to
+    ``<runtime_root>/<rel_path>``. Raises ``RuntimeContainmentError`` unless
+    the resolved destination is inside ``runtime_root`` -- this is the sole
+    JSON write path in the package, so every JSON writer in it (including
+    snapshot materialisation) is confined by this one guard.
+
+    Atomic: writes to a ``.tmp`` sibling in the same directory, ``fsync``s
+    it, then ``os.replace``s it onto the target -- an interruption never
+    leaves a half-written record."""
+    data = json.dumps(obj, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    return _atomic_write(runtime_root, rel_path, data)
+
+
+def write_bytes(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) -> Path:
+    """Atomically write raw ``data`` (not JSON) to
+    ``<runtime_root>/<rel_path>``, under the same containment guard and
+    atomic write/fsync/replace sequence as :func:`write_json` -- the
+    sibling write path for content that is not JSON (CP6's own worker
+    ``jobs/<job_id>/worker.std{out,err}`` capture)."""
+    return _atomic_write(runtime_root, rel_path, data)
 
 
 def read_json(path: Path) -> dict | None:

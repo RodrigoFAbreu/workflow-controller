@@ -175,3 +175,79 @@ class UnsupportedInstallProfileError(ControllerError):
     ``workflow_version`` alone is supported."""
 
     code = "UNSUPPORTED_INSTALL_PROFILE"
+
+
+# ---------------------------------------------------------------------------
+# CP3 -- read-only target-repository Workflow state reading
+# (``controller.target_state``).
+# ---------------------------------------------------------------------------
+
+
+class MissingWorkflowStateError(ControllerError):
+    """The target repository has no
+    ``docs/ai-workflow/WORKFLOW_STATE.json``.
+
+    Raised by ``controller.target_state.read`` before anything else it
+    does -- a managed repository with no Workflow state at all is not a
+    state the Controller may reason about.
+    """
+
+    code = "MISSING_WORKFLOW_STATE"
+
+
+class MalformedWorkflowStateError(ControllerError):
+    """``WORKFLOW_STATE.json`` exists but cannot be trusted.
+
+    Covers: invalid JSON, JSON that does not parse to an object, an
+    absent or non-``1`` ``schema_version``, a ``work_items`` entry whose
+    own ``work_item_id`` field disagrees with its key, and an
+    ``active_work_item_id`` naming a work item absent from ``work_items``.
+    Never a best-effort parse -- every one of these is a refusal.
+    """
+
+    code = "MALFORMED_WORKFLOW_STATE"
+
+
+class UnknownPhaseError(ControllerError):
+    """A work item's ``phase`` is outside the Controller's closed,
+    seventeen-member known-phase set (``target_state.KNOWN_PHASES``, a
+    literal copy of frozen Workflow v2.3.1's own
+    ``workflow_state.KNOWN_PHASES`` -- the Controller never imports
+    ``scripts/``).
+
+    A phase the Controller does not recognise is never guessed at; a
+    future Workflow release adding a phase must be a Controller release
+    too.
+    """
+
+    code = "UNKNOWN_PHASE"
+
+
+class AmbiguousWorkItemError(ControllerError):
+    """No single work item can be resolved as the target without a
+    guess.
+
+    Raised by ``controller.target_state.select_work_item`` when: an
+    explicit ``--work-item`` names an id absent from the snapshot; no
+    explicit id and no ``active_work_item_id`` are available and the
+    snapshot's non-terminal work items number zero or more than one.
+    ``evidence['candidates']`` names every candidate considered (possibly
+    empty) -- the Controller never picks one on its own.
+    """
+
+    code = "AMBIGUOUS_WORK_ITEM"
+
+
+class MalformedTargetRegistryError(ControllerError):
+    """A work item's own declared ``registry_path`` cannot be trusted to
+    derive ``registry_complete`` from.
+
+    Raised when the path does not resolve to a file inside the
+    repository, cannot be read or parsed as a JSON object, declares no
+    non-empty ``checkpoints`` array of ``{"id": ...}`` entries, or whose
+    own ``work_item_id`` field disagrees with the work item that declared
+    it. A registry the Controller cannot authoritatively read is never
+    read as vacuously complete or incomplete -- it is a named refusal.
+    """
+
+    code = "MALFORMED_TARGET_REGISTRY"

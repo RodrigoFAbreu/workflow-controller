@@ -176,3 +176,59 @@ def write_stub_workflow_manager(
     path.write_text(script)
     path.chmod(0o755)
     return path
+
+
+# ---------------------------------------------------------------------------
+# CP3 -- target-state reader fixtures.
+# ---------------------------------------------------------------------------
+
+
+def write_workflow_state(root: Path, state: dict) -> Path:
+    """Write ``docs/ai-workflow/WORKFLOW_STATE.json`` under ``root`` with
+    exactly ``state`` as its content (a plain dict the caller builds so
+    each malformed-state test states precisely what it corrupts)."""
+    state_dir = root / "docs" / "ai-workflow"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "WORKFLOW_STATE.json").write_text(json.dumps(state, indent=2) + "\n")
+    return state_dir / "WORKFLOW_STATE.json"
+
+
+def write_workflow_state_raw(root: Path, raw_text: str) -> Path:
+    """Like :func:`write_workflow_state`, but writes ``raw_text`` verbatim
+    -- for the invalid-JSON fixture, which has no dict form."""
+    state_dir = root / "docs" / "ai-workflow"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "WORKFLOW_STATE.json").write_text(raw_text)
+    return state_dir / "WORKFLOW_STATE.json"
+
+
+def write_workflow_config(root: Path, config: dict) -> Path:
+    """Write ``docs/ai-workflow/WORKFLOW_CONFIG.json`` under ``root``."""
+    state_dir = root / "docs" / "ai-workflow"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "WORKFLOW_CONFIG.json").write_text(json.dumps(config, indent=2) + "\n")
+    return state_dir / "WORKFLOW_CONFIG.json"
+
+
+def write_target_registry(root: Path, rel_path: str, registry: dict) -> Path:
+    """Write a registry JSON file at ``<root>/<rel_path>`` -- the
+    ``registry_path`` a work item entry can declare."""
+    full_path = root / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(json.dumps(registry, indent=2) + "\n")
+    return full_path
+
+
+def build_target_managed_repository(root: Path):
+    """A minimal, real ``managed_repo.ManagedRepository`` pointed at
+    ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so
+    the other fields are inert placeholders rather than a real Workflow
+    Manager inspection."""
+    from controller.managed_repo import ManagedRepository
+
+    root.mkdir(parents=True, exist_ok=True)
+    return ManagedRepository(
+        root=root, manifest={}, workflow_version="2.3.1", profile="full",
+        verify={"returncode": 0, "stdout": "", "stderr": ""},
+        status={"returncode": 0, "stdout": "", "stderr": ""},
+    )

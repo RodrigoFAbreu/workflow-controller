@@ -326,9 +326,41 @@ between `identity` and `cli`. `controller/cli.py`'s `inspect` command
 stays unwired (`NotImplementedError`) -- it needs CP3's target-state
 reader too, per CP1's own comment, and CP3 is not yet implemented.
 
-Next: `CP3` (read-only Workflow state reader: active work item, phase,
+`CP3` (read-only Workflow state reader: active work item, phase,
 checkpoints, review and approval state, fail-closed on malformed or
-ambiguous state), depends on `CP1`.
+ambiguous state) is **complete**, verified by `python3 -m unittest
+tests.test_target_state` (34 tests, all green, including two integration
+cases run against this repository's own real `WORKFLOW_STATE.json` and
+registry) and by re-running the full suite (`python3 -m unittest discover
+-s tests`: 95 tests, all green, no regressions). Delivered:
+`controller/target_state.py` (`read(managed_repo) -> WorkflowSnapshot`,
+producing frozen `WorkflowSnapshot`/`WorkItemView` dataclasses;
+`select_work_item(snapshot, *, work_item_id=None) -> WorkItemView`
+implementing the explicit-override / `active_work_item_id` /
+sole-non-terminal-item / `AmbiguousWorkItemError` selection order; the
+closed, literal, test-verified-equal-to-frozen-Workflow-v2.3.1
+seventeen-member `KNOWN_PHASES` set; the three-outcome
+`registry_complete` derivation -- `None` with no declared
+`registry_path`, `True`/`False` for a resolvable self-consistent
+registry, `MalformedTargetRegistryError` for an unresolvable/unreadable/
+unparseable/cross-linked one -- deliberately never reproducing the
+out-of-scope `StalePlanApprovalRegistryReadError` check; and
+`incomplete_children`'s reverse lookup over sibling work items). Five new
+`controller/errors.py` refusals (`MissingWorkflowStateError`,
+`MalformedWorkflowStateError`, `UnknownPhaseError`,
+`AmbiguousWorkItemError`, `MalformedTargetRegistryError`).
+`tests/test_target_state.py`, including an AST-scan structural proof that
+the module contains no writing call and defines no write function.
+`tests/fixtures.py` extended with target-state fixture builders.
+`controller/__init__.py`'s eager-import literal gains `target_state`
+between `managed_repo` and `cli`. `controller/cli.py`'s `inspect` command
+still stays unwired -- CP3 delivers only the reader module the plan
+names for this checkpoint's own files; wiring it into `cli.py` is CP4's
+and later checkpoints' concern, not restated here.
+
+Next: `CP4` (next-action decision engine part 1: the phase -> action
+mapping over frozen Workflow v2.3.1's seventeen phases, the user-only
+denylist, and the explainable `Decision` shape), depends on `CP3`.
 
 ## Current blockers
 

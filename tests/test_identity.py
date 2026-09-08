@@ -323,12 +323,15 @@ class DecoyAndRealRouteTest(unittest.TestCase):
             env.pop(identity.EXEC_HANDOFF_ENV, None)
             # `step` is not read-only, so this is the route that actually
             # exercises materialise-and-re-exec; the pinned child reaches
-            # cmd_step's own (CP1-stub) NotImplementedError, which is the
-            # proof dispatch got there pinned -- identity.json is written
-            # before that command body runs regardless.
+            # `cmd_step`'s own real body (CP9), which refuses with
+            # `UnmanagedRepositoryError` -- this fixture checkout carries no
+            # `.workflow-manager/installation.json` -- which is the proof
+            # dispatch got there pinned just as surely as the CP1-era stub
+            # did: `identity.json` is written before that command body runs
+            # regardless.
             proc = fixtures.run([str(console_script), "step", str(checkout)], cwd=checkout, env=env, check=False)
-            self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("NotImplementedError", proc.stderr)
+            self.assertEqual(proc.returncode, 20)  # EXIT_FAIL_CLOSED
+            self.assertIn("not a Workflow-managed repository", proc.stderr)
 
             runtime_root = checkout / ".controller"
             record = runtime.read_json(runtime_root / "identity.json")
@@ -366,7 +369,7 @@ class DecoyAndRealRouteTest(unittest.TestCase):
                 cwd=scratch, env=env, check=False,
             )
             self.assertNotIn("DECOY IMPORTED", proc.stderr)
-            self.assertIn("NotImplementedError", proc.stderr)
+            self.assertIn("not a Workflow-managed repository", proc.stderr)
             record = runtime.read_json(runtime_root / "identity.json")
             self.assertEqual(record["exec_depth"], 1)
 

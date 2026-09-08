@@ -830,9 +830,120 @@ even attempted); the equal-generation/different-commit case exercised
 through the real run loop rather than only through `detect()`; and the
 real subprocess end-to-end test described above.
 
-Next: `CP9` (CLI completion, disposable managed-repository real-Workflow-
-action evidence, documentation, and full milestone verification), depends
-on `CP8`.
+`CP9` (CLI completion, disposable managed-repository real-Workflow-action
+evidence, documentation, and full milestone verification) is **complete**,
+verified by `python3 -m unittest tests.test_cli
+tests.test_plan_document_consistency tests.test_integration_disposable_repo
+-v` (47 tests, 46 green and 1 correctly skipped -- the live-worker
+integration test is opt-in via `CONTROLLER_LIVE_WORKER=1`, run separately
+per the plan's own "run for real, once, during CP9") and by re-running the
+full suite (`python3 -m unittest discover -s tests -t .`: 332 tests, 331
+green and 1 skipped, no regressions). Delivered: `controller/cli.py`
+completed -- `inspect` (managed-repo verification + a Workflow state
+summary, text and `--json`), `explain` (`controller.evidence.decide`'s
+full `Decision`, text and `--json`, never launching a worker or writing a
+job record), `step` (one call through a new shared `_run_one_step` helper
+-- a generation-handoff check then `job.execute_step`, mapping every
+reachable status to the exit-code table and stopping after exactly one
+action, unlike `run`'s own loop over the same helper) and `resume`
+(`job.resume`'s reconciled/reported records, text and `--json`, exiting
+`40` when any record is `INTERRUPTED`) are all wired to their real
+behaviour; `cmd_run` is refactored (behaviour-preserving, confirmed by the
+full pre-existing `tests/test_handoff.py` suite staying green unchanged)
+to share `_run_one_step` with `step` rather than duplicating the
+per-status exit-code mapping. The full ten-row exit-code table
+(`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md`, "Exit codes") is now
+implemented, including the two codes CP1-CP8 left unreachable from the
+CLI (`2`, argparse's own default; `40`, added as `EXIT_INTERRUPTED`).
+`tests/test_cli.py` (28 tests): the parser's own command-line surface,
+including the `OPUS-R34-B2` global-option-ordering fixture pair
+(`--permission-mode` before vs. after the subcommand); `inspect`/
+`explain`'s text and `--json` reports across an automatic phase
+(`PLANNING`), a gate (`AWAITING_PLAN_APPROVAL`) and a declined phase
+(`IMPLEMENTING`), plus `explain`'s own never-writes-a-job-record proof;
+`step`'s exit-code mapping (`10`/`15`/`30`/`35`/`50`/`0`, the no-action
+`Decision`, and stopping after exactly one `FINISHED` call, contrasted
+with `run`'s own looping); `step`'s own handoff-detection-first case,
+built from a real bumped-generation origin checkout; `resume`'s no-records/
+terminal-`FINISHED`/terminal-`INTERRUPTED`(`->40`)/`--json` cases, and its
+own never-launches-a-worker proof (a monkeypatched `worker.launch` that
+fails the test if called, against a `PLANNED` record). Two stale CP1-era
+assertions in `tests/test_identity.py`
+(`DecoyAndRealRouteTest.test_console_script_route_pins_and_contains_correctly`/
+`test_decoy_package_in_working_directory_is_never_imported`) are updated
+from expecting `cmd_step`'s old `NotImplementedError` stub to expecting its
+real `UnmanagedRepositoryError` refusal (exit 20) against the same
+unmanaged fixture checkout -- the pinning proof both tests exist for
+(`identity.json` written before the command body runs) is unchanged and
+still asserted.
+
+`docs/adr/0001-controller-generation-1-architecture.md` (new): the
+normative exit-code table (its own `## Exit codes` heading, read by the
+document-consistency suite under the same heading-matching rule as the
+plan's own `### Exit codes`), plus the decisions most likely to matter to
+a later generation (exit code as the Workflow Manager's own verdict; the
+four-outcome worker classification; persist-before-launch as the basis of
+resume; generation-number-against-committed-`HEAD` as the handoff
+trigger). `README.md` gains installation (including the
+not-every-install-serves-`step`/`run`/`resume` rule), the CLI surface, the
+runtime-state layout and the safety model, with the exit-code table by
+reference rather than restated (`README.md` is excluded at both approval
+stages; the ADR is protected at the implementation stage). A new CI
+workflow, `.github/workflows/controller-tests.yml`, runs the Controller's
+own default suite on push/PR alongside the existing frozen conformance
+workflow, which it does not touch.
+
+`tests/test_plan_document_consistency.py` (18 tests) implements the
+document-consistency property's four in-scope halves -- checkpoint
+complexities against the registry, the exit-codes table against the ADR,
+round counts against `plan_revision - 1`, and Controller invocation lines
+against `controller.cli.build_parser()` itself -- each asserted first
+against the live plan/registry/ADR (green, including a pin that the
+command-line recogniser finds exactly the plan's own measured seven
+lines) and then against a negative/positive instantiation pinning its
+polarity (a wrong complexity fails; the superseded half of a `**N** today`
+-marked pair does not; an unmarked stale figure sharing a sentence with a
+marked pair still fails; a row differing between the plan and the ADR
+fails; emphasis-only differences do not; a stale wrapped round count
+(`ran\nit N rounds`) still fails; the `OPUS-R34-B2` pair parses/fails
+exactly as measured against the live parser; a bracketed usage synopsis
+and a bare route mention naming no command are both excluded). This
+suite's own complexity-half extraction is deliberately narrower than the
+plan's fullest specification of it (documented in the module's own
+docstring): a bare `**N**` is used only to detect a sentence's own
+`**N** today` marking, for pairing/exclusion purposes, and is never itself
+compared against the registry -- treating every bare bold decimal in 3300
+lines of prose as a checkpoint-complexity claim is exactly the shape that
+produces false positives against unrelated bold numbers sharing a sentence
+with a `CPn` token, and this suite trades a slice of the fullest
+specification's own coverage for zero false positives against the live
+document.
+
+`tests/test_integration_disposable_repo.py` (`REQ-T18`) implements the
+disposable-repository real-Workflow-action evidence exactly as the plan's
+own six steps describe: a throwaway repository under `tempfile.mkdtemp()`;
+a real `workflow-manager bootstrap --profile full` installation (with the
+plan's own documented fallback if the Manager is unreachable); a trivial
+committed milestone (add one `hello.txt` file) for `/milestone-plan` to
+plan; `workflow-controller --permission-mode bypassPermissions step <tmp>`
+run as the real installed module against the real `claude` binary, with
+`--allow-dirty-source` added (also before the subcommand, since it is a
+global) exactly when `git status --porcelain -- controller pyproject.toml`
+is non-empty at run time; asserting a genuine, durable Workflow state
+change (a `work_items` entry at `AWAITING_LOCAL_PLAN_REVIEW`, its
+registry/mapping/artifacts files, and the Controller's own job record
+showing `FINISHED`/`transition_verified: true` with the worker's real
+`session_id`); and printing the evidence line (worker `session_id`,
+pre-/post-phase, wall-clock and worker duration) `TEST_RESULTS.md` records
+verbatim. Opt-in via `CONTROLLER_LIVE_WORKER=1` (skipped by default, since
+it requires a live `claude` binary, network access and real spend); its
+one real run for this checkpoint is recorded in the implementation
+bundle's `TEST_RESULTS.md`.
+
+The milestone's ten required capabilities are now all delivered: 1
+(CP2), 2 (CP3), 3 (CP4/CP4B), 4 (CP5), 5 (CP9's own disposable-repo
+evidence), 6 (CP4/CP4B), 7 (CP7), 8 (phase-independent, CP2/CP3/CP5/
+CP6B/CP7), 9 (CP8), 10 (CP9's own completed CLI surface).
 
 ## Current blockers
 

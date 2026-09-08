@@ -1,25 +1,30 @@
 """The Controller's command-line surface (capability 10).
 
-CP1 provides the skeleton: argument parsing for the full six-command
+CP1 provided the skeleton: argument parsing for the full six-command
 surface, the pinned-execution guard and the materialise-and-re-exec
 mechanism that makes every non-read-only command run from an immutable
-snapshot, and a fully working ``status`` command. ``inspect``, ``explain``,
-``step``, ``run`` and ``resume`` are wired to their real behaviour by later
-checkpoints (CP2-CP9); here they are present in the command table -- so the
-guard and the parser are already complete and tested -- but their bodies
-raise ``NotImplementedError`` once dispatched.
+snapshot, and a fully working ``status`` command, with ``inspect``,
+``explain``, ``step``, ``run`` and ``resume`` present in the command table
+but stubbed. CP2-CP8 wired ``run`` (and, through it, the decision engine,
+job execution, durable resume's own reconciliation module, and the
+generation-handoff primitive). CP9 completes the surface: ``inspect``,
+``explain``, ``step`` and ``resume`` are wired to their real behaviour
+below, and the exit-code table (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
+"Exit codes") is now implemented in full, including ``40`` (``resume``
+reconciling a record to ``INTERRUPTED``).
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import os
 import sys
 import time
 from pathlib import Path
 
-from controller import handoff, identity, job, managed_repo, runtime
+from controller import evidence, handoff, identity, job, managed_repo, runtime, target_state
 from controller.decision import Decision
 from controller.errors import ControllerError, SourceSnapshotError
 
@@ -30,8 +35,9 @@ from controller.errors import ControllerError, SourceSnapshotError
 READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status"})
 ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume"})
 
-#: The `run` loop's own exit-code contract (CP8's slice of it -- the
-#: full table, including 10/15/16/30/35, is CP9's own "CLI completion").
+#: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
+#: "Exit codes"). ``2`` is argparse's own default usage-error code and is
+#: never returned explicitly by this module.
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_GATE = 10
@@ -40,6 +46,7 @@ EXIT_MAX_STEPS = 16
 EXIT_FAIL_CLOSED = 20
 EXIT_WORKER_FAILED = 30
 EXIT_INCOMPLETE = 35
+EXIT_INTERRUPTED = 40
 EXIT_HANDOFF_PENDING = 50
 
 #: Test-support surface (CP8): `--pause-file` is inert unless this
@@ -106,7 +113,7 @@ def _reexec(*, snapshot_dir: Path, runtime_root: Path, argv: list[str],
     ]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(snapshot_dir)
-    env[identity.EXEC_HANDOFF_ENV] = __import__("json").dumps({
+    env[identity.EXEC_HANDOFF_ENV] = json.dumps({
         "exec_depth": exec_depth_seen + 1,
         "source_kind": source_kind,
         "source_commit": source_commit,
@@ -203,17 +210,180 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     return EXIT_OK
 
 
+def _inspect_target(args: argparse.Namespace) -> managed_repo.ManagedRepository:
+    """The five-check managed-repository read every non-``status`` command
+    performs first (capability 1) -- factored once so ``inspect``,
+    ``explain``, ``step``, ``run`` and ``resume`` all fail the same way on
+    an unmanaged/drifted/unsupported target."""
+    return managed_repo.inspect(args.repo, manager_bin=args.workflow_manager)
+
+
+def _work_item_payload(work_item: target_state.WorkItemView) -> dict:
+    return {
+        "work_item_id": work_item.work_item_id,
+        "work_item_type": work_item.work_item_type,
+        "work_item_kind": work_item.work_item_kind,
+        "governing_workflow_version": work_item.governing_workflow_version,
+        "phase": work_item.phase,
+        "plan_revision": work_item.plan_revision,
+        "implementation_revision": work_item.implementation_revision,
+        "functional_review_round": work_item.functional_review_round,
+        "current_checkpoint_id": work_item.current_checkpoint_id,
+        "last_completed_checkpoint_id": work_item.last_completed_checkpoint_id,
+        "registry_complete": work_item.registry_complete,
+        "incomplete_children": list(work_item.incomplete_children),
+    }
+
+
 def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
-    raise NotImplementedError("wired to Workflow Manager / target-state reading in CP2/CP3")
+    """``inspect``: managed-repo verification + Workflow state summary;
+    read-only (capabilities 1 and 2)."""
+    target = _inspect_target(args)
+    snapshot = target_state.read(target)
+    work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
+
+    if args.json:
+        print(json.dumps({
+            "repository": {
+                "root": str(target.root),
+                "workflow_version": target.workflow_version,
+                "profile": target.profile,
+            },
+            "work_item": _work_item_payload(work_item),
+        }))
+        return EXIT_OK
+
+    print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+    print(f"work item: {work_item.work_item_id} "
+          f"(type={work_item.work_item_type} kind={work_item.work_item_kind} "
+          f"governing_workflow_version={work_item.governing_workflow_version})")
+    print(f"phase: {work_item.phase}")
+    print(f"plan_revision={work_item.plan_revision} "
+          f"implementation_revision={work_item.implementation_revision} "
+          f"functional_review_round={work_item.functional_review_round}")
+    print(f"current_checkpoint_id={work_item.current_checkpoint_id} "
+          f"last_completed_checkpoint_id={work_item.last_completed_checkpoint_id} "
+          f"registry_complete={work_item.registry_complete}")
+    if work_item.incomplete_children:
+        print(f"incomplete children: {', '.join(work_item.incomplete_children)}")
+    return EXIT_OK
 
 
 def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
-    raise NotImplementedError("wired to the decision engine in CP4/CP4B")
+    """``explain``: the next-action decision with full evidence, and, at a
+    gate, exactly what a human must do (capability 3). Read-only -- it
+    only ever calls :func:`controller.evidence.decide`, never
+    :func:`controller.job.execute_step`, so no job record is written and
+    no worker is launched."""
+    target = _inspect_target(args)
+    snapshot = target_state.read(target)
+    work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
+    decision = evidence.decide(target, snapshot, work_item)
+
+    if args.json:
+        gate = decision.gate
+        print(json.dumps({
+            "observed_phase": decision.observed_phase,
+            "evidence": list(decision.evidence),
+            "automatic": decision.automatic,
+            "declined": decision.declined,
+            "action": decision.action.command if decision.action is not None else None,
+            "reason": decision.reason,
+            "gate": None if gate is None else {
+                "repository": gate.repository,
+                "work_item_id": gate.work_item_id,
+                "phase": gate.phase,
+                "what_is_required": gate.what_is_required,
+                "artifact_path": gate.artifact_path,
+                "safe_resume_command": gate.safe_resume_command,
+            },
+        }))
+        return EXIT_OK
+
+    print(f"phase: {decision.observed_phase}")
+    for line in decision.evidence:
+        print(f"  evidence: {line}")
+    print(f"reason: {decision.reason}")
+    if decision.gate is not None:
+        gate = decision.gate
+        print(f"human gate -- what is required: {gate.what_is_required}")
+        if gate.artifact_path is not None:
+            print(f"  artifact: {gate.artifact_path}")
+        print(f"  safe resume command: {gate.safe_resume_command}")
+    elif decision.automatic:
+        print(f"next automatic action: {decision.action.command}")
+    elif decision.declined:
+        print(f"declined by this generation (automation-safe, but not automated here): "
+              f"{decision.action.command}")
+    else:
+        print("no action at this phase (e.g. LEGACY_READY or MILESTONE_COMPLETE)")
+    return EXIT_OK
+
+
+def _run_one_step(
+    args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
+    target: managed_repo.ManagedRepository,
+) -> tuple[int, dict | Decision | None]:
+    """One orchestration boundary: a generation-handoff check, then (at
+    most) one job execution. Shared by ``step`` (one call) and ``run``'s
+    own loop body (repeated until a stop condition) -- both `step`'s "stop
+    after exactly one action" and `run`'s own boundary discipline (CP8:
+    handoff detection runs "after a job finishes, before the next one
+    starts, never mid-job") are this same check, run once per call.
+
+    Returns ``(exit_code, result)``, where ``result`` is ``None`` for a
+    handoff, a :class:`~controller.decision.Decision` for the no-action
+    class, or a ``JobRecord`` otherwise."""
+    origin_source_root = ident.origin_source_root or ident.source_root
+    pending = handoff.detect(ident, origin_source_root)
+    if pending is not None:
+        jobs_complete, jobs_open = _classify_jobs(runtime_root)
+        handoff.write_handoff_record(
+            runtime_root, pending,
+            jobs_complete=jobs_complete, jobs_open=jobs_open,
+            next_generation_command=_next_generation_command(runtime_root, args.repo),
+            now=_now(),
+        )
+        return EXIT_HANDOFF_PENDING, None
+
+    result = job.execute_step(
+        target,
+        work_item_id=args.work_item,
+        identity=ident,
+        runtime=runtime_root,
+        permission_mode=args.permission_mode or job.DEFAULT_PERMISSION_MODE,
+        timeout=args.timeout,
+        claude_bin=args.claude_binary,
+    )
+
+    if isinstance(result, Decision):
+        # LEGACY_READY / MILESTONE_COMPLETE: nothing ran, nothing is
+        # pending.
+        return EXIT_OK, result
+
+    # `execute_step`'s own `status` field, mapped to the exit-code table
+    # (`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md`, "Exit codes"). `FINISHED`
+    # maps to `EXIT_OK` here too -- the distinction between "finished, keep
+    # going" (`run`) and "finished, stop" (`step`) is the caller's own loop
+    # structure, never a different exit code for the same status.
+    status_exit_codes = {
+        job.STATUS_GATE_BLOCKED: EXIT_GATE,
+        job.STATUS_DECLINED: EXIT_DECLINED,
+        job.STATUS_HANDOFF_PENDING: EXIT_HANDOFF_PENDING,
+        job.STATUS_FAILED: EXIT_WORKER_FAILED,
+        job.STATUS_INCOMPLETE: EXIT_INCOMPLETE,
+        job.STATUS_FINISHED: EXIT_OK,
+    }
+    return status_exit_codes[result["status"]], result
 
 
 def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
+    """``step``: execute exactly one automatic action, validate the
+    transition, stop (capabilities 5, 7, 8)."""
     require_pinned_execution()
-    raise NotImplementedError("wired to job execution in CP6")
+    target = _inspect_target(args)
+    exit_code, _result = _run_one_step(args, runtime_root, ident, target)
+    return exit_code
 
 
 def _classify_jobs(runtime_root: Path) -> tuple[list[str], list[str]]:
@@ -267,69 +437,63 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
             file=sys.stderr,
         )
 
-    target = managed_repo.inspect(args.repo, manager_bin=args.workflow_manager)
-    origin_source_root = ident.origin_source_root or ident.source_root
+    target = _inspect_target(args)
 
     steps_run = 0
     while steps_run < args.max_steps:
         # The orchestration boundary: checked once before every job this
         # loop starts, including the first -- never mid-job. Both halves
-        # (the test-support pause and the real handoff detection) are
-        # checked here, together, per the plan's own "the run loop checks
-        # for the file only at the same orchestration boundary where
-        # detect() runs".
+        # (the test-support pause and the real handoff detection, inside
+        # `_run_one_step`) are checked here, together, per the plan's own
+        # "the run loop checks for the file only at the same orchestration
+        # boundary where detect() runs".
         _await_pause_file(args.pause_file)
 
-        pending = handoff.detect(ident, origin_source_root)
-        if pending is not None:
-            jobs_complete, jobs_open = _classify_jobs(runtime_root)
-            handoff.write_handoff_record(
-                runtime_root, pending,
-                jobs_complete=jobs_complete, jobs_open=jobs_open,
-                next_generation_command=_next_generation_command(runtime_root, args.repo),
-                now=_now(),
-            )
-            return EXIT_HANDOFF_PENDING
-
-        result = job.execute_step(
-            target,
-            work_item_id=args.work_item,
-            identity=ident,
-            runtime=runtime_root,
-            permission_mode=args.permission_mode or job.DEFAULT_PERMISSION_MODE,
-            timeout=args.timeout,
-            claude_bin=args.claude_binary,
-        )
+        exit_code, result = _run_one_step(args, runtime_root, ident, target)
         steps_run += 1
 
-        if isinstance(result, Decision):
-            # LEGACY_READY / MILESTONE_COMPLETE: nothing ran, nothing is
-            # pending.
-            return EXIT_OK
+        if isinstance(result, dict) and result["status"] == job.STATUS_FINISHED:
+            # This checkpoint/action is done -- loop back to the
+            # orchestration boundary and decide the next one.
+            continue
 
-        status = result["status"]
-        if status == job.STATUS_GATE_BLOCKED:
-            return EXIT_GATE
-        if status == job.STATUS_DECLINED:
-            return EXIT_DECLINED
-        if status == job.STATUS_HANDOFF_PENDING:
-            # A handoff.json this loop did not itself write (e.g. left
-            # over from a prior invocation) -- execute_step's own step 3
-            # check caught it first.
-            return EXIT_HANDOFF_PENDING
-        if status == job.STATUS_FAILED:
-            return EXIT_WORKER_FAILED
-        if status == job.STATUS_INCOMPLETE:
-            return EXIT_INCOMPLETE
-        # STATUS_FINISHED: this checkpoint/action is done -- loop back to
-        # the orchestration boundary and decide the next one.
+        # Every other outcome stops the loop: the no-action class
+        # (`result` is a `Decision`, exit 0), a handoff (`result` is
+        # `None`, exit 50), or one of `GATE_BLOCKED`/`DECLINED`/
+        # `HANDOFF_PENDING`/`FAILED`/`INCOMPLETE` (a `dict`, its own exit
+        # code -- `HANDOFF_PENDING` here is a `handoff.json` this loop did
+        # not itself write, e.g. left over from a prior invocation, since
+        # `_run_one_step`'s own handoff check already caught the ordinary
+        # case first).
+        return exit_code
 
     return EXIT_MAX_STEPS
 
 
 def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
+    """``resume``: reconcile non-terminal job records, then report
+    (capability 7). Never launches a worker -- ``controller.job.resume``
+    contains no call to ``controller.worker.launch`` at all."""
     require_pinned_execution()
-    raise NotImplementedError("wired to durable resume in CP7")
+    target = _inspect_target(args)
+    records = job.resume(target, identity=ident, runtime=runtime_root)
+
+    if args.json:
+        print(json.dumps(records))
+    else:
+        if not records:
+            print(f"no job records for {target.root}")
+        for record in records:
+            job_id = record.get("job_id", "<unknown>")
+            status = record.get("status", "<unknown>")
+            marked = record.get("resume_marked")
+            if marked is not None:
+                print(f"{job_id}: {status} (resume_marked={marked['outcome']}: {marked['reason']})")
+            else:
+                print(f"{job_id}: {status}")
+
+    any_interrupted = any(record.get("status") == job.STATUS_INTERRUPTED for record in records)
+    return EXIT_INTERRUPTED if any_interrupted else EXIT_OK
 
 
 _DISPATCH = {

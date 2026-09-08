@@ -1,0 +1,16 @@
+[project]
+name = "workflow-controller"
+version = "1.0.0"
+description = "Workflow Controller -- Generation 1: automates operation of the Workflow state machine over managed repositories."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+workflow-controller = "controller.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["controller"]

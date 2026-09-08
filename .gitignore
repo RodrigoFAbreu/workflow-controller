@@ -8,3 +8,11 @@ __pycache__/
 .ai-review/
 __pycache__/
 *.pyc
+
+# Claude Code local session permissions (untracked, machine-local)
+.claude/settings.local.json
+
+# --- Workflow Controller-owned runtime state (never tracked) ---
+.controller/
+build/
+*.egg-info/

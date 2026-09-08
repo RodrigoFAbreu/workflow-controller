@@ -251,3 +251,45 @@ class MalformedTargetRegistryError(ControllerError):
     """
 
     code = "MALFORMED_TARGET_REGISTRY"
+
+
+# ---------------------------------------------------------------------------
+# CP4 -- next-action decision engine (``controller.decision``).
+# ---------------------------------------------------------------------------
+
+
+class NoSupportedActionError(ControllerError):
+    """The observed phase has no automatic action, no human gate, and is
+    not one of the deliberately inert phases (``LEGACY_READY``,
+    ``MILESTONE_COMPLETE``).
+
+    Raised for the four vocabulary phases frozen Workflow v2.3.1's own
+    ``KNOWN_PHASES`` carries but no writer ever persists
+    (``SELF_REVIEWING_PLAN``, ``AWAITING_TECHNICAL_APPROVAL``,
+    ``FIXING_FUNCTIONAL_FINDINGS``, ``AWAITING_USER_ACCEPTANCE``) --
+    ``evidence['phase']`` names the phase and ``message`` explains that no
+    writer produces it -- and, defensively, for any phase string that
+    reaches ``decision.decide`` without having gone through
+    ``target_state.read``'s own ``UnknownPhaseError`` gate first, which
+    should be unreachable in practice.
+    """
+
+    code = "NO_SUPPORTED_ACTION"
+
+
+class HumanGateError(ControllerError):
+    """A caller attempted to treat a gated :class:`~controller.decision.Decision`
+    (``gate is not None``, or ``automatic`` is ``False``) as one safe to act
+    on automatically.
+
+    ``decision.decide`` itself never raises this -- a gate is ordinary,
+    reportable data, not a refusal. It exists for the later checkpoints
+    that consume a ``Decision`` (CP6's ``execute_step``, most directly):
+    the launch guard those checkpoints implement is asserted positively in
+    their own tests, and this is the named exception a defensive internal
+    check raises if a non-automatic decision ever reached a worker launch
+    despite that guard -- an invariant violation, never an ordinary
+    control-flow path.
+    """
+
+    code = "HUMAN_GATE"

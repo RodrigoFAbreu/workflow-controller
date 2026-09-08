@@ -358,9 +358,61 @@ still stays unwired -- CP3 delivers only the reader module the plan
 names for this checkpoint's own files; wiring it into `cli.py` is CP4's
 and later checkpoints' concern, not restated here.
 
-Next: `CP4` (next-action decision engine part 1: the phase -> action
-mapping over frozen Workflow v2.3.1's seventeen phases, the user-only
-denylist, and the explainable `Decision` shape), depends on `CP3`.
+`CP4` (next-action decision engine part 1: the phase -> action mapping
+over frozen Workflow v2.3.1's seventeen phases, the user-only denylist,
+and the explainable `Decision` shape) is **complete**, verified by
+`python3 -m unittest tests.test_decision` (25 tests, all green) and by
+re-running the full suite (`python3 -m unittest discover -s tests`: 120
+tests, all green, no regressions). Delivered: `controller/decision.py`
+(`decide(managed_repo, snapshot, work_item) -> Decision`, the frozen
+`Decision`/`Action`/`HumanGate` dataclasses; the phase -> action mapping
+over all seventeen known phases -- the two pure-automatic phases
+(`PLANNING`, `REVISING_PLAN`), the five report-only phases split into the
+two automation-safe `declined=True` ones (`IMPLEMENTING`,
+`SELF_REVIEWING_IMPLEMENTATION`) and the three genuine human gates
+(`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, `APPLYING_REVIEW_FEEDBACK`,
+`AWAITING_FUNCTIONAL_REVIEW`), the `AWAITING_PLAN_APPROVAL` user-only gate,
+`LEGACY_READY`'s and `MILESTONE_COMPLETE`'s own inert outcomes, and the
+four vocabulary phases raising `NoSupportedActionError`; the
+qualified-literal `workflow_state.validate_...confirmation` recogniser
+(`carries_user_confirmation_guard`), the command-file partition property
+(`classify_command_files`, enumerating the target repository's own
+`.claude/commands/*.md` fresh at call time -- never a copied list) and the
+derived three-command `USER_ONLY_COMMANDS` set
+(`derive_user_only_commands`); the closed, literal, two-directionally-
+tested-equal-to-`target_state.KNOWN_PHASES` seventeen-member
+`decision.KNOWN_PHASES` copy). Two new `controller/errors.py` refusals
+(`NoSupportedActionError`, `HumanGateError`). `tests/test_decision.py`,
+covering the table-driven per-phase mapping, the two-directional
+known-phase-set equality, the scope assertion (`automatic=False` at the
+five report-only phases, `automatic=True` at the six automatic triples),
+the two-shape assertion (gate-bearing vs. declined), the user-only
+denylist derivation (including the proxy-derivation-yields-two pin and
+both discriminating-recogniser fixtures), the command-file partition
+property (including the sixteenth-file negative case), and the
+never-returns-a-user-only-command total assertion.
+`tests/fixtures.py` extended with `build_work_item_view`,
+`copy_real_commands_dir` (this repository's own `.claude/commands/` is
+itself a live frozen-v2.3.1 fifteen-file installation, reused as the
+fixture) and `write_command_file`. `controller/__init__.py`'s eager-import
+literal gains `decision` between `identity` and `managed_repo`, matching
+the plan's dependency order.
+
+**Three phases remain provisional pending CP4B** (`AWAITING_LOCAL_PLAN_REVIEW`,
+`AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, `AWAITING_EXTERNAL_PLAN_REVIEW` on a
+`"1"`-governed item): `decide()` resolves each to its ordinary-case
+automatic row without reading any `.ai-review/` evidence, since nothing in
+this checkpoint's own dependency graph (`job`/`cli`, which depend on
+CP4B's `evidence`, never on `decision` directly) acts on a `Decision` yet.
+Each such `Decision.reason` states this explicitly. `HumanGate.artifact_path`
+is `None` on every gate CP4 produces for the same reason -- CP4B's
+`evidence.py` owns the plan-stage/implementation-stage `<bundle_dir>`/
+`<feedback_dir>` resolution.
+
+Next: `CP4B` (next-action decision engine part 2: evidence-reading
+disambiguations -- feedback role and status, checklist trailer, consumed
+marker, incomplete children -- and human-gate classification), depends on
+`CP4`.
 
 ## Current blockers
 

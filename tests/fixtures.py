@@ -219,6 +219,72 @@ def write_target_registry(root: Path, rel_path: str, registry: dict) -> Path:
     return full_path
 
 
+# ---------------------------------------------------------------------------
+# CP4 -- decision-engine fixtures.
+# ---------------------------------------------------------------------------
+
+REAL_COMMANDS_DIR = REPO_ROOT / ".claude" / "commands"
+
+
+def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
+                          governing_workflow_version: str | None = "2.1", **overrides):
+    """A real ``controller.target_state.WorkItemView`` with every field
+    populated by a sensible default, so a decision-engine test states only
+    the fields it cares about."""
+    from controller.target_state import WorkItemView
+
+    defaults: dict = dict(
+        work_item_id=work_item_id,
+        work_item_type="product",
+        work_item_kind="product",
+        governing_workflow_version=governing_workflow_version,
+        phase=phase,
+        plan_revision=1,
+        implementation_revision=None,
+        functional_review_round=None,
+        base_commit="0" * 40,
+        reviewed_implementation_head=None,
+        current_checkpoint_id=None,
+        last_completed_checkpoint_id=None,
+        checkpoints={},
+        current_bundle_id=None,
+        plan_approval=None,
+        technical_approval=None,
+        functional_acceptance_status=None,
+        plan_review_stages=None,
+        parent_work_item_id=None,
+        incomplete_children=(),
+        registry_complete=None,
+        state_revision=1,
+    )
+    defaults.update(overrides)
+    return WorkItemView(**defaults)
+
+
+def copy_real_commands_dir(dest: Path) -> Path:
+    """A real, on-disk copy of this repository's own
+    ``.claude/commands/`` -- this repository is itself a frozen Workflow
+    v2.3.1 installation, so its fifteen command files are the same
+    external artifact a target managed repository carries. Copying rather
+    than pointing at ``REAL_COMMANDS_DIR`` directly keeps a fixture that
+    mutates a file (the 16th-file / discriminating-recogniser tests)
+    from ever touching this repository's own working tree."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for path in REAL_COMMANDS_DIR.glob("*.md"):
+        shutil.copy2(path, dest / path.name)
+    return dest
+
+
+def write_command_file(commands_dir: Path, name: str, text: str) -> Path:
+    """Write a single synthetic command file -- for the partition and
+    denylist-recogniser fixtures that need a file the real fifteen do not
+    carry."""
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    path = commands_dir / f"{name}.md"
+    path.write_text(text)
+    return path
+
+
 def build_target_managed_repository(root: Path):
     """A minimal, real ``managed_repo.ManagedRepository`` pointed at
     ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so

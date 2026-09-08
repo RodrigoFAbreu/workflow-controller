@@ -87,3 +87,92 @@ def run_controller_module(args: list[str], *, cwd: Path, env: dict, check: bool 
         [sys.executable, "-m", "controller", *args],
         cwd=cwd, env=full_env, capture_output=True, text=True, check=check,
     )
+
+
+# ---------------------------------------------------------------------------
+# CP2 -- managed-repository inspection fixtures.
+# ---------------------------------------------------------------------------
+
+
+def build_bare_git_repo(dest: Path) -> Path:
+    """A real, otherwise-empty Git repository with no Workflow Manager
+    installation at all -- the ``UnmanagedRepositoryError`` fixture."""
+    dest.mkdir(parents=True, exist_ok=True)
+    run(["git", "init", "-q"], cwd=dest)
+    run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=dest)
+    run(["git", "config", "user.name", "Controller Tests"], cwd=dest)
+    return dest
+
+
+def write_installation_manifest(
+    root: Path,
+    *,
+    workflow_version: str = "2.3.1",
+    profile: str = "full",
+    schema_version: object = 1,
+    include_schema_version: bool = True,
+    include_workflow_version: bool = True,
+    include_profile: bool = True,
+) -> Path:
+    """Write ``.workflow-manager/installation.json`` under ``root``. Every
+    field the malformed-manifest tests need to omit or corrupt is an
+    explicit keyword here rather than post-hoc string surgery, so each
+    fixture states exactly what it is missing."""
+    manifest_dir = root / ".workflow-manager"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    manifest: dict = {}
+    if include_schema_version:
+        manifest["schema_version"] = schema_version
+    if include_workflow_version:
+        manifest["workflow_version"] = workflow_version
+    if include_profile:
+        manifest["profile"] = profile
+    (manifest_dir / "installation.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest_dir / "installation.json"
+
+
+def build_managed_repo(
+    dest: Path, *, workflow_version: str = "2.3.1", profile: str = "full",
+) -> Path:
+    """A real Git repository carrying a syntactically valid
+    ``.workflow-manager/installation.json`` -- the fixture every CP2 test
+    that only needs the manifest half (not a real ``workflow-manager``
+    verify/status pass) is built on."""
+    build_bare_git_repo(dest)
+    write_installation_manifest(dest, workflow_version=workflow_version, profile=profile)
+    run(["git", "add", "-A"], cwd=dest)
+    run(["git", "commit", "-q", "-m", "managed"], cwd=dest)
+    return dest
+
+
+def write_stub_workflow_manager(
+    path: Path, *, verify_exit: int = 0, status_exit: int = 0,
+    verify_stdout: str = "workflow 2.3.1 (full profile) -- clean",
+    status_stdout: str = "workflow 2.3.1 (full profile) -- clean",
+) -> Path:
+    """A hermetic, offline stand-in for the real ``workflow-manager``
+    executable: an executable shell script whose ``verify``/``status``
+    exit codes and stdout are the caller's own, so the drift/asymmetry
+    tests never depend on the real Manager's actual behaviour."""
+    script = (
+        "#!/bin/sh\n"
+        "sub=\"$1\"\n"
+        "shift\n"
+        "case \"$sub\" in\n"
+        "  verify)\n"
+        f"    echo {verify_stdout!r}\n"
+        f"    exit {verify_exit}\n"
+        "    ;;\n"
+        "  status)\n"
+        f"    echo {status_stdout!r}\n"
+        f"    exit {status_exit}\n"
+        "    ;;\n"
+        "  *)\n"
+        "    echo \"stub workflow-manager: unknown subcommand $sub\" >&2\n"
+        "    exit 1\n"
+        "    ;;\n"
+        "esac\n"
+    )
+    path.write_text(script)
+    path.chmod(0o755)
+    return path

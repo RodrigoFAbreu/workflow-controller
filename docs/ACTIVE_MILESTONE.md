@@ -299,8 +299,36 @@ functional); `controller/GENERATION.json`; the `.gitignore` entry for
 `.controller/`; and `tests/fixtures.py`, `tests/test_runtime.py`,
 `tests/test_identity.py`, `tests/test_package_structure.py`.
 
-Next: `CP2` (managed-repository inspection via Workflow Manager
-`status`/`verify`), depends on `CP1`.
+`CP2` (managed-repository inspection: Workflow Manager `status`/`verify`
+integration, unmanaged/drifted/unsupported-installation refusals) is
+**complete**, verified by `python3 tests/test_managed_repo.py` (18 tests,
+all green, including two real-`workflow-manager` integration cases run
+against this repository's own live installation and a real `bootstrap
+--profile runtime` fixture -- neither skipped, since a real
+`workflow-manager` is installed in this environment) and by re-running
+`tests/test_runtime.py`, `tests/test_identity.py` and
+`tests/test_package_structure.py` (no regressions; 43 tests, all green).
+Delivered: `controller/managed_repo.py` (`inspect(path, *,
+manager_bin=None) -> ManagedRepository`, the five ordered fail-closed
+checks: not-a-repository, unmanaged, malformed manifest, unavailable
+Manager executable, drifted installation with `verify`'s exit code as the
+sole admission signal and `status`'s as a corroborating one, and the
+closed `SUPPORTED_INSTALLATIONS = {("2.3.1", "runtime"), ("2.3.1",
+"full")}` `(workflow_version, profile)` admission set); seven new
+`controller/errors.py` refusals (`NotARepositoryError`,
+`UnmanagedRepositoryError`, `MalformedInstallationManifestError`,
+`WorkflowManagerUnavailableError`, `DriftedInstallationError`,
+`UnsupportedWorkflowVersionError`, `UnsupportedInstallProfileError`);
+`tests/test_managed_repo.py`; `tests/fixtures.py` extended with
+managed-repository and stub-`workflow-manager` fixture builders;
+`controller/__init__.py`'s eager-import literal gains `managed_repo`
+between `identity` and `cli`. `controller/cli.py`'s `inspect` command
+stays unwired (`NotImplementedError`) -- it needs CP3's target-state
+reader too, per CP1's own comment, and CP3 is not yet implemented.
+
+Next: `CP3` (read-only Workflow state reader: active work item, phase,
+checkpoints, review and approval state, fail-closed on malformed or
+ambiguous state), depends on `CP1`.
 
 ## Current blockers
 

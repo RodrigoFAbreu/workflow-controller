@@ -285,6 +285,114 @@ def write_command_file(commands_dir: Path, name: str, text: str) -> Path:
     return path
 
 
+# ---------------------------------------------------------------------------
+# CP4B -- evidence-reading fixtures.
+# ---------------------------------------------------------------------------
+
+
+def build_target_git_repo(root: Path) -> Path:
+    """A real, minimal Git repository at ``root`` -- ``controller.evidence``
+    shells out to ``git rev-parse HEAD``/``git log`` against the *target*
+    repository itself, so its own tests need a real repository with real
+    commits, distinct from ``build_managed_repo`` (CP2), which only needs
+    a syntactically valid ``.workflow-manager/installation.json`` and
+    never runs a real ``git log``."""
+    root.mkdir(parents=True, exist_ok=True)
+    run(["git", "init", "-q"], cwd=root)
+    run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=root)
+    run(["git", "config", "user.name", "Controller Tests"], cwd=root)
+    return root
+
+
+def commit_all(root: Path, message: str, *, allow_empty: bool = False) -> str:
+    """Stage everything under ``root`` and commit it (or, with
+    ``allow_empty``, commit with nothing staged -- the round-scoped
+    functional-checklist evidence fixture's own shape), returning the new
+    commit's full SHA."""
+    run(["git", "add", "-A"], cwd=root)
+    args = ["git", "commit", "-q", "-m", message]
+    if allow_empty:
+        args = ["git", "commit", "-q", "--allow-empty", "-m", message]
+    run(args, cwd=root)
+    return run(["git", "rev-parse", "HEAD"], cwd=root).stdout.strip()
+
+
+def current_head(root: Path) -> str:
+    return run(["git", "rev-parse", "HEAD"], cwd=root).stdout.strip()
+
+
+def write_review_feedback(root: Path, feedback_dir_rel: Path | str, text: str) -> Path:
+    """Write ``<feedback_dir>/REVIEW_FEEDBACK.md`` under ``root``."""
+    path = root / feedback_dir_rel / "REVIEW_FEEDBACK.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def build_review_feedback_text(
+    *, status: str | None = "APPROVE", reviewer_role: str | None = None,
+    reviewed_bundle_id: str | None = "b" * 64, reviewed_base_commit: str | None = "0" * 40,
+    work_item: str | None = "wi-1", reviewed_content_id: str | None = "c" * 64,
+    extra_lines: tuple[str, ...] = (),
+) -> str:
+    """Assemble a ``REVIEW_FEEDBACK.md`` provenance block from named
+    fields -- any field left ``None`` is simply omitted, so a test states
+    only what it wants missing. ``extra_lines`` are appended to the
+    provenance block verbatim (e.g. a bare-identifier citation, or a
+    duplicate line), still ahead of the first ``## `` heading."""
+    lines = ["# Review Decision", ""]
+    if status is not None:
+        lines.append(f"Status: {status}")
+    if reviewer_role is not None:
+        lines.append(f"Reviewer role: {reviewer_role}")
+    if reviewed_bundle_id is not None:
+        lines.append(f"Reviewed bundle ID: {reviewed_bundle_id}")
+    if reviewed_base_commit is not None:
+        lines.append(f"Reviewed base commit: {reviewed_base_commit}")
+    if work_item is not None:
+        lines.append(f"Work item: {work_item}")
+    if reviewed_content_id is not None:
+        lines.append(f"Reviewed content ID: {reviewed_content_id}")
+    lines.extend(extra_lines)
+    lines.append("")
+    lines.append("## Blocking findings")
+    lines.append("")
+    lines.append("Status: this is prose quoting the template, never a live field.")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def write_manifest(root: Path, bundle_dir_rel: Path | str, text: str) -> Path:
+    """Write ``<bundle_dir>/MANIFEST.md`` under ``root``."""
+    path = root / bundle_dir_rel / "MANIFEST.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def build_manifest_text(
+    *, bundle_id: str | None = "b" * 64, generation_head: str | None = "0" * 40,
+) -> str:
+    lines = ["# Bundle manifest", ""]
+    if bundle_id is not None:
+        lines.append(f"bundle_id: {bundle_id}")
+    if generation_head is not None:
+        lines.append(f"generation_head: {generation_head}")
+    lines.append("")
+    lines.append("## Protected paths")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def write_rejected_marker(root: Path, work_item_id: str, *, scoped: bool, detail: str = "withdrawn") -> Path:
+    """Write the ``REJECTED`` marker at its scoped or flat path."""
+    base = (root / ".ai-review" / work_item_id) if scoped else (root / ".ai-review")
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / "REJECTED"
+    path.write_text(detail + "\n")
+    return path
+
+
 def build_target_managed_repository(root: Path):
     """A minimal, real ``managed_repo.ManagedRepository`` pointed at
     ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so

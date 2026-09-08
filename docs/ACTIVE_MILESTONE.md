@@ -409,10 +409,72 @@ is `None` on every gate CP4 produces for the same reason -- CP4B's
 `evidence.py` owns the plan-stage/implementation-stage `<bundle_dir>`/
 `<feedback_dir>` resolution.
 
-Next: `CP4B` (next-action decision engine part 2: evidence-reading
+`CP4B` (next-action decision engine part 2: evidence-reading
 disambiguations -- feedback role and status, checklist trailer, consumed
-marker, incomplete children -- and human-gate classification), depends on
-`CP4`.
+marker, incomplete children -- and human-gate classification) is
+**complete**, verified by `python3 -m unittest tests.test_evidence` (40
+tests, all green) and by re-running the full suite (`python3 -m unittest
+discover -s tests`: 160 tests, all green, no regressions). Delivered:
+`controller/evidence.py` (`decide(managed_repo, snapshot, work_item) ->
+Decision`, CP4B's own entry point -- checks the withdrawn-`REJECTED`-
+bundle outcome ahead of every other row for every bundle-bearing phase,
+resolves the three phases CP4 left as an ordinary-case placeholder
+(`AWAITING_LOCAL_PLAN_REVIEW`, `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`,
+`AWAITING_EXTERNAL_PLAN_REVIEW` on a `"1"`-governed item) with a real
+evidence read, sharpens the two evidence-driven report-only phases
+(`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`'s four sub-cases including the
+`generation_head`-behind-`HEAD` -> `/recover-implementation-provenance`
+case, and `AWAITING_FUNCTIONAL_REVIEW`'s four sub-cases via the
+`Workflow-Functional-Checklist` trailer, the `FUNCTIONAL_REVIEW.consumed`
+marker, and `incomplete_children`), and falls through unchanged to
+`controller.decision.decide` for every phase needing no `.ai-review/`
+read). Implements: the provenance-block text model
+(`provenance_block`/`read_labelled_line`, matching only a line inside the
+block before the first `## ` heading, so a body section quoting a label
+as prose is never read); the two-rule `<bundle_dir>` resolver
+(`resolve_bundle_dir`, unconditionally scoped at the four plan-stage
+phases with no existence gate, scoped-else-flat elsewhere) and the
+stage-less scoped-else-flat `<feedback_dir>`/`REJECTED`-marker resolvers
+(`resolve_feedback_dir`, `resolve_rejected_marker_path`); the
+manual-stage and `"1"`-path plan-review admissibility clause tables
+(`evaluate_manual_stage_admissibility` -- hard on role/`Status:`/the
+three `WFR-03` fields'/`review_content_id`/local-approval/
+`generation_head` clauses, advisory only on `Reviewed bundle ID:`;
+`evaluate_apply_plan_review_admissibility` -- `Reviewed bundle ID:` hard
+instead, no role/content-id reads); the local stage's own BLOCK
+exemption (role+`Status:` alone, no admissibility rule, so a genuine
+BLOCK with one malformed binding field still gates rather than
+launching); the round-scoped `Workflow-Functional-Checklist` trailer
+reader (`functional_checklist_evidence`, a first-parent `git log` walk
+within `base_commit..head`) and the `FUNCTIONAL_REVIEW.md`/
+`FUNCTIONAL_REVIEW.consumed` presence-then-content-hash reader
+(`functional_review_findings_consumed`). No new `controller/errors.py`
+refusal was needed -- every evidence-reading disambiguation this
+checkpoint owns resolves to `Decision` content (a gate naming the
+failing clause, never a raised exception), matching the plan's own
+per-checkpoint refusal-taxonomy summary, which names none for CP4B.
+`controller/__init__.py`'s eager-import literal gains `evidence` between
+`target_state` and `cli`, matching the plan's dependency order.
+`tests/test_evidence.py` (40 tests) covers: the text model; both
+`<bundle_dir>` rules including the plan-stage existence-gate fixture;
+the `REJECTED` marker at both layouts and its withdrawn-bundle-first
+integration into `decide()`; `AWAITING_LOCAL_PLAN_REVIEW`'s ordinary/
+BLOCK/exemption/loop-closure cases; `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`'s
+arrival test (round 3's B1 negative), admissibility hard clauses (round
+38's `EXT-PLAN-R38-B1` discriminating fixture), the advisory `bundle_id`
+case (`EXT-PLAN-R38-I1`), the legacy lowercase role spelling, and BLOCK;
+`AWAITING_EXTERNAL_PLAN_REVIEW`'s (`"1"`) three sub-cases including the
+hard-`bundle_id` contrast with the manual column; both implementation-
+stage and functional-review report sub-cases. `tests/fixtures.py` gains
+`build_target_git_repo`/`commit_all`/`current_head` (a real Git
+repository fixture `controller.evidence`'s own `git rev-parse`/`git log`
+calls need, distinct from CP2's manifest-only fixture) and
+`write_review_feedback`/`build_review_feedback_text`/`write_manifest`/
+`build_manifest_text`/`write_rejected_marker`.
+
+Next: `CP5` (fresh Claude worker abstraction: bounded task launch,
+synchronous wait, success/failure/interruption/ambiguity classification),
+depends on `CP1`.
 
 ## Current blockers
 

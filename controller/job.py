@@ -71,7 +71,7 @@ from typing import Any, Callable
 
 from controller import evidence, runtime, target_state, worker
 from controller.decision import Decision
-from controller.errors import HumanGateError
+from controller.errors import ControllerError, HumanGateError, StaleJobRecordError, UnreconcilableJobError
 
 JobRecord = dict[str, Any]
 
@@ -696,6 +696,473 @@ def _verify_transition(
         "observed_phase": observed_phase_after,
         "worker_outcome": worker_outcome,
     }
+
+
+# ---------------------------------------------------------------------------
+# CP7 -- durable resume (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``, "CP7
+# -- Durable resume"). `resume` loads every job record this Controller
+# generation ever wrote for one target repository and reconciles each
+# non-terminal one against authoritative Workflow/Git state -- never the
+# Controller's own optimism, and never by relaunching a worker: this
+# module's only worker-launch call site is `execute_step`'s own step 5,
+# which `resume` never calls.
+# ---------------------------------------------------------------------------
+
+#: The three non-terminal statuses `execute_step` can leave a record at if
+#: the process dies mid-job -- the only members `resume`'s closed
+#: reconciliation table actually judges.
+NON_TERMINAL_STATUSES: frozenset[str] = frozenset({STATUS_PLANNED, STATUS_LAUNCHED, STATUS_COMPLETED})
+
+#: The remaining seven members of the closed, ten-member enumeration --
+#: every one of `execute_step`'s own terminal outcomes, plus `resume`'s own
+#: `INTERRUPTED` write. A terminal record is reported, never reconciled.
+TERMINAL_STATUSES: frozenset[str] = frozenset({
+    STATUS_FINISHED, STATUS_FAILED, STATUS_INTERRUPTED, STATUS_INCOMPLETE,
+    STATUS_GATE_BLOCKED, STATUS_DECLINED, STATUS_HANDOFF_PENDING,
+})
+
+#: The worker outcomes a `COMPLETED` record's own `worker_outcome` must be
+#: one of to pass validation-pass case 3 -- the same closed four-member set
+#: `controller.worker.launch` itself ever classifies into.
+_KNOWN_WORKER_OUTCOMES: frozenset[str] = frozenset({"SUCCESS", "FAILURE", "AMBIGUOUS", "INTERRUPTED"})
+
+
+@dataclasses.dataclass(frozen=True)
+class Validity:
+    """The result of one :func:`validate_record` call -- the plan's own
+    named ``Validity`` return type. ``valid=True`` carries nothing else.
+    An invalid result carries ``terminal`` (whether :func:`resume` should
+    raise ``StaleJobRecordError`` or surface the record marked, per round
+    8's I2 carve-out -- decided from the record's own ``status``, never
+    guessed), ``case`` (which of the four validation-pass cases fired, for
+    tests and diagnostics), and a ``code``/``reason``/``message``/
+    ``evidence`` describing why. :func:`validate_record` itself never
+    raises -- :func:`resume` is the sole place a refusal becomes an
+    exception, which is what lets every case be asserted directly against
+    a plain returned value."""
+
+    valid: bool
+    terminal: bool = False
+    case: int | None = None
+    code: str = ""
+    reason: str = ""
+    message: str = ""
+    evidence: dict = dataclasses.field(default_factory=dict)
+
+
+#: The single shared "nothing wrong" result -- reused rather than
+#: reconstructed, so ``validate_record(record, ...) == VALID`` is a plain
+#: dataclass equality check in tests.
+VALID = Validity(valid=True)
+
+
+def _record_status_is_terminal(record: JobRecord) -> bool:
+    """The carve-out's own terminality read, over the record's own
+    ``status`` -- never over which validation case fired. A status this
+    generation does not recognise (or an absent one) is treated as
+    **non-terminal**, the fail-closed direction round 19's I2 chose: the
+    carve-out's premise (protecting *this generation's own history*) does
+    not hold for a record whose status this generation cannot even read."""
+    return record.get("status") in TERMINAL_STATUSES
+
+
+def _invalid(record: JobRecord, *, case: int, code: str, reason: str, message: str, evidence: dict) -> Validity:
+    return Validity(
+        valid=False, terminal=_record_status_is_terminal(record), case=case,
+        code=code, reason=reason, message=message, evidence=evidence,
+    )
+
+
+def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> Validity:
+    """The named validation pass CP7's own plan text states: four cases,
+    in a stated order, each answering *"can this record be believed?"*
+    Every case that fails returns an invalid :class:`Validity` -- never
+    raises; :func:`resume` alone turns an invalid, non-terminal result
+    into a raised :class:`~controller.errors.StaleJobRecordError`, per the
+    carve-out :func:`_record_status_is_terminal` reads.
+
+    ``managed_repo`` and ``identity`` are needed for case 2 (does the
+    record's own target still resolve, and does its ``work_item_id``
+    still exist there) and case 1's own ``controller_generation``
+    comparison respectively -- the plan's own shorthand signature
+    ``validate_record(record) -> Validity`` elides both, since neither is
+    optional in a real implementation of case 1 or case 2.
+
+    Case 1 and case 2 read no field this repository's target could not
+    have written by accident; none of the four cases reads the target's
+    **post-state** (that is what the reconciliation table below is for) --
+    case 2 is the only one that touches the target at all, and only to ask
+    whether it and its work item still exist.
+    """
+    # Case 1: uninterpretable record.
+    schema_version = record.get("schema_version")
+    if schema_version != SCHEMA_VERSION:
+        return _invalid(
+            record, case=1, code="StaleJobRecordError", reason="unknown_schema_version",
+            message=(
+                f"job {record.get('job_id')!r} declares schema_version={schema_version!r}, "
+                f"which this generation does not recognise (expected {SCHEMA_VERSION!r})"
+            ),
+            evidence={"job_id": record.get("job_id"), "schema_version": schema_version},
+        )
+    record_generation = record.get("controller_generation")
+    running_generation = identity.generation
+    if (
+        isinstance(record_generation, int) and isinstance(running_generation, int)
+        and record_generation > running_generation
+    ):
+        return _invalid(
+            record, case=1, code="StaleJobRecordError", reason="newer_controller_generation",
+            message=(
+                f"job {record.get('job_id')!r} was written by controller_generation="
+                f"{record_generation!r}, which is newer than this generation's own "
+                f"{running_generation!r} -- possibly-live work belonging to a generation "
+                f"that supersedes this one"
+            ),
+            evidence={
+                "job_id": record.get("job_id"), "record_generation": record_generation,
+                "running_generation": running_generation,
+            },
+        )
+
+    # Case 2: unresolvable subject. The loader (`resume`) has already
+    # confined `record` to this call's own `managed_repo` (its own
+    # `target_repo` field equals `str(managed_repo.root)`, by construction
+    # -- see `resume`'s own docstring), so "does target_repo resolve" is a
+    # fresh, live re-check of that same directory, never a re-parse of the
+    # record's own string.
+    if not managed_repo.root.is_dir():
+        return _invalid(
+            record, case=2, code="StaleJobRecordError", reason="target_repo_unresolvable",
+            message=(
+                f"job {record.get('job_id')!r} names target_repo "
+                f"{record.get('target_repo')!r}, which no longer resolves to a directory"
+            ),
+            evidence={"job_id": record.get("job_id"), "target_repo": record.get("target_repo")},
+        )
+    work_item_id = record.get("work_item_id")
+    try:
+        snapshot = target_state.read(managed_repo)
+    except ControllerError as exc:
+        # Any of target_state.read's own named refusals (missing/malformed
+        # WORKFLOW_STATE.json, an unknown phase, a malformed registry) --
+        # never a bare `Exception` catch, which would also swallow a real
+        # programming error here rather than surfacing it as evidence.
+        return _invalid(
+            record, case=2, code="StaleJobRecordError", reason="target_state_unreadable",
+            message=(
+                f"job {record.get('job_id')!r}'s target state at {managed_repo.root} could not "
+                f"be read: {exc}"
+            ),
+            evidence={"job_id": record.get("job_id"), "target_repo": record.get("target_repo"),
+                      "error": str(exc)},
+        )
+    if work_item_id not in snapshot.work_items:
+        return _invalid(
+            record, case=2, code="StaleJobRecordError", reason="work_item_absent",
+            message=(
+                f"job {record.get('job_id')!r} names work_item_id {work_item_id!r}, which is "
+                f"absent from {managed_repo.root}'s current Workflow state"
+            ),
+            evidence={"job_id": record.get("job_id"), "work_item_id": work_item_id},
+        )
+
+    # Case 3: worker_outcome disagrees with the step that owns the
+    # record's status -- stated over the three named non-terminal
+    # statuses, one rule each, keyed on presence/membership rather than on
+    # a class test, so an unrecognised status simply is not one of the
+    # three and falls through to case 4 untouched.
+    status = record.get("status")
+    if status in (STATUS_PLANNED, STATUS_LAUNCHED):
+        if "worker_outcome" in record:
+            return _invalid(
+                record, case=3, code="StaleJobRecordError", reason="worker_outcome_present",
+                message=(
+                    f"job {record.get('job_id')!r} is {status!r} but carries a worker_outcome "
+                    f"({record.get('worker_outcome')!r}) -- {status} is written before the "
+                    f"worker exists and never carries one"
+                ),
+                evidence={"job_id": record.get("job_id"), "status": status,
+                          "worker_outcome": record.get("worker_outcome")},
+            )
+    elif status == STATUS_COMPLETED:
+        worker_outcome = record.get("worker_outcome")
+        if worker_outcome not in _KNOWN_WORKER_OUTCOMES:
+            return _invalid(
+                record, case=3, code="StaleJobRecordError", reason="worker_outcome_invalid",
+                message=(
+                    f"job {record.get('job_id')!r} is COMPLETED but its worker_outcome "
+                    f"{worker_outcome!r} is absent or outside {sorted(_KNOWN_WORKER_OUTCOMES)}"
+                ),
+                evidence={"job_id": record.get("job_id"), "status": status,
+                          "worker_outcome": worker_outcome},
+            )
+
+    # Case 4: derived-field disagreement. `status` is derived from
+    # `selected_action.declined` at record-write time; ranges only over
+    # the enumeration's own (recognised) members -- an unrecognised status
+    # has no terminality this generation can determine and falls through
+    # unjudged to the reconciliation table's own unknown-status row.
+    declined = (record.get("selected_action") or {}).get("declined")
+    if status == STATUS_DECLINED and declined is not True:
+        return _invalid(
+            record, case=4, code="StaleJobRecordError", reason="declined_status_without_flag",
+            message=(
+                f"job {record.get('job_id')!r} is DECLINED but selected_action.declined is "
+                f"{declined!r}, not True"
+            ),
+            evidence={"job_id": record.get("job_id"), "status": status, "declined": declined},
+        )
+    if status in TERMINAL_STATUSES | NON_TERMINAL_STATUSES and status != STATUS_DECLINED and declined is True:
+        return _invalid(
+            record, case=4, code="StaleJobRecordError", reason="declined_flag_without_status",
+            message=(
+                f"job {record.get('job_id')!r} carries selected_action.declined=True but its "
+                f"status is {status!r}, not DECLINED"
+            ),
+            evidence={"job_id": record.get("job_id"), "status": status, "declined": declined},
+        )
+
+    return VALID
+
+
+def _expected_outcome_for_record(record: JobRecord) -> ExpectedOutcome:
+    """The single :data:`EXPECTED_OUTCOMES` row a ``LAUNCHED``/``COMPLETED``
+    record's own ``pre_state`` and ``selected_action`` correspond to -- the
+    resume-time mirror of :func:`_expected_outcome_for`, reading from a
+    persisted record instead of a live ``work_item``/``Decision`` pair. A
+    miss here is an invariant violation, never ordinary control flow: by
+    the time :func:`resume` calls this, :func:`validate_record` has
+    already confirmed the record is a genuine Generation-1 write (case 1's
+    ``controller_generation`` check), and `execute_step` never launches a
+    worker for any key outside this table."""
+    pre_state = record.get("pre_state") or {}
+    selected_action = record.get("selected_action") or {}
+    command = selected_action.get("command")
+    command_token = command.split()[0] if isinstance(command, str) and command else None
+    key = (pre_state.get("phase"), pre_state.get("governing_workflow_version"), command_token)
+    outcome = _EXPECTED_OUTCOMES_BY_KEY.get(key)
+    if outcome is None:
+        raise AssertionError(
+            f"resume reached a non-terminal record with no known expected transition: "
+            f"job_id={record.get('job_id')!r} key={key!r}"
+        )
+    return outcome
+
+
+def _row2_verified(
+    *, root: Path, work_item_id: str, outcome: ExpectedOutcome, pre_state: dict,
+    observed_phase_after: str, status: str, worker_outcome: str | None,
+) -> tuple[bool, str | None]:
+    """The ``LAUNCHED``/``COMPLETED`` row's own rule (CP7's reconciliation
+    table, row 2), stated once for both statuses. ``worker_outcome`` is
+    guaranteed absent on a ``LAUNCHED`` record and present-and-known on a
+    ``COMPLETED`` one by the time this runs (:func:`validate_record`'s own
+    case 3), so a ``LAUNCHED`` record's own clause-1 is always satisfied --
+    stated positively here rather than by substituting a fake outcome
+    value, so the returned reason (when unverified) never misreports what
+    the record actually carried. Returns ``(verified, reason)`` --
+    ``reason`` is one of ``"worker_outcome"``, ``"phase_not_in_to_any_of"``
+    or ``"predicate_not_satisfied"``, ``None`` when verified."""
+    if status == STATUS_COMPLETED:
+        outcome_ok = worker_outcome in _VERIFYING_WORKER_OUTCOMES
+    else:
+        outcome_ok = True  # STATUS_LAUNCHED, validated absent by case 3.
+    if not outcome_ok:
+        return False, "worker_outcome"
+    if observed_phase_after not in outcome.to_any_of:
+        return False, "phase_not_in_to_any_of"
+    if observed_phase_after == outcome.from_phase:
+        if outcome.predicate is None or not outcome.predicate(root, work_item_id, pre_state):
+            return False, "predicate_not_satisfied"
+    return True, None
+
+
+def _reconcile_planned(record: JobRecord, *, runtime_root: Path) -> JobRecord:
+    """Row 1: ``PLANNED``, anything observed -- nothing can have happened,
+    since the record was flushed before the launch was even prepared.
+    Mark ``INTERRUPTED`` and allow a fresh ``step``. No observed reality is
+    read at all (there is none to read: no ``expected_transition`` was
+    ever written for this record)."""
+    now = _now()
+    reconciled = {**record, "status": STATUS_INTERRUPTED, "reconciled_at": now, "updated_at": now}
+    return _persist(runtime_root, record["job_id"], reconciled)
+
+
+def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """Rows 2-4: ``LAUNCHED``. A fresh post-state re-read (never the
+    ``pre_state`` this record itself captured) decides between "already
+    succeeded" (row 2, never relaunch), "nothing durable happened" (row 3,
+    ``INTERRUPTED``, a fresh ``step`` may retry), and "cannot be
+    reconciled" (row 4, :class:`~controller.errors.UnreconcilableJobError`,
+    fail closed and require a human)."""
+    root = managed_repo.root
+    work_item_id = record["work_item_id"]
+    pre_state = record.get("pre_state") or {}
+    outcome = _expected_outcome_for_record(record)
+
+    post_snapshot = target_state.read(managed_repo)
+    post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item_id)
+    observed_phase_after = post_work_item.phase
+    observed_head = _current_head(root)
+
+    verified, _reason = _row2_verified(
+        root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
+        observed_phase_after=observed_phase_after, status=STATUS_LAUNCHED, worker_outcome=None,
+    )
+    now = _now()
+    if verified:
+        reconciled = {
+            **record, "status": STATUS_FINISHED, "transition_verified": True,
+            "observed_phase_after": observed_phase_after, "reconciled_at": now, "updated_at": now,
+        }
+        return _persist(runtime_root, record["job_id"], reconciled)
+
+    phase_unchanged = observed_phase_after == pre_state.get("phase")
+    head_unchanged = observed_head == pre_state.get("target_head")
+    if phase_unchanged and head_unchanged:
+        reconciled = {
+            **record, "status": STATUS_INTERRUPTED, "observed_phase_after": observed_phase_after,
+            "reconciled_at": now, "updated_at": now,
+        }
+        return _persist(runtime_root, record["job_id"], reconciled)
+
+    raise UnreconcilableJobError(
+        f"job {record['job_id']!r} for {work_item_id!r} cannot be reconciled: pre-phase "
+        f"{pre_state.get('phase')!r} -> observed {observed_phase_after!r}, pre-state target_head "
+        f"{pre_state.get('target_head')!r} -> observed {observed_head!r}",
+        evidence={
+            "job_id": record["job_id"], "work_item_id": work_item_id,
+            "pre_phase": pre_state.get("phase"), "observed_phase_after": observed_phase_after,
+            "pre_target_head": pre_state.get("target_head"), "observed_target_head": observed_head,
+        },
+    )
+
+
+def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """Row 2 (verifying) / row 5 (failing): ``COMPLETED``. Mirrors CP6B
+    step 8/9's own verification rule exactly -- "exactly as CP6B step 8
+    would have" -- against a fresh post-state re-read, never the
+    long-gone process's own memory."""
+    root = managed_repo.root
+    work_item_id = record["work_item_id"]
+    pre_state = record.get("pre_state") or {}
+    worker_outcome = record.get("worker_outcome")
+    outcome = _expected_outcome_for_record(record)
+
+    post_snapshot = target_state.read(managed_repo)
+    post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item_id)
+    observed_phase_after = post_work_item.phase
+
+    verified, reason = _row2_verified(
+        root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
+        observed_phase_after=observed_phase_after, status=STATUS_COMPLETED, worker_outcome=worker_outcome,
+    )
+    now = _now()
+    if verified:
+        reconciled = {
+            **record, "status": STATUS_FINISHED, "transition_verified": True,
+            "observed_phase_after": observed_phase_after, "reconciled_at": now, "updated_at": now,
+        }
+        return _persist(runtime_root, record["job_id"], reconciled)
+
+    reconciled = {
+        **record,
+        "status": STATUS_FAILED,
+        "transition_verified": False,
+        "observed_phase_after": observed_phase_after,
+        "reconciliation_evidence": {
+            "code": "TransitionNotObservedError",
+            "reason": reason,
+            "expected_to_any_of": sorted(outcome.to_any_of),
+            "observed_phase": observed_phase_after,
+            "worker_outcome": worker_outcome,
+        },
+        "reconciled_at": now,
+        "updated_at": now,
+    }
+    return _persist(runtime_root, record["job_id"], reconciled)
+
+
+def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord]:
+    """Restart reconciliation: load every job record this Controller ever
+    wrote for ``managed_repo`` (``<runtime>/jobs/*.json`` whose own
+    ``target_repo`` equals ``str(managed_repo.root)`` -- the runtime root
+    is resolved from the Controller's own origin checkout, not from the
+    target, so one runtime root can carry jobs for more than one target
+    repository over time; this is the "for this target repository" load
+    scope), and reconcile each **non-terminal** one against authoritative
+    Workflow/Git state. Terminal records are reported, never reconciled.
+
+    Never relaunches a worker: this function contains no call to
+    ``controller.worker.launch`` at all -- ``execute_step``'s own step 5 is
+    the package's sole launch site, and ``resume`` never calls it,
+    structurally, not by a runtime guard.
+
+    Raises :class:`~controller.errors.StaleJobRecordError` (aborting the
+    whole call) for the first record that fails :func:`validate_record`
+    while its own status is non-terminal, or whose (valid) non-terminal
+    status is outside the closed reconciliation table's enumeration.
+    Raises :class:`~controller.errors.UnreconcilableJobError` for a
+    ``LAUNCHED`` record whose observed target state the table's own row 4
+    covers. A **terminal** record failing :func:`validate_record` is never
+    raised for -- it is returned in the result, augmented with a
+    ``resume_marked`` block naming why (``outcome`` is ``"malformed"`` for
+    a case-4 failure, ``"unreadable"`` for case 1 or 2) -- the record on
+    disk is never rewritten (a terminal record is history, and one bad
+    file from an old generation must not stop the reconciliation of live
+    work beside it)."""
+    root = managed_repo.root
+    target_repo_str = str(root)
+    jobs_dir = runtime / "jobs"
+    paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+
+    results: list[JobRecord] = []
+    for path in paths:
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise StaleJobRecordError(
+                f"job record at {path} could not be read or parsed as JSON: {exc}",
+                evidence={"path": str(path), "error": str(exc)},
+            ) from exc
+        if not isinstance(record, dict) or record.get("target_repo") != target_repo_str:
+            continue  # not "for this target repository" -- left untouched.
+
+        validity = validate_record(record, managed_repo=managed_repo, identity=identity)
+        if not validity.valid:
+            if validity.terminal:
+                outcome_word = "malformed" if validity.case == 4 else "unreadable"
+                results.append({
+                    **record,
+                    "resume_marked": {
+                        "outcome": outcome_word, "case": validity.case, "code": validity.code,
+                        "reason": validity.reason, "message": validity.message,
+                    },
+                })
+                continue
+            raise StaleJobRecordError(validity.message, evidence=validity.evidence)
+
+        status = record.get("status")
+        if status in TERMINAL_STATUSES:
+            results.append(record)  # reported, never reconciled, never relaunched.
+        elif status == STATUS_PLANNED:
+            results.append(_reconcile_planned(record, runtime_root=runtime))
+        elif status == STATUS_LAUNCHED:
+            results.append(_reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime))
+        elif status == STATUS_COMPLETED:
+            results.append(_reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime))
+        else:
+            # The closed table's own last row: a status outside the
+            # ten-member enumeration entirely (or absent) is dispatched as
+            # non-terminal -- validate_record's own cases could not judge
+            # its terminality either, so this is what judges it.
+            raise StaleJobRecordError(
+                f"job {record.get('job_id')!r} has status {status!r}, which is outside the "
+                f"closed job-status enumeration this generation recognises",
+                evidence={"job_id": record.get("job_id"), "status": status},
+            )
+    return results
 
 
 # ---------------------------------------------------------------------------

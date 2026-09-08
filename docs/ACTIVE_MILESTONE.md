@@ -681,9 +681,86 @@ the reason above -- no other CP6 test needed a change, since CP6's own
 `PLANNED`/`LAUNCHED` assertions and its `statuses[:3]` prefix check are
 unaffected by anything CP6B appends after `COMPLETED`.
 
-Next: `CP7` (durable resume: restart reconciliation against authoritative
+`CP7` (durable resume: restart reconciliation against authoritative
 Workflow/Git state, no replay of an already-completed action, stale-
-metadata rejection), depends on `CP6B`.
+metadata rejection) is **complete**, verified by `python3 -m unittest
+tests.test_resume` (37 tests, all green) and by re-running the full suite
+(`python3 -m unittest discover -s tests -p "test_*.py"`: 258 tests, all
+green, no regressions). Delivered: `controller/job.py` extended with
+`resume(managed_repo, *, identity, runtime) -> list[JobRecord]` and its
+own named four-case validation pass, `validate_record(record, *,
+managed_repo, identity) -> Validity` (the plan's own shorthand signature
+elides the two keyword parameters case 1/case 2 actually need). `resume`
+loads every job record under `<runtime>/jobs/*.json` whose own
+`target_repo` equals `str(managed_repo.root)` -- "for this target
+repository" -- since the runtime root is resolved from the Controller's
+own origin checkout (`cli._dispatch`'s `origin = ident.origin_source_root
+or ident.source_root`), never from the target, so one runtime root can
+carry job history for more than one target repository over time; a
+record for a different target is left completely untouched, neither
+raising nor appearing in the result. `validate_record`'s four cases, in
+the plan's own stated order: (1) uninterpretable -- unknown
+`schema_version`, or `controller_generation` newer than the running one;
+(2) unresolvable subject -- `managed_repo.root` no longer a directory, or
+`work_item_id` absent from a fresh `target_state.read`; (3) `worker_outcome`
+disagreeing with the step that owns the record's status -- keyed on
+presence for `PLANNED`/`LAUNCHED` (any value, recognised or not, is a
+refusal) and on membership in the closed four-outcome set for `COMPLETED`;
+(4) `status`/`selected_action.declined` derived-field disagreement. Every
+case returns an invalid `Validity` (never raises) carrying `terminal`,
+decided from the record's own `status` against the ten-member closed
+enumeration (`job.NON_TERMINAL_STATUSES`/`job.TERMINAL_STATUSES`, newly
+exported) -- round 8's I2 carve-out: `resume` raises
+`StaleJobRecordError` (new `controller/errors.py` refusal) only for a
+non-terminal (or unrecognised/absent-status, fail-closed) invalid record,
+aborting the whole call; a terminal one is returned in the result
+augmented with a `resume_marked` block (`outcome: "malformed"` for case
+4, `"unreadable"` for case 1/2) and is never rewritten on disk. Terminal
+records generally are reported, never reconciled, never rewritten. The
+closed reconciliation table's three non-terminal rows: `PLANNED` always
+reconciles to `INTERRUPTED` (row 1, "anything" -- no post-state read at
+all, since nothing was ever launched); `LAUNCHED` reconciles via a fresh
+post-state re-read and the shared `_row2_verified` rule (row 2's own
+`worker_outcome`/`to_any_of`/predicate clauses, restated once for both
+`LAUNCHED` and `COMPLETED` rather than by substituting a fake outcome
+value) to `FINISHED` when verified (row 2, never relaunch), to
+`INTERRUPTED` when the observed phase and target `HEAD` both match
+`pre_state` (row 3), or else to a raised `UnreconcilableJobError` (new
+`controller/errors.py` refusal; row 4, covering both "phase unchanged,
+predicate unsatisfied, `HEAD` moved" and "phase moved outside
+`to_any_of`" without needing to inspect which); `COMPLETED` reconciles via
+the same rule to `FINISHED` (row 2) or to `FAILED` with
+`TransitionNotObservedError` evidence naming the worker outcome and the
+observed transition separately (row 5, "exactly as CP6B step 8 would
+have"). A status outside the closed ten-member enumeration (including an
+absent one on an otherwise well-formed record) is dispatched as
+non-terminal per the plan's own stated routing and raises
+`StaleJobRecordError` from the table's own unknown-status row -- never
+reconciled as `PLANNED`, never surfaced as terminal. `resume` contains no
+call to `controller.worker.launch` at all, so "never relaunch" is
+structural, not a runtime guard -- proven directly in
+`tests/test_resume.py` by patching `worker.launch` to raise if ever
+called. `tests/test_resume.py` (37 tests): every validation-pass case,
+both branches of the terminal carve-out (including the two "terminality
+cannot be determined" fixtures at cases 1/2, and the two ordering-pin
+fixtures proving case 1 preempts the reconciliation table entirely for a
+`COMPLETED`/`PLANNED` record whose post-state would otherwise look like a
+legitimate outcome); the reconciliation table's five non-terminal rows,
+including row 5's own no-op-worker instantiation (a `"1"`-governed
+`/apply-plan-review` `LAUNCHED` record with `plan_revision`/
+`state_revision` deliberately advanced, proving the stronger
+`bundle_generated_digest` predicate is what is actually consulted); the
+unknown-status row from both an unrecognised-string fixture and an
+absent-`status` first-flush fixture; target-repository scoping (a
+foreign, unresolvable record is left untouched by `resume` against a
+different target); the "a subsequent `step` runs normally" property; and
+one true end-to-end test driving a real `execute_step` worker in a
+separate process, `SIGKILL`-ed mid-run, confirming the `LAUNCHED` record
+lands on disk before `resume` reconciles it to `INTERRUPTED`.
+
+Next: `CP8` (generation handoff primitive: pending-handoff record,
+intentional stop, and enforced absence of hot reload in the running
+generation), depends on `CP7`.
 
 ## Current blockers
 

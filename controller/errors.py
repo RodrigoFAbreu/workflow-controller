@@ -350,6 +350,43 @@ class WorkerAmbiguousResultError(ControllerError):
     code = "WORKER_AMBIGUOUS_RESULT"
 
 
+class StaleJobRecordError(ControllerError):
+    """A non-terminal job record could not be believed, and the whole
+    ``resume`` call was aborted rather than reconciling around it.
+
+    Raised by ``controller.job.resume`` when a record fails the
+    validation pass (``controller.job.validate_record``) while its own
+    ``status`` is non-terminal -- or absent/unrecognised, the fail-closed
+    default for a status this generation cannot evaluate -- and also when
+    a non-terminal record's ``status`` is outside the closed
+    reconciliation table's ten-member enumeration entirely (the table's
+    own last, unknown-status row). ``evidence`` names the record's
+    ``job_id``, its ``work_item_id`` and the specific reason it could not
+    be trusted. Never raised for a *terminal* record failing the same
+    checks -- those are surfaced in ``resume``'s own result, marked
+    malformed or unreadable, and never stop the reconciliation of live
+    work beside them (round 8's I2's own carve-out).
+    """
+
+    code = "STALE_JOB_RECORD"
+
+
+class UnreconcilableJobError(ControllerError):
+    """A ``LAUNCHED`` job record's target shows evidence the Controller
+    cannot account for: a moved Git ``HEAD`` alongside an unmoved phase
+    and an unsatisfied predicate, or a phase that moved somewhere outside
+    the action's own declared ``to_any_of`` set.
+
+    Raised by ``controller.job.resume``. A deliberate refusal, not a
+    heuristic -- guessing whether to retry could duplicate a commit or
+    silently skip real work. ``evidence`` names both the pre- and
+    post-state observations (phase and target ``HEAD``) so a human can
+    reconcile the record manually.
+    """
+
+    code = "UNRECONCILABLE_JOB"
+
+
 class UserOnlyCommandError(ControllerError):
     """``controller.worker.launch`` refused a ``task`` naming one of
     ``USER_ONLY_COMMANDS``'s three bare command names.

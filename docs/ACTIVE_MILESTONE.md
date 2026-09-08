@@ -596,9 +596,94 @@ one thing ever called and stays spyable. CP6's own slice of
 post-state, decide `transition_verified`, or write `FINISHED`/`FAILED`/
 `INCOMPLETE`; that is CP6B's extension of this same function.
 
-Next: `CP6B` (job execution part 2: fresh post-state re-read and
+`CP6B` (job execution part 2: fresh post-state re-read and
 expected-transition verification, with `FINISHED` written only after it
-passes), depends on `CP6`.
+passes) is **complete**, verified by `python3 -m unittest
+tests.test_job_validation` (33 tests, all green), by re-running `python3
+-m unittest tests.test_job` (11 tests, all green -- two updated to inspect
+the intermediate `COMPLETED` write via the existing `_WriteSpy` rather
+than `execute_step`'s own return value, which is now the terminal
+`FINISHED`/`FAILED`/`INCOMPLETE` record), and by re-running the full suite
+(`python3 -m unittest discover -s tests -p "test_*.py"`: 221 tests, all
+green, no regressions). Delivered: `controller/job.py` extended with
+steps 7-9 of `execute_step` -- a fresh `target_state.read`/
+`select_work_item` re-read (never the `snapshot`/`work_item` captured
+before the worker ran; a second `managed_repo.inspect()` is deliberately
+out of scope, documented in the module's own docstring, since nothing else
+in the package threads a `manager_bin` through `execute_step` yet), the
+`transition_verified` rule stated in full at step 8 (`worker_outcome` is
+`SUCCESS` or `INTERRUPTED` -- stated as a **positive**, total guard, never
+a negative one -- **and** the observed post-phase is in
+`expected_transition.to_any_of`, **and**, when that phase equals the
+row's own `from_phase`, the row's predicate holds against `pre_state`,
+evaluated fresh against disk), and step 9's `INCOMPLETE` precedence
+(defined and dispatchable via a per-triple `_INCOMPLETE_EFFECT_PHASES`
+mapping, empty for every one of Generation 1's own six rows -- revision
+10's plan narrowing removed its sole producer, `/apply-implementation-
+review` reaching `APPLYING_REVIEW_FEEDBACK`, which is not one of this
+generation's automatic actions). The plan's own `ExpectedOutcome` table is
+transcribed as real, declared data (`ExpectedOutcome`, `WriterCall`,
+`BranchSpec` dataclasses; `EXPECTED_OUTCOMES`, six rows) with two real
+predicates (row 3: a current-round `REVIEW_FEEDBACK.md` with `Status:
+BLOCK`, `Reviewer role: LOCAL_MODEL_PLAN_REVIEW` and a matching `Reviewed
+bundle ID:`; row 5: a freshly recomputed `bundle_generated_digest` that
+differs from `pre_state`'s own), replacing CP6's own `_EXPECTED_TO_ANY_OF`
+lookup table. **Row 5's plan-declared open item is resolved**: its own
+`WriterCall.branch` is restated to point directly at `apply-plan-
+review.md`'s own step-5 span (a new `BranchSpec(kind="step", label="5")`
+marker form) rather than the governing-version bullet in step 0 the plan
+found no way to resolve a cross-reference into -- step 5 already runs
+unconditionally on both governing-version branches, so its own numbered
+span already contains the declared `prepare-ai-review.sh` call in full,
+with no "steps N-M execute" cross-reference needed. Six properties are
+implemented and tested: coverage and predicate presence/validity
+(`job.property_table_violations`, structural, over the table alone),
+record completeness (`job.property_record_completeness_violations`,
+`predicate_inputs ⊆ PRE_STATE_FIELDS`), declaration against artifact
+(`job.property_declaration_against_artifact_violations`, a real text scan
+of this repository's own frozen `.claude/commands/*.md` -- locates each
+row's declared branch, confirms the declared call inside it, and confirms
+no *different* durable write follows it in the same span), pair-keyed
+writer reachability (asserted via real `controller.evidence.decide` calls
+from each row's own `(from_phase, governing_version)`, never a second
+declaration), and completion (documented narratively, since "produced on
+completion" vs. "producible by the action's writers" is not a distinction
+the table's own data can decide without executing the real command).
+`tests/test_job_validation.py` (33 tests): the real table passes every
+property, and each property's own negative instantiation (a duplicate
+triple, a predicate-bearing row with no `to_any_of` self-membership and
+vice versa, a non-`COMPLETION` writer kind, a `predicate_input` outside
+`PRE_STATE_FIELDS`, an unlocatable branch, a call absent from its branch, a
+further different durable write after the call, an unreadable command
+file) fails construction, naming the row; end-to-end `execute_step` cases
+through a fake worker (`tests/fake_claude.py`, extended with a new
+`FAKE_CLAUDE_WRITE_PATH`/`FAKE_CLAUDE_WRITE_TEXT` pair so a fixture can
+make the fake worker itself perform the target repository's own expected
+state edit) covering: a real successful transition reaching `FINISHED`
+with the persisted `status` sequence exactly `["PLANNED", "LAUNCHED",
+"COMPLETED", "FINISHED"]`; a worker that changes nothing, and one that
+moves the phase somewhere else entirely, each `FAILED` with
+`TransitionNotObservedError` evidence naming the expected set and the
+observed phase; an `AMBIGUOUS` worker not verified even when the
+post-state happens to match; an `INTERRUPTED` worker whose durable
+transition already landed, verified; row 3's `BLOCK` case both ways (a
+current-round `Status: BLOCK` feedback verifies; no feedback does not);
+row 5's mid-action case (a worker that exits 0 without ever completing the
+bundle regeneration does not verify) and its own positive case (a
+regenerated bundle verifies); and the `INCOMPLETE`-takes-precedence
+mechanism exercised directly against a synthetic effect-only landing,
+since no real Generation-1 fixture can reach it. `tests/test_job.py`'s
+own two affected assertions (`test_completed_record_contains_every_
+schema_field_cp6_owns`, `test_launched_record_present_on_disk_before_
+worker_starts`) were updated to inspect the intermediate `COMPLETED`
+write via `_WriteSpy` rather than `execute_step`'s own return value, for
+the reason above -- no other CP6 test needed a change, since CP6's own
+`PLANNED`/`LAUNCHED` assertions and its `statuses[:3]` prefix check are
+unaffected by anything CP6B appends after `COMPLETED`.
+
+Next: `CP7` (durable resume: restart reconciliation against authoritative
+Workflow/Git state, no replay of an already-completed action, stale-
+metadata rejection), depends on `CP6B`.
 
 ## Current blockers
 

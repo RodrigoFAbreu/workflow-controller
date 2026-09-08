@@ -259,10 +259,11 @@ class LaunchPathTest(unittest.TestCase):
         old = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
         try:
-            record = job.execute_step(
-                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
-                claude_bin=str(FAKE_CLAUDE), timeout=10,
-            )
+            with _WriteSpy() as spy:
+                record = job.execute_step(
+                    self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                    claude_bin=str(FAKE_CLAUDE), timeout=10,
+                )
         finally:
             for k, v in old.items():
                 if v is None:
@@ -271,9 +272,15 @@ class LaunchPathTest(unittest.TestCase):
                     os.environ[k] = v
         # If the record were not durable before the worker ran,
         # fake_claude.py would have exited 91 and the outcome would be
-        # FAILURE rather than SUCCESS.
-        self.assertEqual(record["worker_outcome"], "SUCCESS")
-        self.assertEqual(record["status"], job.STATUS_COMPLETED)
+        # FAILURE rather than SUCCESS. Checked against the intermediate
+        # COMPLETED flush -- CP6's own slice -- since CP6B's own
+        # post-state verification (this fake worker never actually
+        # performs the target repository's real phase transition, so the
+        # record's final status is FAILED, asserted in its own suite,
+        # tests/test_job_validation.py) is out of this test's scope.
+        completed = next(obj for _rel, obj in spy.calls if obj.get("status") == "COMPLETED")
+        self.assertEqual(completed["worker_outcome"], "SUCCESS")
+        self.assertIsInstance(record, dict)
 
     def test_write_sequence_prefix_is_planned_launched_completed(self) -> None:
         with _WriteSpy() as spy:
@@ -325,10 +332,17 @@ class LaunchPathTest(unittest.TestCase):
             self.assertNotIn(absent_field, launched)
 
     def test_completed_record_contains_every_schema_field_cp6_owns(self) -> None:
-        record = job.execute_step(
-            self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
-            claude_bin=str(FAKE_CLAUDE), timeout=10,
-        )
+        # CP6B's own steps 7-9 always run after step 6's COMPLETED flush
+        # (execute_step is one function spanning all nine steps), so this
+        # checks the intermediate COMPLETED write via the spy -- CP6's own
+        # slice -- rather than execute_step's own return value, which is
+        # now the terminal FINISHED/FAILED/INCOMPLETE record.
+        with _WriteSpy() as spy:
+            job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        record = next(obj for _rel, obj in spy.calls if obj.get("status") == "COMPLETED")
         expected_keys = {
             "schema_version", "job_id", "controller_generation", "controller_source_commit",
             "controller_source_tree_digest", "target_repo", "target_workflow_version",

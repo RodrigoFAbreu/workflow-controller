@@ -50,6 +50,15 @@ Recognised environment variables (all optional):
     this way -- from inside the worker itself, which can only ever run
     after ``controller.job.execute_step`` has already flushed that
     record, rather than by racing the parent process from the outside.
+``FAKE_CLAUDE_WRITE_PATH`` / ``FAKE_CLAUDE_WRITE_TEXT``
+    If both are set, this process writes ``FAKE_CLAUDE_WRITE_TEXT``
+    verbatim to ``FAKE_CLAUDE_WRITE_PATH`` (creating parent directories as
+    needed) *before* producing its ordinary output -- CP6B's own "a fake
+    worker that performs the expected state edit" fixture
+    (``tests/test_job_validation.py``): a worker that never touches the
+    target repository is otherwise indistinguishable, from
+    ``controller.job.execute_step``'s own step 7 re-read, from one that
+    ran and did nothing.
 """
 
 from __future__ import annotations
@@ -99,9 +108,20 @@ def _check_required_file() -> None:
         sys.exit(91)
 
 
+def _write_requested_file() -> None:
+    path = os.environ.get("FAKE_CLAUDE_WRITE_PATH")
+    text = os.environ.get("FAKE_CLAUDE_WRITE_TEXT")
+    if not path or text is None:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(text)
+
+
 def main() -> None:
     _write_diagnostics()
     _check_required_file()
+    _write_requested_file()
 
     if os.environ.get("FAKE_CLAUDE_SELF_TERM"):
         os.kill(os.getpid(), signal.SIGTERM)

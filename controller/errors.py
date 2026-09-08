@@ -293,3 +293,74 @@ class HumanGateError(ControllerError):
     """
 
     code = "HUMAN_GATE"
+
+
+# ---------------------------------------------------------------------------
+# CP5 -- fresh Claude worker abstraction (``controller.worker``).
+# ---------------------------------------------------------------------------
+
+
+class WorkerLaunchError(ControllerError):
+    """The worker subprocess itself could not be started.
+
+    Raised when ``subprocess.Popen`` fails with an ``OSError`` -- e.g. the
+    resolved ``claude_bin`` does not exist or is not executable. Distinct
+    from every outcome ``WorkerResult.outcome`` classifies: those all
+    require the worker process to have actually started and either run to
+    completion or be interrupted mid-flight.
+    """
+
+    code = "WORKER_LAUNCH_ERROR"
+
+
+class WorkerFailedError(ControllerError):
+    """A caller treated a :class:`~controller.worker.WorkerResult` whose
+    ``outcome`` is ``FAILURE`` as though the worker had succeeded.
+
+    Never raised by ``controller.worker.launch`` itself -- ``FAILURE`` is
+    ordinary, reportable classification data, not a refusal. Reserved for
+    a later checkpoint (CP6's job execution) that asserts a completed
+    job's worker outcome before recording a Workflow transition as
+    verified.
+    """
+
+    code = "WORKER_FAILED"
+
+
+class WorkerInterruptedError(ControllerError):
+    """A caller treated a :class:`~controller.worker.WorkerResult` whose
+    ``outcome`` is ``INTERRUPTED`` as though the worker had completed.
+
+    Never raised by ``controller.worker.launch`` itself, for the same
+    reason as :class:`WorkerFailedError`.
+    """
+
+    code = "WORKER_INTERRUPTED"
+
+
+class WorkerAmbiguousResultError(ControllerError):
+    """A caller treated a :class:`~controller.worker.WorkerResult` whose
+    ``outcome`` is ``AMBIGUOUS`` as though the worker's result were
+    decidable.
+
+    Never raised by ``controller.worker.launch`` itself, for the same
+    reason as :class:`WorkerFailedError`.
+    """
+
+    code = "WORKER_AMBIGUOUS_RESULT"
+
+
+class UserOnlyCommandError(ControllerError):
+    """``controller.worker.launch`` refused a ``task`` naming one of
+    ``USER_ONLY_COMMANDS``'s three bare command names.
+
+    The second, independent denylist layer: ``controller.worker`` keeps
+    its own literal copy of the three-command set and its own token scan,
+    deliberately separate from CP4's ``controller.decision.
+    derive_user_only_commands`` -- defence in depth for the single most
+    consequential invariant in the milestone, "never fabricate user
+    approval". Raised before any subprocess is spawned;
+    ``evidence['matched_token']`` names the exact token that matched.
+    """
+
+    code = "USER_ONLY_COMMAND"

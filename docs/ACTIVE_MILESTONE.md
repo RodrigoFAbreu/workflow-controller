@@ -472,9 +472,64 @@ calls need, distinct from CP2's manifest-only fixture) and
 `write_review_feedback`/`build_review_feedback_text`/`write_manifest`/
 `build_manifest_text`/`write_rejected_marker`.
 
-Next: `CP5` (fresh Claude worker abstraction: bounded task launch,
-synchronous wait, success/failure/interruption/ambiguity classification),
-depends on `CP1`.
+`CP5` (fresh Claude worker abstraction: bounded task launch, synchronous
+wait, success/failure/interruption/ambiguity classification) is
+**complete**, verified by `python3 -m unittest tests.test_worker` (17
+tests, all green) and by re-running the full suite (`python3 -m unittest
+discover -s tests -p "test_*.py"`: 177 tests, all green, no regressions).
+Delivered: `controller/worker.py` (`launch(task, *, cwd, permission_mode,
+timeout, claude_bin=None) -> WorkerResult`, running exactly the proven
+mechanism above via `subprocess.Popen` with `stdin=subprocess.DEVNULL`,
+`start_new_session=True` and an explicit `env=` built from `os.environ`
+with `PYTHONPATH` removed; the frozen `WorkerResult` dataclass carrying
+`outcome` plus the nine named JSON fields (`session_id`, `is_error`,
+`subtype`, `terminal_reason`, `stop_reason`, `result`, `num_turns`,
+`permission_denials`, `total_cost_usd`, `duration_ms`), raw `stdout`/
+`stderr`, and `raw_json`; the fixed four-outcome classification order
+(`INTERRUPTED` on a timeout or negative return code, checked first;
+`FAILURE` on non-zero exit or exit-0-with-`is_error:true`; `AMBIGUOUS` on
+exit 0 with an undecidable body; `SUCCESS` otherwise); `REQ-26`'s
+worker-stdout JSON candidate-span rule (`_parse_worker_stdout` -- exactly
+one trailing newline stripped, the whole remaining span parsed as exactly
+one JSON document via `json.loads`'s own "no trailing data" behaviour, a
+non-UTF-8 byte tolerated by `errors="replace"` at decode time rather than
+raising); a timeout's `os.killpg` of the worker's own process group
+(never only the direct child, since `communicate()`'s own timeout
+handling kills nothing); and the second, independent denylist layer
+(`USER_ONLY_COMMANDS`, a literal three-name copy kept deliberately
+separate from CP4's `decision.derive_user_only_commands`, plus the
+leading-`` ` ``/`/`-and-trailing-punctuation text model and whole-token
+equality check, raising `UserOnlyCommandError` before any subprocess is
+spawned). Five new `controller/errors.py` refusals (`WorkerLaunchError`,
+raised when the subprocess itself cannot start; `WorkerFailedError`,
+`WorkerInterruptedError`, `WorkerAmbiguousResultError`, reserved for CP6's
+own use against a completed `WorkerResult`; `UserOnlyCommandError`).
+`controller/__init__.py`'s eager-import literal gains `worker` between
+`evidence` and `cli`, matching the plan's dependency order.
+`tests/fake_claude.py`, a small stdlib script (env-var-driven, since
+`launch()`'s argv shape is fixed) standing in for the real `claude`
+binary: emits a chosen stdout/exit code, hangs (optionally spawning a
+tracked grandchild to prove the whole process group is reaped, not only
+the direct child), or sends itself `SIGTERM`; also writes a diagnostic
+record (`cwd`, whether stdin was already at EOF, `PYTHONPATH`) so the
+launch-mechanics cases need not depend on the case under classification
+test. `tests/test_worker.py` (17 tests) covers every case the plan names:
+success with fields extracted; non-zero exit; exit-0-with-`is_error:true`;
+non-JSON stdout, a JSON array, missing required fields, and two
+concatenated JSON documents (`REQ-26`) all classifying `AMBIGUOUS`; a
+hung worker under a short timeout classifying `INTERRUPTED` with its
+process-group grandchild confirmed reaped; a self-`SIGTERM`-ed worker
+classifying `INTERRUPTED`; all three `USER_ONLY_COMMANDS` names refused
+(bare, backticked, and sentence-final-punctuated) with no process spawned
+in the bare case, plus a substring-of-a-name negative case; `cwd`, closed
+`stdin`, and the absent `PYTHONPATH` all confirmed from the worker's own
+observed view; and a nonexistent `claude_bin` raising `WorkerLaunchError`.
+The real `claude` binary is deliberately not exercised here -- CP9's
+opt-in integration test is the only call site that does.
+
+Next: `CP6` (job execution part 1: durable Controller-owned job records,
+pre-state capture, persist-before-launch, worker launch and result
+recording), depends on `CP2`, `CP3`, `CP4B`, `CP5`.
 
 ## Current blockers
 

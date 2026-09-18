@@ -54,18 +54,57 @@ that fresh-session result is recorded, treat mechanism (2) above as the
 actually load-bearing control for the Skill exposure path, not mechanism
 (1) alone.
 
-0. **Dual-mode branch** (Workflow v2.1, `WF4a-ii`): resolve the target work
+0. **Dual-mode branch** (Workflow v2.1, `WF4a-ii`; widened workflow-2.5.0 to
+   a third `governing_workflow_version` branch): resolve the target work
    item (named argument, or `active_work_item_id`) and read its
    `governing_workflow_version` from `docs/ai-workflow/WORKFLOW_STATE.json`.
    - **`governing_workflow_version: "1"`**: steps 1-7 execute exactly as
      written.
    - **`governing_workflow_version: "2.1"`**: steps 1-7 execute identically;
      for the plan stage only, step 1's gate-reachability check additionally
-     requires `workflow_state.plan_approval_gate_reachable(...)`'s `"2.1"`
-     branch (the `plan_review_stages` ledger, populated by `/review-plan`/
-     `/record-manual-plan-review`, `D-Plan-Review-Stages`) — fully live;
-     inert only in the sense that this repository's own work item is fixed
-     at `"1"` for its entire execution and so never exercises it.
+     requires `workflow_state.plan_approval_gate_reachable(...)`'s
+     `TWO_STAGE_PLAN_REVIEW_VERSIONS` branch (the `plan_review_stages`
+     ledger, populated by `/review-plan`/`/record-manual-plan-review`,
+     `D-Plan-Review-Stages`) — fully live, and, since workflow-2.5.0, no
+     longer inert for this repository's own installation either
+     (`workflow-2.5.0` correction, `LOCAL_MODEL_PLAN_REVIEW` round 5): this
+     repository now carries two `"2.1"`-governed work items
+     (`plan-amendment-mechanism`, `implementation-review-two-stage`) whose
+     own plan-stage approvals exercise this branch directly. The prior
+     text's claim that this branch was "inert... because this repository's
+     own work item is fixed at `"1"`" was true only while
+     `workflow-v2-1-core` was this repository's sole tracked work item; it
+     no longer is, and this branch is not, and never was, inert in general
+     — it governs every `"2.1"`-governed work item anywhere this Workflow
+     is installed.
+   - **`governing_workflow_version: "2.2"`** (workflow-2.5.0,
+     `D-Implementation-Review-Version-Activation`): steps 1-7 execute
+     identically to the `"2.1"` branch immediately above for the **plan**
+     stage — the two-stage plan-review protocol is unaffected by this
+     version bump, since `TWO_STAGE_PLAN_REVIEW_VERSIONS` already covers
+     both `"2.1"`/`"2.2"`. For the **implementation** stage only, step 1's
+     gate-reachability check additionally applies
+     `workflow_state.technical_approval_gate_reachable(...)`'s own
+     `"2.2"`-only ledger check, active exactly when this item's own
+     `governing_workflow_version` is `"2.2"` — mirroring the plan stage's
+     existing `plan_review_stages` check exactly, substituted for the
+     implementation-stage ledger (both `LOCAL_MODEL_IMPLEMENTATION_REVIEW`/
+     `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` required `APPROVE` against the
+     current `review_content_id`, `D-Implementation-Review-Stages`). Step
+     1 passes this item's real `governing_workflow_version`,
+     `implementation_review_stages`, and the current implementation-stage
+     `review_content_id` to that call **unconditionally, for every
+     governing version, not only when it is `"2.2"`** — these three are
+     required parameters on that function now (round 7's `I1`), so this
+     command must always state the work item's actual values rather than
+     branch on version to decide whether to pass them at all; the
+     function's own internal `!= "2.2"` check is what keeps a `"1"`/`"2.1"`
+     item's outcome unchanged.
+   - **Any other `governing_workflow_version`** (including one this module
+     does not recognize): refuse cleanly, naming the actual value — never
+     guess which branch above applies (round-7 optional finding 2, the same
+     explicit-refusal discipline `/milestone-implement`'s own step 0
+     states).
 1. **Confirm gate reachability**: read `<feedback_dir>/REVIEW_FEEDBACK.md`'s
    most recently reviewed round status and bundle ID
    (`workflow_fingerprint.parse_review_feedback_binding_fields`) —
@@ -94,10 +133,25 @@ actually load-bearing control for the Skill exposure path, not mechanism
    is an implementation-stage-only mechanism.
    Call
    `workflow_state.approval_gate_reachable(status)` for the plan stage on a
-   `"1"` item (`plan_approval_gate_reachable(...)` on a `"2.1"` item), or
-   `workflow_state.technical_approval_gate_reachable(...,
-   pinned_block=pinned)` for the
-   implementation stage. The latter's `protected_path_dirty` argument is
+   `"1"` item (`plan_approval_gate_reachable(...)` on a `"2.1"`/`"2.2"`
+   item — both governed by `TWO_STAGE_PLAN_REVIEW_VERSIONS`), or
+   `workflow_state.technical_approval_gate_reachable(..., pinned_block=pinned,
+   governing_workflow_version=work_item.get("governing_workflow_version"),
+   implementation_review_stages=work_item.get("implementation_review_stages"),
+   current_review_content_id=<the current implementation-stage
+   review_content_id, already recomputed above>)` for the implementation
+   stage, **at every governing version alike, unconditionally** — never only
+   on a `"2.2"` branch (workflow-2.5.0 REVISE round 7's own `I1`: these
+   three are required keyword-only parameters on this function now, exactly
+   like `plan_approval_gate_reachable`'s own equivalents always have been;
+   omitting any of them raises `TypeError` instead of silently defaulting,
+   so a caller can no longer forget `governing_workflow_version` for a
+   `"2.2"` item and have the ledger check silently skipped. The function's
+   own `!= "2.2"` branch is what keeps this behavior-preserving for a
+   `"1"`/`"2.1"` item — passing its real `governing_workflow_version` and
+   `implementation_review_stages` here changes nothing for it, since both
+   values are already computed at this point in the step regardless of
+   version). The latter's `protected_path_dirty` argument is
    `workflow_state.any_protected_path_dirty(...)` (`WF4a-iii`), called with
    the implementation-stage classification
    (`workflow_fingerprint.load_implementation_stage_classification(...)`) —
@@ -313,7 +367,30 @@ actually load-bearing control for the Skill exposure path, not mechanism
     still be caught. Read `docs/ai-workflow/WORKFLOW_STATE.json`'s
     current working-tree bytes fresh and parse them (`pre_state`). Build
     the record via step 4 above (`record`, `approval_now = <now>`) if not
-    already built. Then call
+    already built.
+
+    **workflow-2.4.0, D-Plan-Amendment-4 — reconciliation inputs, read here
+    and only here.** Call `metadata =
+    workflow_fingerprint.resolve_plan_stage_metadata(repo_root,
+    work_item_id)` -- one additional, cheap, idempotent resolver call, not
+    a value inherited from an earlier step -- and read `metadata.plan_path`'s
+    current working-tree bytes as `post_plan_text` and
+    `metadata.registry_path`'s current working-tree bytes, parsed as JSON,
+    as `post_registry`: the exact bytes the two-stage review just approved.
+    When `pre_state`'s own `work_items[work_item_id]` has an open amendment
+    (`amendment_history` non-empty and its last entry's
+    `resolved_at_plan_revision` still `null`), also call `pre_plan_text,
+    pre_registry = workflow_state.load_pre_amendment_snapshot(repo_root,
+    work_item_id, metadata.plan_path, metadata.registry_path,
+    amendment_history[-1])` -- never a re-read of the live
+    `plan_path`/`registry_path`, which by this point in `AMENDING_PLAN`'s
+    lifecycle already hold the *post*-amendment content. No open amendment:
+    `pre_plan_text`/`pre_registry` stay `None`. All four values are read
+    exactly once, at this call site, in this order, and forwarded verbatim
+    into `open_plan_approval_journal` below -- never re-derived, and never
+    consulted by this step itself.
+
+    Then call
     `journal = workflow_state.open_plan_approval_journal(repo_root,
     work_item_id=work_item_id, base_commit=base_commit, pre_state=pre_state,
     record=record, approval_now=approval_now, expected_bundle_id=<step 2's
@@ -325,7 +402,9 @@ actually load-bearing control for the Skill exposure path, not mechanism
     steps 6.2/6c's own fresh whole-file compare-and-swap
     (plan_approval_state_matches_pre_transaction) closes the concurrent-
     writer race the bootstrap's quiescence window instead bridges by
-    convention")`. `owner_token = journal["owner_token"]`. Unlike the
+    convention", pre_registry=pre_registry, pre_plan_text=pre_plan_text,
+    post_registry=post_registry, post_plan_text=post_plan_text)`.
+    `owner_token = journal["owner_token"]`. Unlike the
     now-superseded prior revision of this step, **no**
     `docs/ai-workflow/WORKFLOW_STATE.json` working-tree write happens
     here or anywhere below — the transaction's expected post-approval
@@ -571,3 +650,22 @@ actually load-bearing control for the Skill exposure path, not mechanism
 7. Report the new phase (`IMPLEMENTING` or `AWAITING_FUNCTIONAL_REVIEW`) and
    **stop**. Never chain into the next state's actions in the same
    invocation.
+
+   **workflow-2.4.0, D-Plan-Amendment-4 — report the reconciliation
+   outcome (`IMPL6-B1`)**: plan stage only, and only when this
+   invocation's own `apply_plan_approval` call resolved an amendment (step
+   4c read a non-`None` `pre_registry`/`pre_plan_text` pair for it). Read
+   `amendment_history[-1]["reconciliation_outcome"]` from the
+   just-materialized `docs/ai-workflow/WORKFLOW_STATE.json` (the exact map
+   `reconcile_checkpoints_after_amendment` returned, keyed by checkpoint
+   id) and report it alongside the phase, by id: which ids were
+   `retained`, which were demoted to `needs_revalidation` directly (their
+   own registry row or checkpoint content changed) versus
+   `needs_revalidation_dependency` (unchanged themselves, demoted only
+   because a dependency was), which were `dropped`, and which are `new`.
+   This is the operator-visible distinction between "reconciliation ran
+   and legitimately did nothing" (every id `retained`) and "it never ran"
+   (no amendment resolved this round, so this paragraph does not apply at
+   all) -- never omit it for a round that did resolve an amendment, and
+   never fabricate it by re-deriving from anything other than this exact
+   field.

@@ -167,6 +167,20 @@ warns on) any such entry as defense in depth.
 └── files/                     # generated: final copies of changed + listed context files
 ```
 
+**`workflow-2.4.0`, `D-Plan-Amendment-5`**: `AMENDMENT_DIFF.patch`, when
+present, is a **sibling** of `<bundle_dir>` itself, at
+`.ai-review/<work_item_id>/AMENDMENT_DIFF.patch` — never a member of the
+tree above, and never hashed into `bundle_id`/`review_content_id`, both of
+which walk only `<bundle_dir>`. `scripts/prepare-ai-review.sh` writes it
+during a plan-stage generation for a work item whose `amendment_history`'s
+last entry is still open (`resolved_at_plan_revision` still `null`) —
+`git diff <amendment_base_commit>..HEAD` restricted to the plan-stage
+protected paths, reviewer convenience only — and deletes any stale copy
+once no amendment is open. The manual-external-review archive
+(`review-bundle.tar.gz`) bundles it alongside `current/` when present, so
+both the local and the manual-external reviewer see the identical
+convenience diff.
+
 ### Generation diagnostic metadata (`worktree_root`/`generation_head`)
 
 `MANIFEST.md` records the absolute worktree root and HEAD SHA the bundle
@@ -202,6 +216,14 @@ This is **portability vs. local staleness, split by consumer**:
   `review_content_id`" below — the same computation the
   generator's own `--write-manifest` step performs, so a line written this
   way agrees with `MANIFEST.md` by construction rather than by care.
+  **`workflow-2.4.0`, `D-Plan-Amendment-5`**: at the `plan` stage, the
+  author appends one fixed line, unconditionally — never gated on whether
+  this generation's own work item currently has an open amendment: "
+  `AMENDMENT_DIFF.patch` (if present in this archive) is reviewer
+  convenience only: it sits outside `bundle_dir`/`bundle_id`/
+  `review_content_id` and is not covered by the Reviewed bundle ID above."
+  No validator enforces this line's presence — author-written prose like
+  every other field on this list.
 - **PLAN.md** — populated at the `plan` stage: the actual execution plan
   being reviewed. Leave empty (or omit updating it) at later stages. Must
   state the plan's current `(Revision N)` marker — a bundle whose `PLAN.md`
@@ -460,18 +482,104 @@ important finding must end up either resolved, or explicitly rejected in the
 plan/summary with repository evidence (file, line, test, or doc reference)
 and a clear explanation.
 
+### Finding taxonomy and circuit breaker (`D-Review-Finding-Taxonomy-and-Circuit-Breaker`)
+
+**Advisory tag, never parser-enforced.** Every Blocking/Important finding
+may carry a `[substantive]` or `[apparatus]` tag: `[substantive]` names a
+defect in the design or implementation actually being reviewed;
+`[apparatus]` names a defect confined to bundle metadata, a declarations-
+file justification string, a stale table embed, or similar supporting
+material that does not itself indicate the reviewed content is wrong. The
+tag is recommended prose, not a required field — a missing, malformed, or
+ambiguous tag is **never rejected**; `WFR-03`'s binding-field strictness
+(`parse_review_feedback_binding_fields`/`assert_feedback_matches_bundle`)
+governs only the three binding fields above and is not extended to this
+tag, so no live work item's existing feedback shape breaks on update. An
+untagged or ambiguously-tagged Blocking/Important finding is instead
+treated, conservatively, as `[substantive]` for every purpose below —
+silence can never manufacture an apparatus-only streak. Optional findings
+are unaffected either way.
+
+**No weakening of resolution requirements.** The rule immediately above —
+every Blocking/Important finding ends up resolved or explicitly rejected
+with repository evidence — is completely unchanged by this tag, and
+unchanged for an untagged finding too. `[apparatus]` never means "may be
+ignored"; it means only "does not by itself cast doubt on the substantive
+design or implementation."
+
+**Bounded, advisory circuit-breaker signal.** When two consecutive `REVISE`
+rounds for the **same local-model review stage** — `LOCAL_MODEL_PLAN_REVIEW`
+or `LOCAL_MODEL_IMPLEMENTATION_REVIEW`, distinguished by
+`REVIEW_FEEDBACK.md`'s own `Reviewer role:` line, never by
+`<feedback_dir>/REVIEW_FEEDBACK.md`'s path (which stays stage-agnostic and
+shared by both stage protocols) — have carried **no** `[substantive]`
+Blocking/Important finding (every one `[apparatus]`; an untagged finding
+counts as `[substantive]`, per above), the reviewer's own next report
+states this explicitly (for example, "2 consecutive apparatus-only
+rounds") as a visible diminishing-returns signal an operator can act on —
+requesting a lighter confirmation pass, or accepting the standing
+substantive verdict — rather than treating every apparatus fix as
+resetting the convergence clock to zero. The bound is fixed at **2**: the
+same reviewing command reads the immediately-prior `REVIEW_FEEDBACK.md`
+before overwriting it with its own, which is exactly enough visibility for
+a bound of 2 and no more — neither `record_local_plan_review`'s nor its
+implementation-stage mirror's `REVISE` branch writes any durable,
+finding-classification-bearing ledger entry, so no reviewer can observe
+more than one prior round beyond its own.
+
+This signal is deliberately advisory prose in the reviewer's own report,
+never a new `docs/ai-workflow/WORKFLOW_STATE.json` field or a
+phase-machinery gate: it changes no existing work item's behavior on
+update (no governing-version bump), never itself approves anything, and
+`/approve-review` and its `EXTERNAL_APPROVE`/local-plus-manual-ledger bases
+are completely unaffected.
+
+**Scoped to the local-model loop only — no corresponding claim for
+consecutive manual-external rounds.** The signal above is checkable only
+because the *same* reviewing command reads the immediately-prior
+`REVIEW_FEEDBACK.md` before overwriting it — true for two consecutive
+`LOCAL_MODEL_PLAN_REVIEW`/`LOCAL_MODEL_IMPLEMENTATION_REVIEW` rounds, since
+`/review-plan`/`/review-implementation` run before the file is replaced. It
+does **not** hold across two consecutive manual-external rounds: a manual
+`REVISE` is consumed by `/apply-*-review`, and no path re-enters
+manual-external review without a fresh local pass first, which overwrites
+the same stage-agnostic path with its own `REVIEW_FEEDBACK.md` before the
+next manual reviewer ever sees the prior one. Neither
+`record_local_plan_review`'s/`record_manual_plan_review`'s (nor their
+implementation-stage mirrors') `REVISE` branch writes any durable,
+finding-classification-bearing ledger entry, and the review bundle itself
+never includes `feedback/`. This document makes **no** corresponding
+recoverability claim for two consecutive manual-external rounds: recovering
+that signal would need a minimal durable per-round history this addition
+deliberately does not add. Manual-external convergence stays operator
+judgment, as it already is today.
+
 ## Local reviewer commands (operator ergonomics)
 
 Two commands (`workflow-v2-3`) give an operator a repository-local, second
-opinion before handing a stage to its real gate, without adding a new
-lifecycle state or ledger stage: `/review-implementation` (usable while a
-work item sits at `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`) and
-`/review-functional` (usable while a work item sits at
-`AWAITING_FUNCTIONAL_REVIEW`). Both implement a model-independent review
-role — nothing about either command's contract, checks, or report format
-names a specific model. Neither ever writes
-`docs/ai-workflow/WORKFLOW_STATE.json` or `docs/ACTIVE_MILESTONE.md`,
-approves a stage, applies a finding, or advances `phase`. Their write
+opinion before handing a stage to its real gate: `/review-implementation`
+(usable while a `"1"`/`"2.1"` work item sits at
+`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, or a `"2.2"` item sits at
+`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` — see below) and `/review-functional`
+(usable while a work item sits at `AWAITING_FUNCTIONAL_REVIEW`). Both
+implement a model-independent review role — nothing about either command's
+contract, checks, or report format names a specific model.
+`/review-functional` never writes `docs/ai-workflow/WORKFLOW_STATE.json` or
+`docs/ACTIVE_MILESTONE.md`, approves a stage, applies a finding, or advances
+`phase`, for any work item. **`/review-implementation` is dual-mode
+(`workflow-2.5.0`, `D-Implementation-Review-Stages`), not uniformly
+advisory**: for a `"1"`/`"2.1"` item its existing behavior is byte-for-byte
+unchanged — it adds no new lifecycle state or ledger stage, and never writes
+`WORKFLOW_STATE.json` or advances `phase`. For a `"2.2"` item, it *is* the
+authoritative `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage writer: phase-guarded
+to `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, it writes the
+`implementation_review_stages` ledger and does advance `phase` on `APPROVE`/
+`REVISE` — see `docs/ai-workflow/MILESTONE_WORKFLOW.md`'s
+`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` section and
+`docs/ai-workflow/IMPLEMENTATION_REVIEW_WORKFLOW.md` for the full "2.2"
+mechanism. This does not add a new hard gate either way (the terminal
+`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` gate is reused, not duplicated —
+`docs/ai-workflow/MILESTONE_WORKFLOW.md`'s "Hard gates summary"). Their write
 behavior toward their own review-feedback artifact differs, though:
 `/review-implementation` writes the current `<feedback_dir>/
 REVIEW_FEEDBACK.md` once its own pre-write guards pass (see
@@ -511,6 +619,51 @@ work-item-scoped `REJECTED` marker can never reach it), `/review-functional`
 does consult that marker before composing its report — a withdrawn work item
 must not receive an advisory functional-review opinion either, even though
 `/review-functional` itself touches no bundle at all.
+
+### No bundle regeneration between the local and manual-external implementation-review stages
+
+`workflow-2.5.0`, `§2.3` point 1 (`REQ-4`). For a `"2.2"` item, the same
+bundle -- the same `bundle_id`, and the same implementation-stage
+`review_content_id` -- that `LOCAL_MODEL_IMPLEMENTATION_REVIEW` approved is
+exactly what the manual-external reviewer is handed, and exactly what
+`/record-manual-implementation-review` ingests. Nothing regenerates the
+bundle, and nothing recomputes a fresh `review_content_id` to check the
+manual round against, in between `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`'s
+own `APPROVE` and `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`'s own
+ingestion. This mirrors the plan-review side (`D-Plan-Review-Stages`),
+which already has this property structurally: `LOCAL_MODEL_PLAN_REVIEW`'s
+`APPROVE` and `MANUAL_EXTERNAL_PLAN_REVIEW`'s ingestion are bound to the
+same `review_content_id` the same way, with no bundle-refresh step of its
+own between them either.
+
+It is easy to accidentally regress this by adding a bundle-refresh step
+where none belongs -- so the property is enforced mechanically, not only
+by omission: `record_manual_implementation_review`'s own precondition
+(`validate_manual_implementation_review_preconditions`,
+`scripts/workflow_state.py`) hard-blocks the moment the manual round's own
+`review_content_id` disagrees with the value
+`implementation_review_stages["review_content_id"]` already recorded when
+`LOCAL_MODEL_IMPLEMENTATION_REVIEW` approved -- with `StaleReviewContentIdError`
+when the disagreement is between the reviewer's own feedback-carried
+`review_content_id` and the current recomputed value, and with
+`MissingLocalApprovalForManualImplementationStageError` when the operator's
+recomputed-fresh value agrees with the feedback but neither matches the
+ledger's own recorded `review_content_id` (the bundle regenerated after
+`LOCAL_MODEL_IMPLEMENTATION_REVIEW`'s own approval, so there is no current
+local approval for the content actually being ingested). Either way there
+is no fallback path that silently re-approves different content under the
+old local-approval ledger entry. The advisory-only `bundle_id` check
+(`check_manual_stage_bundle_id_advisory`) is deliberately weaker (a warning,
+not a block) since a reviewer-facing wrapper artifact's own `bundle_id` can
+legitimately differ in shape from the recomputed one without the
+underlying protected content having changed; `review_content_id` is the
+one binding identity this rule is stated over. `workflow-2.5.0` CP5's own
+disposable-repo fixture
+(`scripts/workflow_state_test.py`'s
+`TestNoBundleRegenerationBetweenImplementationReviewStages`) demonstrates
+both halves of this against a real Git history: the ordinary carry-through
+succeeds unchanged, and a simulated regeneration between the two stages is
+hard-blocked rather than silently ingested.
 
 ## Context-efficiency rules
 

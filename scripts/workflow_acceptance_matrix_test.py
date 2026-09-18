@@ -799,6 +799,16 @@ class Item:
         if not ws.technical_approval_gate_reachable(
             latest_round_status=feedback["status"], protected_path_dirty=dirty,
             head_matches_reviewed_implementation_head=interval_ok, pinned_block=pinned,
+            # workflow-2.5.0 REVISE round 7's own I1: these three are now
+            # required keyword-only parameters (no longer defaulted to
+            # None) -- passing the entry's real governing_workflow_version/
+            # implementation_review_stages and the freshly recomputed
+            # current_review_content_id here is behavior-preserving for
+            # every "1"/"2.1" row this suite drives (the function's own
+            # `!= "2.2"` branch), and is what a real "2.2" caller needs too.
+            governing_workflow_version=entry.get("governing_workflow_version"),
+            implementation_review_stages=entry.get("implementation_review_stages"),
+            current_review_content_id=review_content_id,
         ):
             raise AssertionError(
                 f"technical-approval gate not reachable: status={feedback['status']} "
@@ -3043,6 +3053,8 @@ class InvalidAndMalformedState(MatrixCase):
         self.assertFalse(ws.technical_approval_gate_reachable(
             latest_round_status="REVISE", protected_path_dirty=False,
             head_matches_reviewed_implementation_head=True, pinned_block=True,
+            governing_workflow_version=None, implementation_review_stages=None,
+            current_review_content_id=None,
         ))
         with self.assertRaises(ws.BlockCannotApproveError):
             ws.resolve_approval_basis(
@@ -4262,6 +4274,8 @@ class UserOverrideApprovalBasis(MatrixCase):
         self.assertFalse(ws.technical_approval_gate_reachable(
             latest_round_status="BLOCK", protected_path_dirty=False,
             head_matches_reviewed_implementation_head=True, pinned_block=False,
+            governing_workflow_version=None, implementation_review_stages=None,
+            current_review_content_id=None,
         ))
 
         # D2a's laundering path: pin the BLOCK, then rewrite the mutable
@@ -4276,6 +4290,8 @@ class UserOverrideApprovalBasis(MatrixCase):
         self.assertFalse(ws.technical_approval_gate_reachable(
             latest_round_status="REVISE", protected_path_dirty=False,
             head_matches_reviewed_implementation_head=True, pinned_block=True,
+            governing_workflow_version=None, implementation_review_stages=None,
+            current_review_content_id=None,
         ))
         with self.assertRaises(AssertionError) as ctx:
             item.approve_implementation(expect_basis=None)

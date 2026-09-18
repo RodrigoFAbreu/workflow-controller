@@ -65,6 +65,12 @@ rule for every stage alike.
      execute (the plan-production/self-review/gate mechanics are
      version-independent), plus the additional sub-steps marked **[2.1]**
      interleaved below.
+   - **`governing_workflow_version: "2.2"`** (workflow-2.5.0,
+     `D-Implementation-Review-Version-Activation`): takes the identical
+     `"2.1"` branch immediately above -- this command's own plan-production/
+     self-review/gate mechanics, and the two-stage plan-review protocol
+     they hand off to, are unaffected by the `"2.2"` implementation-review
+     bump; `TWO_STAGE_PLAN_REVIEW_VERSIONS` already covers both.
    - **Explicitly selected target** (version-independent): when
      `$ARGUMENTS` named a `work_items` key, **that entry is the target** --
      step 1 does not re-derive one from

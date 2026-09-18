@@ -233,10 +233,17 @@ def validate_work_item_kind(work_item_kind: str) -> None:
     if not isinstance(work_item_kind, str) or work_item_kind not in WORK_ITEM_KINDS:
         raise InvalidWorkItemTypeError(f"unknown work_item_kind: {work_item_kind!r}")
 
-CHECKPOINT_STATUSES = frozenset({"IN_PROGRESS", "COMPLETE"})
+CHECKPOINT_STATUSES = frozenset({"IN_PROGRESS", "COMPLETE", "NEEDS_REVALIDATION"})
 
 # D2's unified plan_approval/technical_approval record shape.
-APPROVAL_STATUSES = frozenset({"CURRENT", "STALE"})
+# "SUPERSEDED" is additive (D-Plan-Amendment-3, workflow-2.4.0): an
+# explicit, authorized `/request-plan-amendment` retired this approval on
+# purpose, distinct from "STALE" (the same reviewed plan document changed
+# under us, by accident or a later REVISE). No live writer ever produces
+# "STALE" for `plan_approval` today (`apply_plan_approval` always writes
+# "CURRENT"), so this addition disambiguates a value that was previously
+# only theoretical, not one any existing record actually held.
+APPROVAL_STATUSES = frozenset({"CURRENT", "STALE", "SUPERSEDED"})
 APPROVAL_BASES = frozenset({"EXTERNAL_APPROVE", "USER_OVERRIDE", "LEGACY_V1"})
 # Narrowed per OPUS-R10-014: no_content_id removed -- the only basis that
 # uses waivers (LEGACY_V1) always backfills a real content ID at import
@@ -270,6 +277,12 @@ _GIT_OBJECT_ID_RE = re.compile(r"^[0-9a-f]{40}$")
 # ingest from REVIEW_FEEDBACK.md's `Status:` field.
 PLAN_REVIEW_VERDICTS = frozenset({"APPROVE", "REVISE", "BLOCK"})
 
+# workflow-2.5.0 CP3: `D-Implementation-Review-Stages`' own verdict set,
+# mirroring `PLAN_REVIEW_VERDICTS` exactly -- the identical three verdicts,
+# ingested by `/review-implementation`/`/record-manual-implementation-review`
+# instead of `/review-plan`/`/record-manual-plan-review`.
+IMPLEMENTATION_REVIEW_VERDICTS = frozenset({"APPROVE", "REVISE", "BLOCK"})
+
 # Canonical, SCREAMING_SNAKE_CASE `plan_review_stages` key casing (item 8,
 # workflow-v2-3-followups CP3): every write past this checkpoint uses these
 # two constants, never the legacy lowercase literals directly. Legacy
@@ -278,6 +291,30 @@ PLAN_REVIEW_VERDICTS = frozenset({"APPROVE", "REVISE", "BLOCK"})
 # never need rewriting.
 LOCAL_MODEL_PLAN_REVIEW = "LOCAL_MODEL_PLAN_REVIEW"
 MANUAL_EXTERNAL_PLAN_REVIEW = "MANUAL_EXTERNAL_PLAN_REVIEW"
+
+# workflow-2.5.0 (D-Implementation-Review-Version-Activation, "Inheritance
+# rule, general"): the single named membership constant replacing the exact
+# `governing_workflow_version == "2.1"` / `!= "2.1"` literal at every site
+# that gates the two-stage plan-review protocol -- `publish_plan_revision`,
+# `plan_approval_gate_reachable`, `_require_v2_1_plan_review`, and
+# `_validate_plan_review_stages`. A `"2.2"` item is a `"2.1"` item for plan
+# review purposes: it runs the identical two-stage mechanism, unchanged.
+TWO_STAGE_PLAN_REVIEW_VERSIONS = frozenset({"2.1", "2.2"})
+
+# Canonical, SCREAMING_SNAKE_CASE `implementation_review_stages` key casing
+# (workflow-2.5.0, D-Implementation-Review-Stages), mirroring
+# `LOCAL_MODEL_PLAN_REVIEW`/`MANUAL_EXTERNAL_PLAN_REVIEW` above exactly.
+# This ledger is introduced fresh at `"2.2"` -- no legacy lowercase variant
+# has ever existed for it -- but `normalize_implementation_review_stages`
+# still mirrors `normalize_plan_review_stages`'s own collision-aware read
+# contract below, so a future legacy alias (if one is ever introduced) is
+# handled by the same discipline from day one rather than bolted on later.
+# Each stage's ledger key and its own `REVIEW_FEEDBACK.md` `Reviewer role:`
+# string are deliberately the identical one name -- exactly as they already
+# are on the plan side -- so no document, command or validator ever has two
+# names for one stage to keep in step.
+LOCAL_MODEL_IMPLEMENTATION_REVIEW = "LOCAL_MODEL_IMPLEMENTATION_REVIEW"
+MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW = "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
 
 # Only MILESTONE_COMPLETE is terminal -- LEGACY_READY is explicitly
 # "dormant, not terminal" (D-Legacy phase 1, resolves GPT-R9-005).
@@ -312,6 +349,25 @@ KNOWN_PHASES = frozenset({
     "AWAITING_TECHNICAL_APPROVAL",
     # D-Legacy phase 1 -- dormant, not terminal
     "LEGACY_READY",
+    # workflow-2.4.0 addition (D-Plan-Amendment-1): real and persisted,
+    # unlike the four vocabulary-only states above, because the mechanism
+    # must survive an interruption between the request and the first
+    # post-request /milestone-plan call. Entered by /request-plan-amendment
+    # alone (its sole writer, `request_plan_amendment`), left by the very
+    # next /milestone-plan invocation reusing that command's existing
+    # step 3/[2.1] machinery unchanged.
+    "AMENDING_PLAN",
+    # workflow-2.5.0 addition (D-Implementation-Review-Stages): "2.2"-only,
+    # real and persisted. Entered in place of
+    # AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW for a "2.2"-governed item's
+    # implementation review, mirroring AWAITING_LOCAL_PLAN_REVIEW/
+    # AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW's own local-then-manual-external
+    # shape at the implementation stage. "Terminal-phase naming, decided"
+    # keeps AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW itself as the "2.2"
+    # terminal phase too -- its entry condition, not its name, grows the
+    # extra ledger check (see D-Implementation-Review-Version-Activation).
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
 })
 
 
@@ -502,12 +558,35 @@ class UnownedCheckpointError(Exception):
 
 class PlanReviewStagesInvalidForVersionError(Exception):
     """Raised when `plan_review_stages` is non-null on a work item whose
-    `governing_workflow_version` is not `"2.1"` (resolves GPT-R11-001)."""
+    `governing_workflow_version` is not one of `TWO_STAGE_PLAN_REVIEW_
+    VERSIONS` (resolves GPT-R11-001; widened workflow-2.5.0 from a bare
+    `"2.1"` check to the membership constant)."""
 
 
 class ManualStageWithoutLocalStageError(Exception):
     """Raised when `MANUAL_EXTERNAL_PLAN_REVIEW` is recorded while
     `LOCAL_MODEL_PLAN_REVIEW` is absent (resolves GPT-R11-001)."""
+
+
+class ImplementationReviewStagesInvalidForVersionError(Exception):
+    """workflow-2.5.0 (D-Implementation-Review-Stages): the
+    `implementation_review_stages` ledger's own ledger-shape counterpart of
+    `PlanReviewStagesInvalidForVersionError`, a new exception class rather
+    than a reuse -- unlike `WrongReviewerRoleError`/`StaleReviewContentIdError`/
+    `check_manual_stage_bundle_id_advisory`, which are already stage-
+    agnostic, `PlanReviewStagesInvalidForVersionError`'s own message names
+    `plan_review_stages` specifically. Raised when `implementation_review_
+    stages` is non-null on a work item whose `governing_workflow_version`
+    is not `"2.2"` -- unlike the plan-review ledger, this one is never
+    valid for `"2.1"`: the two-stage *implementation*-review protocol is
+    `"2.2"`-only (D-Implementation-Review-Version-Activation)."""
+
+
+class ManualImplementationStageWithoutLocalStageError(Exception):
+    """workflow-2.5.0: the `implementation_review_stages` counterpart of
+    `ManualStageWithoutLocalStageError`. Raised when `MANUAL_EXTERNAL_
+    IMPLEMENTATION_REVIEW` is recorded while `LOCAL_MODEL_IMPLEMENTATION_REVIEW`
+    is absent."""
 
 
 class StageVerdictNotApproveError(Exception):
@@ -542,6 +621,141 @@ class StaleReviewContentIdError(Exception):
     manual stage's advisory-only `bundle_id` check, `OPUS-R14-005`)."""
 
 
+# ---------------------------------------------------------------------------
+# workflow-2.4.0: D-Plan-Amendment-1..8 -- amending an approved plan after
+# implementation has begun. New error family, amendment-prefixed (I-R32-1)
+# to stay clear of this module's own pre-existing, unrelated
+# `ReconciliationTableParseError`/`_RECONCILIATION_STATUS_TOKENS` vocabulary.
+# ---------------------------------------------------------------------------
+
+
+class WrongPhaseForAmendmentRequestError(Exception):
+    """Raised when `/request-plan-amendment` is invoked outside `phase in
+    {"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION"}` (D-Plan-Amendment-1) --
+    the two phases this release supports, and deliberately the only two.
+    Also the refusal a second, redundant `/request-plan-amendment` against
+    an item already at `AMENDING_PLAN` hits, since that phase is not a
+    member of the allowed set either."""
+
+
+class AmendmentApprovalCommitUnreachableError(Exception):
+    """Raised by `request_plan_amendment` when the work item's current
+    `plan_approval`'s own approval commit is not discoverable, or not an
+    ancestor of `HEAD` (D-Plan-Amendment-1's widened precondition,
+    corrected revision 12, B-R12-1). Checked, and this error raised,
+    *before* superseding anything -- `plan_approval.status` is never set
+    to `SUPERSEDED` when this fires, so the item never wedges at
+    `AMENDING_PLAN` with an unreproducible `pre_amendment_approval_commit`."""
+
+
+class AmendmentAlreadyResolvedError(Exception):
+    """Raised when reconciliation (folded into `apply_plan_approval`) finds
+    `amendment_history[-1]["resolved_at_plan_revision"]` already non-`None`
+    -- the same "wrong state, refuse and name it" discipline
+    `WrongPhaseForAmendmentRequestError` applies to a re-run
+    `/request-plan-amendment`, applied here to a re-run reconciliation
+    (D-Plan-Amendment-3's write-once-field discipline)."""
+
+
+class AmendmentReconciliationInputsMissingError(Exception):
+    """Raised by `apply_plan_approval` when the work item has an open
+    amendment (`amendment_history` non-empty, last entry's
+    `resolved_at_plan_revision` still `None`) but one or more of
+    `pre_registry`/`pre_plan_text`/`post_registry`/`post_plan_text` is
+    `None` -- an internal-caller bug (the command procedure failed to read
+    and pass all four), never a data condition this silently tolerates or
+    skips reconciliation for (D-Plan-Amendment-4, B2-new)."""
+
+
+class AmendmentPreSnapshotUnreproducibleError(Exception):
+    """Raised by `load_pre_amendment_snapshot` when a pinned blob SHA
+    cannot be retrieved via `git cat-file -p`, or the cross-check
+    (`git ls-tree <pre_amendment_approval_commit> -- <path>`) disagrees
+    with the manifest's own pinned blob -- naming the path and the blob SHA
+    it could not reproduce, rather than silently substituting empty
+    content or crashing on an unhandled `git` failure (D-Plan-Amendment-3,
+    EXT-R6-I1's bounded, content-addressed reference redesign)."""
+
+
+class AmendmentAnchorCoverageError(Exception):
+    """Raised by `validate_post_anchor_coverage` (called from
+    `apply_plan_approval`, before it computes any reconciliation outcome)
+    when a checkpoint id present in `post_registry` has zero well-formed
+    `<!-- CP<n> -->`/`<!-- /CP<n> -->` anchor pairs in `post_plan_text` --
+    a forgotten anchor on the side where a refusal is always actionable
+    (D-Plan-Amendment-4, B5-new)."""
+
+
+class AmendmentAnchorMalformedError(Exception):
+    """Raised by `parse_checkpoint_anchor_spans` (in `strict` mode, used
+    only for `post_plan_text`) when a checkpoint id's own anchor tags are
+    not a closed, non-nesting, per-id balanced grammar: an unmatched open
+    tag, an orphan close tag, or a tag nested inside another open span for
+    the same id (D-Plan-Amendment-4, B5-new/I5-new)."""
+
+
+class AmendmentPostRegistryMalformedError(Exception):
+    """Raised by `apply_plan_approval`'s amendment-reconciliation branch
+    when `post_registry` has no `"checkpoints"` key at all (IMPL2-O2):
+    `validate_post_anchor_coverage` reads it via `.get("checkpoints", [])`
+    and would pass vacuously, but `validate_registry_topological_order`
+    reads `registry["checkpoints"]` directly and would raise an unnamed
+    `KeyError` for the identical malformed input -- named here, once,
+    before either validator runs, matching every other refusal in this
+    branch."""
+
+
+class AmendmentCheckpointIdShapeError(Exception):
+    """Raised by `request_plan_amendment` when the work item's own
+    registry already contains a checkpoint id that is not of the shape
+    `CP<digits>` (IMPL2-R1): `_CHECKPOINT_ANCHOR_RE`'s grammar can only
+    ever produce an anchor tag keyed `"CP" + digits`, so
+    `validate_post_anchor_coverage` is unsatisfiable for any such id --
+    there is no text an author could write in the amended plan that would
+    ever satisfy it. Raised *before* `plan_approval` is superseded, the
+    same "refuse before any supersede" discipline
+    `AmendmentApprovalCommitUnreachableError` already follows, naming
+    every offending id at once rather than wedging the item at
+    `AMENDING_PLAN` two review stages later with no in-band recovery."""
+
+
+class AmendmentRegistryMissingIdError(Exception):
+    """Raised by `request_plan_amendment` when its own current registry
+    (loaded via `_load_authoritative_registry_or_none`) has a checkpoint
+    entry with no `id` key (IMPL3-O2, renamed IMPL4-O2): an amendment-
+    specific refusal, distinct from `RegistryCoverageError`, whose own
+    vocabulary is documented primarily around completion-accounting call
+    sites (`resolve_own_registry_completion_status`/
+    `resolve_completion_obligations`) this check has nothing to do with.
+    Named in `.claude/commands/request-plan-amendment.md`'s own refusal
+    list alongside `AmendmentCheckpointIdShapeError`, the sibling check it
+    runs immediately before."""
+
+
+class AmendmentCheckpointActiveError(Exception):
+    """Raised by `request_plan_amendment` (XMODEL-R4-B1, merged round-4
+    review) when this work item already has a checkpoint `IN_PROGRESS` in
+    `WORKFLOW_STATE.json`, or has an outstanding shared checkpoint claim
+    (`resolve_claim`) -- checked *before* superseding anything, the same
+    "refuse before any supersede" discipline every other precondition in
+    this function follows.
+
+    Both halves are checked, not only the state-only one, because they are
+    two different synchronization domains: `claim_checkpoint` is published
+    to the filesystem claims directory *before*
+    `transition_checkpoint_in_progress` writes `WORKFLOW_STATE.json`
+    (`/milestone-implement` step 1d's documented ordering), so
+    `resolve_checkpoint_ownership`'s own supported `CONTINUE_CLAIM` outcome
+    is a window in which a claim is real and outstanding while state still
+    looks completely idle. A state-only `IN_PROGRESS` check alone would
+    miss exactly that window and let `plan_approval` be superseded while a
+    checkpoint start is already in flight. The independent second half of
+    this fix -- refusing a checkpoint's own `IN_PROGRESS` publication once
+    the work item has left `IMPLEMENTING` -- is
+    `IllegalCheckpointStartPhaseError` on `transition_checkpoint_in_progress`
+    itself."""
+
+
 class WrongReviewerRoleError(Exception):
     """Raised when `REVIEW_FEEDBACK.md`'s declared `Reviewer role:` does
     not match the stage being ingested (e.g. a local-role or unlabeled
@@ -574,23 +788,103 @@ class AmbiguousPlanReviewStageKeyError(Exception):
     raises."""
 
 
+class AmbiguousImplementationReviewStageKeyError(Exception):
+    """workflow-2.5.0: `normalize_implementation_review_stages`'s own
+    counterpart of `AmbiguousPlanReviewStageKeyError`, raised on a genuine
+    conflict between two raw keys that normalize to the same
+    `implementation_review_stages` canonical stage. No legacy-cased key
+    has ever existed for this ledger, so this is unreachable through any
+    supported write path today -- defined for structural parity with the
+    plan-review ledger's own collision-aware read contract, exercised only
+    by a direct unit-test construction of a conflicting dict."""
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.5.0 CP3: `D-Implementation-Review-Stages`' own review-stage
+# writer exceptions -- implementation-stage-named siblings of the
+# plan-review exceptions whose own name is literally plan-specific
+# (`WrongPhaseForPlanReviewStageError`, `WrongGoverningVersionForPlanReviewStageError`,
+# `MissingLocalApprovalForManualStageError`, `DuplicateManualStageIngestionError`,
+# `UnknownPlanReviewVerdictError`); `WrongReviewerRoleError`/
+# `StaleReviewContentIdError`/`check_manual_stage_bundle_id_advisory` are
+# already stage-agnostic and reused verbatim below, unchanged.
+# ---------------------------------------------------------------------------
+
+
+class UnknownImplementationReviewVerdictError(Exception):
+    """Raised when a verdict passed to `record_local_implementation_review`/
+    `record_manual_implementation_review` is not one of
+    `IMPLEMENTATION_REVIEW_VERDICTS` -- the implementation-stage counterpart
+    of `UnknownPlanReviewVerdictError`."""
+
+
+class WrongGoverningVersionForImplementationReviewStageError(Exception):
+    """Raised when `/review-implementation` or
+    `/record-manual-implementation-review` is invoked, in its authoritative
+    `"2.2"` role, against a work item whose `governing_workflow_version` is
+    not exactly `"2.2"` -- unlike the plan-review protocol
+    (`TWO_STAGE_PLAN_REVIEW_VERSIONS`, valid for both `"2.1"`/`"2.2"`), the
+    two-stage *implementation*-review protocol is `"2.2"`-only
+    (D-Implementation-Review-Version-Activation): a `"1"`/`"2.1"` item has
+    no two-stage implementation-review protocol to run. The
+    implementation-stage counterpart of
+    `WrongGoverningVersionForPlanReviewStageError`."""
+
+
+class WrongPhaseForImplementationReviewStageError(Exception):
+    """Raised when `/review-implementation` is invoked (in its `"2.2"`
+    authoritative role) outside `phase == AWAITING_LOCAL_IMPLEMENTATION_REVIEW`,
+    or `/record-manual-implementation-review` outside `phase ==
+    AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` -- covers "already
+    completed this round" and a local `REVISE`'s work item never reaching
+    the manual stage. The implementation-stage counterpart of
+    `WrongPhaseForPlanReviewStageError`."""
+
+
+class MissingLocalApprovalForManualImplementationStageError(Exception):
+    """Raised when `/record-manual-implementation-review` is asked to
+    ingest an `APPROVE` while no current `LOCAL_MODEL_IMPLEMENTATION_REVIEW`
+    `APPROVE` is recorded for the same `review_content_id` -- a restated
+    invariant, since entry to `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`
+    already requires it; defends against a corrupted or hand-edited state
+    file. The implementation-stage counterpart of
+    `MissingLocalApprovalForManualStageError`."""
+
+
+class DuplicateManualImplementationStageIngestionError(Exception):
+    """Raised when a `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` stage is
+    already recorded against the current `review_content_id` -- rejects
+    duplicate ingestion. The implementation-stage counterpart of
+    `DuplicateManualStageIngestionError`."""
+
+
 class ConfigMissingAfterActivationError(Exception):
     """Raised when `WORKFLOW_CONFIG.json` is missing or corrupt *after*
-    Workflow v2.1 activation -- a hard stop, never a silent downgrade
-    (resolves OPUS-R6-015)."""
+    Workflow activation -- a hard stop, never a silent downgrade (resolves
+    OPUS-R6-015). Generalized (workflow-2.5.0,
+    `D-Implementation-Review-Version-Activation`) off the original
+    hard-coded `"Workflow v2.1"` text: `load_config`'s raise message names
+    the resolved destination version when the latest activation/rollback
+    event resolves to one (e.g. `"Workflow 2.2"`), and names the
+    unresolved `Workflow-Rollback` trailer's own value verbatim in the
+    fail-closed miss case -- never a version name that, in the miss case,
+    by construction does not exist."""
 
 
 class AlreadyActivatedError(Exception):
     """Raised by `build_activated_config` when the config's
-    `default_workflow_version` is already `"2.1"` -- `WF-Activate` is a
-    sole, one-time boundary (WFR-10), never an idempotent no-op call."""
+    `default_workflow_version` is already the requested `target_version`
+    (default `"2.1"`, generalized workflow-2.5.0 for the `"2.1"` -> `"2.2"`
+    bump) -- `WF-Activate` is a sole, one-time boundary (WFR-10), never an
+    idempotent no-op call."""
 
 
 class NotActivatedError(Exception):
     """Raised by `build_rolled_back_config` when the config's
-    `default_workflow_version` is not `"2.1"` -- there is nothing to roll
-    back (WFR-10/WFR-12's rollback is a real state reversal, not a bare
-    field reset)."""
+    `default_workflow_version` is not the requested `target_version`
+    (default `"2.1"`, generalized workflow-2.5.0 for the `"2.1"` -> `"2.2"`
+    bump) -- there is nothing to roll back (WFR-10/WFR-12's rollback is a
+    real state reversal, not a bare field reset)."""
 
 
 class UnsupportedGoverningVersionError(Exception):
@@ -888,16 +1182,27 @@ class MalformedBundleGenerationRecordCommitError(Exception):
     `WORKFLOW_STATE.json`, its own `work_items[work_item_id]` field
     changes must be a non-empty subset of `{phase,
     reviewed_implementation_head, implementation_revision, state_revision,
-    last_transition}` including `phase`, and it must carry exactly the
-    two-trailer ordinary set (`Workflow-Bundle-Generation-Record`,
+    last_transition, implementation_review_stages}` (workflow-2.5.0 CP3
+    widened the admitted set with the last field, unconditionally)
+    including `phase`, its committed `phase` must equal
+    `bundle_generation_target_phase(stage, governing_workflow_version)`'s
+    resolved value (read from the commit's own committed
+    `governing_workflow_version`, `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`
+    for `"1"`/`"2.1"`, byte-identical to before CP3), and it must carry
+    exactly the two-trailer ordinary set (`Workflow-Bundle-Generation-Record`,
     `Workflow-Work-Item`). A **recovered**-role commit (WF8c (c)/(b)) must
     touch only `WORKFLOW_STATE.json`, its own field changes must be a
-    non-empty subset of `{phase, state_revision, last_transition}` --
-    `reviewed_implementation_head`/`implementation_revision` must be
-    byte-identical to its parent -- its committed `phase` must equal
-    `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` and its parent's committed
-    `phase` must be one of the three legal recovered-role source phases,
-    and it must carry exactly the three-trailer recovered set
+    non-empty subset of `{phase, state_revision, last_transition,
+    implementation_review_stages}` -- `reviewed_implementation_head`/
+    `implementation_revision` must be byte-identical to its parent -- its
+    committed `phase` must be a member of
+    `bundle_generation_recovered_role_legal_committed_phases(
+    governing_workflow_version)` (a single-valued
+    `{AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW}` for `"1"`/`"2.1"`,
+    byte-identical to before CP3; the three-phase `"2.2"` set otherwise)
+    and its parent's committed `phase` must be one of the (additively
+    widened, workflow-2.5.0 CP3) legal recovered-role source phases, and
+    it must carry exactly the three-trailer recovered set
     (`Workflow-Bundle-Generation-Record`, `Workflow-Work-Item`,
     `Workflow-Supersedes`). A commit whose trailer set matches neither
     role's exact shape is rejected outright, naming the offending trailer
@@ -1028,6 +1333,15 @@ class NonFirstParentFunctionalChecklistEvidenceError(Exception):
 
 def _run(args: list[str], cwd: Path) -> str:
     result = subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True)
+    return result.stdout
+
+
+def _run_bytes(args: list[str], cwd: Path) -> bytes:
+    """Binary-safe counterpart of `_run` -- `git cat-file -p` on a blob
+    must never go through `text=True`'s own decode, since
+    `load_pre_amendment_snapshot` (workflow-2.4.0) needs the exact bytes a
+    Git blob holds, before this function's own caller decodes them."""
+    result = subprocess.run(args, cwd=cwd, check=True, capture_output=True)
     return result.stdout
 
 
@@ -1486,6 +1800,74 @@ def _is_ancestor(repo_root: Path, ancestor: str, descendant: str) -> bool:
     return result.returncode == 0
 
 
+def load_pre_amendment_snapshot(
+    repo_root: Path, work_item_id: str, plan_path: str, registry_path: str, entry: dict,
+) -> tuple[str, dict]:
+    """workflow-2.4.0, D-Plan-Amendment-3's bounded, content-addressed
+    reference model (EXT-R6-I1): given one `amendment_history` entry,
+    reads the pinned `blob` SHA for `plan_path`/`registry_path` out of
+    `entry["superseded_plan_approval"]["review_content_manifest"]` (a
+    lookup by `path`, never a re-derivation of the manifest), retrieves
+    each blob's bytes via `git cat-file -p <blob>`, and cross-checks each
+    retrieved blob is still reachable from
+    `entry["pre_amendment_approval_commit"]` via `git ls-tree
+    <pre_amendment_approval_commit> -- <path>` reporting the identical SHA,
+    before decoding. Returns `(pre_plan_text, pre_registry)` -- the plan
+    bytes decoded as UTF-8, the registry bytes parsed as JSON.
+
+    Raises `AmendmentPreSnapshotUnreproducibleError`, naming the path and
+    the blob SHA it could not reproduce, rather than silently substituting
+    empty content or crashing on an unhandled `git` failure."""
+    manifest = entry.get("superseded_plan_approval", {}).get("review_content_manifest") or []
+    manifest_by_path = {m.get("path"): m.get("blob") for m in manifest if isinstance(m, dict)}
+    commit = entry.get("pre_amendment_approval_commit")
+
+    def _resolve_blob(path: str) -> bytes:
+        blob = manifest_by_path.get(path)
+        if not blob:
+            raise AmendmentPreSnapshotUnreproducibleError(
+                f"{work_item_id}: {path!r} has no pinned blob in this amendment's own "
+                f"superseded_plan_approval.review_content_manifest"
+            )
+        try:
+            ls_tree_out = _run(["git", "ls-tree", commit, "--", path], cwd=repo_root)
+        except subprocess.CalledProcessError as exc:
+            raise AmendmentPreSnapshotUnreproducibleError(
+                f"{work_item_id}: could not run 'git ls-tree {commit} -- {path}' to "
+                f"cross-check pinned blob {blob}: {exc}"
+            ) from exc
+        fields = ls_tree_out.strip().split(None, 3)
+        found_blob = fields[2] if len(fields) >= 3 else None
+        if found_blob != blob:
+            raise AmendmentPreSnapshotUnreproducibleError(
+                f"{work_item_id}: pinned blob {blob} for {path!r} is not reachable from "
+                f"pre_amendment_approval_commit {commit} (git ls-tree reports {found_blob!r})"
+            )
+        try:
+            return _run_bytes(["git", "cat-file", "-p", blob], cwd=repo_root)
+        except subprocess.CalledProcessError as exc:
+            raise AmendmentPreSnapshotUnreproducibleError(
+                f"{work_item_id}: could not retrieve blob {blob} for {path!r} via "
+                f"'git cat-file -p': {exc}"
+            ) from exc
+
+    plan_bytes = _resolve_blob(str(plan_path))
+    registry_bytes = _resolve_blob(str(registry_path))
+    try:
+        pre_plan_text = plan_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise AmendmentPreSnapshotUnreproducibleError(
+            f"{work_item_id}: {plan_path!r}'s pinned blob is not valid UTF-8"
+        ) from exc
+    try:
+        pre_registry = json.loads(registry_bytes)
+    except json.JSONDecodeError as exc:
+        raise AmendmentPreSnapshotUnreproducibleError(
+            f"{work_item_id}: {registry_path!r}'s pinned blob is not valid JSON"
+        ) from exc
+    return pre_plan_text, pre_registry
+
+
 def verify_checkpoint_completions(
     work_item: dict, repo_root: Path, base_commit: str, head: str = "HEAD",
 ) -> None:
@@ -1895,6 +2277,8 @@ def open_plan_approval_journal(
     fifth_member_applies: bool, fifth_member_sha256: str | None,
     user_confirmation: str, quiescence_authorization: str,
     path: Path = PLAN_APPROVAL_JOURNAL_PATH,
+    pre_registry: dict | None = None, pre_plan_text: str | None = None,
+    post_registry: dict | None = None, post_plan_text: str | None = None,
 ) -> dict:
     """Opens the durable, crash-resumable plan-approval transaction
     journal (`WFR-63`, missing-test item 349): this invocation's own
@@ -1922,13 +2306,24 @@ def open_plan_approval_journal(
     window in which a reader can observe a partially-written journal,
     and a crash between the two file operations leaves nothing at the
     final pathname at all. Gitignored (`.ai-review/`), worktree-local,
-    never a `WORKFLOW_STATE.json` field."""
+    never a `WORKFLOW_STATE.json` field.
+
+    workflow-2.4.0, D-Plan-Amendment-4: `pre_registry`/`pre_plan_text`/
+    `post_registry`/`post_plan_text` are a pure pass-through into the one
+    internal `apply_plan_approval` call above -- this function performs no
+    read of its own to obtain them and no amendment-specific logic; it
+    stays a thin, journal-writing orchestrator exactly as it already is
+    for `record`/`base_commit`/every other caller-supplied argument."""
     full_path = plan_approval_journal_path(repo_root, path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     repo_root_id, git_common_dir, worktree_root = _git_identity(repo_root)
     pre_procedure_head = _run(["git", "rev-parse", "HEAD"], cwd=repo_root).strip()
     pre_state_bytes = _serialize_state(pre_state)
-    expected_post_state = apply_plan_approval(pre_state, work_item_id, record, approval_now)
+    expected_post_state = apply_plan_approval(
+        pre_state, work_item_id, record, approval_now,
+        pre_registry=pre_registry, pre_plan_text=pre_plan_text,
+        post_registry=post_registry, post_plan_text=post_plan_text,
+    )
     expected_post_state_bytes = _serialize_state(expected_post_state)
     journal = {
         "schema_version": PLAN_APPROVAL_JOURNAL_SCHEMA_VERSION,
@@ -2828,12 +3223,25 @@ def _replace_plan_approval_journal(
 # ---------------------------------------------------------------------------
 
 
+#: `workflow-2.5.0` CP9 (`v2.3.1-003`'s own first stated portable form,
+#: `docs/defects/v2.3.1-003-plan-approval-requires-precommitted-state-file.md`):
+#: the file mode `pin_plan_approval_state_blob` falls back to when
+#: `state_path` has no `HEAD` entry to read a real mode from -- the mode
+#: every other tracked path this Workflow ever commits already uses, per
+#: the defect record's own observation, not a guess.
+_FALLBACK_STATE_BLOB_MODE = "100644"
+
+
 class PlanApprovalStateBlobUnavailableError(Exception):
-    """Raised by `pin_plan_approval_state_blob` when `state_path` does not
-    exist at `HEAD` -- there is no committed file mode to pin a new blob
-    against. `WORKFLOW_STATE.json` always exists once `WF1a` has landed,
-    so this is not a case this transaction's own contract needs to
-    recover from, only fail closed on."""
+    """No longer raised by `pin_plan_approval_state_blob` itself
+    (`workflow-2.5.0` CP9, `v2.3.1-003`): a `state_path` absent at `HEAD`
+    -- this repository's own genuinely-first plan approval, before
+    `docs/ai-workflow/WORKFLOW_STATE.json` has ever been committed -- now
+    falls back to `_FALLBACK_STATE_BLOB_MODE` instead of refusing
+    unconditionally, since every other tracked path this Workflow ever
+    commits already uses that same mode. Retained as a documented
+    exception type for this module's own public contract; no code path in
+    this Workflow release raises it."""
 
 
 class StagedStateBlobMismatchError(Exception):
@@ -2891,7 +3299,15 @@ def pin_plan_approval_state_blob(
     verification against the journal's own pinned identity is
     `verify_staged_plan_approval_state_blob`, by content sha256, not this
     object id, so it is unaffected by which hash algorithm the repository
-    itself uses for Git objects)."""
+    itself uses for Git objects).
+
+    `workflow-2.5.0` CP9 (`v2.3.1-003`): when `state_path` has no entry at
+    `HEAD` at all -- a repository's own genuinely-first plan approval,
+    before `WORKFLOW_STATE.json` has ever been committed -- this no
+    longer refuses unconditionally. It falls back to
+    `_FALLBACK_STATE_BLOB_MODE` (`100644`), the mode every other tracked
+    path this Workflow ever commits already uses, and proceeds exactly as
+    if that mode had been read from `HEAD`."""
     already = _run(
         ["git", "diff", "--name-only", "--cached", "HEAD", "--", str(state_path)], cwd=repo_root,
     ).strip()
@@ -2901,12 +3317,7 @@ def pin_plan_approval_state_blob(
             f"step-6.1b-state-pin ran -- resolve or unstage it first"
         )
     mode_and_sha = _blob_mode_and_sha_at_commit(repo_root, "HEAD", str(state_path))
-    if mode_and_sha is None:
-        raise PlanApprovalStateBlobUnavailableError(
-            f"{state_path} does not exist at HEAD -- cannot determine its file mode "
-            f"to pin a new blob in its place"
-        )
-    mode, _head_blob = mode_and_sha
+    mode = mode_and_sha[0] if mode_and_sha is not None else _FALLBACK_STATE_BLOB_MODE
     blob_sha = subprocess.run(
         ["git", "hash-object", "-w", "--stdin"], cwd=repo_root,
         input=expected_state_bytes, capture_output=True, check=True,
@@ -3084,6 +3495,264 @@ def plan_approval_state_matches_pre_transaction(
 
 
 # ---------------------------------------------------------------------------
+# workflow-2.4.0, D-Plan-Amendment-4: paired-anchor checkpoint-content
+# hashing and checkpoint reconciliation after an amendment. Every plan
+# document written or amended under this mechanism marks each checkpoint's
+# own design-decision prose with paired anchor comments, `<!-- CP<n> -->`
+# immediately before and `<!-- /CP<n> -->` immediately after each block of
+# prose that describes it -- a checkpoint may have any number of such
+# disjoint, non-contiguous pairs.
+# ---------------------------------------------------------------------------
+
+_CHECKPOINT_ANCHOR_RE = re.compile(r"<!--\s*(/?)CP(\d+)\s*-->")
+
+#: Shape a checkpoint id must have for `_CHECKPOINT_ANCHOR_RE` to ever be
+#: able to produce a matching anchor tag for it (IMPL2-R1): the grammar
+#: only ever emits/consumes `"CP" + digits`, so any other id shape (e.g.
+#: `workflow-v2-1-core`'s own real `WF4a-i`) can never have a well-formed
+#: anchor pair -- `checkpoint_id_supports_anchor` below is the single
+#: place that fact is checked, so `request_plan_amendment` can refuse
+#: early rather than leave `validate_post_anchor_coverage` as the only,
+#: much later, signal.
+_ANCHOR_COMPATIBLE_CHECKPOINT_ID_RE = re.compile(r"^CP\d+\Z")
+
+
+def checkpoint_id_supports_anchor(checkpoint_id: str) -> bool:
+    """True iff `checkpoint_id` has the one shape (`CP<digits>`) the
+    paired-anchor grammar (`_CHECKPOINT_ANCHOR_RE`/
+    `parse_checkpoint_anchor_spans`) can ever match. False for any other
+    shape -- e.g. `WF4a-i` -- for which `validate_post_anchor_coverage` is
+    unconditionally unsatisfiable, no matter what the plan document says.
+
+    `\\Z` rather than `$` (IMPL4-O3): Python's `$` matches immediately
+    before a trailing `\\n` as well as at the true end of string, so an id
+    of `"CP1\\n"` would otherwise pass this shape gate while remaining
+    unsatisfiable by `_CHECKPOINT_ANCHOR_RE`'s own anchor-tag parser, which
+    has no such allowance."""
+    return bool(_ANCHOR_COMPATIBLE_CHECKPOINT_ID_RE.match(checkpoint_id))
+
+
+def parse_checkpoint_anchor_spans(text: str, *, strict: bool = True) -> dict[str, list[tuple[int, int]]]:
+    """Parses `text` for `<!-- CP<n> -->`/`<!-- /CP<n> -->` anchor pairs,
+    returning `{checkpoint_id: [(content_start, content_end), ...]}` in
+    document order -- the content *between* each matched pair, never
+    including the tags themselves.
+
+    Grammar (D-Plan-Amendment-4, B5-new/I5-new), a closed, non-nesting,
+    per-id balanced-tag grammar with no undefined case: for a given id,
+    every open tag must be followed, before any other open/close tag for
+    that same id and before end of document, by exactly one matching close
+    tag. An unmatched open tag, an orphan close tag, or a tag nested inside
+    another open span for the same id is malformed. Any number of disjoint,
+    non-overlapping, well-formed pairs for the same id is legal.
+
+    When `strict` is true (the only mode used for `post_plan_text` --
+    D-Plan-Amendment-4's post side is "validated, and a refusal here is
+    always actionable"), a malformed tag raises
+    `AmendmentAnchorMalformedError`. When `strict` is false (the only mode
+    used for `pre_amendment_plan_text` -- "never a refusal, always
+    conservative"), a checkpoint id with a malformed shape is simply
+    omitted from the returned map -- indistinguishable, to this function's
+    caller, from an id with zero anchors at all, which is exactly the
+    fail-closed "no information" direction the pre side requires."""
+    spans: dict[str, list[tuple[int, int]]] = {}
+    open_at: dict[str, int] = {}
+    malformed: set[str] = set()
+    for match in _CHECKPOINT_ANCHOR_RE.finditer(text):
+        is_close = match.group(1) == "/"
+        # The registry's own checkpoint ids are "CP<n>" strings (e.g.
+        # "CP1"); the anchor tag's own digits are joined back onto that
+        # prefix so this map's keys line up with `depends_on`/registry
+        # `id` values directly, never a bare digit that would silently
+        # never match anything.
+        checkpoint_id = "CP" + match.group(2)
+        if not is_close:
+            if checkpoint_id in open_at:
+                # Nested/overlapping open tag for the same id.
+                if strict:
+                    raise AmendmentAnchorMalformedError(
+                        f"{checkpoint_id}: nested <!-- {checkpoint_id} --> tag "
+                        f"(an earlier span for this id is still open)"
+                    )
+                malformed.add(checkpoint_id)
+                continue
+            open_at[checkpoint_id] = match.end()
+        else:
+            if checkpoint_id not in open_at:
+                # Orphan close tag with no preceding matching open.
+                if strict:
+                    raise AmendmentAnchorMalformedError(
+                        f"{checkpoint_id}: <!-- /{checkpoint_id} --> with no "
+                        f"preceding matching <!-- {checkpoint_id} -->"
+                    )
+                malformed.add(checkpoint_id)
+                continue
+            start = open_at.pop(checkpoint_id)
+            spans.setdefault(checkpoint_id, []).append((start, match.start()))
+    for checkpoint_id in open_at:
+        # Unterminated final anchor.
+        if strict:
+            raise AmendmentAnchorMalformedError(
+                f"{checkpoint_id}: <!-- {checkpoint_id} --> with no matching "
+                f"<!-- /{checkpoint_id} --> before end of document"
+            )
+        malformed.add(checkpoint_id)
+    for checkpoint_id in malformed:
+        spans.pop(checkpoint_id, None)
+    return spans
+
+
+def checkpoint_content_hash(text: str, checkpoint_id: str, *, strict: bool = False) -> str | None:
+    """The per-checkpoint content hash D-Plan-Amendment-4's "identical
+    checkpoint content" test uses: sha256 over the concatenation, in
+    document order, of every well-formed anchor span for `checkpoint_id`.
+    Returns `None` when the id has zero well-formed spans in `text` -- the
+    "no information" case, which every caller must treat as "content
+    changed" (conservatively), never as "unchanged"."""
+    spans = parse_checkpoint_anchor_spans(text, strict=strict)
+    ids_spans = spans.get(checkpoint_id)
+    if not ids_spans:
+        return None
+    content = "".join(text[start:end] for start, end in ids_spans)
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def validate_post_anchor_coverage(post_plan_text: str, post_registry: dict) -> None:
+    """D-Plan-Amendment-4's post-side validation, run by `apply_plan_approval`
+    before it computes any reconciliation outcome: every checkpoint id
+    present in `post_registry` must have at least one well-formed anchor
+    pair in `post_plan_text`. A missing id raises
+    `AmendmentAnchorCoverageError`; a malformed tag anywhere in
+    `post_plan_text` raises `AmendmentAnchorMalformedError` (propagated
+    from the strict parse below) -- both before any silent partial
+    reconciliation.
+
+    An id introduced by the amendment itself (not merely one inherited
+    from the pre-amendment registry) that is not of the shape `CP<digits>`
+    raises `AmendmentCheckpointIdShapeError` instead of the coverage error
+    (IMPL3-O1): `request_plan_amendment`'s own id-shape precondition only
+    ever inspects the *pre*-amendment registry, so an anchor-incompatible
+    id authored during the amendment would otherwise reach this function
+    and get the unactionable "add an anchor" message for an id no anchor
+    text can ever satisfy -- checked here, ahead of the coverage check, for
+    the same reason `request_plan_amendment` checks it early."""
+    spans = parse_checkpoint_anchor_spans(post_plan_text, strict=True)
+    for entry in post_registry.get("checkpoints", []):
+        checkpoint_id = entry["id"]
+        if not checkpoint_id_supports_anchor(checkpoint_id):
+            raise AmendmentCheckpointIdShapeError(
+                f"{checkpoint_id} is not of the shape 'CP<digits>' -- the "
+                f"plan-amendment anchor grammar (D-Plan-Amendment-4) can never be "
+                f"satisfied for this id no matter what the amended plan document "
+                f"says; rename it via another /milestone-plan round"
+            )
+        if not spans.get(checkpoint_id):
+            raise AmendmentAnchorCoverageError(
+                f"{checkpoint_id} has no well-formed anchor pair in the plan document "
+                f"being approved -- every registry checkpoint id must have at least one"
+            )
+
+
+_RECONCILIATION_ROW_FIELDS = ("name", "depends_on", "complexity", "session_target")
+
+
+def reconcile_checkpoints_after_amendment(
+    pre_registry: dict, post_registry: dict, pre_plan_text: str, post_plan_text: str, checkpoints: dict,
+) -> dict:
+    """workflow-2.4.0, D-Plan-Amendment-4's reconciliation algorithm, folded
+    into `apply_plan_approval`'s own computation. Computes, per checkpoint
+    id, one of four outcomes -- never a free-text operator claim -- and
+    returns `{"checkpoints": <new map>, "outcome": {id: "retained" |
+    "needs_revalidation" | "needs_revalidation_dependency" | "dropped" |
+    "new"}, "dropped": [id, ...]}`. `"needs_revalidation"` and
+    `"needs_revalidation_dependency"` are deliberately distinct tokens
+    (`IMPL6-B1`): both leave the checkpoint's own `status` at
+    `NEEDS_REVALIDATION`, but the former means *this* id's own registry row
+    or checkpoint content changed, and the latter means this id was itself
+    unchanged and was flipped only because a dependency it names was
+    demoted or dropped -- the "which flips came from the dependency-closure
+    pass" distinction `/approve-review plan`'s own report (see
+    `apply_plan_approval`) requires and that a single shared token could
+    not otherwise recover.
+
+    - id present in both, identical registry row and identical checkpoint
+      content (by `checkpoint_content_hash`, pre-side non-strict/
+      conservative, post-side already validated strict by
+      `validate_post_anchor_coverage`) -- untouched (`retained`).
+    - id present in both, registry row changed or checkpoint content
+      changed (including the zero-anchor legacy default: `pre_plan_text`
+      has no anchors anywhere, so every shared id is conservatively
+      `needs_revalidation`) -- if it was `COMPLETE`, rewritten to
+      `NEEDS_REVALIDATION`; any other status is left as-is (nothing to
+      revalidate that has not already completed).
+    - id removed from the amended registry -- dropped from the live
+      `checkpoints` map (its history survives in this amendment's own
+      `checkpoints_snapshot` and in git history via commit trailers).
+    - id new to the amended registry -- absent from `checkpoints`, picked
+      up by `select_next_checkpoint` exactly as any new checkpoint always
+      is; reported as `"new"`.
+
+    Then a single forward pass over `post_registry`'s own order (already a
+    valid topological order) propagates dependency closure: any checkpoint
+    left `COMPLETE` whose own `depends_on` includes an id that is not
+    itself `COMPLETE` in the resulting map (rewritten, or absent because
+    just removed) is also rewritten to `NEEDS_REVALIDATION`, reported as
+    `"needs_revalidation_dependency"` regardless of what the direct pass
+    above recorded for that same id (a closure-derived demotion always
+    supersedes a direct one in the report, since the closure pass runs
+    strictly after and the id's `status` ends at `NEEDS_REVALIDATION`
+    either way). No fixed-point loop needed, since every dependency
+    precedes its dependents in that order (B6.3) -- a precondition this
+    function itself does not re-check, but which its sole caller,
+    `apply_plan_approval`, now enforces mechanically immediately before
+    calling this function (`validate_registry_topological_order(post_registry)`,
+    `OPUS-R145-002`) rather than relying on `write_registry_and_mapping`-time
+    validation of a document that, by the time this runs, has already been
+    re-read raw off the working tree."""
+    pre_rows = {entry["id"]: entry for entry in pre_registry.get("checkpoints", [])}
+    post_rows = {entry["id"]: entry for entry in post_registry.get("checkpoints", [])}
+
+    new_checkpoints = copy.deepcopy(checkpoints)
+    outcome: dict[str, str] = {}
+
+    for checkpoint_id in post_rows:
+        if checkpoint_id not in pre_rows:
+            outcome[checkpoint_id] = "new"
+            continue
+        pre_row = pre_rows[checkpoint_id]
+        post_row = post_rows[checkpoint_id]
+        row_changed = any(pre_row.get(field) != post_row.get(field) for field in _RECONCILIATION_ROW_FIELDS)
+        pre_hash = checkpoint_content_hash(pre_plan_text, checkpoint_id, strict=False)
+        post_hash = checkpoint_content_hash(post_plan_text, checkpoint_id, strict=True)
+        content_changed = pre_hash is None or pre_hash != post_hash
+        entry = new_checkpoints.get(checkpoint_id)
+        if row_changed or content_changed:
+            if entry is not None and entry.get("status") == "COMPLETE":
+                new_checkpoints[checkpoint_id] = dict(entry, status="NEEDS_REVALIDATION")
+            outcome[checkpoint_id] = "needs_revalidation"
+        else:
+            outcome[checkpoint_id] = "retained"
+
+    dropped = [checkpoint_id for checkpoint_id in pre_rows if checkpoint_id not in post_rows]
+    for checkpoint_id in dropped:
+        new_checkpoints.pop(checkpoint_id, None)
+        outcome[checkpoint_id] = "dropped"
+
+    complete_ids = {cid for cid, entry in new_checkpoints.items() if entry.get("status") == "COMPLETE"}
+    for row in post_registry.get("checkpoints", []):
+        checkpoint_id = row["id"]
+        if checkpoint_id not in complete_ids:
+            continue
+        depends_on = row.get("depends_on", [])
+        if any(dep not in complete_ids for dep in depends_on):
+            new_checkpoints[checkpoint_id] = dict(new_checkpoints[checkpoint_id], status="NEEDS_REVALIDATION")
+            complete_ids.discard(checkpoint_id)
+            outcome[checkpoint_id] = "needs_revalidation_dependency"
+
+    return {"checkpoints": new_checkpoints, "outcome": outcome, "dropped": dropped}
+
+
+# ---------------------------------------------------------------------------
 # WF2: D-Selection's deterministic four-rule checkpoint-selection algorithm,
 # the IN_PROGRESS/COMPLETE state writers, and D3's worktree-scoped dirty-
 # resume mechanics (WORKTREE_IDENTITY.json writer + resume check).
@@ -3162,6 +3831,57 @@ def select_next_checkpoint(work_item: dict, registry: dict) -> str | None:
     )
 
 
+# ---------------------------------------------------------------------------
+# workflow-2.4.0 round 4 (XMODEL-R4-B1): closing the amendment-vs-checkpoint-
+# start race. `request_plan_amendment`'s own new guard (below, in the
+# amendment error family) refuses to supersede `plan_approval` while a
+# checkpoint is IN_PROGRESS or a shared checkpoint claim is outstanding, but
+# that guard alone cannot close the race: `claim_checkpoint` is published
+# (step 1d, "before `transition_checkpoint_in_progress`") in a *separate*
+# synchronization domain (the filesystem claims directory) from
+# `WORKFLOW_STATE.json`'s own lock, so a claim can be outstanding while
+# state still looks idle (`resolve_checkpoint_ownership`'s own supported
+# `CONTINUE_CLAIM` window). The second, independent half of the fix lives
+# here: `transition_checkpoint_in_progress` itself refuses to publish
+# `IN_PROGRESS` once the work item has left a legal checkpoint-execution
+# phase -- so even if `request_plan_amendment`'s state_transaction commits
+# first (observing no claim yet), the checkpoint worker's own later
+# state_transaction, now reading `AMENDING_PLAN`, is refused rather than
+# publishing live implementation state on top of a superseded plan.
+# `IMPLEMENTING` is the only legal source phase: `SELF_REVIEWING_
+# IMPLEMENTATION` is reached only once every registry checkpoint is already
+# `COMPLETE` (`complete_checkpoint`), and no supported path ever restarts a
+# checkpoint from there.
+# ---------------------------------------------------------------------------
+
+CHECKPOINT_START_LEGAL_PHASES = frozenset({"IMPLEMENTING"})
+
+
+class IllegalCheckpointStartPhaseError(Exception):
+    """Raised when `transition_checkpoint_in_progress` is called from a
+    phase other than `IMPLEMENTING` (`CHECKPOINT_START_LEGAL_PHASES`,
+    XMODEL-R4-B1) -- most importantly `AMENDING_PLAN`, which a checkpoint
+    claim published before this work item's amendment transition committed
+    can otherwise reach, publishing live `IN_PROGRESS` implementation state
+    on top of an already-superseded `plan_approval`. Names the actual phase
+    and the legal set, the same behavioural-refusal shape
+    `IllegalBundleGenerationSourcePhaseError`/`IllegalSelfReviewEntryPhaseError`
+    use for their own phase-guarded writers.
+
+    Also raised, for the same reason and against the same legal set, by
+    `claim_checkpoint` itself (`XMODEL-R8-B1`): that function's own
+    pre-publication phase check is this error's second, independent call
+    site, closing the window this docstring's first paragraph describes
+    rather than merely detecting it after the fact -- within one worktree
+    root only; `XMODEL-R9-B1` (`docs/defects/v2.4.0-002-amendment-claim-
+    race-crosses-worktree-boundary.md`) records that the same claim
+    published from a different linked worktree of the same repository is
+    not caught by either call site -- a claim published into that window
+    would otherwise still be refused here, later, by
+    `transition_checkpoint_in_progress`, but would already have leaked
+    onto disk with nothing left to release it."""
+
+
 def transition_checkpoint_in_progress(
     state: dict, work_item_id: str, checkpoint_id: str, start_commit: str, now: str,
 ) -> dict:
@@ -3170,9 +3890,22 @@ def transition_checkpoint_in_progress(
     sets `current_checkpoint_id`. The filesystem half --
     `write_worktree_identity` -- is a separate call the caller makes
     alongside this one, since it touches a local, gitignored file this
-    module's other state writers never touch. Returns a new state dict."""
+    module's other state writers never touch. Returns a new state dict.
+
+    Refuses (`IllegalCheckpointStartPhaseError`) unless the work item's
+    current phase is in `CHECKPOINT_START_LEGAL_PHASES` -- XMODEL-R4-B1's
+    second, independent guard, checked here against the freshly re-read
+    state inside this function's own `state_transaction`, so it applies
+    even when a checkpoint claim was published before an amendment
+    transition landed (see the section comment above)."""
     new_state = copy.deepcopy(state)
     work_item = new_state["work_items"][work_item_id]
+    phase = work_item.get("phase")
+    if phase not in CHECKPOINT_START_LEGAL_PHASES:
+        raise IllegalCheckpointStartPhaseError(
+            f"{work_item_id!r} is at phase {phase!r} -- a checkpoint can only start "
+            f"IN_PROGRESS from phase in {sorted(CHECKPOINT_START_LEGAL_PHASES)}"
+        )
     work_item["checkpoints"][checkpoint_id] = {"status": "IN_PROGRESS", "start_commit": start_commit}
     work_item["current_checkpoint_id"] = checkpoint_id
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
@@ -4129,12 +4862,21 @@ def _publish_claim_exclusive(path: Path, record: dict) -> None:
 
 
 def _claim_or_refuse(repo_root: Path, work_item_id: str, record: dict) -> dict:
+    """IMPL9-O2: the contended branch below reuses `record["worktree_root"]`
+    -- already resolved once, outside any lock, by `_build_claim_record`'s
+    own `_git_identity` call before either caller (`claim_checkpoint`,
+    `adopt_claim`) enters its locked critical section -- rather than
+    spawning a second `git rev-parse` subprocess while `claim_checkpoint`'s
+    `state_lock` is held. `state_lock`'s own docstring frames the critical
+    section as a short read -> mutate -> publish window; a contending
+    writer should not additionally wait for a process spawn only needed to
+    format this function's own refusal message."""
     path = claim_path(repo_root, work_item_id)
     try:
         _publish_claim_exclusive(path, record)
     except FileExistsError:
         existing = resolve_claim(repo_root, work_item_id)
-        _, _, worktree_root = _git_identity(repo_root)
+        worktree_root = record["worktree_root"]
         if existing is not None and not claim_is_this_worktree(repo_root, existing):
             raise CheckpointOwnedByOtherWorktreeError(
                 f"{work_item_id!r} checkpoint {existing.get('checkpoint_id')!r} is already "
@@ -4157,9 +4899,94 @@ def claim_checkpoint(repo_root: Path, work_item_id: str, checkpoint_id: str, *, 
     **before** `transition_checkpoint_in_progress` -- both orderings are
     load-bearing, not stylistic, per "Where the check belongs, and the
     ordering" (future WF8b scope wires this call site; this function is
-    the primitive it will call)."""
+    the primitive it will call).
+
+    `XMODEL-R8-B1`: publication itself now runs inside `state_lock` --
+    the identical `WORKFLOW_STATE.lock` `state_transaction` holds across
+    `request_plan_amendment`'s complete authoritative-quiescence-read ->
+    supersede -> write critical section. Before round 8, this function
+    published the claim through `_claim_or_refuse` alone, which
+    synchronizes claim publication against other claim publications
+    (`os.link`'s own atomicity) but against nothing in the
+    `WORKFLOW_STATE.json` domain at all, so a claim could still be
+    published in the exact window between
+    `request_plan_amendment`'s own `resolve_claim(...)` read (which
+    observes no claim) and that same call's later `AMENDING_PLAN` commit
+    -- both reads/writes of `state`, and this function's own state read
+    below, are real Git-repo-relative file operations, not in-memory
+    values, so nothing but a shared lock can order them. Sharing the one
+    lock file makes the two operations strictly ordered: whichever
+    acquires it first completes its entire critical section --
+    including this function's own claim publication, or
+    `request_plan_amendment`'s entire supersede-and-commit -- before the
+    other's begins. A work item with no `WORKFLOW_STATE.json` entry at
+    all has no amendment mechanism that could race this call, so the
+    phase check below is skipped for it (matching every other
+    state-aware precondition in this module that stays silent absent an
+    entry) -- most of this module's own claim-record unit tests exercise
+    exactly that unregistered-work-item shape, by design.
+
+    **Scoped to one worktree root, not the repository (`XMODEL-R9-B1`,
+    narrowing the claim above, round 9 external implementation review).**
+    `STATE_LOCK_PATH` resolves as `repo_root / ".ai-review/runtime/
+    WORKFLOW_STATE.lock"` -- one lock file *per worktree* -- while
+    `claims_dir(repo_root)` (this function's own claim-record home) is
+    `git_common_dir`-rooted and shared by every linked worktree of the
+    same repository. Two processes in two different worktrees therefore
+    take `flock` on two different inodes and are not serialized at all,
+    and this function's own phase check below reads `repo_root /
+    DEFAULT_STATE_PATH` -- *this worktree's own working-tree copy* of
+    `WORKFLOW_STATE.json` -- which cannot observe a phase committed only
+    to another worktree's own branch, so even perfect serialization would
+    not by itself make an amendment made from worktree A visible to a
+    claim attempted from worktree B. The guarantee above is real and
+    load-bearing *only within one worktree root*; deliberately left open
+    across linked worktrees for `2.4.0` rather than half-fixed --
+    `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-
+    boundary.md` records the residual, the two independent reasons above,
+    and what a future release closing it would need (a `claims_dir`-rooted
+    serialization primitive plus a repo-global witness for `AMENDING_PLAN`,
+    neither of which this release adds).
+
+    Raises `IllegalCheckpointStartPhaseError` -- naming the actual phase
+    and `CHECKPOINT_START_LEGAL_PHASES` -- and publishes nothing, when a
+    registered work item's current phase (re-read fresh, under the lock,
+    never from a caller-supplied snapshot) is not legal for a checkpoint
+    start. This is what leaves no orphaned claim behind when the
+    amendment side of the race wins **in the same worktree**: `AMENDING_PLAN`
+    is already durable in this worktree's own working-tree state by the
+    time this function's own lock acquisition succeeds, so the claim this
+    function would otherwise publish is refused before a single byte of
+    it reaches disk.
+
+    IMPL9-O3: two other functions publish a claim without this check --
+    `adopt_claim` (through `_claim_or_refuse` directly) and
+    `take_over_claim` (through `_publish_claim_replacing`). Both are safe
+    only *transitively*, and only within one worktree: `adopt_claim`
+    refuses unless this worktree's own local state already shows the
+    checkpoint `IN_PROGRESS`, and `request_plan_amendment` refuses on any
+    checkpoint `IN_PROGRESS`; `take_over_claim` requires a pre-existing
+    claim, which the amendment also refuses on. Neither argument is
+    checked here, and under `XMODEL-R9-B1` neither holds across
+    worktrees either."""
     record = _build_claim_record(repo_root, work_item_id, checkpoint_id, now)
-    return _claim_or_refuse(repo_root, work_item_id, record)
+    with state_lock(repo_root):
+        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+        work_item = state.get("work_items", {}).get(work_item_id)
+        if work_item is not None:
+            phase = work_item.get("phase")
+            if phase not in CHECKPOINT_START_LEGAL_PHASES:
+                raise IllegalCheckpointStartPhaseError(
+                    f"{work_item_id!r} is at phase {phase!r} -- a checkpoint claim can only be "
+                    f"published while phase is in {sorted(CHECKPOINT_START_LEGAL_PHASES)} "
+                    f"(checked under WORKFLOW_STATE.lock immediately before publication, "
+                    f"XMODEL-R8-B1, so a claim can never be published in the window between an "
+                    f"amendment's authoritative quiescence read and its AMENDING_PLAN commit -- "
+                    f"within one worktree root; see XMODEL-R9-B1 and "
+                    f"docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md "
+                    f"for the cross-worktree residual this check does not close)"
+                )
+        return _claim_or_refuse(repo_root, work_item_id, record)
 
 
 def release_checkpoint(repo_root: Path, work_item_id: str, checkpoint_id: str, *,
@@ -5941,58 +6768,165 @@ def any_protected_path_changed_since(
 # ---------------------------------------------------------------------------
 
 
-def find_latest_activation_event(repo_root: Path, head: str = "HEAD") -> tuple[str, str] | None:
+# workflow-2.5.0 (D-Implementation-Review-Version-Activation): the explicit,
+# declared predecessor mapping generalizing the prior hard-coded `"1"`
+# rollback-destination literal. Rollback targets the version activation
+# actually superseded -- `"2.2"` rolls back to `"2.1"`, `"2.1"` rolls back
+# to `"1"` -- never a derived value and never a version-string ordering
+# comparison (lexicographic comparison is unsound for these values:
+# `"2.10" < "2.2"`). This is also the sole legal domain for a
+# `Workflow-Rollback` trailer's own value: a value outside it (bare/empty,
+# a typo, or an unrecognized future version) is a resolution *miss*,
+# handled explicitly and fail-closed everywhere it is looked up below,
+# never a silent `dict.get` fall-through and never an uncaught `KeyError`.
+ACTIVATION_ROLLBACK_PREDECESSOR = {"2.1": "1", "2.2": "2.1"}
+
+
+def find_latest_activation_event(
+    repo_root: Path, head: str = "HEAD",
+) -> tuple[str, str | None, str] | None:
     """Most recent `Workflow-Activation`/`Workflow-Rollback` trailer event
     by first-parent ancestry from `head` (resolves GPT-R9-007's missing-
     config recovery rule: "the latest event", not just "any activation
-    trailer"). Returns `(kind, commit)` where `kind` is `"activation"` or
-    `"rollback"`, or `None` if neither has ever landed."""
+    trailer"). Returns `(kind, destination_version, commit)` where `kind`
+    is `"activation"` or `"rollback"`, or `None` if neither has ever
+    landed.
+
+    `destination_version` (workflow-2.5.0, D-Implementation-Review-
+    Version-Activation, version-aware event model) is the event's own
+    resolved destination: an activation trailer's value, used directly --
+    though `is_activated` reports `True` for the activation direction
+    unconditionally, for every value including `"1"`, never conditioned on
+    this field for that direction; a rollback trailer's value, resolved
+    through `ACTIVATION_ROLLBACK_PREDECESSOR`'s explicit domain, where
+    `is_activated` reports `True` whenever this resolved destination is not
+    `"1"`. `destination_version` is `None` only for a `"rollback"` kind
+    whose trailer value falls outside that domain -- the fail-closed miss
+    case `is_activated` treats as activated, never as not-activated."""
     for commit in _first_parent_commits_ordered(repo_root, head):
         trailers = _commit_trailers(repo_root, commit)
         if "Workflow-Activation" in trailers:
-            return ("activation", commit)
+            return ("activation", trailers["Workflow-Activation"].strip(), commit)
         if "Workflow-Rollback" in trailers:
-            return ("rollback", commit)
+            value = trailers["Workflow-Rollback"].strip()
+            return ("rollback", ACTIVATION_ROLLBACK_PREDECESSOR.get(value), commit)
     return None
+
+
+def _activation_event_description(repo_root: Path, event: tuple[str, str | None, str]) -> tuple[bool, str]:
+    """Shared by `is_activated` and `load_config`'s missing-config recovery
+    message (workflow-2.5.0): resolves a non-`None`
+    `find_latest_activation_event` result to `(activated, description)`.
+    `description` names the resolved destination version (e.g.
+    `"Workflow 2.2"`) when one exists, or the unresolvable trailer's own
+    raw value verbatim in either fail-closed miss case -- a blank
+    `Workflow-Activation` trailer (`destination_version == ""`) or an
+    unresolvable `Workflow-Rollback` trailer (`destination_version is
+    None`) -- never a version name that, in either miss case, by
+    construction does not exist. This is the module's one computation of
+    "is this event activated", never duplicated at either call site.
+
+    The activation direction is fail-closed by construction, exactly like
+    `2.4.0`'s binary `kind == "activation"` check: an `"activation"` event
+    reports activated for *every* trailer value, including `"1"` (I2 --
+    reading `destination_version != "1"` unconditionally regressed this one
+    value fail-*open* against `2.4.0`, the only direction nothing declared
+    a deliberate difference for). Only the rollback direction's *resolved*
+    destination may ever report not-activated; an unresolvable rollback
+    trailer still fails closed, same as before."""
+    kind, destination_version, commit = event
+    if kind == "activation":
+        if destination_version:
+            return True, f"Workflow {destination_version}"
+        # A blank Workflow-Activation trailer (destination_version == "").
+        raw_value = _commit_trailers(repo_root, commit).get("Workflow-Activation")
+        return True, f"an unresolvable Workflow-Activation trailer value {raw_value!r}"
+    # kind == "rollback": destination_version is the predecessor resolved
+    # through ACTIVATION_ROLLBACK_PREDECESSOR's explicit domain, or None
+    # for a trailer value outside that domain.
+    if destination_version:
+        return destination_version != "1", f"Workflow {destination_version}"
+    raw_value = _commit_trailers(repo_root, commit).get("Workflow-Rollback")
+    return True, f"an unresolvable Workflow-Rollback trailer value {raw_value!r}"
 
 
 def is_activated(repo_root: Path, head: str = "HEAD") -> bool:
     event = find_latest_activation_event(repo_root, head)
-    return event is not None and event[0] == "activation"
+    if event is None:
+        return False
+    activated, _description = _activation_event_description(repo_root, event)
+    return activated
 
 
-def build_activated_config(config: dict) -> dict:
-    """`WF-Activate`'s own transform: `default_workflow_version` -> `"2.1"`,
-    every other field untouched. The caller writes the returned dict to
-    `WORKFLOW_CONFIG.json` and commits it carrying a `Workflow-Activation:
-    2.1` trailer (D-Self-Governance) -- this function only computes the
-    new content, never touches Git or the filesystem itself, matching
-    every other state-transform function in this module. Rejects a config
-    already at `"2.1"`: activation is a sole, one-time boundary, not an
-    idempotent setter (`AlreadyActivatedError`)."""
-    if config.get("default_workflow_version") == "2.1":
-        raise AlreadyActivatedError(
-            "config.default_workflow_version is already \"2.1\" -- WF-Activate "
-            "is a one-time boundary, not an idempotent call"
+def build_activated_config(config: dict, target_version: str = "2.1") -> dict:
+    """`WF-Activate`'s own transform, generalized (workflow-2.5.0,
+    D-Implementation-Review-Version-Activation) to a `target_version`
+    parameter -- default `"2.1"`, preserving the original `"1"` -> `"2.1"`
+    call shape byte-for-byte -- rather than the prior hard-coded `"2.1"`
+    literal, reused (not duplicated) for the `"2.1"` -> `"2.2"` bump.
+    Sets `default_workflow_version` to `target_version` and appends
+    `target_version` to `supported_versions` if not already present -- a
+    genuinely new piece of behavior, since neither activation wrote that
+    field before; every other field is untouched. The caller writes the
+    returned dict to `WORKFLOW_CONFIG.json` and commits it carrying a
+    `Workflow-Activation: <target_version>` trailer (D-Self-Governance) --
+    this function only computes the new content, never touches Git or the
+    filesystem itself, matching every other state-transform function in
+    this module. Rejects a config already at `target_version`: activation
+    is a sole, one-time boundary, not an idempotent setter
+    (`AlreadyActivatedError`)."""
+    if target_version not in ACTIVATION_ROLLBACK_PREDECESSOR:
+        raise ValueError(
+            f"build_activated_config: unsupported target_version {target_version!r}, "
+            f"expected one of {sorted(ACTIVATION_ROLLBACK_PREDECESSOR)}"
         )
-    return {**config, "default_workflow_version": "2.1"}
+    if config.get("default_workflow_version") == target_version:
+        raise AlreadyActivatedError(
+            f"config.default_workflow_version is already {target_version!r} -- "
+            f"WF-Activate is a one-time boundary, not an idempotent call"
+        )
+    supported_versions = list(config.get("supported_versions", []))
+    if target_version not in supported_versions:
+        supported_versions.append(target_version)
+    return {
+        **config,
+        "default_workflow_version": target_version,
+        "supported_versions": supported_versions,
+    }
 
 
-def build_rolled_back_config(config: dict) -> dict:
-    """The rollback counterpart of `build_activated_config`: `"2.1"` ->
-    `"1"`. The caller commits the result carrying a `Workflow-Rollback:
-    2.1` trailer. This reverts only the repository-level default -- it
-    never touches any work item's own `governing_workflow_version`, fixed
-    at creation and immune to this change (D-Self-Governance). Rejects a
-    config not currently at `"2.1"`: there is nothing to roll back
-    (`NotActivatedError`)."""
-    if config.get("default_workflow_version") != "2.1":
+def build_rolled_back_config(config: dict, target_version: str = "2.1") -> dict:
+    """The rollback counterpart of `build_activated_config`, generalized
+    (workflow-2.5.0) the same way: rolls `default_workflow_version` back
+    from `target_version` (default `"2.1"`, preserving the original
+    `"2.1"` -> `"1"` call shape byte-for-byte) to `target_version`'s own
+    predecessor under `ACTIVATION_ROLLBACK_PREDECESSOR`'s explicit domain
+    -- `"2.1"` -> `"1"`, `"2.2"` -> `"2.1"` -- never the prior hard-coded
+    `"1"` literal and never a version-string ordering comparison
+    (lexicographic comparison is unsound: `"2.10" < "2.2"`). The caller
+    commits the result carrying a `Workflow-Rollback: <target_version>`
+    trailer. This reverts only the repository-level default -- it never
+    touches any work item's own `governing_workflow_version`, fixed at
+    creation and immune to this change (D-Self-Governance). Does not
+    remove `target_version` from `supported_versions` -- asymmetric with
+    activation's append, deliberately: `validate_governing_version` is
+    only ever called with `config["default_workflow_version"]` itself, so
+    a stale `supported_versions` member grants nothing today. Rejects a
+    config not currently at `target_version`: there is nothing to roll
+    back (`NotActivatedError`)."""
+    if config.get("default_workflow_version") != target_version:
         raise NotActivatedError(
             f"config.default_workflow_version is "
-            f"{config.get('default_workflow_version')!r}, not \"2.1\" -- "
+            f"{config.get('default_workflow_version')!r}, not {target_version!r} -- "
             f"nothing to roll back"
         )
-    return {**config, "default_workflow_version": "1"}
+    predecessor = ACTIVATION_ROLLBACK_PREDECESSOR.get(target_version)
+    if predecessor is None:
+        raise ValueError(
+            f"build_rolled_back_config: unsupported target_version {target_version!r}, "
+            f"expected one of {sorted(ACTIVATION_ROLLBACK_PREDECESSOR)}"
+        )
+    return {**config, "default_workflow_version": predecessor}
 
 
 # ---------------------------------------------------------------------------
@@ -6025,7 +6959,13 @@ def load_config(repo_root: Path, config_path: Path = DEFAULT_CONFIG_PATH) -> dic
     """Load `WORKFLOW_CONFIG.json` with D3's pre-/post-activation fail-safe
     rule: missing or corrupt before activation -> default to
     `default_workflow_version: "1"`; missing or corrupt after activation
-    -> hard stop (resolves OPUS-R6-015)."""
+    -> hard stop (resolves OPUS-R6-015). The raise message is generalized
+    (workflow-2.5.0, D-Implementation-Review-Version-Activation) off the
+    prior hard-coded `"Workflow v2.1"` text: it names the resolved
+    destination version when the latest activation/rollback event
+    resolves to one, and the unresolved `Workflow-Rollback` trailer's own
+    value verbatim in the fail-closed miss case (`_activation_event_
+    description`, shared with `is_activated` so the two never disagree)."""
     try:
         config = _load_json(repo_root / config_path)
     except CorruptJsonError:
@@ -6033,12 +6973,15 @@ def load_config(repo_root: Path, config_path: Path = DEFAULT_CONFIG_PATH) -> dic
     if config is not None:
         validate_config(config)
         return config
-    if is_activated(repo_root):
-        raise ConfigMissingAfterActivationError(
-            f"{config_path} is missing or corrupt, and Workflow v2.1 is activated -- "
-            f"restore or recreate it from the activation commit's own tree, "
-            f"per D-Self-Governance's missing-config recovery rule"
-        )
+    event = find_latest_activation_event(repo_root)
+    if event is not None:
+        activated, description = _activation_event_description(repo_root, event)
+        if activated:
+            raise ConfigMissingAfterActivationError(
+                f"{config_path} is missing or corrupt, and {description} is activated -- "
+                f"restore or recreate it from the activation commit's own tree, "
+                f"per D-Self-Governance's missing-config recovery rule"
+            )
     return default_config()
 
 
@@ -6464,6 +7407,28 @@ def _implementation_stage_default(
     for prefix in _SHARED_REPOSITORY_PREFIXES:
         excluded_prefixes.setdefault(prefix, _SHARED_TERRITORY_JUSTIFICATION)
     excluded_prefixes.setdefault(WORKFLOW_DOCS_PREFIX, _SIBLING_WORKFLOW_DOCS_JUSTIFICATION)
+    # `workflow-2.5.0` CP9 (`v2.4.0-001`'s own implementation-stage symmetry
+    # widening, docs/defects/v2.4.0-001-workflow-manager-installation-record-
+    # unclassified-at-plan-stage.md): the `2.4.0` fix above widened only the
+    # *plan*-stage default; a freshly generated declarations file's
+    # implementation-stage half stayed silent on
+    # `.workflow-manager/installation.json`, so an `update()`-driven commit
+    # to it landing inside a live item's own implementation-stage interval
+    # still raised `UnclassifiedPathError`, exactly as the plan-stage gap
+    # once did. Excluded here, in the generated template (the same "widen
+    # the template, not an existing item's own already-generated
+    # declarations file" rule the plan-stage fix already established): no
+    # existing work item's own declarations file changes, so no existing
+    # approval's identity moves. Forward-only -- this does not by itself
+    # repair a work item whose own declarations file predates this fix; see
+    # the defect record for that residual and its operator mitigations.
+    excluded_prefixes.setdefault(
+        ".workflow-manager/",
+        "workflow_manager's own installation-record bookkeeping (which release is "
+        "installed, managed/generated/merged file digests) -- tooling identity, "
+        "never this or any other work item's own implementation-stage deliverable "
+        "(workflow-2.5.0 CP9, symmetric with the plan-stage exclusion above)",
+    )
 
     # The item's own declarations file is carved out by exact path and
     # checked first by `classify_path_implementation_stage`, so the
@@ -6541,6 +7506,31 @@ def generate_artifacts_declarations(
     plan_stage_excluded_prefixes = dict(fingerprint.PLAN_STAGE_EXCLUDED_PREFIXES)
     plan_stage_excluded_prefixes.setdefault(
         WORKFLOW_DOCS_PREFIX, _SIBLING_WORKFLOW_DOCS_JUSTIFICATION,
+    )
+    # CP8 (`plan-amendment-mechanism`), disposable-repository update-path
+    # validation surfaced this: `workflow_manager.install`'s own
+    # `.workflow-manager/installation.json` record (never Workflow-
+    # distributed content, and unknown to `fingerprint.PLAN_STAGE_EXCLUDED_
+    # PREFIXES`, whose inherited set predates this tool entirely) changes on
+    # every `update()`, so an `update()` landing inside any in-flight work
+    # item's plan-approval..HEAD interval otherwise makes plan-stage
+    # `review_content_id` recomputation -- `implementing_entry_reachable`
+    # included -- raise `UnclassifiedPathError` rather than cleanly
+    # excluding a path this item never wrote. Excluded here, in the
+    # generated template (same "widen the template, not the frozen
+    # constant" rule salvage audit I7/I8 already established above), so no
+    # existing declaration file changes and no existing approval's identity
+    # moves. This does not by itself repair a work item whose own
+    # declarations file was already generated before this fix landed (any
+    # work item created under `2.3.1`, or under an earlier `2.4.0` overlay
+    # revision) -- see docs/defects/v2.4.0-001-workflow-manager-installation-
+    # record-unclassified-at-plan-stage.md for that residual, pre-existing-
+    # item gap and why it is not retroactively repaired here.
+    plan_stage_excluded_prefixes.setdefault(
+        ".workflow-manager/",
+        "workflow_manager's own installation-record bookkeeping (which release is "
+        "installed, managed/generated/merged file digests) -- tooling identity, "
+        "never this or any other work item's own plan-stage content",
     )
     for path in sorted(fingerprint.PLAN_STAGE_PROTECTED):
         if path in own_declaration_paths:
@@ -6751,8 +7741,11 @@ def publish_plan_revision(state: dict, work_item_id: str, plan_revision: int, no
     to `WORKFLOW_STATE.json`'s non-authoritative mirror through this one
     entry point -- never as a plain JSON edit. Sets `plan_revision` to the
     given value and `phase` to `AWAITING_EXTERNAL_PLAN_REVIEW` for a
-    `"1"`-governed item or `AWAITING_LOCAL_PLAN_REVIEW` for a `"2.1"`-governed
-    one (`D-Plan-Review-Stages` enters local review first).
+    `"1"`-governed item or `AWAITING_LOCAL_PLAN_REVIEW` for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed (`"2.1"`/`"2.2"`) one
+    (`D-Plan-Review-Stages` enters local review first; workflow-2.5.0
+    widens this from a bare `"2.1"` literal to the membership constant --
+    a `"2.2"` item is a `"2.1"` item for plan review purposes).
 
     Exhaustive call sites (named, not left to convention): `/milestone-plan`
     step 3's `[2.1]` registry write; `/apply-plan-review` step 5, on both
@@ -6774,14 +7767,14 @@ def publish_plan_revision(state: dict, work_item_id: str, plan_revision: int, no
             f"a plan revision can never be published against a completed work item"
         )
     governing_version = work_item.get("governing_workflow_version")
-    if governing_version == "2.1":
+    if governing_version in TWO_STAGE_PLAN_REVIEW_VERSIONS:
         target_phase = "AWAITING_LOCAL_PLAN_REVIEW"
     elif governing_version == "1":
         target_phase = "AWAITING_EXTERNAL_PLAN_REVIEW"
     else:
         raise UnsupportedGoverningVersionError(
             f"{work_item_id!r} has governing_workflow_version {governing_version!r}, "
-            f"expected \"1\" or \"2.1\""
+            f"expected \"1\" or one of {sorted(TWO_STAGE_PLAN_REVIEW_VERSIONS)}"
         )
 
     if work_item.get("plan_revision") == plan_revision and work_item.get("phase") == target_phase:
@@ -6881,7 +7874,9 @@ def resolve_own_registry_completion_status(repo_root: Path, work_item: dict) -> 
     return registry_completion_status(work_item, registry_data)
 
 
-def _load_authoritative_registry_or_none(repo_root: Path, work_item: dict) -> dict | None:
+def _load_authoritative_registry_or_none(
+    repo_root: Path, work_item: dict, *, require_plan_approval_coverage: bool = True,
+) -> dict | None:
     """The loading half of `resolve_own_registry_completion_status`,
     factored out so `resolve_completion_obligations` (item 356's own "no
     registry parameter" requirement) can resolve the same authoritative
@@ -6890,7 +7885,23 @@ def _load_authoritative_registry_or_none(repo_root: Path, work_item: dict) -> di
     caller-supplied dict -- the same trust boundary `GPT-R37-001` already
     removed from `complete_work_item` one layer up. `None` means a
     registry-less work item (e.g. the legacy `milestone-8` shape), never
-    a load failure -- a load failure always raises."""
+    a load failure -- a load failure always raises.
+
+    `require_plan_approval_coverage` (IMPL3-R1): the plan-approval-coverage
+    check (`_assert_registry_covered_by_current_plan_approval`) is a
+    completion-accounting trust boundary that belongs to
+    `resolve_own_registry_completion_status`/`resolve_completion_obligations`
+    -- both of the other two call sites, which need a proof the registry
+    bytes are the approved ones before trusting them for terminality.
+    `/request-plan-amendment`'s own `request_plan_amendment` needs only the
+    registry's self-declared checkpoint *ids* for its early anchor-shape
+    check (`AmendmentCheckpointIdShapeError`), never a coverage proof --
+    that command's own design (`D-Plan-Amendment-1`, `B-R12-1`) is to
+    *not* refuse on approval-manifest staleness, since an amendment is
+    precisely what is about to supersede and replace it. Passing `False`
+    here skips only that one assertion; safe-path resolution, existence,
+    JSON-object shape, and self-declared `work_item_id` are still checked
+    unconditionally for every caller."""
     work_item_id = work_item["work_item_id"]
     registry_path = work_item.get("registry_path")
     if registry_path is None:
@@ -6934,7 +7945,8 @@ def _load_authoritative_registry_or_none(repo_root: Path, work_item: dict) -> di
             f"work_item_id {registry_work_item_id!r}, expected {work_item_id!r}"
         )
 
-    _assert_registry_covered_by_current_plan_approval(repo_root, work_item, registry_path)
+    if require_plan_approval_coverage:
+        _assert_registry_covered_by_current_plan_approval(repo_root, work_item, registry_path)
 
     return registry_data
 
@@ -7322,6 +8334,15 @@ REVIEW_SUBJECT_ROSTER = frozenset({
     ".claude/commands/review-functional.md",
     ".claude/commands/review-implementation.md",
     ".claude/commands/review-plan.md",
+    # workflow-2.4.0's own new command, `/request-plan-amendment.md`
+    # (CP3), is deliberately *not* added here: it never reads
+    # `REVIEW_FEEDBACK.md`, never recomputes/compares a `bundle_id`, and
+    # never presents a bundle as ready for review -- none of the three
+    # semantic disjuncts this roster exists to classify apply to it. Its
+    # own review-subject posture is `none` in substance, exactly like a
+    # command already absent from this frozenset; recorded here so the
+    # omission reads as a decision, not an oversight (D-Plan-Amendment,
+    # CP2's own compatibility-audit deliverable).
 })
 
 _REVIEW_SUBJECT_DECLARATION_RE = re.compile(
@@ -9310,6 +10331,58 @@ def migrate_plan_review_stage_keys(state: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# workflow-2.5.0 CP2: `implementation_review_stages` ledger normalize/read
+# helpers, mirroring `normalize_plan_review_stages`/
+# `_normalize_plan_review_stage_key` exactly. CP3 (D-Implementation-Review-
+# Stages' own review-stage writers and gate widening) is the ledger's sole
+# writer set (`record_local_implementation_review`/
+# `record_manual_implementation_review`); this plumbing exists ahead of
+# those writers so CP3 imports one already-reviewed normalize/read
+# contract rather than deriving its own.
+# ---------------------------------------------------------------------------
+
+
+def _normalize_implementation_review_stage_key(key: str) -> str:
+    """Identity mapping today -- no legacy lowercase variant has ever
+    existed for `implementation_review_stages`, introduced fresh at
+    `"2.2"` (unlike `plan_review_stages`, which inherited two real legacy
+    keys from a pre-`SCREAMING_SNAKE_CASE` era). Kept as its own named
+    function, mirroring `_normalize_plan_review_stage_key`'s own shape,
+    so `normalize_implementation_review_stages` below never needs to
+    change if a legacy alias is ever introduced later."""
+    return key
+
+
+def normalize_implementation_review_stages(stages: dict) -> dict:
+    """Reads an `implementation_review_stages` dict, mirroring
+    `normalize_plan_review_stages`'s own collision-aware read contract
+    exactly: `review_content_id` passes through unchanged as a value,
+    never a stage key; a byte-identical (`==`) duplicate under two raw
+    keys that normalize to the same canonical stage collapses silently;
+    a genuine conflict raises `AmbiguousImplementationReviewStageKeyError`,
+    independent of dict insertion order. Used at every
+    `implementation_review_stages` read site CP3 adds."""
+    normalized: dict = {}
+    raw_key_by_canonical: dict[str, str] = {}
+    for key, value in stages.items():
+        if key == "review_content_id":
+            normalized[key] = value
+            continue
+        canonical = _normalize_implementation_review_stage_key(key)
+        if canonical in normalized:
+            if normalized[canonical] != value:
+                raise AmbiguousImplementationReviewStageKeyError(
+                    f"implementation_review_stages: raw keys "
+                    f"{raw_key_by_canonical[canonical]!r} and {key!r} both normalize "
+                    f"to {canonical!r} but disagree: {normalized[canonical]!r} vs. {value!r}"
+                )
+            continue
+        normalized[canonical] = value
+        raw_key_by_canonical[canonical] = key
+    return normalized
+
+
+# ---------------------------------------------------------------------------
 # D-States: non-circular gate-reachability for AWAITING_PLAN_APPROVAL /
 # AWAITING_TECHNICAL_APPROVAL (never reads plan_approval/technical_approval
 # themselves -- resolves OPUS-R6-004/-011)
@@ -9329,6 +10402,9 @@ def technical_approval_gate_reachable(
     *, latest_round_status: str, protected_path_dirty: bool,
     head_matches_reviewed_implementation_head: bool,
     pinned_block: bool = False,
+    governing_workflow_version: str | None,
+    implementation_review_stages: dict | None,
+    current_review_content_id: str | None,
 ) -> bool:
     """`AWAITING_TECHNICAL_APPROVAL`'s entry condition: the shared
     reachability rule above, plus "no protected path is dirty" (D3;
@@ -9343,12 +10419,57 @@ def technical_approval_gate_reachable(
     pure and never reads state/bundles itself. A pinned bundle can never
     become reachable again by any later edit of the mutable feedback file,
     including a status-preserving-binding overwrite that changes only
-    `Status:` from `BLOCK` to `REVISE` (`GPT-R55-002`)."""
+    `Status:` from `BLOCK` to `REVISE` (`GPT-R55-002`).
+
+    workflow-2.5.0 CP3, widened exactly like `plan_approval_gate_reachable`
+    already is for `TWO_STAGE_PLAN_REVIEW_VERSIONS`: for a `"2.2"` item
+    only, this gate additionally requires the `implementation_review_stages`
+    ledger to record both `LOCAL_MODEL_IMPLEMENTATION_REVIEW` and
+    `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` completed (`verdict: APPROVE`)
+    against the *current* implementation-stage `review_content_id`
+    (D-Implementation-Review-Stages). `governing_workflow_version` equal to
+    `None` (a legitimately absent/legacy value) or anything other than
+    `"2.2"` runs exactly today's shared rule, unchanged.
+
+    workflow-2.5.0 REVISE round 7's own `I1`: these three parameters are
+    **required**, exactly like `plan_approval_gate_reachable`'s equivalent
+    three (`governing_workflow_version`, `plan_review_stages`,
+    `current_review_content_id`) always have been -- deliberately no
+    longer defaulted to `None`, the one asymmetry between this function and
+    the one its own docstring claims to mirror "exactly". A caller that
+    omits `governing_workflow_version` used to fall through the `!= "2.2"`
+    branch and return `True` with the `"2.2"` ledger never consulted at
+    all -- fail *open*, precisely backwards for an approval gate, and
+    reachable in practice (round 7's own reproduction: a call passing
+    `implementation_review_stages=None` and a real
+    `current_review_content_id` while omitting only
+    `governing_workflow_version` returned `True`). Requiring all three
+    turns that omission into an immediate `TypeError` instead of a silent
+    approval-gate opening, for every caller, present and future -- not
+    merely `approve-review.md`'s own now-corrected call (see that file's
+    step 0/1), which is the one call site this repository ships but not
+    the only one this signature has to defend against. Passing `None` for
+    any of the three (a `"1"`/`"2.1"` item's `governing_workflow_version`
+    and `implementation_review_stages`, most commonly) remains exactly as
+    valid as before -- only *omitting* the keyword argument entirely is now
+    refused, by Python's own call mechanics, before this function's body
+    ever runs."""
+    if pinned_block or not approval_gate_reachable(latest_round_status):
+        return False
+    if protected_path_dirty or not head_matches_reviewed_implementation_head:
+        return False
+    if governing_workflow_version != "2.2":
+        return True
+    if implementation_review_stages is None:
+        return False
+    stages = normalize_implementation_review_stages(implementation_review_stages)
+    if stages.get("review_content_id") != current_review_content_id:
+        return False
+    local = stages.get(LOCAL_MODEL_IMPLEMENTATION_REVIEW)
+    manual = stages.get(MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW)
     return (
-        not pinned_block
-        and approval_gate_reachable(latest_round_status)
-        and not protected_path_dirty
-        and head_matches_reviewed_implementation_head
+        local is not None and local.get("verdict") == "APPROVE"
+        and manual is not None and manual.get("verdict") == "APPROVE"
     )
 
 
@@ -9357,16 +10478,17 @@ def plan_approval_gate_reachable(
     plan_review_stages: dict | None, current_review_content_id: str,
 ) -> bool:
     """`AWAITING_PLAN_APPROVAL`'s entry condition: the shared reachability
-    rule above, plus -- for a `governing_workflow_version: "2.1"` work item
-    only (resolves GPT-R11-001/-003) -- the `plan_review_stages` ledger
-    must record both `LOCAL_MODEL_PLAN_REVIEW` and
+    rule above, plus -- for a `TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed
+    (`"2.1"`/`"2.2"`, widened workflow-2.5.0 from a bare `"2.1"` literal)
+    work item only (resolves GPT-R11-001/-003) -- the `plan_review_stages`
+    ledger must record both `LOCAL_MODEL_PLAN_REVIEW` and
     `MANUAL_EXTERNAL_PLAN_REVIEW` completed (`verdict: APPROVE`) against
     the *current* plan-stage `review_content_id`. A `"1"` item's condition
     is exactly the shared rule, unchanged. Tolerant of legacy lowercase
     keys via `normalize_plan_review_stages` (workflow-v2-3-followups CP3)."""
     if not approval_gate_reachable(latest_round_status):
         return False
-    if governing_workflow_version != "2.1":
+    if governing_workflow_version not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
         return True
     if plan_review_stages is None:
         return False
@@ -9635,14 +10757,143 @@ def record_technical_review_block_pin(
     return new_state
 
 
-def apply_plan_approval(state: dict, work_item_id: str, record: dict, now: str) -> dict:
+def apply_plan_approval(
+    state: dict, work_item_id: str, record: dict, now: str, *,
+    pre_registry: dict | None = None, pre_plan_text: str | None = None,
+    post_registry: dict | None = None, post_plan_text: str | None = None,
+) -> dict:
     """`/approve-review plan`'s state-write step (D-Approval-Commits): sets
     `plan_approval` and transitions the work item to `IMPLEMENTING`. Commit
     creation itself is `/approve-review`'s own concern (D-Approval-Commits),
-    not this function's."""
+    not this function's.
+
+    workflow-2.4.0, D-Plan-Amendment-4: four new, optional, keyword-only
+    parameters. For a work item with no open amendment (`amendment_history`
+    empty, or its last entry's `resolved_at_plan_revision` already set),
+    all four stay `None` and are never consulted -- this function's
+    behavior for that case is byte-for-byte unchanged from v2.3.1, so no
+    existing call site needs to change. For a work item *with* an open
+    amendment, all four must be non-`None` (`AmendmentReconciliationInputsMissingError`
+    naming which is absent), `validate_post_anchor_coverage` runs against
+    `post_plan_text`/`post_registry` before any outcome is computed, and
+    `reconcile_checkpoints_after_amendment` folds its own outcome -- the
+    rewritten `checkpoints` map, `current_checkpoint_id`/
+    `last_completed_checkpoint_id` nulled if either named a dropped id,
+    `amendment_history[-1]["resolved_at_plan_revision"]` set to this work
+    item's own live `plan_revision`, and (`IMPL6-B1`) that same
+    reconciliation call's own `{id: outcome}` map recorded verbatim as
+    `amendment_history[-1]["reconciliation_outcome"]` -- into the state
+    this function returns, alongside its own unchanged write set
+    (`plan_approval`, `phase`, `state_revision`, `last_transition`).
+    `reconciliation_outcome`'s tokens already distinguish a direct
+    row/content demotion (`"needs_revalidation"`) from a
+    dependency-closure-derived one (`"needs_revalidation_dependency"`),
+    so `/approve-review plan`'s own step 7 can report "it ran and did X"
+    (by id, closure flips distinguishable from direct ones) without this
+    function computing anything further -- it stores the map
+    `reconcile_checkpoints_after_amendment` already returns, unmodified.
+    `plan_revision` itself is never written here -- it stays
+    `publish_plan_revision`'s alone.
+
+    A caller that supplies either pre-side reconciliation input
+    (`pre_registry`/`pre_plan_text`) against a work item whose last
+    `amendment_history` entry is *already* resolved -- a re-run
+    reconciliation, the one case `AmendmentAlreadyResolvedError` names in
+    its own docstring -- is refused before anything else runs (checked
+    ahead of, and independent of, `has_open_amendment`'s own gate below;
+    that gate alone can never observe this state, since it is true only
+    when the last entry is *not* yet resolved). The guard is keyed on the
+    pre-side pair specifically, never on `post_registry`/`post_plan_text`
+    alone (`OPUS-R145-001`): the real caller, `approve-review.md` step 4c,
+    reads and forwards `post_plan_text`/`post_registry` *unconditionally*,
+    from the working tree, on every plan-stage approval regardless of
+    amendment state -- only `pre_registry`/`pre_plan_text` are gated there
+    on an open amendment. Keying this guard on "any of the four" made it
+    fire from that real caller for *any* plan approval following a
+    resolved amendment, non-amendment or not, degenerating into "a work
+    item that has ever amended once can never have a plan approval applied
+    again"; keying it on the pre-side pair alone matches the only shape a
+    genuine re-run reconciliation can take (a caller that itself believed
+    an amendment was still open). A caller that supplies neither pre-side
+    value against an already-resolved amendment stays the ordinary,
+    unconsulted no-op case -- the case the real caller always presents
+    once past its first, ordinary (never-amended) round."""
     validate_approval_record(record, stage="plan")
     new_state = copy.deepcopy(state)
     work_item = new_state["work_items"][work_item_id]
+    amendment_history = work_item.get("amendment_history") or []
+    pre_side_supplied = pre_registry is not None or pre_plan_text is not None
+    if (
+        amendment_history and amendment_history[-1].get("resolved_at_plan_revision") is not None
+        and pre_side_supplied
+    ):
+        raise AmendmentAlreadyResolvedError(
+            f"{work_item_id}'s last amendment_history entry is already resolved at "
+            f"plan_revision {amendment_history[-1]['resolved_at_plan_revision']!r} -- "
+            f"refusing a re-run reconciliation"
+        )
+    has_open_amendment = bool(amendment_history) and amendment_history[-1].get("resolved_at_plan_revision") is None
+    if has_open_amendment:
+        missing = [
+            name for name, value in (
+                ("pre_registry", pre_registry), ("pre_plan_text", pre_plan_text),
+                ("post_registry", post_registry), ("post_plan_text", post_plan_text),
+            ) if value is None
+        ]
+        if missing:
+            raise AmendmentReconciliationInputsMissingError(
+                f"{work_item_id} has an open amendment -- reconciliation requires all of "
+                f"pre_registry/pre_plan_text/post_registry/post_plan_text; missing: {missing}"
+            )
+        # IMPL2-O2: `validate_post_anchor_coverage` reads
+        # `post_registry.get("checkpoints", [])` (vacuously passes a
+        # registry missing the key), but `validate_registry_topological_order`
+        # reads `registry["checkpoints"]` directly and would raise an
+        # unnamed `KeyError` for the same malformed input -- against this
+        # branch's own "refuse and name it" discipline. Named here, once,
+        # before either validator runs.
+        if "checkpoints" not in post_registry:
+            raise AmendmentPostRegistryMalformedError(
+                f"{work_item_id}'s post_registry has no 'checkpoints' key -- cannot "
+                f"validate anchor coverage or topological order for this amendment"
+            )
+        # IMPL4-O1: both `validate_post_anchor_coverage` and
+        # `reconcile_checkpoints_after_amendment` directly read `entry["id"]`
+        # from `post_registry["checkpoints"]` -- a row with no `id` key
+        # would otherwise escape as a bare, unnamed `KeyError` from either
+        # call below. Named here, once, ahead of both call paths, the same
+        # "refuse and name it" discipline the "checkpoints"-key check just
+        # above already applies to the coarser malformation.
+        missing_id_indices = [
+            i for i, entry in enumerate(post_registry.get("checkpoints", []))
+            if "id" not in entry
+        ]
+        if missing_id_indices:
+            raise AmendmentPostRegistryMalformedError(
+                f"{work_item_id}'s post_registry has checkpoint entries with no 'id' "
+                f"key at index/indices {missing_id_indices} -- cannot validate anchor "
+                f"coverage or topological order for this amendment"
+            )
+        validate_post_anchor_coverage(post_plan_text, post_registry)
+        validate_registry_topological_order(post_registry)
+        reconciliation = reconcile_checkpoints_after_amendment(
+            pre_registry, post_registry, pre_plan_text, post_plan_text,
+            work_item.get("checkpoints", {}),
+        )
+        work_item["checkpoints"] = reconciliation["checkpoints"]
+        if work_item.get("current_checkpoint_id") in reconciliation["dropped"]:
+            work_item["current_checkpoint_id"] = None
+        if work_item.get("last_completed_checkpoint_id") in reconciliation["dropped"]:
+            work_item["last_completed_checkpoint_id"] = None
+        resolved_entry = copy.deepcopy(amendment_history[-1])
+        resolved_entry["resolved_at_plan_revision"] = work_item.get("plan_revision")
+        # IMPL6-B1: record the reconciliation outcome, by id, onto the
+        # resolved amendment_history entry itself -- the durable home
+        # `/approve-review plan`'s own step 7 reads to report "it ran and
+        # did X" rather than only the new phase. Recorded verbatim; this
+        # function performs no further summarization of it.
+        resolved_entry["reconciliation_outcome"] = reconciliation["outcome"]
+        work_item["amendment_history"] = amendment_history[:-1] + [resolved_entry]
     work_item["plan_approval"] = record
     work_item["phase"] = "IMPLEMENTING"
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
@@ -9661,6 +10912,196 @@ def apply_technical_approval(state: dict, work_item_id: str, record: dict, now: 
     work_item["phase"] = "AWAITING_FUNCTIONAL_REVIEW"
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
+    return new_state
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.4.0, D-Plan-Amendment-1/2/3: /request-plan-amendment's sole
+# writer -- amending an approved plan after implementation has begun.
+# ---------------------------------------------------------------------------
+
+
+_AMENDMENT_REQUEST_ALLOWED_PHASES = frozenset({"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION"})
+
+
+def request_plan_amendment(
+    state: dict, work_item_id: str, reason: str, *, repo_root: Path, now: str,
+) -> dict:
+    """`/request-plan-amendment`'s sole writer (D-Plan-Amendment-1/2/3).
+
+    Entry condition: `phase in {"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION"}`
+    -- the two phases this release supports, and deliberately the only two
+    (`WrongPhaseForAmendmentRequestError` otherwise, naming the actual
+    phase; this is also what refuses a second, redundant request against
+    an item already at `AMENDING_PLAN`).
+
+    Widened precondition (revision 11/12, I-R11-1/B-R12-1): the current
+    `plan_approval`'s own approval commit must actually be discoverable and
+    an ancestor of `HEAD` -- checked directly via
+    `discover_plan_approval_commit`/`_is_ancestor`, the identical pair
+    `implementing_entry_reachable` itself evaluates, never through that
+    four-exit composite (which would also, incorrectly, refuse on a
+    digest-only staleness this amendment is about to replace anyway).
+    Raises `AmendmentApprovalCommitUnreachableError` *before* superseding
+    anything -- `plan_approval.status` is never set to `SUPERSEDED` when
+    this fires.
+
+    Checkpoint-id-shape precondition (IMPL2-R1, narrowed by IMPL3-R1): before
+    either of the above, loads the work item's own current registry (via
+    `_load_authoritative_registry_or_none(repo_root, work_item,
+    require_plan_approval_coverage=False)` -- `None` for a registry-less
+    work item, which skips this check) and raises
+    `AmendmentCheckpointIdShapeError`, naming every offending id, if any
+    checkpoint id in it is not of the shape `CP<digits>`. Such an id can
+    never satisfy `validate_post_anchor_coverage`'s anchor grammar no
+    matter what the amended plan document says, so refusing here -- before
+    `plan_approval` is superseded -- replaces a refusal that would
+    otherwise surface only after both plan-review stages have already
+    been spent on the amended plan, with no in-band recovery.
+
+    `require_plan_approval_coverage=False` (IMPL3-R1): this call needs only
+    the registry's self-declared checkpoint ids, not a proof the registry
+    bytes are the ones the current `plan_approval` covers.
+    `_load_authoritative_registry_or_none`'s default coverage check
+    (`_assert_registry_covered_by_current_plan_approval`) is
+    `resolve_own_registry_completion_status`/`resolve_completion_obligations`'s
+    own completion-accounting trust boundary; reusing it verbatim here
+    reintroduced, through a different door, exactly the digest-only-
+    staleness refusal `.claude/commands/request-plan-amendment.md` step 1
+    explicitly forbids (`D-Plan-Amendment-1`, `B-R12-1`) -- an operator who
+    has started editing `plan_path`/`registry_path` before running this
+    command (the single most likely working-tree state for one about to
+    request an amendment) was refused with a `StalePlanApprovalRegistryReadError`
+    whose message talks about "registry-derived completion", though nothing
+    about this command is completion-accounting. Passing `False` restores
+    the narrower, id-shape-only read this precondition was designed for;
+    the coverage checks other two call sites still need are unaffected.
+
+    In one `state_transaction`-compatible mutation: sets
+    `plan_approval.status = "SUPERSEDED"`; appends one entry to the
+    work item's own append-only `amendment_history` list (bounded,
+    content-addressed reference model, EXT-R6-I1: `superseded_plan_approval`
+    is a deep copy of the record just superseded -- its own
+    `review_content_manifest` already pins the exact blob SHAs of
+    `plan_path`/`registry_path` at the moment it was made;
+    `pre_amendment_approval_commit` is the single commit SHA that
+    reproduces those bytes later via `load_pre_amendment_snapshot`, never
+    a stored copy of the documents themselves); sets `amendment_base_commit`
+    to the current `HEAD`; and writes `phase = "AMENDING_PLAN"` as a direct
+    string literal (never through a local name), so the AST-derived phase
+    census resolves it without a third hardcoded compensation entry.
+
+    This function performs one read of Git identity (`HEAD`'s own SHA, and
+    the reachability check above) -- both are needed to compute the exact
+    `amendment_history` entry this function itself writes, the same
+    narrow exception to pure-`state`-only mutators D-Plan-Amendment-3
+    grants this one writer and no other."""
+    work_item = state["work_items"][work_item_id]
+    phase = work_item.get("phase")
+    if phase not in _AMENDMENT_REQUEST_ALLOWED_PHASES:
+        raise WrongPhaseForAmendmentRequestError(
+            f"{work_item_id} is at phase {phase!r} -- /request-plan-amendment requires "
+            f"phase in {sorted(_AMENDMENT_REQUEST_ALLOWED_PHASES)}"
+        )
+
+    # XMODEL-R4-B1: refuse before anything else -- and before any of the
+    # checks below -- if a checkpoint is already IN_PROGRESS in state, or a
+    # shared filesystem checkpoint claim is outstanding for this work item.
+    # See `AmendmentCheckpointActiveError`'s own docstring for why both
+    # halves are checked (they are two different synchronization domains).
+    if any(
+        entry.get("status") == "IN_PROGRESS"
+        for entry in work_item.get("checkpoints", {}).values()
+    ):
+        raise AmendmentCheckpointActiveError(
+            f"{work_item_id!r} has a checkpoint IN_PROGRESS "
+            f"({work_item.get('current_checkpoint_id')!r}) -- /request-plan-amendment "
+            f"refuses while implementation is live"
+        )
+    outstanding_claim = resolve_claim(repo_root, work_item_id)
+    if outstanding_claim is not None:
+        raise AmendmentCheckpointActiveError(
+            f"{work_item_id!r} has an outstanding checkpoint claim "
+            f"(checkpoint {outstanding_claim.get('checkpoint_id')!r}, worktree "
+            f"{outstanding_claim.get('worktree_root')!r}) -- /request-plan-amendment "
+            f"refuses while a checkpoint start is in flight, even though "
+            f"WORKFLOW_STATE.json may not show it IN_PROGRESS yet"
+        )
+
+    # IMPL2-R1: refuse by name, before anything is superseded, if the
+    # work item's own current registry already names a checkpoint id that
+    # is not of the shape `CP<digits>` -- `validate_post_anchor_coverage`
+    # would refuse the eventual amended plan for exactly this id, but only
+    # after both plan-review stages have been spent on it, with no anchor
+    # text able to fix it. A registry-less work item (`registry_path` is
+    # `None`) has nothing to check here.
+    registry = _load_authoritative_registry_or_none(
+        repo_root, work_item, require_plan_approval_coverage=False,
+    )
+    if registry is not None:
+        # IMPL3-O2: `_load_authoritative_registry_or_none` validates the
+        # registry's own envelope (safe path, JSON object, self-declared
+        # `work_item_id`) but never its checkpoint-row shape, so a row
+        # missing `id` must be named here rather than escaping as an
+        # unnamed `KeyError` from the comprehension below -- the same
+        # "refuse and name it" violation IMPL2-O2 was raised about, in a
+        # different registry read.
+        missing_id_indices = [
+            i for i, entry in enumerate(registry.get("checkpoints", []))
+            if "id" not in entry
+        ]
+        if missing_id_indices:
+            raise AmendmentRegistryMissingIdError(
+                f"{work_item_id}'s registry ({work_item.get('registry_path')}) has "
+                f"checkpoint entries with no 'id' key at index/indices "
+                f"{missing_id_indices} -- cannot check anchor-shape compatibility"
+            )
+        unsupported_ids = [
+            entry["id"] for entry in registry.get("checkpoints", [])
+            if not checkpoint_id_supports_anchor(entry["id"])
+        ]
+        if unsupported_ids:
+            raise AmendmentCheckpointIdShapeError(
+                f"{work_item_id}'s registry ({work_item.get('registry_path')}) names "
+                f"checkpoint id(s) {unsupported_ids!r} that are not of the shape "
+                f"'CP<digits>' -- the plan-amendment anchor grammar "
+                f"(D-Plan-Amendment-4) can never be satisfied for these, so "
+                f"/request-plan-amendment refuses before superseding plan_approval"
+            )
+
+    plan_approval = work_item.get("plan_approval") or {}
+    base_commit = work_item["base_commit"]
+    head = _run(["git", "rev-parse", "HEAD"], cwd=repo_root).strip()
+    approval_commit = discover_plan_approval_commit(
+        repo_root, work_item_id, plan_approval.get("approved_review_content_id"), base_commit, head=head,
+    )
+    if approval_commit is None or not _is_ancestor(repo_root, approval_commit, head):
+        raise AmendmentApprovalCommitUnreachableError(
+            f"{work_item_id}'s current plan_approval commit is not discoverable in "
+            f"{base_commit}..{head}, or not an ancestor of it -- refusing before "
+            f"superseding anything"
+        )
+
+    new_state = copy.deepcopy(state)
+    new_work_item = new_state["work_items"][work_item_id]
+    history = new_work_item.setdefault("amendment_history", [])
+    entry = {
+        "amendment_id": str(len(history)),
+        "requested_at": now,
+        "requested_from_phase": phase,
+        "reason": reason,
+        "superseded_plan_revision": new_work_item.get("plan_revision"),
+        "superseded_plan_approval": copy.deepcopy(new_work_item.get("plan_approval")),
+        "checkpoints_snapshot": copy.deepcopy(new_work_item.get("checkpoints", {})),
+        "pre_amendment_approval_commit": approval_commit,
+        "resolved_at_plan_revision": None,
+    }
+    history.append(entry)
+    new_work_item["plan_approval"]["status"] = "SUPERSEDED"
+    new_work_item["amendment_base_commit"] = head
+    new_work_item["phase"] = "AMENDING_PLAN"
+    new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
+    new_work_item["last_transition"] = now
     return new_state
 
 
@@ -9697,6 +11138,74 @@ def mark_technical_approval_stale(state: dict, work_item_id: str, now: str) -> d
     return new_state
 
 
+def bundle_generation_target_phase(stage: str, governing_workflow_version: str | None) -> str:
+    """workflow-2.5.0 CP3 (D-Implementation-Review-Stages "Provenance-
+    interval interaction"): the single function of `(stage,
+    governing_workflow_version)` replacing `record_bundle_generation`'s
+    and `validate_bundle_generation_record_commit`'s previously
+    hard-coded `"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"` target-phase
+    literal. Returns `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for
+    `"1"`/`"2.1"` (both `stage` values, byte-identical to pre-CP3
+    behavior) and `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for `"2.2"` (both
+    `stage` values -- a `"2.2"` item's post-fix regeneration re-enters
+    local review exactly like its first-round generation does, never
+    going straight back to the terminal phase). `governing_workflow_version`
+    absent (`None`) resolves as the `"1"`/`"2.1"` literal, never a raise --
+    the same convention this module's other version-dependent resolvers
+    (e.g. `plan_approval_gate_reachable`) already follow for a work item
+    with no recorded version. `stage` itself must still be one of
+    `"implementation"`/`"post-fix"` (`InvalidBundleGenerationStageError`);
+    note that, for any single `governing_workflow_version`, both `stage`
+    values always resolve to the identical target -- the distinction
+    matters only for legal-source-phase checking
+    (`BUNDLE_GENERATION_LEGAL_SOURCE_PHASES_BY_STAGE`), never for the
+    target phase itself."""
+    if stage not in ("implementation", "post-fix"):
+        raise InvalidBundleGenerationStageError(
+            f"reviewed_implementation_head is written only at the "
+            f"\"implementation\"/\"post-fix\" bundle-generation stage, got {stage!r}"
+        )
+    if governing_workflow_version == "2.2":
+        return "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+    return "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+
+def bundle_generation_recovered_role_legal_committed_phases(
+    governing_workflow_version: str | None,
+) -> frozenset[str]:
+    """workflow-2.5.0 CP3 (D-Implementation-Review-Stages "Provenance-
+    interval interaction", third fix): the recovered-role committed-phase
+    membership test replacing `validate_bundle_generation_record_commit`'s
+    former single-valued equality, and the identical set
+    `/recover-implementation-provenance`'s own invocation guard
+    (`verify_implementation_provenance_recovery`/
+    `apply_implementation_provenance_recovery`) admits. For `"1"`/`"2.1"`
+    (and an absent/`None` version, the same convention
+    `bundle_generation_target_phase` follows): the single-member set
+    `{AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW}`, byte-identical to pre-CP3
+    behavior. For `"2.2"`: the three-phase set
+    `{AWAITING_LOCAL_IMPLEMENTATION_REVIEW,
+    AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW,
+    AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW}` -- every phase a `"2.2"` item
+    can occupy between a generation-record commit `T` and technical
+    approval, since recovery never changes `phase`'s value and so must be
+    invocable from whichever of those three phases the round is currently
+    sitting at. The resulting invariant: for the recovered role, the
+    command guard and this function's own return value are the identical
+    set, and both are always a subset of the additively-widened
+    `RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES` (the legal
+    *parent* phases, a superset covering every source phase recovery's own
+    same-content interval walk may cross, not only the phase recovery is
+    invoked *from*)."""
+    if governing_workflow_version == "2.2":
+        return frozenset({
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        })
+    return frozenset({"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"})
+
+
 def record_bundle_generation(
     state: dict, work_item_id: str, *, stage: str, head: str, now: str, outcome: str = "ordinary",
 ) -> dict:
@@ -9717,9 +11226,12 @@ def record_bundle_generation(
     (`IllegalBundleGenerationSourcePhaseError`), or naming the non-`STALE`
     status for the `AWAITING_FUNCTIONAL_REVIEW` case specifically
     (`BundleGenerationRequiresStaleTechnicalApprovalError`). Always sets
-    the durable target `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` -- the
-    "Ordinary bundle-publication phase transition" contract, `WFR-61`'s
-    five-field mutation.
+    the durable target `bundle_generation_target_phase(stage,
+    governing_workflow_version)` -- version-dependent since workflow-2.5.0
+    CP3 (`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for `"1"`/`"2.1"`,
+    byte-identical to before; `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for
+    `"2.2"`) -- the "Ordinary bundle-publication phase transition"
+    contract, `WFR-61`'s five-field mutation.
 
     `outcome` (WF8c (c), D-Commit-Provenance "Same-content post-fix
     republication") selects which of this function's two legal outcomes
@@ -9743,10 +11255,12 @@ def record_bundle_generation(
     intervening commits are all legitimately excluded-only; `head` itself
     is otherwise unused in this branch, kept only for call-shape symmetry.
     Both outcomes always perform a real `phase` transition into
-    `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` from whichever legal source
-    phase for the requested `stage` was current -- never value-wise
-    unchanged, since `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` itself is
-    never one of this function's own legal source phases for any stage."""
+    `bundle_generation_target_phase`'s own resolved value, from whichever
+    legal source phase for the requested `stage` was current -- never
+    value-wise unchanged, since neither
+    `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` nor (for `"2.2"`)
+    `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` is ever itself one of this
+    function's own legal source phases for any stage."""
     if stage not in ("implementation", "post-fix"):
         raise InvalidBundleGenerationStageError(
             f"reviewed_implementation_head is written only at the "
@@ -9775,7 +11289,9 @@ def record_bundle_generation(
                 f"requires technical_approval.status == 'STALE' (the functional-review "
                 f"bounded-fix marker) -- got {technical_approval_status!r}"
             )
-    work_item["phase"] = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+    work_item["phase"] = bundle_generation_target_phase(
+        stage, work_item.get("governing_workflow_version"),
+    )
     if outcome == "ordinary":
         work_item["reviewed_implementation_head"] = head
         work_item["implementation_revision"] = (work_item.get("implementation_revision") or 0) + 1
@@ -9830,14 +11346,39 @@ def enter_applying_review_feedback(state: dict, work_item_id: str, now: str) -> 
 ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     "phase", "reviewed_implementation_head", "implementation_revision",
     "state_revision", "last_transition",
+    # workflow-2.5.0 CP3: widened unconditionally (not "2.2"-scoped) to
+    # admit a "2.2" REVISE loop's stale, uncommitted implementation_review_
+    # stages residue in a commit's own field diff -- see D-Implementation-
+    # Review-Stages' "Provenance-interval interaction", second fix. Safe
+    # for "1"/"2.1": that vocabulary is never written by their own
+    # state_transaction mutators, so it is always absent from their field
+    # diffs regardless of what this set admits -- and this is not merely a
+    # reachability argument: `_validate_implementation_review_stages` (run
+    # from `validate_state`) rejects any non-"2.2" item carrying a non-null
+    # `implementation_review_stages` at read time, so the vocabulary is
+    # rejected, not just unreached.
+    "implementation_review_stages",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     "phase", "state_revision", "last_transition",
+    # Same unconditional widening as ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS
+    # above, for the identical reason -- a "2.2" same-content post-fix
+    # republication (record_bundle_generation(outcome="same_content"), the
+    # recovered role) can carry the same stale ledger residue.
+    "implementation_review_stages",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES = (
-    BUNDLE_GENERATION_LEGAL_SOURCE_PHASES | {"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}
+    # workflow-2.5.0 CP3: additively widened with the two new "2.2" phases
+    # (D-Implementation-Review-Stages' "Provenance-interval interaction",
+    # third fix) -- AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW remains a legal
+    # parent phase for "1"/"2.1" (and for "2.2", as the terminal phase).
+    BUNDLE_GENERATION_LEGAL_SOURCE_PHASES | {
+        "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+        "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    }
 )
 
 
@@ -9981,6 +11522,33 @@ def _forbidden_state_mutation(repo_root: Path, commit: str, work_item_id: str) -
 
 TECHNICAL_APPROVAL_COMMIT_FIELDS = frozenset({
     "technical_approval", "phase", "state_revision", "last_transition",
+    # workflow-2.5.0 CP12 (disposable-repository functional validation):
+    # widened unconditionally, mirroring ORDINARY_BUNDLE_GENERATION_RECORD_
+    # FIELDS/RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS' own identical
+    # widening and identical reasoning -- a "2.2" item's ordinary positive
+    # path always leaves MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW's own ledger
+    # write (`record_manual_implementation_review`, itself never its own
+    # dedicated durability commit -- see review-implementation.md's "2.2"
+    # authoritative branch, step A6, and record-manual-implementation-
+    # review.md's identical shape) sitting uncommitted until the very next
+    # commit, which for a "2.2" item is always this one:
+    # `/approve-review implementation`'s own technical-approval commit. Found
+    # by CP12's own disposable-repository end-to-end scenario, which
+    # exercises the real local-approve-then-manual-approve-then-approve-
+    # sequence a hand-authored dict-state fixture never drove: every "2.2"
+    # item's very first technical-approval commit failed
+    # MalformedTechnicalApprovalCommitError outright before this widening,
+    # since `implementation_review_stages` was missing from this set even
+    # though its sibling generation-record sets already admit the identical
+    # residue for the identical reason. Safe for "1"/"2.1": that vocabulary
+    # is never written by their own state_transaction mutators, so it is
+    # always absent from their own field diffs regardless of what this set
+    # admits -- and this is not merely a reachability argument:
+    # `_validate_implementation_review_stages` (run from `validate_state`)
+    # rejects any non-"2.2" item carrying a non-null
+    # `implementation_review_stages` at read time, so the vocabulary is
+    # rejected, not just unreached.
+    "implementation_review_stages",
 })
 
 
@@ -9991,11 +11559,15 @@ class MalformedTechnicalApprovalCommitError(Exception):
     exhaustive field set -- mirroring items 267/254's exact-field-set
     discipline for generation-record commits, applied here to the
     technical-approval commit `D-States`'s own "Exit" bullet already names
-    exhaustively (`GPT-R51-001`): exactly `technical_approval`, `phase`
+    exhaustively (`GPT-R51-001`): `technical_approval`, `phase`
     (`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` ->
     `AWAITING_FUNCTIONAL_REVIEW`), `state_revision`, `last_transition` --
-    no other field, and never another work item's own entry or a
-    top-level routing field in the same commit."""
+    plus, for a "2.2" item only, the uncommitted `implementation_review_
+    stages` ledger residue a "2.2" item's own manual-approve round always
+    leaves behind (workflow-2.5.0 CP12, mirroring the generation-record
+    commit's own identical widening) -- no other field, and never another
+    work item's own entry or a top-level routing field in the same
+    commit."""
 
 
 def validate_technical_approval_commit(repo_root: Path, commit: str, work_item_id: str) -> None:
@@ -10075,7 +11647,12 @@ def validate_bundle_generation_record_commit(repo_root: Path, commit: str, work_
         )
     field_diff = _work_item_field_diff(repo_root, commit, work_item_id)
     after = _read_json_at_commit_or_empty(repo_root, commit, state_rel)
-    committed_phase = after.get("work_items", {}).get(work_item_id, {}).get("phase")
+    committed_work_item = after.get("work_items", {}).get(work_item_id, {})
+    committed_phase = committed_work_item.get("phase")
+    # workflow-2.5.0 CP3: read anchored to this exact commit's own
+    # committed work_items[work_item_id] dict, never the live entry
+    # (D-Implementation-Review-Stages "Provenance-interval interaction").
+    governing_workflow_version = committed_work_item.get("governing_workflow_version")
     if role == "ordinary":
         if not field_diff or not field_diff <= ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS:
             raise MalformedBundleGenerationRecordCommitError(
@@ -10089,10 +11666,16 @@ def validate_bundle_generation_record_commit(repo_root: Path, commit: str, work_
                 f"include 'phase' -- an ordinary bundle-generation-record commit must always "
                 f"transition phase (OPUS-R101-001)"
             )
-        if committed_phase != "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW":
+        # Stage is irrelevant here -- bundle_generation_target_phase's
+        # value depends only on governing_workflow_version, identical for
+        # both "implementation"/"post-fix" at any single version -- so
+        # "implementation" is passed as an arbitrary, invariant witness.
+        required_target = bundle_generation_target_phase("implementation", governing_workflow_version)
+        if committed_phase != required_target:
             raise MalformedBundleGenerationRecordCommitError(
                 f"{commit} sets {work_item_id!r}'s phase to {committed_phase!r}, not the "
-                f"required target 'AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW'"
+                f"required target {required_target!r} (governing_workflow_version "
+                f"{governing_workflow_version!r})"
             )
         return
     # role == "recovered" (WF8c (c)/(b), D-Commit-Provenance condition 4's
@@ -10106,10 +11689,18 @@ def validate_bundle_generation_record_commit(repo_root: Path, commit: str, work_
             f"(recovered role) -- reviewed_implementation_head/implementation_revision "
             f"must never change in a recovered-role commit"
         )
-    if committed_phase != "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW":
+    # workflow-2.5.0 CP3: a membership test, not a single-valued equality
+    # (D-Implementation-Review-Stages "Provenance-interval interaction",
+    # third fix) -- {AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW} for "1"/"2.1",
+    # the three-phase "2.2" set otherwise.
+    legal_committed_phases = bundle_generation_recovered_role_legal_committed_phases(
+        governing_workflow_version,
+    )
+    if committed_phase not in legal_committed_phases:
         raise MalformedBundleGenerationRecordCommitError(
-            f"{commit} sets {work_item_id!r}'s phase to {committed_phase!r}, not the "
-            f"required target 'AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW'"
+            f"{commit} sets {work_item_id!r}'s phase to {committed_phase!r}, not one of "
+            f"the required target phases {sorted(legal_committed_phases)} "
+            f"(governing_workflow_version {governing_workflow_version!r})"
         )
     parent = _run(["git", "rev-parse", f"{commit}^"], cwd=repo_root).strip()
     parent_phase = _read_json_at_commit_or_empty(repo_root, parent, state_rel).get(
@@ -10498,13 +12089,22 @@ def resolve_bundle_generation_outcome(
 class IllegalImplementationProvenanceRecoverySourcePhaseError(Exception):
     """Raised when `verify_implementation_provenance_recovery`/
     `apply_implementation_provenance_recovery` is invoked from a phase
-    other than `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` -- the only phase
+    outside `bundle_generation_recovered_role_legal_committed_phases(
+    governing_workflow_version)` -- for `"1"`/`"2.1"` (and an absent
+    version) that is the single phase `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`,
+    byte-identical to pre-workflow-2.5.0 behavior; for `"2.2"` it is the
+    three phases a `"2.2"` item can occupy between a generation-record
+    commit `T` and technical approval
+    (`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`,
+    `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`,
+    `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`) -- the only phases
     `/recover-implementation-provenance` (WF8c (b)) may run from: recovery
     repairs a stale `generation_head` for the round *currently* awaiting
-    external review, never a round still being written
-    (`SELF_REVIEWING_IMPLEMENTATION`/`APPLYING_REVIEW_FEEDBACK` already
-    have their own same-content path through `record_bundle_generation`'s
-    `outcome="same_content"`, WF8c (c)) and never any other phase."""
+    (local, manual-external, or external) review, never a round still
+    being written (`SELF_REVIEWING_IMPLEMENTATION`/`APPLYING_REVIEW_FEEDBACK`
+    already have their own same-content path through
+    `record_bundle_generation`'s `outcome="same_content"`, WF8c (c)) and
+    never any other phase."""
 
 
 class ImplementationProvenanceRecoveryNotApplicableError(Exception):
@@ -10542,11 +12142,13 @@ def verify_implementation_provenance_recovery(
     no state mutation and no Git write of its own."""
     work_item_id = work_item["work_item_id"]
     phase = work_item.get("phase")
-    if phase != "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW":
+    legal_phases = bundle_generation_recovered_role_legal_committed_phases(
+        work_item.get("governing_workflow_version"),
+    )
+    if phase not in legal_phases:
         raise IllegalImplementationProvenanceRecoverySourcePhaseError(
             f"recover_implementation_provenance invoked for {work_item_id!r} from phase "
-            f"{phase!r}, but the only legal source phase is "
-            f"'AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW'"
+            f"{phase!r}, but the only legal source phase(s) are {sorted(legal_phases)}"
         )
     outcome, t = resolve_bundle_generation_outcome(
         repo_root, work_item, base_commit=base_commit, head=head,
@@ -10600,34 +12202,37 @@ def validate_implementation_provenance_recovery_confirmation(
 def apply_implementation_provenance_recovery(state: dict, work_item_id: str, now: str) -> dict:
     """The state half of `/recover-implementation-provenance`'s `S2`
     commit (WF8c (b), `WFR-62`): recovery never changes `phase`'s *value*
-    -- the work item was already `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`
-    and remains there -- only `state_revision`/`last_transition` change,
-    the recovered-role field set `record_bundle_generation`'s own
-    `same_content` outcome already uses, minus `phase` itself since there
-    is no transition to *perform* here (unlike that function's own legal
-    source phases -- `SELF_REVIEWING_IMPLEMENTATION` for
-    `stage="implementation"`; `APPLYING_REVIEW_FEEDBACK`, or
-    `AWAITING_FUNCTIONAL_REVIEW` with a `STALE` `technical_approval`, for
-    `stage="post-fix"` -- every one of which does transition into this
-    phase; `workflow-v2-3-followups` continued scope widened this from two
-    to three).
+    -- the work item was already at one of
+    `bundle_generation_recovered_role_legal_committed_phases(
+    governing_workflow_version)` and remains there -- only
+    `state_revision`/`last_transition` change, the recovered-role field
+    set `record_bundle_generation`'s own `same_content` outcome already
+    uses, minus `phase` itself since there is no transition to *perform*
+    here (unlike that function's own legal source phases -- `SELF_
+    REVIEWING_IMPLEMENTATION` for `stage="implementation"`;
+    `APPLYING_REVIEW_FEEDBACK`, or `AWAITING_FUNCTIONAL_REVIEW` with a
+    `STALE` `technical_approval`, for `stage="post-fix"` -- every one of
+    which does transition into this phase; `workflow-v2-3-followups`
+    continued scope widened this from two to three).
     `reviewed_implementation_head`/`implementation_revision` are never
     touched, exactly as the recovered role requires. Refuses via
     `IllegalImplementationProvenanceRecoverySourcePhaseError` if the
-    freshly re-read state's phase is not
-    `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` at the moment this mutator
-    actually runs inside `state_transaction`'s lock -- an independent
-    check, never merely trusting the caller's own already-passed
-    `verify_implementation_provenance_recovery` precondition, since a race
-    could have moved the phase between that read and this write."""
+    freshly re-read state's phase is not a member of that legal set at the
+    moment this mutator actually runs inside `state_transaction`'s lock --
+    an independent check, never merely trusting the caller's own
+    already-passed `verify_implementation_provenance_recovery`
+    precondition, since a race could have moved the phase between that
+    read and this write."""
     new_state = copy.deepcopy(state)
     work_item = new_state["work_items"][work_item_id]
     phase = work_item.get("phase")
-    if phase != "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW":
+    legal_phases = bundle_generation_recovered_role_legal_committed_phases(
+        work_item.get("governing_workflow_version"),
+    )
+    if phase not in legal_phases:
         raise IllegalImplementationProvenanceRecoverySourcePhaseError(
             f"apply_implementation_provenance_recovery invoked for {work_item_id!r} from "
-            f"phase {phase!r}, but the only legal source phase is "
-            f"'AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW'"
+            f"phase {phase!r}, but the only legal source phase(s) are {sorted(legal_phases)}"
         )
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
@@ -10722,11 +12327,19 @@ def discover_current_functional_checklist_evidence(
 
 
 def _require_v2_1_plan_review(work_item: dict) -> None:
-    if work_item.get("governing_workflow_version") != "2.1":
+    """Widened workflow-2.5.0 from a bare `governing_workflow_version !=
+    "2.1"` check to `TWO_STAGE_PLAN_REVIEW_VERSIONS` membership: a `"2.2"`
+    item runs the identical two-stage plan-review protocol a `"2.1"` item
+    does (D-Implementation-Review-Version-Activation's inheritance rule).
+    Function name kept unchanged -- it is a private helper, and every
+    caller's own name (`validate_local_plan_review_preconditions`, etc.)
+    already reads as version-neutral."""
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
         raise WrongGoverningVersionForPlanReviewStageError(
             f"{work_item['work_item_id']}: governing_workflow_version is "
-            f"{work_item.get('governing_workflow_version')!r}, not \"2.1\" -- "
-            f"the two-stage plan-review protocol only applies to \"2.1\" work items"
+            f"{work_item.get('governing_workflow_version')!r}, not one of "
+            f"{sorted(TWO_STAGE_PLAN_REVIEW_VERSIONS)} -- the two-stage plan-review "
+            f"protocol applies to \"2.1\"/\"2.2\" work items alike"
         )
 
 
@@ -10910,9 +12523,13 @@ def record_manual_plan_review(
 
 
 def transition_to_awaiting_local_plan_review(state: dict, work_item_id: str, now: str) -> dict:
-    """`/apply-plan-review`'s `"2.1"`-only revised exit step (D-Plan-Review-
-    Stages, resolves `GPT-R11-003`/`-007`): after every accepted plan edit,
-    the work item transitions to `AWAITING_LOCAL_PLAN_REVIEW` -- never
+    """`/apply-plan-review`'s revised exit step for a `TWO_STAGE_PLAN_
+    REVIEW_VERSIONS`-governed (`"2.1"`/`"2.2"`) item alike (D-Plan-Review-
+    Stages, resolves `GPT-R11-003`/`-007`; corrected workflow-2.5.0 from
+    describing this as `"2.1"`-only -- the exit step is identical for
+    `"2.2"`, D-Implementation-Review-Version-Activation's inheritance
+    rule): after every accepted plan edit, the work item transitions to
+    `AWAITING_LOCAL_PLAN_REVIEW` -- never
     self-declaring plan readiness. The stale `plan_review_stages` ledger
     (if any) is left as-is, never explicitly cleared: its own
     `review_content_id` no longer matches the freshly recomputed one the
@@ -10927,6 +12544,226 @@ def transition_to_awaiting_local_plan_review(state: dict, work_item_id: str, now
     work_item["phase"] = "AWAITING_LOCAL_PLAN_REVIEW"
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
+    return new_state
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.5.0 CP3: D-Implementation-Review-Stages -- two-stage
+# local-then-manual-external *implementation*-review protocol's ledger
+# writers and gate widening, mirroring WF4a-iv's plan-review-stage section
+# above function-for-function, substituted for the implementation stage
+# (`"2.2"`-only -- see `WrongGoverningVersionForImplementationReviewStageError`
+# for why this protocol never applies to `"1"`/`"2.1"`, unlike the
+# plan-review protocol, which is `TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed
+# for both). No separate `transition_to_awaiting_local_implementation_review`
+# writer exists: `record_bundle_generation`'s own version-dependent
+# `bundle_generation_target_phase` resolver (further below in this module)
+# is the sole writer for both entries into `AWAITING_LOCAL_IMPLEMENTATION_
+# REVIEW`, first-round and post-fix alike.
+# ---------------------------------------------------------------------------
+
+
+def _require_implementation_review_stage_version(work_item: dict) -> None:
+    """The implementation-stage counterpart of `_require_v2_1_plan_review`:
+    unlike that check (membership in `TWO_STAGE_PLAN_REVIEW_VERSIONS`, both
+    `"2.1"`/`"2.2"`), this ledger's two-stage protocol is `"2.2"`-only, so
+    this is a single-valued equality, never a membership test."""
+    if work_item.get("governing_workflow_version") != "2.2":
+        raise WrongGoverningVersionForImplementationReviewStageError(
+            f"{work_item['work_item_id']}: governing_workflow_version is "
+            f"{work_item.get('governing_workflow_version')!r}, not \"2.2\" -- the "
+            f"two-stage implementation-review protocol applies only to \"2.2\" "
+            f"work items"
+        )
+
+
+def validate_local_implementation_review_preconditions(work_item: dict) -> None:
+    """`/review-implementation`'s resolution/phase preconditions, in its
+    `"2.2"` authoritative role (D-Implementation-Review-Stages): the item
+    must be `"2.2"`-governed and currently at
+    `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`. Bundle/manifest staleness is a
+    separate, generic check (D-Bundle-Manifest, reused unchanged) run by
+    the command itself before this, not duplicated here -- the exact
+    discipline `validate_local_plan_review_preconditions` already
+    follows."""
+    _require_implementation_review_stage_version(work_item)
+    if work_item.get("phase") != "AWAITING_LOCAL_IMPLEMENTATION_REVIEW":
+        raise WrongPhaseForImplementationReviewStageError(
+            f"{work_item['work_item_id']}: phase is {work_item.get('phase')!r}, "
+            f"not \"AWAITING_LOCAL_IMPLEMENTATION_REVIEW\" -- /review-implementation "
+            f"refuses rather than silently re-running (e.g. already completed this "
+            f"round)"
+        )
+
+
+def record_local_implementation_review(
+    state: dict, work_item_id: str, *, verdict: str, bundle_id: str,
+    review_content_id: str, round: int, now: str,
+) -> dict:
+    """`/review-implementation`'s sole state write set in its `"2.2"`
+    authoritative role (D-Implementation-Review-Stages transition table),
+    mirroring `record_local_plan_review` exactly, substituted for the
+    implementation stage:
+
+    - `APPROVE`: records the completed `LOCAL_MODEL_IMPLEMENTATION_REVIEW`
+      stage against `review_content_id` (starting a fresh ledger scoped to
+      this content id) and transitions to
+      `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
+    - `REVISE`: no ledger write; transitions directly to
+      `APPLYING_REVIEW_FEEDBACK` -- unlike the plan side's `REVISING_PLAN`,
+      since this writer already sets that phase directly.
+      `/apply-implementation-review`'s own step 0 then finds `phase`
+      already `APPLYING_REVIEW_FEEDBACK` and skips its own
+      `enter_applying_review_feedback` call under that command's
+      version-independent phase-conditional guard -- not because of a
+      `"1"`/`"2.1"` vs `"2.2"` branch; there is no version branch at step 0
+      any more. Can never reach
+      `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
+    - `BLOCK`: no ledger write, no phase transition -- a true no-op; the
+      returned state is unchanged.
+    """
+    if verdict not in IMPLEMENTATION_REVIEW_VERDICTS:
+        raise UnknownImplementationReviewVerdictError(
+            f"unknown implementation-review verdict: {verdict!r}"
+        )
+    new_state = copy.deepcopy(state)
+    work_item = new_state["work_items"][work_item_id]
+    validate_local_implementation_review_preconditions(work_item)
+
+    if verdict == "APPROVE":
+        work_item["implementation_review_stages"] = {
+            "review_content_id": review_content_id,
+            LOCAL_MODEL_IMPLEMENTATION_REVIEW: {
+                "bundle_id": bundle_id, "verdict": "APPROVE",
+                "round": round, "completed_at": now,
+            },
+            MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW: None,
+        }
+        work_item["phase"] = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+    elif verdict == "REVISE":
+        work_item["phase"] = "APPLYING_REVIEW_FEEDBACK"
+    else:  # BLOCK
+        return state
+
+    work_item["state_revision"] = work_item.get("state_revision", 1) + 1
+    work_item["last_transition"] = now
+    _validate_implementation_review_stages(work_item)
+    return new_state
+
+
+def validate_manual_implementation_review_preconditions(
+    work_item: dict, *, current_review_content_id: str, feedback_role: str,
+    feedback_review_content_id: str,
+) -> None:
+    """`/record-manual-implementation-review`'s resolution/phase/role/
+    staleness/invariant preconditions (D-Implementation-Review-Stages
+    transition table), checked before writing anything -- mirroring
+    `validate_manual_plan_review_preconditions` exactly, substituted for
+    the implementation stage:
+
+    - `"2.2"`-governed and currently at
+      `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
+    - the feedback's declared role is exactly the canonical
+      `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` (rejects a local-role,
+      unlabeled, or any other feedback file) -- reuses
+      `WrongReviewerRoleError`, already stage-agnostic.
+    - the feedback's `review_content_id` matches the current recomputed
+      value -- **hard**, blocks ingestion (reuses `StaleReviewContentIdError`,
+      already stage-agnostic; distinct from the advisory-only `bundle_id`
+      check, `check_manual_stage_bundle_id_advisory`, also reused verbatim
+      and never performed here).
+    - a current `LOCAL_MODEL_IMPLEMENTATION_REVIEW` `APPROVE` is recorded
+      for the same `review_content_id` (restated invariant).
+    - no `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` stage is already recorded
+      against the current `review_content_id` (rejects duplicate
+      ingestion).
+    """
+    _require_implementation_review_stage_version(work_item)
+    if work_item.get("phase") != "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW":
+        raise WrongPhaseForImplementationReviewStageError(
+            f"{work_item['work_item_id']}: phase is {work_item.get('phase')!r}, "
+            f"not \"AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW\""
+        )
+    if feedback_role != MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW:
+        raise WrongReviewerRoleError(
+            f"REVIEW_FEEDBACK.md declares Reviewer role: {feedback_role!r}, "
+            f"expected \"{MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW}\""
+        )
+    if feedback_review_content_id != current_review_content_id:
+        raise StaleReviewContentIdError(
+            f"feedback review_content_id {feedback_review_content_id!r} does not "
+            f"match the current recomputed value {current_review_content_id!r} -- "
+            f"this is a hard block, unlike the manual stage's advisory bundle_id check"
+        )
+    stages = normalize_implementation_review_stages(work_item.get("implementation_review_stages") or {})
+    local = stages.get(LOCAL_MODEL_IMPLEMENTATION_REVIEW)
+    if (
+        stages.get("review_content_id") != current_review_content_id
+        or local is None or local.get("verdict") != "APPROVE"
+    ):
+        raise MissingLocalApprovalForManualImplementationStageError(
+            f"{work_item['work_item_id']}: no current LOCAL_MODEL_IMPLEMENTATION_REVIEW "
+            f"APPROVE recorded for review_content_id {current_review_content_id!r}"
+        )
+    if stages.get(MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW) is not None:
+        raise DuplicateManualImplementationStageIngestionError(
+            f"{work_item['work_item_id']}: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW is "
+            f"already recorded against review_content_id {current_review_content_id!r}"
+        )
+
+
+def record_manual_implementation_review(
+    state: dict, work_item_id: str, *, verdict: str, bundle_id: str, round: int,
+    now: str, current_review_content_id: str, feedback_role: str,
+    feedback_review_content_id: str,
+) -> dict:
+    """`/record-manual-implementation-review`'s sole state write set
+    (D-Implementation-Review-Stages transition table), mirroring
+    `record_manual_plan_review` exactly, substituted for the
+    implementation stage:
+
+    - `APPROVE`: records the completed `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`
+      stage -- including the feedback's own `bundle_id` **verbatim**,
+      regardless of whether it matches the current recomputed one, so the
+      ledger records what the reviewer actually saw -- and transitions to
+      `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, the terminal "ready for
+      approval" phase (reused, not a fresh name -- see
+      `D-Implementation-Review-Version-Activation`'s "terminal-phase
+      naming" decision). Unlike the plan side's own manual-`APPROVE` exit
+      (`AWAITING_PLAN_APPROVAL`, a distinct gate phase from the ledger
+      itself), the implementation side has no separate pre-existing
+      terminal-phase name to promote (the disposition record's own
+      divergence 2), so it reuses the phase name that already existed.
+    - `REVISE`: no ledger write; transitions directly to
+      `APPLYING_REVIEW_FEEDBACK`.
+    - `BLOCK`: no ledger write, no phase transition -- a true no-op; the
+      returned state is unchanged.
+    """
+    if verdict not in IMPLEMENTATION_REVIEW_VERDICTS:
+        raise UnknownImplementationReviewVerdictError(
+            f"unknown implementation-review verdict: {verdict!r}"
+        )
+    new_state = copy.deepcopy(state)
+    work_item = new_state["work_items"][work_item_id]
+    validate_manual_implementation_review_preconditions(
+        work_item, current_review_content_id=current_review_content_id,
+        feedback_role=feedback_role, feedback_review_content_id=feedback_review_content_id,
+    )
+
+    if verdict == "APPROVE":
+        work_item["implementation_review_stages"][MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW] = {
+            "bundle_id": bundle_id, "verdict": "APPROVE",
+            "round": round, "completed_at": now,
+        }
+        work_item["phase"] = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+    elif verdict == "REVISE":
+        work_item["phase"] = "APPLYING_REVIEW_FEEDBACK"
+    else:  # BLOCK
+        return state
+
+    work_item["state_revision"] = work_item.get("state_revision", 1) + 1
+    work_item["last_transition"] = now
+    _validate_implementation_review_stages(work_item)
     return new_state
 
 
@@ -11067,13 +12904,30 @@ def promote_legacy_work_item(
 
     On success: `active_work_item_id` is set to `work_item_id`,
     `governing_workflow_version` transitions `"1"` -> `"2.1"` (an
-    ordinary, auditable version transition, legal only because adoption
-    runs from Workflow v2.1's own completed `/prepare-functional-review`,
-    so the repository default is already `"2.1"` -- resolves
-    `OPUS-R10-011`), and `phase` transitions to `AWAITING_FUNCTIONAL_REVIEW`
-    -- `technical_approval` itself is preserved exactly as imported
-    (`basis: LEGACY_V1`, untouched); adoption changes routing, never the
-    approval record.
+    ordinary, auditable version transition -- resolves `OPUS-R10-011`), and
+    `phase` transitions to `AWAITING_FUNCTIONAL_REVIEW` -- `technical_approval`
+    itself is preserved exactly as imported (`basis: LEGACY_V1`, untouched);
+    adoption changes routing, never the approval record.
+
+    **The `"2.1"` destination is a deliberate literal, corrected
+    workflow-2.5.0 (resolves `LOCAL_MODEL_PLAN_REVIEW` round 6, optional
+    finding 1): never `config["default_workflow_version"]`.** A legacy
+    item adopted here is, by construction, already past both
+    implementation-review stages `D-Implementation-Review-Stages` adds at
+    `"2.2"` -- it was built and reviewed entirely under Workflow v1, then
+    imported with a `LEGACY_V1`-basis `technical_approval` already in hand
+    (`import_legacy_work_item`), so there is no implementation-review round
+    left for it to run through, whatever the repository's own current
+    default version is. Promoting it to the current default instead --
+    even after this repository has separately activated `"2.2"`
+    (`workflow_state_activate`/`WF-Activate`) -- would retroactively assign
+    it a two-stage implementation-review obligation it can never satisfy,
+    since it has no future implementation round left in which to satisfy
+    it. `"2.1"` is therefore always correct: it is the version at which
+    `D-Legacy` phase 2 first became possible, still ahead of
+    `D-Implementation-Review-Stages`' own additional scope, and it names
+    that fact directly rather than deferring to whatever configuration
+    happens to be active at adoption time.
 
     **`artifacts_path` has no default** (salvage audit `I6`): it used to
     default to `fingerprint.DEFAULT_ARTIFACTS_PATH`, `workflow-v2-1-core`'s
@@ -11129,11 +12983,11 @@ def _validate_plan_review_stages(work_item: dict) -> None:
     stages = work_item.get("plan_review_stages")
     if stages is None:
         return
-    if work_item.get("governing_workflow_version") != "2.1":
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
         raise PlanReviewStagesInvalidForVersionError(
             f"{work_item['work_item_id']}: plan_review_stages is non-null but "
             f"governing_workflow_version is {work_item.get('governing_workflow_version')!r}, "
-            f"not \"2.1\""
+            f"not one of {sorted(TWO_STAGE_PLAN_REVIEW_VERSIONS)}"
         )
     stages = normalize_plan_review_stages(stages)
     local = stages.get(LOCAL_MODEL_PLAN_REVIEW)
@@ -11149,6 +13003,45 @@ def _validate_plan_review_stages(work_item: dict) -> None:
                 f"{work_item['work_item_id']}.{stage_name}.verdict is "
                 f"{stage.get('verdict')!r}, expected \"APPROVE\" -- only a completed "
                 f"APPROVE is ever recorded at either stage (GPT-R14-010)"
+            )
+
+
+def _validate_implementation_review_stages(work_item: dict) -> None:
+    """workflow-2.5.0 CP2: the `implementation_review_stages` ledger's own
+    shape check, mirroring `_validate_plan_review_stages` exactly except
+    for its version domain -- this ledger is `"2.2"`-only, never valid for
+    `"2.1"` (unlike `plan_review_stages`, valid for both). CP3's own
+    writers (`record_local_implementation_review`/
+    `record_manual_implementation_review`) are this ledger's sole write
+    path; this validator exists ahead of them, exercised today only by a
+    directly-constructed test fixture, so a shape defect introduced by
+    CP3's writers is caught here from the moment they land, rather than
+    only once a test happens to cover it."""
+    stages = work_item.get("implementation_review_stages")
+    if stages is None:
+        return
+    if work_item.get("governing_workflow_version") != "2.2":
+        raise ImplementationReviewStagesInvalidForVersionError(
+            f"{work_item['work_item_id']}: implementation_review_stages is non-null "
+            f"but governing_workflow_version is "
+            f"{work_item.get('governing_workflow_version')!r}, not \"2.2\""
+        )
+    stages = normalize_implementation_review_stages(stages)
+    local = stages.get(LOCAL_MODEL_IMPLEMENTATION_REVIEW)
+    manual = stages.get(MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW)
+    if manual is not None and local is None:
+        raise ManualImplementationStageWithoutLocalStageError(
+            f"{work_item['work_item_id']}: {MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW} is "
+            f"recorded while {LOCAL_MODEL_IMPLEMENTATION_REVIEW} is absent"
+        )
+    for stage_name, stage in (
+        (LOCAL_MODEL_IMPLEMENTATION_REVIEW, local), (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW, manual),
+    ):
+        if stage is not None and stage.get("verdict") != "APPROVE":
+            raise StageVerdictNotApproveError(
+                f"{work_item['work_item_id']}.{stage_name}.verdict is "
+                f"{stage.get('verdict')!r}, expected \"APPROVE\" -- only a completed "
+                f"APPROVE is ever recorded at either stage"
             )
 
 
@@ -11209,6 +13102,7 @@ def _validate_work_item(work_item_id: str, work_item: dict) -> None:
         )
 
     _validate_plan_review_stages(work_item)
+    _validate_implementation_review_stages(work_item)
     _validate_technical_review_block_pins(work_item)
 
     # I2 (workflow-v2-3-followups continued scope, external cross-model
@@ -11481,3 +13375,598 @@ def validate_worktree_identity(data: dict) -> None:
                 raise CorruptJsonError(
                     f"expected_dirty_paths_by_work_item[{work_item_id!r}] entry has unexpected keys: {entry!r}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# D-Review-Material-Lifecycle's review-material-lifecycle marker
+# (`workflow-2.5.0` CP1 fixes this representation, as one canonical
+# render/parse definition, before `D-Review-Material-Lifecycle` itself
+# exists as a design section -- CP1's own required disposition-record
+# marker must be written in *some* concrete representation, and that
+# representation cannot remain a later checkpoint's decision. CP6 imports
+# and reuses this identical pair for every marker it writes and for its
+# own lint's parsing; it is never re-derived as a second, independent
+# grammar. See `docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s
+# `D-Implementation-Review-Stages` `2.5.0 disposition record` subsection.)
+# ---------------------------------------------------------------------------
+
+REVIEW_MATERIAL_LIFECYCLE_STATES = ("CURRENT", "HISTORICAL")
+
+_REVIEW_MATERIAL_LIFECYCLE_MARKER_RE = re.compile(
+    r"<!--\s*review-material-lifecycle:\s*(CURRENT|HISTORICAL)\s*-->"
+)
+
+
+def render_marker(state: str) -> str:
+    """Render the canonical `review-material-lifecycle` marker for `state`.
+
+    `state` must be exactly one of `REVIEW_MATERIAL_LIFECYCLE_STATES`
+    (`"CURRENT"` or `"HISTORICAL"`). This function's own output bytes are
+    the sole specification of the marker's representation -- every marker
+    any checkpoint writes (CP1's own disposition-record instance, and
+    every marker D-Review-Material-Lifecycle's own marking pass writes)
+    is required to equal `render_marker`'s output for its respective
+    state, never hand-typed independently of it.
+    """
+    if state not in REVIEW_MATERIAL_LIFECYCLE_STATES:
+        raise ValueError(
+            f"render_marker: state must be one of {REVIEW_MATERIAL_LIFECYCLE_STATES}, got {state!r}"
+        )
+    return f"<!-- review-material-lifecycle: {state} -->"
+
+
+def parse_marker(text: str) -> str | None:
+    """Parse a `render_marker` marker out of `text`, or return `None`.
+
+    Returns `"CURRENT"` or `"HISTORICAL"` for a well-formed marker
+    matching `render_marker`'s own output shape exactly; returns `None`
+    for absent, malformed, or out-of-contract input (a mutated delimiter,
+    a third state value, or truncated/duplicated marker text). Callers
+    fail closed on `None` by treating the classification as `CURRENT`
+    (D-Review-Material-Lifecycle's fail-closed default), never as an
+    error: classification can only narrow what a reviewer sees, never
+    silently widen what a reviewer does not see.
+    """
+    matches = _REVIEW_MATERIAL_LIFECYCLE_MARKER_RE.findall(text)
+    if len(matches) != 1:
+        return None
+    state = matches[0]
+    if state not in REVIEW_MATERIAL_LIFECYCLE_STATES:
+        return None
+    return state
+
+
+# ---------------------------------------------------------------------------
+# D-Review-Material-Lifecycle (`workflow-2.5.0` CP6): unit parsing,
+# classification, the marker-presence obligation, the marking pass, the
+# narrative-content check, and the governing-version enumeration sweep. All
+# of this imports and reuses `render_marker`/`parse_marker` above -- never a
+# second, independently-derived grammar. See `docs/ai-workflow/
+# WORKFLOW_V2_PLAN.md`'s `D-Review-Material-Lifecycle` design section.
+# ---------------------------------------------------------------------------
+
+_MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+
+
+class MarkdownUnit:
+    """One Markdown heading-delimited unit: `own_text` is everything
+    between this heading's line and the next heading line at *any* level
+    (never a descendant unit's own text); `full_text` additionally includes
+    every descendant unit, down to the next heading at a level <= this
+    unit's own (or end of document). Classification (`unit_state`) is
+    decided from `own_text` alone, exactly so a nested unit's own marker
+    never gets folded into its container's search."""
+
+    __slots__ = ("level", "heading", "own_text", "full_text", "start_line", "children")
+
+    def __init__(self, level, heading, own_text, full_text, start_line):
+        self.level = level
+        self.heading = heading
+        self.own_text = own_text
+        self.full_text = full_text
+        self.start_line = start_line
+        self.children: list["MarkdownUnit"] = []
+
+
+def parse_markdown_units(text: str) -> list[MarkdownUnit]:
+    """Parse `text` into a flat list of every heading-delimited unit at
+    every level, each carrying its own `MarkdownUnit.children` (the units
+    whose heading is the next thing encountered at a deeper level, before
+    the next heading at <= this unit's level closes it). A document with no
+    heading at all yields an empty list -- callers that need "the whole
+    document" as a single unit when it has no heading of its own handle
+    that case separately (see `document_level_unit`)."""
+    lines = text.splitlines(keepends=True)
+    headings: list[tuple[int, int, str]] = []  # (line_index, level, heading_text)
+    for i, line in enumerate(lines):
+        m = _MARKDOWN_HEADING_RE.match(line.rstrip("\n"))
+        if m:
+            headings.append((i, len(m.group(1)), m.group(2).strip()))
+
+    units: list[MarkdownUnit] = []
+    for idx, (line_i, level, heading) in enumerate(headings):
+        # own_text: up to the very next heading of any level (or EOF).
+        own_end = headings[idx + 1][0] if idx + 1 < len(headings) else len(lines)
+        own_text = "".join(lines[line_i + 1:own_end])
+
+        # full_text: up to the next heading at level <= this one (or EOF).
+        full_end = len(lines)
+        for later_i, later_level, _ in headings[idx + 1:]:
+            if later_level <= level:
+                full_end = later_i
+                break
+        full_text = "".join(lines[line_i:full_end])
+
+        units.append(MarkdownUnit(level, heading, own_text, full_text, line_i))
+
+    # Wire up direct children: the nearest following unit at level+? that is
+    # not itself enclosed by an intervening same-or-shallower unit. Simple
+    # stack-based construction, standard heading-nesting algorithm.
+    stack: list[MarkdownUnit] = []
+    for unit in units:
+        while stack and stack[-1].level >= unit.level:
+            stack.pop()
+        if stack:
+            stack[-1].children.append(unit)
+        stack.append(unit)
+    return units
+
+
+def document_level_unit(text: str) -> MarkdownUnit:
+    """Treat the whole document as a single unit, for a document (like
+    `IMPLEMENTATION_REVIEW_WORKFLOW.md`) whose marker-presence subject is
+    "the whole document" rather than an enumerated set of named sections.
+
+    A document opening with exactly one top-level heading (the ordinary
+    `# Title` case) treats that heading's own `own_text` -- the prose
+    directly under the title, before its first subsection -- as the
+    document-level unit's own text, since that is where the document's own
+    top-of-file marker lives; every subsection below it is a child,
+    classified independently, exactly like any other nested unit. A
+    document with no heading, or more than one top-level heading, falls
+    back to the raw text preceding the first heading (or the whole text,
+    absent any heading)."""
+    units = parse_markdown_units(text)
+    if not units:
+        return MarkdownUnit(0, "(document)", text, text, 0)
+
+    top_level = min(u.level for u in units)
+    roots = [u for u in units if u.level == top_level]
+    if len(roots) == 1:
+        doc = MarkdownUnit(0, "(document)", roots[0].own_text, text, 0)
+        doc.children = roots[0].children
+        return doc
+
+    lines = text.splitlines(keepends=True)
+    own_text = "".join(lines[:units[0].start_line])
+    doc = MarkdownUnit(0, "(document)", own_text, text, 0)
+    doc.children = roots
+    return doc
+
+
+def _first_nonblank_line(text: str) -> str:
+    for line in text.splitlines():
+        if line.strip():
+            return line
+    return ""
+
+
+def unit_state(unit: MarkdownUnit) -> tuple[str, bool]:
+    """`(state, explicit)`: `state` is `parse_marker` of the *first
+    non-blank line* of `unit.own_text` if that line is an explicit marker,
+    else the fail-closed `"CURRENT"` default; `explicit` says which. Never
+    looks at `unit.full_text` or any descendant's own text -- a nested
+    unit's own marker classifies only that nested unit
+    (`D-Review-Material-Lifecycle`'s "Unit and nesting").
+
+    Restricted to the *first* non-blank line, not a search over the whole
+    of `own_text`, precisely so the boundary-redrawing guarantee holds
+    mechanically rather than by convention alone: merging a `CURRENT`
+    region into an adjacent `HISTORICAL`-marked unit by deleting or
+    demoting the heading between them (with no marker edit anywhere in the
+    diff) leaves that unit's own marker no longer the first line of the
+    merged `own_text` -- content from the former `CURRENT` region now
+    precedes it -- so the merge falls to the fail-closed default instead of
+    inheriting the marker its own text still happens to contain deeper
+    in. Every marker this checkpoint or CP1 writes is placed as the first
+    line after its heading for exactly this reason."""
+    marker = parse_marker(_first_nonblank_line(unit.own_text))
+    if marker is not None:
+        return marker, True
+    return "CURRENT", False
+
+
+def find_named_top_level_units(units: list[MarkdownUnit], names: tuple[str, ...]) -> dict[str, MarkdownUnit | None]:
+    """Resolve each of `names` (an exact heading-text prefix, e.g.
+    `"### D-Review-Material-Lifecycle"`'s own heading text without the
+    leading `#`s) to the first top-level unit whose heading starts with it,
+    or `None` if absent. Used for `WORKFLOW_V2_PLAN.md`'s enumerable,
+    registry-named subject set -- never a diff or a cross-corpus match."""
+    stripped_names = [name.lstrip("#").strip() for name in names]
+    result: dict[str, MarkdownUnit | None] = {name: None for name in names}
+    for unit in units:
+        for name, stripped in zip(names, stripped_names):
+            if result[name] is None and unit.heading.startswith(stripped):
+                result[name] = unit
+    return result
+
+
+class MissingLifecycleMarkerError(Exception):
+    """Raised by `check_marker_presence` (or returned as a finding list by
+    its non-raising sibling) naming every in-scope unit with no explicit
+    marker of its own."""
+
+
+def check_marker_presence_whole_document(text: str) -> bool:
+    """`IMPLEMENTATION_REVIEW_WORKFLOW.md`'s own marker-presence subject:
+    the whole document, read as one unit. Returns True iff that unit's own
+    text (excluding every top-level heading's own subtree, each classified
+    independently) carries an explicit marker of either value."""
+    doc = document_level_unit(text)
+    _, explicit = unit_state(doc)
+    return explicit
+
+
+def check_marker_presence_plan_sections(text: str, section_names: tuple[str, ...]) -> list[str]:
+    """`WORKFLOW_V2_PLAN.md`'s own marker-presence subject: each of
+    `section_names` (registry-named top-level `### D-*` headings). Returns
+    the list of names with no explicit marker of their own -- empty when
+    every named section is explicitly marked. A missing name entirely
+    (the section does not exist in `text` at all) is also reported, since
+    an absent registry-named section can never satisfy the obligation."""
+    units = parse_markdown_units(text)
+    resolved = find_named_top_level_units(units, section_names)
+    missing = []
+    for name, unit in resolved.items():
+        if unit is None:
+            missing.append(name)
+            continue
+        _, explicit = unit_state(unit)
+        if not explicit:
+            missing.append(name)
+    return missing
+
+
+_FORBIDDEN_NARRATIVE_RE = re.compile(
+    r"\b(?:corrected|revised|narrowed|widened|reassigned|added)\b[^.\n]{0,120}"
+    r"\brevision\s+\d+\b[^.\n]{0,160}\bfinding\b",
+    re.IGNORECASE,
+)
+
+
+def find_forbidden_narrative(text: str) -> list[str]:
+    """The concrete textual shape `D-Review-Material-Lifecycle`'s
+    narrative-content guarantee forbids inside an explicit-`CURRENT` unit:
+    a "corrected/revised/narrowed/widened/reassigned/added at revision N
+    ... finding X"-shaped sentence. Returns every matched snippet (empty
+    when none found)."""
+    return [m.group(0) for m in _FORBIDDEN_NARRATIVE_RE.finditer(text)]
+
+
+def check_narrative_content(unit: MarkdownUnit) -> list[str]:
+    """Guarantee (vi): asserted only over a unit carrying an *explicit*
+    `CURRENT` marker (never over one `CURRENT` only by the fail-closed
+    default) -- checked over `own_text` plus every descendant unit's
+    `own_text` that is not itself separately, explicitly marked (a
+    descendant with its own explicit marker -- `CURRENT` or `HISTORICAL`
+    -- is a unit of its own, checked independently, never folded into this
+    walk). Returns every forbidden-narrative snippet found; empty means the
+    guarantee holds."""
+    state, explicit = unit_state(unit)
+    if not (explicit and state == "CURRENT"):
+        return []
+
+    findings = list(find_forbidden_narrative(unit.own_text))
+
+    def walk(u: MarkdownUnit) -> None:
+        for child in u.children:
+            _, child_explicit = unit_state(child)
+            if child_explicit:
+                continue  # separately classified unit; not this guarantee's concern
+            findings.extend(find_forbidden_narrative(child.own_text))
+            walk(child)
+
+    walk(unit)
+    return findings
+
+
+def mark_missing_units_current(text: str, section_names: tuple[str, ...]) -> str:
+    """CP6's marking pass: for each of `section_names` present in `text`
+    with no explicit marker of its own, insert `render_marker("CURRENT")`
+    as the first line of its `own_text` (immediately after the heading
+    line, before any other content). Never touches a section that already
+    carries an explicit marker, and never touches any other text. Returns
+    the modified document text unchanged if every named section is already
+    explicitly marked (or absent)."""
+    lines = text.splitlines(keepends=True)
+    units = parse_markdown_units(text)
+    resolved = find_named_top_level_units(units, section_names)
+
+    insertions = []  # (line_index, marker_line) sorted descending so indices stay valid
+    for name, unit in resolved.items():
+        if unit is None:
+            continue
+        _, explicit = unit_state(unit)
+        if explicit:
+            continue
+        # The leading "\n" terminates the heading line itself, so this is
+        # correct whether or not that line already ends in a newline (a
+        # heading that is the file's own last line, unterminated, included).
+        insertions.append((unit.start_line, f"\n{render_marker('CURRENT')}\n"))
+
+    for line_index, marker_block in sorted(insertions, key=lambda t: -t[0]):
+        lines.insert(line_index + 1, marker_block)
+    return "".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Governing-version enumeration sweep: no document may present a bare
+# "2.1" governing-version reference as exhaustive of the two-stage
+# plan-review protocol's own applicability, now that
+# TWO_STAGE_PLAN_REVIEW_VERSIONS = {"2.1", "2.2"}.
+# ---------------------------------------------------------------------------
+
+_EXHAUSTIVE_ENUMERATION_RE = re.compile(
+    r'"1"\s*(?:,|/|\band\b|\bor\b)\s*"2\.1"|"2\.1"\s*(?:,|/|\band\b|\bor\b)\s*"1"'
+)
+_BARE_21_SCOPED_RE = re.compile(
+    r'(?:only[\s-]+`?"2\.1"`?|`?"2\.1"`?[\s-]+only|scoped entirely to\s+`?"2\.1"`?)',
+    re.IGNORECASE,
+)
+_NEGATION_CUE_RE = re.compile(r"\bnot\b|\bnever\b|\bindependent(?:ly|ence)?\b", re.IGNORECASE)
+_CONTEXT_WINDOW = 200
+
+# Both detection forms exist to catch a stale claim about the *two-stage
+# plan-review protocol's own applicability* specifically -- not every
+# unrelated "1"/"2.1" enumeration anywhere in the corpus (the dual-mode
+# implementation-review branches, for instance, correctly distinguish
+# "1"/"2.1" from "2.2" for a wholly different reason: which review contract
+# `/review-implementation` runs, not which items get two-stage plan
+# review). An occurrence counts only when its surrounding context is
+# actually about plan review.
+_PLAN_REVIEW_CONTEXT_RE = re.compile(
+    r"plan[\s_-]*review|plan[\s_-]*approval|AWAITING_(?:LOCAL|MANUAL_EXTERNAL)_PLAN|"
+    r"/review-plan\b|/apply-plan-review\b|/record-manual-plan-review\b|"
+    r"TWO_STAGE_PLAN_REVIEW_VERSIONS",
+    re.IGNORECASE,
+)
+
+
+class GoverningVersionSweepFinding:
+    __slots__ = ("path", "offset", "line", "form", "snippet")
+
+    def __init__(self, path, offset, line, form, snippet):
+        self.path = path
+        self.offset = offset
+        self.line = line
+        self.form = form
+        self.snippet = snippet
+
+    def __repr__(self):
+        return f"GoverningVersionSweepFinding({self.path!r}, line={self.line!r}, form={self.form!r})"
+
+
+WHOLE_DOCUMENT_ALLOWLIST = (
+    "WORKFLOW_V2_3_PLAN.md",
+    "WORKFLOW_V2_3_FOLLOWUPS_PLAN.md",
+    "WORKFLOW_V2_AUDIT.md",
+)
+
+
+def _line_number_at(text: str, offset: int) -> int:
+    return text.count("\n", 0, offset) + 1
+
+
+def _is_allowlisted_occurrence(text: str, offset: int, historical_spans: list[tuple[int, int]]) -> bool:
+    return any(start <= offset < end for start, end in historical_spans)
+
+
+def _historical_spans(text: str) -> list[tuple[int, int]]:
+    """Byte-offset spans of every unit (at any nesting depth) classified
+    `HISTORICAL` -- computed over the unit's *heading line plus* `own_text`,
+    mapped back to the full document, used by the sweep's occurrence-level
+    allowlist. The heading line itself is included in the span (not just
+    the text after it): this corpus authors some headings as a single,
+    very long ATX line whose "rest of the line" carries the bulk of a
+    changelog entry's own prose -- an occurrence sitting inside the heading
+    line's own text must still count as inside that heading's own unit."""
+    lines = text.splitlines(keepends=True)
+    line_offsets = [0]
+    for line in lines:
+        line_offsets.append(line_offsets[-1] + len(line))
+
+    spans: list[tuple[int, int]] = []
+    units = parse_markdown_units(text)
+    for unit in units:
+        state, explicit = unit_state(unit)
+        if explicit and state == "HISTORICAL":
+            heading_start = line_offsets[unit.start_line]
+            own_text_start = line_offsets[unit.start_line + 1] if unit.start_line + 1 < len(line_offsets) else len(text)
+            # own_text runs to the next heading at any level (or EOF); reuse
+            # its length to compute the end offset precisely.
+            end = own_text_start + len(unit.own_text)
+            spans.append((heading_start, end))
+    return spans
+
+
+def find_governing_version_occurrences(
+    path: str, text: str, *, allowlist_whole_document: tuple[str, ...] = WHOLE_DOCUMENT_ALLOWLIST,
+) -> list[GoverningVersionSweepFinding]:
+    """Both detection forms, occurrence-granular, with the sweep's own
+    allowlist applied (whole-document for the three named closed-history
+    documents; occurrence-inside-a-HISTORICAL-unit otherwise). A negated or
+    version-independence assertion near the match is never an occurrence of
+    either form."""
+    basename = os.path.basename(path)
+    if basename in allowlist_whole_document:
+        return []
+
+    historical_spans = _historical_spans(text)
+    findings: list[GoverningVersionSweepFinding] = []
+    for form, pattern in (("exhaustive_enumeration", _EXHAUSTIVE_ENUMERATION_RE), ("bare_21_scoped", _BARE_21_SCOPED_RE)):
+        for m in pattern.finditer(text):
+            window_start = max(0, m.start() - _CONTEXT_WINDOW)
+            window_end = min(len(text), m.end() + _CONTEXT_WINDOW)
+            window = text[window_start:window_end]
+            if not _PLAN_REVIEW_CONTEXT_RE.search(window):
+                continue
+            if _NEGATION_CUE_RE.search(text[max(0, m.start() - 40):m.start()]):
+                continue
+            if form == "bare_21_scoped" and ('"2.2"' in window or '"1"' in window):
+                continue
+            if _is_allowlisted_occurrence(text, m.start(), historical_spans):
+                continue
+            findings.append(
+                GoverningVersionSweepFinding(
+                    path=path, offset=m.start(), line=_line_number_at(text, m.start()),
+                    form=form, snippet=text[max(0, m.start() - 40):m.end() + 40].replace("\n", " "),
+                )
+            )
+    return findings
+
+
+def sweep_governing_version_enumeration(paths_and_texts: dict[str, str]) -> list[GoverningVersionSweepFinding]:
+    """Run `find_governing_version_occurrences` over every `(path, text)`
+    pair. Returns the combined, still-flagged finding list -- empty means
+    the sweep is clean."""
+    findings: list[GoverningVersionSweepFinding] = []
+    for path, text in paths_and_texts.items():
+        findings.extend(find_governing_version_occurrences(path, text))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.5.0 REVISE round 7, Missing-tests item 1 / B1's own negative-
+# corpus sweep: no document may claim `enter_applying_review_feedback` is
+# skipped for a `"2.2"` item as an absolute, version-keyed rule ("`"1"`/
+# `"2.1"` only", "never needs this call", "for it at all", "not called at
+# all", a bare "no `enter_applying_review_feedback` call") without also
+# stating the qualifier that makes the claim true: the skip is
+# phase-conditional, and the `"2.2"` terminal-phase escape *does* call it.
+# Five rounds of point-fixes to this exact prose (rounds 3, 5, 6, and two
+# more instances in round 7 itself) are the evidence this needs a standing
+# sweep rather than another one-off reword.
+# ---------------------------------------------------------------------------
+
+_MARKDOWN_EMPHASIS_STRIP_RE = re.compile(r"[*`]")
+
+
+def _strip_markdown_emphasis(text: str) -> str:
+    """Removes only `*` (bold/italic) and backtick (code-span) markup
+    characters -- deliberately never `_`, which is both Markdown's other
+    emphasis character *and* a literal character inside every snake_case
+    identifier this sweep must keep intact (`enter_applying_review_feedback`
+    itself, `implementation_review_stages`, ...). Round 6's own post-fix
+    grep for the literal substring `"no enter_applying_review_feedback
+    call"` missed round 7's own `makes **no**
+    \\`enter_applying_review_feedback\\` call` for exactly this reason: the
+    bold asterisks and code-span backticks around the words split the
+    substring the naive grep needed intact. Stripping only `*`/backtick
+    (not `_`) fixes that gap without corrupting any identifier."""
+    return _MARKDOWN_EMPHASIS_STRIP_RE.sub("", text)
+
+
+_APPLYING_REVIEW_FEEDBACK_REFERENCE_CUE = "enter_applying_review_feedback"
+
+# Round 7's own two `B1` instances, verbatim once markup is stripped, plus
+# the wordings round 5/6's own instances used -- named directly from round
+# 7's Missing-tests item (a): "the reference cue", (b): "absolute-quantifier
+# cues".
+_APPLYING_REVIEW_FEEDBACK_ABSOLUTE_CUES = (
+    re.compile(r'"1"\s*/\s*"2\.1"\s*only'),
+    re.compile(r"never needs this call"),
+    re.compile(r"for it at all"),
+    re.compile(r"not called at all"),
+    re.compile(r"no\s+enter_applying_review_feedback\s+call"),
+)
+
+# Round 7's Missing-tests item (c): qualifier cues that mean the surrounding
+# claim is the *correct*, scoped statement of the rule, not the superseded
+# absolute one. Deliberately narrower than the Missing-tests item's own
+# suggested list, which also named the bare word "already": round 7's own
+# `B1` instance (1) reads "a `\"2.2\"` item instead arrives at
+# `APPLYING_REVIEW_FEEDBACK` **already** ... so this command makes no ...
+# call for it at all" -- "already" appears in that *false*, absolute claim
+# too, so treating it as a blanket qualifier would silently un-catch the
+# exact instance this sweep exists for. `"finds phase"` (the two-word
+# phrase `MILESTONE_WORKFLOW.md:349`'s correct passage actually uses --
+# "since it finds `phase` already there") is precise enough to keep that
+# true negative without reopening the false-negative "already" causes.
+_APPLYING_REVIEW_FEEDBACK_QUALIFIER_CUES = (
+    "terminal", "escape", "phase-conditional", "finds phase",
+    # `review-implementation.md`'s and `WORKFLOW_V2_1_OPERATOR_REFERENCE.md
+    # :464`'s own correct, narrower claim -- "this one writer's REVISE
+    # branch never itself calls it, because its own only legal source
+    # phase is wrong for this specific branch" -- is true without needing
+    # the terminal-escape caveat: it is not a claim about every "2.2" item
+    # anywhere, only about one writer's one action. Both passages share
+    # this exact phrase.
+    "legal source phase",
+)
+
+_APPLYING_REVIEW_FEEDBACK_CONTEXT_WINDOW = 300
+
+
+class ApplyingReviewFeedbackVersionClaimFinding:
+    __slots__ = ("path", "offset", "line", "snippet")
+
+    def __init__(self, path, offset, line, snippet):
+        self.path = path
+        self.offset = offset
+        self.line = line
+        self.snippet = snippet
+
+    def __repr__(self):
+        return (
+            f"ApplyingReviewFeedbackVersionClaimFinding({self.path!r}, "
+            f"line={self.line!r}, snippet={self.snippet!r})"
+        )
+
+
+def find_applying_review_feedback_version_claims(
+    path: str, text: str,
+) -> list[ApplyingReviewFeedbackVersionClaimFinding]:
+    """Flags every occurrence of an absolute-quantifier cue that (a) sits
+    within `_APPLYING_REVIEW_FEEDBACK_CONTEXT_WINDOW` characters of a
+    reference to `enter_applying_review_feedback` -- so an unrelated "not
+    called at all" elsewhere in the document is never in scope -- and (b)
+    has no qualifier cue anywhere in that same window. Both the cue match
+    and the window are computed over markup-stripped text
+    (`_strip_markdown_emphasis`), so Markdown emphasis/code-span characters
+    between the cue's own words can never defeat the match the way they
+    defeated round 6's literal-substring grep. The window, not a
+    sentence split, is what lets a qualifier stated in the *next* sentence
+    of the same bullet (`WORKFLOW_V2_1_OPERATOR_REFERENCE.md`'s own
+    already-correct `:439`/`:464` passages, where "terminal" sits just
+    outside the sentence carrying the absolute-sounding "no ... call")
+    still suppress the finding."""
+    stripped = _strip_markdown_emphasis(text)
+    findings: list[ApplyingReviewFeedbackVersionClaimFinding] = []
+    for cue_re in _APPLYING_REVIEW_FEEDBACK_ABSOLUTE_CUES:
+        for m in cue_re.finditer(stripped):
+            window_start = max(0, m.start() - _APPLYING_REVIEW_FEEDBACK_CONTEXT_WINDOW)
+            window_end = min(len(stripped), m.end() + _APPLYING_REVIEW_FEEDBACK_CONTEXT_WINDOW)
+            window = stripped[window_start:window_end]
+            if _APPLYING_REVIEW_FEEDBACK_REFERENCE_CUE not in window:
+                continue
+            if any(cue in window.lower() for cue in _APPLYING_REVIEW_FEEDBACK_QUALIFIER_CUES):
+                continue
+            findings.append(
+                ApplyingReviewFeedbackVersionClaimFinding(
+                    path=path, offset=m.start(), line=_line_number_at(stripped, m.start()),
+                    snippet=window.strip(),
+                )
+            )
+    return findings
+
+
+def sweep_applying_review_feedback_version_claims(
+    paths_and_texts: dict[str, str],
+) -> list[ApplyingReviewFeedbackVersionClaimFinding]:
+    """Run `find_applying_review_feedback_version_claims` over every
+    `(path, text)` pair. Returns the combined, still-flagged finding list --
+    empty means the sweep is clean."""
+    findings: list[ApplyingReviewFeedbackVersionClaimFinding] = []
+    for path, text in paths_and_texts.items():
+        findings.extend(find_applying_review_feedback_version_claims(path, text))
+    return findings

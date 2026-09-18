@@ -15,7 +15,38 @@ workflow_state.enter_applying_review_feedback(state, work_item_id, now=<now>))`
 naming the actual phase, unless the work item's current phase is
 `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`) and persisting the returned
 state. Skip this call, and stay silent about phase, for a work item with
-no `docs/ai-workflow/WORKFLOW_STATE.json` entry.
+no `docs/ai-workflow/WORKFLOW_STATE.json` entry. **workflow-2.5.0 (I3,
+round 4): the skip is conditional on the item's own current `phase`, never
+on its `governing_workflow_version`** -- skip this call whenever `phase`
+already equals `APPLYING_REVIEW_FEEDBACK` (a version-independent no-op
+guard), and otherwise call it exactly as stated above, even for a `"2.2"`
+item. For the normal `"2.2"` two-stage loop this is always the skip case:
+`enter_applying_review_feedback`'s own only legal source phase is
+`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, which is never where a `"2.2"`
+item sits when this command is invoked for a `REVISE`/`BLOCK`-turned-`REVISE`
+round from either two-stage writer -- it arrives at
+`APPLYING_REVIEW_FEEDBACK` already, written directly by
+`/review-implementation`'s or `/record-manual-implementation-review`'s own
+`REVISE` branch (`record_local_implementation_review`/
+`record_manual_implementation_review`, mirroring the plan side's own
+`REVISING_PLAN` write), so the call is skipped exactly as a version-keyed
+check would also have skipped it. But a `"2.2"` item that has instead
+reached the *terminal* `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` phase
+(both implementation-review stages already `APPROVE`d, then a late problem
+surfaces and a fix is committed after `/approve-review implementation`
+closed the gate) sits at exactly the phase `enter_applying_review_feedback`'s
+own guard names as legal -- a version-keyed skip stranded that item with no
+in-band way back into `APPLYING_REVIEW_FEEDBACK`, even though
+`MILESTONE_WORKFLOW.md`'s own unqualified "Exit" line for that phase
+documents exactly this path. The phase-conditional check fires the call for
+that item instead, restoring `APPLYING_REVIEW_FEEDBACK` and closing the
+wedge. This command's own step 0 branch below states this explicitly; its
+existing `"1"`/`"2.1"` step-0 dual-mode enumeration stays byte-unchanged,
+correctly (`LOCAL_MODEL_PLAN_REVIEW` round 8, optional finding 3): steps 1-8
+already run identically for `"1"`/`"2.1"` regardless of the two-stage
+*plan*-review protocol, and that stays true verbatim -- the only thing this
+checkpoint widens is which phase this command's own
+`APPLYING_REVIEW_FEEDBACK` entry line above tolerates finding it already in.
 
 `<bundle_dir>`/`<feedback_dir>` below resolve per
 `docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location"
@@ -36,7 +67,23 @@ no `docs/ai-workflow/WORKFLOW_STATE.json` entry.
    (`AWAITING_TECHNICAL_APPROVAL`) is amended only in its naming, per
    `D-Self-Governance`; there is no other version-specific behavior here.
    This step exists so the command's own dual-mode structure is explicit
-   and testable per that enumeration.
+   and testable per that enumeration. **workflow-2.5.0 addition, round-7
+   optional finding 2**: a `"2.2"` item also runs steps 1-8 identically to
+   the above -- the only two things this milestone changes for it are
+   stated at the top of this file (`enter_applying_review_feedback`'s call
+   being conditional on the item's actual `phase` rather than its version,
+   per `I3` above -- in the normal two-stage loop this still means no call,
+   as before; step 7's post-fix regeneration resolves to
+   `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` via `record_bundle_generation`'s
+   own version-dependent `bundle_generation_target_phase` resolver, not a
+   second writer) -- neither changes steps 1-8's own text. Any
+   `governing_workflow_version` other than `"1"`, `"2.1"`, `"2.2"`, or
+   absent (no `WORKFLOW_STATE.json` entry at all): refuse cleanly, naming
+   the actual value -- never guess which of the branches above applies. In
+   practice this refusal branch is unreachable today, since every version
+   this module accepts already runs steps 1-8 identically above; it exists
+   for the same defensive-enumeration reason `/milestone-implement`'s and
+   `/review-implementation`'s own step 0 state it.
 1. Read `<feedback_dir>/REVIEW_FEEDBACK.md`. If it does not exist, stop
    and say so. Validate its binding fields
    (`workflow_fingerprint.parse_review_feedback_binding_fields`/
@@ -100,8 +147,16 @@ no `docs/ai-workflow/WORKFLOW_STATE.json` entry.
    `workflow_state.record_bundle_generation(state, work_item_id,
    stage="post-fix", head=<current HEAD SHA>, now=<now>, outcome=<the
    resolved outcome>)` (`WF4c`, D-Approval-Commits' sole writer of
-   `reviewed_implementation_head`), persist the returned state to
-   `WORKFLOW_STATE.json`, and commit it **alone** — stage exactly that one
+   `reviewed_implementation_head`) -- **workflow-2.5.0**: this call's own
+   target phase is `bundle_generation_target_phase("post-fix",
+   governing_workflow_version)`, `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`
+   for `"1"`/`"2.1"` (byte-identical to before this checkpoint) and
+   `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for `"2.2"` -- a `"2.2"` item's
+   post-fix regeneration re-enters local review, never going straight back
+   to the terminal phase, so both implementation-review stages run again
+   before `/approve-review implementation` is reachable. Persist the
+   returned state to `WORKFLOW_STATE.json`, and commit it **alone** —
+   stage exactly that one
    path (never a broader `git add`) and create one commit carrying, for
    `"ordinary"`, `Workflow-Bundle-Generation-Record:
    <work_item_id>/<implementation_revision>` +

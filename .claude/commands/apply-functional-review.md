@@ -112,8 +112,19 @@ all in the same invocation.
      phase — refusing with `BundleGenerationRequiresStaleTechnicalApprovalError`
      if step 1's write never landed. Never invoke this call with a
      `CURRENT` `technical_approval` still in place. Nothing else makes
-     `/approve-review implementation` reachable again —
-     persist the returned state to `WORKFLOW_STATE.json`, and commit it
+     `/approve-review implementation` reachable again. **workflow-2.5.0
+     (resolves I2)**: for a `"2.2"` item, this call's own target phase is
+     `bundle_generation_target_phase("post-fix", "2.2")` ==
+     `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, never straight back to the
+     terminal `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` -- a `"2.2"`
+     functional-review bounded fix re-enters both implementation-review
+     stages (`/review-implementation` then
+     `/record-manual-implementation-review`) before
+     `/approve-review implementation` is reachable again, exactly as an
+     ordinary post-fix round does for it. For `"1"`/`"2.1"`, the target
+     phase is `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, byte-identical to
+     before this checkpoint. Persist the returned state to
+     `WORKFLOW_STATE.json`, and commit it
      **alone**: stage exactly that one path (never a broader `git add`) and
      create one commit carrying, for `"ordinary"`,
      `Workflow-Bundle-Generation-Record: <work_item_id>/<implementation_revision>`
@@ -215,7 +226,12 @@ all in the same invocation.
      `/record-manual-plan-review <child-id>` (a `"1"`-governed child uses
      `/apply-plan-review <child-id>` instead of those two) →
      `/approve-review plan <child-id>` → `/milestone-implement <child-id>`
-     (× N) → `/review-implementation <child-id>` (optional) →
+     (× N) → `/review-implementation <child-id>` (optional for a `"1"`/
+     `"2.1"` child; a `"2.2"`-governed child instead uses it as the
+     authoritative `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage writer,
+     `workflow-2.5.0`) → `/record-manual-implementation-review <child-id>`
+     (a `"2.2"`-governed child only, mirroring the plan side's own
+     `/record-manual-plan-review`) →
      `/approve-review implementation <child-id>` →
      `/prepare-functional-review <child-id>` → `/review-functional
      <child-id>` (optional) → `/apply-functional-review <child-id>` (only
@@ -229,9 +245,24 @@ all in the same invocation.
      `governing_workflow_version` is `"2.1"` (the config default at
      creation) and at `AWAITING_EXTERNAL_PLAN_REVIEW` when it is `"1"` --
      `publish_plan_revision`'s own version branch, not a special
-     remediation rule. Only `/accept-milestone <child-id>` clears the
+     remediation rule. **workflow-2.5.0**: a `"2.2"` child (the config
+     default once a repository has activated `"2.2"`) enters review at
+     `AWAITING_LOCAL_PLAN_REVIEW` identically to a `"2.1"` child --
+     `publish_plan_revision`'s own `TWO_STAGE_PLAN_REVIEW_VERSIONS` branch
+     covers both, so this is the same code path, not a third one. Only
+     `/accept-milestone <child-id>` clears the
      parent's `IncompleteChildWorkItemError` block, so the parent cannot
      complete until the child does.
+
+     **`workflow-2.4.0` addendum: the child may amend its own plan too.**
+     A remediation child is a work item like any other, so once it reaches
+     `IMPLEMENTING`/`SELF_REVIEWING_IMPLEMENTATION` it may request its own
+     plan amendment on exactly the terms `D-Plan-Amendment-1`/`-2` set for
+     any work item: `/request-plan-amendment <child-id>` followed by
+     `/milestone-plan <child-id>`, re-entering the sanctioned sequence
+     above at its own `/milestone-plan <child-id>` step. This is not a
+     remediation-specific mechanism and grants the child no authority its
+     parent lacks.
 
 5. Commit coherent fixes for any "no code change"/narrative-only findings
    resolved in step 4 (the bounded branch already committed its own fix

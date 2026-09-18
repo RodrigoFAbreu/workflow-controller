@@ -12,14 +12,29 @@ edge list was found short. This script closes that gap for the edges that
 are genuinely closable: the ones provable from `scripts/workflow_state.py`
 alone.
 
+**workflow-v2.4.0 overlay note (plan-amendment-mechanism round 8,
+`XMODEL-R8-B1`):** `claim_checkpoint`'s own publication now runs inside a
+`with state_lock(repo_root):` block (closing the race between
+`request_plan_amendment`'s authoritative `resolve_claim(...)` read and its
+`AMENDING_PLAN` commit -- within one worktree root; see `XMODEL-R9-B1` and
+`docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md`
+for the cross-worktree residual this closure does not reach), which the
+"Guard-bracket nesting" shape already
+generalizes over -- `state_lock` is already one of the five bare
+`fcntl.flock` context managers this shape's own detection walks, so this is
+a new call site of an existing mechanism, not a new detection rule. This
+overlay copy is the one place that new edge, `(2)->(8)`, is declared;
+`docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s own eleven-edge table (this
+overlay's own copy) is this script's evidence source, exactly as before.
+
 **The raw edge set is not uniformly code-derivable, and this script does
-not pretend otherwise.** Ten edges are declared, read fresh from
-`docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s own fenced ten-edge table
+not pretend otherwise.** Eleven edges are declared, read fresh from
+`docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s own fenced eleven-edge table
 (`parse_declared_raw_edges_from_plan` below) rather than duplicated as a
 second hand-maintained Python literal (`OPUS-R120-002`: the prior
 `RAW_EDGES = CODE_DERIVABLE | COMMAND_ORCHESTRATED` definition made the
 union/equality check compare a set against itself -- provably unreachable
-dead code, confirmed by 200 000 randomised trials never firing it). Six
+dead code, confirmed by 200 000 randomised trials never firing it). Seven
 are provable from this module's own AST -- two structural shapes, both
 mechanized below:
 
@@ -29,7 +44,10 @@ mechanized below:
     whose own bodies open guard (6)/(7) and hand the caller a still-open
     lease (5)/(1)) -- every acquisition reachable, transitively through
     same-module calls, from that block's own body is a target of an edge
-    sourced at `G`'s primitive. Produces `(7)->(1)`, `(6)->(5)`, `(6)->(8)`.
+    sourced at `G`'s primitive. Produces `(7)->(1)`, `(6)->(5)`, `(6)->(8)`,
+    and, since round 8 (`XMODEL-R8-B1`), `(2)->(8)` (`claim_checkpoint`'s own
+    `with state_lock(repo_root):` block, reaching `_claim_or_refuse`'s
+    `os.link`).
   - **Manual acquire/release window**: the same relationship, for the two
     places this module hands back a *value* (a lease dict) instead of using
     a context manager -- `lease = acquire_guard(...)` / `release_guard(...,
@@ -64,7 +82,7 @@ itself enforces:
     evidence is the sanctioned `D-Approval-Commits` step 8b procedure, not a
     current production call site -- `(1)->(2)` is tracked in
     `COMMAND_ORCHESTRATED` on that footing, exactly as the other three are on
-    theirs, and is never asked to satisfy the mechanical AST check the six
+    theirs, and is never asked to satisfy the mechanical AST check the seven
     code-derivable edges do.
   - `(5)->(2)`, `(8)->(2)`, `(8)->(3)`: real, live edges (step 1d/1f, per
     `.claude/commands/milestone-implement.md:121-136`), but nothing in
@@ -72,11 +90,11 @@ itself enforces:
     to each other in this order -- that sequencing is the command file's own
     orchestration, external to this module.
 
-**Both directions of equality are checked, for the six code-derivable edges
+**Both directions of equality are checked, for the seven code-derivable edges
 only**: every edge this script's own passes discover is asserted to be one
-of the six declared code-derivable edges (a spurious extra edge fails,
+of the seven declared code-derivable edges (a spurious extra edge fails,
 naming it -- the property `OPUS-R119` asked this arm to have); every one of
-the six declared code-derivable edges is asserted to be rediscovered (a
+the seven declared code-derivable edges is asserted to be rediscovered (a
 declared edge silently going stale -- e.g. a future refactor that moves
 `_establish_or_repair_identity`'s call outside the guard window -- fails
 too). The one shared `os.link` statement in this module
@@ -91,8 +109,8 @@ evidence for the same shared statement -- reproduced below by
 `MUTATION_REMOVE_6_TO_8`/`MUTATION_REMOVE_6_TO_5`, each removing exactly
 one edge's only evidence independently). The four command-orchestrated
 edges are compared, bidirectionally, against the same independently-parsed
-plan table the six code-derivable edges are (`parse_declared_raw_edges_from_plan`),
-never claimed to pass the mechanical AST check the other six do.
+plan table the seven code-derivable edges are (`parse_declared_raw_edges_from_plan`),
+never claimed to pass the mechanical AST check the other seven do.
 
 **Single-attempt precondition, call-chain-aware** (`OPUS-R119-004`,
 tightened by `OPUS-R120-003`): the three `os.link`-based publication entry
@@ -129,14 +147,21 @@ PATHNAME_TO_PRIMITIVE = {canon(v): k for k, v in DECLARED_PRIMITIVES.items()}
 
 # ---------------------------------------------------------------------------
 # The two code-derivable/command-orchestrated tiers this script itself
-# claims responsibility for. The full ten-edge set is never duplicated here
-# as a third literal -- `parse_declared_raw_edges_from_plan` reads it fresh
-# from the plan document instead, so the comparison below has two genuinely
-# independent sides (`OPUS-R120-002`).
+# claims responsibility for. The full eleven-edge set is never duplicated
+# here as a third literal -- `parse_declared_raw_edges_from_plan` reads it
+# fresh from the plan document instead, so the comparison below has two
+# genuinely independent sides (`OPUS-R120-002`).
 # ---------------------------------------------------------------------------
 
 CODE_DERIVABLE = {
     ("7", "1"), ("6", "5"), ("6", "8"), ("8", "6"), ("8", "5"), ("5", "3"),
+    # workflow-v2.4.0, plan-amendment-mechanism round 8, `XMODEL-R8-B1`:
+    # `claim_checkpoint` now publishes inside a `with state_lock(repo_root):`
+    # block, an instance of the same "Guard-bracket nesting" shape the other
+    # six edges above are drawn from -- `state_lock` is already one of the
+    # five bare `fcntl.flock` context managers that shape's own detection
+    # walks, so this is a new call site, not a new detection rule.
+    ("2", "8"),
 }
 
 COMMAND_ORCHESTRATED = {
@@ -147,9 +172,9 @@ BLOCKING_TARGETS = {"2", "3", "4", "6", "7"}  # fcntl.flock primitives
 
 PLAN_PATH = Path(__file__).resolve().parent.parent / "WORKFLOW_V2_PLAN.md"
 
-# The fenced ```text ten-edge table's own opening and closing rows -- stable
-# anchors independent of surrounding prose, so a reorganized or duplicated
-# table is caught (fails closed) rather than silently mis-parsed.
+# The fenced ```text eleven-edge table's own opening and closing rows --
+# stable anchors independent of surrounding prose, so a reorganized or
+# duplicated table is caught (fails closed) rather than silently mis-parsed.
 RAW_EDGE_TABLE_START_ANCHOR = "(7) PLAN_APPROVAL_MUTATION.guardlock"
 RAW_EDGE_TABLE_END_ANCHOR = "(4) identity-gap.lock"
 
@@ -159,7 +184,7 @@ def is_blocking(edge: tuple[str, str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# The independent evidence source for the ten-edge union/equality check:
+# The independent evidence source for the eleven-edge union/equality check:
 # the plan document's own fenced table, parsed fresh from disk each run
 # (`OPUS-R120-002`). Deliberately *not* derived from `CODE_DERIVABLE`/
 # `COMMAND_ORCHESTRATED` -- that was the prior definition's exact defect.
@@ -167,30 +192,31 @@ def is_blocking(edge: tuple[str, str]) -> bool:
 
 
 def parse_declared_raw_edges_from_plan(plan_text: str) -> set[tuple[str, str]]:
-    """The ten-edge table lives in exactly one place in the plan document --
-    a fenced ```text block anchored by its own opening
-    (`PLAN_APPROVAL_MUTATION.guardlock`) and closing (`identity-gap.lock`,
-    the isolated leaf) rows. Read fresh from disk here so the comparison in
-    `compare_to_declared` checks the script's own `CODE_DERIVABLE`/
-    `COMMAND_ORCHESTRATED` constants against a source that is not derived
-    from those same constants. Fails closed, naming the reason, if the
-    anchors are not found exactly once, or if the parsed count is not
-    exactly ten -- an edited or reorganized table must not silently stop
-    being checked against."""
+    """The eleven-edge table (widened from ten, workflow-v2.4.0
+    plan-amendment-mechanism round 8, `XMODEL-R8-B1`, for `(2)->(8)`) lives
+    in exactly one place in the plan document -- a fenced ```text block
+    anchored by its own opening (`PLAN_APPROVAL_MUTATION.guardlock`) and
+    closing (`identity-gap.lock`, the isolated leaf) rows. Read fresh from
+    disk here so the comparison in `compare_to_declared` checks the script's
+    own `CODE_DERIVABLE`/`COMMAND_ORCHESTRATED` constants against a source
+    that is not derived from those same constants. Fails closed, naming the
+    reason, if the anchors are not found exactly once, or if the parsed
+    count is not exactly eleven -- an edited or reorganized table must not
+    silently stop being checked against."""
     blocks = re.findall(r"```text\n(.*?)\n```", plan_text, re.DOTALL)
     candidates = [b for b in blocks
                   if RAW_EDGE_TABLE_START_ANCHOR in b and RAW_EDGE_TABLE_END_ANCHOR in b]
     if len(candidates) != 1:
         raise AssertionError(
-            f"expected exactly one fenced ten-edge table in {PLAN_PATH}, found "
+            f"expected exactly one fenced eleven-edge table in {PLAN_PATH}, found "
             f"{len(candidates)} -- the raw-edge table's anchors have moved or been duplicated"
         )
     block = candidates[0]
     edges = {(m.group(1), m.group(2))
              for m in re.finditer(r"^\((\d)\)[^\n]*?→[^\n]*?\((\d)\)", block, re.MULTILINE)}
-    if len(edges) != 10:
+    if len(edges) != 11:
         raise AssertionError(
-            f"parsed {len(edges)} edges from the plan's ten-edge table, expected exactly 10 "
+            f"parsed {len(edges)} edges from the plan's eleven-edge table, expected exactly 11 "
             f"-- {sorted(edges)}"
         )
     return edges
@@ -579,17 +605,17 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
     undeclared = discovered - CODE_DERIVABLE
     stale = CODE_DERIVABLE - discovered
     if undeclared:
-        failures.append(f"code-discovered edges not among the six declared code-derivable "
+        failures.append(f"code-discovered edges not among the seven declared code-derivable "
                          f"edges: {sorted(undeclared)}")
     if stale:
         failures.append(f"declared code-derivable edges not rediscovered live in the code: "
                          f"{sorted(stale)}")
     if verbose:
-        print(f"\n-- Bidirectional comparison against the six declared code-derivable edges --")
+        print(f"\n-- Bidirectional comparison against the seven declared code-derivable edges --")
         if not failures:
             print(f"  {len(discovered)} discovered == {len(CODE_DERIVABLE)} declared. PASS.")
         print(f"\n-- Tier-2 command-orchestrated edges (not mechanically checked against code; "
-              f"compared bidirectionally against the plan's own independently-parsed ten-edge "
+              f"compared bidirectionally against the plan's own independently-parsed eleven-edge "
               f"table below) --")
         for edge in sorted(COMMAND_ORCHESTRATED):
             print(f"  ({edge[0]}) -> ({edge[1]})  -- declared, command-file-orchestrated or "
@@ -606,7 +632,7 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
     stale_in_script = plan_declared_edges - script_total
     if undeclared_in_plan:
         failures.append(f"script-derived edges (code-discovered ∪ COMMAND_ORCHESTRATED) not "
-                         f"present in the plan's own declared ten-edge table: "
+                         f"present in the plan's own declared eleven-edge table: "
                          f"{sorted(undeclared_in_plan)}")
     if stale_in_script:
         failures.append(f"plan-declared edges not tracked by the script's CODE_DERIVABLE/"
@@ -614,8 +640,8 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
 
     blocking = {e for e in plan_declared_edges if is_blocking(e)}
     non_blocking = plan_declared_edges - blocking
-    if len(blocking) != 6 or len(non_blocking) != 4:
-        failures.append(f"blocking/non-blocking split is not 6/4: "
+    if len(blocking) != 6 or len(non_blocking) != 5:
+        failures.append(f"blocking/non-blocking split is not 6/5: "
                          f"{len(blocking)} blocking, {len(non_blocking)} non-blocking")
     sources = {e[0] for e in blocking}
     targets = {e[1] for e in blocking}
@@ -637,7 +663,7 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
 #     including independently for each of the two edges that share one
 #     `os.link` statement (`OPUS-R120-001`);
 # (b) injecting a spurious nested acquisition must make a NEW edge appear,
-#     and that new edge must not be in the declared six, so the
+#     and that new edge must not be in the declared seven, so the
 #     forward-direction check fails and names it;
 # (c)/(d) the plan-table comparison (`OPUS-R120-002`) is reachable and
 #     non-vacuous in both directions;
@@ -671,7 +697,7 @@ MUTATION_REMOVE_5_TO_3_SECOND_PATH = (
 MUTATION_INJECT_EXTRA_EDGE = (
     # write_worktree_identity: inject a spurious nested `with state_lock(...):`
     # inside the already-open identity_document_lock window -- must surface
-    # a NEW edge, (3)->(2), not among the declared six, and the
+    # a NEW edge, (3)->(2), not among the declared seven, and the
     # forward-direction check must fail, naming it.
     "    full_path = repo_root / path\n"
     "    with identity_document_lock(repo_root):\n"
@@ -767,7 +793,7 @@ def run_regression_checks(base_src: str, plan_declared_edges: set[tuple[str, str
             failures.append(f"mutation (b) base pass unexpectedly failed: {mfail}")
         elif ("3", "2") in discovered:
             cmp_failures = compare_to_declared(discovered, plan_declared_edges, verbose=False)
-            if any("not among the six declared" in f for f in cmp_failures):
+            if any("not among the seven declared" in f for f in cmp_failures):
                 print("regression (b) (inject spurious (3)->(2)): new edge discovered and "
                       "the forward-direction check names it. PASS.")
             else:
@@ -896,10 +922,10 @@ def main() -> int:
             print(f"  - {f}")
         return 1
 
-    print("\nAll checks passed: the six code-derivable raw edges are mechanically "
+    print("\nAll checks passed: the seven code-derivable raw edges are mechanically "
           "rediscovered, exactly, bidirectionally, with the shared os.link statement "
           "attributed caller-aware; the four command-orchestrated edges are compared "
-          "bidirectionally against the plan's own independently-parsed ten-edge table; the "
+          "bidirectionally against the plan's own independently-parsed eleven-edge table; the "
           "single-attempt discriminator is call-chain-aware; the blocking sub-order (six "
           "edges) is acyclic; all required regressions (a missing edge, a spurious extra "
           "edge, each shared-statement edge independently, both plan-table divergence "

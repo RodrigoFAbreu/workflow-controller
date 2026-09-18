@@ -404,6 +404,79 @@ fi
 DIFF_FILE="$BUNDLE_DIR/DIFF.patch"
 git diff "$BASE_SHA" -- . > "$DIFF_FILE"
 
+# --- generated: AMENDMENT_DIFF.patch (workflow-2.4.0, D-Plan-Amendment-5) ---
+# Reviewer-convenience diff of the plan-stage protected paths since the
+# current open amendment's own amendment_base_commit, for a work item whose
+# amendment_history's last entry is still open (resolved_at_plan_revision is
+# still null). Written to $ROOT_DIR/AMENDMENT_DIFF.patch -- a sibling of
+# $BUNDLE_DIR ("current"), never a descendant of it -- so it participates in
+# neither bundle_id nor review_content_id (both walk only $BUNDLE_DIR).
+# Regenerated unconditionally on every plan-stage generation, and deleted
+# when no amendment is open, so a bundle regenerated after the amendment
+# closes never leaves a stale copy sitting next to a fresh "current/". No
+# governing-version awareness -- this applies identically regardless of
+# which of the two plan-review protocols the work item follows.
+#
+# In practice this point is only ever reached once the PLAN_STAGE_BASE_CHECK
+# block above has already resolved this exact work item's plan-stage
+# metadata successfully (which itself requires docs/ai-workflow/
+# WORKFLOW_STATE.json to exist, parse, and carry this work item's entry --
+# any failure there reports "error::" and exits 1 before this point), so an
+# absent or unparseable state file is already provably unreachable here
+# today. The read below is still wrapped defensively (OPUS-R145-004): this
+# block runs unconditionally for every plan-stage generation, including the
+# overwhelming majority of work items that will never amend, so a later,
+# independent change to either guard must not turn a merely
+# reviewer-convenience file into a hard failure for those work items.
+# Only the state-file read/parse above is wrapped (IMPL4-O1 review round:
+# the previous wording here overstated this) -- a failure there degenerates
+# to "no amendment is open" (delete any stale copy, write nothing), the
+# same conservative, fail-toward-absent direction
+# `parse_checkpoint_anchor_spans`'s own non-strict mode already takes for
+# the pre side of this same mechanism. Once `is_open` is True, the branch
+# below (`resolve_plan_stage_metadata`, the `amendment_base_commit` read,
+# the `git diff` subprocess) is *not* similarly wrapped: an exception there
+# propagates out of the heredoc, `python3` exits non-zero, and `set -euo
+# pipefail` (line 19) aborts this entire script -- the same hard-failure
+# path every other unrecovered error in this file already takes, not a
+# silent "no amendment is open" degradation. This is deliberately not
+# widened to a broad `try/except Exception` around the whole branch: a
+# genuine amendment-diff generation failure for a work item that *does*
+# have an open amendment is exactly the class of error a reviewer needs to
+# see, not one this reviewer-convenience file should paper over.
+if [[ "$STAGE" == "plan" ]]; then
+  AMENDMENT_DIFF_FILE="$ROOT_DIR/AMENDMENT_DIFF.patch"
+  PYTHONPATH="$REPO_ROOT/scripts:${PYTHONPATH:-}" python3 - \
+      "$REPO_ROOT" "$WORK_ITEM_ID" "$AMENDMENT_DIFF_FILE" <<'PYEOF'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import workflow_fingerprint as fingerprint
+
+repo_root, work_item_id, out_path = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+state_path = repo_root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+try:
+    state = json.loads(state_path.read_text())
+    work_item = state.get("work_items", {}).get(work_item_id) or {}
+except (OSError, ValueError):
+    work_item = {}
+history = work_item.get("amendment_history") or []
+is_open = bool(history) and history[-1].get("resolved_at_plan_revision") is None
+if is_open:
+    metadata = fingerprint.resolve_plan_stage_metadata(repo_root, work_item_id)
+    base_commit = work_item["amendment_base_commit"]
+    diff = subprocess.run(
+        ["git", "diff", f"{base_commit}..HEAD", "--", *sorted(metadata.protected_paths)],
+        cwd=repo_root, check=True, capture_output=True, text=True,
+    ).stdout
+    out_path.write_text(diff)
+else:
+    out_path.unlink(missing_ok=True)
+PYEOF
+fi
+
 # --- generated: files/ (final copies of changed files, excluding deletions) ---
 rm -rf "$FILES_DIR"
 mkdir -p "$FILES_DIR"
@@ -522,7 +595,20 @@ fi
 # corrupted or truncated in place.
 ARCHIVE="$ROOT_DIR/review-bundle.tar.gz"
 ARCHIVE_TMP="$ARCHIVE.tmp"
-tar -czf "$ARCHIVE_TMP" -C "$ROOT_DIR" current
+# workflow-2.4.0, D-Plan-Amendment-5: bundle AMENDMENT_DIFF.patch into the
+# archive too, conditionally, when present -- otherwise the manual external
+# reviewer, who works exclusively from review-bundle.tar.gz, never sees it.
+# The tarball is a sibling of $BUNDLE_DIR on disk, built by this separate,
+# unhashed step, so this changes nothing about what bundle_id/
+# review_content_id measure. The conditional member is placed *before* the
+# fixed "current" positional argument, and the whole invocation stays on one
+# line, so item 341's frozen regression guard (workflow_fingerprint_
+# generalization_test.py) keeps seeing exactly the property it checks: the
+# archive's positional directory argument is the bare literal "current",
+# never a caller-influenced value -- true here regardless of argument order,
+# since AMENDMENT_DIFF.patch is always this fixed literal name, gated only
+# on its own existence, never on any work-item- or token-derived value.
+tar -czf "$ARCHIVE_TMP" -C "$ROOT_DIR" $(cd "$ROOT_DIR" && [ -f AMENDMENT_DIFF.patch ] && echo AMENDMENT_DIFF.patch) current
 mv -f "$ARCHIVE_TMP" "$ARCHIVE"
 
 # --- closing check (D-Fingerprint-Generalization, GPT-R30-001/003; WFR-67

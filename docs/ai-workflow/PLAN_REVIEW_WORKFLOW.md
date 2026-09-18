@@ -1,4 +1,4 @@
-# Two-Stage Plan-Review Protocol (`governing_workflow_version: "2.1"` only)
+# Two-Stage Plan-Review Protocol (`governing_workflow_version: "2.1"`/`"2.2"` only)
 
 Concise operator guide for the local-then-manual-external plan-review
 protocol. Full design and rationale live in
@@ -11,12 +11,17 @@ Documents the already-reviewed design for operators; it is not itself the
 design (same treatment as `MILESTONE_WORKFLOW.md`/`REVIEW_PROTOCOL.md`) —
 writing or editing this file never changes plan-stage `review_content_id`.
 
-Scoped entirely to `"2.1"` work items. A `"1"` item (including this
-repository's own `workflow-v2-1-core` work item, fixed at `"1"` for its
-entire execution) uses the existing single-stage
-`AWAITING_EXTERNAL_PLAN_REVIEW` → `AWAITING_PLAN_APPROVAL` flow unchanged;
-`/review-plan` and `/record-manual-plan-review` both refuse cleanly if
-invoked against a `"1"` item.
+Scoped entirely to work items whose `governing_workflow_version` is in
+`TWO_STAGE_PLAN_REVIEW_VERSIONS = {"2.1", "2.2"}` (`"2.2"` added by
+`workflow-2.5.0`'s `D-Implementation-Review-Version-Activation` — plan
+review for a `"2.2"` item runs this identical mechanism, unchanged; only the
+later, implementation-stage review this item's plan cannot see is new for
+`"2.2"`, documented in `docs/ai-workflow/IMPLEMENTATION_REVIEW_WORKFLOW.md`).
+A `"1"` item (including this repository's own `workflow-v2-1-core` work
+item, fixed at `"1"` for its entire execution) uses the existing
+single-stage `AWAITING_EXTERNAL_PLAN_REVIEW` → `AWAITING_PLAN_APPROVAL` flow
+unchanged; `/review-plan` and `/record-manual-plan-review` both refuse
+cleanly if invoked against a `"1"` item.
 
 ## Normal flow
 
@@ -63,10 +68,10 @@ Whichever command stops, it states, in its own report:
   external reviewer already did) and never edits the plan. Not a
   user-authority gate — `/approve-review plan` remains the sole approval
   gate, unchanged.
-- **`/apply-plan-review`**: unchanged mechanism, `"2.1"`-only revised exit:
-  after an accepted edit, never self-declares plan readiness — always
-  returns to `AWAITING_LOCAL_PLAN_REVIEW`, requiring a fresh local pass
-  before manual-external review can run again.
+- **`/apply-plan-review`**: unchanged mechanism, `"2.1"`/`"2.2"`-alike
+  revised exit: after an accepted edit, never self-declares plan readiness —
+  always returns to `AWAITING_LOCAL_PLAN_REVIEW`, requiring a fresh local
+  pass before manual-external review can run again.
 
 ## Staleness, in one line
 

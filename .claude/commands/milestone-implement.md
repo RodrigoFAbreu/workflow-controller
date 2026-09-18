@@ -36,6 +36,20 @@ Requires an approved plan (from `/milestone-plan` + `/apply-plan-review`).
      inline exactly as step 1's own replacement is. The `"1"` branch stays
      v1-inert: it performs no `WORKFLOW_STATE.json` read or write beyond
      step 0's own.
+   - **`governing_workflow_version: "2.2"`** (workflow-2.5.0,
+     round-6 plan-review-inheritance widening, `LOCAL_MODEL_PLAN_REVIEW`
+     round 6, finding B1(a)/(c)): takes the identical `"2.1"` branch
+     immediately above -- the resumable, one-checkpoint-per-invocation
+     session model and the checkpoint-vs-wrap-up boundary discipline are
+     entirely independent of which review protocol (single-stage,
+     two-stage plan-only, or two-stage plan-and-implementation) governs
+     this work item's own review stages. This is a distinct item from step
+     4 below's own version-dependent `record_bundle_generation(stage=
+     "implementation")` documentation -- that is about which phase step 4
+     writes; this is about which branch of *this* step selects.
+   - **Any other `governing_workflow_version`** (round-7 optional
+     finding 2): refuse cleanly, naming the actual value -- never guess
+     which branch above applies.
 
 1. For each checkpoint in the approved plan, in order:
    - implement it, following `CLAUDE.md`/`AGENTS.md`/`.github/copilot-instructions.md`/
@@ -271,7 +285,18 @@ dirty-resume rule, `WF2`):
    is available and the plan touches persistence/migrations. Report exactly
    what ran and its real result — never claim a check passed that did not
    run.
-4. Enter `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`:
+4. Enter `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` **for a `"1"`/`"2.1"`
+   item, or `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for a `"2.2"` item**
+   (workflow-2.5.0, `D-Implementation-Review-Stages`; documented here, not a
+   separate writer): the phase this step's own `record_bundle_generation`
+   call below actually writes is
+   `workflow_state.bundle_generation_target_phase("implementation",
+   governing_workflow_version)`'s resolved value -- `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`
+   for `"1"`/`"2.1"` (byte-identical to before this checkpoint) and
+   `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for `"2.2"` -- never a bare
+   hard-coded literal. This section's own heading names the `"1"`/`"2.1"`
+   case for continuity with the rest of this file; the `"2.2"` case is the
+   identical call, resolving differently, not a second code path:
    - if this work item has a `docs/ai-workflow/WORKFLOW_STATE.json` entry:
      **`REJECTED`-bundle refusal, this command's sole assertion, immediately
      preceding `record_bundle_generation`** (`WFR-67`, one of the three

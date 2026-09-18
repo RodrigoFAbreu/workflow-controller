@@ -430,7 +430,16 @@ class TestReviewImplementationCommandStaticConformance(unittest.TestCase):
     def test_frontmatter_has_description_and_argument_hint(self):
         self.assertIn("description:", self.text)
         self.assertIn("argument-hint:", self.text)
-        self.assertIn("state_writer: false", self.text)
+        # workflow-2.5.0: reclassified from `false` to `true` -- this
+        # command is now the authoritative LOCAL_MODEL_IMPLEMENTATION_REVIEW
+        # stage writer for a "2.2" item at
+        # AWAITING_LOCAL_IMPLEMENTATION_REVIEW, so it belongs in
+        # `discover_state_writers`' writer census. The declaration
+        # vocabulary is the closed set `true`/`false`/`"publisher"` (item
+        # 357) -- a "conditional" value is unparseable and fails closed, so
+        # the branch-dependence is documented in `description:` and the
+        # command body instead, never in the machine-read value.
+        self.assertIn("state_writer: true", self.text)
         self.assertIn("review-subject: bundle", self.text)
 
     def test_states_model_independence(self):
@@ -579,6 +588,37 @@ class TestReviewImplementationCommandStaticConformance(unittest.TestCase):
         this check."""
         self.assertIn("MissingRequiredBundleFileError", self.text)
 
+    def test_the_2_2_authoritative_branchs_reviewer_role_and_ledger_key_match_the_code_constant(self):
+        """workflow-2.5.0 REVISE round 2, Missing-tests item 3: nothing
+        previously bound this command file's prose to the constant its own
+        `A6` write set actually uses -- the exact divergence class the
+        self-review found once already (`LOCAL_IMPLEMENTATION_REVIEW` in
+        code vs `LOCAL_MODEL_IMPLEMENTATION_REVIEW` in every document) would
+        still be invisible to `workflow_integration_test.py` today without
+        this. `workflow_acceptance_matrix_test.py`'s real end-to-end suite
+        calls `workflow_state` functions directly, never executing this
+        Markdown contract, so a hand-edited `Reviewer role:` line here (or
+        in `A6`'s own ledger-key reference) would pass everything else in
+        this file silently."""
+        self.assertIn(
+            f"`Reviewer role: {ws.LOCAL_MODEL_IMPLEMENTATION_REVIEW}`", self.text,
+        )
+        self.assertIn(
+            'workflow_state.record_local_implementation_review(state,\n'
+            '      work_item_id, verdict="APPROVE"',
+            self.text,
+        )
+        # The A6 ledger-key/Reviewer-role identity claim itself, restated in
+        # the file's own prose -- proven equal to the real constant, not
+        # merely equal to itself.
+        self.assertEqual(ws.LOCAL_MODEL_IMPLEMENTATION_REVIEW, "LOCAL_MODEL_IMPLEMENTATION_REVIEW")
+        self.assertIn(
+            f"`{ws.LOCAL_MODEL_IMPLEMENTATION_REVIEW}` ledger fields (the `Reviewer role:`\n"
+            "      string above and the ledger's own canonical key are deliberately the\n"
+            "      same one name",
+            self.text,
+        )
+
 
 class TestReviewFunctionalCommandStaticConformance(unittest.TestCase):
     """`workflow-v2-3` CP2's own conformance coverage for the new
@@ -659,25 +699,30 @@ class TestVersion21OnlyCommandsRefuseCleanlyForV1(unittest.TestCase):
     covered at the unit level by `workflow_state_test.py`'s
     `TestRecordLocalPlanReview`/`TestRecordManualPlanReview` classes)."""
 
+    #: workflow-2.5.0: widened from a bare `not "2.1"` check to
+    #: `TWO_STAGE_PLAN_REVIEW_VERSIONS` membership (D-Implementation-
+    #: Review-Version-Activation's inheritance rule) -- both review-plan.md
+    #: and record-manual-plan-review.md share this exact wording up to
+    #: "naming the actual version", after which each file's own reason
+    #: text diverges.
+    _V1_REFUSAL_CONDITION_TEXT = (
+        "if the resolved item's\n   `governing_workflow_version` is not a "
+        "member of\n   `workflow_state.TWO_STAGE_PLAN_REVIEW_VERSIONS` "
+        '(`"2.1"`/`"2.2"`,\n   widened workflow-2.5.0 from a bare `"2.1"` '
+        "check), refuse cleanly,\n   naming the actual version"
+    )
+
     def test_review_plan_states_its_own_v1_refusal_condition_and_reason(self):
         text = _command_text("review-plan.md")
         self.assertIn("**Governing-version guard**", text)
-        self.assertIn(
-            'if the resolved item\'s\n   `governing_workflow_version` is not `"2.1"`, refuse cleanly, naming the\n'
-            '   actual version',
-            text,
-        )
+        self.assertIn(self._V1_REFUSAL_CONDITION_TEXT, text)
         self.assertIn("no local-review stage to run", text)
         self.assertIn("WrongGoverningVersionForPlanReviewStageError", text)
 
     def test_record_manual_plan_review_states_its_own_v1_refusal_condition_and_reason(self):
         text = _command_text("record-manual-plan-review.md")
         self.assertIn("**Governing-version guard**", text)
-        self.assertIn(
-            'if the resolved item\'s\n   `governing_workflow_version` is not `"2.1"`, refuse cleanly, naming the\n'
-            '   actual version',
-            text,
-        )
+        self.assertIn(self._V1_REFUSAL_CONDITION_TEXT, text)
         self.assertIn("WrongGoverningVersionForPlanReviewStageError", text)
 
     def test_both_commands_resolve_work_item_id_the_same_way_before_the_guard_runs(self):
@@ -784,7 +829,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # with no procedure. The algorithm is written once, in the protocol;
     # each command carries a reference, never a restatement. Intentional
     # content change, not a regression.
-    "milestone-plan.md": "23fffdcca909726c89e6d4f348386be0a37683ce097cd8d4af685a4e4b72ebea",
+    "milestone-plan.md": "90cb51b7c0a45fefeeb19b9d300bf7d93f86e167130c4def9df6a852a725f525",
     # milestone-implement.md further updated, OPUS-R129-001: step 1f's
     # checkpoint-completion commit instruction now states explicitly that
     # the Workflow-Checkpoint/Workflow-Work-Item trailer must be the
@@ -799,7 +844,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # closing the gap a fresh Opus review found at this second trailer-
     # write site in an already-corrected file -- intentional content
     # change.
-    "milestone-implement.md": "efb929144f3ba5c5033e522dfcfa48f286502887c548f45fce780f4c72a980ea",
+    "milestone-implement.md": "937cd2b0fd75e87df4317a9567397294c2ff11c555974704387228745b58276f",
     # approve-review.md (WF8c item (c), same-content bundle-generation
     # republication idempotency; further updated WF8c item (b): the
     # trailing caveat naming the dedicated /recover-implementation-provenance
@@ -866,7 +911,34 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # at all) and `verify_post_approval_manifest_match` -- applied to the
     # commit the invocation just created, never retroactively to
     # discovered history. Intentional content change, not a regression.
-    "approve-review.md": "3efde74cddebf89cc7e07f5ddc1359a7b18cbc0aa8fe30ee4e886c8e111abf52",
+    # Updated by `workflow-2.4.0` CP3 (`D-Plan-Amendment-4`): step 4c now
+    # reads pre_registry/pre_plan_text (via load_pre_amendment_snapshot,
+    # open-amendment only) and post_registry/post_plan_text (via a fresh
+    # resolve_plan_stage_metadata call and a working-tree read) and forwards
+    # all four into open_plan_approval_journal. Intentional content change,
+    # not a regression.
+    # Updated by `workflow-2.4.0`'s round-6 implementation-review fix
+    # (`IMPL6-B1`): step 7 now instructs reporting
+    # `amendment_history[-1]["reconciliation_outcome"]`, by id, whenever
+    # this invocation's own plan-stage approval resolved an amendment --
+    # the reconciliation-outcome report `D-Plan-Amendment-4`'s own prose
+    # requires. Intentional content change, not a regression.
+    # Updated by `workflow-2.5.0`'s own SELF_REVIEWING_IMPLEMENTATION pass:
+    # the implementation-stage ledger-check paragraph now names the stage by
+    # its one canonical name, `LOCAL_MODEL_IMPLEMENTATION_REVIEW` -- the same
+    # string the ledger key, the `Reviewer role:` line and every normative
+    # document already use -- instead of the short-form variant the code
+    # originally shipped. Intentional content change, not a regression.
+    # Updated again, round 7's `I1` fix: `technical_approval_gate_reachable`'s
+    # three "2.2" widening parameters are now required (no longer defaulted
+    # to `None`), closing the fail-open gap a caller that omitted
+    # `governing_workflow_version` could hit; step 0's and step 1's prose
+    # now state that this command passes the work item's real
+    # `governing_workflow_version`/`implementation_review_stages`/current
+    # `review_content_id` to that call unconditionally, for every governing
+    # version, rather than only on a `"2.2"` branch. Intentional content
+    # change, not a regression.
+    "approve-review.md": "0ff381aa856ac7a8a0d30c66cbb8204b376922599ae74aa1c02002cafb70a034",
     # accept-milestone.md updated, baseline-freeze correctness fix
     # (OPUS-R129-001): step 6's completion-commit instruction now states
     # the same "trailers must be the commit message's own final paragraph"
@@ -883,7 +955,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # forward instead (finish the checkpoint with /milestone-implement, or
     # route a functional finding through /apply-functional-review's
     # bounded/broad branches) -- intentional content change.
-    "accept-milestone.md": "3d1efc80a42a32164b4a068e8de53ffd3654f63b7a2f9d1aab4b1d35cacf17d3",
+    "accept-milestone.md": "ddf2f49aacd802d831602ac89673a4bba1d65960d4acad13fdad1578d5feff0a",
     # prepare-functional-review.md further updated, baseline-portability
     # correctness fix (OPUS-R129-001): step 3a's checklist-evidence
     # provenance commit instruction now states the same "trailers must be
@@ -898,14 +970,14 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # The commit itself stays -- step 4 reports its identity and
     # /review-functional reads it back -- but the guidance now names only
     # supported next steps -- intentional content change.
-    "prepare-functional-review.md": "e5c918c32daef7c241ba177d09448e7c3bf9b18e0a17493773a39d7e7993b81e",
+    "prepare-functional-review.md": "49480af8183c0f194131018fe0fc1b1296762e734252de5a5cce90f9f8046921",
     # apply-plan-review.md/bootstrap-workflow-v2.md (D-Plan-Revision-Publication,
     # WFR-65): intentional content change, publish_plan_revision wiring.
     # apply-plan-review.md further updated, convergence pass 12 (ledger row
     # `I22`): step 5 now names the `render_registry_markdown` re-embed the
     # plan document's generated checkpoint table owes whenever the registry
     # is regenerated. Intentional content change, not a regression.
-    "apply-plan-review.md": "93e7f23ec703ed006a075b8b809c8aeeb6b6b927a765db401c9310f67e59b6d5",
+    "apply-plan-review.md": "3182ff9a6239e3c4787fc3d0410a5f23daa56df26489c8588e7f71cfaa721a82",
     # apply-implementation-review.md (WF8c item (c)): step 7's
     # record_bundle_generation call site widened to first resolve the
     # outcome (resolve_bundle_generation_outcome) and write the matching
@@ -917,7 +989,18 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # requirement milestone-implement.md/bootstrap-workflow-v2.md/
     # approve-review.md/accept-milestone.md already state -- intentional
     # content change.
-    "apply-implementation-review.md": "0234cd1c6cf698650762711b3569ed5c73e9088ff9adf85501ba821dc0e13b13",
+    # apply-implementation-review.md further updated, round-4 implementation
+    # review fix (I3): the preamble's "workflow-2.5.0, "2.2"-governed items
+    # only: skip this call too" wording is replaced with a phase-conditional
+    # rule ("skip this call whenever phase already equals
+    # APPLYING_REVIEW_FEEDBACK", version-independent) so a "2.2" item that
+    # reaches the terminal AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW phase
+    # (both implementation-review stages already APPROVEd, then a late fix
+    # is committed) can still call enter_applying_review_feedback and
+    # re-enter APPLYING_REVIEW_FEEDBACK -- the version-keyed wording left
+    # that item with no in-band escape. Step 0's own dual-mode enumeration
+    # updated to match. Intentional content change, not a regression.
+    "apply-implementation-review.md": "fd47b646eeb4d557e51f42c6fc39d8393490cd1496a5093f47c8f1d558c4c1b4",
     # review-plan.md/record-manual-plan-review.md further updated,
     # workflow-v2-3-followups CP3 (REQ-8/-9): the `Reviewer role:` template
     # literal, the round-computation prose, the exact-match-expectation
@@ -931,8 +1014,17 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # `review_content_id` they recompute; both now reference
     # `REVIEW_PROTOCOL.md`'s "Computing `review_content_id`". Intentional
     # content change, not a regression.
-    "review-plan.md": "20603d29b085c93cc31a5597e5951146a453a6a9a1edfa16b0046ffdedd86402",
-    "record-manual-plan-review.md": "e0b27966cca274ff09722179903ae631ff4ae979b2c9e1adffcea46912c395ab",
+    #
+    # review-plan.md further updated, workflow-2.5.0 REVISE round 2 (I3):
+    # step 8's write set gains the same assert_feedback_not_owned_by_other_
+    # work_item ownership guard /review-implementation's advisory branch
+    # step 7 already runs immediately before its own write -- this command
+    # had never had it, and its write is exactly as capable of destroying
+    # another work item's unconsumed feedback at the same scoped-else-flat
+    # `resolve_feedback_dir` path -- intentional content change, not a
+    # regression.
+    "review-plan.md": "37d2896320c30e3039e69bd9499c88dd6d60e97bfb1189af7d35737719a831a2",
+    "record-manual-plan-review.md": "63d567f98bf70a39e5b1626fdf0aef37a73725a5bba065f39cf623e9c541995c",
     # bootstrap-workflow-v2.md (WF8c scope clauses (l)/(p)/(q), GPT-R108-002/
     # OPUS-R109-004): the driver-range text made checkpoint-agnostic
     # (OPUS-R102-009), a NO_CHECKPOINT terminal-wrap-up branch added to step
@@ -988,7 +1080,31 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # values, immediately before the write -- so step 6's "hard
     # precondition" wording is now actually enforced -- intentional
     # content change.
-    "review-implementation.md": "a017359a961ac5dc3e9cee1c3c2f8265e38f924f1af2cdbe984b381f79f4de6a",
+    #
+    # review-implementation.md further updated, workflow-2.5.0 CP11/CP13:
+    # the "2.2" authoritative LOCAL_MODEL_IMPLEMENTATION_REVIEW branch and
+    # its State-writer discipline paragraph, with the frontmatter
+    # declaration reclassified `false` -> `true` (CP13: CP11 had written an
+    # unparseable `conditional` value, which `discover_state_writers` fails
+    # closed on -- see that paragraph's own "Why the frontmatter declares
+    # state_writer: true" note) -- intentional content change.
+    #
+    # review-implementation.md further updated by `workflow-2.5.0`'s own
+    # SELF_REVIEWING_IMPLEMENTATION pass: step A6's parenthetical no longer
+    # reconciles two names for the local stage -- the ledger key and the
+    # `Reviewer role:` string are now the identical
+    # `LOCAL_MODEL_IMPLEMENTATION_REVIEW`, as the approved plan and every
+    # normative document already declared -- intentional content change.
+    #
+    # review-implementation.md further updated, workflow-2.5.0 REVISE round 2
+    # (I3): the "2.2" authoritative branch's A6 write set gains the same
+    # assert_feedback_not_owned_by_other_work_item ownership guard the
+    # "1"/"2.1" advisory branch's own step 7 already runs immediately before
+    # its write -- A6's write is exactly as capable of destroying another
+    # work item's unconsumed feedback at the same scoped-else-flat path, and
+    # the advisory branch above stays byte-unchanged -- intentional content
+    # change, not a regression.
+    "review-implementation.md": "df6de5ba869bfee1e6fc31cf7a07932fecb66dbb36b55a906d8d0d4b831caf62",
     # review-functional.md: new, workflow-v2-3 CP2 -- the first recorded
     # hash, not a change.
     #
@@ -997,7 +1113,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # /accept-milestone`/`/accept-scoped-remediation` as a pair; the second
     # is retired, so both now name /accept-milestone alone -- intentional
     # content change.
-    "review-functional.md": "f6e6cdbc0780d018664dcb2481919f14302eb0776626eeb5e8ade3bad6d7deae",
+    "review-functional.md": "c373a7eb795e433627345b2b098b36a0c1020ddf4f80f804347b58d0ebb207af",
     # apply-functional-review.md (O2, workflow-v2-3-followups REVISE round
     # 2, external cross-model review): this roster's own scope was fixed
     # to "every command file workflow-v2-1-core's own dual-mode
@@ -1045,7 +1161,13 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # them, what each outcome does to the counter, and the two different
     # consequences (withdrawal vs outright refusal). Intentional content
     # change, not a regression.
-    "apply-functional-review.md": "2a8380524d3aad1eb50d87164b84af15a92f8510d3a35a7952f8202c9e338ef6",
+    # Updated by `workflow-2.4.0` CP3 (`D-Plan-Amendment-1`): the broad-
+    # remediation branch's sanctioned child sequence now names
+    # `/request-plan-amendment <child-id>` as an addendum a child may use
+    # once it reaches `IMPLEMENTING`/`SELF_REVIEWING_IMPLEMENTATION`, on the
+    # same terms as its parent. Intentional content change, not a
+    # regression.
+    "apply-functional-review.md": "a29cb42921d9ecadb9cfbc995896ece1a1348d4835eb2619aa385879c3cb21aa",
 }
 
 
@@ -1224,6 +1346,13 @@ _GENERATOR_MENTION_ONLY_COMMANDS = {
         "report-only: names the omitted-id invocation as the documented cause "
         "of a MissingRequiredBundleFileError refusal, and tells the *user* to "
         "regenerate scoped; it never generates anything itself"
+    ),
+    "request-plan-amendment.md": (
+        "workflow-2.4.0, I-R14-2: its own 'what happens next' prose names "
+        "prepare-ai-review.sh to explain that AMENDMENT_DIFF.patch will "
+        "appear in the next plan-stage bundle while this amendment stays "
+        "open -- deliberately phrased without a run/rerun-plus-backticked-"
+        "invocation construction, so it never generates anything itself"
     ),
 }
 
@@ -1692,8 +1821,8 @@ class TestGenerationCommandsNameTheCompleteAuthorInputSet(unittest.TestCase):
 
     def test_no_mention_only_command_instructs_its_own_generation(self):
         """The negative half of the partition, asserted directly rather
-        than inferred from the regex that produced it: neither
-        report-only command tells *itself* to run the generator."""
+        than inferred from the regex that produced it: none of the three
+        report-only commands tells *itself* to run the generator."""
         for filename in _GENERATOR_MENTION_ONLY_COMMANDS:
             with self.subTest(filename=filename):
                 self.assertIsNone(_GENERATOR_RUN_RE.search(_command_text(filename)))
@@ -2321,6 +2450,28 @@ class TestGoldenCommandFileHashes(unittest.TestCase):
                     f"{filename} content changed since this golden hash was recorded -- "
                     f"if intentional, update _GOLDEN_COMMAND_FILE_SHA256",
                 )
+
+
+class TestReconciliationOutcomeReportingConformance(unittest.TestCase):
+    """workflow-2.4.0's round-6 implementation-review fix (`IMPL6-B1`):
+    `D-Plan-Amendment-4`'s own closing requirement --
+
+        Reconciliation's outcome (retained / needs-revalidation / dropped,
+        by id, including which flips came from the dependency-closure
+        pass) is included in `/approve-review plan`'s own output
+
+    -- names an operator-visible report that only a prior round's audit
+    caught as unimplemented despite the requirement appearing verbatim in
+    the shipped `WORKFLOW_V2_PLAN.md`. This is the "single test going red"
+    that finding's own "Architecture and maintainability concerns" section
+    says nothing previously bound the design paragraph to the command
+    text; this class is that binding, mirroring `TestGoldenCommandFileHashes`'s
+    pinned-literal shape rather than trusting prose alone again."""
+
+    def test_approve_review_step_7_instructs_reporting_the_reconciliation_outcome(self):
+        text = _command_text("approve-review.md")
+        self.assertIn("reconciliation_outcome", text)
+        self.assertIn("needs_revalidation_dependency", text)
 
 
 class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
@@ -3181,11 +3332,85 @@ class TestReviewPlanRefusalGoldenHash(unittest.TestCase):
         steps_by_marker = text.split("2. **Governing-version guard**:", 1)
         self.assertEqual(len(steps_by_marker), 2, "review-plan.md's step-2 marker text has changed")
         guard_text = steps_by_marker[1].split("3. **Phase guard**", 1)[0]
+        # workflow-2.5.0: widened from a bare `!= "2.1"` check to
+        # `TWO_STAGE_PLAN_REVIEW_VERSIONS` membership (D-Implementation-
+        # Review-Version-Activation's inheritance rule) -- an intentional
+        # content change, not a regression.
         self.assertEqual(
             hashlib.sha256(guard_text.encode()).hexdigest(),
-            "770935c554e378479890df7b1b4b5d0a14a8c9fa44dab92b12d6fe87504984a1",
+            "f5b22d30b2ee49998b9daceccb968242c5a22a9cbdf412d65e46eec15844d04d",
         )
-        self.assertIn('not `"2.1"`, refuse cleanly, naming the', guard_text)
+        self.assertIn(
+            'not a member of\n   `workflow_state.TWO_STAGE_PLAN_REVIEW_VERSIONS`',
+            guard_text,
+        )
+
+
+class TestReviewPlanStep8OwnershipGuardIsPresent(unittest.TestCase):
+    """workflow-2.5.0 REVISE round 3, Missing-tests item (O4): the prose
+    binding this round added for `review-implementation.md`'s `A6`
+    (`test_the_2_2_authoritative_branchs_reviewer_role_and_ledger_key_match_
+    the_code_constant` above) has no `/review-plan` twin. `review-plan.md`
+    step 8's own ownership guard is pinned only by
+    `TestGoldenCommandFileHashes`' whole-file hash, which moves on *any*
+    edit -- recording that the file changed, never that the guard itself is
+    still in it. This closes that gap with a direct check over the shipped
+    file, mirroring this class' own narrower-than-whole-file style.
+
+    round 4's O4: the first check is a regex tolerant of whitespace/wrapping
+    around the call's own arguments -- pinning the guard's presence and its
+    exact arguments, never the surrounding line-wrap/indentation a harmless
+    prose reflow could otherwise break for a reason unrelated to the guard.
+    The ordering assertion below (matched on the bare function name, already
+    robust) is unchanged and remains the part carrying this test's real
+    value."""
+
+    _GUARD_CALL_RE = re.compile(
+        r"assert_feedback_not_owned_by_other_work_item\(\s*"
+        r"existing_content,\s*work_item_id=work_item_id\s*\)"
+    )
+
+    def test_step_8_calls_the_ownership_guard_before_the_first_write(self):
+        text = _command_text("review-plan.md")
+        step8 = text.split("8. **Write set, exact.**", 1)[1]
+        self.assertRegex(step8, self._GUARD_CALL_RE)
+        # The guard must run before the verdict-branch write set below it,
+        # not after -- the same ordering property I3 (round 2) pinned for
+        # `review-implementation.md`'s `A6`.
+        guard_pos = step8.index("assert_feedback_not_owned_by_other_work_item")
+        first_write_pos = step8.index("`APPROVE`: `REVIEW_FEEDBACK.md`")
+        self.assertLess(guard_pos, first_write_pos)
+
+
+class TestApplyImplementationReviewStep0SkipIsPhaseConditional(unittest.TestCase):
+    """workflow-2.5.0 REVISE round 5, Missing-tests item 1: I3's own prose
+    binding -- that step 0's `enter_applying_review_feedback` skip is keyed
+    on the item's own `phase`, never on its `governing_workflow_version` --
+    was pinned only by `TestGoldenCommandFileHashes`' whole-file hash for
+    `apply-implementation-review.md`, which moves on *any* edit, recording
+    that the file changed, never that the rule itself is still stated
+    correctly. Round 5's own B1 found the shipped design document
+    (`WORKFLOW_V2_PLAN.md`) had gone stale on exactly this rule while the
+    command file itself stayed correct -- pinning the command file's own
+    prose directly, the same way `TestReviewPlanStep8OwnershipGuardIsPresent`
+    pins its own guard, is the mechanism that would have caught the
+    divergence at the design-document layer by forcing an editor back
+    through this test rather than leaving it to whole-file hash movement
+    alone."""
+
+    _PHASE_NOT_VERSION_RE = re.compile(
+        r"skip\s+is\s+conditional\s+on\s+the\s+item's\s+own\s+current\s+"
+        r"`phase`,\s+never\s+on\s+its\s+`governing_workflow_version`"
+    )
+    _SKIP_CONDITION_RE = re.compile(
+        r"skip\s+this\s+call\s+whenever\s+`phase`\s+already\s+equals\s+"
+        r"`APPLYING_REVIEW_FEEDBACK`"
+    )
+
+    def test_step_0_states_the_skip_is_phase_conditional_not_version_conditional(self):
+        text = _command_text("apply-implementation-review.md")
+        self.assertRegex(text, self._PHASE_NOT_VERSION_RE)
+        self.assertRegex(text, self._SKIP_CONDITION_RE)
 
 
 # ---------------------------------------------------------------------------
@@ -5103,17 +5328,40 @@ class TestPlanApprovalStateBlobPinAndMaterialize(unittest.TestCase):
             with self.assertRaises(ws.DirtyIndexBeforeStagingError):
                 ws.pin_plan_approval_state_blob(repo.root, self._expected_bytes(journal))
 
-    def test_pin_raises_when_state_path_absent_at_head(self):
+    def test_pin_defaults_to_mode_100644_when_state_path_absent_at_head(self):
+        """`workflow-2.5.0` CP9 (`v2.3.1-003`,
+        `docs/defects/v2.3.1-003-plan-approval-requires-precommitted-state-file.md`):
+        a `state_path` with no entry at `HEAD` at all -- this repository's
+        own genuinely-first plan approval, before `WORKFLOW_STATE.json` has
+        ever been committed -- no longer raises
+        `PlanApprovalStateBlobUnavailableError` unconditionally. It falls
+        back to mode `100644`, the mode every other tracked path this
+        Workflow ever commits already uses, and the pin succeeds exactly as
+        it would have if that mode had been read from `HEAD`."""
         with h.ScratchRepo() as repo:
             wi = "wi"
             pre_state, record, review_content_id, plan = self._setup(repo, wi)
             journal = self._open_journal(repo, wi, pre_state, record, review_content_id, plan)
+            absent_path = Path("docs/ai-workflow/DOES_NOT_EXIST.json")
+            expected_bytes = self._expected_bytes(journal)
+            # confirms this exercises the fallback branch, not a
+            # coincidental match against an existing HEAD entry
+            self.assertIsNone(ws._blob_mode_and_sha_at_commit(repo.root, "HEAD", str(absent_path)))
 
-            with self.assertRaises(ws.PlanApprovalStateBlobUnavailableError):
-                ws.pin_plan_approval_state_blob(
-                    repo.root, self._expected_bytes(journal),
-                    state_path=Path("docs/ai-workflow/DOES_NOT_EXIST.json"),
-                )
+            blob_sha = ws.pin_plan_approval_state_blob(
+                repo.root, expected_bytes, state_path=absent_path,
+            )
+
+            self.assertIn(len(blob_sha), (40, 64))
+            mode, staged_sha, _stage_num, _path = _run(
+                ["git", "ls-files", "--stage", "--", str(absent_path)], cwd=repo.root,
+            ).split()
+            self.assertEqual(mode, "100644")
+            self.assertEqual(staged_sha, blob_sha)
+            staged_content = subprocess.run(
+                ["git", "show", f":{absent_path}"], cwd=repo.root, capture_output=True, check=True,
+            ).stdout
+            self.assertEqual(staged_content, expected_bytes)
 
     # -- verify staged --------------------------------------------------
 
@@ -6003,13 +6251,32 @@ class TestRetiredScopedRemediationLeavesNoLiveSurface(unittest.TestCase):
         dated record of what was true then, and rewriting it would falsify
         the record. It is left verbatim and immediately followed by a
         dated correction, so the two read as history plus current truth
-        rather than as stale live guidance."""
+        rather than as stale live guidance.
+
+        `workflow-2.5.0` CP9 (`v2.3.1-001`,
+        `docs/defects/v2.3.1-001-host-history-coupled-tests.md`): the note
+        this test looks for is RepFlow's own dated milestone history, never
+        part of any Workflow release's distributed content. A repository
+        that has never carried it (any freshly bootstrapped target) has
+        neither the note nor its correction, and `next(...)` used to raise
+        `StopIteration` there instead of a clean pass/fail. The portable
+        form the defect record itself states is adopted verbatim: look for
+        the note with a default of `None` and skip cleanly when it is
+        absent, rather than treating "no host history at all" the same as
+        "host history present but malformed." A repository that does carry
+        the note (this one; the frozen conformance fixture) is unaffected
+        -- the assertions below still run, and still fail exactly as
+        before when the note is present but its correction is missing or
+        malformed."""
         text = (_repo_root() / "docs/ACTIVE_MILESTONE.md").read_text()
         paragraphs = text.split("\n\n")
         note = next(
-            i for i, p in enumerate(paragraphs)
-            if p.startswith("**Status note (2026-08-04)**")
+            (i for i, p in enumerate(paragraphs)
+             if p.startswith("**Status note (2026-08-04)**")),
+            None,
         )
+        if note is None:
+            self.skipTest("no host status note in this repository")
         correction = paragraphs[note + 1]
         self.assertTrue(correction.startswith("**Correction (2026-08-26)**"), correction[:80])
         self.assertIn("retired", correction)
@@ -6057,13 +6324,16 @@ class TestRetiredScopedRemediationLeavesNoLiveSurface(unittest.TestCase):
         `/accept-scoped-remediation`. Removing that section left 13, plus a
         second, older gap: `workflow-v2-3` added `/review-implementation`
         and `/review-functional` without ever sectioning them here. Both
-        gaps are now closed -- the reference sections all 15 live commands
-        -- and this test derives the expected count from the real files
-        rather than hand-maintaining a number that can go stale again."""
+        gaps are now closed -- `workflow-2.4.0` CP3 added a sixteenth,
+        `/request-plan-amendment` -- and `workflow-2.5.0` CP4 added a
+        seventeenth, `/record-manual-implementation-review` -- the
+        reference sections all 17 live commands -- and this test derives
+        the expected count from the real files rather than hand-maintaining
+        a number that can go stale again."""
         text = (_repo_root() / "docs/ai-workflow/WORKFLOW_V2_1_OPERATOR_REFERENCE.md").read_text()
         sections = re.findall(r"(?m)^### `/([a-z0-9-]+)", text)
         on_disk = sorted(p.stem for p in (_repo_root() / ".claude" / "commands").glob("*.md"))
-        self.assertEqual(len(on_disk), 15)
+        self.assertEqual(len(on_disk), 17)
         self.assertNotIn("accept-scoped-remediation", sections)
         self.assertNotIn("accept-scoped-remediation", on_disk)
         # Every live command has exactly one section, and vice versa.
@@ -6336,6 +6606,14 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         # version-keyed constants are the only such case (asserted by
         # workflow_state_test.TestPersistedPhaseWriterCensus).
         written |= {"AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_EXTERNAL_PLAN_REVIEW"}
+        # workflow-2.5.0: `record_bundle_generation` writes through a call
+        # to `bundle_generation_target_phase(...)`, not a literal or a
+        # local name this regex census follows -- the same kind of
+        # indirection as `publish_plan_revision`'s own two constants
+        # above, resolved the identical way (asserted by
+        # workflow_state_completion_obligations_test.TestNeverPersistedPhaseVocabulary's
+        # own Call-branch AST resolution).
+        written |= {"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}
         self.assertEqual(set(_reference_phase_table("**Persisted phases**")), written)
         self.assertEqual(
             set(_reference_phase_table("**Declared but never written**")),
@@ -6362,6 +6640,9 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
                                            "promote_legacy_work_item"],
             "MILESTONE_COMPLETE": ["complete_work_item"],
             "LEGACY_READY": ["import_legacy_work_item"],
+            "AMENDING_PLAN": ["request_plan_amendment"],
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW": ["record_bundle_generation"],
+            "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": ["record_local_implementation_review"],
         }
         for phase, names in expected.items():
             for name in names:
@@ -6386,12 +6667,20 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
 
     def test_the_state_writer_false_claim_matches_the_frontmatter(self):
         """Finding `A3`: `/prepare-review` was called "the only command with
-        `state_writer: false`". There are three."""
+        `state_writer: false`". There were three -- `workflow-2.5.0`
+        reclassified `/review-implementation`'s own frontmatter from
+        `false` to `true` (it is the authoritative
+        `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage writer for a `"2.2"` item
+        at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`), so exactly two
+        remain."""
         stems = _declared_state_writer_false()
-        self.assertEqual(stems, {"prepare-review", "review-implementation", "review-functional"})
+        self.assertEqual(stems, {"prepare-review", "review-functional"})
         text = _operator_reference_text()
         self.assertNotIn("The only command with\n  `state_writer: false`", text)
-        self.assertIn("One of the three commands\n  declaring `state_writer: false`", text)
+        self.assertIn(
+            "One of the two commands\n  unconditionally declaring `state_writer: false`",
+            text,
+        )
         for stem in sorted(stems - {"prepare-review"}):
             self.assertIn(f"`/{stem}`", text)
 
@@ -6453,7 +6742,7 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         equality is derived; the count is a hardcoded tripwire."""
         text = _operator_reference_text()
         self.assertNotIn("not\nhand-maintained", text)
-        self.assertIn("assertEqual(len(on_disk), 15)", text)
+        self.assertIn("assertEqual(len(on_disk), 16)", text)
         self.assertIn("hardcoded tripwire", text)
         # And the claim it makes about the derivation is itself true.
         sections = re.findall(r"(?m)^### `/([a-z0-9-]+)", text)
@@ -6481,7 +6770,15 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         reference showed it as that version's next state."""
         source = inspect.getsource(ws.record_manual_plan_review)
         self.assertIn("validate_manual_plan_review_preconditions", source)
-        self.assertIn('!= "2.1"', inspect.getsource(ws._require_v2_1_plan_review))
+        # workflow-2.5.0: widened from a bare `!= "2.1"` literal to
+        # `TWO_STAGE_PLAN_REVIEW_VERSIONS` membership (D-Implementation-
+        # Review-Version-Activation's inheritance rule -- a `"2.2"` item
+        # runs the identical two-stage plan-review protocol a `"2.1"` item
+        # does), so the substring this test pins moves with it.
+        self.assertIn(
+            "not in TWO_STAGE_PLAN_REVIEW_VERSIONS",
+            inspect.getsource(ws._require_v2_1_plan_review),
+        )
         text = _operator_reference_text()
         self.assertNotIn("`/apply-plan-review` → `AWAITING_PLAN_APPROVAL`", text)
         self.assertIn("a `\"1\"` item never occupies that phase", text)
@@ -6511,6 +6808,15 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         "state_revision", "technical_approval", "work_item_id",
         "work_item_kind", "work_item_type", "work_items", "worktree_root",
         "test_the_operator_reference_command_count_matches_reality",
+        # workflow-2.4.0, D-Plan-Amendment-3: amendment_history entry/
+        # top-level state field names, not code symbols.
+        "amendment_base_commit", "amendment_history",
+        "pre_amendment_approval_commit",
+        # workflow-2.5.0, D-Implementation-Review-Stages: the implementation-
+        # side mirror of `plan_review_stages`, a state field name, not a
+        # callable; `user_confirmation` is `plan_approval`'s own existing
+        # field, first referenced by name in this release's reference text.
+        "implementation_review_stages", "user_confirmation",
     })
 
     def test_every_code_symbol_the_reference_names_actually_exists(self):
@@ -6536,8 +6842,8 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         self.assertEqual(shadowed, [])
 
     def test_the_enter_the_state_preamble_convention_is_documented_correctly(self):
-        """Re-audit finding `O22`: ten command files open with an `Enter ...`
-        line naming a phase -- inherited v1 wording that
+        """Re-audit finding `O22`: eleven command files open with an
+        `Enter ...` line naming a phase -- inherited v1 wording that
         does not mean the command writes `X` -- which is the root of the
         `FIXING_FUNCTIONAL_FINDINGS` and `AWAITING_TECHNICAL_APPROVAL`
         confusion. The reference's three-way table is checked here against
@@ -6565,8 +6871,9 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
             "accept-milestone", "apply-functional-review",
             "apply-implementation-review", "apply-plan-review",
             "approve-review", "milestone-implement", "milestone-plan",
-            "prepare-functional-review", "record-manual-plan-review",
-            "review-plan",
+            "prepare-functional-review", "record-manual-implementation-review",
+            "record-manual-plan-review",
+            "request-plan-amendment", "review-plan",
         ])
         # Every command with such a preamble appears in the reference's table.
         table = _operator_reference_text().split(

@@ -1,5 +1,5 @@
 ---
-description: Independently review the current plan bundle as the LOCAL_MODEL_PLAN_REVIEW stage of the two-stage plan-review protocol ("2.1" work items only).
+description: Independently review the current plan bundle as the LOCAL_MODEL_PLAN_REVIEW stage of the two-stage plan-review protocol ("2.1"/"2.2" work items).
 argument-hint: "[work-item-id]"
 state_writer: true
 review-subject: bundle
@@ -36,11 +36,15 @@ rule for every stage alike.
    `work_item_id`; otherwise use `active_work_item_id`
    (`docs/ai-workflow/WORKFLOW_STATE.json`).
 2. **Governing-version guard**: if the resolved item's
-   `governing_workflow_version` is not `"2.1"`, refuse cleanly, naming the
-   actual version — `"1"` items have no local-review stage to run; use the
-   existing single-stage `AWAITING_EXTERNAL_PLAN_REVIEW` flow instead
+   `governing_workflow_version` is not a member of
+   `workflow_state.TWO_STAGE_PLAN_REVIEW_VERSIONS` (`"2.1"`/`"2.2"`,
+   widened workflow-2.5.0 from a bare `"2.1"` check), refuse cleanly,
+   naming the actual version — `"1"` items have no local-review stage to run;
+   use the existing single-stage `AWAITING_EXTERNAL_PLAN_REVIEW` flow instead
    (`workflow_state.validate_local_plan_review_preconditions` raises
-   `WrongGoverningVersionForPlanReviewStageError`).
+   `WrongGoverningVersionForPlanReviewStageError`). A `"2.2"` item
+   runs this identical stage: the two-stage plan-review protocol does not
+   distinguish `"2.1"`/`"2.2"`.
 3. **Phase guard**: if the item's `phase` is not
    `AWAITING_LOCAL_PLAN_REVIEW`, refuse cleanly, naming the actual phase —
    including "already completed this round" (`WrongPhaseForPlanReviewStageError`).
@@ -95,7 +99,20 @@ rule for every stage alike.
    the first write below, re-call
    `workflow_fingerprint.assert_bundle_not_rejected(repo_root,
    work_item_id)` — a withdrawal landing between step 5 and here must
-   still be caught.
+   still be caught. **Ownership guard, immediately before the write**
+   (workflow-2.5.0, mirroring `/review-implementation`'s own advisory-branch
+   step 7): resolve `<feedback_dir>` via the existing, unmodified
+   `resolve_feedback_dir(repo_root, work_item_id)`, read whatever
+   `REVIEW_FEEDBACK.md` already sits there (`None` if nothing does), and call
+   `workflow_fingerprint.assert_feedback_not_owned_by_other_work_item(
+   existing_content, work_item_id=work_item_id)` against it — a genuine
+   cross-work-item collision at that scoped-else-flat path (live whenever no
+   scoped `.ai-review/<work_item_id>/feedback/` directory exists yet for this
+   work item) is refused rather than silently overwritten. On a
+   `FeedbackOwnedByOtherWorkItemError` here, stop naming both work item ids;
+   see `/review-implementation`'s own step 7 "Recovery from an ownership
+   refusal" for the disposition (wait for the blocking work item to reach a
+   terminal phase, or judge a dormant/untracked blocker by hand).
    - `APPROVE`: `REVIEW_FEEDBACK.md`, plus — via
      `workflow_state.record_local_plan_review(..., verdict="APPROVE", ...)`
      — the resolved work item's `LOCAL_MODEL_PLAN_REVIEW` ledger fields and

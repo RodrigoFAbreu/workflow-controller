@@ -326,11 +326,31 @@ class TestNeverPersistedPhaseVocabulary(unittest.TestCase):
     def _phases_the_writer_persists() -> "frozenset[str]":
         """Every phase literal `workflow_state.py` assigns, read out of its
         own AST rather than by regex, so a rename or a reflow cannot make
-        this silently under-count. Both shapes are collected: a subscript
-        assignment (`work_item["phase"] = "..."`) and a dict literal entry
-        (`"phase": "..."`), which is how `default_work_item` seeds
-        `PLANNING`."""
+        this silently under-count. Three shapes are collected: a subscript
+        assignment (`work_item["phase"] = "..."`), a dict literal entry
+        (`"phase": "..."`, which is how `default_work_item` seeds
+        `PLANNING`), and (workflow-2.5.0 CP11, D-Implementation-Review-
+        Stages) a subscript assignment whose value is a direct call to a
+        module-level resolver function (`work_item["phase"] =
+        bundle_generation_target_phase(...)`) -- resolved by walking that
+        function's own `return` statements for string-literal values, the
+        same "follow the indirection to its literal source" discipline
+        the existing Name branch already applies to a local variable."""
         tree = ast.parse((Path(ws.__file__)).read_text())
+        functions_by_name = {
+            node.name: node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+        }
+
+        def _return_literals(func: ast.FunctionDef) -> set[str]:
+            literals: set[str] = set()
+            for ret in ast.walk(func):
+                if isinstance(ret, ast.Return) and isinstance(ret.value, ast.Constant):
+                    if isinstance(ret.value.value, str):
+                        literals.add(ret.value.value)
+            return literals
+
         found: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
@@ -362,6 +382,18 @@ class TestNeverPersistedPhaseVocabulary(unittest.TestCase):
                             and isinstance(n.value, ast.Constant)
                             and isinstance(n.value.value, str)
                         )
+                    # `work_item["phase"] = some_resolver(...)`, where the
+                    # called function's own `return` statements are the
+                    # literal source (`bundle_generation_target_phase`).
+                    elif (
+                        isinstance(target, ast.Subscript)
+                        and isinstance(target.slice, ast.Constant)
+                        and target.slice.value == "phase"
+                        and isinstance(node.value, ast.Call)
+                        and isinstance(node.value.func, ast.Name)
+                        and node.value.func.id in functions_by_name
+                    ):
+                        found.update(_return_literals(functions_by_name[node.value.func.id]))
             elif isinstance(node, ast.Dict):
                 for key, value in zip(node.keys, node.values):
                     if (
@@ -372,18 +404,35 @@ class TestNeverPersistedPhaseVocabulary(unittest.TestCase):
                         found.add(value.value)
         return frozenset(found & ws.KNOWN_PHASES)
 
-    #: The thirteen `KNOWN_PHASES` some writer really does persist. Stated
+    #: The fifteen `KNOWN_PHASES` some writer really does persist. Stated
     #: as well as derived, so an under-counting helper cannot quietly grow
     #: the never-persisted set: `AWAITING_EXTERNAL_PLAN_REVIEW` in
     #: particular is only reachable through `publish_plan_revision`'s
     #: `target_phase` indirection, so it is present here exactly when the
-    #: helper's indirect branch works.
+    #: helper's indirect branch works, and (workflow-2.5.0)
+    #: `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` only through
+    #: `record_bundle_generation`'s call to
+    #: `bundle_generation_target_phase`, present here exactly when the
+    #: helper's Call branch works.
     PERSISTED = frozenset({
         "PLANNING", "AWAITING_EXTERNAL_PLAN_REVIEW", "REVISING_PLAN",
         "AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
         "AWAITING_PLAN_APPROVAL", "IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION",
         "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK",
         "AWAITING_FUNCTIONAL_REVIEW", "MILESTONE_COMPLETE", "LEGACY_READY",
+        # workflow-2.4.0, D-Plan-Amendment-1: real and persisted (its sole
+        # writer is `request_plan_amendment`), unlike NEVER_PERSISTED's four.
+        "AMENDING_PLAN",
+        # workflow-2.5.0, D-Implementation-Review-Stages: the two new
+        # "2.2" review-stage phases, both real and persisted --
+        # `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`'s sole writer
+        # (`enter_manual_external_implementation_review`) assigns the
+        # literal directly (its writer is `record_local_implementation_review`'s
+        # `"APPROVE"` branch); `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` is
+        # only ever reached through `record_bundle_generation`'s call to
+        # `bundle_generation_target_phase`.
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+        "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
     })
 
     def test_exactly_four_known_phases_are_never_persisted(self):

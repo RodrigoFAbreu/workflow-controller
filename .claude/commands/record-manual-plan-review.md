@@ -1,5 +1,5 @@
 ---
-description: Ingest an already-pasted manual external reviewer's verdict as the MANUAL_EXTERNAL_PLAN_REVIEW stage of the two-stage plan-review protocol ("2.1" work items only).
+description: Ingest an already-pasted manual external reviewer's verdict as the MANUAL_EXTERNAL_PLAN_REVIEW stage of the two-stage plan-review protocol ("2.1"/"2.2" work items).
 argument-hint: "[work-item-id]"
 state_writer: true
 review-subject: verdict
@@ -43,8 +43,10 @@ rule for every stage alike.
    `work_item_id`; otherwise use `active_work_item_id`
    (`docs/ai-workflow/WORKFLOW_STATE.json`).
 2. **Governing-version guard**: if the resolved item's
-   `governing_workflow_version` is not `"2.1"`, refuse cleanly, naming the
-   actual version (`WrongGoverningVersionForPlanReviewStageError`).
+   `governing_workflow_version` is not a member of
+   `workflow_state.TWO_STAGE_PLAN_REVIEW_VERSIONS` (`"2.1"`/`"2.2"`,
+   widened workflow-2.5.0 from a bare `"2.1"` check), refuse cleanly,
+   naming the actual version (`WrongGoverningVersionForPlanReviewStageError`).
 3. **Phase guard**: if the item's `phase` is not
    `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, refuse cleanly, naming the
    actual phase — including "already ingested this round" and "no local

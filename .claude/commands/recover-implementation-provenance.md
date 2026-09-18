@@ -45,11 +45,29 @@ provenance pointer.
    (`docs/ai-workflow/WORKFLOW_STATE.json`). Refuse cleanly if the item has
    no `WORKFLOW_STATE.json` entry — this command has nothing to recover for
    an item with no tracked round.
-2. **Phase guard**: if the item's `phase` is not
-   `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, stop and say so, naming the
-   actual phase — this is the only legal source phase
-   (`IllegalImplementationProvenanceRecoverySourcePhaseError`). A work item
-   already at one of `record_bundle_generation`'s own legal source phases
+2. **Phase guard**: if the item's `phase` is not a member of
+   `workflow_state.bundle_generation_recovered_role_legal_committed_phases(
+   governing_workflow_version)`, stop and say so, naming the actual phase
+   and the legal set — these are the only legal source phases
+   (`IllegalImplementationProvenanceRecoverySourcePhaseError`). For
+   `"1"`/`"2.1"` this is the single-member set
+   `{AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW}`, byte-identical to before
+   `workflow-2.5.0`. **`workflow-2.5.0` widening (resolves round-4 finding
+   B1)**: for a `"2.2"` item, this is the three-phase set
+   `{AWAITING_LOCAL_IMPLEMENTATION_REVIEW,
+   AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW,
+   AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW}` — every phase a `"2.2"` item
+   can occupy between a generation-record commit `T` and technical
+   approval, since recovery never changes `phase` and so must be invocable
+   from whichever of those three phases the round is currently sitting at.
+   **This command's own guard and
+   `bundle_generation_recovered_role_legal_committed_phases`'s return value
+   are, by construction, the identical set** — stated explicitly rather
+   than left as an inference, since `/approve-review implementation`'s own
+   provenance-interval check validates a recovered-role commit's committed
+   `phase` against that exact function (`workflow-v2-3-followups` continued
+   scope). A work item already at one of `record_bundle_generation`'s own
+   legal source phases
    — still being written (`SELF_REVIEWING_IMPLEMENTATION`/
    `APPLYING_REVIEW_FEEDBACK`), or mid functional-review bounded fix
    (`AWAITING_FUNCTIONAL_REVIEW` with `technical_approval.status ==
@@ -97,9 +115,12 @@ provenance pointer.
    workflow_state.apply_implementation_provenance_recovery(state,
    work_item_id, now=<now>))` (the recovered-role field set: only
    `state_revision`/`last_transition` change — `phase` stays
-   `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` value-unchanged, unlike
+   value-unchanged at whichever of step 2's legal source phases this
+   invocation was run from (`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for
+   `"1"`/`"2.1"`, byte-identical to before `workflow-2.5.0`; any of the
+   three phases in step 2's own widened `"2.2"` set otherwise), unlike
    `record_bundle_generation`'s own legal source phases, every one of
-   which transitions *into* it), persist the returned state, and commit it
+   which transitions *into* one of them), persist the returned state, and commit it
    **alone** — stage exactly `docs/ai-workflow/WORKFLOW_STATE.json` (never
    a broader `git add`) — as the one first-parent child of live HEAD
    (never of `t`; ancestry is never rewritten), carrying exactly three

@@ -47,11 +47,22 @@ Enter the `AWAITING_FUNCTIONAL_REVIEW` state of
     4. On success, persist the returned state to
        `docs/ai-workflow/WORKFLOW_STATE.json`. `active_work_item_id` now
        points at the target, `governing_workflow_version` has transitioned
-       `"1"` → `"2.1"`, and `phase` is now `AWAITING_FUNCTIONAL_REVIEW` —
-       `technical_approval` itself (`basis: LEGACY_V1`) is unchanged.
-       Proceed to step 1 for this same target; do not stop here — adoption
-       is not itself the functional-review checklist, step 1 still runs in
-       this same invocation.
+       `"1"` → `"2.1"` -- **always the literal `"2.1"`, never
+       `config["default_workflow_version"]`, even once a repository has
+       separately activated `"2.2"` as its own default** (`workflow-2.5.0`
+       correction, `LOCAL_MODEL_PLAN_REVIEW` round 6, optional finding 1):
+       a legacy item's adoption target is fixed by what it is adopted
+       *past* (both implementation-review stages, already complete by
+       construction for a legacy import), never by whatever this
+       repository's current default happens to be -- and `phase` is now
+       `AWAITING_FUNCTIONAL_REVIEW` — `technical_approval` itself (`basis:
+       LEGACY_V1`) is unchanged. Proceed to step 1 for this same target; do
+       not stop here — adoption is not itself the functional-review
+       checklist, step 1 still runs in this same invocation. **Steps 1-5
+       below are themselves version-independent** (`workflow-2.5.0`),
+       reachable identically for a `"1"`, `"2.1"`, or `"2.2"` item alike
+       (the newly-adopted `"2.1"` item included) — this command's own
+       checklist-preparation mechanics read no version-gated field.
 1. Confirm the automated verification state is current (rerun only if the
    working tree changed since the last full run in
    `/milestone-implement`/`/apply-implementation-review`).

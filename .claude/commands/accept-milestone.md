@@ -40,8 +40,9 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
    therefore the only way its parent's own
    `IncompleteChildWorkItemError` block below ever clears. Then read that
    work item's `governing_workflow_version` from
-   `docs/ai-workflow/WORKFLOW_STATE.json`. Both `"1"` and `"2.1"` items run
-   steps 1-8 identically, including the new step 2a below —
+   `docs/ai-workflow/WORKFLOW_STATE.json`. `"1"`, `"2.1"`, and
+   (`workflow-2.5.0`) `"2.2"` items alike run steps 1-8 identically,
+   including the new step 2a below —
    `AWAITING_USER_ACCEPTANCE`/`MILESTONE_COMPLETE` gain exactly one shared
    condition from `D-Functional-Remediation`: acceptance blocks while any
    work item names this one as its own `parent_work_item_id` and has not

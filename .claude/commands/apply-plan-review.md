@@ -41,9 +41,21 @@ rule for every stage alike.
    - **`governing_workflow_version: "2.1"`**: steps 1-6 execute identically;
      step 7 is replaced by the revised exit step below — the two-stage
      local-then-manual-external plan-review protocol (`D-Plan-Review-Stages`,
-     `/review-plan`, `/record-manual-plan-review`). This branch is inert for
-     this repository's own work item, which is fixed at `"1"` for its
-     entire execution, but is otherwise fully live.
+     `/review-plan`, `/record-manual-plan-review`). This branch is not, and
+     never was, inert in general (`workflow-2.5.0` correction,
+     `LOCAL_MODEL_PLAN_REVIEW` round 5): it governs every `"2.1"`-governed
+     work item anywhere this Workflow is installed, and this repository now
+     carries two of its own (`plan-amendment-mechanism`,
+     `implementation-review-two-stage`) whose own plan-stage `REVISE`
+     rounds exercise it directly.
+   - **`governing_workflow_version: "2.2"`** (workflow-2.5.0,
+     `D-Implementation-Review-Version-Activation`): takes the identical
+     `"2.1"` branch immediately above -- `TWO_STAGE_PLAN_REVIEW_VERSIONS`
+     already covers both, and the `"2.2"` implementation-review bump
+     changes nothing about the plan-review protocol this command drives.
+   - **Any other `governing_workflow_version`** (round-7 optional
+     finding 2): refuse cleanly, naming the actual value -- never guess
+     which branch above applies.
 1. Read `<feedback_dir>/REVIEW_FEEDBACK.md`. If it does not exist, stop
    and say so — do not proceed on assumed feedback. Validate its binding
    fields (`workflow_fingerprint.parse_review_feedback_binding_fields`/
@@ -132,8 +144,11 @@ rule for every stage alike.
    `AWAITING_PLAN_APPROVAL` is the next state, and stop — do not auto-run
    `/approve-review` or `/milestone-implement`. Only the user invokes
    `/approve-review plan`; let the user decide when to proceed.
-7'. **`governing_workflow_version: "2.1"`, revised exit step** (resolves
-    `GPT-R11-003`/`-007`): this command never self-declares plan readiness,
+7'. **`governing_workflow_version: "2.1"`/`"2.2"`, revised exit step**
+    (resolves `GPT-R11-003`/`-007`; widened workflow-2.5.0 from a bare
+    `"2.1"` check to cover `"2.2"` too -- the identical step, since the
+    plan-review protocol does not distinguish between them): this command
+    never self-declares plan readiness,
     regardless of how large or small a "structural change" judgment would
     call the edit:
     1. the recomputed `review_content_id` already differs from whatever

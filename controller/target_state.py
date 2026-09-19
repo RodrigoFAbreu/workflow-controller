@@ -25,6 +25,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
+from controller.decision import NO_PHASE, NO_PHASE_WIRE
 from controller.errors import (
     AmbiguousWorkItemError,
     MalformedTargetRegistryError,
@@ -83,36 +84,15 @@ KNOWN_PHASES: frozenset[str] = frozenset({
 TERMINAL_PHASES: frozenset[str] = frozenset({"MILESTONE_COMPLETE"})
 
 
-class _NoPhaseType:
-    """The sentinel type of :data:`NO_PHASE`.
-
-    Revision 64 (round 63's B2): the single in-memory value every field
-    that would otherwise need to represent "there is no phase" carries --
-    ``Decision.observed_phase`` for a :data:`NoWorkItemYet` target,
-    ``pre_state.phase``, ``observed_phase_before`` and a job record's
-    ``expected_transition.from``. Never ``None``: ``None`` keeps the one
-    meaning the schema already gives it (an absent optional field) and is
-    never overloaded a second way. ``is``-comparable, deliberately not a
-    plain string -- nothing about a real Workflow phase name should ever
-    compare equal to it.
-    """
-
-    def __repr__(self) -> str:  # pragma: no cover -- diagnostic convenience
-        return "NO_PHASE"
-
-
-#: The single sentinel used everywhere "no phase" needs representing (see
-#: :class:`_NoPhaseType`). Never a Workflow phase, never ``None``.
-NO_PHASE = _NoPhaseType()
-
-#: ``NO_PHASE``'s single durable (JSON) form -- a reserved literal that can
-#: never collide with a real Workflow phase name, since :data:`KNOWN_PHASES`
-#: is a closed set of ``A-Z_`` identifiers none of which begins or ends
-#: with a double underscore. A writer maps ``NO_PHASE -> NO_PHASE_WIRE``
-#: and every real phase to its own name; a reader maps
-#: ``NO_PHASE_WIRE -> NO_PHASE``, any member of :data:`KNOWN_PHASES` to
-#: itself, and anything else to a refusal, never a guess.
-NO_PHASE_WIRE = "__NO_PHASE__"
+#: ``NO_PHASE``/``NO_PHASE_WIRE`` are declared in ``controller.decision``,
+#: not here (revision 71 relocation): ``decision.decide_no_work_item``
+#: needs the same sentinel object CP6/CP7 read back off disk, and
+#: ``decision`` sits *earlier* than ``target_state`` in the dependency
+#: order (``tests/test_package_structure.py``'s ``DEPENDENCY_ORDER``) --
+#: ``target_state`` may import ``decision``, never the reverse. Re-exported
+#: here (``target_state.NO_PHASE``) so every module that reads a target's
+#: Workflow state can reach the one canonical sentinel through this
+#: module's own vocabulary, without a second, divergent instance.
 
 
 class _NoWorkItemYetType:

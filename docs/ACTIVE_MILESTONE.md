@@ -1170,20 +1170,60 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   `tests.test_decision` (CP4) and `tests.test_cli` (CP9), both already red
   before this checkpoint and unaffected by it. Verified by `python3 -m
   unittest tests.test_target_state` (39 tests, all green). `COMPLETE`.
+- `CP4` revalidated: this checkpoint's own plan section *did* change
+  (revision 64's twenty-phase `KNOWN_PHASES` widening, the three new
+  report-only phases `AMENDING_PLAN`/`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`
+  (declined)/`AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` (gate), the
+  seventeen-command-file partition (4 selected + 9 deliberately-not-selected
+  + 4 user-only), the user-only denylist widened from a single
+  guard-literal recogniser to the **union** of that recogniser and a new
+  front-matter `disable-model-invocation: true` recogniser (round 63's
+  `B6` -- `request-plan-amendment.md` and `recover-implementation-provenance.md`
+  each carry only one of the two), and `decide_no_work_item(managed_repo)
+  -> Decision`, the distinct, version-independent sibling entry point for
+  a `NoWorkItemYet` target). `controller/decision.py` and
+  `tests/test_decision.py` were rewritten to match.
+
+  **One cross-checkpoint relocation, forced by the dependency graph**:
+  `NO_PHASE`/`NO_PHASE_WIRE` (declared in `controller/target_state.py` by
+  CP3's own revalidation) had to move into `controller/decision.py`
+  instead, with `target_state.py` now importing and re-exporting them.
+  `decide_no_work_item` is `NO_PHASE`'s first producer and
+  `tests/test_package_structure.py`'s `DEPENDENCY_ORDER` places `decision`
+  strictly *before* `target_state` (`decision` may never import
+  `target_state`, only the reverse) -- so the one canonical sentinel object
+  every `is NO_PHASE` comparison across CP6/CP7 depends on can only be
+  owned by whichever module needs it earliest, which is `decision.py`, not
+  `target_state.py`. `target_state.NO_PHASE is decision.NO_PHASE` is now an
+  asserted property (`tests/test_decision.py`'s
+  `DecideNoWorkItemTest.test_target_state_re_exports_the_same_canonical_sentinel`),
+  and `tests.test_target_state` stays fully green (its own `NO_PHASE`
+  assertions read the re-exported attribute, unaffected by where it is
+  defined).
+
+  Verified by `python3 -m unittest tests.test_decision` (38 tests, all
+  green) and `python3 -m unittest discover -s tests` (356 tests: 2
+  failures, 1 skip -- both failures pre-existing in `tests.test_cli`
+  (`InspectCommandTest`'s stale `"2.3.1"` assertions against the shared
+  fixtures' now-`"2.5.1"` default, CP2's own revalidation already
+  documented these as CP9's residual scope), no errors, no regression
+  against CP1-CP3's own revalidation baseline). `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP4`/`CP4B` onward in registry order (`CP4` depends on `CP3`,
-now satisfied), applying the revision-64/68 Workflow-baseline changes
-(the twenty-known-phase table, the seventeen-command-file/four-user-only-
-command union denylist, `VALIDATED_WORKFLOW_RELEASES`) and wiring
-`decide_no_work_item(managed_repo) -> Decision` as the distinct,
-version-independent sibling entry point for a `NoWorkItemYet` target
-(`observed_phase=NO_PHASE`, action `/milestone-plan` with no
-`work_item_id`) -- never a twenty-first row in `decide()`'s own table --
-where each remaining checkpoint's own plan section now requires them,
-through `CP9` where B1's `worker_outcome` schema mismatch is also fixed,
-before the phase can re-enter `SELF_REVIEWING_IMPLEMENTATION` and a fresh
-implementation-review bundle is generated.
+revalidating `CP4B` onward in registry order (`CP4B` depends on `CP4`, now
+satisfied): `controller/evidence.py`'s own evidence-reading
+disambiguations (feedback role and `Status:`, the checklist trailer, the
+consumed marker, `incomplete_children`, `reviewed_implementation_head`),
+the `HumanGate` plan-stage/implementation-stage `artifact_path`
+resolution, and the `REJECTED`-marker-first override CP4's own
+`_ordinary_case_placeholder`s and static gate reports are still standing
+in for -- then `CP5` through `CP9` in registry order, applying the
+revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
+the `USER_ONLY_COMMANDS` union widened to four, `NO_PHASE`'s round-trip
+schema) where each remaining checkpoint's own plan section now requires
+them, through `CP9` where B1's `worker_outcome` schema mismatch is also
+fixed, before the phase can re-enter `SELF_REVIEWING_IMPLEMENTATION` and a
+fresh implementation-review bundle is generated.
 
 ## Active plan
 

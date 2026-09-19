@@ -19,10 +19,10 @@ from controller import decision, target_state
 from controller.errors import NoSupportedActionError
 from tests import fixtures
 
-#: A hand-copied set of the seventeen phase names, independent of
+#: A hand-copied set of the twenty phase names, independent of
 #: ``decision.KNOWN_PHASES`` itself -- the two-directional equality below
 #: is only meaningful if this copy was typed independently.
-_HAND_COPIED_SEVENTEEN_PHASES = {
+_HAND_COPIED_TWENTY_PHASES = {
     "PLANNING",
     "SELF_REVIEWING_PLAN",
     "AWAITING_EXTERNAL_PLAN_REVIEW",
@@ -40,12 +40,18 @@ _HAND_COPIED_SEVENTEEN_PHASES = {
     "AWAITING_PLAN_APPROVAL",
     "AWAITING_TECHNICAL_APPROVAL",
     "LEGACY_READY",
+    "AMENDING_PLAN",
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
 }
 
-#: The three user-only command file stems, named explicitly rather than
+#: The four user-only command file stems, named explicitly rather than
 #: derived, so the denylist test below has an independent expectation to
 #: check the live derivation against.
-_EXPECTED_USER_ONLY = {"approve-review", "accept-milestone", "recover-implementation-provenance"}
+_EXPECTED_USER_ONLY = {
+    "approve-review", "accept-milestone", "recover-implementation-provenance",
+    "request-plan-amendment",
+}
 
 _EXPECTED_SELECTED = {"milestone-plan", "review-plan", "record-manual-plan-review",
                        "apply-plan-review"}
@@ -53,14 +59,14 @@ _EXPECTED_SELECTED = {"milestone-plan", "review-plan", "record-manual-plan-revie
 _EXPECTED_NOT_SELECTED = {
     "review-implementation", "review-functional", "milestone-implement",
     "apply-implementation-review", "apply-functional-review", "prepare-functional-review",
-    "bootstrap-workflow-v2", "prepare-review",
+    "record-manual-implementation-review", "bootstrap-workflow-v2", "prepare-review",
 }
 
 
 class KnownPhaseSetTest(unittest.TestCase):
-    def test_two_directional_equality_against_hand_copied_seventeen(self) -> None:
-        self.assertEqual(decision.KNOWN_PHASES, _HAND_COPIED_SEVENTEEN_PHASES)
-        self.assertEqual(len(decision.KNOWN_PHASES), 17)
+    def test_two_directional_equality_against_hand_copied_twenty(self) -> None:
+        self.assertEqual(decision.KNOWN_PHASES, _HAND_COPIED_TWENTY_PHASES)
+        self.assertEqual(len(decision.KNOWN_PHASES), 20)
 
     def test_two_directional_equality_against_target_state_known_phases(self) -> None:
         # decision.py must not import target_state (dependency graph), so
@@ -136,13 +142,15 @@ class TableDrivenPhaseDecisionTest(unittest.TestCase):
 
 class ScopeAssertionTest(unittest.TestCase):
     """The scope assertion restated against a subject that can fail (round
-    12's B1): ``automatic=False`` at all five report-only phases,
-    ``automatic=True`` at the six automatic triples -- both directions."""
+    12's B1): ``automatic=False`` at all eight report-only phases (revision
+    64 widens this from five to eight), ``automatic=True`` at the automatic
+    phases -- both directions."""
 
-    REPORT_ONLY_FIVE = {
+    REPORT_ONLY_EIGHT = {
         "IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION",
         "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK",
-        "AWAITING_FUNCTIONAL_REVIEW",
+        "AWAITING_FUNCTIONAL_REVIEW", "AMENDING_PLAN",
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
     }
 
     AUTOMATIC_PHASES = {
@@ -161,9 +169,9 @@ class ScopeAssertionTest(unittest.TestCase):
         work_item = fixtures.build_work_item_view(phase=phase)
         return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
 
-    def test_report_only_five_are_all_non_automatic(self) -> None:
-        self.assertEqual(self.REPORT_ONLY_FIVE, decision.REPORT_ONLY_PHASES)
-        for phase in sorted(self.REPORT_ONLY_FIVE):
+    def test_report_only_eight_are_all_non_automatic(self) -> None:
+        self.assertEqual(self.REPORT_ONLY_EIGHT, decision.REPORT_ONLY_PHASES)
+        for phase in sorted(self.REPORT_ONLY_EIGHT):
             with self.subTest(phase=phase):
                 self.assertFalse(self._decide(phase).automatic)
 
@@ -173,15 +181,16 @@ class ScopeAssertionTest(unittest.TestCase):
                 self.assertTrue(self._decide(phase).automatic)
 
     def test_no_automatic_phase_is_also_report_only(self) -> None:
-        self.assertEqual(set(), self.AUTOMATIC_PHASES & self.REPORT_ONLY_FIVE)
+        self.assertEqual(set(), self.AUTOMATIC_PHASES & self.REPORT_ONLY_EIGHT)
 
 
 class TwoShapeAssertionTest(unittest.TestCase):
-    """Round 10's B1: the three gate-bearing report-only phases yield
-    ``gate=HumanGate(...)``, ``action=None``; ``IMPLEMENTING`` and
-    ``SELF_REVIEWING_IMPLEMENTATION`` yield ``declined=True``, a populated
-    ``action``, ``gate=None``. Neither shape may be reported as the
-    other."""
+    """Round 10's B1, widened by revision 64: the four gate-bearing
+    report-only phases yield ``gate=HumanGate(...)``, ``action=None``; the
+    four declined phases (``IMPLEMENTING``, ``SELF_REVIEWING_IMPLEMENTATION``,
+    ``AMENDING_PLAN``, ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``) yield
+    ``declined=True``, a populated ``action``, ``gate=None``. Neither shape
+    may be reported as the other."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -223,16 +232,17 @@ class TwoShapeAssertionTest(unittest.TestCase):
 
 
 class UserOnlyDenylistTest(unittest.TestCase):
-    """The three-command user-only denylist, derived by the qualified-
-    literal recogniser and asserted two-directionally against a set
-    computed fresh from the real fifteen files at test time."""
+    """The four-command user-only denylist, derived as the union of the
+    qualified-literal recogniser and the front-matter-flag recogniser,
+    asserted two-directionally against a set computed fresh from the real
+    seventeen files at test time."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.commands_dir = fixtures.copy_real_commands_dir(Path(self._tmp.name) / "commands")
 
-    def test_derivation_matches_the_expected_three_exactly(self) -> None:
+    def test_derivation_matches_the_expected_four_exactly(self) -> None:
         derived = decision.derive_user_only_commands(self.commands_dir)
         self.assertEqual(derived, frozenset(_EXPECTED_USER_ONLY))
 
@@ -240,18 +250,42 @@ class UserOnlyDenylistTest(unittest.TestCase):
         derived = decision.derive_user_only_commands(self.commands_dir)
         self.assertIn("recover-implementation-provenance", derived)
 
-    def test_proxy_derivation_from_front_matter_alone_yields_only_two(self) -> None:
-        """Pins the exact gap round 9 found: deriving from
-        ``disable-model-invocation: true`` alone -- not the qualified-
-        literal property -- misses
-        ``recover-implementation-provenance.md``."""
-        proxy_derived = set()
-        for path in self.commands_dir.glob("*.md"):
-            text = path.read_text()
-            if "disable-model-invocation: true" in text:
-                proxy_derived.add(path.stem)
-        self.assertEqual(proxy_derived, {"approve-review", "accept-milestone"})
+    def test_request_plan_amendment_named_explicitly(self) -> None:
+        derived = decision.derive_user_only_commands(self.commands_dir)
+        self.assertIn("request-plan-amendment", derived)
+
+    def test_front_matter_flag_recogniser_alone_yields_three_and_omits_recover(self) -> None:
+        """Pins round 9's own gap: deriving from
+        ``disable-model-invocation: true`` alone misses
+        ``recover-implementation-provenance.md``, which carries only the
+        guard literal."""
+        proxy_derived = {
+            path.stem for path in self.commands_dir.glob("*.md")
+            if decision.carries_disable_model_invocation_flag(path.read_text())
+        }
+        self.assertEqual(
+            proxy_derived, {"approve-review", "accept-milestone", "request-plan-amendment"},
+        )
         self.assertNotEqual(proxy_derived, _EXPECTED_USER_ONLY)
+        self.assertNotIn("recover-implementation-provenance", proxy_derived)
+
+    def test_guard_literal_recogniser_alone_yields_three_and_omits_request_plan_amendment(
+        self,
+    ) -> None:
+        """Pins round 63's ``B6``: deriving from the qualified guard
+        literal alone misses ``request-plan-amendment.md``, which declares
+        itself user-only procedurally and in its front matter, never
+        through a ``workflow_state.validate_...confirmation`` call."""
+        guard_derived = {
+            path.stem for path in self.commands_dir.glob("*.md")
+            if decision.carries_user_confirmation_guard(path.read_text())
+        }
+        self.assertEqual(
+            guard_derived,
+            {"approve-review", "accept-milestone", "recover-implementation-provenance"},
+        )
+        self.assertNotEqual(guard_derived, _EXPECTED_USER_ONLY)
+        self.assertNotIn("request-plan-amendment", guard_derived)
 
     def test_discriminating_false_negative_surface_form_is_still_counted(self) -> None:
         """A guard introduced in a surface form none of the live three use
@@ -300,7 +334,7 @@ class CommandFilePartitionTest(unittest.TestCase):
         classification = decision.classify_command_files(self.commands_dir)
         on_disk = {p.stem for p in self.commands_dir.glob("*.md")}
         self.assertEqual(set(classification), on_disk)
-        self.assertEqual(len(on_disk), 15)
+        self.assertEqual(len(on_disk), 17)
 
         selected = {stem for stem, cat in classification.items()
                     if cat == decision.CATEGORY_SELECTED}
@@ -312,25 +346,57 @@ class CommandFilePartitionTest(unittest.TestCase):
         self.assertEqual(selected, _EXPECTED_SELECTED)
         self.assertEqual(not_selected, _EXPECTED_NOT_SELECTED)
         self.assertEqual(user_only, _EXPECTED_USER_ONLY)
-        self.assertEqual(len(selected) + len(not_selected) + len(user_only), 15)
+        self.assertEqual(len(selected) + len(not_selected) + len(user_only), 17)
+        self.assertEqual(len(selected), 4)
+        self.assertEqual(len(not_selected), 9)
+        self.assertEqual(len(user_only), 4)
         # disjoint by construction: each stem appears in exactly one set
         self.assertEqual(selected & not_selected, set())
         self.assertEqual(selected & user_only, set())
         self.assertEqual(not_selected & user_only, set())
 
-    def test_a_sixteenth_unclassifiable_command_file_fails_the_suite(self) -> None:
+    def test_an_eighteenth_unclassifiable_command_file_fails_the_suite(self) -> None:
         fixtures.write_command_file(
             self.commands_dir, "some-new-command",
-            "A brand-new command file frozen v2.3.1 never shipped, carrying no "
-            "user-confirmation guard and not named in either static set.\n",
+            "A brand-new command file the reference release never shipped, carrying "
+            "no user-confirmation guard, no disable-model-invocation flag, and not "
+            "named in either static set.\n",
         )
         with self.assertRaises(NoSupportedActionError):
             decision.classify_command_files(self.commands_dir)
 
+    def test_front_matter_flag_alone_classifies_a_file_user_only(self) -> None:
+        """A file that carries only the front-matter flag (never the guard
+        literal) is still ``user_only`` -- pins recogniser 2's own half of
+        the union, independent of recogniser 1."""
+        fixtures.write_command_file(
+            self.commands_dir, "synthetic-flag-only",
+            "---\ndescription: synthetic\ndisable-model-invocation: true\n---\n\n"
+            "This command declares itself user-only in its front matter alone.\n",
+        )
+        classification = decision.classify_command_files(self.commands_dir)
+        self.assertEqual(classification["synthetic-flag-only"], decision.CATEGORY_USER_ONLY)
+
+    def test_flag_mentioned_only_in_the_body_is_not_a_declaration(self) -> None:
+        """A file whose body *discusses* the flag -- never its own front
+        matter -- does not carry it (the location-based rule, not a
+        semantic one)."""
+        fixtures.write_command_file(
+            self.commands_dir, "milestone-plan",
+            "This command's prose discusses disable-model-invocation: true as a "
+            "concept without ever declaring it in its own front matter.\n",
+        )
+        # milestone-plan.md is overwritten in place (a SELECTED_COMMANDS
+        # member, with no front matter at all in this fixture text), so
+        # classification still succeeds and the flag must not have been
+        # detected from the body mention.
+        classification = decision.classify_command_files(self.commands_dir)
+        self.assertEqual(classification["milestone-plan"], decision.CATEGORY_SELECTED)
+
 
 class DecideNeverReturnsUserOnlyCommandTest(unittest.TestCase):
-    """``decide()`` never returns any of the three user-only commands as
-    its ``action``, for any of the seventeen phases -- a total assertion."""
+    """``decide()`` never returns any of the four user-only commands as
+    its ``action``, for any of the twenty phases -- a total assertion."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -370,6 +436,110 @@ class HumanGateShapeTest(unittest.TestCase):
         self.assertEqual(result.gate.safe_resume_command, "/approve-review plan wi-1")
         self.assertEqual(result.gate.work_item_id, "wi-1")
         self.assertEqual(result.gate.repository, str(self.managed_repo.root))
+
+    def test_awaiting_manual_external_implementation_review_is_a_gate(self) -> None:
+        work_item = fixtures.build_work_item_view(
+            phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            governing_workflow_version="2.2",
+        )
+        result = decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertIsNotNone(result.gate)
+        self.assertEqual(
+            result.gate.safe_resume_command, "/record-manual-implementation-review wi-1",
+        )
+
+
+class Revision64PhaseWideningTest(unittest.TestCase):
+    """The three phases the 2.5.1 baseline widening adds (revision 64,
+    round 63's ``B6``), each assigned by the declined-vs-gate criterion
+    stated in "The `Decision` shape for a report-only phase"."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name) / "target"
+        self.managed_repo = fixtures.build_target_managed_repository(root)
+        fixtures.copy_real_commands_dir(root / ".claude" / "commands")
+
+    def _decide(self, phase: str, **overrides):
+        work_item = fixtures.build_work_item_view(phase=phase, **overrides)
+        return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def test_amending_plan_is_declined_naming_milestone_plan(self) -> None:
+        result = self._decide("AMENDING_PLAN")
+        self.assertTrue(result.declined)
+        self.assertFalse(result.automatic)
+        self.assertIsNone(result.gate)
+        self.assertIsNotNone(result.action)
+        self.assertEqual(result.action.command, "/milestone-plan wi-1")
+
+    def test_awaiting_local_implementation_review_is_declined_naming_review_implementation(
+        self,
+    ) -> None:
+        result = self._decide(
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", governing_workflow_version="2.2",
+        )
+        self.assertTrue(result.declined)
+        self.assertFalse(result.automatic)
+        self.assertIsNone(result.gate)
+        self.assertIsNotNone(result.action)
+        self.assertEqual(result.action.command, "/review-implementation wi-1")
+
+    def test_awaiting_manual_external_implementation_review_is_a_gate_not_declined(self) -> None:
+        result = self._decide(
+            "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", governing_workflow_version="2.2",
+        )
+        self.assertFalse(result.declined)
+        self.assertFalse(result.automatic)
+        self.assertIsNotNone(result.gate)
+        self.assertIsNone(result.action)
+
+    def test_all_three_are_members_of_known_phases_and_report_only(self) -> None:
+        for phase in (
+            "AMENDING_PLAN", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+        ):
+            with self.subTest(phase=phase):
+                self.assertIn(phase, decision.KNOWN_PHASES)
+                self.assertIn(phase, decision.REPORT_ONLY_PHASES)
+
+
+class DecideNoWorkItemTest(unittest.TestCase):
+    """``decide_no_work_item`` (revision 63, B2, ``REQ-40``): the distinct,
+    unconditional pre-phase entry point for a ``NoWorkItemYet`` target."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name) / "target"
+        self.managed_repo = fixtures.build_target_managed_repository(root)
+
+    def test_returns_no_phase_and_bare_milestone_plan(self) -> None:
+        result = decision.decide_no_work_item(self.managed_repo)
+        self.assertIs(result.observed_phase, decision.NO_PHASE)
+        self.assertEqual(result.action.command, "/milestone-plan")
+        self.assertTrue(result.automatic)
+        self.assertIsNone(result.gate)
+        self.assertFalse(result.declined)
+        self.assertTrue(result.reason)
+
+    def test_no_phase_is_never_a_known_phase_and_never_none(self) -> None:
+        self.assertNotIn(decision.NO_PHASE, decision.KNOWN_PHASES)
+        self.assertIsNotNone(decision.NO_PHASE)
+
+    def test_no_phase_wire_form_is_the_reserved_literal(self) -> None:
+        self.assertEqual(decision.NO_PHASE_WIRE, "__NO_PHASE__")
+        self.assertNotIn(decision.NO_PHASE_WIRE, decision.KNOWN_PHASES)
+
+    def test_target_state_re_exports_the_same_canonical_sentinel(self) -> None:
+        # target_state cannot define its own NO_PHASE -- decision sits
+        # earlier in the dependency order, and CP6/CP7's `is NO_PHASE`
+        # comparisons only work if there is exactly one instance.
+        self.assertIs(target_state.NO_PHASE, decision.NO_PHASE)
+        self.assertEqual(target_state.NO_PHASE_WIRE, decision.NO_PHASE_WIRE)
 
 
 if __name__ == "__main__":

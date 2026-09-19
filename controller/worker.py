@@ -41,22 +41,29 @@ FAILURE = "FAILURE"
 AMBIGUOUS = "AMBIGUOUS"
 INTERRUPTED = "INTERRUPTED"
 
-#: The three Workflow commands whose own procedural text calls a
-#: ``workflow_state.validate_..._confirmation`` guard against a live human
-#: turn (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``, "The user-only
-#: denylist, derived from the property rather than from a proxy"). CP4's
-#: ``controller.decision.derive_user_only_commands`` derives this same
-#: three-name set fresh from the installed ``.claude/commands/*.md`` files,
-#: by the qualified-literal property. This module keeps its own,
-#: independent literal copy so :func:`launch` can refuse a task naming one
-#: of these commands without depending on an installed commands directory
-#: at call time -- "never fabricate user approval" is enforced twice, by
-#: two different mechanisms fed by two different sources, never by one
-#: shared code path a single defect could disable in both places at once.
+#: The four Workflow commands CP4's ``controller.decision.
+#: derive_user_only_commands`` derives fresh from the installed
+#: ``.claude/commands/*.md`` files, as the union of two recognisers
+#: (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``, "The user-only
+#: denylist, derived from the property rather than from a proxy", revision
+#: 64's baseline widening, round 63's ``B6``): three of the four --
+#: ``approve-review``, ``accept-milestone``, ``recover-implementation-
+#: provenance`` -- carry the qualified ``workflow_state.
+#: validate_..._confirmation`` guard against a live human turn in their
+#: own procedural text; the fourth, ``request-plan-amendment``, carries
+#: only the front-matter ``disable-model-invocation: true`` flag instead,
+#: so a single-recogniser derivation would miss it. This module keeps its
+#: own, independent literal copy of the resulting four-name set so
+#: :func:`launch` can refuse a task naming one of these commands without
+#: depending on an installed commands directory at call time -- "never
+#: fabricate user approval" is enforced twice, by two different mechanisms
+#: fed by two different sources, never by one shared code path a single
+#: defect could disable in both places at once.
 USER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "approve-review",
     "accept-milestone",
     "recover-implementation-provenance",
+    "request-plan-amendment",
 })
 
 #: Trailing punctuation a command mention can carry in ordinary prose (a
@@ -107,8 +114,8 @@ def _assert_not_user_only(task: str) -> None:
     """Raise :class:`~controller.errors.UserOnlyCommandError` if any
     whitespace-delimited, punctuation-stripped token of ``task`` equals
     (case-sensitively, whole-token) one of :data:`USER_ONLY_COMMANDS`'s
-    three bare names. A whole-token equality, never a substring test --
-    a task that merely contains one of the three names' letters as part
+    four bare names. A whole-token equality, never a substring test --
+    a task that merely contains one of the four names' letters as part
     of a longer word is not refused."""
     for token in _task_tokens(task):
         if token in USER_ONLY_COMMANDS:

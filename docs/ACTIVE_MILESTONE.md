@@ -1256,15 +1256,42 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   CP4's own revalidation already documented as CP9's residual scope, no
   errors, no regression against CP1-CP4's own revalidation baseline).
   `COMPLETE`.
+- `CP5` revalidated: this checkpoint's own second, independent denylist
+  layer (`controller/worker.py`'s `USER_ONLY_COMMANDS`, a literal copy
+  kept deliberately separate from CP4's `decision.derive_user_only_commands`)
+  had gone stale under the amendment -- CP4's own revalidation already
+  widened `derive_user_only_commands` from a single guard-literal
+  recogniser to the union of that recogniser and the front-matter
+  `disable-model-invocation: true` recogniser, which now derives **four**
+  names (`approve-review`, `accept-milestone`,
+  `recover-implementation-provenance`, and `request-plan-amendment`,
+  the new command `workflow-2.4.0` introduced -- caught only by the
+  flag recogniser, never the guard-literal one), while `worker.py`'s own
+  copy still held the pre-amendment three. Added `"request-plan-amendment"`
+  to `USER_ONLY_COMMANDS` and corrected the module's docstrings (the
+  three-name/"qualified-literal property" description no longer matches:
+  three of the four names carry the confirmation guard, the fourth only
+  the front-matter flag). No other part of this checkpoint's own plan
+  section changed (`launch()`'s mechanism, the four-outcome classification,
+  the worker-stdout JSON candidate-span rule, the process-group timeout
+  teardown, and the `PYTHONPATH`-stripped environment are all untouched
+  by the amendment). `tests/test_worker.py` gained
+  `test_task_naming_request_plan_amendment_refuses`, mirroring the
+  existing per-name refusal cases. Verified by `python3 -m unittest
+  tests.test_worker` (18 tests, all green) and `python3 -m unittest
+  discover -s tests` (363 tests: 2 failures, 1 skip -- the same two
+  pre-existing `tests.test_cli` failures CP4's own revalidation already
+  documented as CP9's residual scope, no errors, no regression against
+  CP1-CP4B's own revalidation baseline). `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP5` through `CP9` in registry order, applying the
+revalidating `CP6` through `CP9` in registry order, applying the
 revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
-the `USER_ONLY_COMMANDS` union widened to four, `NO_PHASE`'s round-trip
-schema) where each remaining checkpoint's own plan section now requires
-them, through `CP9` where B1's `worker_outcome` schema mismatch is also
-fixed, before the phase can re-enter `SELF_REVIEWING_IMPLEMENTATION` and a
-fresh implementation-review bundle is generated.
+`NO_PHASE`'s round-trip schema) where each remaining checkpoint's own plan
+section now requires them, through `CP9` where B1's `worker_outcome`
+schema mismatch is also fixed, before the phase can re-enter
+`SELF_REVIEWING_IMPLEMENTATION` and a fresh implementation-review bundle
+is generated.
 
 ## Active plan
 

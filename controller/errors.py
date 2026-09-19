@@ -422,10 +422,10 @@ class GenerationHandoffPendingError(ControllerError):
 
 class UserOnlyCommandError(ControllerError):
     """``controller.worker.launch`` refused a ``task`` naming one of
-    ``USER_ONLY_COMMANDS``'s three bare command names.
+    ``USER_ONLY_COMMANDS``'s four bare command names.
 
     The second, independent denylist layer: ``controller.worker`` keeps
-    its own literal copy of the three-command set and its own token scan,
+    its own literal copy of the four-command set and its own token scan,
     deliberately separate from CP4's ``controller.decision.
     derive_user_only_commands`` -- defence in depth for the single most
     consequential invariant in the milestone, "never fabricate user

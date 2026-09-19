@@ -190,6 +190,24 @@ class UserOnlyCommandTest(unittest.TestCase):
             with self.assertRaises(UserOnlyCommandError):
                 _launch(task="run `/recover-implementation-provenance`.", cwd=td, env_overrides={})
 
+    def test_task_naming_request_plan_amendment_refuses(self) -> None:
+        """`USER_ONLY_COMMANDS`'s fourth name (revision 64's baseline
+        widening, round 63's `B6`): `request-plan-amendment.md` carries
+        only the front-matter `disable-model-invocation: true` flag, not
+        the qualified-literal confirmation guard the other three names
+        carry, but CP5's own denylist copy refuses it identically -- the
+        union CP4's `derive_user_only_commands` derives, not just the
+        guard-literal recogniser's own three."""
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td) / "diag.json"
+            with self.assertRaises(UserOnlyCommandError) as ctx:
+                _launch(
+                    task="please run /request-plan-amendment now",
+                    cwd=td, env_overrides={"FAKE_CLAUDE_DIAG_FILE": str(marker)},
+                )
+            self.assertEqual(ctx.exception.evidence["matched_token"], "request-plan-amendment")
+            self.assertFalse(marker.exists(), "a worker process was spawned despite the denylist")
+
     def test_substring_of_user_only_name_is_not_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             result = _launch(

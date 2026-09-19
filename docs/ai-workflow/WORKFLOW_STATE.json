@@ -11,8 +11,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-generation-1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json",
       "governing_workflow_version": "2.1",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 62,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 71,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "b9adf5faacbe5e935e27a6eacef37b2eb87d9869",
@@ -21,103 +21,103 @@
       "last_completed_checkpoint_id": "CP9",
       "checkpoints": {
         "CP1": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "eeee54c0f7a344221d24618f9955d1513ef1a535"
         },
         "CP2": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "daeca071c387bff9ee305f26d4ca418a462cbb31"
         },
         "CP3": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "834caf66fb7d4e22eac6e3565d5f48d88db61172"
         },
         "CP4": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "6a418e758118040f16a31a39b670a6ae8712c06a"
         },
         "CP4B": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "14f5077894463d554519a6e33dd53e609746b07e"
         },
         "CP5": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "2be17bc37b8b9e30f98e66e3ad25ae45cfdcf5a7"
         },
         "CP6": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "32b74b6d107e46d8b3d3367abc392744efd7b413"
         },
         "CP6B": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "a7eaeefabd799ac46ee94175a8266c6f0118f199"
         },
         "CP7": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "f1058ef34207f67c22203cb208bdf4442c21bf49"
         },
         "CP8": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "7a1edc838e74fea11d85ac9a5a22bdaa7eecf7ae"
         },
         "CP9": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "4c8bf49f53ab6565c317003dd68c1a1813b9dc4d"
         }
       },
       "current_bundle_id": null,
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "c09c2c5196e6401f573bb9f74176a8ebe4d3ba9c0bb6578c2004250d69a3dc9d",
-        "approved_review_content_id": "fc3cadb44abd21d8f50b07de49ea2f0f3e0e8701e4330b5e53c1f404831a2e2d",
+        "reviewed_bundle_id": "dcae0c768b3431eb43bd0027ad135bd90cf4e3470a547cef9349cf4103038508",
+        "approved_review_content_id": "0aaf04c14a11be2dd4e462bed0c4378b14c8018c21f18017064b852966e0c1a9",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_GEN1_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "eb477bad34d77c371caf9174136e24c07eaeb4e6"
+            "blob": "1b09e49f7682beb343420d05caa5121dc6f102e0"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-generation-1-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "9ca58cf51133efdae72c3257b338eae4899e6ac8"
+            "blob": "f6ddcb9bdf666839c2efbec3f7d2ebb8baf524b3"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json",
             "exists": true,
             "mode": "100644",
-            "blob": "136d22126d54f68f96a02a0842bebbb4b0e5ee14"
+            "blob": "03429bfb46efedc71220388355524434b7c32d02"
           }
         ],
         "reviewed_content_commit": null,
         "legacy_evidence": null,
-        "user_confirmation": "Approve plan for workflow-controller-generation-1",
+        "user_confirmation": "I confirm the amendment approval for workflow-controller-generation-1, plan stage.",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-08T15:43:44Z"
+        "recorded_at": "2026-09-19T18:33:58Z"
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "fc3cadb44abd21d8f50b07de49ea2f0f3e0e8701e4330b5e53c1f404831a2e2d",
+        "review_content_id": "0aaf04c14a11be2dd4e462bed0c4378b14c8018c21f18017064b852966e0c1a9",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "c09c2c5196e6401f573bb9f74176a8ebe4d3ba9c0bb6578c2004250d69a3dc9d",
+          "bundle_id": "dcae0c768b3431eb43bd0027ad135bd90cf4e3470a547cef9349cf4103038508",
           "verdict": "APPROVE",
-          "round": 62,
-          "completed_at": "2026-09-08T14:41:00Z"
+          "round": 71,
+          "completed_at": "2026-09-19T21:05:00Z"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "c09c2c5196e6401f573bb9f74176a8ebe4d3ba9c0bb6578c2004250d69a3dc9d",
+          "bundle_id": "dcae0c768b3431eb43bd0027ad135bd90cf4e3470a547cef9349cf4103038508",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-09-08T15:35:16Z"
+          "round": 71,
+          "completed_at": "2026-09-19T18:30:01Z"
         }
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 214,
-      "last_transition": "2026-09-19T12:41:20Z",
+      "state_revision": 244,
+      "last_transition": "2026-09-19T18:33:58Z",
       "amendment_history": [
         {
           "amendment_id": "0",
@@ -203,7 +203,20 @@
             }
           },
           "pre_amendment_approval_commit": "eeee54c0f7a344221d24618f9955d1513ef1a535",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 71,
+          "reconciliation_outcome": {
+            "CP1": "needs_revalidation",
+            "CP2": "needs_revalidation",
+            "CP3": "needs_revalidation",
+            "CP4": "needs_revalidation",
+            "CP4B": "needs_revalidation",
+            "CP5": "needs_revalidation",
+            "CP6": "needs_revalidation",
+            "CP6B": "needs_revalidation",
+            "CP7": "needs_revalidation",
+            "CP8": "needs_revalidation",
+            "CP9": "needs_revalidation"
+          }
         }
       ],
       "amendment_base_commit": "659ca39060b47966d28ba0f6a605ae2cb74a34d2"

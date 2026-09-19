@@ -1,4 +1,4 @@
-# Workflow Controller — Generation 1 (Revision 62)
+# Workflow Controller — Generation 1 (Revision 71)
 
 Execution/reference plan for work item `workflow-controller-generation-1`.
 Governed by `governing_workflow_version: "2.1"` — the two-stage
@@ -50,12 +50,20 @@ Two structural consequences run through every checkpoint below:
    `runtime.write_json` refuses any destination outside the Controller's own
    runtime root; CP3's reader module exposes no write function at all), not
    only by convention.
-2. **The Controller never crosses a human gate.** `/approve-review` and
-   `/accept-milestone` carry `disable-model-invocation: true` in frozen
-   Workflow v2.3.1; only the user may invoke them. The Controller therefore
-   treats them as a hard denylist enforced at two independent layers (CP4's
-   decision engine never selects them; CP5's worker refuses to execute a
-   task naming one), and never writes or requests a `USER_OVERRIDE`.
+2. **The Controller never crosses a human gate.** Under the revision-64
+   baseline (frozen Workflow **2.5.1**, see "Supported Workflow baseline"
+   below) **four** command files are user-only: `/approve-review`,
+   `/accept-milestone` and `/request-plan-amendment` carry
+   `disable-model-invocation: true`, and `/approve-review`,
+   `/accept-milestone` and `/recover-implementation-provenance` carry a
+   qualified `workflow_state.validate_…confirmation` guard — two
+   overlapping but no longer nested populations, whose **union** is the
+   denylist (CP4's *Deriving `USER_ONLY_COMMANDS`* section states the rule
+   and the run). Only the user may invoke any of them. The Controller
+   treats the four as a hard denylist enforced at two independent layers
+   (CP4's decision engine never selects them; CP5's worker refuses to
+   execute a task naming one), and never writes or requests a
+   `USER_OVERRIDE`.
 
 ## Scope reassessment (revision 10) — what Generation 1 automates, and why
 
@@ -76,10 +84,14 @@ Round 9 named the reason, and it is not a defect in any one row:
 > its own tables, or against a command file *the table itself chose to
 > cite*. **Nothing enumerates what frozen v2.3.1 actually ships.**
 
-That is why a fifteenth command file — `/recover-implementation-provenance`,
-which carries a literal user-confirmation gate and whose sole legal source
-phase sits inside CP4's own disambiguation — stayed invisible across nine
-rounds and six properties.
+That is why `/recover-implementation-provenance` — the fifteenth command
+file of the v2.3.1 surface as it stood at revision 10, which carries a
+literal user-confirmation gate and whose sole legal source phase sits
+inside CP4's own disambiguation — stayed invisible across nine rounds and
+six properties. (Seventeen command files ship under the revision-64
+baseline; the figure in this sentence is revision 10's own measurement and
+is time-labelled rather than restated, per the historical-provenance
+policy below.)
 
 **Revision 10 is the architectural reassessment that finding requires**, and
 it takes the honest option: *narrow what Generation 1 automates to the
@@ -106,7 +118,7 @@ The defects rounds 4–9 found were not distributed evenly. Every one of them
 was a property of the *implementation- and functional-stage* commands:
 
 - `MANIFEST.md` is written **unconditionally** at the plan stage
-  (`prepare-ai-review.sh:508-512`) and only on an optional argument at the
+  (`prepare-ai-review.sh:581-584`) and only on an optional argument at the
   implementation/post-fix stages. Round 7's B1, round 8's B2 and round 9's
   I2 are all consequences of that one asymmetry, and none of them exists at
   the plan stage.
@@ -125,8 +137,12 @@ Removing five automatic rows leaves **six**. The eleven-row table had six
 predicate-bearing rows (3, 5, 7, 8, 9 and 11); the narrowing removed
 **four** of them — and with them the entire class of "is this predicate a
 completion signal" reasoning that rounds 5–9 could not settle. **Two
-predicate-bearing rows survive, so four of the six need no predicate at
-all.**
+predicate-bearing rows survived the narrowing, so four of the six needed
+no predicate at all** — revision 10's own figures, over the six-row table
+that narrowing produced. The live table has carried **seven** rows and
+**three** predicates since revision 63 added row 7; CP6B's own
+`ExpectedOutcome` section states the current figures and is the authority
+for them.
 
 ### What this does not give up
 
@@ -139,8 +155,8 @@ completeness check that covers seven of ten is not one.
 | # | Brief's capability | Still proven under the narrowing? |
 |---|---|---|
 | 1 | Managed repository inspection | **yes** — phase-independent, unchanged (CP2) |
-| 2 | Workflow state reader | **yes** — all seventeen phases, unchanged (CP3) |
-| 3 | Next-action decision engine | **yes, at all seventeen phases.** Reporting an action a human or a later generation must run *is* a decision, and it is what capability 6 depends on |
+| 2 | Workflow state reader | **yes** — all twenty phases, unchanged in mechanism (CP3; seventeen at revision 10, twenty under the revision-64 2.5.1 baseline) |
+| 3 | Next-action decision engine | **yes, at all twenty phases.** Reporting an action a human or a later generation must run *is* a decision, and it is what capability 6 depends on |
 | 4 | Fresh worker orchestration | **yes** — four distinct commands, of which `/review-plan` and `/apply-plan-review` form the unbounded plan-revision loop itself, with no human in it |
 | 5 | **Real Workflow-action execution** (disposable-repository proof) | **yes** — `/milestone-plan` was already the chosen genuine operation and is a plan-stage action, so `REQ-T18` is untouched |
 | 6 | Human-gate detection | **yes**, and better for the three phases whose classification kept coming out wrong — with the `DECLINED` outcome added so the two automation-safe phases are not miscalled gates |
@@ -171,7 +187,7 @@ AWAITING_LOCAL_PLAN_REVIEW --/review-plan--> REVISING_PLAN
 `/milestone-plan` runs once to enter it and `/record-manual-plan-review`
 once to leave it, so worker orchestration is exercised across **four
 distinct commands**, two of them unboundedly. That is the cycle this work
-item has itself executed sixty-one times.
+item has itself executed seventy times.
 
 The Controller **cannot** drive a milestone all the way from `PLANNING` to
 `AWAITING_PLAN_APPROVAL`: a `"2.1"` item must stop at
@@ -192,36 +208,210 @@ Round 9's rule, stated once here and enforced in CP4:
 The plan already contains one working instance — CP3's two-directional
 `KNOWN_PHASES` set-equality against a hand-copied literal, *"the test is
 what keeps the copy honest"*, which is what caught `LEGACY_READY` in round
-1. Revision 10 adds the same shape over `.claude/commands/`: enumerate all
-fifteen command files and assert the partition into **selected**,
-**deliberately-not-selected** and **user-only** is *total*. A Workflow
-release that adds a sixteenth command fails the suite rather than shipping
-an unmodelled phase to a user. That property is what would have caught
-round 9's B1 mechanically, nine rounds earlier.
+1. Revision 10 adds the same shape over `.claude/commands/`: enumerate
+**every** command file — seventeen under the revision-64 baseline — and
+assert the partition into **selected**, **deliberately-not-selected** and
+**user-only** is *total*. A Workflow release that adds an eighteenth
+command fails the suite rather than shipping an unmodelled command to a
+user. That property is what would have caught round 9's B1 mechanically,
+nine rounds earlier — **and it is what the 2.3.1 → 2.5.1 Manager update
+actually exercised**: the two command files and three phases 2.5.x adds
+are exactly the drift both two-directional properties exist to surface
+loudly, which is how round 63's `B6` was found rather than shipped.
 
 ## Environment facts this plan is built on
 
 Verified in this repository at `base_commit` before planning, so the plan
-rests on observation rather than assumption:
+rests on observation rather than assumption. **Every row whose subject is
+the installed Workflow release was re-measured at revision 64 against the
+installation actually present** (`workflow_version: "2.5.1"`), because the
+Workflow Manager updated this repository from 2.3.1 to 2.5.1 mid-flight
+and round 63's `B6` found the table describing a release that is no longer
+installed. A row that records a *past* measurement against a release that
+is no longer installed is time-labelled rather than deleted, per the
+historical-disposition provenance policy below; a row that states a fact
+the Controller's own gates read is re-measured and restated:
 
 | Fact | How it was verified | Why it matters |
 |---|---|---|
-| `workflow-manager` is a real installed CLI with `status`/`verify`/`bootstrap`/`update`/`uninstall`/`releases` subcommands | `workflow-manager --help` | CP2 integrates with it rather than reimplementing drift semantics |
-| `workflow-manager status <target>` prints `workflow 2.3.1 (full profile) — clean` and exits 0; `verify <target>` prints `<target>: installation matches workflow 2.3.1` and exits 0 | run against this repository | the clean case for both subcommands |
+| `workflow-manager` is a real installed CLI with `status`/`verify`/`bootstrap`/`update`/`uninstall`/`releases` subcommands | `workflow-manager --help`, re-run at revision 64 | CP2 integrates with it rather than reimplementing drift semantics |
+| The Manager's `distribution/` currently carries **four** releases — `2.3.1`, `2.4.0`, `2.5.0` and `2.5.1` — and `bootstrap`/`update` without `--release-version` mean the newest | `workflow-manager releases`, run at revision 64 and **re-run at revision 69** (same four) | a target the Controller is pointed at is, **by default**, on the newest release the Manager holds — which since revision 68 is not the same thing as a release the Controller admits, because admission is exact membership of `VALIDATED_WORKFLOW_RELEASES` rather than of a line. This row is why round 63's `B6` happened at all, and, at revision 69, why any fixture that *installs* a Workflow release must name the release it wants instead of accepting the Manager's default (CP9's `REQ-T18`/`REQ-T18C`) |
+| **`--release-version` is a *global* option, accepted before the subcommand, never after it**, and it selects the release every subcommand acts on: `workflow-manager --release-version 2.5.1 bootstrap <tmp>` exits **0**, prints `bootstrapped workflow 2.5.1 (full)…` (a prefix — the real output is two lines, the second naming the managed/state/merged file counts), writes an `installation.json` declaring `workflow_version: "2.5.1"`, and `workflow-manager verify <tmp>` then prints `<tmp>: installation matches workflow 2.5.1` and exits 0; an unknown release fails loudly with `error: no manifest at <manager-root>/distribution/workflow/<version>/manifest.json` rather than silently falling back to the newest | **measured at revision 69** against a fresh `git init` temp repository, together with `workflow-manager bootstrap --help` and `workflow-manager --help` (the subcommand parsers accept only `--profile` and `--force`; the release selector sits on the top-level parser) | this is the mechanism `REQ-T18`'s step 2 uses to pin its fixture to a **validated** release under revision 68's admission rule. The option's *position* is load-bearing and is measured rather than assumed — the same hazard revision 35 recorded for `--permission-mode`/`--allow-dirty-source` on the Controller's own parser, where a global written after the subcommand answers `error: unrecognized arguments` and exits 2 |
+| `workflow-manager status <target>` prints `workflow 2.5.1 (full profile) — clean` and exits 0; `verify <target>` prints `<target>: installation matches workflow 2.5.1` and exits 0 | **re-run against this repository at revision 64** (it printed the same two lines naming `2.3.1` when first measured at `base_commit`) | the clean case for both subcommands, and the demonstration that the prose carries the installed version — which is exactly why CP2 reads the manifest instead |
 | **`status` exits 0 for an *unmanaged* repository**, printing `not a managed repository` on stdout, while `verify` exits **2** with `error: <path> is not a managed repository; nothing to verify` | measured in revision 3 against a fresh `git init` temp directory | `status`'s exit code is **not** a safe admission gate; `verify`'s is. This is why CP2 admits on `verify` |
-| For a *drifted* managed repository both exit **1**; `status` additionally names the modified paths (`workflow 2.3.1 (full profile) — 1 problem(s): modified: scripts/workflow_state.py`) | measured in revision 3 against a `workflow-manager bootstrap`-ed temp repository with one managed file edited | the drift case is the one where both agree, which is what made the unmanaged asymmetry easy to miss |
+| For a *drifted* managed repository both exit **1**; `status` additionally names the modified paths (`workflow 2.3.1 (full profile) — 1 problem(s): modified: scripts/workflow_state.py`) | measured in revision 3 against a `workflow-manager bootstrap`-ed temp repository with one managed file edited, on the 2.3.1 release then installed — the **exit codes** are what CP2 reads and they are release-independent; the quoted prose is revision 3's own measurement and is time-labelled rather than re-run | the drift case is the one where both agree, which is what made the unmanaged asymmetry easy to miss |
 | Neither subcommand offers a machine-readable/JSON output mode | `workflow-manager status --help`, `verify --help` | CP2 must not parse prose for semantics; the installed version comes from the manifest instead |
-| `.workflow-manager/installation.json` records `workflow_version: "2.3.1"`, `profile: "full"`, an `upstream` block, and `managed`/`generated`/`merged` file maps | read directly | CP2 reads the installed version from the manifest the Manager itself wrote |
-| Workflow Manager 2.3.1 defines exactly **two** install profiles, `runtime` and `full`, and both install its whole `distribution` artifact category — which is where every `.claude/commands/*.md` and every `scripts/` file sits. `full` additionally installs a `conformance` category: other work items' historical design, audit and registry documents, none of which the Controller reads | measured in revision 32 by reading the Manager's `INSTALL_PROFILES`/`_PROFILE_CATEGORIES` and its 2.3.1 release manifest, and cross-checked against this repository's own `managed` map, which lists the fifteen command files and the thirteen `scripts/` files | a second valid profile exists, so CP2 must gate on the `(workflow_version, profile)` pair rather than parse `profile` and ignore it — and the Controller's command inventory is sound under **both**, which is why `runtime` is supported rather than refused (external round 31's `EXT-PLAN-R31-O1`) |
+| `.workflow-manager/installation.json` records `workflow_version: "2.5.1"`, `profile: "full"`, an `upstream` block, a `provenance` block (`base_release: "2.5.0"`), and `managed`/`generated`/`merged` file maps | **re-read at revision 64** (`"2.3.1"` at `base_commit`; `updated_at: 2026-09-19T12:06:34Z`) | CP2 reads the installed version from the manifest the Manager itself wrote — and this row is the one that moved under the Controller, which is what round 63's `B6` is about |
+| The installed Workflow Manager still defines exactly **two** install profiles, `runtime` and `full`, and both install its whole `distribution` artifact category — which is where every `.claude/commands/*.md` and every `scripts/` file sits. `full` additionally installs a `conformance` category: other work items' historical design, audit and registry documents, none of which the Controller reads | measured in revision 32 against 2.3.1 and **re-measured at revision 64** against the installed Manager: `install.INSTALL_PROFILES == ('runtime', 'full')`, unchanged; cross-checked against this repository's own `managed` map, which now lists **seventeen** command files and **thirteen** `scripts/` files (fifteen and thirteen at 2.3.1) | a second valid profile exists, so CP2 must gate on the `(workflow_version, profile)` pair rather than parse `profile` and ignore it — and the Controller's command inventory is sound under **both**, which is why `runtime` is supported rather than refused (external round 31's `EXT-PLAN-R31-O1`) |
 | `claude` is installed and on `PATH` | `command -v claude` | CP5's worker mechanism is available |
 | The repository is stdlib-only Python; CI (`.github/workflows/workflow-conformance.yml`) pins Python 3.12 and runs seven `scripts/*_test.py` suites directly | read the workflow file | the Controller is stdlib-only and `unittest`-based; adding a test framework dependency would be a new dependency category and an `AGENTS.md`-class stop condition |
 | `docs/TECHNICAL_DECISIONS.md` does not exist in this repository | `git ls-files` | `/milestone-plan` step 5 has no "Open decision" rows to check against; see "Technical decisions" below |
 | `docs/ROADMAP.md` does not exist | `git ls-files` | milestone identification came from `docs/ACTIVE_MILESTONE.md` alone |
 
+## Supported Workflow baseline (policy, revision 64; admission narrowed at revision 68)
+
+**Stated once, as a policy with a named authority, rather than as N
+counted literals that the next Manager update stales again** — which is
+what round 63's `B6` asked for, and what revisions 1–63 did not have.
+
+Between revision 62's approval and revision 63's amendment, the Workflow
+Manager updated *this* repository from **2.3.1** to **2.5.1**
+(`.workflow-manager/installation.json`, `updated_at:
+2026-09-19T12:06:34Z`). `.claude/commands/`, `scripts/` and
+`.workflow-manager/` are this work item's declared `excluded_prefixes`, so
+that update could never stale an approval — but exclusion is a
+*fingerprinting* guarantee and says nothing about whether this document's
+normative claims about that content are still true. They were not: the
+plan pinned a closed `{("2.3.1", …)}` admission set, a **seventeen**-phase
+`KNOWN_PHASES` copy and a **fifteen**-file command partition, against a
+live tree carrying twenty phases and seventeen command files. Reproduced
+before this section was written: `python3 -m unittest tests.test_target_state
+tests.test_decision` over the completed CP1–CP9 build answers **2 failures
+and 6 errors**, every one of them this.
+
+**The policy.** Generation 1's supported baseline is a **release line** for
+*classification*, but admission itself is gated on a **closed, named set of
+individually validated releases** (revision 68 narrows this from the bare
+line revision 64 shipped; see "Why the line predicate alone was not
+fail-closed" below):
+
+- **`SUPPORTED_WORKFLOW_LINE = "2.5"`** — a manifest's `workflow_version`
+  must parse as a dotted release whose **major and minor components are
+  exactly `2` and `5`**, or it is refused outright (`2.3.1`, `2.4.0`,
+  `2.6.0`, `3.0.0`, and anything that does not parse as a dotted release at
+  all). This is a **necessary pre-filter and a diagnostic classifier**,
+  never by itself sufficient for admission: it tells a refusal whether the
+  observed release is even in the known line before the stronger check
+  below ever runs, and it is what lets a refusal say "wrong line" instead
+  of "not yet validated".
+- **`VALIDATED_WORKFLOW_RELEASES = {"2.5.1"}`** — the actual admission
+  gate (revision 68, manual external plan review round 67's `I1`).
+  `workflow_version` must be an **exact member** of this closed set, not
+  merely a member of the line above. `2.5.1` is its only element because
+  it is the only release this document's three inventories and its
+  seven-suite baseline-verification table were ever actually measured
+  against. A manifest declaring a version that parses into the `2.5` line
+  but is not `2.5.1` — including `2.5.0`, a real, currently-distributed
+  release, and any later `2.5.x` patch the Manager has not shipped yet —
+  is refused with `UnsupportedWorkflowVersionError`, with evidence stating
+  explicitly that the release is in the known line but has not been
+  individually validated, distinguishing it from a wrong-line refusal.
+  Growing this set is a **deliberate act**, never automatic: re-read the
+  three inventories and re-run the seven baseline-verification suites
+  against the newly-installed release, and add its version string to the
+  set by name, in a plan revision that states what was measured — never
+  merely because the Workflow Manager reports a version string that parses
+  into a supported line.
+- **`SUPPORTED_PROFILES = {"runtime", "full"}`** — unchanged in membership
+  and unchanged in its justification (both install the identical command
+  and tooling surface; the Environment-facts row above is re-measured
+  against the installed Manager).
+- **`REFERENCE_WORKFLOW_RELEASE = "2.5.1"`** — the one concrete release
+  every *inventory* in this document is derived from and re-derivable
+  against. Since revision 68 it is also the sole member of
+  `VALIDATED_WORKFLOW_RELEASES`, so the derivation pin and the admission
+  gate currently name the same release; they remain two different
+  mechanisms; a future validated release would extend the latter without
+  necessarily moving the former.
+
+**The authority for every inventory is the installed tree, never a count
+in this prose.** Three derivations, each with its own named source and its
+own two-directional property, all re-run at revision 64:
+
+| Inventory | Authority (read at revision 64) | Value | Property that keeps it honest |
+|---|---|---|---|
+| the known-phase set | `scripts/workflow_state.py:331-371`, `KNOWN_PHASES` | **twenty** entries | CP3's two-directional set equality against the hand-copied literal |
+| the command-file set | every `*.md` under `.claude/commands/` | **seventeen** files | CP4's total-and-disjoint partition over the shipped files |
+| the user-only set | the same seventeen files, under the union rule CP4 states | **four** files | CP4's two-directional denylist assertion against a set derived fresh at test time |
+
+**Why the line predicate alone was not fail-closed, and what changed at
+revision 68.** Revision 64 argued that admitting the whole `2.5.x` line was
+safe because an unmodelled *phase* or *command* — the only two things a
+future patch could plausibly add — is already refused or unselectable by
+construction, and the two two-directional properties below turn an
+inventory mismatch into a loud test failure rather than a field surprise:
+
+- **An unmodelled phase** is refused at CP3's reader with
+  `UnknownPhaseError` before CP4 ever sees it — the fail-closed direction,
+  and the behaviour that sentence has always promised.
+- **An unmodelled command file** can never be *selected*: `decide()`
+  returns one of four literal commands, and CP5's independent token scan
+  refuses any task naming a user-only one. A file the partition does not
+  know is therefore never run, only unclassified.
+- **Both** turn into a **loud test failure** at the next release rather
+  than a field surprise, because the two properties above are
+  two-directional over the shipped artifact. That is precisely what
+  happened here: the 2.3.1 → 2.5.1 update made them red, and that redness
+  is what round 63's `B6` reports.
+
+That argument is still correct as far as it goes, and revision 68 leaves
+it in place. Manual external plan review round 67's `I1` finding is not
+that an unmodelled phase or command could slip through — the properties
+above still catch that, unchanged. It is that a **modelled** one could
+change **underneath its own name**. `KNOWN_PHASES` and the command-file
+partition are set-membership checks over *names*; neither property reads
+what a same-named phase or command *does* — its preconditions, its
+postconditions, the persisted-state writes CP6B and CP7 verify against. A
+future `2.5.x` patch that renamed nothing and added nothing, but changed
+one already-known command's persisted-state contract, would report the
+identical twenty-phase, seventeen-command, four-user-only inventory this
+section measures, pass both two-directional properties, and — under the
+bare line predicate revision 64 shipped — be admitted silently, because
+inventory equality is not semantic equality and the line predicate never
+claimed to check the latter. A fourth case belongs alongside the three
+above, and it is the one the first three cannot cover by construction:
+
+- **A modelled command or phase whose semantics drift while its name and
+  inventory position stay fixed** is refused by `VALIDATED_WORKFLOW_RELEASES`
+  membership alone, never by an inventory check — this is the gap the
+  two-directional properties structurally cannot see, since they compare
+  *names*, and it is what revision 68 closes.
+
+So `VALIDATED_WORKFLOW_RELEASES` is the *admission* rule; `SUPPORTED_WORKFLOW_LINE`
+is a *pre-filter and diagnostic classifier*, not a second gate a validated
+release must independently clear (every member of `VALIDATED_WORKFLOW_RELEASES`
+is, by construction, a member of the `2.5` line); the reference release is
+the *derivation* pin; and the two two-directional properties remain what
+force a deliberate re-derivation of the inventories at whichever release is
+being validated — now the actual mechanism by which a candidate release
+earns membership in `VALIDATED_WORKFLOW_RELEASES`, rather than a safety net
+under an admission rule that trusted the whole line by default. A closed
+`{(version, profile)}` set was the same bargain revision 63 struck, without
+the line's diagnostic value and without a stated procedure for growing it;
+`VALIDATED_WORKFLOW_RELEASES` keeps that set's fail-closed discipline and
+adds both. The operational cost `SUPPORTED_WORKFLOW_LINE` was widened to
+avoid — a pinned single release refuses the Manager's own default install
+the next time the Manager updates it, which is what round 63's `B6`
+reproduced against this very repository — is not undone by this narrowing:
+it is now an accepted, intentional cost, paid as a deliberate, recorded
+revalidation (a new plan revision that re-measures the three inventories
+and the seven baseline-verification suites, per the growth procedure
+above) rather than absorbed by trusting an entire line of patches this
+document has never measured.
+
+**Governing-version vocabulary under this baseline.** Frozen 2.5.x adds
+`governing_workflow_version: "2.2"` and declares
+`TWO_STAGE_PLAN_REVIEW_VERSIONS = {"2.1", "2.2"}`
+(`scripts/workflow_state.py`). `/apply-plan-review` step 0,
+`/milestone-plan` step 0 and `publish_plan_revision`
+(`scripts/workflow_state.py:7788-7792`) all take the **identical** branch
+for both, and `"2.2"`'s own bump is to the *implementation*-review
+protocol, which Generation 1 does not drive at all. **Wherever a
+plan-stage row, predicate or `ExpectedOutcome` key in this document is
+qualified `"2.1"`, it denotes membership of
+`TWO_STAGE_PLAN_REVIEW_VERSIONS`** — `"2.1"` and `"2.2"` alike — and
+contributes **one** triple to the coverage bijection, for exactly the
+reason the wildcard rule already gives for not materialising a version
+that makes no behavioural difference. The `"1"`-qualified rows are
+unchanged. No row is added, removed or split by this re-reading; CP4's
+mapping and CP6B's `ExpectedOutcome` table both keep the six automatic
+triples they had.
+
 ## Baseline verification state at `base_commit` (recorded, not assumed)
 
 The seven conformance suites CI runs were executed at `base_commit` before
-this plan was written, on the only interpreter this planning session has —
+this plan was written — against frozen Workflow **2.3.1**, the release
+then installed — on the only interpreter this planning session has —
 **Python 3.14.7** — while CI pins 3.12 and the project targets `>=3.12`.
 Recording the result here means a reviewer — and CP9 — can tell a
 Controller-caused regression from a pre-existing condition; recording the
@@ -238,6 +428,55 @@ a baseline for a same-interpreter comparison and CP9's gate says so.
 | `scripts/workflow_acceptance_matrix_test.py` | 146 tests, **OK** (skipped=18) |
 | `scripts/workflow_state_completion_obligations_test.py` | 106 tests, **OK** |
 | `scripts/workflow_fingerprint_generalization_test.py` | 79 tests, **OK** |
+
+**Re-measured at revision 64 against the installed 2.5.1 release** (same
+interpreter, Python 3.14.7), because the table above grades a release this
+repository no longer carries and *"no worse than the baseline"* is a
+comparison that is not one when the two sides are different releases:
+
+| Suite | Result at revision 64 (Workflow 2.5.1) |
+|---|---|
+| `scripts/workflow_fingerprint_test.py` | 218 tests, **OK** |
+| `scripts/workflow_state_test.py` | 853 tests, **OK** |
+| `scripts/workflow_test_harness_test.py` | 19 tests, **OK** |
+| `scripts/workflow_integration_test.py` | 260 tests, **OK** (skipped=1) |
+| `scripts/workflow_acceptance_matrix_test.py` | 146 tests, **OK** (skipped=18) |
+| `scripts/workflow_state_completion_obligations_test.py` | 106 tests, **OK** |
+| `scripts/workflow_fingerprint_generalization_test.py` | 79 tests, **OK** |
+
+**All seven are green under 2.5.1, and the revision-64 table is the one
+CP9's gate compares against.** Two things moved and both are recorded
+rather than absorbed:
+
+- **The one red suite of the `base_commit` table is green under 2.5.1.**
+  `workflow_integration_test.py`'s
+  `TestRetiredScopedRemediationLeavesNoLiveSurface.test_the_historical_status_note_carries_a_dated_correction`
+  now *skips* rather than erroring. The analysis below is kept as the
+  record of why it was red and why patching it was refused; the
+  out-of-scope-red carve-out it argued for is no longer needed, and CP9's
+  gate is stated against the revision-64 table below rather than against
+  a permitted exception.
+- **`workflow_state_test.py` was red at revision 63 and neither revision
+  63's own `TEST_RESULTS.md` nor its plan text recorded it.** 2.5.x adds
+  `GoverningVersionEnumerationSweepTest.test_real_corpus_sweep_is_clean`,
+  a standing sweep over `.claude/commands/*.md` and
+  `docs/ai-workflow/*.md` for plan-review prose that scopes itself to a
+  bare `"2.1"` where the live vocabulary is
+  `TWO_STAGE_PLAN_REVIEW_VERSIONS`. It flagged **two occurrences on one
+  line of this document** — the round-6 disposition row's
+  `` `"2.1"`-only in practice `` pair, where the live vocabulary is
+  `"2.1"`/`"2.2"` — and had been red since the Manager
+  update, against the committed `HEAD` text as well as the working tree,
+  so it is `B6`'s own class and not a consequence of the amendment.
+  Revision 64 resolves it at that row by time-labelling rather than
+  rewriting history, per the provenance policy, and the sweep is re-run
+  clean as part of this revision's closing verification. Revision 63's
+  `TEST_RESULTS.md` recorded this suite as *"616 tests, **OK**"*, which is
+  the 2.3.1 figure; the suite ships 853 tests under 2.5.1. **A suite
+  reported green by carrying forward a previous release's figure is the
+  same defect class as a rule certified green by description rather than
+  by extraction**, which this document names as its own recurring failure
+  mode, and it is recorded here rather than silently corrected.
 
 **The one red suite is pre-existing and not fixable by this milestone.**
 `workflow_integration_test.py`'s
@@ -387,7 +626,7 @@ not act, but this generation will not".
 with no exit code. Exit 0 is wrong for the same reason as above and exit 10
 names a gate that does not exist. The bound matters: the plan-revision loop
 is the Controller's only unbounded autonomous cycle, this very work item ran
-it sixty-one rounds without converging, at a real worker launch and real
+it seventy rounds without converging, at a real worker launch and real
 spend per round, and `--max-steps`
 is deliberately the only bound (review-convergence automation is out of
 scope in the brief). Hitting it is therefore the operator's signal that the
@@ -557,7 +796,7 @@ it to:
   "controller_source_commit": "<40-hex or null>",
   "controller_source_tree_digest": "<64-hex>",
   "target_repo": "/abs/path/to/target",
-  "target_workflow_version": "2.3.1",
+  "target_workflow_version": "2.5.1",
   "work_item_id": "<id or null>",
   "observed_phase_before": "PLANNING",
   "pre_state": {
@@ -576,7 +815,8 @@ it to:
     "rejected_marker_present": false,
     "child_work_item_ids": [],
     "functional_review_consumed_blob": null,
-    "functional_checklist_evidence": null
+    "functional_checklist_evidence": null,
+    "pre_work_item_keys": []
   },
   "selected_action": {
     "kind": "slash_command",
@@ -602,6 +842,66 @@ it to:
   "created_at": "...", "updated_at": "..."
 }
 ```
+
+**`pre_work_item_keys` is revision 64's addition to this block** (round
+63's `I1`). Revision 63 declared it a `PRE_STATE_FIELDS` member in CP6
+step 1 — it is row 7's own `predicate_input` — and left this schema
+rendering the other sixteen, so the document declared seventeen in one
+place and rendered sixteen in the other while property 4 asserts
+`set(record["pre_state"]) == set(PRE_STATE_FIELDS)`, a set **equality**.
+That is round 8's `B3` one field over, and it is the exact shape CP6 step
+1's own *"when a revision makes a rule depend on a value, the same pass
+must name every place that value is captured and persisted"* forbids. It
+is rendered as a JSON **array** of the pre-snapshot's `work_items` keys;
+the in-memory declaration is a `frozenset`, and the capture serialises it
+in sorted order so two runs over the same pre-state produce byte-identical
+records.
+
+**`NO_PHASE`'s durable form, and the single value used for "no phase"**
+(revision 64, round 63's `B2`). Four fields in this record and in CP6B's
+table can carry "there was no phase": `Decision.observed_phase`,
+`observed_phase_before`, `expected_transition.from` and
+`pre_state.phase`. Revision 63 introduced `NO_PHASE` as an
+`is`-comparable sentinel for the third of them, said nothing about how it
+is written to disk or read back, and had `decide_no_work_item` return
+`observed_phase=None` for the first — two representations for one
+concept, one of which does not survive a JSON round-trip at all. Both are
+corrected here, as one declaration:
+
+- **One value, everywhere.** `NO_PHASE` is the **only** in-memory value
+  any of the four fields carries for "no phase". `decide_no_work_item`
+  returns `Decision(observed_phase=NO_PHASE, …)`, not `None`;
+  `pre_state.phase` for a `NoWorkItemYet` target is `NO_PHASE`;
+  `observed_phase_before` is written from the decision, so it carries the
+  same value; and row 7's `expected_transition.from` is that same
+  sentinel. Python's `None` keeps the one meaning the schema already gives
+  it (an absent optional, e.g. `work_item_id`) and the one the
+  `ExpectedOutcome` schema already gives it (`governing_version=None`, the
+  version wildcard), and is never overloaded a third way.
+- **One durable form.** `NO_PHASE` serialises to the JSON **string
+  `"__NO_PHASE__"`** — a reserved literal chosen so that it can never
+  collide with a Workflow phase name, since `KNOWN_PHASES` is a closed
+  set of `A-Z_` identifiers none of which begins or ends with a double
+  underscore. It is declared once, as
+  `NO_PHASE_WIRE = "__NO_PHASE__"`, beside the sentinel itself.
+- **One round-trip rule, stated as an equality.** The writer maps
+  `NO_PHASE → NO_PHASE_WIRE` and every real phase to its own name; the
+  reader maps `NO_PHASE_WIRE → NO_PHASE`, any member of the known-phase
+  set to itself, and **anything else — including a literal `null`, a bare
+  `"None"`, or an unrecognised string — to a refusal**, never to a guess.
+  A record read back off disk must compare `is NO_PHASE` exactly where the
+  record that wrote it held `NO_PHASE`, and CP6's test list carries the
+  round-trip case that asserts it from disk rather than from process
+  memory. Reading is total over the domain and fail-closed outside it,
+  which is the same posture CP3's `UnknownPhaseError` already takes for
+  the phase field it reads out of the *target's* state.
+- **Why a reserved string rather than `null`.** `null` is what an *absent*
+  key deserialises to, and CP7's validation pass keys several of its cases
+  on presence-versus-absence; a "no phase" written as `null` is
+  indistinguishable from a field a buggy writer omitted, which is the
+  discrimination CP6 step 4's own must-be-present/must-be-absent lists
+  exist to make. A reserved non-null literal keeps "no phase" a **stated
+  value** and leaves absence meaning absence.
 
 `status` moves through `PLANNED → LAUNCHED → COMPLETED → FINISHED`, or
 terminates at `FAILED`, `INTERRUPTED`, `INCOMPLETE`, `GATE_BLOCKED`,
@@ -648,13 +948,13 @@ can never leave work that started with no record of it.
 | id | name | depends_on | complexity | session_target |
 | --- | --- | --- | --- | --- |
 | CP1 | Package skeleton, packaging, ignored runtime layout, refusal taxonomy, and the pinned immutable Controller source identity | - | 4 | 1 |
-| CP2 | Managed-repository inspection: Workflow Manager status/verify integration, unmanaged/drifted/unsupported-installation refusals | CP1 | 4 | 1 |
-| CP3 | Read-only Workflow state reader: active work item, phase, checkpoints, review and approval state, fail-closed on malformed or ambiguous state | CP1 | 4 | 1 |
-| CP4 | Next-action decision engine part 1: the phase -> action mapping over frozen Workflow v2.3.1's seventeen phases, the user-only denylist, and the explainable Decision shape | CP3 | 3 | 1 |
+| CP2 | Managed-repository inspection: Workflow Manager status/verify integration, unmanaged/drifted/unsupported-installation refusals | CP1 | 5 | 1 |
+| CP3 | Read-only Workflow state reader: active work item, phase, checkpoints, review and approval state, fail-closed on malformed or ambiguous state | CP1 | 5 | 1 |
+| CP4 | Next-action decision engine part 1: the phase -> action mapping over frozen Workflow 2.5.1's twenty phases, the union-derived user-only denylist, and the explainable Decision shape | CP3 | 5 | 1 |
 | CP4B | Next-action decision engine part 2: evidence-reading disambiguations -- feedback role and status, checklist trailer, consumed marker, incomplete children -- and human-gate classification | CP4 | 3 | 1 |
 | CP5 | Fresh Claude worker abstraction: bounded task launch, synchronous wait, success/failure/interruption/ambiguity classification | CP1 | 5 | 1 |
-| CP6 | Job execution part 1: durable Controller-owned job records, pre-state capture, persist-before-launch, worker launch and result recording | CP2, CP3, CP4B, CP5 | 4 | 1 |
-| CP6B | Job execution part 2: fresh post-state re-read and expected-transition verification, with FINISHED written only after it passes | CP6 | 2 | 1 |
+| CP6 | Job execution part 1: durable Controller-owned job records, pre-state capture, persist-before-launch, worker launch and result recording | CP2, CP3, CP4B, CP5 | 5 | 1 |
+| CP6B | Job execution part 2: fresh post-state re-read and expected-transition verification, with FINISHED written only after it passes | CP6 | 3 | 1 |
 | CP7 | Durable resume: restart reconciliation against authoritative Workflow/Git state, no replay of an already-completed action, stale-metadata rejection | CP6B | 5 | 1 |
 | CP8 | Generation handoff primitive: pending-handoff record, intentional stop, and enforced absence of hot reload in the running generation | CP7 | 5 | 1 |
 | CP9 | CLI completion, disposable managed-repository real-Workflow-action evidence, documentation, and full milestone verification | CP8 | 5 | 1 |
@@ -723,15 +1023,117 @@ revision 36** — "unsupported-installation refusals" in place of
 "unsupported-version refusals" — because its admission gate now refuses an
 unsupported install *profile* as well as an unsupported version, and a name
 narrower than its own gate is the defect this document keeps finding in its
-own prose. That is the only rename in this document's whole history, and it renames
-nothing anything keys on: `depends_on` and the mapping both key on the id.
-Eleven checkpoints, none added and none removed.
+own prose. **Revision 64 widens exactly one more, for the identical
+reason**: `CP4`'s name read *"over frozen Workflow v2.3.1's seventeen
+phases, the user-only denylist"*, and both halves of that clause are false
+against the installed release — the mapping is over **twenty** phases and
+the denylist is now derived as a **union** of two recognisers rather than
+from one. Those two are the only renames in this document's whole history,
+and neither renames anything anything keys on: `depends_on` and the mapping
+both key on the id. **Revision 64 changes one complexity, `CP4` 4 → 5**,
+and it is a re-derivation rather than a bump: three new mapping rows (both
+of their shapes — `DECLINED` and `GATE_BLOCKED` — already exist and are
+already asserted two-directionally), a partition over seventeen files
+instead of fifteen, and one genuinely new mechanism — the union denylist
+derivation, which is a **second** recogniser with its own text model, its
+own no-match rule and its own discriminating instantiations, where
+revisions 10–63 had one. Every other checkpoint's complexity is unchanged
+**at revision 64** and re-derived rather than assumed: CP2's admission gate
+swaps a set-membership test for a line predicate, which is a rewording of
+an existing gate and not a subsystem (4, unchanged, on revision 33's own
+repair-versus-extension precedent); CP3 copies three more literal strings
+into a closed set whose property is already two-directional (5, unchanged);
+CP5's token scan is keyed on a set that gained a member, which is data (5,
+unchanged); CP6B's step-8 rule gains a second stated trigger and CP7's
+case 2 a stated carve-out, each a clause inside a rule those checkpoints
+already own with a case inside a property they already declare (3 and 5,
+unchanged); CP9's `REQ-T18` fixture keeps the mechanism it had and loses a
+refusal that would have stopped it (5, unchanged). Eleven checkpoints,
+none added and none removed at revision 64.
+
+**Revision 68 changes one further complexity, `CP2` 4 → 5** (manual
+external plan review round 67's `I1`, `REQ-43`), and this one is a genuine
+second gate rather than a rewording of the first: revision 64's own
+"rewording of an existing gate, not a subsystem" justification for leaving
+CP2 at 4 no longer holds once admission gains a second, independently
+evaluated membership test (`VALIDATED_WORKFLOW_RELEASES`, evaluated after
+and distinct from `SUPPORTED_WORKFLOW_LINE`), two refusal-evidence shapes
+that must stay distinguishable (`wrong line` versus `known line,
+unvalidated release`), and a discriminating fixture (`REQ-T18B`) that
+exercises a synthetic same-inventory installation no earlier CP2 case
+constructs. The baseline predicate's test count grows from four to seven
+accordingly (above). Every other checkpoint's complexity is unchanged at
+revision 68: no phase, command or denylist inventory moves, so CP3, CP4,
+CP4B, CP5, CP6, CP6B, CP7, CP8 and CP9 are all re-derived and found
+unchanged from their revision-64 (or, for CP1, revision-38) figures. Eleven
+checkpoints, none added and none removed at revision 68 either.
+
+**Revision 69 changes no complexity at all** (round 68's `B1`/`I1`/`I2`),
+and this is re-derived rather than assumed. The only checkpoint whose
+*design* text revision 69 changes is `CP9`: `REQ-T18`'s step 2 gains a
+stated release-selection rule and step 3b gains one fixture precondition,
+`REQ-T18C`. Neither is a new subsystem, a new recogniser or a new text
+model — the rule names a constant CP2 already owns and step 3b asserts two
+memberships of sets the Controller already exports, in a fixture this
+checkpoint already builds — so CP9 stays at **5** on the same
+repair-versus-extension precedent revision 33 set and revision 64 applied
+to this same fixture. `CP2` is untouched at revision 69 and stays at the
+**5** revision 68 derived for it. The other nine are re-read and unchanged:
+no phase, command, denylist or profile inventory moves, and no other
+checkpoint's text is edited. Eleven checkpoints, none added, none removed
+and none renamed at revision 69.
+
+**Checkpoint anchors, and what they must enclose** (revision 64, round
+63's `I2`). `workflow-2.4.0`'s `D-Plan-Amendment-4` requires every
+registry checkpoint id to be delimited in this document by a
+`<!-- CPn -->`/`<!-- /CPn -->` pair, and `/approve-review plan`'s
+reconciliation computes each checkpoint's `content_changed` from
+`workflow_state.checkpoint_content_hash` over **exactly the text those
+anchors enclose**. Revision 63 added the eleven pairs and placed each
+around a heading line alone — measured spans of 24 to 359 bytes against
+sections running to hundreds of lines. That was harmless for revision 63
+only because the *pre* side carried no anchors at all, so every checkpoint
+conservatively reconciled to `NEEDS_REVALIDATION` whatever the hash said.
+From the **next** amendment on it would have been a silent hole: a
+revision that rewrote a checkpoint's entire body without touching its
+heading or its registry row would compute `content_changed = False`,
+reconcile `retained`, and leave the checkpoint `COMPLETE` — skipping the
+revalidation the anchors exist to force. **The rule this document now
+follows, stated so a later revision cannot quietly narrow it again: each
+`<!-- CPn -->`/`<!-- /CPn -->` pair encloses that checkpoint's entire
+content — from the line above its own heading through the last line of its
+section, immediately before the horizontal rule that closes it — and
+nothing else.** Two consequences are deliberate. `CP4` and `CP4B` share
+one section, which this document says is *"written as one design and marked
+where ownership divides"*; both ids therefore enclose that whole shared
+section, `CP4`'s pair outside `CP4B`'s, so a change to either half
+revalidates both. And each anchor sits on a line of its own, separated by
+a blank line from the content it wraps, so that it forms its own block and
+can never be merged into a sentence the document-consistency property's
+complexity half reads — the anchors carry `CP` tokens, and revision 63's
+inline placement put one of them on the same line as a live
+`complexity N` figure.
 
 Requirement traceability is machine-checked in
 `docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json`
 (`REQ-1`–`REQ-15` for the ten capabilities plus scope/layout/acceptance;
-`REQ-T1`–`REQ-T18` for the eighteen named testing requirements, one per
-`docs/ACTIVE_MILESTONE.md` list entry). `generate_mapping` validated
+**`REQ-T1`–`REQ-T18` for the eighteen named testing requirements, one per
+`docs/ACTIVE_MILESTONE.md` list entry, plus `REQ-T18B` and `REQ-T18C`,
+which are *not* brief list entries** — each is a review-raised test this
+document owes on its own account, `REQ-T18B` from round 67's missing-test
+requirement and `REQ-T18C` from round 68's, so the `REQ-T` family has
+**twenty** members against the brief's eighteen and the two suffixed ids
+are exactly the difference; `REQ-16`–`REQ-39` for the
+implementation obligations revision 52 moved out of prose and into the
+mapping; and the amendment requirements, enumerated individually because
+each records one accepted review finding: `REQ-40` for revision 63's
+`NoWorkItemYet` bootstrap architecture, `REQ-41` for revision 64's 2.5.x
+baseline, `REQ-42` for the one round-63 missing test revision 64 defers,
+and `REQ-43` for revision 68's `VALIDATED_WORKFLOW_RELEASES` admission
+narrowing — **sixty-three** requirements in all, counted
+from the regenerated file rather than from this sentence's own history,
+which is a provenance this sentence asserts and revision 69 re-established
+after round 68's `I2` found it asserted while stale). `generate_mapping` validated
 bidirectional coverage at generation time: every requirement owns at least
 one checkpoint and every checkpoint is owned by at least one requirement.
 Revision 2's split moved `REQ-5`, `REQ-8`, `REQ-11` and `REQ-T11` onto
@@ -740,6 +1142,8 @@ Revision 2's split moved `REQ-5`, `REQ-8`, `REQ-11` and `REQ-T11` onto
 both present.
 
 ---
+
+<!-- CP1 -->
 
 ### CP1 — Package skeleton, packaging, runtime layout, refusal taxonomy, pinned source identity
 
@@ -2018,11 +2422,15 @@ a worker-launching command against it refuses with
 `DirtyControllerSourceError` unless `--allow-dirty-source` is passed; a
 malformed `GENERATION.json` refuses rather than defaulting.
 
+<!-- /CP1 -->
+
 ---
+
+<!-- CP2 -->
 
 ### CP2 — Managed-repository inspection
 
-**Owns**: REQ-1, REQ-8 (partly), REQ-T1, REQ-T2, REQ-T3.
+**Owns**: REQ-1, REQ-8 (partly), REQ-T1, REQ-T2, REQ-T3, REQ-41 (partly, revision 64), REQ-43 (revision 68), REQ-T18B (revision 68).
 
 **Files**: `controller/managed_repo.py`, `tests/test_managed_repo.py`,
 `tests/fixtures.py` (extended).
@@ -2070,22 +2478,70 @@ order, refusing at the first failure:
    future reordering that dropped step 2 in favour of "just ask the
    Manager" would silently reopen the hole. `verify` is named the admission
    gate so that reordering cannot.
-5. **The manifest's `(workflow_version, profile)` pair must be in the
-   Controller's supported set**, checked here — before any command file or
-   Workflow state is read — as one closed enumeration,
-   `SUPPORTED_INSTALLATIONS = {("2.3.1", "runtime"), ("2.3.1", "full")}`
-   (revision 32, external round 31's `EXT-PLAN-R31-O1`). An unsupported
-   *version* is `UnsupportedWorkflowVersionError`; a supported version with
-   an unsupported *profile* is `UnsupportedInstallProfileError`; both name
-   the observed value and the supported set. Revisions 1–31 required the
+5. **The manifest's `(workflow_version, profile)` pair must satisfy the
+   Controller's supported-baseline rule**, checked here — before any
+   command file or Workflow state is read. **Revision 64 replaced the
+   closed pair-set with a line predicate; revision 68 narrows admission
+   again, to a closed set of individually validated releases inside that
+   line** (manual external plan review round 67's `I1`), and the
+   "Supported Workflow baseline" policy above, not this step, is the
+   authority:
+
+   - `workflow_version` must parse as a dotted release whose **major and
+     minor components are exactly those of `SUPPORTED_WORKFLOW_LINE`
+     (`"2.5"`)** — a value that does not parse as a dotted release at all
+     is `UnsupportedWorkflowVersionError` naming the observed string, never
+     a best-effort prefix match. This is checked first because it is the
+     cheaper, coarser refusal, and because its evidence names a different
+     defect class from the check below (a release outside the known line
+     at all, versus one inside it that has never been individually
+     validated);
+   - `workflow_version` must **also** be an exact member of
+     `VALIDATED_WORKFLOW_RELEASES` (`{"2.5.1"}`) — the admission gate
+     itself. A version that parses into the `2.5` line but is not in this
+     set (`2.5.0`, or any `2.5.x` patch newer than `2.5.1`) is refused with
+     `UnsupportedWorkflowVersionError`, with evidence stating explicitly
+     that the release is in the supported line but has not been
+     individually validated — distinct wording from the line-predicate
+     refusal above, so the two failure classes are never conflated in a
+     report a human reads;
+   - `profile` must be a member of `SUPPORTED_PROFILES =
+     {"runtime", "full"}`;
+   - `REFERENCE_WORKFLOW_RELEASE = "2.5.1"` is carried alongside both and
+     is **not** a third admission gate: since revision 68 it is also the
+     sole member of `VALIDATED_WORKFLOW_RELEASES`, so the same value names
+     the release every phase, command and denylist inventory in this
+     document was derived from *and* the one release currently admitted;
+     it is what a refusal message quotes when it says which release the
+     Controller's inventories were measured against.
+
+   An unsupported *version* — wrong line, or right line but unvalidated —
+   is `UnsupportedWorkflowVersionError`; a supported, validated version
+   with an unsupported *profile* is `UnsupportedInstallProfileError`; every
+   refusal names the observed value, and the version refusal additionally
+   names which of the two checks it failed. Revisions 1–31 required the
    manifest to declare `profile` in step 2 and then gated on
    `workflow_version` alone, leaving a parsed field with no consumer —
-   the same shape as the `VERIFIED` status revision 15 removed. **Both
-   2.3.1 profiles are supported rather than only the one this repository
-   happens to use**, because the Environment-facts row above measures that
-   they install the identical command and tooling surface; a profile the
-   Manager may add later is refused until it has been measured, which is
-   the fail-closed direction.
+   the same shape as the `VERIFIED` status revision 15 removed. Revision 32
+   closed that with the pair-set `{("2.3.1", "runtime"), ("2.3.1",
+   "full")}` (external round 31's `EXT-PLAN-R31-O1`); revisions 32–63 kept
+   it, and its only distinguishing effect once the Manager shipped 2.4.0
+   and 2.5.x was to refuse the Manager's own default install — including
+   **this repository's**, which is the reproduction round 63's `B6`
+   carries. Revision 64's line predicate over-corrected that: it admitted
+   every `2.5.x` patch sight unseen, which manual external round 67's `I1`
+   found was not fail-closed against a same-named command's semantics
+   drifting between patches. Revision 68's `VALIDATED_WORKFLOW_RELEASES`
+   keeps revision 32's fail-closed discipline — nothing is admitted until
+   it has been measured — while keeping the line predicate's diagnostic
+   value and its stated, repeatable growth procedure, rather than reverting
+   to an unexplained closed pair-set. **Both profiles are supported rather
+   than only the one this repository happens to use**, because the
+   Environment-facts row above measures that they install the identical
+   command and tooling surface; a profile the Manager may add later is
+   refused until it has been measured, which is the fail-closed direction,
+   and so is every release outside `VALIDATED_WORKFLOW_RELEASES` — whether
+   or not it is inside the `2.5` line.
 
 **Two design decisions worth challenging explicitly:**
 
@@ -2121,16 +2577,71 @@ manifest whose `schema_version` is absent, or present but not `1`, raises
 passes the absent case and fails the wrong-value one; a
 stub `workflow-manager` script that exits non-zero raises
 `DriftedInstallationError` and the evidence contains the stub's output; a
-missing executable raises `WorkflowManagerUnavailableError`; a manifest
-declaring `2.4.0` raises `UnsupportedWorkflowVersionError`.
+missing executable raises `WorkflowManagerUnavailableError`.
 
-**The profile pair gets its own three tests** (revision 32): a manifest
-declaring `profile: "runtime"` at `2.3.1` is **admitted**, and the same
-fixture asserts the fifteen command files CP4 partitions are all present
-under it, which is the fact that licenses admitting it; a manifest
-declaring an unknown profile at `2.3.1` raises
+**The baseline predicate gets its own seven cases** (revision 64, round
+63's `B6`; widened from four to seven at revision 68, manual external round
+67's `I1`, `REQ-T18B`), because a bare line predicate, a bare closed set
+and the two-tier rule revision 68 adopts each agree on a different subset
+of them, and a suite written against any one of the first two passes cases
+it should not: a manifest declaring **`2.5.1`** is admitted (the reference
+release, this repository's own, and `VALIDATED_WORKFLOW_RELEASES`'s only
+member); one declaring **`2.4.0`** raises `UnsupportedWorkflowVersionError`
+naming the observed version, the line and the reference release, with
+evidence stating the release is outside the supported line entirely (as
+does `2.3.1`, the superseded baseline, which is asserted explicitly so that
+"the Controller no longer runs against the release it was designed on" is
+a *stated, tested* fact rather than a side effect); one declaring
+**`2.6.0`** raises the same wrong-line refusal, which is what keeps the
+line predicate a line rather than a floor; and a manifest whose
+`workflow_version` is not a dotted release at all (`"latest"`, `""`) raises
+`UnsupportedWorkflowVersionError` too, never a prefix match — four cases,
+unchanged in shape from revision 64's own four, all still wrong-line
+refusals.
+
+**Two further cases were revision 64's own discriminator and are now the
+opposite of what revision 64 asserted, which is the change `I1` requires.**
+A manifest declaring **`2.5.0`** — a real, currently-distributed release —
+now raises `UnsupportedWorkflowVersionError` too, but with evidence naming
+the *other* reason: the release is inside `SUPPORTED_WORKFLOW_LINE` but is
+not a member of `VALIDATED_WORKFLOW_RELEASES`, so its refusal message and
+its evidence dictionary are asserted to differ from `2.4.0`'s — this is
+what discriminates the two-tier rule from a bare line predicate, the same
+role revision 64 gave this case for discriminating a line from a closed
+pair-set, inverted: revision 64 asserted `2.5.0` **admitted** (no closed
+`2.5.1`-only set would have that), and revision 68 asserts it **refused**,
+by name, as the direct consequence of `I1`'s acceptance criterion 1.
+
+**The seventh case is the one `I1`'s own missing-test requirement asks
+for, and it is the case the six above cannot exercise: same inventory,
+different, unvalidated release.** A fixture repository is built whose
+`.claude/commands/` tree and whose `scripts/workflow_state.py`
+`KNOWN_PHASES` block are byte-identical copies of the reference `2.5.1`
+tree — so the phase set, the command-file partition and the user-only set
+CP3/CP4/CP5 read are, by construction, identical to the admitted case — and
+whose `installation.json` alone declares `workflow_version: "2.5.2"`, a
+release that does not exist in the Manager's own `distribution/` and was
+never measured. This manifest is refused with `UnsupportedWorkflowVersionError`,
+carrying the same "known line, unvalidated release" evidence as the
+`2.5.0` case. The test asserts refusal **and** that CP2 never reaches
+CP3/CP4's inventory reads for this fixture — the assertion that
+discriminates this design from one that (wrongly) falls back to an
+inventory-equality check when the exact version is unrecognised, which
+would readmit exactly the case `I1` exists to close. `REQ-T18` (CP9's
+disposable-managed-repository integration test) continues to exercise the
+repository's actually-installed, actually-validated release and is
+unaffected; this seventh case is `REQ-T18B`, a CP2 unit-level fixture, not
+a live-Manager integration test, since the release it names is
+deliberately one the Manager cannot produce.
+
+**The profile pair gets its own three tests** (revision 32, re-pointed at
+the reference release in revision 64): a manifest declaring
+`profile: "runtime"` at `2.5.1` is **admitted**, and the same fixture
+asserts the seventeen command files CP4 partitions are all present under
+it, which is the fact that licenses admitting it; a manifest declaring an
+unknown profile at `2.5.1` raises
 `UnsupportedInstallProfileError` naming both the observed value and
-`SUPPORTED_INSTALLATIONS`; and the refusal is asserted to happen **before**
+`SUPPORTED_PROFILES`; and the refusal is asserted to happen **before**
 any command file or `WORKFLOW_STATE.json` read, by pointing the fixture at
 a repository whose Workflow state is deliberately unparseable — if CP3's
 `MalformedWorkflowStateError` surfaces instead, the ordering regressed.
@@ -2149,11 +2660,16 @@ against the **real** installed `workflow-manager` and is skipped when it is
 absent, so the integration is genuinely exercised where available without
 making the suite depend on it.
 
+<!-- /CP2 -->
+
 ---
+
+<!-- CP3 -->
 
 ### CP3 — Read-only Workflow state reader
 
-**Owns**: REQ-2, REQ-8 (partly), REQ-T4, REQ-T5.
+**Owns**: REQ-2, REQ-8 (partly), REQ-T4, REQ-T5, REQ-40 (partly, revision 63),
+REQ-41 (partly, revision 64).
 
 **Files**: `controller/target_state.py`, `tests/test_target_state.py`.
 
@@ -2185,8 +2701,8 @@ dropped it.
 
 `registry_complete` is the Controller's own read-only derivation of the
 "every checkpoint in the item's own registry is `COMPLETE`" half of the
-`is_terminal` predicate frozen Workflow v2.3.1 computes in
-`resolve_own_registry_completion_status` (`scripts/workflow_state.py:6843`).
+`is_terminal` predicate frozen Workflow computes in
+`resolve_own_registry_completion_status` (`scripts/workflow_state.py:7855`).
 It is derived from the `checkpoints` map and the target's registry file,
 both of which the reader already opens.
 
@@ -2195,11 +2711,13 @@ explicit** (round 2's B1 and I1). Revision 2 made `registry_complete` the
 discriminator between the functional-review gate and the
 milestone-acceptance gate. It cannot be: an item only reaches
 `AWAITING_FUNCTIONAL_REVIEW` *through* `SELF_REVIEWING_IMPLEMENTATION`, and
-`enter_self_reviewing_implementation` (`scripts/workflow_state.py:3317-3325`)
+`enter_self_reviewing_implementation` (`scripts/workflow_state.py:4069-4077`)
 raises `IncompleteCheckpointsForSelfReviewError` unless every registry
 checkpoint is already `COMPLETE`. So the value is `True` on arrival and
 stays `True` for both branches it was asked to separate.
-`MILESTONE_WORKFLOW.md:328-331` says the same thing from the other
+`MILESTONE_WORKFLOW.md:539-542` (revision 65: re-derived against the
+installed 2.5.1 release, which moved this text from `:328-331` -- round
+64's `I2`) says the same thing from the other
 direction, about the retired `/accept-scoped-remediation`: its precondition
 — `AWAITING_FUNCTIONAL_REVIEW` with a non-terminal own registry — *"has no
 producer in any supported lifecycle"*. CP4's revision-3 mapping therefore
@@ -2277,21 +2795,72 @@ Fail-closed conditions, each its own named refusal and its own test:
   refuses to guess which item the operator meant; `--work-item <id>`
   resolves it explicitly.
 
+**Amendment, revision 63 (B2): the zero-candidate case is not a refusal.**
+Revision 62's own target-selection paragraph below folded "zero
+non-terminal work items" into the same `else → AmbiguousWorkItemError`
+branch as "more than one" -- correct for `> 1` (irreducibly ambiguous, no
+default to prefer) but wrong for `0`, where there is no candidate to be
+ambiguous *among*. `REQ-T18`'s own disposable-repository fixture (CP9
+section, "Disposable managed-repository integration evidence") bootstraps
+a target with zero `work_items` entries and asserts the Controller
+succeeds from exactly that state, driving `/milestone-plan` to create the
+first entry -- a contradiction local plan review round 62 never caught,
+since neither side names the other. `select_work_item` now returns a
+distinct, non-error value for this case:
+
+- `active_work_item_id` is `null`, no `--work-item` was given, and
+  **zero** non-terminal work items exist → `NoWorkItemYet` (a `target_state.py`
+  sentinel, never a `WorkItemView` -- there is no work item to view). CP4's
+  own distinct pre-phase branch, below, resolves it to bare
+  `/milestone-plan`. **`NoWorkItemYet` carries no `phase` of its own, and
+  every field that would otherwise hold one carries `NO_PHASE`** — the
+  single value declared once under "Controller-owned runtime state"
+  (revision 64, round 63's `B2`), with `pre_state.phase` included: a
+  `NoWorkItemYet` target's captured pre-state records `phase: NO_PHASE`,
+  serialised as `"__NO_PHASE__"`, never `null` and never a synthetic phase
+  string. This is disjoint from the bullet above it: an explicit
+  `--work-item <id>` naming an id absent from `work_items` is **not**
+  affected by this addition and stays `AmbiguousWorkItemError` exactly as
+  before (`REQ-40`, below) -- the Controller never treats an operator's
+  explicit, wrong name as an invitation to invent a work item, and frozen
+  `.claude/commands/milestone-plan.md` itself refuses that shape
+  unconditionally ("the id argument selects an **existing** entry only...
+  never a silently created work item").
+
 The known-phase set is a **closed set** in `controller/target_state.py`
-holding all **seventeen** phases of frozen Workflow v2.3.1's own
-`workflow_state.KNOWN_PHASES` (`scripts/workflow_state.py:296-315`,
-verified: seventeen entries).
+holding all **twenty** phases of the reference release's own
+`workflow_state.KNOWN_PHASES` (`scripts/workflow_state.py:331-371`,
+re-derived at revision 64 by importing the installed module and counting:
+twenty entries).
+
+**Revision 64 re-derives this set from the installed release rather than
+carrying the v2.3.1 copy** (round 63's `B6`). Three phases are added, and
+all three are 2.4.0/2.5.0 additions the Controller must recognise because
+they are **real and persisted**, not vocabulary:
+
+| Phase | Added by | Written by | Why CP3 must know it |
+|---|---|---|---|
+| `AMENDING_PLAN` | `workflow-2.4.0`, `D-Plan-Amendment-1` | `request_plan_amendment` alone | it survives an interruption between the amendment request and the first post-request `/milestone-plan`, so a supervised target can genuinely be sitting in it — **this work item is in its own `amendment_history` because of exactly that mechanism** |
+| `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` | `workflow-2.5.0`, `D-Implementation-Review-Stages` | `"2.2"`-governed items only | the implementation stage's own local-then-manual-external shape; the Controller reports there and never drives it |
+| `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` | `workflow-2.5.0`, same | `"2.2"`-governed items only | the same, one stage on |
+
+The four vocabulary states and `LEGACY_READY` are unchanged, and no phase
+was removed, so the set grows from seventeen to twenty and nothing else
+about this paragraph's mechanism moves. **The two-directional equality is
+what made this visible rather than a field surprise**, which is the whole
+argument for its shape: the suite went red against the installed release
+the moment the Manager updated, which is how round 63's `B6` was found.
 
 Revision 1 said the set was "derived from
 `docs/ai-workflow/MILESTONE_WORKFLOW.md`'s state reference" and listed
 sixteen. Local plan review round 1 established that this is the wrong
 derivation and found the phase it loses: `LEGACY_READY` appears **zero**
 times in `MILESTONE_WORKFLOW.md` (verified) yet is genuinely persisted —
-`scripts/workflow_state.py:11025` writes `work_item["phase"] =
+`scripts/workflow_state.py:12884` writes `work_item["phase"] =
 "LEGACY_READY"` for a D-Legacy phase 1 dormant adoption entry, and
-`scripts/workflow_state.py:282-284` states explicitly that only
+`scripts/workflow_state.py:319-321` states explicitly that only
 `MILESTONE_COMPLETE` is terminal and `LEGACY_READY` is "dormant, not
-terminal". A dormant adoption entry is the *normal* product of adopting the
+terminal" (both re-derived at revision 64 against the installed release). A dormant adoption entry is the *normal* product of adopting the
 Workflow into an existing repository — precisely the managed repositories
 this Controller exists to supervise — so a Controller that refuses it as
 malformed state cannot `inspect` those repositories at all, and its
@@ -2299,9 +2868,10 @@ non-terminal-item count would also raise a spurious
 `AmbiguousWorkItemError` on a repository with one genuinely active item.
 
 So the set is derived from **the Workflow's own vocabulary**, not from
-prose, and a test asserts set equality against a literal copy of frozen
-v2.3.1's seventeen names (the Controller must not import `scripts/`, so the
-list is copied, not referenced — the test is what keeps the copy honest).
+prose, and a test asserts set equality against a literal copy of the
+reference release's twenty names (the Controller must not import
+`scripts/`, so the list is copied, not referenced — the test is what keeps
+the copy honest).
 The equality assertion is deliberately two-directional: a future Workflow
 release adding a phase fails this suite loudly, rather than shipping an
 `UnknownPhaseError` to a user in the field.
@@ -2314,19 +2884,28 @@ which a writer does persist. Recognising a phase as *known* is not the same
 as *acting* on it — CP4 maps the vocabulary states to explicit refusals and
 `LEGACY_READY` to an explicit manual outcome, never to an action.
 
-Selecting a target work item: an explicit `--work-item <id>` wins; else
-`active_work_item_id`; else, if exactly one non-terminal item exists, that
-one; else `AmbiguousWorkItemError`. `active_work_item_id` is a resume-focus
-pointer and not an execution lock (`D1`), so the Controller treats it as a
-default, never as an authority to override an explicit argument.
+Selecting a target work item: an explicit `--work-item <id>` wins -- and,
+naming an id absent from `work_items`, is `AmbiguousWorkItemError`, never a
+bootstrap trigger; else `active_work_item_id`; else, if exactly one
+non-terminal item exists, that one; else, if **zero** non-terminal items
+exist, `NoWorkItemYet` (revision 63, B2 -- see above); else (more than one)
+`AmbiguousWorkItemError`. `active_work_item_id` is a resume-focus pointer
+and not an execution lock (`D1`), so the Controller treats it as a default,
+never as an authority to override an explicit argument.
+
+<!-- /CP3 -->
 
 ---
+
+<!-- CP4 -->
+
+<!-- CP4B -->
 
 ### CP4 / CP4B — Next-action decision engine and human-gate classification
 
 Revision 4 splits this checkpoint. Round 3 answered revision 3's own
 challenge question 8 — "is CP4 at complexity 6 still one session's work?"
-(**3** today; 6 when that question was asked) —
+(**5** today; 6 when that question was asked) —
 with *no*, and named the seam the plan itself had proposed. Across three
 revisions CP4 absorbed a thirteen-row mapping, three multi-row
 disambiguations, checklist-trailer reading, consumed-marker reading,
@@ -2334,15 +2913,18 @@ feedback role *and* binding-field reading, incomplete-children reading, the
 gate-field single-source rule, and roughly a dozen test groups. The seam is
 a real dependency boundary, not a size cut:
 
-- **CP4** (complexity 3) — `controller/decision.py`, `tests/test_decision.py`:
-  the phase → action mapping over all seventeen phases, the user-only
-  denylist, the phase-set equality assertion, and the `Decision` shape. It
-  reads nothing outside `WorkItemView`.
+- **CP4** (complexity **5** today; 3 at revision 63, before the
+  revision-64 baseline widening) — `controller/decision.py`,
+  `tests/test_decision.py`: the phase → action mapping over all twenty
+  phases, the union-derived user-only denylist, the phase-set equality
+  assertion, and the `Decision` shape. It reads nothing outside
+  `WorkItemView`.
 - **CP4B** (complexity 3, depends on CP4) — `controller/evidence.py`,
   `tests/test_evidence.py`: every evidence-reading disambiguation — feedback
   role and `Status:`, the checklist trailer, the consumed marker,
   `incomplete_children`, `reviewed_implementation_head` — plus `HumanGate`
   and the plan-stage/implementation-stage `artifact_path` resolution.
+
 
 CP6 now depends on CP4B rather than CP4. This is the same argument round 1
 made about CP6 and revision 2 took; pre-declaring it costs one registry
@@ -2350,7 +2932,9 @@ regeneration now against a mid-implementation plan revision later. The
 sections below are written as one design and marked where ownership
 divides.
 
-**Owns**: REQ-3, REQ-6 (partly), REQ-T6, REQ-T7.
+**Owns**: REQ-3, REQ-6 (partly), REQ-T6, REQ-T7, REQ-40 (partly, revision 63 —
+`REQ-40` is assigned to five checkpoints in the mapping, so CP4's share is
+partial like every other's; round 63's `O2`), REQ-41 (partly, revision 64).
 
 `decide(managed_repo, snapshot, work_item) -> Decision` (CP4's entry point,
 delegating every evidence read to CP4B), where `Decision` is a frozen
@@ -2358,6 +2942,42 @@ dataclass: `observed_phase`, `evidence: tuple[str, ...]`,
 `action: Action | None`, `automatic: bool`, `gate: HumanGate | None`,
 `declined: bool`, `reason: str`. Every field is populated on every path —
 an explanation is not an optional extra, it is the return value.
+
+**`NoWorkItemYet` (revision 63, B2, `REQ-40`): a distinct pre-phase
+branch, never a twenty-first row in the twenty-phase table.** CP3's
+`select_work_item` returns `NoWorkItemYet` -- not a `WorkItemView` -- when
+zero non-terminal work items exist and no explicit `--work-item` was
+given (see above). `decide()`'s existing signature takes a `work_item`
+that is always a real `WorkItemView`; a caller holding a `NoWorkItemYet`
+instead calls a distinct, sibling entry point,
+`decide_no_work_item(managed_repo) -> Decision`, *before* ever reaching
+`decide()` -- there is no `phase` to key the twenty-row table on, and
+manufacturing one (e.g. a synthetic `"NO_WORK_ITEM"` phase string) would
+be exactly the invented-vocabulary-state mistake the known-phase set
+above is a closed, Workflow-vocabulary-derived set specifically to avoid.
+`decide_no_work_item` is unconditional and version-independent (there is
+no work item yet to carry a `governing_workflow_version`): it always
+returns `Decision(observed_phase=NO_PHASE, evidence=(), action=Action(command="/milestone-plan",
+work_item_id=None), automatic=True, gate=None, declined=False, reason="no
+non-terminal work item exists and none was explicitly named; frozen
+/milestone-plan derives and creates the first one from
+docs/ACTIVE_MILESTONE.md")`.
+
+**`observed_phase` is `NO_PHASE`, not `None`** (revision 64, round 63's
+`B2`). Revision 63 wrote `None` here and `NO_PHASE` in CP6B's row 7, which
+is two values for one concept — and the amendment's own justification for
+introducing `NO_PHASE` at all is that `None` *"must not be overloaded a
+second way for a different field"*. CP6 step 4 writes
+`observed_phase_before` straight from this field, so the two values would
+have landed in one record, `null` in one key and `"__NO_PHASE__"` in
+another, describing the same absence. The single value, its wire form and
+its round-trip rule are declared once under "Controller-owned runtime
+state" and are not restated here. `action.work_item_id=None` is itself
+significant, not an oversight: the Controller never supplies an id to this
+invocation (`D-Plan-Amendment` constraint above -- frozen Workflow alone
+derives and creates it), so `job.execute_step`'s own launch call passes no
+`--work-item` argument for this action, mirroring exactly what a human
+operator would type for a brand-new milestone.
 
 `declined` is revision 12's addition (round 11's B2). Revision 11 asserted
 it as returned, tested data in three places and never added it here — the
@@ -2391,8 +3011,19 @@ while `selected_action.declined` is `false`, or the reverse, is malformed;
 CP7 treats the disagreement as `StaleJobRecordError` rather than picking a
 winner. `run`, `resume` and `status` all read the stored field.
 
-The mapping, derived from frozen Workflow v2.3.1's own state reference and
-command front matter:
+The mapping, derived from the reference release's own state reference and
+command front matter (frozen Workflow v2.3.1's through revision 63; 2.5.1's
+from revision 64, per the "Supported Workflow baseline" policy above).
+**A `"2.1"` qualifier in this table denotes membership of frozen
+`TWO_STAGE_PLAN_REVIEW_VERSIONS` — `"2.1"` and `"2.2"` alike** — because
+`publish_plan_revision` (`scripts/workflow_state.py:7788-7792`) and every
+plan-stage command's own step 0 take the identical branch for both, and
+`"2.2"`'s only behavioural difference is at the *implementation* stage,
+which this generation does not drive. Each such row therefore stays **one**
+row and contributes **one** coverage triple, for the same reason the
+wildcard rule gives for not materialising a version that makes no
+behavioural difference. The `"1"` qualifier is unchanged and still names
+exactly one version.
 
 **The organising rule, which revision 2 did not have** (round 2's B2):
 *every phase whose exit condition is "a human places an artifact" hosts at
@@ -2438,6 +3069,9 @@ two commands, on neither list.
 | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` | — | — | **no**: report the phase's own gate — see the reporting rules below |
 | `APPLYING_REVIEW_FEEDBACK` | — | — | **no**: an apply stopped part-way, and no Workflow command can legally run from this phase — see below |
 | `AWAITING_FUNCTIONAL_REVIEW` | — | — | **no**: report the phase's own gate — see the reporting rules below |
+| `AMENDING_PLAN` (revision 64) | — | — | **no** (revision 10 scope, applied to a phase 2.4.0 added): report that `/milestone-plan <id>` is the next action and that Generation 1 does not drive it — see below |
+| `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` (`"2.2"`, revision 64) | — | — | **no** (revision 10 scope): report that `/review-implementation <id>` is next and that this generation does not run it — see below |
+| `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` (`"2.2"`, revision 64) | — | — | **no**: report the phase's own gate — an implementation bundle is waiting on a manual external reviewer's verdict; see the reporting rules below |
 | *any bundle-bearing phase* | a `REJECTED` marker exists for this work item | — | **no**, and this row is checked **first** — the bundle was withdrawn; see below |
 | `LEGACY_READY` | — | — | **no**: a dormant D-Legacy adoption entry. Nothing to drive; the human decides whether to activate it |
 | `MILESTONE_COMPLETE` | — | — | terminal: nothing to do |
@@ -2521,14 +3155,14 @@ current bundle's `MANIFEST.md`.
 **At the implementation-stage phases that file is neither guaranteed to
 exist nor guaranteed to be current, and revision 8 handled only the first
 half** (round 8's B2). `prepare-ai-review.sh` writes it there only when its
-optional `[work_item_id]` is passed (`:512`), and when it does not write
+optional `[work_item_id]` is passed (`:586-588`), and when it does not write
 one it deliberately **leaves the previous round's file in place** — *"The
 file stays — it is the published round's identity record, and this run has
 no standing to delete it — but its bundle_id no longer describes what is
-now in `$BUNDLE_DIR`"* (`:585-590`), with a warning printed to say so
-(`:595-600`). Every implementation-stage generation site in the frozen
-release brackets the argument (`milestone-implement.md:325`,
-`apply-implementation-review.md:141`, `apply-functional-review.md:163`), so
+now in `$BUNDLE_DIR`"* (`:671-680`), with a warning printed to say so
+(`:681-686`). Every implementation-stage generation site in the frozen
+release brackets the argument (`milestone-implement.md:350`,
+`apply-implementation-review.md:196`, `apply-functional-review.md:174`), so
 a target whose first `implementation` bundle was generated *with* the id
 and whose `post-fix` rounds are generated *without* it — an ordinary,
 supported mix — carries a permanently frozen `MANIFEST.md`. A readable
@@ -2590,7 +3224,7 @@ inherits rather than assuming all of them everywhere.
 whole of the `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` gate. Round 3 found
 that revision 3's rows for that phase had **no producer**: the only writer
 of the phase is `record_local_plan_review`'s `APPROVE` branch
-(`scripts/workflow_state.py:10781`), which is `/review-plan` step 8 — and
+(`scripts/workflow_state.py:12416`), which is `/review-plan` step 8 — and
 step 7 of that same invocation is required to have written
 `REVIEW_FEEDBACK.md` stating the recomputed `bundle_id`. Nothing
 regenerates the bundle in between, so on entry to the phase the bundle-id
@@ -2601,7 +3235,7 @@ The consequence was not a stall but a wrong action: the Controller would
 launch a worker running `/record-manual-plan-review` against the local
 verdict on **every** `"2.1"` milestone, every round; that command refuses
 with `WrongReviewerRoleError`
-(`.claude/commands/record-manual-plan-review.md:52-56`, `:69-71`); the
+(`.claude/commands/record-manual-plan-review.md:54-58`, `:71-73`); the
 phase would not move; CP6B would record `TransitionNotObservedError`; and
 `run` would exit 30 reporting a *failed job* for a perfectly healthy
 milestone — while never once producing the gate report ("take this bundle
@@ -2644,11 +3278,11 @@ section was written:
   disagreement on any of the three (`FeedbackBundleMismatchError`).
 - `/record-manual-plan-review` step 6 calls
   `validate_manual_plan_review_preconditions`
-  (`scripts/workflow_state.py:10793-10848`), which checks the declared
+  (`scripts/workflow_state.py:12428-12482`), which checks the declared
   **role**, the feedback's **`review_content_id`**, the **current local
   `APPROVE`** and **duplicate ingestion** — and does **not** call
   `assert_feedback_matches_bundle` at all. Its `bundle_id` check is
-  `check_manual_stage_bundle_id_advisory` (`:10850-10866`), documented
+  `check_manual_stage_bundle_id_advisory` (`:12485-12501`), documented
   advisory *because* a wrapper-only regeneration between upload and paste
   changes `bundle_id` while leaving `review_content_id` unchanged and must
   not invalidate a manual review.
@@ -2706,7 +3340,7 @@ table for a stated reason rather than by oversight** (revision 40, local round
 the other three and not this one, because it is **unreachable at this phase by
 construction**. The sole writer of `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` is
 `record_local_plan_review`'s `APPROVE` branch, at
-`scripts/workflow_state.py:10781`, and the assignment two lines above it in the
+`scripts/workflow_state.py:12416`, and the assignment two lines above it in the
 same statement sets `MANUAL_EXTERNAL_PLAN_REVIEW: None` — so a
 `DuplicateManualStageIngestionError` cannot fire at a phase the Controller
 reads unless a hand edit has already written a manual stage record under it,
@@ -2785,7 +3419,7 @@ and the comparison here is against `plan_review_stages.review_content_id`,
 a string field read out of `WORKFLOW_STATE.json`. That value is the current
 one at this phase by construction: the sole writer of
 `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` is `record_local_plan_review`'s
-`APPROVE` branch (`scripts/workflow_state.py:10781`), which stamps the
+`APPROVE` branch (`scripts/workflow_state.py:12416`), which stamps the
 ledger with the id it recomputed in that same invocation, and the only
 edit that changes a plan-stage `review_content_id` is an edit to a
 plan-stage protected path, which reaches this phase again only through
@@ -2831,10 +3465,10 @@ Controller only reports" is supposed to buy.
 
 **`APPLYING_REVIEW_FEEDBACK` is a human gate, not a resume action**, and
 each of revisions 2–4 got this row wrong in a different way.
-`enter_applying_review_feedback` (`scripts/workflow_state.py:9787-9805`)
+`enter_applying_review_feedback` (`scripts/workflow_state.py:11325-11342`)
 **refuses outright from any phase other than
 `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`** — it has no already-there no-op
-branch, unlike `enter_self_reviewing_implementation` (`:3309-3315`), which
+branch, unlike `enter_self_reviewing_implementation` (`:4059-4062`), which
 does — and `.claude/commands/apply-implementation-review.md` calls it in
 its preamble, before its own step 0. So `/apply-implementation-review`
 *runs from* `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` and *writes*
@@ -2853,9 +3487,13 @@ impossible. The gate report now says it out loud: *"an
 implementation-review apply was interrupted here; no Workflow command can
 resume it from this phase, and a human must decide how to recover."*
 
-That is **all seventeen** phases of CP3's closed set: twelve phases with an
-automatic-or-manual outcome, `LEGACY_READY`, and the four vocabulary
-phases. The table carries more *rows* than phases, because a phase whose
+That is **all twenty** phases of CP3's closed set: **fifteen** phases with
+an automatic-or-manual outcome, `LEGACY_READY`, and the four vocabulary
+phases — 15 + 1 + 4 = 20, and the arithmetic is written out because this
+is one of the two places in the plan where totality over the phase set is
+the whole assertion. Twelve, one and four summing to seventeen was the
+revision-10 through revision-63 figure, over the v2.3.1 set; the three
+phases revision 64 adds all land in the first group. The table carries more *rows* than phases, because a phase whose
 outcome turns on evidence gets one row per sub-case, so adding a sub-case
 row never changes this count — the denylist test below enumerates the
 **phase set**, not the rows. The denylist
@@ -2881,12 +3519,12 @@ revision 10's narrowing it is the only one that still selects an action:
    **and** the phase the plan-approval gate sits at. That last duty is not
    obvious: `AWAITING_PLAN_APPROVAL` has exactly one writer in the whole
    module — `record_manual_plan_review`'s `APPROVE` branch
-   (`scripts/workflow_state.py:10900`), on a `"2.1"`-only path — so a `"1"`
+   (`scripts/workflow_state.py:12535`), on a `"2.1"`-only path — so a `"1"`
    item never occupies it. `publish_plan_revision` maps `"1"` back to
-   `AWAITING_EXTERNAL_PLAN_REVIEW` (`:6779-6780`), and `/approve-review`
+   `AWAITING_EXTERNAL_PLAN_REVIEW` (`:7791-7792`), and `/approve-review`
    has no phase precondition at all: its gate is
    `approval_gate_reachable(latest_round_status)`, `True` for `REVISE` or
-   `APPROVE` (`:9319-9325`). So a `"1"` item sits *here* for the whole time
+   `APPROVE` (`:10411-10417`). So a `"1"` item sits *here* for the whole time
    the plan-approval gate is open.
 
    | Evidence | Outcome |
@@ -2912,10 +3550,52 @@ Revision 11 wires all four. There are two distinct shapes, not one:
 
 | Phase | `Decision` | Job status | Exit |
 |---|---|---|---|
-| `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, `AWAITING_FUNCTIONAL_REVIEW`, `APPLYING_REVIEW_FEEDBACK` | `action=None, automatic=False, gate=HumanGate(...), declined=False` | `GATE_BLOCKED` | 10 |
-| `IMPLEMENTING`, `SELF_REVIEWING_IMPLEMENTATION` | `action=<the command>, automatic=False, gate=None, declined=True` | `DECLINED` | **15** |
+| `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, `AWAITING_FUNCTIONAL_REVIEW`, `APPLYING_REVIEW_FEEDBACK`, **`AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`** (revision 64) | `action=None, automatic=False, gate=HumanGate(...), declined=False` | `GATE_BLOCKED` | 10 |
+| `IMPLEMENTING`, `SELF_REVIEWING_IMPLEMENTATION`, **`AMENDING_PLAN`**, **`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`** (both revision 64) | `action=<the command>, automatic=False, gate=None, declined=True` | `DECLINED` | **15** |
 
-The second row is the new one and the distinction is load-bearing. These
+**Revision 64 assigns the three phases the 2.5.1 baseline adds, and each
+is assigned by the same criterion the two shapes were built on rather than
+by resemblance** (round 63's `B6`). The criterion is the one stated
+immediately below: a phase is a **gate** when a human must place an
+artifact before anything can proceed, and **declined** when the next
+action is model-invocable, on neither denylist, and this generation simply
+does not run it.
+
+- **`AMENDING_PLAN` → declined.** Its exit is *"the very next
+  `/milestone-plan [work-item-id]` invocation"*
+  (`MILESTONE_WORKFLOW.md`'s own `AMENDING_PLAN` section), and that
+  command is model-invocable and on neither denylist — the same command
+  the Controller already drives automatically at `PLANNING`. The frozen
+  section says so outright: *"Stop for user/reviewer? No … once a human
+  has invoked it, work continues autonomously from here exactly as it
+  would from `PLANNING`."* So calling it a gate would report "a human must
+  act" for work that needs none. It is **not** promoted to an automatic
+  row, and that is a deliberate scope decision rather than an oversight:
+  an automatic row needs its own `ExpectedOutcome` — a `to_any_of`
+  derived from the frozen transition table and, because
+  `/milestone-plan` from `AMENDING_PLAN` republishes into the same
+  plan-review cycle, its own completion predicate — which is new design
+  work, of exactly the class rounds 4–9 kept getting wrong, and outside
+  the bounded scope round 63's `B6` was resolved under. Generation 2 may
+  take it; Generation 1 names it and declines, which is what `declined`
+  exists to say.
+- **`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` → declined.** Its next action
+  is `/review-implementation <id>`, which is model-invocable and on
+  neither denylist — and which this plan already places in the
+  *deliberately-not-selected* half of the partition, with a stated
+  reason: *"their writes would close a review loop with no external
+  reviewer in it."* A stated reason not to automate an automatable action
+  **is** the declined shape; recording it as a gate would misreport why
+  nothing is happening.
+- **`AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` → gate.** A human
+  must take the implementation bundle to an external reviewer and paste a
+  verdict before `/record-manual-implementation-review` can run at all.
+  That is the implementation stage's exact analogue of
+  `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, and it is a human artifact
+  gate by the criterion, not by analogy.
+
+The `IMPLEMENTING`/`SELF_REVIEWING_IMPLEMENTATION` row is revision 11's
+and the distinction is load-bearing. These
 two phases are **automation-safe** — `/milestone-implement` is
 model-invocable, on neither denylist, and the brief's six hard gates do not
 include either — so calling them a gate would report "a human must act" for
@@ -2949,8 +3629,11 @@ Each names the next action, who must run it, and the artifact path:
 | `IMPLEMENTING` | `/milestone-implement <id>` is next; a human or a later Controller generation runs it. Reports `last_completed_checkpoint_id` and the outstanding checkpoint set, read from the target's registry |
 | `SELF_REVIEWING_IMPLEMENTATION` | `/milestone-implement <id>`'s wrap-up invocation is next; every checkpoint is `COMPLETE` and the implementation bundle has not been generated |
 | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` | one of **four** things, distinguished by read-only evidence: no current-round `REVIEW_FEEDBACK.md` → hand the bundle to a reviewer; `Status: REVISE`/`BLOCK` → `/apply-implementation-review <id>`; `Status: APPROVE` → `/approve-review implementation <id>`, **user-only**; `MANIFEST.md`'s `generation_head` behind the target's `HEAD` → see the provenance note below |
-| `APPLYING_REVIEW_FEEDBACK` | an implementation-review apply was interrupted here. **No Workflow command can legally run from this phase** — `enter_applying_review_feedback` (`scripts/workflow_state.py:9787-9805`) refuses from every other phase and has no already-there no-op branch — so a human must decide how to recover. The report carries the last job record's worker stdout, which is what distinguishes "interrupted" from "refused for a stated reason" |
+| `APPLYING_REVIEW_FEEDBACK` | an implementation-review apply was interrupted here. **No Workflow command can legally run from this phase** — `enter_applying_review_feedback` (`scripts/workflow_state.py:11325-11342`) refuses from every other phase and has no already-there no-op branch — so a human must decide how to recover. The report carries the last job record's worker stdout, which is what distinguishes "interrupted" from "refused for a stated reason" |
 | `AWAITING_FUNCTIONAL_REVIEW` | one of four: no current-round checklist evidence → `/prepare-functional-review <id>`; checklist current and no `FUNCTIONAL_REVIEW.md` → the user performs functional testing and places findings; findings present and unconsumed → `/apply-functional-review <id>`; findings consumed, registry terminal, no incomplete children → `/accept-milestone <id>`, **user-only** |
+| `AMENDING_PLAN` (revision 64) | a human has requested a plan amendment and the amended plan has not been re-planned yet. `/milestone-plan <id>` is next, through that command's own dual-mode branch; a human or a later Controller generation runs it. The report carries the newest `amendment_history` entry's `reason` verbatim and its `requested_from_phase`, which is what tells a reader whether the amendment interrupted `IMPLEMENTING` or `SELF_REVIEWING_IMPLEMENTATION` |
+| `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` (`"2.2"`, revision 64) | `/review-implementation <id>` is next and this generation does not run it — the same reason `review-implementation.md` sits in the *deliberately-not-selected* half of CP4's partition. The report names the bundle path and the ledger's `LOCAL_MODEL_IMPLEMENTATION_REVIEW` state |
+| `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` (`"2.2"`, revision 64) | one of three, distinguished by the same read-only evidence the plan stage's manual gate uses one stage over: no current-round `REVIEW_FEEDBACK.md`, or one declaring `Reviewer role: LOCAL_MODEL_IMPLEMENTATION_REVIEW` → hand the named bundle to a manual external reviewer; a `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` verdict on file → `/record-manual-implementation-review <id>` is next and a human runs it; `Status: BLOCK` → explicit user resolution first. **The Controller reports and never launches at any of the three**, so the admissibility model CP4B states for the plan stage is deliberately *not* re-derived here: nothing at this phase turns on it, and a report is sharpened, never made unsafe, by an evidence read it does not perform |
 
 These are *reports*, so a wrong one costs a human one wasted step rather
 than a wrong durable write — which is exactly the difference the nine
@@ -2972,7 +3655,7 @@ literally name the work item and the superseded commit SHA — which a
 `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` report names it as the human's
 action for that fourth case, and the Controller never selects it. Revision
 9 named the ordinary `post-fix` regeneration as the remedy for this state;
-the generator **refuses** in it (`prepare-ai-review.sh:244`, *"a
+the generator **refuses** in it (`prepare-ai-review.sh:331-338`, *"a
 same-content republication or provenance recovery must first record its own
 `Workflow-Bundle-Generation-Record` commit"*), so that advice was
 unrunnable and is replaced.
@@ -3039,15 +3722,51 @@ apart and send the human to the wrong action while confidently naming the
 right phase. A test asserts that for every gate-producing phase the three
 fields name the same sub-case.
 
-**The user-only denylist, derived from the property rather than from a
-proxy** (revision 10, round 9's B1a; the predicate stated as a form and the
-run recorded by rule, revision 46, local round 45's `OPUS-R45-B1`).
+**The user-only denylist, derived from the union of two recognisers**
+(revision 10, round 9's B1a; the predicate stated as a form and the run
+recorded by rule, revision 46, local round 45's `OPUS-R45-B1`; **widened
+from one recogniser to the union of two in revision 64**, round 63's `B6`).
 Revisions 1–9 derived `USER_ONLY_COMMANDS` from `disable-model-invocation:
-true` front matter and got two commands. That front-matter flag is a
-*proxy* for "this is a human gate", and the proxy and the property come
-apart on exactly one command.
+true` front matter and got two commands. Revisions 10–63 derived it from a
+qualified user-confirmation-guard literal instead and got three, on the
+argument that the front-matter flag is a *proxy* for "this is a human gate"
+while the guard is the property — an argument that was **correct at
+v2.3.1, and correct only because the two populations were nested there**:
+every flagged file also carried the guard, so the guard was the wider set
+and the proxy could be demoted to corroborating evidence with nothing lost.
 
-**The text model.** A command file **carries a user-confirmation guard**
+**At the 2.5.1 reference release they are no longer nested, and neither
+alone is total.** `request-plan-amendment.md`, which 2.4.0 adds, carries
+`disable-model-invocation: true` in its front matter and states *"This
+command is user-only by construction, the same authority shape
+`/approve-review` and `/accept-milestone` already use"* — and it does
+**not** call any `workflow_state.validate_…confirmation` function: its
+own user-only guard ("**User-only guard, mechanism (2)**") is stated
+procedurally, as a refusal to write anything unless the user's own
+current-turn message supplies confirmation text and a reason. The
+guard-literal recogniser therefore misses it, in the **silent** direction:
+a command the frozen release declares user-only would be absent from both
+denylist layers, exactly as `/recover-implementation-provenance` was under
+the proxy-only derivation nine rounds earlier, and with the same
+consequence — a worker launched with it has no user turn to confirm from,
+so it reaches the guard and stops, after the Controller has already
+selected it.
+
+**So the rule is the union, and it is stated as a union rather than as a
+third, wider single recogniser.** `USER_ONLY_COMMANDS` is the set of
+command files that carry **either** the qualified guard literal **or** the
+front-matter flag. Two independent recognisers, each with its own text
+model below, each total over the same enumeration, combined by set union —
+which is the fail-closed direction, because a file either recogniser
+claims is user-only is refused, and a wrong classification can only
+*remove* a command from the Controller's reach, never add one. Deriving a
+third recogniser that subsumes both would mean reading a command's prose
+for the concept "user-only", which is precisely the judgement round 9's
+diagnosis forbids: *enumerate the external artifact, not the table.* The
+flag is no longer "corroborating evidence" and is no longer demoted; it is
+one of two authorities, and the plan says which defect each one closes.
+
+**The text model, recogniser 1 (the guard literal).** A command file **carries a user-confirmation guard**
 when its text contains an occurrence of the literal dotted reference
 `workflow_state.validate_` immediately followed by one or more of
 `[A-Za-z_]` ending in `confirmation` — the fully qualified name of a
@@ -3066,58 +3785,73 @@ is therefore one literal, not two: there is no second, semantic
 "is-this-a-citation" test to state or get wrong, because the qualified form
 already answers it.
 
-**The coverage and the no-match behaviour.** The rule is applied to every
-one of the fifteen files under `.claude/commands/` — the same enumeration
-CP4's partition property already reads — and each resolves to exactly one
-of *carries* or *does not*: the literal either occurs in the file's text or
-it does not, so every file is classified and none is left in a third
+**The text model, recogniser 2 (the front-matter flag).** A command file
+**declares itself model-uninvocable** when its YAML front matter — the
+block delimited by the file's own first two `---` lines, never the body —
+carries a line whose text, after stripping leading whitespace, is exactly
+`disable-model-invocation: true`. Scoping it to the front matter is what
+keeps it a declaration rather than a mention: a body that *discusses* the
+flag (as `request-plan-amendment.md`'s own user-only paragraph does, and
+as this plan does) is not a file that carries it, and the delimiters
+answer that by location, exactly as CP4B's labelled-line model answers its
+own quotation hazard by location rather than by meaning.
+
+**The coverage and the no-match behaviour, for both recognisers alike.**
+Each rule is applied to every one of the **seventeen** files under
+`.claude/commands/` — the same enumeration CP4's partition property
+already reads — and each file resolves, under each rule, to exactly one of
+*carries* or *does not*: the literal either occurs in the scoped region or
+it does not, so every file is classified twice and none is left in a third
 state. The two-directional assertion is against that live derivation,
-computed fresh from the fifteen files at test time, never against a copy
-of the three filenames compared with itself — the cannot-fail shape
+computed fresh from the seventeen files at test time, never against a copy
+of the four filenames compared with itself — the cannot-fail shape
 `OPUS-R45-B1` names as this predicate's other reachable failure mode. A
-file this rule cannot read at all (missing, unreadable) is a failure
+file either rule cannot read at all (missing, unreadable) is a failure
 naming the file, never a skipped classification — the same non-skip
 guarantee the partition property already gives this same enumeration.
 
-**Run over the shipped artifact, by rule.** Applied to all fifteen files:
-**three** carry the guard — `approve-review.md` (`:36`,
-`workflow_state.validate_user_confirmation`), `accept-milestone.md`
-(`:24`, `:54`, `workflow_state.validate_user_confirmation(text,
-work_item_id=..., stage="acceptance")`) and
-`recover-implementation-provenance.md` (`:86`,
-`workflow_state.validate_implementation_provenance_recovery_confirmation(`)
-— and **twelve** do not: `apply-functional-review.md`,
+**Run over the shipped artifact, by rule** (re-run at revision 64 over the
+2.5.1 reference release's seventeen files; the citations are re-derived
+against those bytes, since 2.5.x moved several of them):
+
+| Population | Count | Files |
+|---|---|---|
+| carries `disable-model-invocation: true` in its front matter (recogniser 2) | **3** | `approve-review.md`, `accept-milestone.md`, **`request-plan-amendment.md`** (`:4`) |
+| carries the qualified `workflow_state.validate_…confirmation` reference (recogniser 1) | **3** | `approve-review.md` (`:36`), `accept-milestone.md` (`:24`, `:55`), **`recover-implementation-provenance.md`** (`:104`) |
+| `USER_ONLY_COMMANDS`, the **union** | **4** | the two both agree on, plus one each: `request-plan-amendment.md` and `recover-implementation-provenance.md` |
+
+The remaining **thirteen** carry neither: `apply-functional-review.md`,
 `apply-implementation-review.md`, `apply-plan-review.md`,
 `bootstrap-workflow-v2.md`, `milestone-implement.md`, `milestone-plan.md`,
 `prepare-functional-review.md`, `prepare-review.md`,
-`record-manual-plan-review.md`, `review-functional.md`,
-`review-implementation.md`, `review-plan.md`.
-`recover-implementation-provenance.md` also carries, at `:79`, the bare
+`record-manual-implementation-review.md`, `record-manual-plan-review.md`,
+`review-functional.md`, `review-implementation.md`, `review-plan.md`.
+`recover-implementation-provenance.md` also carries, at `:97`, the bare
 identifier `` `validate_user_confirmation` `` inside the parenthetical
 *"identical in spirit to `/approve-review`'s own `validate_user_confirmation`
 guard"* — a citation of `/approve-review`'s mechanism, not a call to its
 own — and that occurrence does not match the qualified literal above, so
-it does not inflate the count. The proxy derivation, run the same way over
-the same fifteen files, answers **two**: `disable-model-invocation: true`
-occurs in `approve-review.md` and `accept-milestone.md` and nowhere else.
+it does not inflate recogniser 1's count.
 
-| Population | Count | Files |
-|---|---|---|
-| carries `disable-model-invocation: true` (the proxy) | **2** | `approve-review.md`, `accept-milestone.md` |
-| carries the qualified `workflow_state.validate_…confirmation` reference (the property) | **3** | those two, **plus `recover-implementation-provenance.md`** |
+**Each recogniser's own miss is now a stated, instantiated case rather
+than an argument.** `recover-implementation-provenance.md`'s step 4 is
+headed "User-confirmation gate" and the file states the equivalence
+itself, while its front matter carries no `disable-model-invocation` — so
+recogniser 2 misses it, which is round 9's B1a exactly.
+`request-plan-amendment.md` declares itself user-only in its front matter
+and in its own prose, and implements its guard procedurally rather than
+through a `workflow_state` call — so recogniser 1 misses it, which is
+round 63's `B6` exactly. Under either rule alone **both** denylist layers
+pass the missed file through: CP4 would not find it on the list, and CP5's
+token scan is keyed on the same list. The union is what makes neither miss
+reachable, and the two files are what make the union's own two halves
+individually testable.
 
-`recover-implementation-provenance.md`'s step 4 is headed "User-confirmation
-gate" and the file states the equivalence itself — *"identical in spirit to
-`/approve-review`'s own `validate_user_confirmation` guard"* — while its
-front matter carries no `disable-model-invocation`. Under the old
-derivation **both** denylist layers passed it through: CP4 would not have
-found it on the list, and CP5's token scan is keyed on the same list. A
-worker launched with it has no user turn to confirm from, so it reaches
-step 4 and stops.
-
-So `USER_ONLY_COMMANDS` is the **three**-command set, derived from the
-user-confirmation guard, and `disable-model-invocation` is recorded as
-corroborating evidence rather than as the definition.
+So `USER_ONLY_COMMANDS` is the **four**-command set — `approve-review.md`,
+`accept-milestone.md`, `recover-implementation-provenance.md`,
+`request-plan-amendment.md` — derived as the union of the
+user-confirmation guard and the self-declared model-uninvocability flag,
+with neither recogniser subordinate to the other.
 
 **The partition property, which is what closes this class rather than this
 instance.** Round 9's diagnosis was that every property the plan asserts is
@@ -3132,29 +3866,47 @@ the partition into three sets is **total and disjoint**:
 
 - **selected** — the **four** command files `decide()` may return:
   `milestone-plan.md`, `review-plan.md`, `record-manual-plan-review.md`,
-  `apply-plan-review.md`. (Six is the *row* count in CP6B's table; the
-  partition is over *files*, and two commands appear in two rows each);
-- **deliberately not selected** — the **eight**, each with a one-line
+  `apply-plan-review.md`. (Seven is the *row* count in CP6B's table; the
+  partition is over *files*, and two commands appear in two rows each,
+  while `milestone-plan.md` appears in three);
+- **deliberately not selected** — the **nine**, each with a one-line
   reason in the same data structure: `review-implementation.md` and
   `review-functional.md` (their writes would close a review loop with no
   external reviewer in it), `milestone-implement.md`,
   `apply-implementation-review.md`, `apply-functional-review.md`,
   `prepare-functional-review.md` (revision 10's report-only set),
-  `bootstrap-workflow-v2.md` and `prepare-review.md` (outside the milestone
-  lifecycle entirely);
-- **user-only** — the three above.
+  **`record-manual-implementation-review.md`** (revision 64: the
+  implementation stage's own manual-verdict ingestion, model-invocable and
+  on neither recogniser, and deliberately not selected for the same reason
+  the rest of the implementation stage is report-only — it is the
+  `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` gate's *named* next
+  action, run by a human), `bootstrap-workflow-v2.md` and
+  `prepare-review.md` (outside the milestone lifecycle entirely);
+- **user-only** — the four above.
 
-**4 + 8 + 3 = 15**, and fifteen is every `*.md` under `.claude/commands/`.
-The arithmetic is stated because totality over a fixed fifteen is the whole
-assertion — this is the one place in the plan where the counts must be
-exact. A file in none of the three fails the suite; a file in two fails the
-disjointness assertion. That is a two-directional
+**4 + 9 + 4 = 17**, and seventeen is every `*.md` under
+`.claude/commands/` at the 2.5.1 reference release (fifteen, as 4 + 8 + 3,
+from revision 10 through revision 63, over v2.3.1's own surface).
+The arithmetic is stated because totality over the shipped file set is the
+whole assertion — this is the one place in the plan where the counts must
+be exact. A file in none of the three fails the suite; a file in two fails
+the disjointness assertion. **The two files 2.5.x adds landed in two
+different cells and neither landed by default**, which is the property
+this partition exists to force: `request-plan-amendment.md` is user-only
+by both its front matter and its own declaration, and
+`record-manual-implementation-review.md` is deliberately-not-selected by
+the same report-only rule revision 10's narrowing already applies to every
+other implementation-stage command. That is a two-directional
 assertion against the shipped artifact, in the same shape and for the same
 reason as the `KNOWN_PHASES` equality, and it is what would have caught
 round 9's B1 mechanically — nine rounds earlier.
 
 CP5's `launch()` keeps its independent token scan against the same
-three-command set, so "never fabricate user approval" stays enforced twice.
+**four**-command set, so "never fabricate user approval" stays enforced
+twice. The scan is keyed on `USER_ONLY_COMMANDS` by reference rather than
+on a second copy of the names, so revision 64's widening reaches both
+layers in one edit — which is the property that made round 9's B1a a
+*single* fix and would otherwise have made round 63's `B6` two.
 
 **Tests** (`REQ-T6`/`T7`). Each entry is marked with the checkpoint that
 owns it, so a session implementing CP4 can satisfy its own list without
@@ -3163,8 +3915,11 @@ CP4B's evidence reads.
 - **(CP4)** a table-driven test over every known phase asserting the
   expected action, `automatic` flag and reason — driven from CP3's phase
   set, with a **two-directional** set-equality assertion against the
-  hand-copied seventeen `KNOWN_PHASES` names, so a phase added *or removed*
-  by a future Workflow release fails the suite;
+  hand-copied **twenty** `KNOWN_PHASES` names, so a phase added *or
+  removed* by a future Workflow release fails the suite. **It did**: the
+  2.3.1 → 2.5.1 Manager update took this assertion red against three added
+  phases, which is round 63's `B6` and is the case this test was written
+  for;
 - **(CP9)** **the document-consistency property** — see CP9, which owns it;
   it is listed here only because the class it exists for was found in this
   checkpoint's tables;
@@ -3172,17 +3927,25 @@ CP4B's evidence reads.
   B1): enumerate every `*.md` under `.claude/commands/` and assert the
   partition into *selected* / *deliberately-not-selected* / *user-only* is
   total and disjoint. A file in none of the three fails. Instantiated
-  negatively by adding a synthetic sixteenth command file to a fixture
+  negatively by adding a synthetic **eighteenth** command file to a fixture
   directory and asserting the suite fails — this is the one property that
-  enumerates the shipped artifact rather than the plan's own tables, and it
-  is what would have caught `/recover-implementation-provenance`;
-- **(CP4)** the **three**-command user-only denylist derived by the
-  qualified-literal recogniser stated above, asserted two-directionally
-  against a set computed fresh from the same fifteen files at test time —
-  never a copied list — with `/recover-implementation-provenance` named
-  explicitly. A companion test asserts that deriving from
-  `disable-model-invocation` alone yields **two** — pinning the exact gap
-  round 9 found, so nobody re-derives it from the proxy. **Two more
+  enumerates the shipped artifact rather than the plan's own tables, it is
+  what would have caught `/recover-implementation-provenance`, and it is
+  what *did* catch `record-manual-implementation-review.md` and
+  `request-plan-amendment.md` when the Manager shipped them;
+- **(CP4)** the **four**-command user-only denylist derived as the
+  **union** of the two recognisers stated above, asserted two-directionally
+  against a set computed fresh from the same seventeen files at test time —
+  never a copied list — with `/recover-implementation-provenance` and
+  `/request-plan-amendment` both named explicitly. **Two companion tests,
+  one per recogniser, each pinning that recogniser's own gap** (revision
+  64, round 63's `B6`): deriving from the front-matter flag alone yields
+  **three** and omits `/recover-implementation-provenance` — round 9's own
+  gap, unchanged; deriving from the guard literal alone yields **three**
+  and omits `/request-plan-amendment` — round 63's. Each must fail against
+  a build that implements the union as either half, and neither can be
+  satisfied by the other, which is what makes the union's two directions
+  separately checkable rather than jointly assumed. **Two more
   instantiations discriminate the recogniser itself** (revision 46, local
   round 45's `OPUS-R45-B1`), since neither existing case exercises the form
   the declaration now states: a **failing** fixture command file whose
@@ -3192,23 +3955,26 @@ CP4B's evidence reads.
   must be counted, so a build keyed to one of the illustrated surface forms
   rather than to the qualified literal itself is red against it; and a
   **false-positive** fixture command file whose only occurrence is a
-  citation in exactly `recover-implementation-provenance.md:79`'s own
+  citation in exactly `recover-implementation-provenance.md:97`'s own
   shape — the bare identifier `` `validate_user_confirmation` `` inside
   "identical in spirit to `/another-command`'s own ... guard" — and carries
   no guard of its own, which must **not** be counted. Neither of the two
   existing cases reaches either: *"`/recover-implementation-provenance`
   named explicitly"* is satisfied by a hardcoded three-name list, and *"the
   proxy yields two"* exercises only the front-matter flag;
-- **(CP4)** `decide()` never returns any of the three user-only commands
-  for any of the seventeen phases — a total assertion, not a spot check;
+- **(CP4)** `decide()` never returns any of the four user-only commands
+  for any of the twenty phases — a total assertion, not a spot check;
 - **(CP4)** `LEGACY_READY` yielding no action, no gate and no error; every
   vocabulary phase raising `NoSupportedActionError`; an unknown phase
   string refused by CP3's reader before the engine sees it;
 - **(CP4)** **the scope assertion, restated against a subject that can
   fail** (round 12's B1): `decide()` returns **`automatic=False`** at
   `IMPLEMENTING`, `SELF_REVIEWING_IMPLEMENTATION`,
-  `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, `APPLYING_REVIEW_FEEDBACK` and
-  `AWAITING_FUNCTIONAL_REVIEW`, and `automatic=True` at each of the six
+  `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, `APPLYING_REVIEW_FEEDBACK`,
+  `AWAITING_FUNCTIONAL_REVIEW` and — since revision 64 — `AMENDING_PLAN`,
+  `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` and
+  `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`, **eight** report-only
+  phases in all, and `automatic=True` at each of the six
   automatic triples — asserted **two-directionally over both sets**, so
   re-widening is a deliberate test change rather than a silent one.
   Revisions 10–12 stated this as *"`decide()` launches no worker"*, which is
@@ -3218,7 +3984,7 @@ CP4B's evidence reads.
   revision 11's real defect;
 - **(CP6)** **the launch guard is positive, asserted over the whole set**:
   `execute_step` launches a worker only when `decision.automatic` is `True`.
-  Instantiated negatively at **all five** report-only phases with
+  Instantiated negatively at **all eight** report-only phases with
   `claude_bin` pointed at a script that would create a sentinel file, and
   the file must not exist at any of them — the sentinel form works
   identically at a gate phase and a declined one. This is round 11's B1
@@ -3226,11 +3992,13 @@ CP4B's evidence reads.
   `gate=None`, so it fell through and launched `/milestone-implement`) and
   round 12's B1 (revision 12 pinned only `IMPLEMENTING`, leaving three of
   the five covered by nothing that can fail);
-- **(CP4)** **the two-shape assertion** (round 10's B1): the three
-  gate-bearing phases yield `gate=HumanGate(...)`, `action=None`,
-  `GATE_BLOCKED`, exit 10; `IMPLEMENTING` and
-  `SELF_REVIEWING_IMPLEMENTATION` yield `declined=True`, a **populated**
-  `action`, `gate=None`, `DECLINED`, exit **15**. Instantiated negatively
+- **(CP4)** **the two-shape assertion** (round 10's B1; the two sets
+  widened in revision 64): the **four** gate-bearing report-only phases
+  yield `gate=HumanGate(...)`, `action=None`, `GATE_BLOCKED`, exit 10; the
+  **four** declined phases — `IMPLEMENTING`,
+  `SELF_REVIEWING_IMPLEMENTATION`, `AMENDING_PLAN` and
+  `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` — yield `declined=True`, a
+  **populated** `action`, `gate=None`, `DECLINED`, exit **15**. Instantiated negatively
   in both directions — a declined phase reported as a gate, and a gate
   reported as declined, each fail — because folding either into the other
   is exactly what revision 10 left open;
@@ -3357,11 +4125,18 @@ review. So the negative properties above are asserted over the whole
 mapping, in the same shape as the denylist and phase-set assertions, rather
 than instantiated per row.
 
+<!-- /CP4B -->
+
+<!-- /CP4 -->
+
 ---
+
+<!-- CP5 -->
 
 ### CP5 — Fresh Claude worker abstraction
 
-**Owns**: REQ-4, REQ-8 (partly), REQ-T8, REQ-T9, REQ-T10.
+**Owns**: REQ-4, REQ-8 (partly), REQ-T8, REQ-T9, REQ-T10, REQ-41 (partly,
+revision 64).
 
 **Files**: `controller/worker.py`, `tests/test_worker.py`,
 `tests/fake_claude.py`.
@@ -3474,24 +4249,30 @@ launches anything, so clearing the variable costs the child nothing.
 `PYTHONPATH` removed. This is a case added to an existing test list, not a
 new test, and CP5's complexity is unchanged.
 
+<!-- /CP5 -->
+
 ---
+
+<!-- CP6 -->
 
 ### CP6 — Job execution, part 1: records, pre-state, persist-before-launch
 
 **Owns**: REQ-5 (partly), REQ-6 (partly), REQ-8 (partly), REQ-11 (partly),
-REQ-T11 (partly).
+REQ-T11 (partly), REQ-40 (partly, revision 63).
 
 **Files**: `controller/job.py`, `tests/test_job.py`.
 
-Revision 1 made this one checkpoint at complexity 6 (CP6 is **4** today,
-CP6B **2**; 6 when first declared, before revision 4's split and revision
+Revision 1 made this one checkpoint at complexity 6 (CP6 is **5** today,
+CP6B **3**; 6 when first declared, before revision 4's split and revision
 10's narrowing), and flagged in its own risk table that it might overrun a
 session. Local plan review round 1
 agreed and pointed at the seam already present in the step list: steps 1–6
 are *execute and record*, steps 7–9 are *validate the post-state*. Rather
 than leave the split to a mid-implementation plan revision, it is
-pre-declared here as CP6 (steps 1–6, complexity 4) and CP6B (steps 7–9,
-complexity 2 since revision 10's narrowing; 3 when first declared). CP6B depends on CP6 and CP7 now depends on CP6B; nothing
+pre-declared here as CP6 (steps 1–6, complexity **5** today; 4 from
+revision 2's split until revision 62) and CP6B (steps 7–9, complexity
+**3** today; 2 from revision 10's narrowing until revision 62, and 3 when
+first declared). CP6B depends on CP6 and CP7 now depends on CP6B; nothing
 else about the design changed.
 
 `execute_step(managed_repo, *, work_item_id=None, identity, runtime) ->
@@ -3504,25 +4285,43 @@ steps 7–9**:
    **pre-state** into the record's `pre_state` block. The block is not a
    prose list: **`PRE_STATE_FIELDS` is a single declaration that both the
    capture function and property 4 read**, so the two cannot drift. At
-   revision 9 it holds `phase`, `governing_workflow_version`, `target_head`,
+   revision 64 it holds **seventeen** members — `phase`,
+   `governing_workflow_version`, `target_head`,
    `state_revision`, `plan_revision`, `implementation_revision`,
    `last_completed_checkpoint_id`, `checkpoints`, `bundle_id`,
    `bundle_manifest_readable`, `bundle_manifest_generation_head`,
    `bundle_generated_digest`, `rejected_marker_present`,
-   `child_work_item_ids`, `functional_review_consumed_blob` and
-   `functional_checklist_evidence`. Approval status is captured too, for
+   `child_work_item_ids`, `functional_review_consumed_blob`,
+   `functional_checklist_evidence` and, since revision 63,
+   `pre_work_item_keys`. Approval status is captured too, for
    the report.
 
-   **After revision 10's narrowing only three of the sixteen are predicate
-   inputs** — `bundle_id` and `bundle_manifest_readable` (row 3) and
-   `bundle_generated_digest` (row 5). The other thirteen are **report data
+   **`pre_work_item_keys` is the seventeenth**, added by revision 63 as row
+   7's own predicate input and rendered in the record schema by revision 64
+   (round 63's `I1`): revision 63 declared it here and left the schema
+   block above rendering sixteen, while property 4 asserts a set
+   **equality** between the two — round 8's `B3` one field over, and the
+   defect this step's own closing rule forbids. It is captured here, at the
+   pre-state capture, as a `frozenset` of the pre-snapshot's `work_items`
+   keys and serialised in sorted order; the *post*-snapshot's keys are read
+   fresh at verification time and never captured.
+
+   **`phase` is `NO_PHASE` for a `NoWorkItemYet` target** (revision 64,
+   round 63's `B2`), never `null` and never a synthetic phase string —
+   the single value and its wire form are declared once under
+   "Controller-owned runtime state" and read here by reference.
+
+   **After revision 10's narrowing, and with revision 63's row 7, four of
+   the seventeen are predicate inputs** — `bundle_id` and
+   `bundle_manifest_readable` (row 3), `bundle_generated_digest` (row 5)
+   and `pre_work_item_keys` (row 7). The other thirteen are **report data
    rather than predicate inputs**, and the plan says so rather than leaving
    it to be inferred (round 13's I4): they are what `inspect`, `explain`,
    `status` and the gate reports render, and what a later generation driving
    the implementation-stage phases would need. Property 4 asserts
    `predicate_inputs ⊆ PRE_STATE_FIELDS`, a subset rather than an equality,
-   precisely so report data is allowed — and the subset is now a proper one
-   by a wide margin, which is the expected consequence of narrowing the
+   precisely so report data is allowed — and the subset is still a proper
+   one by a wide margin, which is the expected consequence of narrowing the
    automatic surface rather than a defect.
 
    Round 8's B3 is why this is stated as data. Revision 8 added a field to
@@ -3600,7 +4399,14 @@ steps 7–9**:
    - the **top-level identity block** in full — `schema_version`, `job_id`,
      `controller_generation`, `controller_source_commit`,
      `controller_source_tree_digest`, `target_repo`, `target_workflow_version`,
-     `work_item_id`, `observed_phase_before`, `created_at`/`updated_at`;
+     `work_item_id`, `observed_phase_before`, `created_at`/`updated_at`.
+     `observed_phase_before` is written from `Decision.observed_phase`
+     through the one declared wire mapping, so a `NoWorkItemYet` job's
+     first flush carries `"__NO_PHASE__"` — the same value its
+     `pre_state.phase` and, at the second flush, its
+     `expected_transition.from` carry, which is what makes the record
+     internally consistent rather than carrying two spellings of one
+     absence (revision 64, round 63's `B2`);
    - **`pre_state` in full, per `PRE_STATE_FIELDS`** — the same single
      declaration step 1's capture and CP6B's property 4 read, so this half
      cannot drift; `target_head` is a member of it and is therefore written
@@ -3696,6 +4502,11 @@ steps 7–9**:
    Then upgrade the same record to **`LAUNCHED`**, which adds
    **`expected_transition` only** — not the target HEAD, which `pre_state`
    already carries — and flush it again **before** spawning the worker.
+   `expected_transition.from` is serialised through the same declared wire
+   mapping as every other "no phase" site, so row 7's `LAUNCHED` record
+   reads `{"from": "__NO_PHASE__", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]}`
+   on disk and reconstructs to `NO_PHASE` when CP7 re-reads it after a
+   restart (revision 64, round 63's `B2`).
 
    The window between the two flushes is the whole reason CP7's row 1
    exists (round 1's finding): a Controller that dies inside it leaves a
@@ -3778,11 +4589,42 @@ which instead leaves the two flushes differing by `status` and
 `updated_at` alone — the state the selection rule's exception exists to
 prevent, and the only one of the five that no refusal can catch.
 
+**The `NO_PHASE` round-trip case** (revision 64, round 63's `B2` and its
+own missing-tests item), which is the only case in this list that reads a
+record **back from disk** rather than from the `runtime.write_json` spy,
+and that is the whole point of it: execute a row-7 (`NoWorkItemYet`)
+action far enough to write the `PLANNED` and `LAUNCHED` flushes, then
+**re-open both files from the runtime root in a fresh process-level read**
+and assert that `pre_state["phase"]`, `observed_phase_before` and
+`expected_transition["from"]` all reconstruct to the **same** value, and
+that that value `is NO_PHASE`. A build that keeps the sentinel only in
+memory passes every in-process assertion and fails this one, because an
+`is`-comparable object does not survive `json.dump`/`json.load` at all;
+so does a build that writes `null` for one of the three and
+`"__NO_PHASE__"` for another, which is revision 63's own two-value shape.
+**Its negative instantiations are the two shapes the declaration
+forbids**: a fixture record carrying `"phase": null` and one carrying
+`"phase": "None"` must each be **refused** by the reader rather than read
+as "no phase" — the total-and-fail-closed half of the round-trip rule,
+which a reader written as *"anything falsy means `NO_PHASE`"* would pass
+and which is the reading that puts `NO_PHASE` and an omitted key back into
+the same bucket CP6 step 4's present/absent lists exist to keep apart.
+**And the `pre_work_item_keys` case** (round 63's `I1`): the same captured
+`PLANNED` record's `set(record["pre_state"])` is asserted equal to
+`set(PRE_STATE_FIELDS)` at **seventeen** members with `pre_work_item_keys`
+among them — this is property 4's own assertion, instantiated here on the
+field the schema had been missing, so a schema and a declaration that
+disagree by one member fail rather than being noticed by a reviewer.
+
+<!-- /CP6 -->
+
 ---
+
+<!-- CP6B -->
 
 ### CP6B — Job execution, part 2: post-state validation
 
-**Owns**: REQ-5 (partly), REQ-8 (partly), REQ-11 (partly), REQ-T11 (partly).
+**Owns**: REQ-5 (partly), REQ-8 (partly), REQ-11 (partly), REQ-T11 (partly), REQ-40 (partly, revision 63).
 
 **Files**: `controller/job.py` (extended), `tests/test_job_validation.py`.
 
@@ -3792,15 +4634,145 @@ Continuing `execute_step`'s numbering:
    and a fresh state read, not a cached snapshot — and validate the
    post-state against `expected_transition`.
 8. **The verification rule, stated in full and in one form** — this is the
-   sentence an implementation is written from, and CP7 row 2 restates it
-   verbatim rather than paraphrasing it:
+   sentence an implementation is written from, and CP7 row 2 restates the
+   rule in full, clause for clause, and its third clause byte-identically
+   (round 66's `O1`: the standing "restates it verbatim rather than
+   paraphrasing it" claim was true only of the third clause, never of the
+   first two, and is scoped here to what was actually verified rather than
+   left overclaiming the whole sentence):
 
    > `transition_verified` is `true` **iff** the record's `worker_outcome`
    > is `SUCCESS` or `INTERRUPTED`, or is absent on a `PLANNED`/`LAUNCHED`
    > record, **and** the observed post-phase is in
-   > `expected_transition.to_any_of`, **and**, when that observed
-   > post-phase equals the record's own pre-phase, the row's evidence
-   > predicate holds against the pre-state.
+   > `expected_transition.to_any_of`, **and**, whenever the row **carries
+   > an evidence predicate at all**, that predicate holds against the
+   > pre-state — evaluated **unconditionally** when the row's own
+   > `WriterCall.branch` is `None`, and otherwise (the row's writer runs on
+   > one named branch only) evaluated exactly when the observed post-phase
+   > equals the row's own `from_phase`.
+
+   **The third clause is revision 65's repair, correcting revision 64's
+   own** (round 64's `B1`; revision 64 itself repaired round 63's `B1`,
+   below). Revisions 5 through 63 gated predicate evaluation on *"when
+   that observed post-phase equals the record's own pre-phase"* — a
+   condition that is exactly right for the reason the predicate was
+   introduced (rows whose `to_any_of` contains their own `from` phase,
+   where "already succeeded" and "nothing happened" are the same
+   observation) and that **row 7 can never satisfy**: its `from_phase` is
+   `NO_PHASE`, which is not a Workflow phase and can therefore never equal
+   an observed post-phase. Row 7's key-set-difference predicate was
+   declared as data and never evaluated, on the in-process path or on
+   CP7's resume path — so the very case its own paragraph says it exists
+   to stop, *"a `/milestone-plan` that reaches `AWAITING_LOCAL_PLAN_REVIEW`
+   without actually creating a new entry … must not verify"*, verified.
+   Worse, CP6B's own declared row-7 cases require a zero-key and a
+   two-key worker **not** to verify, and neither could pass against an
+   implementation written from the sentence this document says *"an
+   implementation is written from"* — the plan's own named recurring
+   class, a required test that cannot pass against a correct build,
+   reproduced inside the amendment.
+
+   **Revision 64 repaired that by making the trigger the predicate's own
+   presence, unconditionally — which fixed row 7 and broke row 3.** Row
+   3's predicate (`_predicate_row3_block_feedback_current`) checks
+   `Status: BLOCK`; it is a `BLOCK`-branch postcondition by construction,
+   which this document already states two sections below (*"row 3's
+   predicate belongs to the `BLOCK` branch specifically"*) and which the
+   row's own `writer_calls` cell already declares (**branch `BLOCK`**).
+   An unconditional trigger evaluates it on the `APPROVE` and `REVISE`
+   observations too, where it is *false*, so `transition_verified` is
+   `false` on the two outcomes CP4 selects `/review-plan` for automatically
+   and `true` only on `BLOCK` — the row's own no-op branch — which is
+   exactly backwards. Revision 64's own correctness argument (*"the two
+   rows for which the clause is newly wider — rows 3 and 5 — are the two
+   whose `to_any_of` only contains their own pre-phase plus branches the
+   predicate is already true of"*) is false on both halves for row 3: the
+   predicate is false, not true, on `APPROVE`/`REVISE`, and row 5 is not
+   widened at all, since its own `to_any_of` is the pre-phase alone. No
+   declared test caught this: CP6B's three positive cases through revision
+   64 pin row 3 with a `BLOCK` worker only, and a build written verbatim
+   from revision 64's rule passes the whole declared suite regardless.
+
+   **The repair keys the trigger on the row's own declared `branch`
+   (`WriterCall.branch`) instead of on the predicate's bare presence.** A
+   row's `branch` is `None` exactly when its writer runs unconditionally —
+   row 7's `publish_plan_revision` call sits at the end of
+   `milestone-plan.md`'s own unconditional step 1 → step 3 path, so every
+   `to_any_of` member is an equally legitimate observation of that one
+   call, and its predicate is evaluated on every observation, unchanged
+   from revision 64. A row's `branch` is not `None` exactly when its
+   writer runs on one named branch of the command file only — row 3's
+   `BLOCK` branch, row 5's `governing_version="1"` branch — and, by
+   property 5's own walk below, that branch's own step is a **true
+   no-op**: it writes nothing durable, so the phase it leaves behind is
+   its own pre-phase. A branch-bearing row's predicate is therefore
+   evaluated exactly when the observed post-phase equals the row's
+   `from_phase` — the branch's own observation, not merely a phase the
+   row happens to have in `to_any_of`. This recovers, by rule rather than
+   by a second special case, exactly the pre-revision-64 phase comparison
+   for every branch-bearing row (rows 3 and 5) and keeps revision 64's
+   unconditional evaluation for every `branch=None` row (row 7): the two
+   halves of the old single condition were always two different rules
+   wearing one phase comparison, and the row's own `branch` field —
+   declared since revision 11 for property 5 — is what tells them apart.
+
+   **`branch` is a per-`WriterCall` field and `writer_calls` is a tuple,
+   so "the row's own `WriterCall.branch`" is a *derived* value, not a
+   primitive one** (revision 66, round 65's `I1`). Nothing in the schema
+   constrains a row to one writer call — round 6's corollary explicitly
+   contemplates *"a predicate whose row names more than one writer call"*
+   and requires only that such a row conjoin them, and property 3
+   constrains only their `kind` — so a predicate-bearing row with two
+   `WriterCall`s carrying different `branch` values is admissible under
+   every property as they stood at revision 65, and this clause would have
+   had no reading for it. **Property 3 below now states the total,
+   fail-closed derivation** — every `WriterCall` on a row must declare the
+   identical `branch`, and a row whose entries disagree fails at
+   construction naming the row and both values — so this clause reads
+   exactly one value for every row that can be built at all, without
+   forbidding the multi-call shape round 6's corollary depends on. Rows 3,
+   5 and 7 each declare a single `WriterCall`, so the derivation is the
+   identity on the table as it stands and **no row's verdict moves because
+   of it**; it is stated because revision 65 promoted `branch` from data
+   property 5 reads to data this rule *dispatches on*, and a field a rule
+   dispatches on must be total at the level the rule names it.
+
+   No row's verdict changes for row 5 or row 7 from revision 64's own
+   repair; row 3's `APPROVE` and `REVISE` observations are the only two
+   verdicts this revision changes, from `false` (revision 64) back to
+   `true` (subject to the other two clauses, as they were pre-revision-64).
+
+   **Two readings were available, per required acceptance criterion 1, and
+   the choice is recorded rather than left implicit.** (a) Key the trigger
+   on the row's declared `branch`, evaluating a predicate exactly when the
+   observed post-phase is the one that branch's own step is a no-op for —
+   **chosen above**, because `branch` is already declared data
+   (`WriterCall.branch`, revision 11) and reading it is a reduction, not
+   new design. (b) Attach the predicate to a `to_any_of` **member** rather
+   than to the row, so a multi-branch row declares one predicate per
+   member and row 7 declares one over its single member — **rejected**:
+   `ExpectedOutcome.to_any_of` is today a bare `frozenset[str]` with no
+   per-member structure, so (b) **moves `ExpectedOutcome`'s own schema** —
+   `to_any_of` would have to carry a predicate per member (or a parallel
+   mapping keyed on phase), and `predicate_inputs`/property 4's set
+   equality would have to be read per member too, the same "name every
+   place that value is captured and persisted" obligation this document's
+   own migration note already states for that shape. Reading (a) needs
+   none of that, so no `ExpectedOutcome` field is added, removed or
+   renamed by this repair, and (per required acceptance criterion 6) no
+   checkpoint's complexity is re-derived on account of it — CP6B's own
+   complexity is unchanged by choosing (a).
+
+   **Revision 64's own repair to round 63's `B1` is unaffected and
+   restated for context, not undone**: row 7's trigger is still its
+   predicate's bare presence (`branch is None`), which is what makes row
+   7 verify at all. **The alternative the round-63 finding named —
+   "rows whose `from_phase` is `NO_PHASE` are evaluated unconditionally" —
+   stays rejected**, for the reason revision 64 gave: it closes this
+   instance by naming the one row that has the property, which is fixing
+   the location rather than the class. A predicate declared on a row and
+   never run is the defect; the rule now says a declared predicate is
+   always run on the observation it is declared over.
 
    The first clause is revision 18's (round 17's I1), **stated positively
    since revision 21** (round 20's I1). Revision 18 wrote it negatively —
@@ -3845,7 +4817,31 @@ Continuing `execute_step`'s numbering:
    first clause is the exception and is evaluated against the record's own
    `worker_outcome` field, which is what makes it available to `resume` at
    all: the worker is long gone by then, and the outcome survives only
-   because CP6 step 6 persisted it.
+   because CP6 step 6 persisted it. The third clause reads
+   `expected_transition.from` off the record too, through the declared
+   wire mapping, so a row-7 record re-read after a restart reconstructs
+   `NO_PHASE` rather than a `null` the rule would have no reading for
+   (revision 64, round 63's `B2`). **The third clause's *other* input —
+   the row's own `branch` — is read from neither the record nor process
+   memory, and that is deliberate rather than an omission** (revision 66,
+   round 65's `I2`). `expected_transition` persists only
+   `{"from", "to_any_of"}` (`controller/job.py:629-634`) and gains no
+   field from this repair; `resume` does not need one, because
+   `_expected_outcome_for_record` (`controller/job.py:928-949`) re-resolves
+   the **row object itself** out of the in-memory table by
+   `(pre_state.phase, pre_state.governing_workflow_version,
+   command_token)` — all three of which *are* on the wire — and the
+   resolved row carries `branch` with it. So on `resume`, the one place
+   this paragraph says the rule does real work, `branch` comes back from
+   the table rather than from the record, and a record written by a
+   revision-64 build reaches the identical row and the identical `branch`
+   when a revision-66 build reconciles it: no wire migration, no
+   `PRE_STATE_FIELDS` member, no `predicate_inputs` member. That is this
+   revision's answer to its own obligation to *"name every place that
+   value is captured and persisted"*, stated below for the structure and
+   restated here for the value — for `branch` the answer is **nowhere and
+   nowhere**, and it is an answer rather than a gap only because the row is
+   re-resolved by key.
 
    Otherwise — **except for the `INCOMPLETE` case step 9 defines, which
    takes precedence over this clause** — the record is `FAILED` with
@@ -3919,7 +4915,7 @@ Revision 5 keyed on `(from-phase, action)` and then shipped two rows for
 `(PLANNING, /milestone-plan)`, split by governing version — correctly split,
 since `publish_plan_revision` maps `"2.1"` → `AWAITING_LOCAL_PLAN_REVIEW`
 and `"1"` → `AWAITING_EXTERNAL_PLAN_REVIEW`
-(`scripts/workflow_state.py:6776-6780`) — so its own coverage property
+(`scripts/workflow_state.py:7788-7792`) — so its own coverage property
 would have failed at construction: ten pairs, six rows, two sharing a
 key. Round 5 also traced how an implementer would "fix" that: merge the two
 rows into `to_any_of = {AWAITING_LOCAL_PLAN_REVIEW,
@@ -3958,6 +4954,36 @@ ExpectedOutcome(
 )
 ```
 
+**Revision 63 (B2, `REQ-40`) widens `from_phase`'s own domain by exactly
+one member.** Every row through revision 62 has `from_phase` set to a real
+Workflow phase string -- `governing_version=None` already means "the
+wildcard `*`, every version", a per-field convention that says nothing
+about `from_phase`. Row 7 below needs a *distinct* sentinel, not that same
+`None`, because unlike a version wildcard (which still ranges over a real,
+non-empty phase), `from_phase` for the `NoWorkItemYet` bootstrap names no
+phase at all -- there is no work item to have one. `from_phase=NO_PHASE`
+(a private, `is`-comparable sentinel object, never the bare string
+`"None"` or Python's `None` itself, which the wildcard convention already
+claims for `governing_version` and must not be overloaded a second way for
+a different field) is that row's own `from_phase`, and it is the only row
+that ever carries it.
+
+**`NO_PHASE` is durable, and revision 64 says how** (round 63's `B2`).
+`expected_transition` is **persisted JSON** — CP6 step 4's second flush
+writes it and CP7 re-reads it after a restart — so a sentinel defined by
+object identity alone could not be written or reconciled at all, and
+revision 63 declared one without a wire form. The wire form
+(`NO_PHASE_WIRE = "__NO_PHASE__"`), the round-trip rule and the single
+value shared with `Decision.observed_phase`, `observed_phase_before` and
+`pre_state.phase` are all declared **once**, under "Controller-owned
+runtime state", and this table reads them by reference rather than
+restating them — the same single-statement discipline the six properties
+below are stated under. The sentinel stays `is`-comparable **in memory**,
+which is what row-keying needs; the wire literal is what crosses the disk
+boundary; and the reader is total over its domain and a refusal outside
+it, so the two can never drift into "a record that round-trips to
+something that merely looks like no phase".
+
 `predicate_inputs` makes record completeness a genuine set comparison;
 `writer_calls` with a `kind` makes every half of predicate validity
 mechanical instead of a judgement. The markdown table is a rendering of
@@ -3967,21 +4993,88 @@ that data, never its source.
 |---|---|---|---|---|---|---|
 | 1 | `PLANNING` (`"2.1"`) | `/milestone-plan` | `AWAITING_LOCAL_PLAN_REVIEW` | — | ∅ | `publish_plan_revision` (COMPLETION) |
 | 2 | `PLANNING` (`"1"`) | `/milestone-plan` | `AWAITING_EXTERNAL_PLAN_REVIEW` | — | ∅ | `publish_plan_revision` (COMPLETION) |
-| 3 | `AWAITING_LOCAL_PLAN_REVIEW` (`"2.1"`) | `/review-plan` | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` (`APPROVE`), `REVISING_PLAN` (`REVISE`), **or the pre-phase** (`BLOCK`, `scripts/workflow_state.py:10784-10785`) | a `REVIEW_FEEDBACK.md` now exists with `Reviewed bundle ID:` matching the current bundle, `Reviewer role: LOCAL_MODEL_PLAN_REVIEW`, `Status: BLOCK` | `bundle_id`, `bundle_manifest_readable` | `write_review_feedback` (`review-plan.md` step 7), COMPLETION, **branch `BLOCK`** |
-| 4 | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` (`"2.1"`) | `/record-manual-plan-review` | `AWAITING_PLAN_APPROVAL` (`APPROVE`, `:10900`) or `REVISING_PLAN` (`REVISE`, `:10902`) | — (CP4 does not select on `BLOCK`, so `:10903`'s no-op is unreachable) | ∅ | `record_manual_plan_review` (COMPLETION) |
-| 5 | `AWAITING_EXTERNAL_PLAN_REVIEW` (`"1"`) | `/apply-plan-review` | the pre-phase (`publish_plan_revision` maps `"1"` here, `scripts/workflow_state.py:6779-6780`) | `bundle_generated_digest` differs from `pre_state.bundle_generated_digest` | `bundle_generated_digest` | `prepare_ai_review` (`apply-plan-review.md:125`), COMPLETION, **branch `governing_version="1"`** |
+| 3 | `AWAITING_LOCAL_PLAN_REVIEW` (`"2.1"`) | `/review-plan` | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` (`APPROVE`), `REVISING_PLAN` (`REVISE`), **or the pre-phase** (`BLOCK`, `scripts/workflow_state.py:12419-12420`) | a `REVIEW_FEEDBACK.md` now exists with `Reviewed bundle ID:` matching the current bundle, `Reviewer role: LOCAL_MODEL_PLAN_REVIEW`, `Status: BLOCK` | `bundle_id`, `bundle_manifest_readable` | `write_review_feedback` (`review-plan.md` step 7), COMPLETION, **branch `BLOCK`** |
+| 4 | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` (`"2.1"`) | `/record-manual-plan-review` | `AWAITING_PLAN_APPROVAL` (`APPROVE`, `:12535`) or `REVISING_PLAN` (`REVISE`, `:12537`) | — (CP4 does not select on `BLOCK`, so `:12538-12539`'s no-op is unreachable) | ∅ | `record_manual_plan_review` (COMPLETION) |
+| 5 | `AWAITING_EXTERNAL_PLAN_REVIEW` (`"1"`) | `/apply-plan-review` | the pre-phase (`publish_plan_revision` maps `"1"` here, `scripts/workflow_state.py:7791-7792`) | `bundle_generated_digest` differs from `pre_state.bundle_generated_digest` | `bundle_generated_digest` | `prepare_ai_review` (`apply-plan-review.md:137`), COMPLETION, **branch `governing_version="1"`** |
 | 6 | `REVISING_PLAN` (`"2.1"`) | `/apply-plan-review` | `AWAITING_LOCAL_PLAN_REVIEW` | — | ∅ | `transition_to_awaiting_local_plan_review` (COMPLETION) |
+| 7 | `NO_PHASE` (`*`, revision 63) | `/milestone-plan` (no argument) | `AWAITING_LOCAL_PLAN_REVIEW` | the post-snapshot's `work_items.keys()` minus the pre-snapshot's is exactly one key (`post_new_work_item_keys`) | `pre_work_item_keys` | `publish_plan_revision` (`milestone-plan.md:208`), COMPLETION |
 
-Six rows, matching CP4's six automatic
+Six rows through revision 62, matching CP4's six automatic
 `(from-phase, governing_workflow_version, action)` triples after revision
-10's narrowing.
+10's narrowing; **seven from revision 63**, adding row 7 for the
+`NoWorkItemYet` bootstrap (B2, `REQ-40`) -- deliberately **not** an eighth
+triple in CP4's own table, since `NO_PHASE` is not a phase CP4's
+twenty-row mapping is ever keyed on (see CP4's own `decide_no_work_item`
+paragraph above). Coverage's own bijection (property 1, below) is stated
+to exempt this row explicitly, rather than silently widening what "every
+row corresponds to a triple" means.
 
-**Four of the six need no predicate at all**, because their `to_any_of`
-does not contain their own `from` phase — which is the structural reason
-this table can now be got right where the eleven-row version could not.
+**Row 7's writer is the same `publish_plan_revision` completion every
+other `/milestone-plan` row already names** (rows 1-2), because frozen
+`milestone-plan.md` step 0's dual-mode branch and step 1's `route_work_item`
+call run identically whether or not a `work_items[id]` entry already
+existed -- the only difference is that step 1, run with no argument
+against a target with zero non-terminal work items, derives a **new**
+`work_item_id` from `docs/ACTIVE_MILESTONE.md` rather than reusing one.
+Row 7's own `to_any_of` is `{AWAITING_LOCAL_PLAN_REVIEW}` only (never
+`AWAITING_EXTERNAL_PLAN_REVIEW}`, unlike rows 1/2's version split) because
+`NoWorkItemYet` carries no `governing_workflow_version` to select a `"1"`
+branch with -- the config's *current* `default_workflow_version` governs a
+brand-new milestone (step 0's own text), and this Controller Generation
+only ever runs against a `"2.1"`-defaulted installation (`WORKFLOW_CONFIG.json`,
+unmodified by this amendment).
 
-**The two that do carry one also carry a `branch`**, which revision 11 adds
-to the declared data (round 10's B2). Revision 10 reworded property 5 to
+**Row 7's predicate is the plan's own key-set-difference rule, restated as
+data**: `post_work_item = post_state["work_items"].keys() -
+pre_state["work_items"].keys()`, and the predicate is `len(post_work_item)
+== 1`. This is required (row 7's `to_any_of` contains no phase at all, so
+property 3's "required whenever `to_any_of` ∋ `from_phase`" clause does not
+even apply by its own literal reading -- `NO_PHASE` can never be a member
+of a `to_any_of` phase set), but the same defence-in-depth reasoning
+applies as to every predicate-bearing row in this table: a
+`/milestone-plan` that reaches `AWAITING_LOCAL_PLAN_REVIEW` without
+actually creating a new entry (impossible under frozen Workflow, but the
+predicate is never trusted to the command file's own good behaviour more
+than any other row's is) must not verify. **Revision 63 noticed half of
+this and stopped there** (round 63's `B1`): step 8's own rule gated
+predicate *evaluation* on the identical "observed post-phase equals the
+record's own pre-phase" condition this sentence observes row 7 can never
+meet, so the predicate was declared and never run and the case this
+paragraph names verified anyway. Step 8's third clause is rewritten in
+revision 64 to trigger on a row **carrying** a predicate rather than on
+that phase comparison, and CP7 row 2's verbatim restatement moves with it;
+this paragraph is the justification, and the rule above is the repair. `pre_work_item_keys` is a new
+`PRE_STATE_FIELDS` member (frozenset of the pre-snapshot's own
+`work_items` keys, captured at step 1 pre-state capture exactly like every
+other predicate input) -- the *post*-snapshot's own keys are read fresh at
+verification time, never captured in `pre_state`, the same "read fresh,
+never trust a captured post-value" discipline row 5's
+`bundle_generated_digest` predicate already follows.
+
+**Four of the seven need no predicate at all** — rows 1, 2, 4 and 6 —
+because their `to_any_of` does not contain their own `from` phase, which
+is the structural reason this table can now be got right where the
+eleven-row version could not. **Three carry one**: rows 3 and 5, because
+their `to_any_of` *does* contain their own `from` phase, and row 7, for
+the independent defence-in-depth reason its own paragraph above states.
+(Four of six and two of six were the revision-10-through-62 figures;
+revision 63 added row 7 and left this sentence and the one below it
+reading over the old denominator, which is round 63's `B5` and this
+document's own most-repeated failure class — rounds 13's B1a, 14's B1a, 15
+and 19's I3 — recurring in the very table the amendment widened.)
+
+**Two of the three carry a `branch` as well, and row 7 carries none** —
+`branch` is required of a predicate-bearing row **whose writer is invoked
+inside a branch**, never of a predicate-bearing row as such, and property
+5 is stated that way below: a row whose predicate belongs to a branch and
+declares `branch=None` fails construction, while a row whose writer is
+invoked unconditionally declares `branch=None` correctly. Row 7's writer
+is `publish_plan_revision` at the end of `milestone-plan.md`'s own
+unconditional step 1 → step 3 path, reached identically whether or not a
+`work_items` entry already existed, so its `branch` is `None` and its
+property-5 span is the whole file — the `branch=None` case that section
+already declares, not a fourth case. The `branch` field itself is
+revision 11's addition to the declared data (round 10's B2). Revision 10 reworded property 5 to
 require the command-file branch and left `WriterCall` carrying only a name
 and a kind — the same defect as round 7's I1 one property later: a property
 reworded without promoting the field it now reads. Revision 10 also claimed
@@ -3991,7 +5084,7 @@ to the `BLOCK` branch specifically. Read in plain file order row 3 fails
 property 5 — step 7's feedback write is followed by step 8's
 `record_local_plan_review`, a durable state write — and passes only under
 the branch reading, because on `BLOCK` that step is *"a true no-op"*
-(`scripts/workflow_state.py:10784-10785`). The branch is now declared, so
+(`scripts/workflow_state.py:12419-12420`). The branch is now declared, so
 the property can express it. Row 5's branch is the governing-version one,
 already a key field; its `"1"` exit is `apply-plan-review.md`'s step 7,
 report-and-stop with no durable write, so step 5's generator call really is
@@ -4019,7 +5112,7 @@ byte-identical `same_content` round.
 
 Three rounds established why it has to be this and not the alternatives.
 `MANIFEST.md`'s declared `bundle_id` is a record of a *past* generation
-that no live Workflow consumer reads (`prepare-ai-review.sh:591-593`) and
+that no live Workflow consumer reads (`prepare-ai-review.sh:677-679`) and
 that an omitted-id round never refreshes (round 7's B1). The
 `Workflow-Bundle-Generation-Record` commit is required to land *before* the
 generation it attests to (`WF8B-003`), so it is true of rounds that then
@@ -4041,7 +5134,7 @@ bundle regenerated in the same step, so the prior round's feedback cannot
 match the new `bundle_id` — false before the worker ran, true after.
 
 **The plan stage is where `MANIFEST.md` is written unconditionally**
-(`prepare-ai-review.sh:508-512`), so rows 3's staleness input is always
+(`prepare-ai-review.sh:581-584`), so rows 3's staleness input is always
 available. Every defect rounds 7–9 found in the manifest-based inputs was a
 property of the implementation/post-fix stages, whose `[work_item_id]`
 argument is optional; none of it reaches this table.
@@ -4123,9 +5216,26 @@ worded, could not see:
    than relying on the wildcard: `AWAITING_LOCAL_PLAN_REVIEW`,
    `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` and `REVISING_PLAN` are all
    `"2.1"`-only in practice (`publish_plan_revision` maps `"1"` →
-   `AWAITING_EXTERNAL_PLAN_REVIEW`, `scripts/workflow_state.py:6779-6780`;
-   `REVISING_PLAN`'s only writers are `record_local_plan_review` `:10783`
-   and `record_manual_plan_review` `:10902`, both `"2.1"` paths).
+   `AWAITING_EXTERNAL_PLAN_REVIEW`, `scripts/workflow_state.py:7791-7792`;
+   `REVISING_PLAN`'s only writers are `record_local_plan_review` `:12418`
+   and `record_manual_plan_review` `:12537`, both `"2.1"` paths).
+
+   **Revision 63 (B2, `REQ-40`) states one explicit exception to this
+   bijection, rather than silently widening what "every row corresponds to
+   a triple" means.** Row 7's own `from_phase` is `NO_PHASE`, not a member
+   of any Workflow phase vocabulary, so it corresponds to no
+   `(from-phase, governing_workflow_version, action)` triple in CP4's
+   mapping at all -- CP4's own table is keyed entirely over
+   `WorkItemView.phase`, and `NoWorkItemYet` is not a `WorkItemView` (see
+   CP4's own `decide_no_work_item` paragraph). Coverage is therefore
+   checked in two parts from revision 63 on: the bijection above,
+   unchanged, over every row *except* row 7; and, separately, exactly one
+   row (row 7) with `from_phase == NO_PHASE`, corresponding to
+   `decide_no_work_item`'s own single, unconditional call site rather than
+   to any table entry. A test asserting the ordinary bijection over all
+   seven rows unfiltered would itself be wrong from revision 63 on -- it is
+   the property that must name its own exception, not the row that must
+   pretend to a phase it does not have.
 2. **Pair-keyed writer reachability.** Every phase in a row's `to_any_of`
    is one that action's own writers produce **when the command is invoked
    from that row's `from` phase**, for an item of that
@@ -4135,18 +5245,89 @@ worded, could not see:
    The defect was never in a phase; it was in the
    *(action, from-phase) → to_any_of* relation, which is round 4's answer
    to revision 4's own challenge question 6: a fourth negative class.
+
+   **Row 7's own reading (revision 63, B2):** "invoked from that row's
+   `from` phase" means, for `NO_PHASE`, invoked against a target whose
+   Workflow state resolves zero non-terminal work items and named none
+   explicitly -- the precondition `decide_no_work_item`'s own single call
+   site already enforces, never re-derived here. Under that precondition,
+   `publish_plan_revision` unconditionally produces
+   `AWAITING_LOCAL_PLAN_REVIEW` for a `"2.1"`-defaulted installation
+   (`milestone-plan.md` step 0/1, unchanged, unmodified by this
+   amendment), so row 7 passes this property by the same reasoning as
+   rows 1/2, over a precondition stated in `NO_PHASE` terms rather than in
+   phase terms.
 3. **Predicate presence and validity**, asserted over `writer_calls` and
-   `predicate_inputs` rather than over prose. A row whose `to_any_of`
-   contains its own `from` phase and carries no predicate fails at
-   construction; a predicate already implied by its row's CP4 selection
-   condition fails; **every** `WriterCall` on a predicate-bearing row must
-   be `kind=COMPLETION` — an `ENTRY` kind fails (round 5's B2) and a
-   `CONDITIONAL` kind fails (round 7's B1: a writer gated on an optional
+   `predicate_inputs` rather than over prose, **stated in one direction
+   and, since revision 65, with its converse decided explicitly rather
+   than left to the built validator alone** (round 64's `I1`). **Forward,
+   unchanged since revision 5**: a row whose `to_any_of` contains its own
+   `from` phase and carries no predicate fails at construction. **Converse,
+   asserted, with row 7 exempted by name the way property 1's bijection
+   exempts it above**: a row whose `to_any_of` does **not** contain its own
+   `from` phase and carries a predicate anyway also fails at construction —
+   a predicate is either required by `to_any_of`-reachability or it is an
+   unintentional leftover, the same reasoning the forward direction states
+   — **except row 7**, whose `to_any_of` (`{AWAITING_LOCAL_PLAN_REVIEW}`)
+   can never contain its `from_phase` (`NO_PHASE`, which is never a member
+   of any `to_any_of` at all — property 1's own reading, above) and which
+   carries a predicate anyway for the independent defence-in-depth reason
+   its own paragraph states, above ("row 7's predicate is the plan's own
+   key-set-difference rule, restated as data"). The exemption is keyed to
+   `from_phase is NO_PHASE`, not to "any row failing the ordinary
+   `to_any_of`-containment test", so a second, unrelated row that carried a
+   predicate its own `to_any_of` did not require would still fail — the
+   negative instantiation below is exactly that case, kept distinct from
+   the one the exemption admits. `controller/job.py:466-476`'s
+   `property_table_violations` already enforces this converse over the six
+   rows that exist today (*"predicate declared but to_any_of never contains
+   from_phase"*); the exemption is new data this property gains once row 7
+   is implemented, not a change to how the six existing rows are read.
+   **Its own negative instantiation, alongside property 1's**: a synthetic
+   row carrying a **real** `from_phase` (never `NO_PHASE`), a `to_any_of`
+   that does not contain it, and a predicate anyway must still fail
+   construction under the converse — proving the exemption is scoped to
+   row 7's own identity and not to the shape "predicate present, containment
+   absent" in general, which a build that read the exemption as the latter
+   would pass wrongly. A predicate already implied by its row's CP4
+   selection condition fails; **every** `WriterCall` on a predicate-bearing
+   row must be `kind=COMPLETION` — an `ENTRY` kind fails (round 5's B2) and
+   a `CONDITIONAL` kind fails (round 7's B1: a writer gated on an optional
    argument is not performed on every supported invocation); and a row
    naming more than one `WriterCall` must conjoin them, never disjoin
    (round 6's corollary, enforced over **every row of the table** rather than
    the one that prompted it — which is mechanically why round 7's B2
    survived the revision that wrote the corollary).
+
+   **The row-level `branch`, made total and fail-closed** (revision 66,
+   round 65's `I1`). `writer_calls` is a **tuple** and `branch` is a
+   **per-call** field, so "the row's own `branch`" — which step 8's third
+   clause now *dispatches on*, and which property 5 reads to locate a
+   span — is not a primitive of the schema and had no defined value for a
+   row naming more than one call. **The rule, stated once and here rather
+   than inside step 8's prose**: *every `WriterCall` on a row must declare
+   the identical `branch`; the row's `branch` is that shared value, and a
+   row whose `writer_calls` disagree fails at construction, naming the row
+   and both values.* It is **total** — every constructible row has exactly
+   one row-level `branch`, `None` included — and **fail-closed**: the
+   undecided shape is refused rather than resolved by an implementer's
+   silent pick among "all-equal?", "any-named?" and `writer_calls[0]`.
+   Round 6's conjunction corollary is **untouched and still needed**: a
+   row may still name several writer calls and must still conjoin them;
+   what it may not do is straddle two branches, because a single row
+   declares a single observation and property 5 walks a single span.
+   `ExpectedOutcome`'s declared shape does not move — no field is added,
+   removed or renamed, and `writer_calls` stays a tuple (per required
+   acceptance criterion 6 of round 65) — so this is a construction
+   property over existing data, exactly as the `kind` constraints above
+   are. **Its own negative instantiation**: a synthetic predicate-bearing
+   row with two `WriterCall`s, one `branch=None` and one `branch="BLOCK"`,
+   must fail construction; and a second, with two *different* named
+   branches, must fail identically, so the rule is not read as "`None` is
+   the odd one out". Rows 3, 5 and 7 each declare exactly one
+   `WriterCall`, so no existing row's `branch`, and no existing row's
+   verdict, changes — which is what makes the synthetic row the only
+   instrument that can distinguish the readings.
 4. **Record completeness**, asserted against a **captured** record, not
    against another declaration. Build a `pre_state` from a fixture and
    assert `set(record["pre_state"]) == set(PRE_STATE_FIELDS)` and
@@ -4194,7 +5375,7 @@ worded, could not see:
    stating what running *this* branch of *this* command does — as opposed
    to a **citation**, which names the same identifier inside a
    parenthetical or prose aside that attributes the mechanism to a
-   **different**, explicitly named command (`recover-implementation-provenance.md:79`'s
+   **different**, explicitly named command (`recover-implementation-provenance.md:97`'s
    bare `` `validate_user_confirmation` ``, inside "identical in spirit to
    `/approve-review`'s own … guard", is exactly this shape — it names
    `/approve-review`, not this file's own step, so it fails forms (ii) and
@@ -4204,13 +5385,14 @@ worded, could not see:
    bullet, naming no other command" is what keeps form (iii) from ever
    admitting a citation, by its own wording rather than by the qualifying
    prefix alone. **This leaves CP4's own denylist derivation untouched**:
-   it is a distinct rule over a distinct population (all fifteen command
-   files, one qualified literal, no branch and no citation-of-self
-   reasoning), is not restated here, and re-run fresh over the same
-   fifteen files still answers **three** matching
-   (`approve-review.md:36`, `accept-milestone.md:24,54`,
-   `recover-implementation-provenance.md:86`) and twelve not, with
-   `recover-implementation-provenance.md:79` still excluded — form (iii) is
+   it is a distinct rule over a distinct population (all **seventeen**
+   command files, and since revision 64 a **union** of two recognisers,
+   with no branch and no citation-of-self reasoning), is not restated
+   here, and its guard-literal half re-run fresh over those seventeen
+   files still answers **three** matching
+   (`approve-review.md:36`, `accept-milestone.md:24,55`,
+   `recover-implementation-provenance.md:104`) and fourteen not, with
+   `recover-implementation-provenance.md:97` still excluded — form (iii) is
    property 5's own admissible-call form and is never folded into CP4's
    single-literal rule.
 
@@ -4242,19 +5424,26 @@ worded, could not see:
    **Row 3** (`/review-plan`, `BLOCK` branch) is the worked case this
    resolves, re-derived against the frozen file rather than asserted: its
    `BLOCK` branch's span runs from its own `` - `BLOCK`: `` bullet
-   (`.claude/commands/review-plan.md:107`) through step 8's own closing
-   sentence at line 111 — the next numbered step, 9, begins after. Within
-   that span, line 107 reads `` `record_local_plan_review(...,
+   (`.claude/commands/review-plan.md:124`) through step 8's own closing
+   sentence at lines 127-128 — the next numbered step, 9, begins at line
+   129. Within that span, lines 124-125 read `` `record_local_plan_review(...,
    verdict="BLOCK", ...)` `` — a bare identifier naming no other command,
    stating this file's own step 8 outcome for this branch — which
    qualifies under form (iii) and is the located call. No further durable
-   write occurs later in that span: lines 108-111 state only that the call
+   write occurs later in that span: lines 125-126 state only that the call
    "is a true no-op" and that the work item "stays at
-   `AWAITING_LOCAL_PLAN_REVIEW`," and close with a sentence naming no
-   writer at all — neither a `workflow_state.<writer>(...)` call nor a raw
-   state write. Property 5 therefore **passes** row 3, by the same rule
-   that resolves every other row, rather than by the row's own prose being
-   taken as its evidence.
+   `AWAITING_LOCAL_PLAN_REVIEW`," and lines 127-128 close with a sentence
+   naming no writer at all — neither a `workflow_state.<writer>(...)` call
+   nor a raw state write. Property 5 therefore **passes** row 3, by the same
+   rule that resolves every other row, rather than by the row's own prose
+   being taken as its evidence. (Revision 66, round 65's `I3`: three of this
+   walk's four line numbers — `111`, `107` and `108-111` — were the
+   pre-2.5.1 values revision 63 wrote, left standing when revisions 63 and
+   64 moved only the *opening* citation to `:124`, so the span this
+   paragraph described ran **backwards**, from 124 to 111. The conclusion
+   survived re-derivation at the true lines and the apparatus did not,
+   which is the one failure mode a property that checks a declaration
+   against an artifact exists to prevent.)
 
    **Row 5** (`/apply-plan-review`, `governing_version="1"` branch) is
    walked the same way, because it is the only other row the schema
@@ -4265,16 +5454,24 @@ worded, could not see:
    `.claude/commands/apply-plan-review.md:39-40` — a two-line span reading
    only "steps 1-7 execute exactly as written, exiting to
    `AWAITING_PLAN_APPROVAL`." Row 5's declared call site,
-   `apply-plan-review.md:125`, is `` `./scripts/prepare-ai-review.sh` ``,
-   inside step 5 — the step whose own text, at lines 96-97, states that
+   `apply-plan-review.md:137`, is `` `./scripts/prepare-ai-review.sh` ``,
+   inside step 5 — the step whose own text, at lines 108-109, states that
    this call runs unconditionally "on both this step's governing-version
    branches alike," never nested inside either version bullet's own span
    (revision 49, local round 48's `OPUS-R48-I1`: the quotation is step 5's
-   own words about itself, not step 0's — step 0, lines 27-46, states only
-   that "steps 1-7 execute exactly as written" for `"1"` and "steps 1-6
-   execute identically" for `"2.1"`, and never uses the "governing-version
-   branches alike" phrase at all; the proposition the citation supports is
-   unaffected, only its location was wrong). **This row does
+   own words about itself, not step 0's — step 0, lines 27-58, carries the
+   `"1"` bullet "steps 1-7 execute exactly as written" at lines 39-40 and
+   the `"2.1"` bullet "steps 1-6 execute identically" at line 41, **plus
+   two further bullets the 2.5.0 update added** — a `"2.2"` branch at lines
+   51-55 and an "any other `governing_workflow_version`" refusal at lines
+   56-58 — and never uses the "governing-version branches alike" phrase at
+   all; the proposition the citation supports is unaffected, only its
+   location was wrong). (Revision 66, round 65's `I3`: `:96-97` was the
+   pre-2.5.1 location of the quoted phrase, which now sits at `:108-109`;
+   and the 2.5.0 update grew step 0 from `:27-46` to `:27-58`, which made
+   the previous sentence's "states **only**" false of the step it names —
+   both corrected against the installed tree rather than against the
+   previous revision's claim about it.) **This row does
    not resolve under the model above, and this revision does not resolve
    it**: the branch's own span contains no call at all, admissible or
    otherwise, because the actual invocation sits in a step the branch's
@@ -4380,18 +5577,110 @@ CP6B's tests therefore assert **properties 1–6 as numbered above**, plus
 the cases below.
 
 Revision 10's narrowing removes most of what these cases were for. What
-remains, over the six rows: **row 5's mid-action case** — a `"1"` worker
-killed after `publish_plan_revision` and before the regeneration must not
-verify, since the predicate reads the generator's completed output;
-**row 3's `BLOCK` case** — a worker that writes a current-round
-`Status: BLOCK` feedback leaves the pre-phase and *does* verify, while a
-worker that exits 0 writing nothing does not; and **the negative
-instantiation of every property**, since a property that cannot fail is not
-a property: a `CONDITIONAL` writer kind, an `ENTRY` writer kind, a
-disjunction of two writer calls, a `predicate_input` absent from the
-captured record, a `PRE_STATE_FIELDS` entry omitted from the capture, a
-missing row, and a `to_any_of` member that is not a completion each fail
-construction.
+remains, over the (now seven, revision 63) rows: **row 5's mid-action
+case** — a `"1"` worker killed after `publish_plan_revision` and before
+the regeneration must not verify, since the predicate reads the
+generator's completed output; **row 3's `BLOCK` case** — a worker that
+writes a current-round `Status: BLOCK` feedback leaves the pre-phase and
+*does* verify, while a worker that exits 0 writing nothing does not;
+**row 3's `APPROVE` and `REVISE` cases (revision 65, round 64's `B1`,
+required acceptance criterion 2)** — a worker that returns `APPROVE`
+(reaching `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`) and a worker that
+returns `REVISE` (reaching `REVISING_PLAN`) each **verify**, with no
+current-round `REVIEW_FEEDBACK.md` declaring `Status: BLOCK` needed at
+all — row 3's predicate is never even consulted on these two
+observations, since the observed post-phase does not equal the row's
+`from_phase`. Both are **required to verify**, and both are **red**
+against a build written verbatim from revision 64's rule: under that
+rule the third clause fires on every `to_any_of` member, so it evaluates
+`_predicate_row3_block_feedback_current` against a fixture whose
+`REVIEW_FEEDBACK.md` (if any) declares `Status: APPROVE` or
+`Status: REVISE`, the predicate returns `False`, and `transition_verified`
+is wrongly `False` — the case the declared BLOCK-only suite never
+exercised, which is what let revision 64's own defect ship green;
+**row 7's cases (revision 63, B2)** — a worker that creates exactly one
+new `work_items` key verifies; a worker that creates zero (e.g. frozen
+Workflow itself refuses, or exits before step 1) does not; a worker that
+somehow creates two or more (a malformed or concurrently-modified target,
+never a supported frozen-Workflow outcome, but the predicate is never
+trusted to that good behaviour any more than any other row's is) does
+not, since `len(...) == 1` is the literal predicate, not "at least one";
+**the case that discriminates a declared-but-never-evaluated predicate**
+(revision 64, round 63's `B1` and its own missing-tests item) — none of
+the three cases above can fail against a build that ships row 7's
+predicate as data and never runs it, because under revisions 5–63's rule
+*every* build is such a build for this row: the zero-key and two-key
+fixtures are run against a build whose step-8 implementation is written
+from the rule **verbatim**, and each must be **red** unless the third
+clause triggers on row 7's own declared `branch` being `None` — which is
+what makes row 7's predicate evaluated on every one of its `to_any_of`
+members. **Stated as the property rather than as the fixture, since the
+fixture is the same one** (restated at revision 66 in the direction
+revision 65's rule actually holds — round 65's `B1`; revision 64's wording,
+*"evaluated on **every** verification path"*, was true of revision 64's
+rule and became false of revision 65's the moment the trigger was keyed on
+`branch`, contradicting this same checkpoint's two new row-3 cases twenty-six
+lines below):
+
+> *Every declared predicate is evaluated on the observation it is declared
+> over, and a build in which some declared predicate is never consulted on
+> **any** path fails.*
+
+This is the formulation step 8 itself already reaches — *"A predicate
+declared on a row and never run is the defect; the rule now says a
+declared predicate is always run on the observation it is declared over"* —
+and it is a property of the **declaration**, not of the path count, which
+is why it survives a rule that deliberately consults some predicates on one
+observation and others on all of them. **The observation each
+predicate-bearing row is declared over is named here rather than left to be
+re-derived**, since "the observation it is declared over" is the whole
+content of the property:
+
+- **row 3** (`branch="BLOCK"`) is declared over the **`BLOCK`
+  observation** — the one where the post-phase equals its own `from_phase`,
+  because that branch's step is a true no-op. Its `APPROVE` and `REVISE`
+  observations are *not* observations of that branch's write and the
+  predicate is correctly unconsulted on them;
+- **row 5** (`branch="governing_version=\"1\""`) is declared over its
+  **single `to_any_of` member**, which is its own `from_phase` — the same
+  observation by the same reasoning;
+- **row 7** (`branch=None`) is declared over **every member of its
+  `to_any_of`**, because its writer runs unconditionally, so every member
+  is an equally legitimate observation of that one call.
+
+**Its negative instantiation is restated with it, and strengthened**
+(round 65's required acceptance criterion 2): the discriminating build is
+one in which **row 3's predicate is never consulted on any path** — e.g. a
+step-8 that drops the third clause for branch-bearing rows altogether, or
+that evaluates predicates only for `branch is None` rows — which must fail
+this suite on row 3's own `BLOCK` cases, positive and negative. The
+superseded phase-equality mutation revision 64 named is **kept as a second
+instantiation and reclassified**: it still fires, because it differs from a
+correct revision-66 build exactly on `branch is None` rows and so still
+passes row 7's zero-key and two-key cases wrongly — but it instruments
+**row 7's** clause, not the clause this property is now about, and saying
+so is the difference between a property that fails for the right reason and
+one that merely fails. And **the negative
+instantiation of every property**, since a property
+that cannot fail is not a property: a `CONDITIONAL` writer kind, an
+`ENTRY` writer kind, a disjunction of two writer calls, a
+`predicate_input` absent from the captured record, a `PRE_STATE_FIELDS`
+entry omitted from the capture, a missing row, a `to_any_of` member that
+is not a completion, (revision 63) a row with `from_phase == NO_PHASE`
+wrongly counted toward property 1's ordinary six-row bijection, and
+(revision 65, round 64's `I1`) a synthetic row with a real `from_phase`,
+a `to_any_of` that does not contain it, and a predicate anyway —
+distinguishing property 3's row-7 exemption, keyed to `from_phase is
+NO_PHASE`, from a wrongly-general reading that would admit any row
+failing the containment test, and (revision 66, round 65's `I1`) a
+synthetic **predicate-bearing row with two `WriterCall`s whose `branch`
+values disagree** — one `branch=None` and one `branch="BLOCK"`, and
+separately two different *named* branches, so the rule is not read as
+"`None` is the odd one out" — each fail construction. The
+two-`WriterCall` case is the discriminating instrument for property 3's
+new row-level-`branch` rule precisely because rows 3, 5 and 7 all declare
+a single writer call, so no existing row can tell the admissible readings
+apart.
 
 `INCOMPLETE` remains a defined status and CP7 still classifies it, but
 after revision 10's narrowing no Generation 1 action can produce it: its
@@ -4401,16 +5690,33 @@ kept rather than deleted because a record written by a *future* generation
 that does drive that phase must still be readable by this one — which is
 what CP7's closed status table is for.
 
-Two positive cases pin the two predicate-bearing rows that exist: row 3 —
-a `/review-plan` worker returning `BLOCK` writes a current-round
-`REVIEW_FEEDBACK.md`, leaves the pre-phase and **verifies**; and row 5 — a
+Five positive cases pin the three predicate-bearing rows that exist: row
+3 — a `/review-plan` worker returning `BLOCK` writes a current-round
+`REVIEW_FEEDBACK.md`, leaves the pre-phase and **verifies**; row 3 again —
+a worker returning `APPROVE` and a worker returning `REVISE` each leave
+row 3's own predicate unconsulted and **verify** (revision 65, round 64's
+`B1`) — neither is an observation of row 3's `BLOCK` branch, which is the
+observation that predicate is declared over, so the restated property
+above is satisfied by exactly the build these two cases require rather
+than contradicted by it (revision 66, round 65's `B1`); row 5 — a
 `"1"`-governed `/apply-plan-review` worker completing step 5's regeneration
 leaves the pre-phase and **verifies**, because `bundle_generated_digest`
-moved. Revisions 10–13 named
+moved; and row 7 — a bare `/milestone-plan` worker against a
+zero-work-item target creates exactly one new `work_items` key, reaches
+`AWAITING_LOCAL_PLAN_REVIEW` and **verifies** (revision 64: two positive
+cases and two predicate-bearing rows were the figures revisions 10–62
+carried, revision 63 widened the table without widening this sentence to
+three, and revision 64 widened the trigger without adding the two cases
+that would have caught its own defect — round 64's `B1`'s own missing-tests
+item). Revisions 10–13 named
 `/milestone-implement` and `/apply-implementation-review` here; neither has
 a row after the narrowing and neither is ever selected (round 13's B1c).
 
+<!-- /CP6B -->
+
 ---
+
+<!-- CP7 -->
 
 ### CP7 — Durable resume
 
@@ -4455,8 +5761,48 @@ and is stated because the inference went the other way once already:
    by something this generation cannot read, and every later case would be
    reading fields whose meaning it has just declared unknown.
 2. **Unresolvable subject** — `target_repo` does not resolve, or
-   `work_item_id` is absent from the target's state. The record describes
-   work against something that is no longer there.
+   `work_item_id` is **present and** absent from the target's state. The
+   record describes work against something that is no longer there.
+
+   **A `null` `work_item_id` is not an unresolvable subject, and revision
+   64 states which it is** (round 63's `B2`). Row 7's action carries
+   `work_item_id=None` by design — the Controller never supplies an id to
+   a bootstrap `/milestone-plan`, because frozen Workflow alone derives
+   it — so the record's `work_item_id` is `null` both while the job is in
+   flight and forever after. Read as *"absent from the target's state"*,
+   that `null` matches nothing in any target's `work_items` map, and this
+   case would raise `StaleJobRecordError` and **abort the whole call**: a
+   crash in the two-flush window of a bootstrap job — on a brand-new
+   target, the exact population `REQ-T18` exercises — would leave a record
+   that can never be reconciled, and even a *successful* bootstrap's
+   terminal record would abort every later `resume` against that target.
+   The rule is therefore stated over three cases rather than two, and the
+   third is the one revision 63 left unstated:
+
+   - `work_item_id` **absent** from the record entirely → refusal, as CP6
+     step 4's must-be-present list already requires;
+   - `work_item_id` **is a string** and is not a key of the target's
+     `work_items` → refusal, unchanged;
+   - `work_item_id` **is `null`** → **`VALID` for this case**, and the
+     record is dispatched normally. `null` is the *declared* value for a
+     bootstrap job, not a missing subject: the record's subject is the
+     **target repository**, which `target_repo` already resolves, and the
+     work item it created is identified by row 7's own key-set difference
+     rather than by a name the Controller never chose. A row-7 record is
+     distinguishable from a malformed one without guessing, because
+     `expected_transition.from` reconstructs to `NO_PHASE` exactly for
+     those records and to a real phase string for every other row — so
+     *"`work_item_id` is `null`"* and *"`expected_transition.from` is
+     `NO_PHASE`"* must **agree**, and a record in which one holds and the
+     other does not is itself a refusal, naming both fields. That keeps
+     the carve-out keyed on a stated pair rather than on a single
+     permissive `null`.
+
+   **What this costs, stated rather than hidden**: a reconciled row-7
+   record names no work item, so `resume`'s report for it names the
+   target, the job id and the single key the predicate found, not an id
+   the record carries. That is the honest report for a job whose entire
+   point is that the id did not exist when it started.
 3. **`worker_outcome` disagrees with the step that owns the record's
    status.** Stated over the three named non-terminal statuses, one rule
    each, total over the premise below (revision 22, round 21's I1):
@@ -4623,7 +5969,7 @@ which left the sentence a build is assembled from only inferable:
 | Recorded status | Observed reality | Reconciliation |
 |---|---|---|
 | `PLANNED` | anything | nothing can have happened — the record was flushed before the launch was prepared: mark `INTERRUPTED` and allow a fresh `step`. Round 1 found this row missing, and revision 23 gave the status the writer this row had always assumed (round 22's I1): CP6 **step 4** flushes `PLANNED` and only then upgrades the same record to `LAUNCHED`, so a crash between the two flushes leaves a non-terminal record no row matched, and the `resume` loop would have fallen through on a status it did not recognise |
-| `LAUNCHED`/`COMPLETED` | **CP6B step 8's rule holds**, all three clauses: the record's `worker_outcome` is `SUCCESS` or `INTERRUPTED`, or **absent on a `PLANNED`/`LAUNCHED` record**, which are written before the worker returns (stated positively since revision 21 — round 20's I1 — because the negative form admitted every value that was not `FAILURE` or `AMBIGUOUS`; a `COMPLETED` record always carries an outcome and a `PLANNED`/`LAUNCHED` record never does, and any record contradicting the step that owns its status — an outcome present at all on `PLANNED`/`LAUNCHED`, or absent or unrecognised on `COMPLETED` — is malformed and refused by case 3 of the validation pass above, never reaching this table) **and** post-phase ∈ `expected_transition.to_any_of` **and**, where the observed post-phase equals the record's pre-phase, the row's evidence predicate holds against the pre-state | the action **already succeeded**: mark `FINISHED`, `transition_verified: true`, `reconciled_at` set. **Never relaunch.** |
+| `LAUNCHED`/`COMPLETED` | **CP6B step 8's rule holds**, all three clauses: the record's `worker_outcome` is `SUCCESS` or `INTERRUPTED`, or **absent on a `PLANNED`/`LAUNCHED` record**, which are written before the worker returns (stated positively since revision 21 — round 20's I1 — because the negative form admitted every value that was not `FAILURE` or `AMBIGUOUS`; a `COMPLETED` record always carries an outcome and a `PLANNED`/`LAUNCHED` record never does, and any record contradicting the step that owns its status — an outcome present at all on `PLANNED`/`LAUNCHED`, or absent or unrecognised on `COMPLETED` — is malformed and refused by case 3 of the validation pass above, never reaching this table) **and** post-phase ∈ `expected_transition.to_any_of` **and**, whenever the row **carries an evidence predicate at all**, that predicate holds against the pre-state — evaluated **unconditionally** when the row's own `WriterCall.branch` is `None`, and otherwise (the row's writer runs on one named branch only) evaluated exactly when the observed post-phase equals the row's own `from_phase` (restored to byte-verbatim agreement with step 8's **third clause** at revision 66, round 65's `O1`, and the aside re-scoped from "step 8's sentence" to "step 8's third clause" at round 66's `O1` — the third clause is what was actually verified by extraction, and step 8's own standing claim is corrected to match: revision 65 moved this restatement with the repair but dropped the qualified field name and the parenthetical gloss, two divergences in the one revision that moved it, against this cell's own *"restates it verbatim rather than paraphrasing it"*; the row-level value the qualified name denotes is property 3's total, fail-closed derivation over `writer_calls`, revision 66, round 65's `I1`. The third clause's trigger is keyed on the row's declared `branch` since revision 65, round 64's `B1` — it was the predicate's bare presence, unconditionally, through revision 64, which verified row 7 correctly but evaluated row 3's `BLOCK`-specific predicate on `APPROVE`/`REVISE` too, where it is false, failing the Controller's two ordinary `/review-plan` outcomes; and it was *"where the observed post-phase equals the record's pre-phase"* through revision 63, a condition row 7's `NO_PHASE` pre-phase can never satisfy, so row 7's predicate was declared and never evaluated on this path either; this restatement moves with step 8's rule, which is what *"restates it verbatim rather than paraphrasing it"* is for) | the action **already succeeded**: mark `FINISHED`, `transition_verified: true`, `reconciled_at` set. **Never relaunch.** |
 | `LAUNCHED` | phase unchanged, the predicate does **not** hold, and target HEAD unchanged | nothing durable happened: mark `INTERRUPTED` and allow a fresh `step` to retry |
 | `LAUNCHED` | phase unchanged and the predicate does not hold, but target HEAD moved; or phase moved somewhere outside `to_any_of` | `UnreconcilableJobError` — fail closed, report both observations, require a human |
 | `COMPLETED` | CP6B step 8's rule does **not** hold — **including** the case where the durable transition is plainly there and the rule fails on its *first* clause alone, because the worker reported `FAILURE` or returned an `AMBIGUOUS` result | the worker ran and returned, and the transition was not produced or not verified before the process died: reconcile to `FAILED` with `TransitionNotObservedError` evidence, exactly as CP6B step 8 would have — which is now true for every clause rather than for the two durable-state ones (round 17's I1). For the `FAILURE`/`AMBIGUOUS` case the evidence names the worker outcome **and** the observed transition separately, so the report says "the phase moved and the worker did not claim it" rather than either half alone; `resume` still never relaunches it, which is what *"`AMBIGUOUS` requires reconciliation rather than retry"* means at this end. Revisions 1–14 keyed the three failing branches on `LAUNCHED` alone, so a record interrupted between CP6 step 6 and CP6B step 9 matched no row (round 14's I3) |
@@ -4639,11 +5985,15 @@ fact. (Revisions 1–5 called this "the first row"; the first row is the
 `PLANNED` row round 1 added, which permits a fresh attempt.)
 
 **Why the predicate clause is load-bearing here and not merely tidy**
-(round 5's B1). **Two of CP6B's six rows — rows 3 and 5 — have `to_any_of`
-∋ their own `from` phase**, a count revision 10's narrowing left as "six of
-six" by editing the denominator without re-deriving the numerator (rounds
-13's B1a and 14's B1a — the first pass fixed this sentence and left the
-three below it).
+(round 5's B1). **Two of the table's rows — rows 3 and 5 — have `to_any_of`
+∋ their own `from` phase** (six of six at revision 10's narrowing, seven
+from revision 63: row 7 never joins this set, since `NO_PHASE` -- row 7's
+own `from_phase` -- can never be a member of any `to_any_of`, which only
+ever contains real Workflow phase strings; row 7 is predicate-bearing for
+the independent reason its own paragraph above states, not this one), a
+count revision 10's narrowing left as "six of six" by editing the
+denominator without re-deriving the numerator (rounds 13's B1a and 14's
+B1a — the first pass fixed this sentence and left the three below it).
 
 Without the clause, an unchanged phase satisfies this row for **those two
 rows**, and this row is evaluated before the two below it, so both of those
@@ -4656,7 +6006,7 @@ the same observation.
 **The worked case is row 5.** A `"1"`-governed `/apply-plan-review` worker
 is killed after `publish_plan_revision` and before step 5's regeneration.
 `publish_plan_revision` maps `"1"` back to `AWAITING_EXTERNAL_PLAN_REVIEW`
-(`scripts/workflow_state.py:6779-6780`), so the phase is unchanged and *in*
+(`scripts/workflow_state.py:7791-7792`), so the phase is unchanged and *in*
 `to_any_of`; a predicate-blind row 2 reconciles it to *"already succeeded —
 `FINISHED`, never relaunch"* for a round that published no bundle. Note
 that a weaker "did the worker write anything at all" test would also have
@@ -4668,8 +6018,8 @@ must actually be consulted rather than merely declared.
 Revisions 10–14 carried a `/milestone-implement`-at-`IMPLEMENTING` worked
 case here. That action has had no `ExpectedOutcome` row since the narrowing
 and `decide()` can never select it — CP4's sentinel assertion now proves
-that at all five report-only phases — so the case has been restated over a
-row that exists, rather than renamed in place (round 14's B1c).
+that at all eight report-only phases — so the case has been restated over
+a row that exists, rather than renamed in place (round 14's B1c).
 
 The clause also makes the two declared CP7 tests instantiable together.
 Without it, "a `LAUNCHED` record whose target already shows the expected
@@ -4692,10 +6042,10 @@ is reconciled or explicitly rejected" explicitly permits rejection.
 **Tests** (`REQ-T12`/`T13`). Three of these are revision 16's, each the
 **failing instantiation** the corresponding rule lacked — round 7's rule,
 which this document states **five** times and which revision 15's three
-additions each skipped (round 15's I1). **Seven** more have been added since,
-one each in revisions 17, 18, 20, 21 and 29 and two in revision 22 — **ten
-bullets in all**, re-derived by counting them in revision 29 rather than by
-editing the tail of this sentence again (round 22's O1: *"two more"* was
+additions each skipped (round 15's I1). **Nine** more have been added since,
+one each in revisions 17, 18, 20, 21 and 29 and two each in revisions 22
+and 64 — **twelve bullets in all**, re-derived by counting them in
+revision 64 rather than by editing the tail of this sentence again (round 22's O1: *"two more"* was
 true when revision 18 wrote it, and four revisions each added a bullet and
 named themselves at the tail without re-deriving the figure at the head).
 Each is identified below by the revision that wrote it rather than by its
@@ -4807,7 +6157,51 @@ revision 28 answered in CP6 with a writer-side instantiation instead
   direction — and are **not** surfaced marked unreadable. It fails if an
   implementer resolves the split the other way, which is the guess the
   carve-out's wording invites and which would downgrade possibly-live
-  newer-generation work to a note.
+  newer-generation work to a note;
+- **a row-7 record at `LAUNCHED` whose `work_item_id` is `null`**
+  (revision 64, round 63's `B2`), written to disk by a real `execute_step`
+  against a zero-work-item target and re-read from there rather than
+  hand-built: case 2 returns `VALID`, the record reaches the
+  reconciliation table, and the call does **not** abort. Its two negative
+  instantiations are the two halves of the stated pair: a record with
+  `work_item_id: null` whose `expected_transition.from` reconstructs to a
+  **real** phase raises, naming both fields; and a record with a
+  **string** `work_item_id` absent from the target's state still raises,
+  unchanged, so the carve-out is keyed on the pair rather than on `null`
+  alone. A build implementing revision 63's rule as written fails the
+  first of the three, which is the discrimination this case exists for;
+- **the row-7 predicate is consulted on the resume path too** (revision
+  64, round 63's `B1`): a `LAUNCHED` row-7 record whose target's
+  post-phase **is** `AWAITING_LOCAL_PLAN_REVIEW` but whose `work_items`
+  gained **zero** new keys must **not** reconcile to
+  `FINISHED, transition_verified: true` — it is the `LAUNCHED`
+  phase-unchanged-equivalent branch and reconciles to `INTERRUPTED`. This
+  is the CP7-side half of step 8's repaired third clause, and it is red
+  against every build written from revisions 5–63's rule, where row 7's
+  predicate could never be reached at all;
+- **row 3's predicate is *not* consulted on the resume path for its
+  `APPROVE` and `REVISE` observations** (revision 66, round 65's `B1`/`I2`
+  missing-tests item): a `LAUNCHED` row-3 record whose target's post-phase
+  is `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` reconciles to `FINISHED,
+  transition_verified: true` **with no current-round `REVIEW_FEEDBACK.md`
+  declaring `Status: BLOCK` on disk at all**, and the `REVISING_PLAN`
+  (`REVISE`) record does the same. CP7 carried a resume-path case for row
+  7's predicate and none for the row and observations revision 65's own
+  repair moved, which is why the resume half of that repair was never
+  instrumented. Each is red against two distinct wrong builds, which is
+  what makes the pair discriminating rather than merely confirmatory: a
+  build written from revision 64's rule evaluates row 3's predicate here,
+  finds no `BLOCK` feedback and reconciles to `INTERRUPTED`; and a build
+  that tries to read `branch` **off the record** rather than re-resolving
+  the row by key (the reading the paragraph beginning *"The third clause's
+  **other** input — the row's own `branch` — is read from neither the
+  record nor process memory"* rules out, revision 66, round 65's `I2`)
+  finds no such field on the wire and either raises or defaults, failing
+  either way. Both are the exact undecidability `I2` named. (This citation
+  is by opening literal rather than by line number, round 66's `I1`: a
+  line-number self-citation goes stale the moment a revision inserts a
+  paragraph above it, which is exactly what happened to this one between
+  revisions 65 and 66; an opening-literal citation cannot.)
 
 Then: **the no-op-worker property, instantiated here
 as well as in CP6B** (round 5's B1) — for every row whose `to_any_of`
@@ -4847,7 +6241,11 @@ means anything*); an end-to-end interruption test — start a step with a
 fake worker that `SIGKILL`s itself mid-run, confirm the record is
 `LAUNCHED` on disk, then `resume` and assert the reconciled outcome.
 
+<!-- /CP7 -->
+
 ---
+
+<!-- CP8 -->
 
 ### CP8 — Generation handoff primitive
 
@@ -5083,12 +6481,17 @@ Generation 1 does **not** autonomously spawn Generation 2. The handoff
 record and the intentional stop are the contract; starting the next
 generation is a human act, and `handoff.json` carries the exact command.
 
+<!-- /CP8 -->
+
 ---
+
+<!-- CP9 -->
 
 ### CP9 — CLI completion, integration evidence, documentation, verification
 
 **Owns**: REQ-5 (partly), REQ-6 (partly), REQ-10 (partly), REQ-14 (partly),
-REQ-15, REQ-T18.
+REQ-15, REQ-T18, REQ-40 (partly, revision 63), REQ-41 (partly, revision 64),
+REQ-42 (revision 64).
 
 **Files**: `controller/cli.py` (completed), `tests/test_cli.py`,
 `tests/test_integration_disposable_repo.py`,
@@ -5096,6 +6499,22 @@ REQ-15, REQ-T18.
 `docs/adr/0001-controller-generation-1-architecture.md`,
 `.github/workflows/controller-tests.yml`, `docs/ACTIVE_MILESTONE.md`.
 Depends on CP8.
+
+**`NoWorkItemYet` CLI dispatch (revision 63, B2, `REQ-40`, partly).**
+`inspect`/`explain`/`step`/`run`/`resume`/`_work_item_payload` all call
+`target_state.select_work_item(...)` expecting a `WorkItemView` back
+unconditionally; each needs a branch, ahead of that assumption, for a
+`NoWorkItemYet` return. `inspect`/`explain` report it directly (no
+work-item payload to build). `step`/`run`'s shared `_run_one_step` helper
+routes it to `decision.decide_no_work_item(managed_repo)` in place of
+`evidence.decide(managed_repo, snapshot, work_item)`, then into
+`job.execute_step` exactly as any other automatic `Decision` -- CP6's own
+`execute_step` already accepts a `Decision` without touching
+`work_item_id` beyond passing it through to the worker launch, so this is
+a call-site branch in `cli.py`, not a new `job.py` code path. `resume`
+scopes to `managed_repo.root` regardless (CP7, unaffected: a `NoWorkItemYet`
+target has no job records of its own to reconcile the first time it is
+ever run, by construction).
 
 **The document-consistency property** (revision 15, rounds 13's B2 and 14's
 B2), in `tests/test_plan_document_consistency.py`. Five consecutive rounds
@@ -5111,7 +6530,7 @@ B2 is right that the first draft was not:
 
 | Half | Authority | In scope? |
 |---|---|---|
-| every checkpoint complexity, `depends_on` and id stated in prose, **excluding any occurrence carrying the superseded-figure marking**, where an occurrence carries the marking when it is **the superseded half of a marked pair**: the same sentence states, *for the same checkpoint*, both this figure and a different one presented as current. **Both halves of that sentence are declared as forms rather than by description** (revision 45, local round 44's `OPUS-R44-B1`), because the convention's own worked example below is *current-first* while all three of the marked pairs this exclusion acts on are *superseded-first*: at each of them the only figure written in this half's own occurrence form is the **superseded** one and the current half is a bare bold decimal, so a build following the example alone finds no pair at all, leaves the superseded figure in scope and goes red against a correct document at two of the three — while the co-occurrence build that does exclude them drops four live figures out of coverage, which is the reading the sentence after this one forbids. Three declarations, in the order a build performs them. **The text model, over blocks.** A blank line ends a block; a line whose text begins `\|` is a block of its own, so a table row is never merged with its neighbours; every other block is a maximal run of consecutive non-blank, non-table lines. A block's text is its lines joined by single spaces with all whitespace normalised to single spaces and each line's own start offset known by construction, so an occurrence maps back to the line carrying it. A **sentence** is a maximal span of that text beginning at the start of the block or immediately after a full stop and a space — the same rule the partition pin states — which inside a Markdown table row makes the *row*, not the cell, the object a sentence is cut from, since a cell boundary is not a full stop. The block model is load-bearing rather than tidy: at one of the three marked pairs the current half sits on the line *after* the superseded one, so a line-oriented build never sees that pair. **Figures and polarity, over the sentence.** A **figure** is either an occurrence of this half's own form — the literal `complexity ` followed by a decimal, that decimal optionally wrapped in `**` — or a **bare bold decimal**, a `**`-delimited span whose text is a decimal and which is not immediately preceded by that literal. Bare bold decimals are figures because that is how every live current half in this document is written, and a build that reads only the first form is the build this declaration exists to stop. A figure is attributed to the checkpoint named by the nearest `CP` token — matched maximally, so `CP4B` is never read as `CP4` — preceding it in its sentence, or, when none precedes it, the nearest one following it; a sentence carrying no such token attributes nothing, which is how the *names no checkpoint* clause below is reached by rule rather than by reading. A figure is **presented as current** when the next thing in its sentence, skipping whitespace only, is the word `today`. An occurrence therefore carries the marking exactly when its sentence holds another figure, attributed to the same checkpoint, presented as current, and of a different value. **The coverage is declared, and a no-match is a failure.** The rule is applied to every occurrence rather than to the ones a reader expects it to reach: each resolves to exactly one of *excluded*, *out of scope for naming no checkpoint*, or *in scope*, and an in-scope occurrence whose attributed checkpoint is absent from the registry fails the half **naming the site**, never being skipped — a skip-on-no-match build is the cannot-fail shape this document names elsewhere. Built from these three declarations and run over the published text, the thirteen occurrences resolve **by rule** to three excluded, one out of scope and nine in scope, with all nine agreeing with the registry field for field. **The exclusion is of that construct, not of mere co-occurrence** (round 19's I3): a live figure for one checkpoint standing in a sentence where a *different* checkpoint's figure is marked stays in scope, which is what keeps CP6's and CP4's live complexities checkable in the three sentences where a marked CP6B or CP4B pair shares their sentence — under the co-occurrence reading revision 19 wrote, those three fell out of scope and a later registry change to CP6 or CP4 would have gone uncaught at three of the locations that state them. The construct is what all three of the convention's surface forms share — current-first, current-first-over-two-checkpoints and superseded-first — and it needs no new convention. **Three** occurrences in this document disagree with the registry and all three are marked: revision 3's challenge question about CP4 and CP6's own *"revision 1 made this one checkpoint"* sentence, both marked in revision 18, and **round 3's disposition row for CP4B, marked since revision 13** — which revision 18's enumeration missed because the line carries a live figure and a superseded one at once, which is exactly why this half needs an enumeration rather than a spot check. The recogniser has a second half, and the convention's own worked example below is why: an occurrence whose sentence names **no checkpoint at all** states no checkpoint's complexity, so it is outside this half's declared scope (*"every **checkpoint** complexity … stated in prose"*) before any exclusion is reached. That example is the document's only such occurrence and the only statement of the rule that quotes a figure in the matched form — revision 18 claimed no statement of the rule did, which was false of it (round 18's I2). Both halves of the recogniser were run over the live document before this row was written | the registry JSON | **yes** — machine-readable authority, and the occurrences are recognisable (`complexity N`, `CPn`) |
+| every checkpoint complexity, `depends_on` and id stated in prose, **excluding any occurrence carrying the superseded-figure marking**, where an occurrence carries the marking when it is **the superseded half of a marked pair**: the same sentence states, *for the same checkpoint*, both this figure and a different one presented as current. **Both halves of that sentence are declared as forms rather than by description** (revision 45, local round 44's `OPUS-R44-B1`), because the convention's own worked example below is *current-first* while all three of the marked pairs this exclusion acts on are *superseded-first*: at each of them the only figure written in this half's own occurrence form is the **superseded** one and the current half is a bare bold decimal, so a build following the example alone finds no pair at all, leaves the superseded figure in scope and goes red against a correct document at two of the three — while the co-occurrence build that does exclude them drops four live figures out of coverage, which is the reading the sentence after this one forbids. Three declarations, in the order a build performs them. **The text model, over blocks.** A blank line ends a block; a line whose text begins `\|` is a block of its own, so a table row is never merged with its neighbours; every other block is a maximal run of consecutive non-blank, non-table lines. A block's text is its lines joined by single spaces with all whitespace normalised to single spaces and each line's own start offset known by construction, so an occurrence maps back to the line carrying it. A **sentence** is a maximal span of that text beginning at the start of the block or immediately after a full stop and a space — the same rule the partition pin states — which inside a Markdown table row makes the *row*, not the cell, the object a sentence is cut from, since a cell boundary is not a full stop. The block model is load-bearing rather than tidy: at one of the three marked pairs the current half sits on the line *after* the superseded one, so a line-oriented build never sees that pair. **Figures and polarity, over the sentence.** A **figure** is either an occurrence of this half's own form — the literal `complexity ` followed by a decimal, that decimal optionally wrapped in `**` — or a **bare bold decimal**, a `**`-delimited span whose text is a decimal and which is not immediately preceded by that literal. Bare bold decimals are figures because that is how every live current half in this document is written, and a build that reads only the first form is the build this declaration exists to stop. A figure is attributed to the checkpoint named by the nearest `CP` token — matched maximally, so `CP4B` is never read as `CP4` — preceding it in its sentence, or, when none precedes it, the nearest one following it; a sentence carrying no such token attributes nothing, which is how the *names no checkpoint* clause below is reached by rule rather than by reading. A figure is **presented as current** when the next thing in its sentence, skipping whitespace only, is the word `today`. An occurrence therefore carries the marking exactly when its sentence holds another figure, attributed to the same checkpoint, presented as current, and of a different value. **The coverage is declared, and a no-match is a failure.** The rule is applied to every occurrence rather than to the ones a reader expects it to reach: each resolves to exactly one of *excluded*, *out of scope for naming no checkpoint*, or *in scope*, and an in-scope occurrence whose attributed checkpoint is absent from the registry fails the half **naming the site**, never being skipped — a skip-on-no-match build is the cannot-fail shape this document names elsewhere. Built from these three declarations and run over the published text, the thirteen occurrences resolve **by rule** to **four excluded, one out of scope and eight in scope, with all eight agreeing with the registry field for field** — re-run over revision 64's own published text, after this revision's last edit, rather than carried forward from revision 63's classification (three, one and nine), which round 63's `B4` measured red at **six** of its nine. **The exclusion is of that construct, not of mere co-occurrence** (round 19's I3): a live figure for one checkpoint standing in a sentence where a *different* checkpoint's figure is marked stays in scope, which is what keeps CP6's and CP4's live complexities checkable in the three sentences where a marked CP6B or CP4B pair shares their sentence — under the co-occurrence reading revision 19 wrote, those three fell out of scope and a later registry change to CP6 or CP4 would have gone uncaught at three of the locations that state them. The construct is what all three of the convention's surface forms share — current-first, current-first-over-two-checkpoints and superseded-first — and it needs no new convention. **Four** occurrences in this document disagree with the registry and all four are marked, across **three** sites: revision 3's challenge question about CP4 and CP6's own *"revision 1 made this one checkpoint"* sentence, both marked in revision 18, and **round 3's disposition row, which carries two marked pairs of its own** — CP4B's, marked since revision 13, and CP4's, marked in revision 64 when the baseline widening moved CP4 from 3 to 5. That row is why this half needs an enumeration rather than a spot check: it carried a live figure and a superseded one at once, which revision 18's enumeration missed, and it now carries two of each. Sites and occurrences are different figures here and the sentence keeps them apart, which is the same distinction the command-line half's clause (ii) bullet draws between prose sites and matched spans. The recogniser has a second half, and the convention's own worked example below is why: an occurrence whose sentence names **no checkpoint at all** states no checkpoint's complexity, so it is outside this half's declared scope (*"every **checkpoint** complexity … stated in prose"*) before any exclusion is reached. That example is the document's only such occurrence and the only statement of the rule that quotes a figure in the matched form — revision 18 claimed no statement of the rule did, which was false of it (round 18's I2). Both halves of the recogniser were run over the live document before this row was written | the registry JSON | **yes** — machine-readable authority, and the occurrences are recognisable (`complexity N`, `CPn`) |
 | every row of the **Exit codes table** — the `(code, meaning)` pairs this document states there, compared as a set against the copy the ADR carries. **This half was rescoped in revision 38 from a prose recogniser to a closed artifact** (local round 37's `OPUS-R37-B1`), and the reason is the review record rather than taste. As a prose half it declared that this document contains *"exactly two families"* of excluded occurrences — CP5's worker classification and the Workflow Manager's `status`/`verify` codes — and it was **red at three sites from revision 34 onward**: the Controller's own exit out of an uncaught `OSError` in `materialise()` step 3, and the two statements of the decoy measurement's `runpy` exit, none of them attributed to another program and none of them in the table. Rounds 34, 35 and 36 each certified the half green by classifying the occurrence set **by description instead of extracting it**. The enumeration was short in a second way that decides the repair: `git`'s exit code in the non-repository-origin measurement is a third program, so a third exclusion would have needed a fourth. **Ten** rows are compared, which is the whole table; the prose side moves to the out-of-scope row below. **The three steps this row left to an implementer's judgement are declared here** (revision 45, local round 44's `OPUS-R44-I1`), because a set comparison is no more decidable than the extraction that builds the two sets. **Locating the table, over lines, by the same rule in both documents.** The Exit codes table is the Markdown table that follows the first heading line whose text after its leading `#` run is exactly `Exit codes`; the table is the maximal run of consecutive lines beginning `\|` that starts after that heading, and its first two lines — the header and the delimiter — are not rows. Naming the heading rather than a position is what lets one rule run over this document and over the ADR, which is the whole point of a half whose two sides are different files; a document in which the rule finds no such heading or no table after it fails the half **naming the document**, never contributing an empty set. **Reading a row, over its own line.** A row's cells are its text split on `\|` with the leading and trailing empty fields dropped; the row is a `(code, meaning)` pair when it has exactly two cells and the first parses as a decimal integer, and a row that does not is a **failure naming the line**, never a row quietly skipped. **Normalising before comparing.** Codes are compared as integers, so a row's own notation never decides membership; meanings are compared after reduction to their text — `**`, `*` and backtick runs removed, whitespace collapsed to single spaces, the result stripped — so an ADR stating the same meaning with the emphasis rendered differently, which is the most ordinary thing an author does when copying a table between documents, agrees instead of taking a required suite red against a correct ADR | the same table as it appears in `docs/adr/0001-controller-generation-1-architecture.md`, parsed from its own rows | **yes**, and it is now the only one of these halves whose **subject** as well as its authority is a closed external artifact with a mechanical membership test — the criterion this section states below, and the one the prose version of this row failed three rounds running |
 | **every round count** — matched as a pattern over the **verb**, `(executed\|ran\|has run)( it)? <number-word> (times\|rounds)` — the object is optional because the live occurrences include *"executed N times"* with no *it* at all — rather than a list of literal phrasings: revision 16 stated two literals and left *"has run it N rounds"* — one of the three live occurrences, and the one that has drifted twice — outside the rule it was adopted for (round 16's I2). **The extraction runs over the document's text with whitespace normalised to single spaces, not line by line** (revision 37, local round 36's `OPUS-R36-B1`), because an occurrence that wraps across a line break is still one occurrence: exit code 16's justification ends one line with `ran` and begins the next with `it <number-word> rounds`, it is the only one of the three that revision 36 left stale, and a line-oriented implementation of this rule sees two occurrences, finds both green, and reports the half green against a document that disagrees with itself — which is exactly what happened. A quantity token absent from the number-word table is not a round count, which is what keeps this row's own `N` placeholders out of scope without a special case. **An in-scope occurrence whose number word does not equal `plan_revision` − 1 fails the half naming the occurrence's own site, never contributing to an empty or a zero-count match** (revision 54, `OPUS-R53-O3` — the only one of clause (v)'s four siblings whose row previously stopped at stating its text model without also stating what a failing run does, the *cannot fail* shape this document names as its own recurring failure mode). **Three** occurrences are in scope in the live document, and the rule was run to count them rather than the count being asserted: the autonomy section's *"executed N times"*, exit code 16's justification (the wrapped one), and round 11's O1 disposition row | the registry's `plan_revision` − 1, an integer in a JSON file this suite already reads, compared through an **English-number-word table** (`fourteen`→14, `fifteen`→15, `sixteen`→16, …), since every occurrence is a word and the authority is an integer. **Since revision 42 the table must carry hyphenated compounds** (`forty-one`→41, `forty-two`→42, `forty-three`→43): revision 42 was the first revision whose authority is not a single word, and an implementation whose token rule stops at the hyphen reads `forty`, finds it equal to nothing, or — worse — matches the `forty` prefix and reports the half green against a document that states `forty-two`. That is the wrapped-occurrence shape `OPUS-R36-B1` found, one notation over, and it is stated here rather than left for the run to discover — a mapping the complexity half (`complexity N`, digits) does not need | **yes** (revision 16, round 15's I2; extraction rule corrected in revision 17) — the occurrences are as recognisable as the complexity half's, and this exact statement drifted in revisions 13, 14 **and** 15, which is what a test is for |
 | every **command line this document types** for the Controller's own CLI. A code span or fenced line is a **Controller invocation line** when all three clauses hold: **(i)** it begins `workflow-controller ` or `python <flags> -m controller `; **(ii)** its tokens after that prefix contain, as a whole token, one of the **six command names** in CP9's CLI surface table (`inspect`, `explain`, `step`, `run`, `resume`, `status`); and **(iii)** it contains **neither `[` nor `]`**. **The text model these three clauses run over is declared here rather than left to whichever markdown library an implementer reaches for** (revision 43, local round 42's `OPUS-R42-B1`): a candidate is a code span or a fenced line; backtick pairing is scoped to the **paragraph**, never to the whole document, so an unmatched backtick cannot pair across a blank line; the text is read with whitespace normalised to single spaces, so a span that wraps across a line break is one span and not two; and a span's text is its content **with leading and trailing whitespace removed**. The strip is load-bearing rather than tidiness, and saying so is what keeps a later editor from deleting it as noise: this row's own quotation of the first prefix ends in a space, and CommonMark strips a code span's padding only when it carries a leading one *and* a trailing one, so read unstripped that quotation itself begins with the prefix — clause (i) admits it and clause (ii) removes it, moving the strict total and clause (ii)'s removal by one each while the survivor set does not move at all. The other two conventions decide figures the same way: a document-scoped pairing and a line-oriented reading each answer a different loose total. All three are stated because the component pin's clause (d) is only as decidable as this extraction is, and both readings of the strip were run over the published text before this clause was written. Every such line is extracted and required to parse. The live document contains **7**, and the rule was run to count them rather than the count being asserted: CP8's step 2, CP9's step 4, and five of CP9's own surface-table rows — the sixth, `run`, is the synopsis clause (iii) removes. All seven parse. Each clause is there to exclude a form this document actually types, and all three were run over the live document before this row was written — see the paragraph below the table | `controller.cli`'s **own parser object**, built by the suite from the production builder and handed the extracted argv | **yes** (revision 35, round 34's `OPUS-R34-B2`; recogniser corrected and the argv's scope settled in revision 36, round 35's `OPUS-R35-B1`) — the strongest authority of the four, since it is the parser itself rather than a document describing it |
@@ -5852,7 +7271,21 @@ Each half of this property, and each of the two pins above, now has a
 failing instantiation and a false-positive instantiation, which is what
 turns "scoped honestly" from a claim into a check.
 
-CP9's verification gate gains this suite alongside the others.
+CP9's verification gate gains this suite alongside the others, **and one
+stated, open obligation against it**: `REQ-42` (revision 64, round 63's
+third missing test) requires the complexity half's own **occurrence** form
+to be widened to admit a bare bold decimal presented as current — the
+shape the marking convention itself writes every live current half in —
+together with that widened form's coverage, no-match and
+negative-instantiation obligations, and the fixture whose only stale
+figure is such a half. It is open rather than resolved because widening a
+required property's declared subject is plan design, with its own risk of
+the cannot-fail shape, and revision 64's scope is the `NoWorkItemYet`
+repair plus the 2.5.x baseline. The three sites in that shape are correct
+as published at revision 64, verified by running the extraction; what is
+missing is the instrument that keeps them so, and this checkpoint's gate
+cannot pass while it is missing — the same instrument `REQ-31` already
+uses for property 5's unresolved row-5 branch.
 
 **CLI surface** (capability 10's "inspect/status; run/step; resume;
 explain/waiting", with names chosen freely as the brief permits):
@@ -5910,22 +7343,145 @@ the same refusal. `run` exits **35** and names the job record so the human
 can read the worker's own explanation.
 
 **Disposable managed-repository integration evidence** (`REQ-T18`,
-capability 5). `tests/test_integration_disposable_repo.py`:
+capability 5). `tests/test_integration_disposable_repo.py`. **`REQ-T18` is
+the end-to-end integration proof; `REQ-40` (CP3/CP4/CP6/CP6B, revision 63,
+B2) is the underlying architecture it proves** — the `NoWorkItemYet`
+outcome, `decide_no_work_item`'s bare-`/milestone-plan` action, and row 7's
+key-set-difference predicate are unit-tested directly at their own
+checkpoints regardless of whether this opt-in live test ever runs; `REQ-T18`
+alone was never meant to be that architecture's sole normative definition,
+only its real-worker confirmation:
 
 1. Creates a throwaway repository under `tempfile.mkdtemp()` — never
    RepFlow, and never this repository.
-2. Installs frozen Workflow v2.3.1 into it. Preferred mechanism:
-   `workflow-manager bootstrap <tmp>`, so the fixture uses the real
-   installation path. Fallback if the Manager's `distribution/` is not
-   reachable from the test environment: copy this repository's own
-   `.claude/commands/`, `scripts/`, `docs/ai-workflow/` (state and config
-   reset to the bootstrap template) and `.workflow-manager/installation.json`.
-   The fallback is a fixture detail, not a reimplementation of install
-   semantics — CP2 still asks the real Manager to verify the result, and if
-   the Manager refuses the fixture, the test fails rather than proceeding.
+2. **Installs a Workflow release that is a member of
+   `VALIDATED_WORKFLOW_RELEASES`, named explicitly, never the Manager's
+   default** (revision 69, round 68's `B1`; supersedes revision 64's
+   "whatever the `2.5` line's newest installed release is", which the
+   revision-68 admission rule made unsafe). The rule is stated once, here,
+   and the two mechanisms below are both bound by it:
+
+   **The rule.** The fixture reads `VALIDATED_WORKFLOW_RELEASES` — the same
+   constant CP2 admits on, imported from the Controller rather than
+   re-typed — and installs a member of it: `REFERENCE_WORKFLOW_RELEASE` when
+   it is itself a member of that set, otherwise any named member, with step
+   3b below as the admissibility check either way, so the rule needs no
+   assumption about the relationship between the two constants. As at
+   revision 69 the set has exactly one member and `REFERENCE_WORKFLOW_RELEASE`
+   names it, so the two mechanisms currently choose the same release,
+   `2.5.1`. The fixture **never** derives the
+   release from what the Manager happens to hold as newest and never from
+   what *this* repository happens to be installed at, because neither is a
+   statement about validation: the Manager's newest is a distribution fact
+   and this repository's own installed release is an operations fact, and
+   round 68's `B1` is precisely the observation that revision 64 treated
+   one of them as though it were an admission fact.
+
+   **Preferred mechanism**: `workflow-manager --release-version <release>
+   bootstrap <tmp>`, so the fixture uses the real installation path while
+   naming the release it wants. `--release-version` is a **global** option
+   and is written **before** the subcommand, which is measured rather than
+   assumed (Environment facts, revision 69: the `bootstrap` subparser
+   accepts only `--profile` and `--force`, and the release selector sits on
+   the top-level parser) — the same positional hazard this checkpoint
+   already records for the Controller's own `--permission-mode` and
+   `--allow-dirty-source` in step 4.
+
+   **Fallback** if the Manager's `distribution/` is not reachable from the
+   test environment: copy this repository's own `.claude/commands/`,
+   `scripts/`, `docs/ai-workflow/` (state and config reset to the bootstrap
+   template) and `.workflow-manager/installation.json` — **and only if the
+   copied `installation.json` declares a `workflow_version` in
+   `VALIDATED_WORKFLOW_RELEASES`.** If it does not, the fallback does not
+   silently produce an unvalidated fixture and does not quietly rewrite the
+   manifest to claim a release it did not copy: it fails with the named
+   assertion of step 3b below. The fallback remains a fixture detail, not a
+   reimplementation of install semantics — CP2 still asks the real Manager
+   to verify the result, and if the Manager refuses the fixture, the test
+   fails rather than proceeding.
+
+   **Why a pinned, validated release rather than the installed one, and
+   what that costs.** Through revision 63 both of this step's mechanisms
+   produced whatever release the Manager held as newest, or a copy of
+   *this* repository's installed tree; that meant a 2.5.1 target which
+   CP2's 2.3.1-only admission set refused with
+   `UnsupportedWorkflowVersionError` **before any worker launched**, so
+   `REQ-T18` could not reach row 7 for a second reason entirely
+   independent of the `NoWorkItemYet` defect revision 63 was written for.
+   Revision 64 removed that refusal by widening admission to the `2.5`
+   line, and argued on that basis that naming "the installed release"
+   rather than a literal kept the next Manager update from restaling this
+   step. **Revision 68 removed the premise that argument rested on**:
+   admission is now exact membership of `VALIDATED_WORKFLOW_RELEASES`, so
+   the moment the Manager ships a `2.5.2`, "the newest release the Manager
+   holds" is a release CP2 refuses — reinstating round 63's `B6` failure
+   mode at exactly this fixture, which is what round 68's `B1` found. So
+   the direction revision 64 declined is now the correct one in the only
+   form that was ever wrong about it: the objection to pinning was never to
+   pinning as such, it was to pinning to **2.3.1**, a superseded release
+   the Controller is not pointed at in practice. Pinning to a *validated*
+   release is the opposite case — it names the release the Controller's own
+   inventories were measured against and the only kind of release CP2 will
+   admit.
+
+   The cost is stated rather than absorbed, and it is the same accepted
+   cost the "Supported Workflow baseline" section records for
+   `VALIDATED_WORKFLOW_RELEASES` generally: when the Manager updates and
+   this repository moves to an unvalidated `2.5.x`, `REQ-T18` keeps
+   exercising the *validated* release and therefore stops exercising *this
+   repository's* installed one. That divergence is a signal, not a silent
+   degradation, and step 3b is what makes it audible.
 3. Seeds a trivial milestone in the target's `docs/ACTIVE_MILESTONE.md` and
-   commits, so `/milestone-plan` has something real to plan.
+   commits, so `/milestone-plan` has something real to plan. **The target's
+   `WORKFLOW_STATE.json` gains no `work_items` entry at this step** (revision
+   63, B2, `REQ-40`) — this is deliberate, not an omission: it is exactly
+   the zero-non-terminal-work-item precondition `NoWorkItemYet`/`decide_no_work_item`
+   exist to handle, and the fixture's own point is to exercise that path
+   for real rather than pre-seed around it.
+
+   **Step 3b — the fixture asserts its own admissibility before it launches
+   anything** (`REQ-T18C`, revision 69, round 68's missing test). After step
+   2's install and before step 4's run, the fixture reads the *target's*
+   `.workflow-manager/installation.json` from disk — the file the Manager
+   actually wrote, never the value the fixture asked for — and asserts that
+   its `workflow_version` is a member of `VALIDATED_WORKFLOW_RELEASES` and
+   its `profile` a member of `SUPPORTED_PROFILES`, both read from the
+   Controller's own constants rather than re-typed as literals, so a
+   revision that grows either set cannot leave this assertion behind.
+   The failure message names three things: the observed `workflow_version`,
+   the current membership of `VALIDATED_WORKFLOW_RELEASES`, and the
+   "Supported Workflow baseline" growth procedure — re-derive the three
+   inventories and re-run the seven baseline-verification suites against
+   the newly-installed release, then add it to the set by name in a plan
+   revision that states what was measured.
+
+   **What this assertion is for, and what it is not.** It is not a second
+   copy of CP2's admission gate and is not asserting Controller behaviour:
+   CP2's own unit cases, including `REQ-T18B`, already own that. It is a
+   **fixture precondition**, and its whole value is *where it fires*. Both
+   failure modes it catches are otherwise silent or misleading. If the
+   preferred mechanism's `--release-version` is dropped, mistyped, or
+   stops being honoured by a future Manager, the fixture installs the
+   Manager's newest release, and — once that is an unvalidated `2.5.x` —
+   the run dies four steps later inside step 4 at an opaque CP2
+   `UnsupportedWorkflowVersionError`, which reads as a Controller defect in
+   the one test whose whole purpose is real evidence. If the fallback
+   mechanism copies an `installation.json` that this repository's own
+   Manager update has moved to an unvalidated release, the same thing
+   happens for a different reason. In both cases step 3b converts the
+   failure into a named, self-explaining one that says *the fixture is
+   unvalidated* and points at the procedure that fixes it — which is also
+   the intended revalidation trigger. It is therefore the one instrument
+   that keeps `REQ-T18`'s divergence from this repository's installed
+   release (step 2's stated cost) audible rather than silent.
 4. Runs `workflow-controller --permission-mode bypassPermissions step <tmp>`
+   -- **with no `--work-item` argument** (revision 63, B2): this is what
+   selects the `NoWorkItemYet`/row-7 path rather than an
+   `AmbiguousWorkItemError` refusal (zero non-terminal candidates, none
+   named explicitly) or a nonexistent-id refusal (an explicit `--work-item`
+   would itself refuse per frozen `milestone-plan.md`'s own contract, never
+   reaching row 7 at all — the two paths are disjoint by construction, not
+   merely by this fixture's choice not to exercise the other one) --
    with the **real** `claude` binary and **its working directory set
    explicitly to this repository's root** rather than inherited (revision
    33, local round 32's `OPUS-R32-B1`) — the invocation an operator actually
@@ -5949,11 +7505,17 @@ capability 5). `tests/test_integration_disposable_repo.py`:
    scope rule, and asserting on the digest rather than on the commit is what
    keeps this evidence stable across both — which is the point of revision
    32's model rather than a concession to it.
-5. Asserts a genuine, durable Workflow state change: the target's
-   `WORKFLOW_STATE.json` gains a `work_items` entry at phase
-   `AWAITING_LOCAL_PLAN_REVIEW`, its registry/mapping/artifacts files exist,
-   and the Controller's job record records `transition_verified: true` with
-   the worker's real `session_id`.
+5. Asserts a genuine, durable Workflow state change, identified the same
+   way row 7's own predicate is (revision 63, B2): the target's
+   `WORKFLOW_STATE.json`'s `work_items.keys()` after the run, minus the
+   fixture's own recorded pre-run `work_items.keys()` (empty, per step 3
+   above), is **exactly one key** -- the id frozen `/milestone-plan` step 1
+   derived from `docs/ACTIVE_MILESTONE.md`, never a name this fixture
+   chose or predicted. That single new entry is at phase
+   `AWAITING_LOCAL_PLAN_REVIEW`, its registry/mapping/artifacts files exist
+   at the paths its own `WORKFLOW_STATE.json` entry declares, and the
+   Controller's job record records `transition_verified: true` with the
+   worker's real `session_id`.
 6. Deletes the temp tree.
 
 `/milestone-plan` is chosen as the genuine operation because it is the
@@ -5972,8 +7534,14 @@ criterion, so the evidence is produced and recorded, not merely made
 producible.
 
 **Documentation**, including the scope Generation 1 carries: it executes
-automatic actions at the five plan-stage phases and **reports** at every
-later phase (see "Scope reassessment (revision 10)"). `README.md` states
+automatic actions at the five plan-stage phases the mapping marks
+automatic — `PLANNING`, `AWAITING_LOCAL_PLAN_REVIEW`,
+`AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, `AWAITING_EXTERNAL_PLAN_REVIEW`
+and `REVISING_PLAN`, carrying six triples between them — plus the
+`NoWorkItemYet` bootstrap, which has no phase at all — and
+**reports** at every later phase, eight of them under the revision-64
+baseline (see "Scope reassessment (revision 10)" and the two-shape table
+in CP4). `README.md` states
 the boundary and the ADR records why it is where it is — the four
 asymmetries between the plan-stage and implementation-stage commands, and
 the nine review rounds that established them. Inspection, decision, gate
@@ -6031,11 +7599,41 @@ CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_r
 
 The gate is: the Controller suite fully green — including
 `tests/test_plan_document_consistency.py` — the seven conformance suites
-at **no worse than the baseline table above** (i.e. exactly the one
-pre-existing `workflow_integration_test.py` error and nothing else) **and run
-on the interpreter that table names**, since *no worse* is a comparison and
-one made across two interpreters is not one; and the live integration test
-green with its evidence recorded.
+at **no worse than the revision-64 baseline table above**, which is all
+seven green, **and run on the interpreter that table names**, since *no
+worse* is a comparison and one made across two interpreters is not one;
+and the live integration test green with its evidence recorded.
+
+**Revision 64 replaces the `base_commit` table with the revision-64 one as
+this gate's comparand, and the difference is not cosmetic** (round 63's
+`B6`). The `base_commit` table was measured against Workflow 2.3.1 and
+permitted exactly one pre-existing `workflow_integration_test.py` error;
+under the installed 2.5.1 that test skips and the suite is green, so
+carrying the old table forward would have licensed a *real* regression to
+hide behind a permitted exception that no longer has a cause. It also
+named a figure — `workflow_state_test.py` at 616 tests — that the
+installed suite does not have, which is how revision 63 reported that
+suite green while it was red. **The gate is a comparison against a table
+re-measured on the release the suite will actually run under**, and the
+table is re-measured rather than inherited whenever the release it was
+measured on changes.
+
+**Re-derived at revision 69** (round 68's required acceptance criterion 5).
+Revision 64 wrote that last clause as *"a future Manager update inside the
+`2.5` line re-measures it again"*, which read the re-measurement as
+something a Manager update triggers on its own — true only while line
+membership was admission. Under `VALIDATED_WORKFLOW_RELEASES` a Manager
+update triggers nothing by itself: it moves this repository onto a release
+the Controller refuses, and the re-measurement happens as part of the
+**deliberate revalidation** that grows the set — the same act the
+"Supported Workflow baseline" growth procedure names, of which re-running
+these seven suites against the candidate release is one half and
+re-deriving the three inventories the other. The comparand table is
+therefore re-measured per *validated* release, not per Manager update, and
+`REQ-T18C` (step 3b, above) is what refuses to let this checkpoint's live
+evidence run against a release that has not been through that act.
+
+<!-- /CP9 -->
 
 ## Artifacts declaration — what was changed and why
 
@@ -6163,7 +7761,7 @@ four most consequential are:
 | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` hosts several duties | after revision 10 the Controller only *reports* there, so a misclassification costs a human one wasted step rather than a wrong durable write — which is the whole reason the narrowing was taken |
 | The narrowed scope is quietly re-widened by a later checkpoint | two set-wide assertions, both able to fail: CP4's tests `automatic=False` at all five report-only phases and `automatic=True` at the six automatic triples, two-directionally; CP6's launches a sentinel-creating worker binary and asserts no sentinel exists at any of the five. Re-widening is a deliberate test change, never a silent one. (Revisions 10–12 stated this as *"return no action"*, which is false for the two declined phases — they name their action deliberately — and as *"`decide()` launches no worker"*, which is vacuous) |
 | An unclassified deliverable path fails a projection mid-implementation | the artifacts declaration was corrected before this bundle was generated; `.gitignore` gains `.controller/` in CP1 before any Controller run |
-| CP6 was the largest checkpoint and could overrun a session | resolved in revision 2: the execute-and-record / post-state-validation seam is pre-declared as CP6 (complexity 4) and CP6B (complexity **2** today; 3 when first declared, reduced by revision 10's narrowing) rather than left to a mid-implementation plan revision. Their dependencies (CP2–CP5) each land fully tested first, so both are composition rather than invention |
+| CP6 was the largest checkpoint and could overrun a session | resolved in revision 2: the execute-and-record / post-state-validation seam is pre-declared as CP6 (complexity **5** today; 4 as declared then) and CP6B (complexity **3** today; 2 from revision 10's narrowing until revision 62, and 3 when first declared) rather than left to a mid-implementation plan revision. Their dependencies (CP2–CP5) each land fully tested first, so both are composition rather than invention |
 | The pre-existing `workflow_integration_test.py` error masks a real regression | the baseline table above names the exact test; CP9's gate is "no new failures relative to it", and any second failure is a regression |
 | `--pause-file` test surface leaks into production use | it is undocumented in `README.md`, checked only at the orchestration boundary, and flagged here for the reviewer to challenge |
 | The Controller could be pointed at this repository and edit its own source while running | CP1 executes every non-read-only command from an immutable, content-verified snapshot under `<runtime root>/source/<tree_digest>/`, so an edit to the origin worktree cannot reach the running process by any import or resource read — a property of the import root the re-exec constructs with `-P`, **not** of `PYTHONPATH`, which the process's working directory outranks for `python -m` and which was all revision 32 set (revision 33, local round 32's `OPUS-R32-B1`); a dirty source refuses outright unless `--allow-dirty-source` snapshots the working tree under a content digest with no commit; CP8's handoff stops the run when the approved generation moves |
@@ -6192,7 +7790,7 @@ go in a non-normative appendix or a sibling artifact, not inline in the
 document a fresh reviewer reads as the design. This plan is not
 restructured to that shape, on the finding's own instruction not to reopen
 a revision solely to shorten it; the commitment binds the next document,
-where it costs nothing. The reason is measurable in this one: of sixty-one
+where it costs nothing. The reason is measurable in this one: of sixty-six
 rounds, the twelve local rounds from 20 through 31 found no Blocking design
 defect and their findings were overwhelmingly about this document's
 commentary on itself, which is review effort spent on a surface that has no
@@ -6519,7 +8117,7 @@ plan-review half of the lifecycle the earlier rounds never reached.
 | **I1** — `AWAITING_EXTERNAL_PLAN_REVIEW` on a `"1"` item is three-duty; revision 3 modelled two | **Accepted.** Verified: `approval_gate_reachable` (`:9319-9325`) has no phase precondition, so a `"1"` item sits here while the plan-approval gate is open | new case 1 in CP4's disambiguations, mirroring `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` |
 | **I2** — the pre-phase evidence-predicate rule is stated generally and applied to one action | **Accepted.** Verified: `record_local_plan_review`'s `BLOCK` branch is `return state` unchanged (`:10784-10785`), and `/milestone-implement` leaves `IMPLEMENTING` in place on ordinary partial progress (`milestone-implement.md:173-174`) | CP6B declares a predicate for every action whose `to_any_of` includes its `from` phase, and refuses to construct one without; two property tests |
 | **I3** — the plan-stage bundle directory is described as scoped-else-flat, the one rule that never applies there | **Accepted.** Verified: `SCOPED_BY_CONSTRUCTION_STAGES` and `REVIEW_PROTOCOL.md:91-112` | `HumanGate`'s `artifact_path` section states all three rules and why the Controller is more exposed than this repository |
-| **Challenge question 8** — is CP4 still one session? | **Answered: no.** Round 3 argued the split and named the seam the plan itself had proposed | CP4 (complexity 3) / CP4B (complexity 4 as declared then; **3** today, reduced by revision 10's narrowing); CP6 depends on CP4B |
+| **Challenge question 8** — is CP4 still one session? | **Answered: no.** Round 3 argued the split and named the seam the plan itself had proposed | CP4 (complexity 3 as declared then; **5** today, after revision 10's narrowing and revision 64's baseline widening) / CP4B (complexity 4 as declared then; **3** today, reduced by revision 10's narrowing); CP6 depends on CP4B |
 
 Round 3's six missing tests are all taken, in CP4/CP4B and CP6B
 respectively, and its structural observation is taken as a rule rather than
@@ -6660,7 +8258,7 @@ value produced at the wrong moment.
 | **B1** — the predicate clause reads a pre-state the record does not carry, so at `resume` it cannot be evaluated at all | **Accepted.** Verified: the schema carried only `observed_phase_before`; four rows read `state_revision`, the checkpoint map, `bundle_id` and the child set, none persisted. CP6's prose said the record carries the pre-state and target HEAD; the schema showed neither | a `pre_state` block in the record schema and in CP6 step 1, defined as *every predicate input*; the record-completeness property |
 | **B2** — `INCOMPLETE` was created with four consumers unwired, and CP7's closed status table refuses it | **Accepted.** Verified against the status enumeration, CP7's last row, `run`'s stop conditions and the exit-code table; step 8's "otherwise" also contradicted step 9 outright | `INCOMPLETE` added to all four, exit code **35**, and step 8's clause made to defer to step 9 explicitly |
 | **B3** — row 9's surviving disjunct is a commit the Workflow requires to land **before** the regeneration it attests to | **Accepted.** Verified: *"This durability commit must land before generation, never after (`WF8B-003`)"* (`apply-implementation-review.md:122-127`); `withdraw_bundle` then deletes the `MANIFEST.md` disjunct, leaving the weaker one standing | row 9's predicate is a conjunction of completed outputs, fails closed on an absent `MANIFEST.md`; the disjunction corollary added to the predicate-validity rule |
-| **I1** — the coverage key is still not a bijection: CP6B row 6 carried a version qualifier CP4's row did not | **Accepted.** Verified that `AWAITING_LOCAL_PLAN_REVIEW`, `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` and `REVISING_PLAN` are all `"2.1"`-only in practice | the unqualified-row rule stated; CP4's three `"2.1"`-only rows now carry the qualifier explicitly |
+| **I1** — the coverage key is still not a bijection: CP6B row 6 carried a version qualifier CP4's row did not | **Accepted.** Verified that `AWAITING_LOCAL_PLAN_REVIEW`, `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` and `REVISING_PLAN` are all `"2.1"`-only in practice (re-read at revision 64: under the 2.5.1 baseline `"2.1"` here denotes `TWO_STAGE_PLAN_REVIEW_VERSIONS`, `"2.1"` and `"2.2"` alike, which is the frozen `GoverningVersionEnumerationSweepTest` corpus sweep's own requirement — a historical row, time-labelled rather than rewritten) | the unqualified-row rule stated; CP4's three `"2.1"`-only rows now carry the qualifier explicitly |
 | **I2** — the `REJECTED` marker path is stated only scoped, but its resolver takes no stage argument | **Accepted.** Verified: `resolve_rejected_marker_path` is `resolve_bundle_dir(...).parent / "REJECTED"` with no stage (`workflow_fingerprint.py:2135`) | the stage-less scoped-else-flat rule stated, explicitly contrasted with the plan-stage `<bundle_dir>` beside it; a flat-layout fixture |
 | **O1** — the CP6B↔CP7 coupling sentence still described the coupling as sets-only | **Accepted** | rewritten to name the sets, the predicates, the combining rule and the record's `pre_state` block |
 
@@ -6864,7 +8462,7 @@ applies to removals as much as additions.**
 | **I1** — the partition property mis-sizes its `selected` set (six rows ≠ four files) and closes with a clause that breaks disjointness | **Accepted.** Stated as **4 / 8 / 3 = 15** with every file named and the trailing clause deleted. This is the one place the counts must be exact, since totality over a fixed fifteen is the whole assertion |
 | **I2** — two human-artifact gates are called "automatic", and *"drives `PLANNING` → `AWAITING_PLAN_APPROVAL` autonomously"* is false under both versions | **Accepted.** The phase-group table now separates *unconditionally automatic* (three phases) from *automatic once the human's artifact arrives* (two), and the headline claim is replaced by the true and stronger one: the Controller runs the **plan-revision loop** autonomously — a **two**-command cycle (`/review-plan` ⇄ `/apply-plan-review`) repeating without bound, entered by `/milestone-plan` and left by `/record-manual-plan-review`, four distinct commands in total (precision added in revision 13, round 12's O2) |
 | **I3** — the capability audit covers seven of the brief's ten and mislabels capability 5 | **Accepted.** All ten reproduced with the brief's numbering; capability 5 is Real Workflow-action execution, and it survives because `/milestone-plan` is a plan-stage action |
-| **O1** — `--max-steps` is a declared stop reason with no exit code | **Accepted.** Exit **16**. The plan-revision loop is the only unbounded autonomous cycle and `--max-steps` is deliberately its only bound, so hitting it is the operator's sole signal that the loop did not converge — this work item has run it sixty-one rounds without converging, which is the evidence |
+| **O1** — `--max-steps` is a declared stop reason with no exit code | **Accepted.** Exit **16**. The plan-revision loop is the only unbounded autonomous cycle and `--max-steps` is deliberately its only bound, so hitting it is the operator's sole signal that the loop did not converge — this work item has run it seventy rounds without converging, which is the evidence |
 
 ## Plan review round 11 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
 
@@ -7002,7 +8600,13 @@ the denylist derivation at 2 against 3; `KNOWN_PHASES` at seventeen
 matching CP3's closed set; the mapping at 33 with bidirectional coverage
 genuinely holding; `PRE_STATE_FIELDS` at sixteen in both the schema and the
 capture step, with the three predicate inputs a proper subset; and six
-`ExpectedOutcome` rows against six automatic CP4 triples. Its verdict on
+`ExpectedOutcome` rows against six automatic CP4 triples. (Round 15's own
+figures, measured against revision 15's bundle. The live figures are
+**seventeen** members and **four** predicate inputs since revisions 63/64,
+**twenty** `KNOWN_PHASES` and a **4 / 9 / 4** partition since revision 64,
+and **seven** `ExpectedOutcome` rows against six triples plus one
+`NO_PHASE` row since revision 63 — each stated at its own definition site
+above, which is the authority.) Its verdict on
 the status table — *"genuinely closed … the first time in fifteen revisions
 that a status the design persists has not been missing a rule"*.
 
@@ -7032,7 +8636,8 @@ agreeing; the command-file partition 4 / 8 / 3, total and disjoint, member
 for member against the directory; the denylist derivation re-measured at 2
 against 3; `KNOWN_PHASES` at seventeen; the mapping at 33 with bidirectional
 coverage; `PRE_STATE_FIELDS` at sixteen in both places with the three
-predicate inputs a proper subset; six `ExpectedOutcome` rows against six
+predicate inputs a proper subset (round 16's own figures; seventeen and
+four live, per CP6 step 1); six `ExpectedOutcome` rows against six
 automatic triples; the exit-code table numerically ordered; the round count
 at fifteen in all three places, equal to `plan_revision` − 1 — the first
 round in four in which that was true; and all seven frozen conformance
@@ -9612,6 +11217,359 @@ are prose corrections to text this document already contains; no new
 missing-tests item, standing rule, or instrument is added, per required
 acceptance criterion 6.
 
+## Plan review round 62 — disposition (both stages, recorded at revision 64)
+
+Round 62 is the round this document had no disposition section for, and
+**round 63's `O4` is right that the omission would have lost the only
+finding it produced** once `.ai-review/feedback/REVIEW_FEEDBACK.md` was
+overwritten — as it since has been. This section is written at revision 64
+from the record that survives: `WORKFLOW_STATE.json`'s own
+`plan_review_stages` ledger, and round 63's verbatim quotation of the
+finding. It is marked as such rather than presented as a contemporaneous
+record, because it is not one. **Where the surviving evidence now lives,
+named rather than left inferable** (round 64's `O1`): since
+`.ai-review/feedback/REVIEW_FEEDBACK.md` is overwritten by every round
+that follows it, `EXT-PLAN-R62-O1`'s own text survives nowhere on disk
+today except inside this section, which is itself built from round 63's
+quotation of round 62's finding — a chain of two quotations, this one and
+round 63's, and this document is the only place either link is still
+readable.
+
+Round 62 was the **only** round in this item's history to close both
+stages. `LOCAL_MODEL_PLAN_REVIEW` returned `APPROVE` at round 62 against
+bundle `c09c2c51…` / content id `fc3cadb4…`; `MANUAL_EXTERNAL_PLAN_REVIEW`
+returned `APPROVE` at its round 1 against the same bundle; and
+`/approve-review plan` recorded `plan_approval.status: CURRENT` on the
+strength of both. That approval is now `SUPERSEDED` by the
+`/request-plan-amendment` this amendment runs under, and the ledger keeps
+it in `amendment_history[0].superseded_plan_approval`.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`EXT-PLAN-R62-O1`** (Optional, manual external stage) — resolve CP6B's `REQ-31` early, and keep the chosen verifier rule single-source | **Accepted as advice, and deliberately not acted on in this amendment.** Re-verified at revision 64: `REQ-31` is still open in the mapping, assigned to `CP6B` alone, and names the two remedies property 5's own row-5 walk already states — teach the branch-span model to follow a *"steps N-M execute"* cross-reference, or restate row 5's branch to point at step 5's text directly. Neither is chosen here: the finding is advisory, `REQ-31` is an **implementation obligation** CP6B's verification gate already refuses to pass without discharging, and choosing between the two remedies is plan design outside the bounded scope of this amendment — which round 63's own acceptance criterion 6 and the user's `B6` decision both hold to the `NoWorkItemYet` repair plus the 2.5.x baseline. The single-source half **is** honoured and was re-checked this revision: the verifier rule is stated once, at CP6B step 8, and CP7 row 2 restates it verbatim — and revision 64's `B1` repair moved **both** together, which is the property that clause asks for | no plan edit; `REQ-31` stays open in the mapping, and this row is its disposition record so the finding is not lost with the feedback file |
+
+**Why this section exists at all.** This document records a disposition
+for every prior round, and an optional finding from the one round that
+approved the plan is exactly the kind of record that disappears silently:
+the feedback file is gitignored and overwritten each round, the ledger
+stores verdicts rather than findings, and nothing else would have carried
+it. Round 63's `O4` cost one row to fix and is fixed here.
+
+## Plan review round 63 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 63 reviewed the revision-63 amendment bundle
+`5819200e…` / content id `2e5503bd…` and returned `REVISE` with **6
+Blocking**, 2 Important and 4 Optional findings, plus three missing tests
+and six required acceptance criteria. **All twelve findings are accepted;
+none is rejected.** Every figure the findings state was reproduced against
+the repository before the corresponding repair was written, and the two
+`B6` directions were put to the user, who chose the first — the record of
+that choice is in "What revision 64 changed" below and in the
+`REVIEW_REQUEST.md` this round publishes.
+
+The round's own shape is worth stating, because it is not the shape of the
+last twenty: **three of the six Blocking findings are in the Controller's
+own design** (`B1` a rule that cannot evaluate a predicate it declares,
+`B2` a durable representation that does not exist, `B6` a frozen baseline
+that no longer matches the tree), **two are in this document's account of
+itself** (`B3` a generated table not regenerated, `B4` the
+document-consistency property red against its own text), and **one is a
+count around a widened table** (`B5`). That is the reverse of rounds 39
+through 61, and it is the direct consequence of the amendment adding
+*design* rather than commentary.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`B1`** (Blocking) — CP6B step 8's rule gates predicate evaluation on a condition row 7's `NO_PHASE` pre-phase can never satisfy, so row 7's predicate is declared and never run, and CP6B's own row-7 cases cannot pass against an implementation written from the rule | **Accepted in full, and reproduced before the repair was written**: read literally, the third clause fires only when the observed post-phase equals the record's own pre-phase, and `NO_PHASE` is not a phase, so no observation satisfies it for row 7 on either the in-process or the resume path. **The repair is the rule, per required acceptance criterion 1**: the third clause now triggers on the row **carrying a predicate at all**, which is strictly wider, fail-closed, and changes no verdict for any observation the old clause could evaluate. The finding's alternative — a `NO_PHASE`-keyed trigger — is rejected in the text, with the reason: it fixes the location rather than the class | CP6B step 8's rule sentence; CP7 row 2's verbatim restatement, moved with it; the justification paragraph under row 7; two new discriminating cases (CP6B's declared-but-never-evaluated case, CP7's resume-path case) |
+| **`B2`** (Blocking) — `NO_PHASE` has no durable JSON form or round-trip rule; `Decision.observed_phase=None` and `from_phase=NO_PHASE` are two values for one concept; `pre_state.phase` is unspecified for a `NoWorkItemYet` record; CP7 case 2's null-`work_item_id` refusal collides with row 7's own action | **Accepted in full, all four parts, per required acceptance criterion 2.** Reproduced: `expected_transition` and `observed_phase_before` are persisted JSON in the record schema and re-read by CP7 after a restart, and an identity-comparable sentinel does not survive `json.dump`/`json.load` at all. The repair is **one declaration in one place** — the wire literal `"__NO_PHASE__"`, a total-and-fail-closed round-trip rule, and the single value shared by all four fields — with every other site reading it by reference | the record-schema section (new `NO_PHASE` block); `decide_no_work_item` returns `NO_PHASE`, not `None`; CP3's `NoWorkItemYet` bullet states `pre_state.phase`; CP6 step 4's two flushes; CP6B's row-7 schema paragraph; CP7 case 2's three-way rule and its stated `work_item_id`/`expected_transition.from` agreement pair; a CP6 round-trip-from-disk test and a CP7 `null`-id test, each with negative instantiations |
+| **`B3`** (Blocking) — the generated `## Checkpoints` table was not re-embedded after revision 63's registry regeneration, and is stale in four rows | **Accepted.** Reproduced by calling `workflow_state.render_registry_markdown()` on the amended registry and diffing: CP3 4≠5, CP4 3≠4, CP6 4≠5, CP6B 2≠3, exactly as the finding states. `/apply-plan-review` step 5 requires the re-embed **unconditionally** whenever the registry is regenerated, and revision 63 regenerated and did not re-embed | the table is regenerated and re-embedded at revision 64's registry, and the closing verification section records the call that produced it |
+| **`B4`** (Blocking) — the document-consistency property is red against the plan's own text in two halves: six of nine in-scope complexity citations disagree with the registry, and all three in-scope round counts are stale | **Accepted, and re-derived by running each rule rather than by fixing sites, per required acceptance criterion 3.** Both halves were rebuilt from their own declarations and run over the published text before and after the repair. Before: thirteen occurrences → three excluded, one out of scope, nine in scope, **six mismatching**; three round counts, all reading `sixty-one` against an authority of `sixty-two`. After: thirteen occurrences → **four excluded, one out of scope, eight in scope, all eight agreeing**; three round counts, all `sixty-three` against an authority of `sixty-three`. The classification itself moved — one more occurrence became the superseded half of a marked pair when CP4's current figure changed — which is precisely why the row's published figures are re-run output rather than edited constants | the four-halves table's complexity row restates the run's own figures and its marked-pair enumeration (four occurrences across three sites); the four stale sites and the three bare-bold current halves the half cannot see are corrected by the marking convention; the three round counts and the one `of`-governed occurrence are bumped |
+| **`B5`** (Blocking) — the two sentences under the `ExpectedOutcome` table were not updated for the seven-row table: "four of the six need no predicate" has the wrong denominator, and "the two that do carry one also carry a branch" is false | **Accepted.** Reproduced against the table: rows 1, 2, 4 and 6 carry no predicate (four of **seven**); rows 3, 5 and **7** carry one; row 7's `writer_calls` cell declares no branch. Both sentences are restated, and the second is restated as the **rule** rather than as a count — `branch` is required of a predicate-bearing row whose writer is invoked inside a branch, which is what property 5 actually says and which makes row 7's `branch=None` correct rather than an exception | the two sentences under the table; the "two positive cases / two predicate-bearing rows" sentence in CP6B's test list, widened to three; the scope-reassessment section's own revision-10 figures, time-labelled rather than restated |
+| **`B6`** (Blocking) — the frozen-Workflow baseline no longer matches the repository: `installation.json` declares 2.5.1 against a 2.3.1-only `SUPPORTED_INSTALLATIONS`, seventeen declared phases against twenty live, fifteen declared command files against seventeen live; `REQ-T18`'s fixture installs a tree CP2 must refuse | **Accepted in full, and put to the user before revision 64 was written, per required acceptance criterion 4.** The user chose direction (a): widen the baseline to the `2.5.x` line with 2.5.1 as the concrete reference. Reproduced independently: `python3 -m unittest tests.test_target_state tests.test_decision` answers 2 failures and 6 errors, all of them this; and a **frozen conformance suite** is red too, which the finding does not name — 2.5.x's `GoverningVersionEnumerationSweepTest.test_real_corpus_sweep_is_clean` flags this document's round-6 disposition row, and had been red against the committed `HEAD` since the Manager update while revision 63's `TEST_RESULTS.md` reported that suite green by carrying forward a 2.3.1 test count. **The resolution is stated as a policy with an authority**, not as re-counted literals: a line predicate plus a measured reference release, three inventories each derived from the installed tree, and a stated argument for why admitting a line is still fail-closed | a new "Supported Workflow baseline" section; CP2's admission step and its four new cases; CP3's twenty-phase set and its three new rows; CP4's three new mapping rows, its 4 / 9 / 4 partition, its union denylist and the `TWO_STAGE_PLAN_REVIEW_VERSIONS` re-reading of `"2.1"`; CP5's four-command scan; CP9's `REQ-T18` step 2 and its verification gate; the Environment-facts and baseline-verification tables, re-measured; `REQ-41`; CP4's re-derived complexity (4 → 5) and its registry name |
+| **`I1`** (Important) — `pre_work_item_keys` is a declared `PRE_STATE_FIELDS` member absent from the record-schema block, which property 4 asserts set **equality** between | **Accepted.** Reproduced: the schema rendered sixteen members and CP6 step 1 declared seventeen. The field is added to the schema block with its serialisation stated (a sorted JSON array of the `frozenset`), CP6 step 1's own enumeration is restated at seventeen with four predicate inputs, and property 4's instantiation on this exact field is added to CP6's test list. The two historical self-review paragraphs the finding names are time-labelled rather than rewritten, per the provenance policy | the record schema; CP6 step 1; CP6's test list; the revision-16/17 self-review records, time-labelled |
+| **`I2`** (Important) — the eleven anchor pairs enclose a heading line each, so `checkpoint_content_hash` is vacuous from the next amendment on | **Accepted, and the finding's own remedy taken.** Reproduced with `parse_checkpoint_anchor_spans`: spans of 24–359 bytes against sections of hundreds of lines. Every pair now encloses its checkpoint's whole section, heading through the line before the closing rule; `CP4` and `CP4B` both enclose the section they share, `CP4`'s outside `CP4B`'s, so either half's change revalidates both; each anchor sits on its own line separated by a blank line, so it forms its own block and can never join a sentence the complexity half reads — which revision 63's inline placement did, on a line carrying a live `complexity N`. The rule is stated in prose in the `## Checkpoints` section, which the finding notes the document had nowhere | the eleven anchor pairs; a new anchor-convention paragraph under `## Checkpoints` |
+| **`O1`** (Optional) — row 7's frozen-command citation is off by six lines, and row 5's is stale too | **Accepted, and widened into a sweep rather than fixed at the two sites.** Both were reproduced (`publish_plan_revision` at `milestone-plan.md:208`, `prepare_ai_review` at `apply-plan-review.md:137`), and since the Manager update moved a great many of them, **every** frozen-file citation in this document's live design region was re-derived against the installed tree by locating each cited symbol — thirty-odd sites across `workflow_state.py`, `workflow_fingerprint.py`, `prepare-ai-review.sh` and six command files. Citations inside closed disposition prose are provenance under the revision-61 policy and are left as written **(time-labelled correction, revision 65, round 64's `I2`: "every" here, and the identical scoping in revision 64's own closing verification, in fact excluded `docs/ai-workflow/*.md` — a real citation family this document cites from, with one live citation that was stale as a result. The sweep is widened to that family and re-run in "Plan review round 64 — disposition" and "What revision 65 changed", below; this row's own text is left as written rather than rewritten, per the same policy it invokes)** | row 5's and row 7's cells; property 5's row-3 and row-5 walks; the denylist run's three files; CP3's `KNOWN_PHASES`, `LEGACY_READY` and terminality citations; CP4B's admissibility citations; CP6/CP7's writer citations |
+| **`O2`** (Optional) — CP4's `**Owns**` line omits "(partly)" for `REQ-40` | **Accepted.** Reproduced against the mapping: `REQ-40` is assigned to CP3, CP4, CP6, CP6B and CP9, and four of the five write "(partly)" | CP4's `**Owns**` line, with the reason stated inline |
+| **`O3`** (Optional) — `REVIEW_REQUEST.md`'s scope list lists CP6 twice and omits CP3 | **Accepted.** Reproduced against the mapping's five | revision 64's own `REVIEW_REQUEST.md`, which restates the scope over this round's much wider change set |
+| **`O4`** (Optional) — the round-62 external optional finding has no disposition record and will be lost | **Accepted, and it had already been lost**: `.ai-review/feedback/REVIEW_FEEDBACK.md` now carries round 63, so `EXT-PLAN-R62-O1` survives only in round 63's own quotation of it. The disposition section above is written from that quotation and from the ledger, and says so | a new "Plan review round 62 — disposition" section |
+
+**The three missing tests are all added**, each at the checkpoint that owns
+the property it discriminates: the CP6B case that fails when row 7's
+predicate is declared but never evaluated (`B1`); the CP6/CP7 round-trip
+case over a `NoWorkItemYet` record, read back from disk rather than from
+process memory, with CP7 case 2's admission of it (`B2`); and — the third
+— a document-consistency fixture whose only stale figure is a **bare bold
+current half** in the `CP6 is **4** today` shape. **The third is accepted
+and deferred, with its reason stated rather than absorbed**: the complexity
+half enumerates occurrences only in the `complexity N` form, so a bare bold
+current half is a *figure* for polarity and never an *occurrence* for
+coverage, and closing that gap means widening the half's own occurrence
+form — a change to a required CP9 property's declared subject, with its own
+coverage, no-match and instantiation obligations, and its own risk of the
+cannot-fail shape this document keeps finding. That is plan design beyond
+the scope round 63's own acceptance criterion 6 and the user's `B6`
+decision bound this revision to. **It is recorded as an open obligation**,
+`REQ-42` in the mapping, assigned to CP9, so CP9's verification gate cannot
+pass without discharging it — the same instrument `REQ-31` already uses for
+property 5's unresolved row-5 branch. The three sites in that shape are all
+correct as published at revision 64, verified by the extraction above; what
+is missing is the instrument that would keep them so.
+
+## Plan review round 64 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 64 reviewed the revision-64 amendment bundle `b6066fca…` / content
+id `22dc5ee6…` and returned `REVISE` with **1 Blocking**, 4 Important and 1
+Optional finding, plus three missing tests and six required acceptance
+criteria. **All six findings are accepted; none is rejected.** Round 64's
+own review confirmed all twelve of round 63's findings were genuinely
+applied before finding the one defect that remained: `B1`'s own repair was
+a rule change, verified against the built code and found wanting on its
+own two ordinary outcomes rather than its abnormal one.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`B1`** (Blocking) — CP6B step 8's revision-64 third clause fires on every `to_any_of` member once a row carries a predicate at all, so row 3's `BLOCK`-specific predicate is now evaluated on `APPROVE` and `REVISE` too, where it is false, making every ordinary `/review-plan` outcome fail verification | **Accepted in full, and reproduced against `controller/job.py:661-698`'s still-superseded clause before the repair was written**: row 3's predicate is a `BLOCK`-branch postcondition by construction, and an unconditional trigger evaluates it where it is false. **The repair keys the trigger on the row's own declared `branch` (reading (a) of the two the finding names), per required acceptance criterion 1**: `branch is None` evaluates unconditionally (row 7, unchanged from revision 64); a named `branch` evaluates exactly when the observed post-phase equals the row's `from_phase` (rows 3 and 5, recovering the pre-revision-64 comparison by rule). Reading (b) — a predicate per `to_any_of` member — is rejected and the rejection is recorded: it moves `ExpectedOutcome`'s own schema, which reading (a) does not need, since `branch` is already declared data. No checkpoint, and no `ExpectedOutcome` field, is added, removed or renamed, per required acceptance criterion 6 | CP6B step 8's rule sentence and its justification paragraphs; CP7 row 2's verbatim restatement, moved with it; two new CP6B positive cases (row 3 `APPROVE`, row 3 `REVISE`), both demonstrated red against a build written from revision 64's rule |
+| **`I1`** (Important) — property 3 is stated in one direction in the plan and enforced as a biconditional by the built validator, and row 7 fails the enforced converse | **Accepted.** Property 3 now states both directions explicitly: the forward direction, unchanged since revision 5, and the converse, asserted, with row 7 exempted by name — the same treatment property 1's bijection already gives it — because row 7 carries a predicate for the independent defence-in-depth reason its own paragraph states, not because its `to_any_of` requires one. The exemption is keyed to `from_phase is NO_PHASE`, not to "fails the containment test", and a negative instantiation proves the distinction: a synthetic non-row-7 row in the same shape still fails construction | property 3's restated text; its new negative instantiation, alongside property 1's; the CP6B negative-instantiation enumeration |
+| **`I2`** (Important) — the `O1` disposition row and the closing verification both claim "every frozen-file citation" was re-derived, but the sweep excludes `docs/ai-workflow/*.md`, and one live citation in that family is stale | **Accepted, and the sweep widened rather than the one site patched, per required acceptance criterion 4.** `docs/ai-workflow/*.md`'s three live-design-region citations were re-derived against the installed 2.5.1 tree: CP3's `MILESTONE_WORKFLOW.md:328-331` citation had moved to `:539-542` and is corrected; `REVIEW_PROTOCOL.md:91-112` and `:64-79` were re-verified and are unchanged. The five remaining `docs/ai-workflow/*.md` occurrences are inside closed disposition prose and stay as provenance under the revision-61 policy, unswept, which is now stated as the sweep's actual scope rather than implied by omission | CP3's citation; the frozen-citation-sweep paragraph in the closing verification, restated with its true scope |
+| **`I3`** (Important) — `CONTEXT_FILES.txt` lists 29 of the 30 paths `installation.json` declares `managed` under `.claude/commands/`/`scripts/`, missing `record-manual-implementation-review.md` | **Accepted, and regenerated from `installation.json`'s managed set rather than hand-added, per required acceptance criterion 4.** Reproduced: the manifest lists thirty such paths (seventeen `.claude/commands/`, thirteen `scripts/`); the bundle's `CONTEXT_FILES.txt` listed twenty-nine, short by exactly `record-manual-implementation-review.md` | `CONTEXT_FILES.txt`, regenerated to list all thirty, in the file's existing grouped-then-alphabetical order |
+| **`I4`** (Important) — the mapping's `REQ-40` description still says "CP4's seventeen-row phase table", while the plan's own live text says "twenty-row"/"twenty-phase" throughout | **Accepted, and re-read against the current table size rather than hand-edited, per required acceptance criterion 4.** CP4's decision mapping is keyed over the twenty phases `KNOWN_PHASES` now declares (`REQ-41`, revision 64's baseline widening), which the plan's own live text already calls the "twenty-phase table"/"twenty-row mapping" at two other sites; `REQ-40`'s description is the sole surviving occurrence of the stale "seventeen-row" figure and is corrected to agree with them | the mapping's `REQ-40` description |
+| **`O1`** (Optional) — the round-62 disposition section is honest about being reconstructed but does not say where the surviving evidence now lives | **Accepted.** One sentence added naming the chain: `EXT-PLAN-R62-O1`'s text survives only inside this document, as a quotation of round 63's own quotation of the finding, since the feedback file is overwritten every round | the round-62 disposition section's opening paragraph |
+
+**The three missing tests are all added**, each at the row it
+discriminates: **two** CP6B positive cases pin row 3's `APPROVE` and
+`REVISE` observations, each demonstrated red against a build written
+verbatim from revision 64's rule (`B1`); and **one** construction case
+pins property 3's row-7 exemption, with its own negative instantiation
+proving the exemption is scoped to `from_phase is NO_PHASE` rather than to
+the general shape (`I1`). `I3`'s completeness check over
+`CONTEXT_FILES.txt` is a bundle-generation obligation rather than a
+`controller/`/`tests/` one — there is no test file to add it to at the
+plan stage — so it is satisfied here by regenerating the artifact itself
+from the stated rule, the same way `B3`'s re-embed was satisfied by
+calling the renderer rather than by a declared test.
+
+## Plan review round 65 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 65 reviewed the revision-65 amendment bundle `b9fb0935…` / content
+id `dffa3942…` and returned `REVISE` with **1 Blocking**, 3 Important and
+1 Optional finding, plus three missing tests and seven required acceptance
+criteria. **All five findings are accepted; none is rejected.** Round 65
+re-verified five of round 64's six findings as genuinely applied and
+confirmed `B1`'s chosen reading (a) against `controller/job.py` rather
+than against the rejection's argument — including the one thing revision
+65 never stated, that `branch` survives a restart without a wire form.
+What it then found is the same shape as rounds 63's and 64's `B1`: **a
+rule change whose dependent statement was left standing** — this time one
+layer up, at the CP6B *property* revision 64 had derived from revision
+64's rule.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`B1`** (Blocking) — CP6B's declared predicate-evaluation property still states revision 64's rule (*"evaluated on **every** verification path"*) and now contradicts step 8 on exactly the two observations revision 65 exists to fix: a build written from the property fails CP6B's two new row-3 cases, and a build written from step 8 fails the property | **Accepted in full and reproduced**, both halves: the property at its own site and the two required-to-verify cases twenty-six lines below cannot both be satisfied. **The property is restated in the direction revision 65's rule holds**, in the formulation step 8 already reaches — *"every declared predicate is evaluated on the observation it is declared over, and a build in which some declared predicate is never consulted on any path fails"* — and **the observation each predicate-bearing row is declared over is now named explicitly**: row 3 the `BLOCK` observation, row 5 its single `to_any_of` member, row 7 every member (`branch is None`). The two further sentences that still stated the superseded rule are re-derived with it: *"triggers on the predicate's presence"* becomes the `branch`-keyed trigger, and the phase-equality mutation is **kept but reclassified** as instrumenting row 7's clause rather than the clause the property is now about, with a new instantiation — a build that never consults row 3's predicate on **any** path — carrying the property for the change it is about (required acceptance criterion 2) | CP6B's predicate-evaluation property, restated as a quoted property plus a three-row observation list; its two instantiations; the five-positive-cases sentence, now visibly derived from the same statement rather than merely compatible with it |
+| **`I1`** (Important) — step 8's new trigger reads *"the row's own `WriterCall.branch`"* as a scalar, but `writer_calls` is a tuple, `branch` is per-call, and a predicate-bearing row with two calls carrying different branches is admissible today | **Accepted, and closed by a total, fail-closed rule rather than by forbidding the shape** (required acceptance criterion 3). Confirmed against `controller/job.py:287-299`/`:325` and `:478-480`: nothing constrains the arity, round 6's corollary explicitly contemplates multi-call rows, and property 3 constrained only `kind`. **The rule**: every `WriterCall` on a row must declare the identical `branch`; the row's `branch` is that shared value; a row whose entries disagree fails at construction naming the row and both values. Round 6's conjunction corollary is **untouched** — a row may still name several calls and must still conjoin them; it may not straddle two branches, because a row declares one observation and property 5 walks one span. **No schema move** (required acceptance criterion 6): `writer_calls` stays a tuple and no `ExpectedOutcome` field is added, removed or renamed, so no checkpoint's complexity is re-derived. Stated once, in property 3, not inside step 8's prose, with step 8 carrying a pointer to it | property 3's new row-level-`branch` clause; its negative instantiation (mixed branches, and separately two different named branches) in CP6B's enumeration; step 8's justification paragraph, which names the derivation rather than restating it |
+| **`I2`** (Important) — step 8's *"where each clause reads its input from"* paragraph was not extended to the third clause's new input, on `resume`, the one path the paragraph itself calls the only place the rule does real work | **Accepted.** The finding's own verification is confirmed and is the answer the revision owed: `_expected_transition` (`controller/job.py:629-634`) persists only `{"from", "to_any_of"}`, and `_expected_outcome_for_record` (`controller/job.py:928-949`) re-resolves the **row object** by `(pre_state.phase, pre_state.governing_workflow_version, command_token)` — all three on the wire — so `branch` comes back from the in-memory table and needs no wire form. The paragraph now says so, and says it is **deliberate**: reading (a) adds no wire field, no `PRE_STATE_FIELDS` member and no `predicate_inputs` member, and a record written by a revision-64 build reconciles under a revision-66 build to the identical row and the identical `branch`. This is a stronger migration story than revision 65 claimed for itself, which is the finding's own point (required acceptance criterion 4) | step 8's input-provenance paragraph; the new CP7 resume-path case, which is red against a build that reads `branch` off the record |
+| **`I3`** (Important) — four of the five prose-form line citations in the live design region are stale, in the `.claude/commands/*.md` family revision 65 explicitly declined to re-run; property 5's row-3 walk opens a span at `:124` and closes it at `:111`, running backwards | **Accepted, and the sweep re-run rather than the four sites patched** (required acceptance criterion 5). The live design region's citation population was re-derived mechanically against the installed 2.5.1 tree, in two families: **fifteen** `<command>.md:N` symbol citations, **all fifteen correct** and unchanged; and **five** prose-form line references, of which **four are corrected and one is rewritten**. Re-derived values: step 8's closing sentence `111` → `127-128` (step 9 opens at `:129`); the `record_local_plan_review(..., verdict="BLOCK", ...)` call `107` → `124-125`; the no-op text `108-111` → `125-126`; step 5's *"on both this step's governing-version branches alike"* `96-97` → `108-109`; and step 0's `27-46` → `27-58`, whose *"states **only**"* claim the 2.5.0 update's two added bullets made false and which is rewritten rather than renumbered. **Both conclusions survive re-derivation**: property 5 still passes row 3 (`BLOCK` span `:124-128`, located call at `:124`, no later durable write), and row 5's walk still fails to resolve for the reason already recorded under `REQ-31` | property 5's row-3 and row-5 walks; the closing verification's frozen-citation paragraph, which now states this half **was** re-run this revision rather than inheriting revision 64's claim |
+| **`O1`** (Optional) — CP7 row 2's *"verbatim"* restatement is not byte-verbatim: the qualified field name and the parenthetical gloss were dropped in the one revision that moved it | **Accepted, and made byte-identical rather than the claim softened.** CP7 row 2's rule text now reproduces step 8's third clause character for character under whitespace normalisation, verified by extraction rather than by reading; the provenance aside that follows it is outside the restated rule, as it was before | CP7 row 2's rule cell |
+
+**The three missing tests are all added**, each at the row and path it
+discriminates: **one** construction case over a predicate-bearing row with
+two `WriterCall`s carrying different `branch` values, with the mixed-`None`
+and two-named-branch variants both refused (`I1`); **one** CP7 resume-path
+case pinning row 3's `APPROVE` and `REVISE` observations reconciling to
+`FINISHED, transition_verified: true` with no `Status: BLOCK` feedback on
+disk, red against both a revision-64-rule build and a build that reads
+`branch` off the record (`B1`, `I2`); and **one** restated negative
+instantiation for the predicate-evaluation property — a build that never
+consults row 3's predicate on any path — with the superseded phase-equality
+mutation kept alongside it and labelled as instrumenting row 7's clause
+instead (`B1`).
+
+## Plan review round 66 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 66 reviewed the revision-66 amendment bundle `94f7d7b4…` / content
+id `7dd6e4b7…` and returned `REVISE` with **0 Blocking**, **1 Important**
+and **2 Optional** findings, no missing tests, and seven required
+acceptance criteria. **This is the first round of this work item's local
+plan-review history with no substantive finding at all**, and round 66's
+own text says so explicitly: all five of round 65's findings re-verified
+as genuinely applied, and the one thing this round then found is a single
+newly introduced stale self-citation — introduced by the very revision
+that closed round 65's `I3` — plus two prose-scope slips in asides that
+had already been repaired once. **All three findings are accepted; none is
+rejected.**
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`I1`** (Important) — CP7's new row-3 resume-path bullet cites `:4616-4624` for step 8's input-provenance paragraph, revision 65's own coordinate for it; revision 66 inserted a twenty-line paragraph above that paragraph for its own `I1`, so the published revision-66 text has the paragraph at `:4636-4666` and the citation resolves to an unrelated clause | **Accepted, and closed by the durable form rather than a renumbered spot fix** (required acceptance criterion 1). The citation is rewritten to cite the paragraph by its opening literal — *"The third clause's **other** input — the row's own `branch` — is read from neither the record nor process memory"* — rather than by line number, the same repair this document already made to every other self-citation at revision 50 (`OPUS-R50-I1`). This closes the fourth citation family (this document's own self-citations into itself) to zero remaining line-number members, the same way the other three families are closed to a named, swept population; the closing verification below states the rule and the full four-family population by name (required acceptance criterion 2) rather than naming only the two families the sweep happened to run over | CP7's new row-3 resume-path bullet |
+| **`O1`** (Optional) — CP7 row 2's new aside claims byte-verbatim agreement with step 8's *sentence*, true only of step 8's *third clause*; step 8's own standing *"restates it verbatim rather than paraphrasing it"* claim is still false of the whole sentence | **Accepted, and the aside re-scoped to what was verified rather than the claim widened.** CP7 row 2's aside now names "step 8's third clause" rather than "step 8's sentence", and step 8's own header sentence is corrected in the same edit, to *"CP7 row 2 restates the rule in full, clause for clause, and its third clause byte-identically"* — the honest, one-line option the finding names, taken over extending the extraction to the whole sentence (required acceptance criterion 3) | step 8's header sentence; CP7 row 2's provenance aside |
+| **`O2`** (Optional) — a newly introduced sentence in CP6B's restated property paragraph duplicates the pre-existing *"a property that cannot fail is not a property"* clause immediately before it, and breaks the enumeration opened at *"What remains, over the (now seven, revision 63) rows: …"* by interposing a complete sentence between its last two items | **Accepted, and the inserted sentence deleted rather than relocated** (required acceptance criterion 4). *"A property that cannot fail is not a property, and until revision 64 this one could not;"* is removed; the enumeration now reads directly from *"…one that merely fails."* into *"And the negative instantiation of every property, since a property that cannot fail is not a property: …"*, restoring both the list's grammar and the single occurrence of the justifying clause. The *"until revision 64 this one could not"* observation is not relocated elsewhere: nothing in this round's criteria requires keeping it, and the finding itself calls relocation optional | CP6B's restated predicate-evaluation property, negative-instantiation paragraph |
+
+**No missing tests this round.** Round 66's own text confirms all three
+tests round 65 named are present and each discriminates what it claims,
+re-verified against `controller/job.py` rather than against the prior
+round's disposition text.
+
+**Required acceptance criteria 5, 6 and 7** are not separate findings and
+carry no disposition row of their own: criterion 5 (nothing else moves) is
+satisfied by construction — this revision touches only the three sites
+named above, the title marker, the round-count occurrences and the
+registry's `plan_revision` stamp; criterion 6 (the mapping's byte-identical
+claim) is corrected in `REVIEW_REQUEST.md` and in this revision's own
+closing verification below, both of which previously stated the weaker,
+false "byte-identical but for its revision stamp" — the mapping schema
+carries no revision stamp at all; and criterion 7 (a revision-67 closing
+verification in revision 66's own shape, stating explicitly that no
+`[substantive]` finding was raised this round) is satisfied by the "What
+revision 67 changed" section below, which states plainly that round 66 was
+this work item's **first** apparatus-only local plan-review round, that
+the diminishing-returns bound `REVIEW_PROTOCOL.md`'s
+`D-Review-Finding-Taxonomy-and-Circuit-Breaker` sets is **2 consecutive**
+apparatus-only rounds, and that the clock now has one round on it.
+
+## Plan review round 67 — disposition (`MANUAL_EXTERNAL_PLAN_REVIEW`)
+
+Round 67 reviewed the revision-67 amendment bundle `26944a54…` / content id
+`34a1db91…` — the same bundle local plan review round 67 had just approved,
+with **0 Blocking**, **1 Important** finding, no Optional findings, one
+missing test and six required acceptance criteria — and returned `REVISE`.
+**The one finding is accepted; none is rejected.** This is this work item's
+first `MANUAL_EXTERNAL_PLAN_REVIEW` round since round 38, and the first of
+either stage to find something in the amendment's own supported-baseline
+design rather than in this document's account of itself: every finding
+from round 63 through round 66 was a citation, a count, a stale claim about
+a past round, or a rule this document had already stated but not yet
+enforced consistently. This one is different in kind — it agrees the B2
+bootstrap architecture is sound and asks nothing about it; it finds a gap
+in the *admission rule* revision 64 wrote to resolve `B6`, one that
+survived four further local rounds because none of those rounds' own
+properties were built to see it.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`I1`** (Important) — admitting the whole `2.5.x` line is not fail-closed against a future patch that changes an already-known command's or phase's semantics while leaving `KNOWN_PHASES`, the command-file inventory and the two-directional properties over them unchanged; `2.5.x` admission must not mean "trust every future patch solely because its major/minor version matches" | **Accepted in full, and reproduced against the design before it was changed**: `SUPPORTED_WORKFLOW_LINE`'s bullet and the "why admitting a line is fail-closed" paragraph (revision 64) argue only that an unmodelled phase or command is refused or unselectable — true, and unaffected — and say nothing about a modelled one whose behaviour moves under its own name, which neither two-directional property (each a check over *names*) can see. **The repair is the design the finding's own first acceptable option names, per required acceptance criteria 1 and 2**: `VALIDATED_WORKFLOW_RELEASES = {"2.5.1"}` becomes the actual admission gate — an exact-membership check, not a line match — with `SUPPORTED_WORKFLOW_LINE` kept as a necessary pre-filter and diagnostic classifier only. `2.5.0`, a real, currently-distributed release this document never measured, is now refused on the same footing as an unreleased future `2.5.2` — both are "known line, unvalidated release", evidence that is asserted to read differently from a wrong-line refusal. Growing the set is stated as a deliberate, named act — re-derive the three inventories and the seven baseline-verification suites, then add the release by name in a plan revision — never automatic from a parsed major/minor match, which is the finding's own required boundary. **Required acceptance criterion 3** (re-derive every affected statement rather than patch isolated prose) is carried out at every site the old rule's fail-closed argument or its test enumeration touched: the "Supported Workflow baseline" policy section, CP2 step 5's admission rule, the baseline-predicate test enumeration, and CP2's registry/mapping complexity. **Required acceptance criterion 5** (bounded scope) is honoured by construction: no Controller behaviour outside Workflow-version admission is touched, and the B2 bootstrap architecture this round separately found coherent is not reopened or implemented here | the "Supported Workflow baseline" policy section's `VALIDATED_WORKFLOW_RELEASES` bullet and its rewritten fail-closed argument; CP2 step 5's admission rule; the baseline-predicate test enumeration (four cases → seven); the `## Checkpoints` complexity narrative's new revision-68 paragraph; `REQ-43` and `REQ-T18B` in the mapping; CP2's registry complexity (4 → 5) and its regenerated `## Checkpoints` table row |
+
+**The one missing test is added, and it is the case the six pre-existing
+baseline-predicate cases cannot exercise between them** (required
+acceptance criterion 4): a fixture repository whose `.claude/commands/`
+tree and `KNOWN_PHASES` block are byte-identical copies of the validated
+`2.5.1` reference tree — so every inventory CP2, CP3 and CP4 read is,
+by construction, indistinguishable from the admitted case — while
+`installation.json` alone declares `workflow_version: "2.5.2"`, a release
+the Manager's own `distribution/` does not carry and this document never
+measured. The fixture is refused with `UnsupportedWorkflowVersionError`,
+carrying the same "known line, unvalidated release" evidence as the
+reversed `2.5.0` case, proving admission is gated on release identity
+rather than falling back to inventory equality when the exact version is
+unrecognised — which is the discrimination the finding's own missing-test
+paragraph asks for, not a re-check of version parsing or command/phase
+counts. It is `REQ-T18B`, a CP2 unit-level fixture, alongside `REQ-T18`,
+CP9's unaffected live-Manager integration test.
+
+**Required acceptance criterion 6** (regenerate the bundle and return to
+the local-review lifecycle before another manual external review) is not a
+separate finding and carries no disposition row of its own: it is this
+command's own exit step, unconditional for a `"2.1"`/`"2.2"`-governed item
+regardless of finding severity, and it is satisfied by this revision's own
+regenerated bundle and its transition to `AWAITING_LOCAL_PLAN_REVIEW` — see
+the "What revision 68 changed" entry below.
+
+## Plan review round 68 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 68 reviewed the revision-68 amendment bundle `83ec9043…` / content id
+`f2c8ee73…` — the bundle revision 68 published in answer to manual external
+round 67's `I1` — with **1 Blocking**, **2 Important** and **1 Optional**
+finding, one missing test and seven required acceptance criteria, and
+returned `REVISE`. **Three findings are accepted in full; one — `O1` — is
+rejected, with the evidence for the rejection recorded in its own row
+below.** The round is unusual in what it did *not* find: it independently
+re-derived the two-tier admission design revision 68 wrote and confirmed
+every structural claim about it, and says so. What it found instead is that
+revision 68 repaired the admission rule without re-deriving three live
+statements whose truth depended on the rule it replaced — its own required
+acceptance criterion 3, applied to revision 68 rather than by it. One of the
+three is not prose: it left `REQ-T18`, CP9's only real-worker evidence,
+resting on a premise revision 68 had removed.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`B1`** (Blocking, substantive) — `REQ-T18`'s step 2 installs "whatever the `2.5` line's newest installed release is", and the paragraph beneath it asserts that widening the baseline "removes that refusal at its source" and that "the next Manager update inside the `2.5` line does not restale it"; all three were true under revision 64's line predicate and are false under revision 68's exact-membership rule, re-creating round 63's `B6` failure mode at this fixture the moment the Manager ships a `2.5.2` | **Accepted in full, and reproduced before it was repaired.** The chain the finding states holds at every link: the Environment-facts row records, measured, that `bootstrap`/`update` without `--release-version` mean the Manager's newest; the Manager's `distribution/` carries `2.3.1`, `2.4.0`, `2.5.0` and `2.5.1`, re-listed at revision 69; CP2 step 5 refuses a known-line, unvalidated release before any worker launches; and the fallback mechanism copies `.workflow-manager/installation.json` unchanged, so it inherits whatever release *this* repository is on and is no safety net. **The repair is the finding's first acceptable option — a stated rule, not a re-worded sentence**: step 2 now installs a member of `VALIDATED_WORKFLOW_RELEASES`, named explicitly, via `workflow-manager --release-version <release> bootstrap <tmp>`, with the fallback constrained the same way and refused when the copied manifest declares an unvalidated release. The option's **position** is measured rather than assumed at revision 69 — it is a *global*, accepted before the subcommand, since the `bootstrap` subparser accepts only `--profile` and `--force` — and the measurement is recorded as its own Environment-facts row, because a fixture rule that names an invocation form is worth exactly as much as the measurement behind it. The two sentences the finding names are **re-derived from the new rule rather than deleted**: the "widening removes that refusal at its source" paragraph now states that revision 68 removed the premise revision 64's argument rested on, that the objection to pinning was to pinning at *2.3.1* and never to pinning as such, and that pinning to a *validated* release is the opposite case. The cost — `REQ-T18` can now diverge from this repository's installed release after a Manager update — is **stated and made audible** by `REQ-T18C` rather than absorbed | `REQ-T18` step 2, rewritten as a stated rule with its two bound mechanisms; the new step 3b; the new `--release-version` Environment-facts row and the re-derived "Why it matters" cell of the `distribution/` row; CP9's baseline-verification comparand sentence; `REQ-T18C` in the mapping |
+| **`I1`** (Important, substantive) — "Specific areas the reviewer should challenge" item 7 still states the superseded line policy as the choice in force and describes `VALIDATED_WORKFLOW_RELEASES` as the narrower alternative *not* taken; the section contains no occurrence of `revision 68` or `VALIDATED_WORKFLOW_RELEASES` anywhere | **Accepted in full, and confirmed by the same mechanical check the finding reports**: neither string occurred anywhere in the live section, and `SUPPORTED_INSTALLATIONS` — an identifier that names nothing in the current design — occurred there exactly once, as a live use, against three frozen disposition occurrences correctly left alone. The finding's reading of *why this matters more than ordinary staleness* is adopted rather than merely acknowledged: this section's readers are the **next** reviewers, so a stale item 7 invites them to re-litigate a policy already abandoned and conceals that the challenge it names has been accepted. **Item 7 is re-derived, not patched**: it now asks whether the two-tier rule is right, states what revision 68 chose and why round 67's `I1` forced it, and then names three things still genuinely open — the accepted per-update revalidation cost, whether the pre-filter earns its keep when it admits nothing the gate does not, and where the cost actually lands, which is CP9 rather than CP2. The profile half of the item is unchanged in substance and re-checked, with a note that `SUPPORTED_PROFILES` is a set of values rather than a line, so round 67's objection does not reach it | "Specific areas the reviewer should challenge", item 7, rewritten |
+| **`I2`** (Important, apparatus) — the requirement-traceability roster states **sixty** requirements and `REQ-T1`–`REQ-T18` as "the eighteen named testing requirements, one per `docs/ACTIVE_MILESTONE.md` list entry", while the regenerated mapping carries 62 with nineteen `REQ-T` entries; neither `REQ-43` nor `REQ-T18B` appears in its enumeration, and the sentence asserts it was "counted from the regenerated file" | **Accepted in full, and re-derived from the regenerated mapping rather than incremented.** Measured against the file this revision publishes: **sixty-three** requirements, `REQ-1`–`REQ-43` plus **twenty** `REQ-T` entries. The clause the finding singles out as needing re-derivation rather than renumbering is the one that got it: `REQ-T1`–`REQ-T18` remain one per brief list entry, and `REQ-T18B`/`REQ-T18C` are named as **not** brief entries but review-raised tests this document owes on its own account, so the suffixed ids are exactly the difference between the brief's eighteen and the family's twenty. The amendment requirements are now enumerated individually — `REQ-40`, `REQ-41`, `REQ-42`, `REQ-43` — on the stated ground that each records one accepted finding. The missing separator the finding notes as adjacent and pre-existing is fixed while the sentence is open. The sentence keeps its self-description because revision 69 re-establishes the provenance it asserts; nothing mechanical reads requirement counts today, which is why round 68 had to | the requirement-traceability roster in `## Checkpoints` |
+| **`O1`** (Optional) — `REQ-41`'s mapping description still states the superseded admission rule ("`SUPPORTED_WORKFLOW_LINE` plus `SUPPORTED_PROFILES` **replace** the closed 2.3.1-only admission set") as current | **Rejected, on the convention the finding itself names and invites this answer against.** The evidence is in the published mapping, `docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json`: **`REQ-3`** still reads *"a bounded phase -> next-action mapping derived from frozen Workflow v2.3.1's actual command/lifecycle contract"* after revision 64 re-derived that very contract against 2.5.1, and it survived revisions 64–68 including a manual external round without being raised. **`REQ-40`** likewise still states revision 63's `NoWorkItemYet` architecture in its own terms while revision 69 changes what `REQ-T18` (which `REQ-40` names) installs. Amendment entries in this mapping are therefore **additive provenance records of what one revision decided**, superseded by later entries rather than maintained as live single-source statements — which is also why `REQ-43` states the rule that supersedes `REQ-41`'s, and why `REQ-T18C` now states the fixture rule that supersedes `REQ-43`'s own closing "`REQ-T18` is unaffected" clause. Rewriting `REQ-41` would break that convention at one site and leave `REQ-3` and `REQ-40` inconsistent with the new rule, which is strictly worse than the staleness it removes. **Recorded as a stated choice, not an accident**, which is what the finding asked for either way | no edit; the convention is stated here and in the `I2` row's account of the enumeration |
+
+**The one missing test is added and assigned to `CP9`** (required
+acceptance criterion 2): `REQ-T18C`, `REQ-T18`'s own admissibility
+precondition. After step 2's install and before step 4's run, the fixture
+re-reads the **target's** `.workflow-manager/installation.json` from disk
+and asserts its `workflow_version` is a member of
+`VALIDATED_WORKFLOW_RELEASES` and its `profile` a member of
+`SUPPORTED_PROFILES`, both read from the Controller's own constants rather
+than re-typed, with a failure message naming the observed release, the
+current membership, and the growth procedure. The finding's own framing is
+adopted: its value is **where it fires**. Without it, a dropped or
+unhonoured `--release-version`, or a fallback copy from a repository the
+Manager has moved to an unvalidated release, surfaces four steps later as
+an opaque CP2 refusal inside the one test whose purpose is real evidence.
+It is deliberately **not** a second copy of CP2's admission gate —
+`REQ-T18B` owns that, as a CP2 unit fixture over a synthetic manifest —
+but a fixture precondition, which is the distinction the finding's own
+missing-test paragraph draws.
+
+**The sweep required acceptance criterion 5 asks for, with what was
+searched and what was found.** The search was mechanical first and read
+second. Mechanically: every occurrence of `2.5.x`, `2.5 line`, `line
+predicate`, `whole line`, `future patch`, `newest release`, `newest
+installed` and `SUPPORTED_WORKFLOW_LINE` in this document, partitioned into
+the live design region, the live `## Specific areas` section and the frozen
+disposition/`What revision N changed` regions, with the frozen ones
+excluded from repair under the revision-61 provenance policy and read only
+for cross-reference. That enumeration is stated below as four bullets
+covering **five** sites in total: **four live** (**two** beyond the two
+round 68 named, plus the two round 68 named themselves, restated for
+completeness) and **one** deliberately-left frozen:
+
+- the Environment-facts `distribution/` row's *"Why it matters"* cell,
+  which argued that a baseline pinned to one release refuses the Manager's
+  own default install — an argument **for** the line, left standing after
+  the line stopped being the gate. **Re-derived**: it now says that the
+  Manager's default and an admitted release are no longer the same thing,
+  and that this is why any fixture which *installs* a release must name it;
+- CP9's baseline-verification comparand sentence, *"a future Manager update
+  inside the `2.5` line re-measures it again rather than inheriting it"* —
+  false in its causation under exact membership, since a Manager update now
+  triggers nothing by itself. **Re-derived**: the table is re-measured per
+  *validated* release, as one half of the deliberate revalidation act, and
+  `REQ-T18C` is what refuses to let live evidence run ahead of it;
+- `REQ-T18` step 2 and its argument paragraph (`B1`), and item 7 of
+  `## Specific areas` (`I1`) — the two round 68 named, repaired above;
+- `REQ-43`'s closing clause, *"`REQ-T18` (CP9) is unaffected and continues
+  to exercise the repository's actually installed, actually validated
+  release"* — true when written at revision 68 and false in general from
+  revision 69, since `REQ-T18` is now pinned to a validated release rather
+  than to the installed one. **Deliberately left as written**, per the
+  additive-provenance convention this round's `O1` row states and rejects
+  `O1` on; `REQ-T18C`'s own entry is the superseding record, which is the
+  same instrument `REQ-43` is to `REQ-41`.
+
+Three further families were enumerated and found **not** to depend on the
+replaced rule, recorded so the next round need not re-derive them: the
+inventory statements (*"the two command files and three phases 2.5.x
+adds"*, the `KNOWN_PHASES` twenty, the seventeen-file partition, the
+four-file user-only union) — each is a statement about the **reference
+release**'s measured content, which revision 68 did not touch and which
+`REFERENCE_WORKFLOW_RELEASE` still pins; the `## Checkpoints` complexity
+narrative's revision-64 paragraph, which is explicitly scoped *"at revision
+64"* and is immediately followed by revision 68's own correcting paragraph;
+and CP2 step 5 with the baseline-predicate enumeration, both re-derived by
+revision 68 itself and re-read here without change.
+
+**Required acceptance criterion 6** (keep the scope exactly as round 67's
+criterion 5 set it) is honoured by construction: this revision touches no
+file under `controller/` or `tests/`, does not reopen the B2 bootstrap
+architecture, and implements no checkpoint. **Required acceptance criterion
+7** is this command's own exit step and carries no disposition row — see
+"What revision 69 changed" below.
+
 ## Specific areas the reviewer should challenge
 
 **This document has two parallel per-revision section families,
@@ -10350,6 +12308,466 @@ regenerated at `plan_revision` 62 over the same, unchanged checkpoint and
 requirement sets, and `render_registry_markdown`'s output re-embeds
 byte-identically.
 
+**What revision 64 changed, in response to round 63's `REVISE`, and what
+it deliberately did not.** All six Blocking, both Important and all four
+Optional findings are accepted; none is rejected. Round 63's `B6` was put
+to the user before this revision was written, per required acceptance
+criterion 4, and the user chose to **widen the supported baseline to the
+`2.5.x` line with 2.5.1 as the reference release** rather than to pin
+`REQ-T18`'s fixture to a synthetic 2.3.1 — so this revision's scope is
+round 63's own six items **plus** that widening, by explicit
+authorisation, and nothing else. The per-finding record is in "Plan review
+round 63 — disposition", above; what follows is the closing verification
+this revision performs, which revision 63 omitted entirely and which
+required acceptance criterion 5 asks for by name.
+
+**The four consistency halves and both pins, re-run rather than reasoned
+about.** Each was rebuilt from its own declaration in the four-halves
+table and run over revision 64's published text, after this revision's
+last content edit:
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, and it is one of the two `B4` names | **thirteen** occurrences resolve by rule to **four excluded, one out of scope for naming no checkpoint, and eight in scope, all eight agreeing with the registry field for field**. Before the repair the same run answered three / one / nine with **six** of the nine mismatching, reproducing `B4`'s table exactly. The classification itself moved, which is why this row publishes a run rather than an edit: CP4's current figure changing from 3 to 5 turned round 3's disposition row into a *second* marked pair, so one more occurrence left scope as excluded. Three bare bold current halves — the `CP6 is **4** today` shape the half cannot see as occurrences — were corrected in the same pass and are recorded as `REQ-42` rather than silently relied on |
+| **round-count half** | **yes**, the other of `B4`'s two | **three** in-scope occurrences, matched over whitespace-normalised text by the declared verb pattern, all reading `sixty-three` against an authority of `plan_revision` − 1 = **63**. The one `of`-governed occurrence, out of scope by rule, was bumped with them per the practice established at revision 55. Before the repair all three read `sixty-one` against an authority of 62 |
+| **exit-code half** | **no** — not re-run, and the reason is stated rather than assumed. Its subject is the Exit codes table compared against the ADR's copy; this revision changes **no row** of that table (ten rows, unchanged in code, meaning and order), and the ADR does not exist yet, so there is nothing new to compare. The half's own scope is untouched by every finding in round 63 |
+| **command-line half** | **no** — not re-run as an extraction. This revision types **no new Controller command line**: it adds no line beginning `workflow-controller ` or `python <flags> -m controller `, and the one CLI-adjacent edit (CP9's `REQ-T18` step 2) changes prose around an existing invocation without changing the invocation. The survivor set and all five published figures are therefore unmoved, and stating that is different from re-measuring it — which is the distinction `OPUS-R37-B1` was raised about, so this row says which it is |
+| **component pin** (the command-line half's five published figures, over regions R1/R2/R3) | **no**, for the same reason as the half it reads — but the **regions** were checked to still exist and still open with their declared literals, since revision 64 edits text near R1 (the four-halves table) | R1, R2 and R3 all located by their opening literals; none of their published figures edited |
+| **partition pin** (`Of the <number-word> Blocking findings of rounds <a>-<b>,`) | **no** — the sentence, its window endpoints and its three occurrences are untouched by this revision, and round 63's findings do not reach it. Its clause (v) window is rounds 34–38 and this revision adds a disposition section for rounds 62 and 63, both outside it | the three occurrences remain identical and the enumerated id set unchanged |
+
+**The frozen conformance suites, re-run under the installed release.** All
+seven green, on Python 3.14.7: `workflow_fingerprint_test.py` 218,
+`workflow_state_test.py` **853**, `workflow_test_harness_test.py` 19,
+`workflow_integration_test.py` 260 (1 skipped),
+`workflow_acceptance_matrix_test.py` 146 (18 skipped),
+`workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79. **`workflow_state_test.py`
+was red before this revision** — 2.5.x's own
+`GoverningVersionEnumerationSweepTest.test_real_corpus_sweep_is_clean`
+flagged two occurrences on this document's round-6 disposition row — and
+that redness predates the amendment: it reproduces against the committed
+`HEAD` text as well as the working tree. It is repaired here by
+time-labelling that row rather than rewriting it, and
+`sweep_governing_version_enumeration` now answers **zero** findings over
+this document.
+
+**The registry, the mapping and the generated table.** The registry and
+mapping were regenerated through `generate_registry`/`generate_mapping`/
+`write_registry_and_mapping` at `plan_revision` **64**, over **eleven**
+checkpoints — none added, none removed, and none **renamed by the
+B1/B2/I1 repairs**, per required acceptance criterion 6. **`B6`'s widening
+does require one rename and one complexity change, and this sentence is
+where that is said explicitly rather than absorbed**: `CP4`'s registry
+`name` is widened (its old text named v2.3.1's seventeen phases and a
+single-recogniser denylist, both false against the installed release) and
+its complexity is re-derived 4 → 5. That is the second rename in this
+document's history, on the same precedent and for the same reason as
+CP2's at revision 36, and it renames nothing anything keys on.
+`render_registry_markdown(registry)` was then called on the regenerated
+registry and its output **re-embedded** into `## Checkpoints`, replacing
+the stale revision-62 table `B3` names — the step revision 63 skipped.
+`REQ-41` (the 2.5.x baseline) and `REQ-42` (the deferred missing test)
+are added, so the mapping carries **sixty** requirements with
+bidirectional coverage revalidated at generation time.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns exactly one well-formed span per registry id
+for all eleven, spanning **6 371 to 87 013 bytes** where revision 63's
+spanned 24 to 359, and `validate_post_anchor_coverage(post_plan_text,
+post_registry)` passes against the regenerated registry.
+
+**The frozen-citation sweep.** Every `scripts/workflow_state.py`,
+`scripts/workflow_fingerprint.py`, `scripts/prepare-ai-review.sh` and
+`.claude/commands/*.md` line citation in this document's **live design
+region** was re-derived against the installed release by locating the
+cited symbol, because the Manager update moved most of
+`workflow_state.py`. `workflow_fingerprint.py`'s cited offsets are
+unchanged at 2.5.1 and were re-verified rather than assumed. Citations
+inside closed disposition prose are provenance under the revision-61
+policy and were deliberately not swept; that is a stated scope, not an
+omission.
+
+**What this revision does not do.** It does not touch `controller/` or
+`tests/` — every `B1`/`B2`/`B6` consequence for the built code is a
+plan-stage statement that implementation will carry, and the live
+`tests/test_target_state.py`/`tests/test_decision.py` failures `B6`
+reproduces are **expected to stay red until `/milestone-implement`
+resumes**, which is the correct state for a superseded plan approval. It
+does not touch frozen Workflow: `scripts/`, `.claude/commands/` and
+`.workflow-manager/` are read-only authorities this revision derives from
+and never edits. It does not reopen rounds 1–61's history, does not
+re-audit the immutable-execution mechanism, `materialise()`, `pin()`, the
+`-P -B` re-exec, the runtime-root ladder, the refusal taxonomy, the
+exit-code contract, the CLI surface, CP4B's admissibility model or the
+`raised_by` contract — none of which round 63's findings reach. It does
+not resolve `REQ-31` (round 62's own advice), and does not resolve
+`REQ-42`; both are recorded as open obligations against CP6B's and CP9's
+own verification gates rather than closed by assertion. And it does not
+fix `B1`'s namesake in `tests/test_integration_disposable_repo.py`, the
+implementation-stage schema defect round 63's `REVIEW_REQUEST.md` already
+placed out of scope.
+
+**What revision 65 changed, in response to round 64's `REVISE`, and what it
+deliberately did not.** All six findings — 1 Blocking, 4 Important, 1
+Optional — are accepted; none is rejected. The per-finding record is in
+"Plan review round 64 — disposition", above; what follows is the closing
+verification this revision performs, in revision 64's own shape, per
+required acceptance criterion 5.
+
+**The four consistency halves and both pins.**
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **no**, and the reason is stated rather than assumed | none of round 64's findings touch any checkpoint's complexity or CP4's registry name, and this revision introduces no new `complexity N` occurrence and no new bare bold current decimal — checked directly against this revision's own additions, not inferred. The count stands at revision 64's own re-run figure: **thirteen** occurrences, **four excluded, one out of scope, eight in scope, all eight agreeing with the registry** |
+| **round-count half** | **yes** | **three** in-scope occurrences, all reading `sixty-four` against an authority of `plan_revision` − 1 = **64**. The one `of`-governed occurrence, out of scope by rule, was bumped with them. Before this revision all three read `sixty-three` against an authority of 63 |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR does not exist yet |
+| **command-line half** | **no** — this revision types no new Controller command line |
+| **component pin** | **no** — its three regions R1/R2/R3 remain locatable by their declared opening literals |
+| **partition pin** | **no** — its window (rounds 34–38) does not reach round 64, and its three occurrences are untouched |
+
+**The frozen conformance suites, re-run under the installed release.** All
+seven green, on Python 3.14.7, with the same counts as revision 64:
+`workflow_fingerprint_test.py` 218, `workflow_state_test.py` **853**
+(including `GoverningVersionEnumerationSweepTest.test_real_corpus_sweep_is_clean`,
+which stays clean against this revision's new prose),
+`workflow_test_harness_test.py` 19, `workflow_integration_test.py` 260 (1
+skipped), `workflow_acceptance_matrix_test.py` 146 (18 skipped),
+`workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **65**, over the same **eleven** checkpoints — none added,
+none removed, none renamed, and **no complexity changed**, per required
+acceptance criterion 6: `B1`'s chosen repair (reading the already-declared
+`WriterCall.branch` field) needs no `ExpectedOutcome` schema change, so
+CP6B's own complexity is unaffected, unlike `B6`'s baseline widening at
+revision 64. `REQ-40`'s description is corrected (`I4`); no requirement is
+added, removed or reassigned. `render_registry_markdown(registry)` was
+called on the regenerated registry and its output **re-embedded**
+unconditionally into `## Checkpoints` — byte-identical to what was already
+published, since no checkpoint changed.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns exactly one well-formed span per registry id
+for all eleven, spanning **6 401 to 87 013 bytes**, and
+`validate_post_anchor_coverage(post_plan_text, post_registry)` passes
+against the regenerated registry.
+
+**The frozen-citation sweep, widened per `I2`.** `docs/ai-workflow/*.md`'s
+three live-design-region citations were re-derived against the installed
+2.5.1 tree: CP3's `MILESTONE_WORKFLOW.md:328-331` had moved to `:539-542`
+and is corrected; `REVIEW_PROTOCOL.md:91-112` and `:64-79` were
+re-verified and are unchanged. The five remaining `docs/ai-workflow/*.md`
+occurrences are inside closed disposition prose and stay unswept as
+provenance under the revision-61 policy — the sweep's true scope, now
+stated rather than implied by "every frozen-file citation". The
+`scripts/workflow_state.py`/`scripts/workflow_fingerprint.py`/
+`prepare-ai-review.sh`/`.claude/commands/*.md` sweep revision 64 ran is
+unaffected by this revision's edits and was not re-run.
+
+**`B1`'s repair, enumerated rather than argued (required acceptance
+criterion 5).** For every observation the old (pre-revision-64) rule could
+evaluate, and for every observation revision 64's own rule introduced:
+
+| Row | Observation | Pre-revision-64 verdict | Revision 64 verdict | Revision 65 verdict |
+|---|---|---|---|---|
+| 3 | `BLOCK` (post-phase = pre-phase, predicate holds) | verifies | verifies | verifies — **unchanged** |
+| 3 | `BLOCK` (post-phase = pre-phase, predicate does not hold — no current-round `Status: BLOCK` feedback) | does not verify | does not verify | does not verify — **unchanged** |
+| 3 | `APPROVE` (post-phase = `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`) | verifies (other two clauses only; third clause not triggered) | **does not verify** (third clause wrongly triggered, predicate false) | verifies — **reverts to pre-revision-64, the defect this revision fixes** |
+| 3 | `REVISE` (post-phase = `REVISING_PLAN`) | verifies (other two clauses only) | **does not verify** | verifies — **reverts to pre-revision-64, the defect this revision fixes** |
+| 5 | pre-phase, predicate holds (`bundle_generated_digest` moved) | verifies | verifies | verifies — **unchanged** |
+| 5 | pre-phase, predicate does not hold | does not verify | does not verify | does not verify — **unchanged** |
+| 7 | `AWAITING_LOCAL_PLAN_REVIEW`, predicate holds (`len(post_work_item) == 1`) | **does not verify** (third clause never triggered — round 63's `B1`) | verifies | verifies — **unchanged from revision 64** |
+| 7 | `AWAITING_LOCAL_PLAN_REVIEW`, predicate does not hold | does not verify (vacuously, third clause never triggered) | does not verify | does not verify — **unchanged from revision 64** |
+
+Row 3's `APPROVE`/`REVISE` observations are the only two cells this
+revision moves, and they move back to the pre-revision-64 verdict; no
+other row or observation changes from revision 64's own table.
+
+**(Time-labelled correction, revision 66, round 65's required acceptance
+criterion 7: this table's row-7 `Pre-revision-64 verdict` column is wrong
+in both of its cells, and it contradicts this document's own narrative at
+CP6B step 8.** That narrative states that under revisions 5–63's rule row
+7's predicate *"was declared as data and never evaluated"*, so *"the very
+case its own paragraph says it exists to stop … **verified**"*. That is
+the correct derivation: with the third clause never triggered — row 7's
+`from_phase` is `NO_PHASE`, which can never equal an observed post-phase —
+`transition_verified` reduces to the first two clauses alone, and on a
+`SUCCESS` worker landing at `AWAITING_LOCAL_PLAN_REVIEW` both hold. So
+**both** row-7 pre-revision-64 cells should read *"verifies (wrongly —
+third clause never triggered; round 63's `B1`)"*: the predicate-holds cell
+verified for the right outcome by accident, and the predicate-does-not-hold
+cell verified when it must not, which is the defect round 63's `B1` named.
+The published cells read *"does not verify (third clause never triggered —
+round 63's `B1`)"* and *"does not verify (vacuously, third clause never
+triggered)"*, which reads the untriggered clause as **false** rather than
+as **absent** — the one reading the rule's own "whenever the row carries a
+predicate at all" wording forbids. Neither the revision-64 nor the
+revision-65 column is affected, and **no verdict of any build of revision
+64, 65 or 66 changes**: the error is confined to the historical column.
+The row text above is left as written, per the revision-61 provenance
+policy, and the corrected column is restated in revision 66's own closing
+verification below.**)**
+
+**What this revision does not do.** It does not touch `controller/` or
+`tests/` — `B1`'s repair is a plan-stage statement implementation will
+carry when `/milestone-implement` resumes, and `tests/test_target_state.py`/
+`tests/test_decision.py` stay red for the same reasons `B6` already
+established. It does not touch frozen Workflow. It does not reopen rounds
+1–63's history beyond `I2`'s widened citation sweep. It does not resolve
+`REQ-31` or `REQ-42`, both still open against CP6B's and CP9's own
+verification gates. And it does not touch CP4's registry name or
+complexity, `B6`'s baseline, or any of rounds 1–61's disposition prose
+beyond `O1`'s one added sentence.
+
+**What revision 66 changed, in response to round 65's `REVISE`, and what it
+deliberately did not.** All five findings — 1 Blocking, 3 Important, 1
+Optional — are accepted; none is rejected. The per-finding record is in
+"Plan review round 65 — disposition", above; what follows is the closing
+verification this revision performs, in revision 65's own shape, per
+required acceptance criterion 7.
+
+**The four consistency halves and both pins**, each re-run or excused by
+rule rather than by assertion — the figures below were extracted with
+`tests/test_plan_document_consistency.py`'s own recognisers against the
+**published** revision-66 text, not hand-counted:
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, because `I1`'s repair touches a property's declared subject and criterion 6 asks whether the schema moved | **thirteen** occurrences, **four excluded** (superseded halves of marked pairs), **one out of scope** (names no checkpoint), **eight in scope, all eight agreeing with the registry** — identical to revision 64's and 65's figures. `I1` adds a construction property over existing data and moves no `ExpectedOutcome` field, so no checkpoint's complexity is re-derived and this revision introduces no new `complexity N` occurrence |
+| **round-count half** | **yes** | **three** in-scope occurrences, all reading `sixty-five` against an authority of `plan_revision` − 1 = **65**. The one `of`-governed occurrence, out of scope by the row's own rule, was bumped with them. Before this revision all three read `sixty-four` against an authority of 64 |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR does not exist yet |
+| **command-line half** | **no** — this revision types no new Controller command line; the recogniser still answers **seven** invocation lines, unchanged |
+| **component pin** | **no** — its three regions R1/R2/R3 remain locatable by their declared opening literals |
+| **partition pin** | **no** — its window (rounds 34–38) does not reach round 65, and its three occurrences are untouched |
+
+**The frozen conformance suites, re-run under the installed release.** All
+seven green, on Python 3.14.7, with the same counts as revision 65:
+`workflow_fingerprint_test.py` 218, `workflow_state_test.py` **853**,
+`workflow_test_harness_test.py` 19, `workflow_integration_test.py` 260 (1
+skipped), `workflow_acceptance_matrix_test.py` 146 (18 skipped),
+`workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79. `tests/test_plan_document_consistency.py`'s
+own eighteen cases are green against this revision's text as well.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **66**, over the same **eleven** checkpoints — none added,
+none removed, none renamed, and **no complexity changed**, per required
+acceptance criterion 6: `I1`'s chosen resolution is a construction
+property over the existing `writer_calls` tuple, so `ExpectedOutcome`'s
+declared shape does not move and CP6B's complexity is unaffected. No
+requirement is added, removed or reassigned; the mapping is byte-unchanged
+but for its revision stamp. `render_registry_markdown(registry)` was
+called on the regenerated registry and its output **re-embedded**
+unconditionally into `## Checkpoints` — byte-identical to what was already
+published, since no checkpoint changed, which is the no-op the
+unconditional rule predicts rather than a skipped step.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns **exactly one** well-formed span per registry
+id for all eleven, spanning **6 401** (CP5) to **87 013** (CP1) bytes —
+this revision's additions land inside CP6B (**71 737**) and CP7
+(**38 361**), neither an extreme — and
+`validate_post_anchor_coverage(post_plan_text, post_registry)` passes
+against the regenerated registry.
+
+**The frozen-citation sweep, `.claude/commands/*.md` half re-run this
+revision rather than inherited** (`I3`, required acceptance criterion 5).
+Revision 65 stated that this half *"was not re-run"*; it is re-run here,
+mechanically, over the live design region's full citation population in two
+families. **Family one, fifteen `<command>.md:N` symbol citations: all
+fifteen re-derived against the installed 2.5.1 tree and all fifteen
+correct** — `accept-milestone.md:24` and `:55`, `approve-review.md:36`,
+`recover-implementation-provenance.md:97` and `:104` (the guard-literal
+run's three matching plus its one deliberate false-positive citation),
+`apply-functional-review.md:174`, `apply-implementation-review.md:196`,
+`milestone-implement.md:350`, `apply-plan-review.md:137` (twice, rows 5 and
+property 5's walk), `apply-plan-review.md:39-40`, `milestone-plan.md:208`,
+`record-manual-plan-review.md:54-58` and `:71-73`, `review-plan.md:124`,
+and row 3's `` `write_review_feedback` (`review-plan.md` step 7) `` —
+verified as a step reference against step 7's own *"and write
+`<feedback_dir>/REVIEW_FEEDBACK.md`"*. **Family two, the five prose-form
+line references, enumerated with their re-derived values:**
+
+| Site | Revision 65 said | Installed 2.5.1 has | Disposition |
+|---|---|---|---|
+| property 5, row-3 walk: step 8's closing sentence | `line 111` | `:127-128`; step 9 opens at `:129` | corrected |
+| property 5, row-3 walk: the located `record_local_plan_review(..., verdict="BLOCK", ...)` call | `line 107` | `:124-125` (`:107` is `assert_feedback_not_owned_by_other_work_item(`) | corrected |
+| property 5, row-3 walk: the no-op text | `lines 108-111` | `:125-126` | corrected |
+| property 5, row-5 walk: *"on both this step's governing-version branches alike"* | `lines 96-97` | `:108-109` (`:96-97` is the stale-table sentence) | corrected |
+| property 5, row-5 walk: step 0's span | `lines 27-46`, *"states **only**"* | step 0 spans `:27-58` and carries two further bullets the 2.5.0 update added | rewritten, not renumbered — *"states only"* was false of the step, and the two quotations are relocated to `:39-40` and `:41` |
+
+The three `107`/`111`/`108-111` values were revision 63's pre-2.5.1
+numbers, left standing when revisions 63 and 64 moved only the walk's
+opening citation, which is why the published span ran **backwards** from
+124 to 111. **Both walks' conclusions survive re-derivation at the true
+lines**: property 5 still **passes** row 3 (span `:124-128`, located call
+at `:124`, no later durable write within the span), and row 5's walk still
+fails to resolve for the reason already recorded under `REQ-31`. The
+`docs/ai-workflow/*.md` half revision 65 re-ran is unaffected by this
+revision's edits and is not re-run; the
+`scripts/workflow_state.py`/`scripts/workflow_fingerprint.py`/`prepare-ai-review.sh`
+half is likewise untouched.
+
+**Whether the restated property changes any verdict, enumerated rather than
+argued (required acceptance criterion 7).** It does not, and the reason is
+structural rather than incidental: `B1`'s repair restates a **CP6B
+property** — a declared obligation on the test suite — and does not touch
+**step 8's rule**, which is the sole determinant of `transition_verified`.
+Every cell of revision 65's enumeration table therefore stands unchanged
+under revision 66, for all eight row/observation pairs. `I1`'s repair is
+likewise verdict-neutral: rows 3, 5 and 7 each declare exactly one
+`WriterCall`, so the new row-level derivation is the identity on the table
+as it stands and every row's `branch` is the value revision 65 read.
+
+**The row-7 pre-revision-64 column, re-checked against CP6B step 8's own
+narrative (required acceptance criterion 7).** The two are irreconcilable
+as published and **the table is the one that is wrong**. Step 8 states that
+under revisions 5–63's rule row 7's predicate *"was declared as data and
+never evaluated, on the in-process path or on CP7's resume path — so the
+very case its own paragraph says it exists to stop … **verified**"*.
+Re-derived: with `from_phase = NO_PHASE`, the third clause never triggers,
+so `transition_verified` reduces to the first two clauses, and a `SUCCESS`
+worker landing at `AWAITING_LOCAL_PLAN_REVIEW` satisfies both **whatever
+the key-set difference is**. The corrected column:
+
+| Row | Observation | Pre-revision-64 verdict (corrected) |
+|---|---|---|
+| 7 | `AWAITING_LOCAL_PLAN_REVIEW`, predicate holds (`len(post_new_work_item_keys) == 1`) | **verifies** — for the right outcome by accident, the third clause never having triggered |
+| 7 | `AWAITING_LOCAL_PLAN_REVIEW`, predicate does not hold (zero keys, or two or more) | **verifies** — wrongly, and this is exactly the defect round 63's `B1` named |
+
+The published cells read *"does not verify"* in both, which reads an
+**untriggered** clause as a **false** one — the reading step 8's own
+*"whenever the row carries an evidence predicate at all"* wording forbids,
+and the reading that would have made round 63's `B1` unnecessary. A
+time-labelled correction is recorded at the revision-65 table itself and
+the historical row text is left as written, per the revision-61 provenance
+policy. **No revision-64, revision-65 or revision-66 verdict is affected**:
+the error was confined to the historical column, which is why nothing
+downstream of it moves.
+
+**What this revision does not do.** It does not touch `controller/` or
+`tests/` — `B1`'s, `I1`'s and `I2`'s repairs are plan-stage statements
+implementation will carry when `/milestone-implement` resumes, and
+`tests/test_target_state.py`/`tests/test_decision.py` stay red for the
+same reasons `B6` already established. It does not touch frozen Workflow.
+It does not change step 8's rule, any row's `to_any_of`, any predicate, or
+`ExpectedOutcome`'s declared shape. It does not reopen rounds 1–64's
+history beyond `I3`'s re-run sweep and the one time-labelled correction
+criterion 7 asked for. And it does not resolve `REQ-31` or `REQ-42`, both
+still open against CP6B's and CP9's own verification gates.
+
+**What revision 67 changed, in response to round 66's `REVISE`, and what it
+deliberately did not.** All three findings — 0 Blocking, 1 Important, 2
+Optional — are accepted; none is rejected. There were no missing tests.
+The per-finding record is in "Plan review round 66 — disposition", above;
+what follows is the closing verification this revision performs, in
+revision 66's own shape, per required acceptance criterion 7 — and it
+states explicitly, as that criterion asks: **round 66 raised no
+`[substantive]` finding.** All three of its findings are apparatus —
+a stale self-citation and two prose-scope slips in provenance asides —
+and round 66's own text says as much in its opening paragraph. This is
+this work item's **first** apparatus-only local plan-review round.
+`REVIEW_PROTOCOL.md`'s `D-Review-Finding-Taxonomy-and-Circuit-Breaker`
+sets the diminishing-returns bound at **2 consecutive** apparatus-only
+rounds; the clock now has **one** round on it, and an operator reading
+this text after a possible round 67 knows without re-deriving it whether
+that second round has landed.
+
+**The mapping's byte-identical claim, corrected** (required acceptance
+criterion 6). `docs/ai-workflow/requirements/workflow-controller-
+generation-1-mapping.json`'s top-level keys are exactly `schema_version`,
+`work_item_id` and `requirements` — no revision stamp of any kind — so the
+true statement, in both `REVIEW_REQUEST.md` and here, is that the mapping
+is byte-**identical**, full stop, not "byte-identical but for its revision
+stamp." Verified by direct comparison: the mapping regenerated for this
+revision is `==` the previously published one in every field, with no
+field to except.
+
+**The citation-population statement, widened from families to population**
+(required acceptance criterion 2). This document's live design region
+carries **four** citation families, not the two round 65's sweep named:
+frozen-source citations (`scripts/workflow_state.py`,
+`scripts/workflow_fingerprint.py`, `prepare-ai-review.sh`); frozen-command
+citations (`.claude/commands/*.md`); `docs/ai-workflow/*.md` citations; and
+this document's own **self-citations**, into its own line numbers. The
+first three are re-derived against their respective authorities only when
+an edit touches text they cite or the installed release changes, per each
+half's own stated re-run rule; none of the three is re-run this revision,
+because this revision touches none of the text they cite and the installed
+release is unchanged at 2.5.1. **The fourth family is re-run this
+revision, and closed rather than merely swept**: round 66's `I1` was this
+family's only member, and it is rewritten to cite by opening literal
+(`I1`, above) rather than by line number — the same durable form revision
+50 already applied to every other self-citation in this document
+(`OPUS-R50-I1`). A family with zero line-number members sweeps to the
+empty set by construction, so this family needs no further re-run until a
+new self-citation is introduced, and the rule for it is stated once here
+rather than left to be rediscovered: **a self-citation into this document
+is always written by opening literal, never by line number.**
+
+**The four consistency halves and both pins**, each re-run or excused by
+rule rather than by assertion — the figures below were extracted with
+`tests/test_plan_document_consistency.py`'s own recognisers against the
+**published** revision-67 text, not hand-counted:
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, as a full extraction, on general principle even though this revision touches no `complexity N` occurrence | **thirteen** occurrences, **four excluded** (superseded halves of marked pairs), **one out of scope** (names no checkpoint), **eight in scope, all eight agreeing with the registry** — identical to revisions 64, 65 and 66's own figures. None of this revision's three fixes touches a checkpoint's complexity or `ExpectedOutcome`'s schema |
+| **round-count half** | **yes** | **three** in-scope occurrences, all reading `sixty-six` against an authority of `plan_revision` − 1 = **66**. The one `of`-governed occurrence, out of scope by the row's own rule, was bumped with them, per the practice established at revision 55. Before this revision all three read `sixty-five` against an authority of 65 |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR still does not exist |
+| **command-line half** | **no** — this revision types no new Controller command line; the recogniser still answers **seven** invocation lines, unchanged |
+| **component pin** | **no** — its three regions R1/R2/R3 remain locatable by their declared opening literals |
+| **partition pin** | **no** — its window (rounds 34–38) does not reach round 66, and its three occurrences are untouched |
+
+**The frozen conformance suites, re-run under the installed release.**
+Unchanged mechanism and unchanged text under `scripts/`/`controller/`/
+`tests/`, so unchanged counts are expected and were re-measured rather than
+assumed: `workflow_fingerprint_test.py` 218, `workflow_state_test.py`
+**853**, `workflow_test_harness_test.py` 19, `workflow_integration_test.py`
+260 (1 skipped), `workflow_acceptance_matrix_test.py` 146 (18 skipped),
+`workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79 — all seven green, on
+Python 3.14.7, at the identical counts revisions 65 and 66 reported.
+`tests/test_plan_document_consistency.py`'s own eighteen cases are green
+against this revision's text as well.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **67**, over the same **eleven** checkpoints — none added,
+none removed, none renamed, and no complexity changed: none of round 66's
+three findings touches a checkpoint or `ExpectedOutcome`'s declared shape.
+No requirement is added, removed or reassigned; the mapping is
+byte-identical, full stop (required acceptance criterion 6, above).
+`render_registry_markdown(registry)` was called on the regenerated
+registry and its output **re-embedded** unconditionally into
+`## Checkpoints` — byte-identical to what was already published, since no
+checkpoint changed, which is the no-op the unconditional rule predicts
+rather than a skipped step.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns **exactly one** well-formed span per registry
+id for all eleven, spanning **6 401** (CP5) to **87 013** (CP1) bytes —
+this revision's three fixes land inside **CP6B** (**71 941**) and **CP7**
+(**39 014**), both larger than revision 66's own figures (71 737 and 38
+361) by roughly the size of the added asides, neither an extreme — and
+`validate_post_anchor_coverage(post_plan_text, post_registry)` passes
+against the regenerated registry.
+
+**What this revision does not do.** It does not touch `controller/` or
+`tests/` — none of round 66's three findings is a design or implementation
+statement; all three are this document's own account of itself. It does
+not touch frozen Workflow. It does not change step 8's rule, CP6B's
+restated property, any row's `to_any_of`, any predicate, or
+`ExpectedOutcome`'s declared shape — `I1`'s repair rewrites a citation,
+`O1`'s repair rescopes an aside and its matching header sentence, and
+`O2`'s repair deletes one duplicated sentence. It does not reopen rounds
+1–65's history beyond the three sites round 66 named. And it does not
+resolve `REQ-31` or `REQ-42`, both still open against CP6B's and CP9's own
+verification gates.
+
 1. **Is the immutable-execution root the right shape, or is it too much
    machinery for Generation 1?** It adds snapshot materialisation, a
    content digest, a re-exec and a new refusal class to the checkpoint
@@ -10471,16 +12889,73 @@ byte-identically.
    layer, which CP8 does not read.
 6. **Re-derive the automatic-action/user-gate partition from the frozen
    sources now in the bundle**, which is the whole point of including
-   them: fifteen command files, the two denylists (2 and 3 members), the
-   seventeen phases, the six automatic triples, and the exact agreement
-   between CP4's automatic rows and CP6B's `ExpectedOutcome` rows. This
-   plan asserts all of it; nothing but the frozen files can confirm it,
-   and until this round the reviewer did not have them.
-7. **Is supporting both 2.3.1 profiles right, against refusing all but
-   `full`?** The plan measured that `runtime` installs the identical
-   command and tooling surface and admits it on that basis. Refusing it
-   would be safer and less useful; the plan chose useful-and-measured, and
-   pins the measurement with a fixture rather than a sentence.
+   them: **seventeen** command files, the two denylist recognisers (3 and
+   3 members, **union 4**), the **twenty** phases, the six automatic
+   triples, the seven `ExpectedOutcome` rows, and the exact agreement
+   between CP4's automatic rows and CP6B's table. This plan asserts all of
+   it; nothing but the frozen files can confirm it. **Revision 64 is the
+   first round where these figures are re-derived against a release the
+   plan did not ship with**, so a reviewer should re-read them against the
+   *installed* tree rather than against the bundle's own narrative — which
+   is exactly the check that was not performed between the Manager update
+   and round 63.
+7. **Is `VALIDATED_WORKFLOW_RELEASES` the right admission rule, and is the
+   line predicate still earning its place beside it?** **Re-derived at
+   revision 69** (round 68's `I1`): through revision 67 this item asked the
+   opposite question, describing revision 64's `2.5`-line predicate as the
+   choice in force and "a closed set that each release joins once measured"
+   as the narrower alternative *not* taken. Revision 68 took that
+   alternative. `SUPPORTED_INSTALLATIONS`, the identifier this item used to
+   name the superseded pair-set, no longer names anything in the current
+   design; its only remaining occurrences are in frozen disposition rows,
+   where they are provenance.
+
+   **The choice now in force** is two-tier, and the "Supported Workflow
+   baseline" section derives it: `VALIDATED_WORKFLOW_RELEASES = {"2.5.1"}`
+   is the admission gate, an exact-membership check; `SUPPORTED_WORKFLOW_LINE
+   = "2.5"` is retained as a necessary pre-filter and diagnostic classifier
+   that lets a refusal say *wrong line* rather than *not yet validated*, and
+   is never a second gate a validated release must independently clear.
+   Round 67's `I1` is what forced it: the two two-directional properties
+   compare **names**, so a future `2.5.x` that renamed nothing and added
+   nothing but changed an already-known command's persisted-state contract
+   would have been admitted silently under the bare line predicate.
+
+   **What is still open to challenge, stated as a choice rather than a
+   derivation.** Three things:
+
+   - **The accepted cost.** Exact membership converts every Manager update
+     inside the line from a no-op into a plan revision — re-derive the three
+     inventories, re-run the seven baseline-verification suites, add the
+     release by name. The plan accepts that cost deliberately. A reviewer
+     may hold it too high for a Generation 1 whose own repository the
+     Manager has already updated mid-flight once, and should say so.
+   - **Whether the pre-filter earns its keep.** It admits nothing the
+     admission gate does not, so it is pure diagnosis: two distinguishable
+     refusal-evidence shapes instead of one. A reviewer may hold that a
+     single refusal shape is simpler and that carrying a second constant to
+     improve a message is machinery this checkpoint does not need.
+   - **Where the cost actually lands, which is not in CP2.** Round 68's
+     `B1` found it in CP9: `REQ-T18` installs a real Workflow release, and
+     under exact membership it can no longer mean "whatever the Manager
+     holds as newest". Revision 69 pins that fixture to a validated release
+     and adds `REQ-T18C` to make an unvalidated one fail by name (`REQ-T18`
+     step 2 and step 3b). The consequence is that this repository's
+     integration evidence and this repository's *installed* release can
+     diverge the next time the Manager updates. That divergence is stated
+     and made audible rather than removed, and a reviewer may hold that the
+     wrong trade — that live evidence should always track the installation
+     even at the price of a refusal — and should say so here rather than
+     at CP9, since it is this policy that decides it.
+
+   **And is supporting both profiles right, against refusing all but
+   `full`?** Unchanged by revision 68 and re-checked at revision 69: the
+   plan measured that `runtime` installs the identical
+   command and tooling surface and admits it on that basis, re-measured at
+   revision 64. Refusing it would be safer and less useful; the plan chose
+   useful-and-measured, and pins the measurement with a fixture rather
+   than a sentence. Note that `SUPPORTED_PROFILES` is genuinely a set of
+   values rather than a line, so the round-67 objection does not reach it.
 8. **Artifacts declaration** — unchanged in classification since revision
    1; revision 35 adds no path. Adding files to `CONTEXT_FILES.txt` copies
    frozen bytes into the bundle for reading and changes no classification,
@@ -11524,3 +13999,401 @@ byte-identically.
    still misclassify should say so, because that is the question a
    declared contract is supposed to make unaskable rather than merely
    answer once more.
+
+**What revision 68 changed, in response to round 67's `REVISE`
+(`MANUAL_EXTERNAL_PLAN_REVIEW`).** The one finding, `I1`, is accepted; none
+is rejected. The per-finding record is in "Plan review round 67 —
+disposition", above; what follows is this revision's own closing
+verification, in the shape the last several revisions have used.
+
+**What this revision deliberately does not do.** It does not implement B2,
+CP2, or any other checkpoint (`/apply-plan-review` never writes product
+code, and required acceptance criterion 5 bounds this round to
+Workflow-version admission). No file under `controller/` or `tests/`
+changes. The B2 bootstrap architecture round 67 separately found coherent
+is not reopened. Every one of round 63 through round 66's own findings is
+left exactly as their own disposition rows recorded — this round re-read
+them for cross-reference, not for re-verification, since none of their
+subject matter is touched here.
+
+**The four consistency halves**, re-run against the **published**
+revision-68 text with `tests/test_plan_document_consistency.py`'s own
+recognisers, all eighteen of that suite's own cases green throughout:
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, because `I1`'s repair changes `CP2`'s registry complexity | `test_complexities_agree_with_the_registry` passes against the regenerated registry (`CP2` now `5`). No prose occurrence of the literal `complexity N` form names `CP2` in this document today, so the half's own occurrence extraction adds no new site to check — the change is visible in the `## Checkpoints` table (regenerated, below) and in the `## Checkpoints` complexity narrative's new revision-68 paragraph, neither of which the literal-form extraction reads |
+| **round-count half** | **yes** | `test_round_counts_agree_with_plan_revision_minus_one` failed before this fix, naming exactly **three** in-scope occurrences reading the previous number word against the new authority `plan_revision − 1 = 67`: the autonomy-loop sentence naming how many times this cycle has run, the exit-16 justification's account of how many rounds the plan-revision loop has taken, and round 12's own `O1` disposition row's account of the same figure. **This row deliberately does not quote any of the three in the matched verb-phrase form** — `(executed|ran|has run)( it)? <number-word> (times|rounds)` — per the discipline `OPUS-R37-I1` recorded for exactly this hazard: an extraction cannot tell a quotation from a claim, so a disposition row that quotes a stale figure in the matched shape is itself a violation the moment it is published. All three sites are bumped to the new number word; the suite is green after. The one `of`-governed occurrence in "What revision 67 changed", above, is out of scope by the row's own rule and is frozen provenance besides — left as written |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR does not exist yet |
+| **command-line half** | **no** — this revision types no new Controller command line; the recogniser still answers the same invocation lines, unchanged |
+
+**The frozen conformance suites, re-run under the installed release**, on
+Python **3.14.7** (CI pins 3.12; unchanged interpreter posture from every
+prior revision's own recording). All seven green, and every count
+identical to revision 67's own table: `workflow_fingerprint_test.py` 218,
+`workflow_state_test.py` 853, `workflow_test_harness_test.py` 19,
+`workflow_integration_test.py` 260 (1 skipped), `workflow_acceptance_matrix_test.py`
+146 (18 skipped), `workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79 — expected, since this
+revision touches no file any of the seven exercises.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **68**, over the same **eleven** checkpoints — none added,
+none removed, none renamed — with **one** complexity changed: `CP2` `4 →
+5`, per required acceptance criterion 3's re-derivation (above). **Two**
+requirements are added — `REQ-43` (the amendment itself) and `REQ-T18B`
+(the discriminating fixture it requires, named separately per this
+document's own convention of a standalone `REQ-T` entry for each
+automated test, the same shape `REQ-T1` through `REQ-T18` already use) —
+both assigned to `CP2` alone; every other requirement is untouched.
+`render_registry_markdown(registry)` was called
+on the regenerated registry and its output **re-embedded** unconditionally
+into `## Checkpoints`; the diff against the pre-revision table is exactly
+the one row the regeneration changed, `CP2`'s `complexity` cell, `4 → 5` —
+verified by re-running the renderer and diffing rather than asserted.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns exactly one well-formed span per registry id
+for all eleven, and `validate_post_anchor_coverage(post_plan_text,
+post_registry)` passes against the regenerated registry — this revision
+edits text inside `CP2`'s own anchor pair and inside no other checkpoint's,
+so only `CP2`'s span moved, and every other checkpoint's anchored content
+is untouched.
+
+**The missing test, added and discriminating** (required acceptance
+criterion 4, above): `REQ-T18B`, the same-inventory synthetic `2.5.2`
+fixture, is specified in the baseline-predicate test enumeration (CP2
+section) and is its own mapping entry, assigned to `CP2` alongside
+`REQ-43`. It is a plan-stage specification, not
+built code — this command does not implement it — and CP2's own
+verification gate, unchanged in kind since revision 1, is what will refuse
+to pass a future implementation that does not discharge it, the same
+instrument `REQ-31` and `REQ-42` already use for a deferred obligation.
+
+**Exit.** Per `/apply-plan-review`'s revised exit step for a
+`TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed item, this revision does not
+self-declare plan readiness. The bundle is regenerated at revision 68 and
+the work item transitions to `AWAITING_LOCAL_PLAN_REVIEW` — the sole path
+back to `AWAITING_LOCAL_PLAN_REVIEW`, whether the triggering `REVISE` came
+from the local or the manual-external stage, per `D-Plan-Review-Stages`.
+No path re-enters manual-external review without a fresh local pass first,
+so round 68, whenever it occurs, is a `LOCAL_MODEL_PLAN_REVIEW` round.
+
+**What revision 69 changed, in response to round 68's `REVISE`
+(`LOCAL_MODEL_PLAN_REVIEW`).** Of round 68's four findings, `B1`, `I1` and
+`I2` are accepted in full and `O1` is rejected with its evidence recorded
+in its own disposition row. The per-finding record is in "Plan review round
+68 — disposition", above, together with the sweep required acceptance
+criterion 5 asks for; what follows is this revision's own closing
+verification, in the shape the last several revisions have used.
+
+**What this revision deliberately does not do.** It does not implement any
+checkpoint (`/apply-plan-review` never writes product code), and required
+acceptance criterion 6 keeps round 67's criterion 5 bound in force: the
+round is still Workflow-version admission **plus its consequences**, which
+is what let `B1`'s repair reach CP9 without reopening anything else. No
+file under `controller/` or `tests/` changes. The B2 bootstrap
+architecture is not reopened; `REQ-40`, `decide_no_work_item`, the
+bare-`/milestone-plan` action and row 7's key-set-difference predicate are
+untouched, and `REQ-T18`'s steps 3, 4, 5 and 6 — the ones that actually
+exercise that architecture — are unchanged. `REQ-31` and `REQ-42` remain
+open against CP6B's and CP9's verification gates; this revision resolves
+neither and adds `REQ-T18C` alongside them under the same instrument.
+
+**The four consistency halves**, re-run against the **published**
+revision-69 text with `tests/test_plan_document_consistency.py`'s own
+recognisers, all eighteen of that suite's own cases green:
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, as a re-derivation even though no complexity moves | `test_complexities_agree_with_the_registry` passes against the regenerated registry, in which every one of the eleven figures is the one revision 68 published. The `## Checkpoints` narrative gains a revision-69 paragraph deriving why `CP9` — the one checkpoint whose design text this revision edits — does not move: a stated release-selection rule over a constant CP2 already owns, plus one fixture precondition over two sets the Controller already exports, is a repair inside a fixture this checkpoint already builds, not a new subsystem. The literal-form occurrence extraction adds no new site, since this revision types no occurrence of that form |
+| **round-count half** | **yes** | `test_round_counts_agree_with_plan_revision_minus_one` failed before this fix against the new authority `plan_revision − 1`, naming the same **three** in-scope occurrences revision 68's own table names: the autonomy-loop sentence, the exit-16 justification, and round 12's `O1` disposition row. **This row deliberately does not quote any of the three in the matched verb-phrase form**, per the discipline `OPUS-R37-I1` recorded for exactly this hazard — a disposition row that quotes a stale figure in the matched shape is itself a violation the moment it is published. All three are bumped to the new number word; the suite is green after |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR does not exist yet |
+| **command-line half** | **no** — this revision types no new *Controller* invocation line. It does type a new **Manager** one, `workflow-manager --release-version <release> bootstrap <tmp>`, which this half does not read by construction: its prefix recogniser admits only `workflow-controller ` and `python … -m controller `. That is stated rather than assumed, because the new line's whole point is a global option's **position**, which is the class of defect this half exists to catch for the Controller — and the Manager's parser has no such pin in this repository. The measurement is the pin instead, recorded as its own Environment-facts row and re-runnable in one command |
+
+**The frozen conformance suites, re-run under the installed release**, on
+Python **3.14.7** (CI pins 3.12; unchanged interpreter posture from every
+prior revision's own recording). All seven green, and every count
+identical to revision 68's own table: `workflow_fingerprint_test.py` 218,
+`workflow_state_test.py` 853, `workflow_test_harness_test.py` 19,
+`workflow_integration_test.py` 260 (1 skipped), `workflow_acceptance_matrix_test.py`
+146 (18 skipped), `workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79 — expected, since this
+revision touches no file any of the seven exercises.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **69**, over the same **eleven** checkpoints — none added,
+none removed, none renamed — and with **no** complexity changed, which is
+the first revision since 63 of which that is true and is derived in the
+`## Checkpoints` narrative rather than asserted here. **One** requirement
+is added, `REQ-T18C`, assigned to **`CP9`** alone, placed immediately after
+`REQ-T18B` and named under the same convention (a standalone `REQ-T` entry
+per automated test); every other requirement is untouched, including
+`REQ-41` and `REQ-43`, which the `O1` rejection leaves as the additive
+provenance records this mapping's convention makes them. The mapping now
+carries **sixty-three** requirements, which is the figure the re-derived
+roster sentence reports and was read back from the written file rather than
+predicted. `render_registry_markdown(registry)` was called on the
+regenerated registry and its output **re-embedded** unconditionally into
+`## Checkpoints`; the re-embed is a **byte-identical no-op** this round —
+verified by containment against the renderer's fresh output, not assumed
+from the fact that no checkpoint changed, which is the whole reason the
+step is unconditional.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns exactly one well-formed span per registry id
+for all eleven, and `validate_post_anchor_coverage(post_plan_text,
+post_registry)` passes against the regenerated registry. Exactly one span
+moved: **`CP9`**, 84 826 → 91 007 bytes, the added `REQ-T18` step 2 rule
+and step 3b. Every other span is byte-for-byte the size revision 68
+published — `CP1` 87 013, `CP2` 14 545, `CP3` 13 957, `CP4` 82 183, `CP4B`
+82 152, `CP5` 6 401, `CP6` 23 077, `CP6B` 71 941, `CP7` 39 014, `CP8`
+14 656 — which is the mechanical confirmation that `B1`'s repair landed
+inside CP9 and nowhere else, and that `I1`'s and `I2`'s landed outside
+every anchor entirely.
+
+**The missing test, added and assigned where the finding asked** (required
+acceptance criterion 2): `REQ-T18C`, `REQ-T18`'s own admissibility
+precondition, specified at CP9 step 3b and carrying its own mapping entry
+against `CP9`. It is a plan-stage specification, not built code — this
+command does not implement it — and CP9's own verification gate, unchanged
+in kind since revision 1, is what will refuse to pass a future
+implementation that does not discharge it, the same instrument `REQ-31`,
+`REQ-42` and `REQ-T18B` already use.
+
+**Exit.** Per `/apply-plan-review`'s revised exit step for a
+`TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed item, this revision does not
+self-declare plan readiness. The bundle is regenerated at revision 69 and
+the work item transitions to `AWAITING_LOCAL_PLAN_REVIEW` — the sole path
+back to `AWAITING_LOCAL_PLAN_REVIEW`, whether the triggering `REVISE` came
+from the local or the manual-external stage, per `D-Plan-Review-Stages`.
+No path re-enters manual-external review without a fresh local pass first,
+so round 69, whenever it occurs, is a `LOCAL_MODEL_PLAN_REVIEW` round.
+
+## Plan review round 69 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 69 reviewed revision 69 and returned **`REVISE`** with **no Blocking
+finding**. It independently re-verified all three of round 68's accepted
+findings against the repository rather than against the disposition table
+and found each genuinely discharged — `B1`'s repair is a rule, not a
+re-wording; `REQ-T18C` is specified exactly where the finding asked; item 7
+is re-derived, not patched; and the sixty-three/twenty roster is re-derived
+from the regenerated mapping. **None of that is reopened by this round.**
+What stopped an `APPROVE` was two Important findings and one Optional
+finding, all inside material revision 69 itself wrote.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`I1`** (Important, substantive) — `REQ-T18` step 2's tie-break cites the "Supported Workflow baseline" section as stating that `REFERENCE_WORKFLOW_RELEASE` is, by construction, a member of `VALIDATED_WORKFLOW_RELEASES`; that section states the opposite — a present coincidence with an explicit disclaimer against any construction link ("they remain two different mechanisms; a future validated release would extend the latter without necessarily moving the former"), stated precisely for the future state, a second validated release, where the tie-break first executes | **Accepted, and resolved by the finding's second offered repair** — re-deriving the tie-break so it needs no invariant — rather than its first — stating the invariant in the "Supported Workflow baseline" section — because required acceptance criterion 4 confines this round's plan edits to one sentence in `REQ-T18` step 2, not that section. The rule now reads: the fixture installs `REFERENCE_WORKFLOW_RELEASE` when that constant is itself a member of `VALIDATED_WORKFLOW_RELEASES`, otherwise any named member, with step 3b as the admissibility check either way — true regardless of whether the two constants happen to coincide, and the false parenthetical citation is dropped | `REQ-T18` step 2's "The rule." paragraph |
+| **`I2`** (Important, apparatus) — the round-68 disposition's sweep-record lead-in states the enumeration "returned **four** live sites … beyond the two round 68 named", but its own third bullet *is* those two named sites, contradicting "beyond" under either reading of "four"; `REVIEW_REQUEST.md`'s "Also in this revision" section states the same sweep as **two** further live sites plus **one** frozen site — different arithmetic for the same enumeration in the same bundle | **Accepted, and re-derived from the bullets themselves rather than incremented.** The lead-in now states the total directly: four bullets covering **five** sites — two live sites beyond the two round 68 named, the two round 68 named themselves restated for completeness (four live in total), and one deliberately-left frozen. `REVIEW_REQUEST.md`'s "Also in this revision" sentence is rewritten to state the identical total, so the two documents agree | the round-68 disposition's sweep-record lead-in sentence; `REVIEW_REQUEST.md`'s matching sentence |
+| **`O1`** (Optional) — the Environment-facts `--release-version` row quotes `bootstrap`'s stdout as `bootstrapped workflow 2.5.1 (full)`, a true but bare prefix of the measured two-line output, while every neighbouring row in the table quotes measured output in full | **Disposed of explicitly, by marking it a prefix** — the finding's own second offered option, chosen over completing the quote because the second line (`62 managed files, 3 state files, 2 merged files`) does not fit this table's single-cell convention without disrupting it. The cell now reads `bootstrapped workflow 2.5.1 (full)…` **(a prefix — the real output is two lines, the second naming the managed/state/merged file counts)** | the Environment-facts `--release-version` row |
+
+**No missing test.** Round 69 named none; `REQ-T18C`, added at revision
+69, remains this work item's only review-raised test obligation.
+
+**Required acceptance criteria 4 and 5** (nothing round 68/69 confirmed
+reopened; scope stayed exactly Workflow-version admission plus its
+consequences) are honoured by construction: this revision's edits are
+exactly the three cells named above, plus the mechanical round-count and
+title bumps `tests/test_plan_document_consistency.py`'s own recognisers
+require at every revision. No file under `controller/` or `tests/`
+changes; the B2 bootstrap architecture is untouched; CP2's revision-68
+admission design and `REQ-T18`'s rule as repaired at revision 69 are
+re-confirmed, not reopened.
+
+**What revision 70 changed, in response to round 69's `REVISE`
+(`LOCAL_MODEL_PLAN_REVIEW`).** Of round 69's three findings, `I1`, `I2` and
+`O1` are all accepted in full. The per-finding record is in "Plan review
+round 69 — disposition", above; what follows is this revision's own
+closing verification.
+
+**What this revision deliberately does not do.** It does not implement any
+checkpoint. Required acceptance criterion 5 keeps the scope exactly where
+round 67's own criterion 5 and round 68's criterion 6 set it: Workflow-
+version admission plus its consequences. No file under `controller/` or
+`tests/` changes. The B2 bootstrap architecture is not reopened. `REQ-31`
+and `REQ-42` remain open against CP6B's and CP9's verification gates,
+unchanged by this revision.
+
+**The four consistency halves**, re-run against the **published**
+revision-70 text with `tests/test_plan_document_consistency.py`'s own
+recognisers, all eighteen of that suite's own cases green
+(`python3 -m unittest tests.test_plan_document_consistency` →
+`Ran 18 tests … OK`).
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, as a re-derivation even though no complexity moves | `test_complexities_agree_with_the_registry` passes against the regenerated registry, in which every one of the eleven figures is the one revision 69 published. This revision types no new occurrence of the literal `complexity N` form and edits no checkpoint's design text except `CP9`'s, and not in a way that touches a stated complexity |
+| **round-count half** | **yes** | `test_round_counts_agree_with_plan_revision_minus_one` failed before this fix against the new authority `plan_revision − 1` = 69, naming the same three in-scope occurrences revision 69's own table names: the autonomy-loop sentence, the exit-16 justification, and round 12's `O1` disposition row's neighbour (the round-68 `O1` row restated at revision 69). All three are bumped to the new number word (`sixty-eight` → `sixty-nine`); the suite is green after |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR does not exist yet |
+| **command-line half** | **no** — this revision types no new invocation line of either kind; `I1`'s and `O1`'s edits restate existing invocation forms, they do not add one |
+
+**The frozen conformance suites, re-run under the installed release**, on
+Python **3.14.7** (CI pins 3.12; unchanged interpreter posture). All seven
+green: `workflow_fingerprint_test.py` 218, `workflow_state_test.py` 853,
+`workflow_test_harness_test.py` 19, `workflow_integration_test.py` 260 (1
+skipped), `workflow_acceptance_matrix_test.py` 146 (18 skipped),
+`workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79 — expected, since this
+revision touches no file any of the seven exercises.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **70**, over the same **eleven** checkpoints — none added,
+none removed, none renamed — and with **no** complexity changed. **No**
+requirement is added or removed this round (unlike revision 69's
+`REQ-T18C`): this revision is prose-only, and the mapping still carries
+**sixty-three** requirements, byte-identical to revision 69's, confirmed
+by direct comparison rather than by inspection. `render_registry_markdown(registry)`
+was called on the regenerated registry and its output **re-embedded**
+unconditionally into `## Checkpoints`; the re-embed is a **byte-identical
+no-op** this round — verified by containment against the renderer's fresh
+output.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns exactly one well-formed span per registry id
+for all eleven, and `validate_post_anchor_coverage(post_plan_text,
+post_registry)` passes against the regenerated registry. **`CP9`** is the
+only span whose *content* this round's edits touch — `I1`'s rewritten rule
+paragraph and `I2`'s rewritten sweep-record lead-in both sit inside it.
+This entry measures every span in **UTF-8 bytes**, where every prior
+revision's entry measured in **characters** — a unit change inside this
+paragraph, not a repository anomaly. In characters, the ten non-`CP9`
+spans (`CP1` 87 013, `CP2` 14 545, `CP3` 13 957, `CP4` 82 183, `CP4B`
+82 152, `CP5` 6 401, `CP6` 23 077, `CP6B` 71 941, `CP7` 39 014, `CP8`
+14 656) are identical, to the character, to the figures the revision-69
+entry published: the mechanical confirmation that this round's edits
+landed inside `CP9` alone and nowhere else, and the same confirmation
+instrument revision 69's own entry used. `CP9` itself moved from
+**91 007 to 91 128 characters** (Δ +121), computed directly from this
+round's own two edits; measured in UTF-8 bytes it is **91 579**. No
+figure in this paragraph is asserted without being reproducible from the
+published text.
+
+**No missing test.** Round 69 named none.
+
+**Exit.** Per `/apply-plan-review`'s revised exit step for a
+`TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed item, this revision does not
+self-declare plan readiness. The bundle is regenerated at revision 70 and
+the work item transitions to `AWAITING_LOCAL_PLAN_REVIEW` — the sole path
+back to `AWAITING_LOCAL_PLAN_REVIEW`, whether the triggering `REVISE` came
+from the local or the manual-external stage, per `D-Plan-Review-Stages`.
+No path re-enters manual-external review without a fresh local pass first,
+so round 70, whenever it occurs, is a `LOCAL_MODEL_PLAN_REVIEW` round.
+
+## Plan review round 70 — disposition (`LOCAL_MODEL_PLAN_REVIEW`)
+
+Round 70 reviewed revision 70 and returned **`REVISE`** with **no Blocking
+finding**. It independently re-verified all six of round 69's required
+acceptance criteria against the repository rather than against the
+disposition table and found each genuinely discharged — `I1` resolved by
+re-derivation, `I2`'s lead-in derived from its own bullets, `O1` disposed
+of explicitly, nothing round 68 or 69 confirmed moved, scope held, and the
+bundle regenerated at `AWAITING_LOCAL_PLAN_REVIEW`. **None of that is
+reopened by this round.** What stopped an `APPROVE` was one Important
+finding, `[apparatus]`, and one Optional finding, both inside material
+revision 70 itself wrote.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| **`I1`** (Important, apparatus) — the anchors paragraph of "What revision 70 changed" reports the ten non-`CP9` spans' rise over their revision-69 figures as "evidence of a pre-existing measurement drift … out of this round's scope to chase down", when the rise is a unit change inside the same paragraph (revision 70 measured every span in UTF-8 bytes; every prior entry measured in characters) and the ten spans are character-identical to revision 69's published figures; separately, the paragraph's stated pre-edit `CP9` figure, `91 336` bytes, is arithmetically impossible against the measured byte surplus of the edited regions | **Accepted, and resolved by the finding's own two-sentence fix.** The anchors paragraph of "What revision 70 changed" now names the unit explicitly, states that the ten non-`CP9` spans are character-identical to revision 69's published figures as the mechanical confirmation that this round's edits landed inside `CP9` alone, drops the "pre-existing measurement drift" diagnosis, and replaces the unreproducible `91 336` figure with the character pair `91 007 → 91 128` (Δ +121) alongside the already-correct `91 579`-byte figure for the same post-edit span | the anchors paragraph of "What revision 70 changed" |
+| **`O1`** (Optional) — five frozen provenance sites (`:12375`, `:12453`, `:12570`, `:12752`, `:14151`) have labelled character counts "bytes" since at least revision 63; revision 70 was the first entry to measure true UTF-8 bytes, which is why the two instruments disagreed | **Disposed of explicitly, by adopting the one-clause note** — the finding's own recommended action, made knowingly rather than by inheriting the historical label. The corrected anchors paragraph of "What revision 70 changed" (`I1`, above) now states its own unit, UTF-8 bytes, explicitly. The five named frozen sites are untouched, per the finding's own instruction — they remain out of scope under required acceptance criterion 2 | this disposition row; the anchors paragraph of "What revision 70 changed" |
+
+**No missing test.** Round 70 named none — `parse_checkpoint_anchor_spans`
+is frozen Workflow tooling this work item must not modify, and
+`tests/test_plan_document_consistency.py` deliberately reads none of the
+four recogniser halves over anchor sizes, per round 70's own "Missing
+tests" section. `REQ-T18C` remains this work item's only review-raised
+test obligation, unaffected by this round.
+
+**Required acceptance criteria 3 and 4** (nothing round 68, 69 or 70
+confirmed reopened; scope stayed exactly Workflow-version admission plus
+its consequences) are honoured by construction: this revision's only
+substantive edit is the anchors paragraph of "What revision 70 changed",
+named above, plus the mechanical round-count and title bumps
+`tests/test_plan_document_consistency.py`'s own recognisers require at
+every revision. No file under `controller/` or `tests/` changes; the B2
+bootstrap architecture is untouched; the revision-68 two-tier admission
+design and `REQ-T18`'s rule as repaired at revision 69 and re-derived at
+revision 70 are re-confirmed, not reopened.
+
+**What revision 71 changed, in response to round 70's `REVISE`
+(`LOCAL_MODEL_PLAN_REVIEW`).** Of round 70's one Important and one
+Optional finding, both are accepted in full. The per-finding record is in
+"Plan review round 70 — disposition", above; what follows is this
+revision's own closing verification.
+
+**What this revision deliberately does not do.** It does not implement any
+checkpoint. Required acceptance criterion 4 keeps the scope exactly where
+round 67's own criterion 5, round 68's criterion 6 and round 69's
+criterion 4 set it: Workflow-version admission plus its consequences. No
+file under `controller/` or `tests/` changes. The B2 bootstrap
+architecture is not reopened. `REQ-31` and `REQ-42` remain open against
+CP6B's and CP9's verification gates, unchanged by this revision.
+
+**The four consistency halves**, re-run against the **published**
+revision-71 text with `tests/test_plan_document_consistency.py`'s own
+recognisers, all eighteen of that suite's own cases green
+(`python3 -m unittest tests.test_plan_document_consistency` →
+`Ran 18 tests … OK`).
+
+| Half / pin | Re-run this revision? | Result |
+|---|---|---|
+| **complexity half** | **yes**, as a re-derivation even though no complexity moves | `test_complexities_agree_with_the_registry` passes against the regenerated registry, in which every one of the eleven figures is the one revision 70 published. This revision types no new occurrence of the literal `complexity N` form and edits no checkpoint's design text |
+| **round-count half** | **yes** | `test_round_counts_agree_with_plan_revision_minus_one` failed before this fix against the new authority `plan_revision − 1` = 70, naming the same three in-scope occurrences revision 69's own table names: the autonomy-loop sentence, the exit-16 justification, and round 12's `O1` disposition row's neighbour (the round-68 `O1` row restated at revision 69). All three are bumped to the new number word (`sixty-nine` → `seventy`); the suite is green after |
+| **exit-code half** | **no** — this revision changes no row of the Exit codes table and the ADR does not exist yet |
+| **command-line half** | **no** — this revision types no new invocation line of either kind; `I1`'s edit restates existing figures in prose, it does not add an invocation line |
+
+**The frozen conformance suites, re-run under the installed release**, on
+Python **3.14.7** (CI pins 3.12; unchanged interpreter posture). All seven
+green, every count identical to revision 70's own table:
+`workflow_fingerprint_test.py` 218, `workflow_state_test.py` 853,
+`workflow_test_harness_test.py` 19, `workflow_integration_test.py` 260 (1
+skipped), `workflow_acceptance_matrix_test.py` 146 (18 skipped),
+`workflow_state_completion_obligations_test.py` 106,
+`workflow_fingerprint_generalization_test.py` 79 — expected, since this
+revision touches no file any of the seven exercises.
+
+**The registry, the mapping and the generated table.** Regenerated through
+`generate_registry`/`generate_mapping`/`write_registry_and_mapping` at
+`plan_revision` **71**, over the same **eleven** checkpoints — none added,
+none removed, none renamed — and with **no** complexity changed. **No**
+requirement is added or removed this round: this revision is prose-only,
+and the mapping still carries **sixty-three** requirements, byte-identical
+to revision 70's, confirmed by direct comparison rather than by
+inspection. `render_registry_markdown(registry)` was called on the
+regenerated registry and its output re-checked against `## Checkpoints`;
+the re-embed is a **byte-identical no-op** this round, as it has been at
+every revision since 69's requirement addition — verified by containment
+against the renderer's fresh output.
+
+**The anchors.** `parse_checkpoint_anchor_spans(text, strict=True)` over
+the revised document returns exactly one well-formed span per registry id
+for all eleven, and `validate_post_anchor_coverage(post_plan_text,
+post_registry)` passes against the regenerated registry. **No span's
+content moves this round.** This revision's only edit is the anchors
+*paragraph* of "What revision 70 changed" — narrative provenance text that
+sits well after `CP9`'s own closing anchor tag (`:7636`), outside every one
+of the eleven checkpoint anchor spans, all eleven of which close by
+`:7636`. Re-measured after this round's edit, all eleven spans are
+byte-for-byte and character-for-character identical to revision 70's own
+figures: `CP1` 87 013 chars / 87 403 bytes, `CP2` 14 545 / 14 619, `CP3`
+13 957 / 14 009, `CP4` 82 183 / 82 667, `CP4B` 82 152 / 82 636, `CP5`
+6 401 / 6 435, `CP6` 23 077 / 23 225, `CP6B` 71 941 / 72 337, `CP7`
+39 014 / 39 228, `CP8` 14 656 / 14 710, `CP9` 91 128 / 91 579 — the
+strongest possible confirmation that this round's edit is exactly what
+required acceptance criterion 3 asked for: a correction confined to one
+paragraph, touching no checkpoint's design content at all.
+
+**No missing test.** Round 70 named none.
+
+**Exit.** Per `/apply-plan-review`'s revised exit step for a
+`TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed item, this revision does not
+self-declare plan readiness. The bundle is regenerated at revision 71 and
+the work item transitions to `AWAITING_LOCAL_PLAN_REVIEW` — the sole path
+back to `AWAITING_LOCAL_PLAN_REVIEW`, whether the triggering `REVISE` came
+from the local or the manual-external stage, per `D-Plan-Review-Stages`.
+No path re-enters manual-external review without a fresh local pass first,
+so round 71, whenever it occurs, is a `LOCAL_MODEL_PLAN_REVIEW` round.

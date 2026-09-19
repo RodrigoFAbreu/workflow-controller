@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-generation-1",
-  "plan_revision": 62,
+  "plan_revision": 71,
   "checkpoints": [
     {
       "id": "CP1",
@@ -16,7 +16,7 @@
       "depends_on": [
         "CP1"
       ],
-      "complexity": 4,
+      "complexity": 5,
       "session_target": 1
     },
     {
@@ -25,16 +25,16 @@
       "depends_on": [
         "CP1"
       ],
-      "complexity": 4,
+      "complexity": 5,
       "session_target": 1
     },
     {
       "id": "CP4",
-      "name": "Next-action decision engine part 1: the phase -> action mapping over frozen Workflow v2.3.1's seventeen phases, the user-only denylist, and the explainable Decision shape",
+      "name": "Next-action decision engine part 1: the phase -> action mapping over frozen Workflow 2.5.1's twenty phases, the union-derived user-only denylist, and the explainable Decision shape",
       "depends_on": [
         "CP3"
       ],
-      "complexity": 3,
+      "complexity": 5,
       "session_target": 1
     },
     {
@@ -64,7 +64,7 @@
         "CP4B",
         "CP5"
       ],
-      "complexity": 4,
+      "complexity": 5,
       "session_target": 1
     },
     {
@@ -73,7 +73,7 @@
       "depends_on": [
         "CP6"
       ],
-      "complexity": 2,
+      "complexity": 3,
       "session_target": 1
     },
     {

@@ -364,6 +364,50 @@
       "checkpoint_ids": [
         "CP9"
       ]
+    },
+    "REQ-40": {
+      "description": "Amendment (revision 63, B2): NoWorkItemYet bootstrap architecture -- select_work_item returns a distinct non-error NoWorkItemYet value (never AmbiguousWorkItemError) when zero non-terminal work items exist and no explicit --work-item was given; decide_no_work_item resolves it to bare /milestone-plan with no argument, a pre-phase branch distinct from CP4's twenty-row phase table; frozen Workflow alone derives and creates the new work-item id from docs/ACTIVE_MILESTONE.md; post-state is identified by exact pre/post work_items key-set difference requiring exactly one new key; an explicit --work-item naming a nonexistent id remains AmbiguousWorkItemError; more than one non-terminal candidate remains AmbiguousWorkItemError. REQ-T18 is the end-to-end live integration proof of this requirement, not its sole definition.",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4",
+        "CP6",
+        "CP6B",
+        "CP9"
+      ]
+    },
+    "REQ-41": {
+      "description": "Amendment (revision 64, B6): the Controller's supported Workflow baseline is the 2.5.x release line with 2.5.1 as the concrete reference release, stated as a policy with a named authority rather than as counted literals. SUPPORTED_WORKFLOW_LINE plus SUPPORTED_PROFILES replace the closed 2.3.1-only (workflow_version, profile) admission set (CP2). The known-phase set is re-derived from the installed release's own KNOWN_PHASES at twenty entries, adding AMENDING_PLAN, AWAITING_LOCAL_IMPLEMENTATION_REVIEW and AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW (CP3). The decision mapping gains one row per new phase -- AMENDING_PLAN and AWAITING_LOCAL_IMPLEMENTATION_REVIEW as DECLINED, AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW as a human gate -- with no new automatic triple and no new ExpectedOutcome row; the command-file partition is re-derived over seventeen files as 4 selected / 9 deliberately-not-selected / 4 user-only; and USER_ONLY_COMMANDS becomes the union of the qualified user-confirmation-guard recogniser and the disable-model-invocation front-matter flag, which are no longer nested populations, admitting request-plan-amendment (CP4, CP5). A '2.1'-qualified plan-stage row denotes membership of frozen TWO_STAGE_PLAN_REVIEW_VERSIONS ('2.1'/'2.2') and contributes exactly one coverage triple. REQ-T18's fixture keeps exercising the repository's actually installed Workflow release rather than an artificial 2.3.1 tree (CP9).",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5",
+        "CP9"
+      ]
+    },
+    "REQ-42": {
+      "description": "CP9 implementation obligation (plan-stage, revision 64, round 63's third missing test): the document-consistency property's complexity half enumerates occurrences only in the 'complexity N' form, so a bare bold decimal presented as current -- the 'CP6 is **4** today' shape the marking convention itself uses -- is a figure for polarity and never an occurrence for coverage, and the three live sites in that shape are invisible to the half that exists to check them. Widen the half's own occurrence form to include a bare bold decimal presented as current, with its coverage, no-match and negative-instantiation obligations restated over the widened form, and add the fixture whose only stale figure is such a half. Deferred from revision 64 as plan design beyond that revision's bounded scope; CP9's verification gate cannot pass while it is open.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "REQ-43": {
+      "description": "Amendment (revision 68, manual external plan review round 67's I1): the Controller's Workflow-version admission gate is narrowed from bare 2.5.x line membership to VALIDATED_WORKFLOW_RELEASES = {\"2.5.1\"}, a closed, named set of releases individually validated against the three inventories and the seven baseline-verification suites. SUPPORTED_WORKFLOW_LINE (\"2.5\") is retained as a necessary pre-filter and diagnostic classifier only, no longer sufficient for admission on its own. A manifest whose workflow_version parses into the known line but is not in VALIDATED_WORKFLOW_RELEASES -- 2.5.0, or any later 2.5.x patch -- is refused with UnsupportedWorkflowVersionError, with evidence distinguishable from a wrong-line refusal (CP2). The baseline-predicate test suite widens from four to seven cases: the reversed 2.5.0 disposition (admitted under revision 64's rule, refused under revision 68's) and a new discriminating fixture, REQ-T18B, whose .claude/commands/ tree and KNOWN_PHASES block are byte-identical to the validated reference release while installation.json declares an unvalidated workflow_version, proving admission is release-identity-gated rather than inventory-gated (CP2). Growing VALIDATED_WORKFLOW_RELEASES to a later release requires re-deriving the three inventories and re-running the seven baseline-verification suites against it, in a plan revision that states what was measured -- never automatic membership from a parsed major/minor match alone. REQ-T18 (CP9) is unaffected and continues to exercise the repository's actually installed, actually validated release.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-T18B": {
+      "description": "Automated test: CP2 baseline-predicate discriminating fixture. A fixture repository whose .claude/commands/ tree and scripts/workflow_state.py KNOWN_PHASES block are byte-identical copies of the validated 2.5.1 reference tree, while installation.json alone declares workflow_version: \"2.5.2\", a release the Workflow Manager's own distribution/ does not carry and this document never measured. Asserts refusal with UnsupportedWorkflowVersionError carrying the same \"known line, unvalidated release\" evidence as the 2.5.0 case, distinct from a wrong-line refusal, and that CP2 never falls back to inventory equality when the exact version is unrecognised -- proving admission is release-identity-gated rather than inventory-gated.",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "REQ-T18C": {
+      "description": "Automated test: REQ-T18 fixture admissibility precondition (CP9, revision 69, local plan review round 68's B1 missing test). After the disposable managed repository is installed and before the Controller is run against it, the fixture re-reads the target's own .workflow-manager/installation.json from disk -- the file the Workflow Manager actually wrote, never the value the fixture asked for -- and asserts workflow_version is a member of VALIDATED_WORKFLOW_RELEASES and profile a member of SUPPORTED_PROFILES, both read from the Controller's own constants rather than re-typed as literals. The failure names the observed workflow_version, the current membership of VALIDATED_WORKFLOW_RELEASES, and the Supported Workflow baseline growth procedure, so an unvalidated fixture fails at a named, self-explaining precondition that reads as the revalidation trigger it is, rather than four steps later as an opaque CP2 UnsupportedWorkflowVersionError inside the one test whose purpose is real-worker evidence. Supersedes REQ-43's closing claim that REQ-T18 is unaffected by the VALIDATED_WORKFLOW_RELEASES narrowing: REQ-T18's step 2 now installs a named validated release via the Manager's global --release-version option rather than the Manager's newest, so the fixture and this repository's own installed release may diverge after a Manager update, and this assertion is what makes that divergence audible. Not a second copy of CP2's admission gate, which REQ-T18B owns as a CP2 unit fixture: this is a fixture precondition, and its value is where it fires.",
+      "checkpoint_ids": [
+        "CP9"
+      ]
     }
   }
 }

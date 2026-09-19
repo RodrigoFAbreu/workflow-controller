@@ -46,7 +46,7 @@
         },
         "CP6": {
           "status": "COMPLETE",
-          "start_commit": "16968ed536f875a3424d76098114b47734a195f7\n"
+          "start_commit": "16968ed536f875a3424d76098114b47734a195f7"
         },
         "CP6B": {
           "status": "NEEDS_REVALIDATION",

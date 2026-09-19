@@ -1467,13 +1467,37 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   skip -- the same two pre-existing `tests.test_cli` failures CP4's own
   revalidation already documented as CP9's residual scope, no errors, no
   regression against CP1-CP6B's own revalidation baseline). `COMPLETE`.
+- `CP8` revalidated: this checkpoint's own plan section is **byte-identical**
+  between the superseded revision-62 approval and the current revision-71
+  text -- confirmed by extracting both checkpoints' own spans (revision
+  62's `### CP8 — Generation handoff primitive` heading through the next
+  `### CP9` heading; revision 71's `<!-- CP8 -->`/`<!-- /CP8 -->` anchor
+  pair) and diffing them: the only delta is the anchor-tagging
+  infrastructure itself (a trailing `---` separator replaced by the
+  `<!-- /CP8 -->` closing anchor comment a later revision introduced for
+  `parse_checkpoint_anchor_spans`), not this checkpoint's own design text.
+  The B2 amendment's `NoWorkItemYet` bootstrap scope never touches
+  generation-handoff detection at all. No code or test change was needed;
+  `controller/handoff.py` and `controller/cli.py`'s `run`-loop handoff
+  wiring already match the (unchanged) plan text exactly. Re-verified
+  green by `python3 -m unittest tests.test_handoff` (27 tests, all green,
+  including the real end-to-end subprocess test) and by re-running the
+  full suite (`python3 -m unittest discover -s tests -p "test_*.py" -t .`:
+  386 tests: 2 failures, 1 skip -- the same two pre-existing
+  `tests.test_cli` failures CP4's own revalidation already documented as
+  CP9's residual scope, no errors, no regression against CP1-CP7's own
+  revalidation baseline). `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP8` and `CP9` in registry order, applying the
-revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
-`NO_PHASE`'s round-trip schema) where each remaining checkpoint's own plan
-section now requires them, through `CP9` where B1's `worker_outcome`
-schema mismatch is also fixed, before the phase can re-enter
+revalidating `CP9`, the last registry checkpoint, applying the amended
+plan's "NoWorkItemYet CLI dispatch" paragraph (`cmd_inspect`/`cmd_explain`
+need a branch, ahead of `target_state.select_work_item`'s result, for the
+`NoWorkItemYet` sentinel -- currently both crash with `AttributeError`
+against a zero-work-item target, with no test coverage) plus the two
+residual `tests.test_cli` `InspectCommandTest` failures and B1's
+`worker_outcome` schema mismatch in
+`tests/test_integration_disposable_repo.py` (both already tracked above as
+CP9's own scope), before the phase can re-enter
 `SELF_REVIEWING_IMPLEMENTATION` and a fresh implementation-review bundle
 is generated.
 

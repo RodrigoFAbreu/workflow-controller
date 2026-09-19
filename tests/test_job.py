@@ -374,18 +374,20 @@ class BootstrapRowSevenTest(unittest.TestCase):
     non-terminal work items and no explicit ``--work-item`` resolves to
     ``target_state.NoWorkItemYet``, not ``AmbiguousWorkItemError``. CP6's
     own steps 1-6 must capture and durably flush a ``PLANNED``/
-    ``LAUNCHED``/``COMPLETED`` record for this target without crashing,
-    wire-mapping every "no phase" field through the single declared
-    writer (``controller.decision.phase_to_wire``) -- never a synthetic
-    phase string, never Python's own ``None``.
+    ``LAUNCHED``/``COMPLETED`` record for this target, wire-mapping every
+    "no phase" field through the single declared writer
+    (``controller.decision.phase_to_wire``) -- never a synthetic phase
+    string, never Python's own ``None``.
 
-    CP6B's own steps 7-9 do not support this row yet (``execute_step``'s
-    own comment at step 7 names it explicitly as CP6B's next
-    revalidation); every test below therefore expects the documented
-    ``AttributeError`` beyond the point CP6 owns, and asserts only against
-    what was durable on disk *before* that point -- never from process
-    memory, since that is the whole reason the round-trip case reads the
-    persisted record back off disk rather than the in-process value."""
+    CP6B's own steps 7-9 now carry this same row the rest of the way
+    (``tests/test_job_validation.py`` owns those assertions --
+    ``FINISHED``/``FAILED``, ``transition_verified``,
+    ``observed_phase_after`` -- per this checkpoint's own plan-declared
+    file split); every test below asserts only against the fields CP6's
+    own steps 1-6 wrote, which steps 7-9 never overwrite, read back off
+    disk -- never from process memory, since that is the whole reason the
+    round-trip case reads the persisted record back off disk rather than
+    the in-process value."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -406,20 +408,26 @@ class BootstrapRowSevenTest(unittest.TestCase):
         self.addCleanup(setattr, job, "_new_job_id", self._orig_job_id)
 
     def _run_far_enough_and_read_back(self) -> dict:
-        with self.assertRaises(AttributeError):
-            job.execute_step(
-                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
-                claude_bin=str(FAKE_CLAUDE), timeout=10,
-            )
-        # A fresh, process-level read off disk -- the record CP6's own
-        # steps 1-6 left behind before step 7's crash -- never the
-        # in-process value execute_step itself held.
+        # No FAKE_CLAUDE_WRITE_PATH/TEXT override: the fake worker creates
+        # no new work item, so row 7's own post-state check (CP6B) does
+        # not verify -- FAILED, never a crash. This class asserts only
+        # against the CP6-owned fields below, which that outcome leaves
+        # untouched.
+        job.execute_step(
+            self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+            claude_bin=str(FAKE_CLAUDE), timeout=10,
+        )
+        # A fresh, process-level read off disk -- never the in-process
+        # value execute_step itself held.
         job_path = self.runtime_root / "jobs" / "fixed-job-id.json"
         return json.loads(job_path.read_text())
 
     def test_planned_launched_completed_flushes_are_durable_and_do_not_crash(self) -> None:
         record = self._run_far_enough_and_read_back()
-        self.assertEqual(record["status"], "COMPLETED")
+        # CP6B's own step 8/9 (zero new work items -> not verified) leaves
+        # the final status FAILED; the CP6-owned fields below are exactly
+        # what the COMPLETED flush wrote, unmodified by that outcome.
+        self.assertEqual(record["status"], job.STATUS_FAILED)
         self.assertIsNone(record["work_item_id"])
         self.assertEqual(record["worker_outcome"], "SUCCESS")
         self.assertEqual(record["selected_action"]["command"], "/milestone-plan")

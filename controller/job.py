@@ -385,6 +385,32 @@ class ExpectedOutcome:
     writer_calls: tuple[WriterCall, ...]
 
 
+def _row_branch(outcome: ExpectedOutcome) -> BranchSpec | None:
+    """The row's own single ``branch`` (CP6B, step 8's revision-65/66
+    repair; Property 3's "total, fail-closed derivation"), derived across
+    every declared :class:`WriterCall` rather than read off one
+    arbitrarily -- ``writer_calls`` is a tuple precisely because a row
+    *can* name more than one call (round 6's corollary), so a row whose
+    entries disagree on ``branch`` is a table-construction defect, never
+    silently resolved by picking the first. Every real row in
+    :data:`EXPECTED_OUTCOMES` declares exactly one ``WriterCall``, so this
+    is the identity on the table as it stands; it exists because step 8's
+    trigger now dispatches on this value, and a field a rule dispatches on
+    must be total at the level the rule names it. Raises
+    ``AssertionError`` -- an invariant violation, never ordinary
+    control-flow, the same shape as this module's other table-invariant
+    checks -- when ``outcome`` itself was never validated by
+    :func:`property_table_violations` (whose own check reports the
+    identical disagreement as data instead, for a row that is being
+    validated rather than executed)."""
+    branches = {wc.branch for wc in outcome.writer_calls}
+    if len(branches) != 1:
+        raise AssertionError(
+            f"ExpectedOutcome writer_calls disagree on branch: {sorted(branches, key=repr)!r}"
+        )
+    return next(iter(branches))
+
+
 def _predicate_row3_block_feedback_current(root: Path, work_item_id: str, pre_state: dict) -> bool:
     """Row 3's predicate: a current-round ``REVIEW_FEEDBACK.md`` now
     exists whose ``Reviewed bundle ID:`` matches the bundle the pre-state
@@ -550,7 +576,13 @@ def property_table_violations(
       Workflow phases only) requires one. The exemption is keyed to
       ``from_phase is NO_PHASE``, never to "fails the containment test",
       so a synthetic non-``NO_PHASE`` row in the same shape still fails
-      this property.
+      this property. **Property 3 also states a total, fail-closed
+      derivation** (revision 65/66, step 8's own repair): every
+      ``WriterCall`` on one row must declare the identical ``branch`` --
+      a row whose entries disagree fails here, naming the row and every
+      distinct value found (:func:`_row_branch` is what step 8's
+      ``_verify_transition`` calls at runtime to read this same, already
+      total, value back).
     - **Completion** (property 6): asserted narratively against the
       plan's own per-row analysis and exercised by
       ``tests/test_job_validation.py``'s reachability cases (calling
@@ -588,6 +620,12 @@ def property_table_violations(
                         f"{key!r}: predicate-bearing row carries a non-COMPLETION "
                         f"writer_call {wc.function!r} (kind={wc.kind!r})"
                     )
+
+        row_branches = {wc.branch for wc in eo.writer_calls}
+        if len(row_branches) > 1:
+            violations.append(
+                f"{key!r}: writer_calls disagree on branch: {sorted(row_branches, key=repr)!r}"
+            )
     return violations
 
 
@@ -773,28 +811,39 @@ _INCOMPLETE_EFFECT_PHASES: dict[tuple[str, str | None, str], frozenset[str]] = {
 
 
 def _verify_transition(
-    *, root: Path, work_item_id: str, outcome: ExpectedOutcome, pre_state: dict,
-    observed_phase_after: str, worker_outcome: str,
+    *, root: Path, work_item_id: str | None, outcome: ExpectedOutcome, pre_state: dict,
+    observed_phase_after: "str | Any", worker_outcome: str,
 ) -> tuple[bool, dict]:
     """Step 8's rule, stated in full and in one form (CP6B): ``verified``
     is ``True`` iff ``worker_outcome`` is ``SUCCESS`` or ``INTERRUPTED``,
     **and** ``observed_phase_after`` is in ``outcome.to_any_of``, **and**,
-    when ``observed_phase_after`` equals ``outcome.from_phase``, the row's
-    own predicate holds against ``pre_state`` (evaluated fresh, against
-    disk -- never against process memory, since `resume` has none).
-    Returns ``(verified, evidence)`` -- ``evidence`` is a
-    ``TransitionNotObservedError``-shaped dict naming the expected set,
-    the observed phase, the worker outcome, and (for the predicate clause)
-    that the predicate did not hold; ``{}`` when ``verified``."""
+    whenever the row carries an evidence predicate at all, that predicate
+    holds against ``pre_state`` (evaluated fresh, against disk -- never
+    against process memory, since `resume` has none).
+
+    The predicate clause's own trigger is revision 65's repair (round
+    64's `B1`), keyed on the row's own :func:`_row_branch` rather than on
+    raw phase equality: evaluated **unconditionally** when that branch is
+    ``None`` (row 7's own unconditional writer -- its ``from_phase`` is
+    :data:`~controller.decision.NO_PHASE`, which can never equal a real
+    observed phase, so a phase-equality trigger would leave row 7's own
+    predicate declared and never run); evaluated exactly when
+    ``observed_phase_after`` equals ``outcome.from_phase`` otherwise (the
+    row's writer runs on one named branch only, and that branch's own
+    step is a true no-op, so the branch's own observation *is* the
+    from-phase observation -- rows 3 and 5). Returns ``(verified,
+    evidence)`` -- ``evidence`` is a ``TransitionNotObservedError``-shaped
+    dict naming the expected set, the observed phase, the worker outcome,
+    and (for the predicate clause) that the predicate did not hold; ``{}``
+    when ``verified``."""
     outcome_ok = worker_outcome in _VERIFYING_WORKER_OUTCOMES
     predicate_checked = False
     predicate_ok = True
     if outcome_ok and observed_phase_after in outcome.to_any_of:
-        if observed_phase_after == outcome.from_phase:
+        branch = _row_branch(outcome)
+        if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
             predicate_checked = True
-            predicate_ok = outcome.predicate is not None and outcome.predicate(
-                root, work_item_id, pre_state
-            )
+            predicate_ok = outcome.predicate(root, work_item_id, pre_state)
         if predicate_ok:
             return True, {}
 
@@ -807,7 +856,7 @@ def _verify_transition(
         "code": "TransitionNotObservedError",
         "reason": reason,
         "expected_to_any_of": sorted(outcome.to_any_of),
-        "observed_phase": observed_phase_after,
+        "observed_phase": phase_to_wire(observed_phase_after),
         "worker_outcome": worker_outcome,
     }
 
@@ -1570,21 +1619,34 @@ def execute_step(
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
     # -- never the `snapshot`/`work_item` captured before the worker ran
     # (see this module's own docstring, "CP6B's own scope note on step
-    # 7's 'fresh managed_repo.inspect'"). Steps 7-9 are CP6B's own scope
-    # (this checkpoint, CP6, owns only steps 1-6): a row-7 (`NoWorkItemYet`)
-    # job still reaches here today and this line still raises
-    # `AttributeError` on `work_item.work_item_id`, since there is no
-    # `WorkItemView` to read one off of -- CP6's own steps 1-6 (pre-state
-    # capture, the decision, and the `PLANNED`/`LAUNCHED`/`COMPLETED`
-    # flushes) are correct and durable for row 7 by the time execution
-    # reaches this point; wiring steps 7-9 for row 7 (a fresh
-    # `work_item_id`-free re-read, and row 7's own predicate/verification)
-    # is CP6B's own revalidation, next.
+    # 7's 'fresh managed_repo.inspect'"). A row-7 (`NoWorkItemYet`) job has
+    # no `WorkItemView` to re-select by id -- `resolved_work_item_id` is
+    # `None` for it -- so its own post-read is a direct key-set comparison
+    # against `pre_state["pre_work_item_keys"]`, never a second
+    # `select_work_item(work_item_id=None)` call: that call's own "more
+    # than one candidate" branch is `AmbiguousWorkItemError` (CP3), which
+    # would crash `execute_step` on exactly the two-key case this
+    # checkpoint's own declared row-7 cases require to fail *closed*
+    # instead (`observed_phase_after=NO_PHASE`, never a member of any
+    # row's `to_any_of`, so verification fails with the ordinary
+    # `phase_not_in_to_any_of` reason). Row 7's own predicate
+    # (`_predicate_row7_new_work_item_created`) performs the identical
+    # key-set comparison independently, at verification time -- the two
+    # checks are deliberately redundant (defence in depth), not merged.
     post_snapshot = target_state.read(managed_repo)
-    post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item.work_item_id)
-    observed_phase_after = post_work_item.phase
+    if is_bootstrap:
+        new_work_item_keys = frozenset(post_snapshot.work_items) - frozenset(
+            pre_state.get("pre_work_item_keys") or ()
+        )
+        if len(new_work_item_keys) == 1:
+            observed_phase_after = post_snapshot.work_items[next(iter(new_work_item_keys))].phase
+        else:
+            observed_phase_after = NO_PHASE
+    else:
+        post_work_item = target_state.select_work_item(post_snapshot, work_item_id=resolved_work_item_id)
+        observed_phase_after = post_work_item.phase
 
-    outcome_row = _expected_outcome_for(work_item.phase, work_item.governing_workflow_version, decision)
+    outcome_row = _expected_outcome_for(decision.observed_phase, governing_workflow_version, decision)
 
     # Step 9: INCOMPLETE takes precedence over step 8's own "otherwise" --
     # a phase that is a legal *effect* of the action but never a
@@ -1593,13 +1655,13 @@ def execute_step(
     # a future generation's row can populate it without this call site
     # changing.
     incomplete_effect_phases = _INCOMPLETE_EFFECT_PHASES.get(
-        (work_item.phase, work_item.governing_workflow_version, decision.action.command.split()[0]),
+        (decision.observed_phase, governing_workflow_version, decision.action.command.split()[0]),
         frozenset(),
     )
 
     # Step 8: the verification rule, stated in full and in one form.
     verified, verification_evidence = _verify_transition(
-        root=managed_repo.root, work_item_id=work_item.work_item_id, outcome=outcome_row,
+        root=managed_repo.root, work_item_id=resolved_work_item_id, outcome=outcome_row,
         pre_state=pre_state, observed_phase_after=observed_phase_after,
         worker_outcome=result.outcome,
     )
@@ -1614,7 +1676,7 @@ def execute_step(
     record = {
         **record,
         "status": final_status,
-        "observed_phase_after": observed_phase_after,
+        "observed_phase_after": phase_to_wire(observed_phase_after),
         "transition_verified": verified,
         "updated_at": _now(),
     }
@@ -1625,7 +1687,7 @@ def execute_step(
         # is the evidence of what stopped it (CP6B step 9).
         record["reconciliation_evidence"] = {
             "code": "IncompleteEffectPhase",
-            "observed_phase": observed_phase_after,
+            "observed_phase": phase_to_wire(observed_phase_after),
             "worker_stdout": result.stdout,
         }
     _persist(runtime, job_id, record)

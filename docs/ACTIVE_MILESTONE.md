@@ -1338,12 +1338,64 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   failures CP4's own revalidation already documented as CP9's residual
   scope, no errors, no regression against CP1-CP5's own revalidation
   baseline). `COMPLETE`.
+- `CP6B` revalidated: two independent deltas, not one. **(1) Step 8's own
+  predicate-evaluation trigger** (revision 65/66's repair, round 64's
+  `B1`): the pre-amendment build gated a row's evidence predicate on raw
+  phase equality (`observed_phase_after == outcome.from_phase`), which
+  happened to read correctly for rows 3 and 5 (their branch's own no-op
+  observation coincides with their `to_any_of`-self-membership) but left
+  row 7's predicate declared and never evaluated -- row 7's `from_phase`
+  is `NO_PHASE`, which can never equal a real observed phase, so the
+  exact case its own paragraph names ("a `/milestone-plan` that reaches
+  `AWAITING_LOCAL_PLAN_REVIEW` without actually creating a new entry ...
+  must not verify") verified. `controller/job.py` gained `_row_branch`
+  (a new helper deriving one row's own `branch` across every declared
+  `WriterCall`, asserting they agree -- Property 3's "total, fail-closed
+  derivation") and `_verify_transition`'s own trigger is now keyed on
+  that value: evaluated unconditionally when `branch is None` (row 7),
+  evaluated on phase equality otherwise (rows 3 and 5, unchanged in
+  effect). `property_table_violations` gained the matching structural
+  check (every row's `writer_calls` must agree on `branch`), with its own
+  negative instantiation. **(2) `execute_step`'s steps 7-9 did not
+  support the bootstrap row at all**: the post-state re-read and
+  verification call sites still read `work_item.work_item_id`/
+  `work_item.phase`/`work_item.governing_workflow_version` off the
+  `WorkItemView` CP6's own steps 1-6 never have for a `NoWorkItemYet`
+  target, raising `AttributeError`. Fixed by using the already-resolved
+  `resolved_work_item_id`/`decision.observed_phase`/
+  `governing_workflow_version` locals steps 1-6 already compute for both
+  branches, and -- for the bootstrap branch specifically -- a direct
+  `frozenset(post_snapshot.work_items) - frozenset(pre_state["pre_work_item_keys"])`
+  key-set comparison in place of a second `select_work_item(work_item_id=
+  None)` call, which would itself raise `AmbiguousWorkItemError` on a
+  synthetic two-key post-state this checkpoint's own declared cases
+  require to fail *closed* (`observed_phase_after=NO_PHASE`, never a
+  member of any row's `to_any_of`) rather than crash. `observed_phase_after`
+  and every `reconciliation_evidence["observed_phase"]` site are now
+  wire-mapped through `phase_to_wire` before being persisted, for the
+  same reason `pre_state.phase`/`observed_phase_before`/
+  `expected_transition.from` already are. `tests/test_job.py`'s
+  `BootstrapRowSevenTest` no longer expects `AttributeError` (its own
+  assertions stay scoped to the CP6-owned fields, unaffected by steps
+  7-9's outcome); `tests/test_job_validation.py` gained
+  `BootstrapRowSevenVerificationTest` (the zero-key/one-key/two-key cases
+  the plan's own CP6B section names as required) and three new
+  `ExpectedOutcomesTableStructureTest` cases (Property 3's branch-
+  disagreement negative instantiation, the `_row_branch` helper's own
+  refusal, and every real row's single-branch derivation). No row 1-6
+  behaviour changed (verified unchanged by the full pre-existing
+  `TransitionVerificationTest`/`DeclarationAgainstArtifactTest`/
+  `PairKeyedReachabilityTest` suites). Verified by `python3 -m unittest
+  tests.test_job tests.test_job_validation tests.test_decision
+  tests.test_target_state tests.test_evidence tests.test_resume` (220
+  tests, all green) and by re-running the full suite (`python3 -m
+  unittest discover -s tests -p "test_*.py"`: 379 tests: 2 failures, 1
+  skip -- the same two pre-existing `tests.test_cli` failures CP4's own
+  revalidation already documented as CP9's residual scope, no errors, no
+  regression against CP1-CP6's own revalidation baseline). `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP6B` through `CP9` in registry order, wiring CP6B's own
-steps 7-9 (a `work_item_id`-free fresh post-state re-read, and row 7's own
-predicate/verification) for the `NoWorkItemYet` bootstrap CP6 above now
-captures and flushes correctly but cannot itself verify, applying the
+revalidating `CP7` through `CP9` in registry order, applying the
 revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
 `NO_PHASE`'s round-trip schema) where each remaining checkpoint's own plan
 section now requires them, through `CP9` where B1's `worker_outcome`

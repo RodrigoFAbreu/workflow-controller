@@ -198,6 +198,32 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
         violations = job.property_table_violations((broken,))
         self.assertTrue(any("non-COMPLETION" in v for v in violations), violations)
 
+    def test_writer_calls_disagreeing_on_branch_fails(self) -> None:
+        """Property 3's total, fail-closed derivation (revision 65/66,
+        step 8's own repair): a row whose ``WriterCall``s disagree on
+        ``branch`` fails construction, naming the row and both values --
+        a property that cannot fail is not a property, and every real row
+        today declares exactly one ``WriterCall`` so this is otherwise
+        untested."""
+        row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
+        wc1 = row3.writer_calls[0]
+        wc2 = dataclasses.replace(wc1, branch=job.BranchSpec(kind="bullet", label="APPROVE"))
+        broken = dataclasses.replace(row3, writer_calls=(wc1, wc2))
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(any("disagree on branch" in v for v in violations), violations)
+
+    def test_row_branch_helper_raises_on_disagreement(self) -> None:
+        row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
+        wc1 = row3.writer_calls[0]
+        wc2 = dataclasses.replace(wc1, branch=job.BranchSpec(kind="bullet", label="APPROVE"))
+        broken = dataclasses.replace(row3, writer_calls=(wc1, wc2))
+        with self.assertRaises(AssertionError):
+            job._row_branch(broken)
+
+    def test_real_table_rows_each_derive_a_single_consistent_branch(self) -> None:
+        for eo in job.EXPECTED_OUTCOMES:
+            self.assertEqual(job._row_branch(eo), eo.writer_calls[0].branch)
+
     def test_record_completeness_negative_input_outside_pre_state_fields_fails(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         broken = dataclasses.replace(row3, predicate_inputs=frozenset({"not_a_real_field"}))
@@ -530,6 +556,101 @@ class TransitionVerificationTest(unittest.TestCase):
         self.assertEqual(record["status"], job.STATUS_FAILED)
         ev = record["reconciliation_evidence"]
         self.assertEqual(ev["reason"], "predicate_not_satisfied")
+
+
+# ---------------------------------------------------------------------------
+# Row 7 (the `NoWorkItemYet` bootstrap, revision 63's B2) through steps
+# 7-9: this checkpoint's own revalidation. CP6's own steps 1-6 (durable
+# PLANNED/LAUNCHED/COMPLETED flushes for this row, without crashing) are
+# `tests/test_job.py::BootstrapRowSevenTest`'s scope, not this file's.
+# ---------------------------------------------------------------------------
+
+
+def _build_bootstrap_target(tmp_root: Path):
+    root = tmp_root / "target"
+    fixtures.build_target_git_repo(root)
+    (root / "README.md").write_text("target fixture\n")
+    fixtures.commit_all(root, "initial")
+    fixtures.write_workflow_state(root, {
+        "schema_version": 1, "active_work_item_id": None, "work_items": {},
+    })
+    fixtures.copy_real_commands_dir(root / ".claude" / "commands")
+    return root, fixtures.build_target_managed_repository(root)
+
+
+def _write_new_work_items_env(root: Path, *new_ids: str, phase: str = "AWAITING_LOCAL_PLAN_REVIEW") -> dict[str, str]:
+    """``FAKE_CLAUDE_WRITE_PATH``/``FAKE_CLAUDE_WRITE_TEXT`` env overrides
+    that make the fake worker create ``new_ids`` as brand-new
+    ``work_items`` entries -- row 7's own bootstrap action, simulated the
+    same way ``_write_state_phase_env`` simulates an ordinary phase
+    edit."""
+    state_path = root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+    state = json.loads(state_path.read_text())
+    for new_id in new_ids:
+        state["work_items"][new_id] = {
+            "work_item_type": "product",
+            "work_item_kind": "product",
+            "work_item_id": new_id,
+            "governing_workflow_version": "2.1",
+            "phase": phase,
+            "plan_revision": 1,
+            "implementation_revision": None,
+            "state_revision": 1,
+            "checkpoints": {},
+            "current_bundle_id": None,
+            "last_completed_checkpoint_id": None,
+            "base_commit": None,
+            "parent_work_item_id": None,
+        }
+    return {
+        "FAKE_CLAUDE_WRITE_PATH": str(state_path),
+        "FAKE_CLAUDE_WRITE_TEXT": json.dumps(state, indent=2) + "\n",
+    }
+
+
+class BootstrapRowSevenVerificationTest(unittest.TestCase):
+    """Step 8's rule, keyed on row 7's own branch (``None`` -- its single
+    ``WriterCall`` declares no branch -- so its predicate is evaluated
+    **unconditionally**, never gated on ``NO_PHASE`` equalling a real
+    observed phase, which it never can): exactly one new ``work_items``
+    key, at ``AWAITING_LOCAL_PLAN_REVIEW``, verifies; zero or two new
+    keys must not -- the exact "zero-key and two-key worker" cases the
+    plan's own CP6B section names as required (revision 65's repair
+    note)."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir()
+        self.root, self.managed_repo = _build_bootstrap_target(self.tmp_root)
+
+    def test_exactly_one_new_work_item_verifies_and_reaches_finished(self) -> None:
+        env = _write_new_work_items_env(self.root, "wi-new")
+        record = _run(self.managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertNotIn("reconciliation_evidence", record)
+
+    def test_zero_new_work_items_does_not_verify(self) -> None:
+        record = _run(self.managed_repo, self.runtime_root)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["code"], "TransitionNotObservedError")
+        self.assertEqual(ev["reason"], "phase_not_in_to_any_of")
+        self.assertEqual(ev["observed_phase"], "__NO_PHASE__")
+
+    def test_two_new_work_items_does_not_verify(self) -> None:
+        env = _write_new_work_items_env(self.root, "wi-new-1", "wi-new-2")
+        record = _run(self.managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["reason"], "phase_not_in_to_any_of")
+        self.assertEqual(ev["observed_phase"], "__NO_PHASE__")
 
 
 class IncompleteEffectPhaseTest(unittest.TestCase):

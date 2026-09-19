@@ -708,8 +708,10 @@ class AmendmentPostRegistryMalformedError(Exception):
 class AmendmentCheckpointIdShapeError(Exception):
     """Raised by `request_plan_amendment` when the work item's own
     registry already contains a checkpoint id that is not of the shape
-    `CP<digits>` (IMPL2-R1): `_CHECKPOINT_ANCHOR_RE`'s grammar can only
-    ever produce an anchor tag keyed `"CP" + digits`, so
+    `CP<digits>[A-Z]?` (IMPL2-R1, widened by workflow-2.5.1's
+    `D-Checkpoint-Id-Anchor-Grammar-Widening`): `_CHECKPOINT_ANCHOR_RE`'s
+    grammar can only ever produce an anchor tag keyed `"CP" + digits` or
+    `"CP" + digits + one uppercase letter`, so
     `validate_post_anchor_coverage` is unsatisfiable for any such id --
     there is no text an author could write in the amended plan that would
     ever satisfy it. Raised *before* `plan_approval` is superseded, the
@@ -3502,27 +3504,41 @@ def plan_approval_state_matches_pre_transaction(
 # immediately before and `<!-- /CP<n> -->` immediately after each block of
 # prose that describes it -- a checkpoint may have any number of such
 # disjoint, non-contiguous pairs.
+#
+# workflow-2.5.1, D-Checkpoint-Id-Anchor-Grammar-Widening: `<n>` also
+# admits an optional single trailing uppercase letter (e.g. `CP4B`), the
+# legacy inserted-checkpoint lettering convention that predates this
+# mechanism -- see `checkpoint_id_supports_anchor`'s own docstring for the
+# exact widened shape and its scope.
 # ---------------------------------------------------------------------------
 
-_CHECKPOINT_ANCHOR_RE = re.compile(r"<!--\s*(/?)CP(\d+)\s*-->")
+_CHECKPOINT_ANCHOR_RE = re.compile(r"<!--\s*(/?)CP(\d+[A-Z]?)\s*-->")
 
 #: Shape a checkpoint id must have for `_CHECKPOINT_ANCHOR_RE` to ever be
-#: able to produce a matching anchor tag for it (IMPL2-R1): the grammar
-#: only ever emits/consumes `"CP" + digits`, so any other id shape (e.g.
-#: `workflow-v2-1-core`'s own real `WF4a-i`) can never have a well-formed
-#: anchor pair -- `checkpoint_id_supports_anchor` below is the single
-#: place that fact is checked, so `request_plan_amendment` can refuse
-#: early rather than leave `validate_post_anchor_coverage` as the only,
-#: much later, signal.
-_ANCHOR_COMPATIBLE_CHECKPOINT_ID_RE = re.compile(r"^CP\d+\Z")
+#: able to produce a matching anchor tag for it (IMPL2-R1, widened by
+#: workflow-2.5.1's `D-Checkpoint-Id-Anchor-Grammar-Widening`): the
+#: grammar only ever emits/consumes `"CP" + digits` optionally followed by
+#: exactly one uppercase letter, so any other id shape (e.g.
+#: `workflow-v2-1-core`'s own real `WF4a-i`, or a lowercase/multi-letter/
+#: letter-before-digit suffix) can never have a well-formed anchor pair --
+#: `checkpoint_id_supports_anchor` below is the single place that fact is
+#: checked, so `request_plan_amendment` can refuse early rather than leave
+#: `validate_post_anchor_coverage` as the only, much later, signal.
+_ANCHOR_COMPATIBLE_CHECKPOINT_ID_RE = re.compile(r"^CP\d+[A-Z]?\Z")
 
 
 def checkpoint_id_supports_anchor(checkpoint_id: str) -> bool:
-    """True iff `checkpoint_id` has the one shape (`CP<digits>`) the
+    """True iff `checkpoint_id` has one of the shapes (`CP<digits>`, or
+    `CP<digits>` followed by exactly one uppercase letter -- e.g. `CP4B`,
+    the legacy inserted-checkpoint lettering convention that predates
+    workflow-2.4.0's plan-amendment mechanism, widened for in
+    workflow-2.5.1's `D-Checkpoint-Id-Anchor-Grammar-Widening`) the
     paired-anchor grammar (`_CHECKPOINT_ANCHOR_RE`/
     `parse_checkpoint_anchor_spans`) can ever match. False for any other
-    shape -- e.g. `WF4a-i` -- for which `validate_post_anchor_coverage` is
-    unconditionally unsatisfiable, no matter what the plan document says.
+    shape -- e.g. `WF4a-i`, a lowercase suffix, a multi-letter suffix, or a
+    letter-before-digit shape -- for which `validate_post_anchor_coverage`
+    is unconditionally unsatisfiable, no matter what the plan document
+    says.
 
     `\\Z` rather than `$` (IMPL4-O3): Python's `$` matches immediately
     before a trailing `\\n` as well as at the true end of string, so an id
@@ -3560,11 +3576,13 @@ def parse_checkpoint_anchor_spans(text: str, *, strict: bool = True) -> dict[str
     malformed: set[str] = set()
     for match in _CHECKPOINT_ANCHOR_RE.finditer(text):
         is_close = match.group(1) == "/"
-        # The registry's own checkpoint ids are "CP<n>" strings (e.g.
-        # "CP1"); the anchor tag's own digits are joined back onto that
-        # prefix so this map's keys line up with `depends_on`/registry
-        # `id` values directly, never a bare digit that would silently
-        # never match anything.
+        # The registry's own checkpoint ids are "CP<n>" or "CP<n><letter>"
+        # strings (e.g. "CP1", "CP4B"); the anchor tag's own captured
+        # suffix -- digits, optionally followed by exactly one uppercase
+        # letter -- is joined back onto that prefix so this map's keys
+        # line up with `depends_on`/registry `id` values directly, never a
+        # bare digit (or bare digit-plus-letter) that would silently never
+        # match anything.
         checkpoint_id = "CP" + match.group(2)
         if not is_close:
             if checkpoint_id in open_at:
@@ -3628,20 +3646,21 @@ def validate_post_anchor_coverage(post_plan_text: str, post_registry: dict) -> N
     reconciliation.
 
     An id introduced by the amendment itself (not merely one inherited
-    from the pre-amendment registry) that is not of the shape `CP<digits>`
-    raises `AmendmentCheckpointIdShapeError` instead of the coverage error
-    (IMPL3-O1): `request_plan_amendment`'s own id-shape precondition only
-    ever inspects the *pre*-amendment registry, so an anchor-incompatible
-    id authored during the amendment would otherwise reach this function
-    and get the unactionable "add an anchor" message for an id no anchor
-    text can ever satisfy -- checked here, ahead of the coverage check, for
-    the same reason `request_plan_amendment` checks it early."""
+    from the pre-amendment registry) that is not of the shape
+    `CP<digits>[A-Z]?` raises `AmendmentCheckpointIdShapeError` instead of
+    the coverage error (IMPL3-O1): `request_plan_amendment`'s own
+    id-shape precondition only ever inspects the *pre*-amendment
+    registry, so an anchor-incompatible id authored during the amendment
+    would otherwise reach this function and get the unactionable "add an
+    anchor" message for an id no anchor text can ever satisfy -- checked
+    here, ahead of the coverage check, for the same reason
+    `request_plan_amendment` checks it early."""
     spans = parse_checkpoint_anchor_spans(post_plan_text, strict=True)
     for entry in post_registry.get("checkpoints", []):
         checkpoint_id = entry["id"]
         if not checkpoint_id_supports_anchor(checkpoint_id):
             raise AmendmentCheckpointIdShapeError(
-                f"{checkpoint_id} is not of the shape 'CP<digits>' -- the "
+                f"{checkpoint_id} is not of the shape 'CP<digits>[A-Z]?' -- the "
                 f"plan-amendment anchor grammar (D-Plan-Amendment-4) can never be "
                 f"satisfied for this id no matter what the amended plan document "
                 f"says; rename it via another /milestone-plan round"
@@ -10946,14 +10965,15 @@ def request_plan_amendment(
     anything -- `plan_approval.status` is never set to `SUPERSEDED` when
     this fires.
 
-    Checkpoint-id-shape precondition (IMPL2-R1, narrowed by IMPL3-R1): before
-    either of the above, loads the work item's own current registry (via
-    `_load_authoritative_registry_or_none(repo_root, work_item,
-    require_plan_approval_coverage=False)` -- `None` for a registry-less
-    work item, which skips this check) and raises
+    Checkpoint-id-shape precondition (IMPL2-R1, narrowed by IMPL3-R1,
+    widened by workflow-2.5.1's `D-Checkpoint-Id-Anchor-Grammar-
+    Widening`): before either of the above, loads the work item's own
+    current registry (via `_load_authoritative_registry_or_none(repo_root,
+    work_item, require_plan_approval_coverage=False)` -- `None` for a
+    registry-less work item, which skips this check) and raises
     `AmendmentCheckpointIdShapeError`, naming every offending id, if any
-    checkpoint id in it is not of the shape `CP<digits>`. Such an id can
-    never satisfy `validate_post_anchor_coverage`'s anchor grammar no
+    checkpoint id in it is not of the shape `CP<digits>[A-Z]?`. Such an id
+    can never satisfy `validate_post_anchor_coverage`'s anchor grammar no
     matter what the amended plan document says, so refusing here -- before
     `plan_approval` is superseded -- replaces a refusal that would
     otherwise surface only after both plan-review stages have already
@@ -11030,8 +11050,10 @@ def request_plan_amendment(
 
     # IMPL2-R1: refuse by name, before anything is superseded, if the
     # work item's own current registry already names a checkpoint id that
-    # is not of the shape `CP<digits>` -- `validate_post_anchor_coverage`
-    # would refuse the eventual amended plan for exactly this id, but only
+    # is not of the shape `CP<digits>[A-Z]?` (workflow-2.5.1's
+    # `D-Checkpoint-Id-Anchor-Grammar-Widening`) --
+    # `validate_post_anchor_coverage` would refuse the eventual amended
+    # plan for exactly this id, but only
     # after both plan-review stages have been spent on it, with no anchor
     # text able to fix it. A registry-less work item (`registry_path` is
     # `None`) has nothing to check here.
@@ -11064,7 +11086,7 @@ def request_plan_amendment(
             raise AmendmentCheckpointIdShapeError(
                 f"{work_item_id}'s registry ({work_item.get('registry_path')}) names "
                 f"checkpoint id(s) {unsupported_ids!r} that are not of the shape "
-                f"'CP<digits>' -- the plan-amendment anchor grammar "
+                f"'CP<digits>[A-Z]?' -- the plan-amendment anchor grammar "
                 f"(D-Plan-Amendment-4) can never be satisfied for these, so "
                 f"/request-plan-amendment refuses before superseding plan_approval"
             )

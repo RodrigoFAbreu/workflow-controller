@@ -347,8 +347,10 @@ test fails and is authoritative about which one moved.
   claim; no open `/approve-review plan` transaction; the current
   `plan_approval`'s own approval commit still discoverable and an ancestor
   of `HEAD`; every checkpoint id in the work item's own current registry
-  of the shape `CP<digits>` (IMPL2-R1) -- the only shape
-  `validate_post_anchor_coverage` can ever match.
+  of the shape `CP<digits>[A-Z]?` -- `CP` followed by one or more digits,
+  optionally followed by exactly one uppercase letter (widened,
+  workflow-2.5.1, `D-Checkpoint-Id-Anchor-Grammar-Widening`, IMPL2-R1) --
+  the only shape `validate_post_anchor_coverage` can ever match.
 - **Does**: supersedes the current plan approval and moves the item to
   `AMENDING_PLAN` in one transaction — same authority shape as
   `/approve-review`/`/accept-milestone` (`disable-model-invocation: true`
@@ -368,7 +370,8 @@ test fails and is authoritative about which one moved.
   eventual `/approve-review plan`'s own `apply_plan_approval` computation
   (`D-Plan-Amendment-4`), never here. The amended plan document drafted in
   response must delimit every registry checkpoint id with a
-  `<!-- CPn -->`/`<!-- /CPn -->` anchor pair, or `/approve-review plan`
+  `<!-- CPn -->`/`<!-- /CPn -->` anchor pair (`n` is the same widened
+  `CP<digits>[A-Z]?` shape named above), or `/approve-review plan`
   step 4c's `validate_post_anchor_coverage` refuses approval naming the
   first uncovered id.
 - **Refuses**: the wrong phase
@@ -385,9 +388,10 @@ test fails and is authoritative about which one moved.
   (`AmendmentRegistryMissingIdError`, IMPL4-O2); an unreachable approval
   commit (`AmendmentApprovalCommitUnreachableError`, checked *before*
   superseding anything); a registry checkpoint id not of the shape
-  `CP<digits>` (`AmendmentCheckpointIdShapeError`, also checked *before*
-  superseding anything, naming every offending id -- IMPL2-R1); an open
-  plan-approval transaction; no literal confirmation/`reason` this turn.
+  `CP<digits>[A-Z]?` (`AmendmentCheckpointIdShapeError`, also checked
+  *before* superseding anything, naming every offending id -- IMPL2-R1);
+  an open plan-approval transaction; no literal confirmation/`reason` this
+  turn.
 
 ### `/review-implementation [work-item-id]` — review command
 - **When**: optional, repeatable, repository-local second opinion while a

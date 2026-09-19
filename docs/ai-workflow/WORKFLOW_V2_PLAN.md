@@ -31595,7 +31595,13 @@ redesign, since it already treated both as plain arguments, never as
   row alone (B6): every plan document written or amended under this
   mechanism marks each checkpoint's own design-decision prose with paired
   anchor comments, `<!-- CP<n> -->` immediately before and `<!-- /CP<n> -->`
-  immediately after each block of prose that describes it -- a checkpoint
+  immediately after each block of prose that describes it (`<n>` here
+  denotes a checkpoint id of the anchor-compatible shape
+  `CP<digits>[A-Z]?` -- `CP` followed by one or more digits, optionally
+  followed by exactly one uppercase letter, e.g. `1` or `4B`; widened,
+  workflow-2.5.1, `D-Checkpoint-Id-Anchor-Grammar-Widening`, to admit the
+  pre-`2.4.0` inserted-checkpoint lettering convention that predates this
+  mechanism) -- a checkpoint
   may have any number of such disjoint, non-contiguous pairs (the plan's
   own many-to-many mapping of checkpoints to design-decision subsections,
   section 5's own parenthetical, already needs this: CP2 and CP3 both draw

@@ -70,7 +70,11 @@ branches on governing version, unchanged.
   `/approve-review plan` transaction, the current `plan_approval`'s own
   approval commit still discoverable and an ancestor of `HEAD`, and every
   checkpoint id in the work item's own current registry of the shape
-  `CP<digits>` (`AmendmentCheckpointIdShapeError` otherwise, naming every
+  `CP<digits>[A-Z]?` -- `CP` followed by one or more digits, optionally
+  followed by exactly one uppercase letter (widened, workflow-2.5.1,
+  `D-Checkpoint-Id-Anchor-Grammar-Widening`, to admit the pre-`2.4.0`
+  inserted-checkpoint lettering convention, e.g. `CP4B`, that predates this
+  mechanism) (`AmendmentCheckpointIdShapeError` otherwise, naming every
   offending id, before anything is superseded -- IMPL2-R1). The
   independent, second half of XMODEL-R4-B1's fix lives on the other side
   of the same race: `transition_checkpoint_in_progress` itself refuses
@@ -106,9 +110,14 @@ branches on governing version, unchanged.
   amendment's own `checkpoints_snapshot` and in git history via its commit
   trailers). **While drafting the amended plan**, delimit every registry
   checkpoint id with a `<!-- CPn -->`/`<!-- /CPn -->` anchor pair (one or
-  more, non-overlapping, around that checkpoint's own content) -- add the
-  anchors now, not after `/approve-review plan` step 4c's
+  more, non-overlapping, around that checkpoint's own content; `n` is the
+  same widened `CP<digits>[A-Z]?` shape the entry condition above checks) --
+  add the anchors now, not after `/approve-review plan` step 4c's
   `validate_post_anchor_coverage` refuses naming the first uncovered id.
+  `validate_post_anchor_coverage` consults the identical
+  `checkpoint_id_supports_anchor` predicate the entry condition above uses,
+  so the post-side check accepts exactly the same widened shape, never a
+  second, independently-maintained grammar.
 - **Stop for user/reviewer?** No. `/request-plan-amendment` itself carries
   the same mechanism-independent user-only guard `/approve-review` and
   `/accept-milestone` use (Claude cannot invoke it), but once a human has

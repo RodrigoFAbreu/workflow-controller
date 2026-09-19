@@ -10503,8 +10503,9 @@ class TestPersistedPhaseWriterCensus(unittest.TestCase):
 
 
 class TestCheckpointIdSupportsAnchor(unittest.TestCase):
-    """`checkpoint_id_supports_anchor`'s `CP<digits>` shape gate
-    (D-Plan-Amendment-4)."""
+    """`checkpoint_id_supports_anchor`'s `CP<digits>[A-Z]?` shape gate
+    (D-Plan-Amendment-4, widened by workflow-2.5.1's
+    `D-Checkpoint-Id-Anchor-Grammar-Widening`)."""
 
     def test_plain_cp_digits_is_supported(self):
         self.assertTrue(ws.checkpoint_id_supports_anchor("CP1"))
@@ -10520,6 +10521,37 @@ class TestCheckpointIdSupportsAnchor(unittest.TestCase):
         `_CHECKPOINT_ANCHOR_RE`'s own anchor-tag parser, which has no such
         allowance. `\\Z` closes it."""
         self.assertFalse(ws.checkpoint_id_supports_anchor("CP1\n"))
+
+    def test_legacy_letter_suffixed_ids_are_supported(self):
+        """workflow-2.5.1's own reported defect: `workflow-controller-
+        generation-1`'s real, pre-2.4.0 inserted-checkpoint lettering
+        convention (`CP4B`/`CP6B`, an id inserted between two numbered
+        ids without renumbering everything after it) must be accepted,
+        not refused, by the widened grammar."""
+        for checkpoint_id in (
+            "CP1", "CP2", "CP3", "CP4", "CP4B", "CP5", "CP6", "CP6B",
+            "CP7", "CP8", "CP9",
+        ):
+            with self.subTest(checkpoint_id=checkpoint_id):
+                self.assertTrue(ws.checkpoint_id_supports_anchor(checkpoint_id))
+
+    def test_lowercase_letter_suffix_is_unsupported(self):
+        """Scope boundary: exactly one *uppercase* letter, never
+        lowercase (`D-Checkpoint-Id-Anchor-Grammar-Widening`)."""
+        self.assertFalse(ws.checkpoint_id_supports_anchor("CP4b"))
+
+    def test_two_letter_suffix_is_unsupported(self):
+        """Scope boundary: exactly one letter, never more."""
+        self.assertFalse(ws.checkpoint_id_supports_anchor("CP4BC"))
+
+    def test_letter_before_digit_shape_is_unsupported(self):
+        """Scope boundary: the letter must trail the digits, never
+        precede them."""
+        self.assertFalse(ws.checkpoint_id_supports_anchor("CPB4"))
+
+    def test_letter_followed_by_another_digit_is_unsupported(self):
+        """Scope boundary: no digit may follow the trailing letter."""
+        self.assertFalse(ws.checkpoint_id_supports_anchor("CP4B1"))
 
 
 class TestCheckpointAnchorSpans(unittest.TestCase):
@@ -10550,6 +10582,15 @@ class TestCheckpointAnchorSpans(unittest.TestCase):
         self.assertIn("CP1", spans)
         self.assertNotIn("CP2", spans)
 
+    def test_a_letter_suffixed_id_is_recognized_exactly_as_a_numeric_one(self):
+        """D-Checkpoint-Id-Anchor-Grammar-Widening: a well-formed anchor
+        pair for `CP4B` is recognized exactly as one for `CP4` is -- the
+        tag grammar and the id-shape grammar widened together."""
+        text = "<!-- CP4B -->legacy inserted checkpoint<!-- /CP4B -->"
+        spans = ws.parse_checkpoint_anchor_spans(text)
+        self.assertIn("CP4B", spans)
+        self.assertEqual(len(spans["CP4B"]), 1)
+
 
 class TestCheckpointContentHash(unittest.TestCase):
     def test_none_when_the_id_has_no_well_formed_spans(self):
@@ -10564,6 +10605,41 @@ class TestCheckpointContentHash(unittest.TestCase):
         h1 = ws.checkpoint_content_hash("<!-- CP1 -->same<!-- /CP1 -->", "CP1", strict=True)
         h2 = ws.checkpoint_content_hash("prefix <!-- CP1 -->same<!-- /CP1 --> suffix", "CP1", strict=True)
         self.assertEqual(h1, h2)
+
+    def test_a_letter_suffixed_id_hashes_exactly_as_a_numeric_one_does(self):
+        """`CP4B` is hashed exactly as `CP1` is -- the widening only
+        changes which strings the id portion of a tag matches, never the
+        hashing mechanics."""
+        h1 = ws.checkpoint_content_hash("<!-- CP4B -->a<!-- /CP4B -->", "CP4B", strict=True)
+        h2 = ws.checkpoint_content_hash("<!-- CP4B -->b<!-- /CP4B -->", "CP4B", strict=True)
+        self.assertNotEqual(h1, h2)
+        h3 = ws.checkpoint_content_hash("<!-- CP4B -->same<!-- /CP4B -->", "CP4B", strict=True)
+        h4 = ws.checkpoint_content_hash("prefix <!-- CP4B -->same<!-- /CP4B --> suffix", "CP4B", strict=True)
+        self.assertEqual(h3, h4)
+
+
+class TestCheckpointIdAnchorTagShapeCouplingInvariant(unittest.TestCase):
+    """`LOCAL_MODEL_PLAN_REVIEW` round 1, optional finding OPT-2: pins
+    §3's own hazard that the anchor **tag** grammar
+    (`_CHECKPOINT_ANCHOR_RE`) and the anchor **id-shape** grammar
+    (`_ANCHOR_COMPATIBLE_CHECKPOINT_ID_RE`, via
+    `checkpoint_id_supports_anchor`) are two separate regex literals that
+    must widen together -- for every candidate id below, a checkpoint id
+    is anchor-supported if and only if a well-formed anchor pair using
+    that exact id text as its tag is actually recognized as one."""
+
+    _CANDIDATES = (
+        "CP1", "CP2", "CP3", "CP4", "CP4B", "CP5", "CP6", "CP6B", "CP7", "CP8", "CP9",
+        "CP4b", "CP4BC", "CPB4", "CP4B1", "WF4a-i", "CP1\n",
+        "CP0", "CP04A", "CP12Z", "CP999A", "CP4-B", "CP4_B", "cp4", "CPB",
+    )
+
+    def test_shape_and_tag_recognition_agree_for_every_candidate(self):
+        for candidate in self._CANDIDATES:
+            with self.subTest(candidate=repr(candidate)):
+                text = f"<!-- {candidate} -->x<!-- /{candidate} -->"
+                recognized = candidate in ws.parse_checkpoint_anchor_spans(text, strict=False)
+                self.assertEqual(ws.checkpoint_id_supports_anchor(candidate), recognized)
 
 
 class TestValidatePostAnchorCoverage(unittest.TestCase):
@@ -10589,6 +10665,28 @@ class TestValidatePostAnchorCoverage(unittest.TestCase):
         text = "<!-- CP1 --><!-- CP1 -->x<!-- /CP1 --><!-- /CP1 -->"
         with self.assertRaises(ws.AmendmentAnchorMalformedError):
             ws.validate_post_anchor_coverage(text, self._registry(["CP1"]))
+
+    def test_the_full_legacy_letter_suffixed_set_passes_when_every_id_has_an_anchor(self):
+        """The full user-supplied legacy set (`CP1`..`CP9` plus `CP4B`/
+        `CP6B`) passes coverage once every id has a well-formed anchor
+        pair -- exactly as a purely numeric set already did."""
+        ids = ("CP1", "CP2", "CP3", "CP4", "CP4B", "CP5", "CP6", "CP6B", "CP7", "CP8", "CP9")
+        text = "".join(f"<!-- {cid} -->design for {cid}<!-- /{cid} -->" for cid in ids)
+        ws.validate_post_anchor_coverage(text, self._registry(ids))  # must not raise
+
+    def test_malformed_letter_suffixed_checkpoint_ids_are_refused_by_shape(self):
+        """The post side's own shape guard (IMPL3-O1) refuses the same
+        near-miss shapes `request_plan_amendment`'s pre-side precondition
+        refuses -- lowercase suffix, multi-letter suffix, letter-before-digit,
+        and a digit trailing the letter -- raising
+        `AmendmentCheckpointIdShapeError`, never the unactionable
+        `AmendmentAnchorCoverageError`, even when no anchor for the id is
+        present in the plan text at all."""
+        for bad_id in ("CP4b", "CP4BC", "CPB4", "CP4B1"):
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaises(ws.AmendmentCheckpointIdShapeError) as ctx:
+                    ws.validate_post_anchor_coverage("", self._registry([bad_id]))
+                self.assertIn(bad_id, str(ctx.exception))
 
 
 class TestReconcileCheckpointsAfterAmendment(unittest.TestCase):
@@ -10843,6 +10941,65 @@ class TestRequestPlanAmendment(unittest.TestCase):
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
             self.assertEqual(new_state["work_items"]["wi"]["amendment_history"][0]
                               ["pre_amendment_approval_commit"], approval_commit)
+
+    def test_legacy_letter_suffixed_checkpoint_ids_are_no_longer_refused(self):
+        """workflow-2.5.1's own reported defect: a registry carrying the
+        real, pre-2.4.0 `workflow-controller-generation-1` id set (`CP1`
+        through `CP9`, including the inserted, lettered `CP4B`/`CP6B`)
+        must no longer raise `AmendmentCheckpointIdShapeError` -- it is
+        exactly the `D-Checkpoint-Id-Anchor-Grammar-Widening` shape this
+        milestone widens the grammar to admit."""
+        with ScratchRepo() as repo:
+            registry_path = "registry.json"
+            ids = ("CP1", "CP2", "CP3", "CP4", "CP4B", "CP5", "CP6", "CP6B", "CP7", "CP8", "CP9")
+            _write(repo, registry_path, json.dumps({
+                "work_item_id": "wi", "plan_revision": 1,
+                "checkpoints": [{"id": cid, "depends_on": []} for cid in ids],
+            }))
+            _commit_paths(
+                repo, [registry_path], "add registry",
+                trailers={"Workflow-Plan-Approval": "rc-1", "Workflow-Work-Item": "wi"},
+            )
+            plan_approval = _current_plan_approval_covering(repo, registry_path)
+            plan_approval["approved_review_content_id"] = "rc-1"
+            work_item = _base_work_item(
+                base_commit=repo.base,
+                registry_path=registry_path,
+                plan_approval=plan_approval,
+                checkpoints={}, current_checkpoint_id=None, last_completed_checkpoint_id=None,
+            )
+            state = _base_state(wi=work_item)
+            new_state = ws.request_plan_amendment(
+                state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
+            )
+            self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
+
+    def test_malformed_letter_suffixed_checkpoint_ids_still_refuse(self):
+        """Scope boundary: a shape the widening deliberately does not
+        admit (lowercase suffix, multi-letter suffix, letter-before-digit)
+        still refuses, exactly as before."""
+        for bad_id in ("CP4b", "CP4BC", "CPB4", "CP4B1"):
+            with self.subTest(bad_id=bad_id):
+                with ScratchRepo() as repo:
+                    registry_path = "registry.json"
+                    _write(repo, registry_path, json.dumps({
+                        "work_item_id": "wi", "plan_revision": 1,
+                        "checkpoints": [{"id": bad_id, "depends_on": []}],
+                    }))
+                    _commit_paths(repo, [registry_path], "add registry")
+                    work_item = _base_work_item(
+                        base_commit=repo.base,
+                        registry_path=registry_path,
+                        plan_approval=_current_plan_approval_covering(repo, registry_path),
+                        checkpoints={}, current_checkpoint_id=None, last_completed_checkpoint_id=None,
+                    )
+                    state = _base_state(wi=work_item)
+                    with self.assertRaises(ws.AmendmentCheckpointIdShapeError) as ctx:
+                        ws.request_plan_amendment(
+                            state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
+                        )
+                    self.assertIn(bad_id, str(ctx.exception))
+                    self.assertEqual(state["work_items"]["wi"]["plan_approval"]["status"], "CURRENT")
 
     def test_dirty_plan_stage_document_does_not_refuse_the_amendment_request(self):
         """IMPL3-R1: a work item with a `registry_path` whose plan-stage
@@ -11689,10 +11846,10 @@ class TestApplyPlanApprovalAmendmentBranch(unittest.TestCase):
     def test_post_registry_only_non_cp_digit_id_is_a_named_shape_refusal(self):
         """IMPL3-O1: an id introduced *by the amendment itself* (absent from
         the pre-amendment registry, so `request_plan_amendment`'s own early
-        shape check never saw it) that is not of the shape `CP<digits>`
-        must raise `AmendmentCheckpointIdShapeError` here, not the
-        unactionable `AmendmentAnchorCoverageError` -- no anchor text could
-        ever satisfy the latter for this id."""
+        shape check never saw it) that is not of the shape
+        `CP<digits>[A-Z]?` must raise `AmendmentCheckpointIdShapeError`
+        here, not the unactionable `AmendmentAnchorCoverageError` -- no
+        anchor text could ever satisfy the latter for this id."""
         state = self._open_amendment_state()
         pre_registry = {"checkpoints": [
             {"id": "CP1", "name": "n", "depends_on": [], "complexity": 1, "session_target": 1},

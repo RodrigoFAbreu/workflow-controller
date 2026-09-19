@@ -129,7 +129,11 @@ and wait.
      this amendment is about to replace anyway (`D-Plan-Amendment-1`,
      `B-R12-1`).
    - **Every checkpoint id in the work item's own current registry must be
-     of the shape `CP<digits>`** (IMPL2-R1): also checked, authoritatively,
+     of the shape `CP<digits>[A-Z]?`** -- `CP` followed by one or more
+     digits, optionally followed by exactly one uppercase letter (widened,
+     workflow-2.5.1, `D-Checkpoint-Id-Anchor-Grammar-Widening`, to admit
+     the pre-`2.4.0` inserted-checkpoint lettering convention, e.g. `CP4B`;
+     IMPL2-R1): also checked, authoritatively,
      inside `workflow_state.request_plan_amendment` itself
      (`AmendmentCheckpointIdShapeError`, naming every offending id) --
      *before* it supersedes anything. `<!-- CPn -->`/`<!-- /CPn -->` is the
@@ -183,7 +187,8 @@ and wait.
    "Bundle structure" for what it contains and how it is (and is not)
    authoritative. **The amended plan document itself must delimit every
    registry checkpoint id with a `<!-- CPn -->`/`<!-- /CPn -->` anchor pair**
-   (one or more, non-overlapping, around that checkpoint's own content) --
+   (one or more, non-overlapping, around that checkpoint's own content;
+   `n` is the same widened `CP<digits>[A-Z]?` shape named in step 1 above) --
    `/approve-review plan` step 4c's `validate_post_anchor_coverage` refuses
    approval outright, naming the first uncovered id, for any registry
    checkpoint with no well-formed pair in the plan text, so add the anchors

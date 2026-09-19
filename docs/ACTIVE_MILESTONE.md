@@ -947,7 +947,156 @@ CP6B/CP7), 9 (CP8), 10 (CP9's own completed CLI surface).
 
 ## Current blockers
 
-None.
+**Blocked at `SELF_REVIEWING_IMPLEMENTATION` (all nine registry checkpoints
+CP1-CP9 complete, commit `a62ba4f`). The final self-review invocation of
+`/milestone-implement` (steps 2-5: bundle generation) has not run and must
+not run until this is resolved** -- no implementation-review bundle exists,
+and none should be generated while it pretends this is resolved.
+
+Two independent findings surfaced during the attempted self-review step 3
+full-verification run (`CONTROLLER_LIVE_WORKER=1
+python3 -m unittest tests.test_integration_disposable_repo`, `REQ-T18`):
+
+- **B1 -- mechanical, CP9-local, no plan involvement.**
+  `tests/test_integration_disposable_repo.py:200-210` reads
+  `job_record["worker_outcome"]` as a dict (`.get("session_id")`,
+  `.get("classification")`, `.get("duration_seconds")`); `controller/job.py`
+  actually writes `worker_outcome` as a plain string, with `session_id`
+  under `job_record["worker"]["session_id"]` and no `classification`/
+  `duration_seconds` fields anywhere. A test/schema mismatch, fixable by
+  ordinary `/apply-implementation-review`-style remediation once review
+  reopens -- not gating this blocker's resolution.
+
+- **B2 -- a genuine contradiction inside the *approved* plan
+  (`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md`, revision 62), not an
+  implementation defect.** `REQ-T18`'s own fixture (CP9 section, "Disposable
+  managed-repository integration evidence", ~L5911-5975) seeds a target
+  repository with **zero** `work_items` entries (only
+  `docs/ACTIVE_MILESTONE.md` seeded, no work-item created) and asserts step
+  5's outcome that the target "gains a `work_items` entry at phase
+  `AWAITING_LOCAL_PLAN_REVIEW`". But CP3's own target-selection rule
+  (~L2318-2319: "...else, if exactly one non-terminal work item exists, that
+  one; else `AmbiguousWorkItemError`") makes the Controller **refuse** at
+  exactly zero candidates, before any worker launches -- reproduced live:
+  `error: no active_work_item_id is set and the target repository's Workflow
+  state does not resolve to exactly one non-terminal work item (0 found)`,
+  exit 20. CP3 and CP9 disagree about what a zero-work-item target repo
+  should do, and no row in CP4/CP4B's phase -> action mapping covers "no
+  work item exists yet" at all.
+
+  **The frozen command-file constraint that controls any repair**
+  (`.claude/commands/milestone-plan.md`, unmodifiable): "An argument that is
+  neither a `work_items` key nor a resolvable commit is a refusal naming
+  both attempted resolutions -- never a guess, and never a silently created
+  work item: the id argument selects an **existing** entry only... A
+  brand-new milestone's id is still derived in step 1, not passed here."
+  `/milestone-plan` only ever creates a first work item when invoked with
+  **no** argument, deriving the id itself from `docs/ACTIVE_MILESTONE.md`.
+  Passing an explicit new id is a hard refusal under frozen Workflow
+  v2.3.1 -- the Controller can never make that path create anything.
+
+  **Approved bounded amendment scope (six items), not yet applied to the
+  plan:**
+  1. `controller/target_state.py::select_work_item` -- split the existing
+     `else -> AmbiguousWorkItemError` (zero candidates, no explicit
+     `--work-item`) into a distinct non-error `NoWorkItemYet` outcome;
+     `> 1` candidates stays `AmbiguousWorkItemError`, unchanged.
+  2. `NoWorkItemYet` routes to a `Decision` whose action is bare
+     `/milestone-plan` -- no argument.
+  3. Frozen Workflow (not the Controller) derives/creates the new
+     work-item id from `docs/ACTIVE_MILESTONE.md`.
+  4. Post-state validation identifies the created entry by exact key-set
+     difference (`post.work_items.keys() - pre.work_items.keys()`),
+     requiring exactly one new key.
+  5. Explicit `--work-item <nonexistent-id>` remains
+     `AmbiguousWorkItemError`, unchanged -- disjoint from the bootstrap
+     path per the frozen refusal above.
+  6. `controller/decision.py::decide`'s existing 17-phase table is
+     unchanged for real `WorkItemView`s; `NoWorkItemYet` is a distinct
+     pre-phase branch, never an 18th invented Workflow phase.
+
+  **Currently-normative plan/property/test projections this would touch**
+  (not yet edited -- see "why this cannot be applied" below):
+  `CONTROLLER_GEN1_PLAN.md` fail-closed conditions list (~L2274-2277),
+  target-selection paragraph (~L2318-2319), the CP4/`decide()` "reads
+  nothing outside `WorkItemView`" framing (~L2340), the six-row
+  `ExpectedOutcome` table and its "exactly one row .../every row
+  corresponds to a triple" bijection statement (~L3913-3936, ~L3966-3972),
+  Property 1 Coverage (~L4107-4118) and Property 2 Pair-keyed writer
+  reachability (~L4129-4137), the "properties 1-6 ... over the six rows"
+  case enumeration (~L4379-4383), the "two of CP6B's six rows" count
+  (~L4642-4646), and `REQ-T18`'s own fixture description (~L5900-5975,
+  needs: explicit no-`--work-item` invocation, Workflow-derived id, exact
+  key-set-difference post-check). Plus a new requirement id (distinct from
+  `REQ-T18`, which remains the end-to-end integration proof) for the
+  bootstrap architecture itself in
+  `docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json`,
+  and a possible complexity re-estimate for CP3/CP4/CP6/CP6B in
+  `docs/ai-workflow/registry/workflow-controller-generation-1-registry.json`
+  where the added branch/row genuinely changes it.
+
+  **Why this cannot be applied under the currently installed Workflow:**
+  `docs/ai-workflow/MILESTONE_WORKFLOW.md` gives `IMPLEMENTING` (and
+  transitively `SELF_REVIEWING_IMPLEMENTATION`) an entry condition of
+  `plan_approval.status == CURRENT` plus a matching plan-stage
+  `review_content_id` -- and the only route back to `REVISING_PLAN` is a
+  `REVISE` verdict from a plan-review phase
+  (`AWAITING_LOCAL_PLAN_REVIEW`/`AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`/
+  `AWAITING_EXTERNAL_PLAN_REVIEW`), never from `IMPLEMENTING` or
+  `SELF_REVIEWING_IMPLEMENTATION`. No installed command targets this
+  transition either. **Frozen Workflow v2.3.1 exposes no legal path to
+  amend an already-approved plan while implementation is underway** --
+  confirmed by search across `MILESTONE_WORKFLOW.md`, `REVIEW_PROTOCOL.md`,
+  `PLAN_REVIEW_WORKFLOW.md` and the v2.1 operator reference: none document
+  a mid-implementation plan-amendment mechanism.
+
+  **Deliberately not done, per explicit decision**: the approved plan was
+  not edited; the six-item architecture was not implemented; `REQ-T18` was
+  not weakened (no `PLANNING` work item pre-seeded into the fixture); no
+  transition back into plan review was fabricated; no direct
+  `workflow_state` transaction primitive was used to invent an undocumented
+  amendment path; no second Controller work item was created as a
+  substitute approval path; implementation was not resumed and no
+  implementation-review bundle was generated.
+
+**Resolution path -- update 2026-09-19: unblocked.** Workflow was migrated
+to `2.5.1` (`workflow-2.4.0` introduced `/request-plan-amendment`;
+`workflow-2.5.1`'s `D-Checkpoint-Id-Anchor-Grammar-Widening` widened the
+checkpoint-id anchor shape from `CP<digits>` to `CP<digits>[A-Z]?`, which
+is what admits this work item's own `CP4B`/`CP6B` ids). `/request-plan-amendment
+workflow-controller-generation-1` was run by the user (commit `f927163`):
+`plan_approval.status` is now `SUPERSEDED`, `amendment_history` gained one
+entry recording this blocker's reason, `amendment_base_commit` is
+`659ca390`, and the work item's phase is now **`AMENDING_PLAN`**.
+
+**Update 2026-09-19: fully resolved, implementation resumed.** The amended
+plan (revision 71, applying the six-item `NoWorkItemYet` bootstrap scope
+above plus the revision-64/68 Workflow-2.5.1-baseline widening) went through
+the full two-stage local-then-manual-external plan review and was approved
+via `/approve-review plan` (commit `5b33010`); `plan_approval.status` is
+`CURRENT` again and the work item's phase is `IMPLEMENTING`. The amendment's
+reconciliation left every registry checkpoint `NEEDS_REVALIDATION` (none
+reset to incomplete -- `last_completed_checkpoint_id` stays `CP9`), so
+`/milestone-implement` is now revalidating each checkpoint in registry order
+per its own resumable one-checkpoint-per-invocation session model, B1's
+mechanical test/schema fix included in CP9's own revalidation pass.
+
+- `CP1` revalidated: the amendment's diff against the approved revision-62
+  plan touches nothing between this checkpoint's own `<!-- CP1 -->`/
+  `<!-- /CP1 -->` anchors (confirmed by `git diff` over that span -- byte-
+  identical). No code change was needed; re-verified green by `python3 -m
+  unittest tests.test_runtime tests.test_identity tests.test_package_structure`
+  (43 tests, all green, no regressions). `COMPLETE`.
+
+**Next legal step**: a further `/milestone-implement` invocation continues
+revalidating `CP2` onward in registry order (`CP2` depends on `CP1`, now
+satisfied), applying the revision-64/68 Workflow-baseline changes (twenty
+known phases, the seventeen-command-file/four-user-only-command union
+denylist, `VALIDATED_WORKFLOW_RELEASES`) and the `NoWorkItemYet` bootstrap
+path where each checkpoint's own plan section now requires them, through
+`CP9` where B1's `worker_outcome` schema mismatch is also fixed, before the
+phase can re-enter `SELF_REVIEWING_IMPLEMENTATION` and a fresh
+implementation-review bundle is generated.
 
 ## Active plan
 

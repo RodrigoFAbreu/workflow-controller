@@ -201,17 +201,27 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
             job_record = json.loads(job_files[0].read_text())
             self.assertEqual(job_record["status"], "FINISHED")
             self.assertTrue(job_record["transition_verified"])
+            # `job.py`'s own schema (`_worker_dict`/`execute_step`):
+            # `worker_outcome` is the plain classification string itself
+            # (`worker.SUCCESS`/etc.), never a dict; the worker's own
+            # session id, exit code and timing live under the sibling
+            # `"worker"` block. B1 (self-review round, `docs/ACTIVE_
+            # MILESTONE.md`'s "Current blockers"): this test previously
+            # read `worker_outcome` as a dict with `session_id`/
+            # `classification`/`duration_seconds` keys, a schema that has
+            # never existed in `job.py`'s actual records.
+            worker = job_record["worker"]
             worker_outcome = job_record["worker_outcome"]
-            self.assertIsNotNone(worker_outcome.get("session_id"))
+            self.assertIsNotNone(worker.get("session_id"))
 
             evidence = {
-                "worker_session_id": worker_outcome.get("session_id"),
-                "worker_outcome_classification": worker_outcome.get("classification"),
+                "worker_session_id": worker.get("session_id"),
+                "worker_outcome_classification": worker_outcome,
                 "pre_phase": job_record["pre_state"]["phase"],
                 "post_phase": job_record["observed_phase_after"],
                 "target_repo_commit_before": job_record["pre_state"].get("target_head"),
                 "wall_clock_seconds": round(wall_clock, 1),
-                "worker_duration_seconds": worker_outcome.get("duration_seconds"),
+                "worker_duration_ms": worker.get("duration_ms"),
             }
             print("DISPOSABLE_REPO_INTEGRATION_EVIDENCE " + json.dumps(evidence))
 

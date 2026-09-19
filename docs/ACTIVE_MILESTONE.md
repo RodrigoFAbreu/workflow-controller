@@ -1487,19 +1487,74 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   `tests.test_cli` failures CP4's own revalidation already documented as
   CP9's residual scope, no errors, no regression against CP1-CP7's own
   revalidation baseline). `COMPLETE`.
+- `CP9` revalidated, the last registry checkpoint. Three independent
+  deltas, all in this checkpoint's own residual scope (none newly
+  introduced by an earlier checkpoint's revalidation):
+  1. **The amended plan's "NoWorkItemYet CLI dispatch" paragraph was not
+     wired into `cmd_inspect`/`cmd_explain`.** Both called
+     `target_state.select_work_item(...)` and immediately dereferenced a
+     `WorkItemView`-shaped attribute (`_work_item_payload`'s field reads;
+     `evidence.decide`'s `work_item.phase` at its very first line) with no
+     branch ahead of that assumption -- `AttributeError` against a genuine
+     zero-work-item target, with zero test coverage (`step`/`run` needed
+     no fix: `job.execute_step` already resolves `NoWorkItemYet` internally,
+     wired during CP6's own revalidation; `resume` never calls
+     `select_work_item` at all). Fixed: `cmd_inspect` reports the bootstrap
+     state directly when `work_item is target_state.NoWorkItemYet` (text:
+     "work item: none -- no non-terminal work item exists and none was
+     explicitly named"; JSON: `"work_item": null`) instead of building a
+     payload there is none to build. `cmd_explain` routes to the new
+     `controller.decision.decide_no_work_item(target)` import instead of
+     `evidence.decide(...)` for the same case; its JSON branch now maps
+     `decision.observed_phase` through the new `phase_to_wire` import
+     before serialising, since the sentinel case's `observed_phase` is the
+     in-memory `NO_PHASE` object, not JSON-serialisable on its own (the
+     same discipline `job.py`'s durable records already use). `tests/test_cli.py`
+     gained a `_build_managed_target_with_no_work_items` fixture and four
+     new tests (two on `InspectCommandTest`, two on `ExplainCommandTest`),
+     all confirmed red against the pre-fix code.
+  2. **`InspectCommandTest`'s two stale `"2.3.1"` assertions**
+     (`test_text_report_names_repository_and_phase`,
+     `test_json_report_carries_the_full_work_item_payload`), red since
+     CP2's own revalidation moved `tests/fixtures.py`'s shared default to
+     `"2.5.1"` and explicitly deferred the fix here -- corrected to assert
+     `"2.5.1"`.
+  3. **B1** (the self-review-round finding recorded under "Current
+     blockers" above, mechanical and plan-independent):
+     `tests/test_integration_disposable_repo.py` read
+     `job_record["worker_outcome"]` as a dict
+     (`.get("session_id")`/`.get("classification")`/`.get("duration_seconds")`),
+     but `controller/job.py` writes `worker_outcome` as the plain
+     classification string itself, with `session_id`/`duration_ms` under
+     the sibling `job_record["worker"]` block. Fixed to read both fields
+     from their real locations (`worker.get("session_id")`,
+     `worker.get("duration_ms")`, `worker_outcome` used directly as the
+     classification). This test remains opt-in
+     (`CONTROLLER_LIVE_WORKER=1`, real spend) and was not re-run live this
+     round -- the schema fix was verified by structural reading and
+     `python3 -m py_compile`, matching `job.py`'s own actual record shape
+     read directly from source, not by executing the live path again (the
+     plan's own "run for real, once, during CP9" was already satisfied by
+     this checkpoint's original implementation).
 
-**Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP9`, the last registry checkpoint, applying the amended
-plan's "NoWorkItemYet CLI dispatch" paragraph (`cmd_inspect`/`cmd_explain`
-need a branch, ahead of `target_state.select_work_item`'s result, for the
-`NoWorkItemYet` sentinel -- currently both crash with `AttributeError`
-against a zero-work-item target, with no test coverage) plus the two
-residual `tests.test_cli` `InspectCommandTest` failures and B1's
-`worker_outcome` schema mismatch in
-`tests/test_integration_disposable_repo.py` (both already tracked above as
-CP9's own scope), before the phase can re-enter
-`SELF_REVIEWING_IMPLEMENTATION` and a fresh implementation-review bundle
-is generated.
+  No other part of CP9's own plan section changed under the amendment
+  (the document-consistency property, the exit-code table, the parser
+  surface, `resume`'s reconciliation reporting): re-verified unchanged by
+  `python3 -m unittest tests.test_plan_document_consistency` (18 tests, all
+  green). Verified by `python3 -m unittest tests.test_cli
+  tests.test_plan_document_consistency tests.test_integration_disposable_repo`
+  (51 tests, 50 green and 1 correctly skipped) and by re-running the full
+  suite (`python3 -m unittest discover -s tests -p "test_*.py" -t .`: 390
+  tests, 389 green and 1 skipped, no errors, no regression against
+  CP1-CP8's own revalidation baseline). `COMPLETE`.
+
+**Next legal step**: every registry checkpoint (CP1-CP9) is now `COMPLETE`
+under the amended, approved revision-71 plan. A further
+`/milestone-implement` invocation enters `SELF_REVIEWING_IMPLEMENTATION`
+(step 2's own state write), runs the full required verification, and
+generates a fresh implementation-review bundle (step 4) -- this is a hard
+gate: the invocation stops there for external implementation review, and
+no further checkpoint work happens until that review returns.
 
 ## Active plan
 

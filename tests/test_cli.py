@@ -176,6 +176,18 @@ def _build_managed_target(tmp_root: Path, *, phase: str, work_item_id: str = "wi
     return repo
 
 
+def _build_managed_target_with_no_work_items(tmp_root: Path) -> Path:
+    """The bootstrap fixture (revision 63's B2, `target_state.NoWorkItemYet`):
+    a real managed repository whose `WORKFLOW_STATE.json` has zero
+    `work_items` entries and no `active_work_item_id` -- the state
+    `target_state.select_work_item` resolves to the `NoWorkItemYet`
+    sentinel rather than a `WorkItemView`."""
+    repo = fixtures.build_managed_repo(tmp_root / "repo")
+    state = {"schema_version": 1, "active_work_item_id": None, "work_items": {}}
+    fixtures.write_workflow_state(repo, state)
+    return repo
+
+
 class InspectCommandTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -196,7 +208,7 @@ class InspectCommandTest(unittest.TestCase):
             exit_code = cli.cmd_inspect(self._args(), self.runtime_root, FAKE_IDENTITY)
         self.assertEqual(exit_code, cli.EXIT_OK)
         out = buf.getvalue()
-        self.assertIn("Workflow 2.3.1", out)
+        self.assertIn("Workflow 2.5.1", out)
         self.assertIn("phase: PLANNING", out)
         self.assertIn("wi-1", out)
 
@@ -208,7 +220,7 @@ class InspectCommandTest(unittest.TestCase):
             exit_code = cli.cmd_inspect(self._args(json_out=True), self.runtime_root, FAKE_IDENTITY)
         self.assertEqual(exit_code, cli.EXIT_OK)
         payload = json.loads(buf.getvalue())
-        self.assertEqual(payload["repository"]["workflow_version"], "2.3.1")
+        self.assertEqual(payload["repository"]["workflow_version"], "2.5.1")
         self.assertEqual(payload["work_item"]["work_item_id"], "wi-1")
         self.assertEqual(payload["work_item"]["phase"], "PLANNING")
         self.assertEqual(payload["work_item"]["last_completed_checkpoint_id"], "CP1")
@@ -218,6 +230,37 @@ class InspectCommandTest(unittest.TestCase):
         args = _Args(str(bare), workflow_manager=str(self.stub_manager))
         with self.assertRaises(UnmanagedRepositoryError):
             cli.cmd_inspect(args, self.runtime_root, FAKE_IDENTITY)
+
+    def test_no_work_item_yet_text_report_names_repository_only(self) -> None:
+        """Revision 63/64's B2 `NoWorkItemYet` bootstrap sentinel
+        (CONTROLLER_GEN1_PLAN.md's "NoWorkItemYet CLI dispatch"): `inspect`
+        reports the bootstrap state directly rather than building a
+        work-item payload (there is none to build), and never raises
+        `AttributeError` against the sentinel."""
+        repo = _build_managed_target_with_no_work_items(self.tmp_root / "no-work-item-text")
+        args = _Args(str(repo), workflow_manager=str(self.stub_manager))
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_inspect(args, self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        out = buf.getvalue()
+        self.assertIn("Workflow 2.5.1", out)
+        self.assertIn("work item: none", out)
+
+    def test_no_work_item_yet_json_report_carries_a_null_work_item(self) -> None:
+        repo = _build_managed_target_with_no_work_items(self.tmp_root / "no-work-item-json")
+        args = _Args(str(repo), workflow_manager=str(self.stub_manager), json_out=True)
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_inspect(args, self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["repository"]["workflow_version"], "2.5.1")
+        self.assertIsNone(payload["work_item"])
 
 
 class ExplainCommandTest(unittest.TestCase):
@@ -289,6 +332,42 @@ class ExplainCommandTest(unittest.TestCase):
         cli.cmd_explain(self._args(repo), self.runtime_root, FAKE_IDENTITY)
         jobs_dir = self.runtime_root / "jobs"
         self.assertFalse(jobs_dir.is_dir() and any(jobs_dir.iterdir()))
+
+    def test_no_work_item_yet_reports_bare_milestone_plan(self) -> None:
+        """Revision 63's B2 `decide_no_work_item`: `explain` routes a
+        `NoWorkItemYet` target to `decision.decide_no_work_item` directly
+        (never `evidence.decide`, which would raise `AttributeError`
+        dereferencing `work_item.phase` against the sentinel) and reports
+        the unconditional bare `/milestone-plan` action -- no work-item id,
+        since frozen Workflow alone derives and creates the first one."""
+        repo = _build_managed_target_with_no_work_items(self.tmp_root / "no-work-item")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_explain(self._args(repo), self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        out = buf.getvalue()
+        self.assertIn("next automatic action: /milestone-plan", out)
+        self.assertNotIn("/milestone-plan wi-1", out)
+
+    def test_no_work_item_yet_json_report_carries_the_wire_form_phase(self) -> None:
+        """The JSON branch must map `decision.observed_phase` (the
+        in-memory `NO_PHASE` sentinel for this case) through
+        `decision.phase_to_wire` before serialising -- a raw `NO_PHASE` is
+        not JSON-serialisable at all."""
+        repo = _build_managed_target_with_no_work_items(self.tmp_root / "no-work-item-json")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_explain(self._args(repo, json_out=True), self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["observed_phase"], "__NO_PHASE__")
+        self.assertTrue(payload["automatic"])
+        self.assertIsNone(payload["gate"])
+        self.assertEqual(payload["action"], "/milestone-plan")
 
 
 # ---------------------------------------------------------------------------

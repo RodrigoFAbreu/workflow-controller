@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from controller import evidence, handoff, identity, job, managed_repo, runtime, target_state
-from controller.decision import Decision
+from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, SourceSnapshotError
 
 #: The three read-only commands. Positive guard: everything not in this set
@@ -242,6 +242,24 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
 
+    if work_item is target_state.NoWorkItemYet:
+        # revision 63/64's B2 bootstrap sentinel (CONTROLLER_GEN1_PLAN.md's
+        # "NoWorkItemYet CLI dispatch"): there is no WorkItemView to build a
+        # payload from -- report the bootstrap state directly instead.
+        if args.json:
+            print(json.dumps({
+                "repository": {
+                    "root": str(target.root),
+                    "workflow_version": target.workflow_version,
+                    "profile": target.profile,
+                },
+                "work_item": None,
+            }))
+            return EXIT_OK
+        print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+        print("work item: none -- no non-terminal work item exists and none was explicitly named")
+        return EXIT_OK
+
     if args.json:
         print(json.dumps({
             "repository": {
@@ -278,12 +296,16 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     target = _inspect_target(args)
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
-    decision = evidence.decide(target, snapshot, work_item)
+    decision = (
+        decide_no_work_item(target)
+        if work_item is target_state.NoWorkItemYet
+        else evidence.decide(target, snapshot, work_item)
+    )
 
     if args.json:
         gate = decision.gate
         print(json.dumps({
-            "observed_phase": decision.observed_phase,
+            "observed_phase": phase_to_wire(decision.observed_phase),
             "evidence": list(decision.evidence),
             "automatic": decision.automatic,
             "declined": decision.declined,

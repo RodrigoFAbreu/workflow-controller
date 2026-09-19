@@ -301,30 +301,62 @@ functional); `controller/GENERATION.json`; the `.gitignore` entry for
 
 `CP2` (managed-repository inspection: Workflow Manager `status`/`verify`
 integration, unmanaged/drifted/unsupported-installation refusals) is
-**complete**, verified by `python3 tests/test_managed_repo.py` (18 tests,
-all green, including two real-`workflow-manager` integration cases run
-against this repository's own live installation and a real `bootstrap
---profile runtime` fixture -- neither skipped, since a real
-`workflow-manager` is installed in this environment) and by re-running
-`tests/test_runtime.py`, `tests/test_identity.py` and
-`tests/test_package_structure.py` (no regressions; 43 tests, all green).
-Delivered: `controller/managed_repo.py` (`inspect(path, *,
-manager_bin=None) -> ManagedRepository`, the five ordered fail-closed
-checks: not-a-repository, unmanaged, malformed manifest, unavailable
-Manager executable, drifted installation with `verify`'s exit code as the
-sole admission signal and `status`'s as a corroborating one, and the
-closed `SUPPORTED_INSTALLATIONS = {("2.3.1", "runtime"), ("2.3.1",
-"full")}` `(workflow_version, profile)` admission set); seven new
-`controller/errors.py` refusals (`NotARepositoryError`,
-`UnmanagedRepositoryError`, `MalformedInstallationManifestError`,
-`WorkflowManagerUnavailableError`, `DriftedInstallationError`,
-`UnsupportedWorkflowVersionError`, `UnsupportedInstallProfileError`);
-`tests/test_managed_repo.py`; `tests/fixtures.py` extended with
-managed-repository and stub-`workflow-manager` fixture builders;
-`controller/__init__.py`'s eager-import literal gains `managed_repo`
-between `identity` and `cli`. `controller/cli.py`'s `inspect` command
-stays unwired (`NotImplementedError`) -- it needs CP3's target-state
-reader too, per CP1's own comment, and CP3 is not yet implemented.
+**complete**, revalidated after the B2 plan amendment (revision 71) against
+the widened "Supported Workflow baseline" policy, verified by
+`python3 -m unittest tests.test_managed_repo` (24 tests, all green,
+including two real-`workflow-manager` integration cases run against this
+repository's own live installation and a real `--release-version 2.5.1
+bootstrap --profile runtime` fixture -- neither skipped, since a real
+`workflow-manager` is installed in this environment). Delivered:
+`controller/managed_repo.py` (`inspect(path, *, manager_bin=None) ->
+ManagedRepository`, the five ordered fail-closed checks: not-a-repository,
+unmanaged, malformed manifest, unavailable Manager executable, drifted
+installation with `verify`'s exit code as the sole admission signal and
+`status`'s as a corroborating one, and the **two-tier** admission rule
+that replaces the old closed `SUPPORTED_INSTALLATIONS` set:
+`SUPPORTED_WORKFLOW_LINE = "2.5"` (a necessary pre-filter/diagnostic
+classifier), `VALIDATED_WORKFLOW_RELEASES = {"2.5.1"}` (the actual
+admission gate, exact membership), `SUPPORTED_PROFILES = {"runtime",
+"full"}`, `REFERENCE_WORKFLOW_RELEASE = "2.5.1"` (the derivation pin) --
+each refusal's evidence carries a `reason` of `outside_supported_line` or
+`unvalidated_release` so the two failure classes are never conflated);
+`_read_manifest` now accepts an empty-string `workflow_version` as a
+*declared* (if useless) value rather than a malformed manifest, so `""`
+and `"latest"` both reach and fail the version-admission gate rather than
+the manifest-shape gate, per the plan's stated baseline-predicate cases;
+the baseline predicate's own seven cases (`REQ-T18B`: `2.5.1` admitted;
+`2.3.1`/`2.4.0`/`2.6.0`/non-dotted refuse `outside_supported_line`; `2.5.0`
+and a `2.5.2` fixture whose `.claude/commands/` tree and
+`scripts/workflow_state.py` are byte-identical to the reference tree both
+refuse `unvalidated_release`, without ever reaching a command-file or
+`KNOWN_PHASES` read); seven `controller/errors.py` refusals unchanged in
+name (`NotARepositoryError`, `UnmanagedRepositoryError`,
+`MalformedInstallationManifestError`, `WorkflowManagerUnavailableError`,
+`DriftedInstallationError`, `UnsupportedWorkflowVersionError`,
+`UnsupportedInstallProfileError`), their docstrings updated to name the
+new constants; `tests/test_managed_repo.py` rewritten for the two-tier
+rule; `tests/fixtures.py`'s `build_managed_repo`/
+`write_installation_manifest` defaults moved from `"2.3.1"` to `"2.5.1"`
+(this repository's own real, validated installation) and a new
+`build_workflow_line_fixture` helper added for the `REQ-T18B` case.
+`controller/cli.py`'s `inspect` command stays unwired
+(`NotImplementedError`) -- it needs CP3's target-state reader too, per
+CP1's own comment, and CP3 is not yet revalidated.
+
+**Residual, expected cross-checkpoint breakage from this revalidation**
+(not fixed here -- out of CP2's own scope, left for each checkpoint's own
+revalidation in registry order): `tests.test_target_state` and
+`tests.test_decision` still fail against the stale seventeen-phase
+`KNOWN_PHASES` copy and fifteen-file command partition (CP3/CP4's own
+files; unaffected by this checkpoint, reproduces the "2 failures and 6
+errors" the plan's own "Supported Workflow baseline" section measured);
+and `tests.test_cli`'s two `InspectCommandTest` assertions
+(`test_text_report_names_repository_and_phase`,
+`test_json_report_carries_the_full_work_item_payload`) now observe
+`Workflow 2.5.1` from the shared `fixtures.build_managed_repo` default
+instead of the stale `"2.3.1"` they assert -- CP9's own file, to be
+corrected at CP9's revalidation alongside its other baseline-dependent
+assertions.
 
 `CP3` (read-only Workflow state reader: active work item, phase,
 checkpoints, review and approval state, fail-closed on malformed or
@@ -1087,9 +1119,21 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   identical). No code change was needed; re-verified green by `python3 -m
   unittest tests.test_runtime tests.test_identity tests.test_package_structure`
   (43 tests, all green, no regressions). `COMPLETE`.
+- `CP2` revalidated: this checkpoint's own plan section *did* change
+  (revision 64/68's two-tier `SUPPORTED_WORKFLOW_LINE` /
+  `VALIDATED_WORKFLOW_RELEASES` baseline replacing the closed
+  `SUPPORTED_INSTALLATIONS` set), so `controller/managed_repo.py`,
+  `controller/errors.py`'s two affected docstrings, `tests/fixtures.py`
+  and `tests/test_managed_repo.py` were rewritten to match -- see the
+  "Current checkpoint" `CP2` entry above for the full delivered shape and
+  its residual, expected cross-checkpoint breakage in `tests.test_cli`
+  (CP9) and `tests.test_target_state`/`tests.test_decision` (CP3/CP4,
+  already red before this checkpoint, unaffected by it). Verified by
+  `python3 -m unittest tests.test_managed_repo` (24 tests, all green).
+  `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP2` onward in registry order (`CP2` depends on `CP1`, now
+revalidating `CP3` onward in registry order (`CP3` depends on `CP1`, now
 satisfied), applying the revision-64/68 Workflow-baseline changes (twenty
 known phases, the seventeen-command-file/four-user-only-command union
 denylist, `VALIDATED_WORKFLOW_RELEASES`) and the `NoWorkItemYet` bootstrap

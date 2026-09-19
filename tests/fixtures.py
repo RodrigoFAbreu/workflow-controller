@@ -107,7 +107,7 @@ def build_bare_git_repo(dest: Path) -> Path:
 def write_installation_manifest(
     root: Path,
     *,
-    workflow_version: str = "2.3.1",
+    workflow_version: str = "2.5.1",
     profile: str = "full",
     schema_version: object = 1,
     include_schema_version: bool = True,
@@ -132,7 +132,7 @@ def write_installation_manifest(
 
 
 def build_managed_repo(
-    dest: Path, *, workflow_version: str = "2.3.1", profile: str = "full",
+    dest: Path, *, workflow_version: str = "2.5.1", profile: str = "full",
 ) -> Path:
     """A real Git repository carrying a syntactically valid
     ``.workflow-manager/installation.json`` -- the fixture every CP2 test
@@ -145,10 +145,33 @@ def build_managed_repo(
     return dest
 
 
+def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: str = "full") -> Path:
+    """A managed-repo fixture whose ``.claude/commands/`` tree and
+    ``scripts/workflow_state.py`` are byte-identical copies of this
+    repository's own reference ``2.5.1`` tree -- so the phase set, the
+    command-file partition and the user-only set CP3/CP4 read are, by
+    construction, identical to the admitted case -- while
+    ``installation.json`` alone declares ``workflow_version`` (``REQ-T18B``,
+    ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``'s CP2 section). Refusing
+    this fixture at CP2, without ever reaching a command-file or
+    ``KNOWN_PHASES`` read, is the assertion that discriminates the
+    two-tier admission rule from one that (wrongly) falls back to an
+    inventory-equality check when the exact release is unrecognised."""
+    build_bare_git_repo(dest)
+    copy_real_commands_dir(dest / ".claude" / "commands")
+    scripts_dir = dest / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / "scripts" / "workflow_state.py", scripts_dir / "workflow_state.py")
+    write_installation_manifest(dest, workflow_version=workflow_version, profile=profile)
+    run(["git", "add", "-A"], cwd=dest)
+    run(["git", "commit", "-q", "-m", "line-fixture"], cwd=dest)
+    return dest
+
+
 def write_stub_workflow_manager(
     path: Path, *, verify_exit: int = 0, status_exit: int = 0,
-    verify_stdout: str = "workflow 2.3.1 (full profile) -- clean",
-    status_stdout: str = "workflow 2.3.1 (full profile) -- clean",
+    verify_stdout: str = "workflow 2.5.1 (full profile) -- clean",
+    status_stdout: str = "workflow 2.5.1 (full profile) -- clean",
 ) -> Path:
     """A hermetic, offline stand-in for the real ``workflow-manager``
     executable: an executable shell script whose ``verify``/``status``

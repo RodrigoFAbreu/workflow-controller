@@ -166,17 +166,21 @@ class DriftedInstallationError(ControllerError):
 
 
 class UnsupportedWorkflowVersionError(ControllerError):
-    """The manifest's ``workflow_version`` is outside the Controller's
-    supported set (``managed_repo.SUPPORTED_INSTALLATIONS``), regardless
-    of ``profile``."""
+    """The manifest's ``workflow_version`` fails the Controller's two-tier
+    baseline rule (``managed_repo.SUPPORTED_WORKFLOW_LINE`` then
+    ``managed_repo.VALIDATED_WORKFLOW_RELEASES``), regardless of
+    ``profile``. ``evidence['reason']`` distinguishes a version outside the
+    supported line entirely (``"outside_supported_line"``) from one inside
+    the line that has not been individually validated
+    (``"unvalidated_release"``)."""
 
     code = "UNSUPPORTED_WORKFLOW_VERSION"
 
 
 class UnsupportedInstallProfileError(ControllerError):
-    """The manifest's ``(workflow_version, profile)`` pair is not in
-    ``managed_repo.SUPPORTED_INSTALLATIONS``, even though
-    ``workflow_version`` alone is supported."""
+    """The manifest's ``profile`` is not in
+    ``managed_repo.SUPPORTED_PROFILES``, even though ``workflow_version``
+    itself is supported and validated."""
 
     code = "UNSUPPORTED_INSTALL_PROFILE"
 

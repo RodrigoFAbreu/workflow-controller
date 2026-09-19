@@ -25,11 +25,17 @@ Five ordered, fail-closed checks, refusing at the first failure:
 4. ``workflow-manager verify <root>`` and ``... status <root>`` both exit
    ``0``, else :class:`~controller.errors.DriftedInstallationError`,
    carrying both commands' verbatim output as evidence.
-5. ``(workflow_version, profile)`` is in :data:`SUPPORTED_INSTALLATIONS`,
-   else :class:`~controller.errors.UnsupportedWorkflowVersionError`
-   (unsupported version) or
-   :class:`~controller.errors.UnsupportedInstallProfileError` (supported
-   version, unsupported profile).
+5. **The two-tier "Supported Workflow baseline" rule** (revision 68,
+   manual external plan review round 67's ``I1``): ``workflow_version``
+   must first parse as a dotted release inside :data:`SUPPORTED_WORKFLOW_LINE`
+   (a necessary pre-filter and diagnostic classifier only), then must be an
+   **exact member** of :data:`VALIDATED_WORKFLOW_RELEASES` (the real
+   admission gate -- a release inside the supported line that has never
+   been individually measured is refused too, distinguished in its
+   evidence from a wrong-line refusal), else
+   :class:`~controller.errors.UnsupportedWorkflowVersionError`; and
+   ``profile`` must be a member of :data:`SUPPORTED_PROFILES`, else
+   :class:`~controller.errors.UnsupportedInstallProfileError`.
 
 This module never reads a command file or ``WORKFLOW_STATE.json`` --
 that ordering guarantee (step 5's refusal precedes any such read) holds
@@ -41,6 +47,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -62,15 +69,42 @@ _MANIFEST_REL_PATH = ".workflow-manager/installation.json"
 #: after ``--workflow-manager`` and before ``shutil.which``.
 MANAGER_ENV = "WORKFLOW_CONTROLLER_WORKFLOW_MANAGER"
 
-#: The closed ``(workflow_version, profile)`` admission set. Both 2.3.1
+#: A manifest's ``workflow_version`` must parse as a dotted release whose
+#: major and minor components are exactly these two -- a necessary
+#: pre-filter and diagnostic classifier only, never by itself sufficient
+#: for admission (``VALIDATED_WORKFLOW_RELEASES`` below is the actual
+#: gate). Lets a refusal say "wrong line" instead of "not yet validated".
+SUPPORTED_WORKFLOW_LINE = "2.5"
+
+#: The actual admission gate (revision 68, manual external plan review
+#: round 67's ``I1``): ``workflow_version`` must be an **exact member** of
+#: this closed set, not merely a member of ``SUPPORTED_WORKFLOW_LINE``.
+#: ``2.5.1`` is its only element because it is the only release this
+#: Controller's inventories and baseline-verification suites were ever
+#: actually measured against. Growing this set is a deliberate act, never
+#: automatic from a parsed major/minor match: re-measure the inventories
+#: and baseline-verification suites against the newly-installed release,
+#: then add its version string here by name, in a plan revision that
+#: states what was measured.
+VALIDATED_WORKFLOW_RELEASES: frozenset[str] = frozenset({"2.5.1"})
+
+#: Unchanged in membership and justification since revision 32: both
 #: profiles install the identical command/tooling surface the Controller
 #: reads (measured, not assumed -- ``EXT-PLAN-R31-O1``'s disposition in
-#: the plan): only ``full`` additionally installs the ``conformance``
+#: the plan); only ``full`` additionally installs the ``conformance``
 #: category, and nothing in it is read here. A profile the Manager adds
 #: later is refused until it has been measured.
-SUPPORTED_INSTALLATIONS: frozenset[tuple[str, str]] = frozenset(
-    {("2.3.1", "runtime"), ("2.3.1", "full")}
-)
+SUPPORTED_PROFILES: frozenset[str] = frozenset({"runtime", "full"})
+
+#: The one concrete release every inventory in the plan is derived from
+#: and re-derivable against. Since revision 68 it is also the sole member
+#: of ``VALIDATED_WORKFLOW_RELEASES`` -- the derivation pin and the
+#: admission gate currently name the same release, but remain two
+#: different mechanisms; a future validated release would extend the
+#: latter without necessarily moving the former.
+REFERENCE_WORKFLOW_RELEASE = "2.5.1"
+
+_DOTTED_RELEASE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -133,12 +167,17 @@ def _read_manifest(root: Path) -> dict:
             f"{manifest_path} declares schema_version={schema_version!r}, expected 1",
             evidence={"manifest_path": str(manifest_path), "schema_version": schema_version},
         )
-    workflow_version = manifest.get("workflow_version")
-    if not isinstance(workflow_version, str) or not workflow_version:
+    if "workflow_version" not in manifest or not isinstance(manifest["workflow_version"], str):
         raise MalformedInstallationManifestError(
             f"{manifest_path} does not declare a workflow_version",
             evidence={"manifest_path": str(manifest_path)},
         )
+    # An empty string is a *declared* value -- a string that fails the
+    # baseline predicate's "must parse as a dotted release" test, exactly
+    # like `"latest"` -- so it is a version-admission refusal
+    # (`UnsupportedWorkflowVersionError`, step 5), never a malformed-
+    # manifest one: this field was declared, just not usefully.
+    workflow_version = manifest["workflow_version"]
     profile = manifest.get("profile")
     if not isinstance(profile, str) or not profile:
         raise MalformedInstallationManifestError(
@@ -194,6 +233,53 @@ def _run_manager(manager_bin: str, subcommand: str, root: Path) -> dict:
     return {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
 
 
+def _workflow_line(workflow_version: str) -> str | None:
+    """The ``major.minor`` line of a dotted ``major.minor.patch`` release
+    string, or ``None`` if it does not parse as one at all -- never a
+    best-effort prefix match."""
+    match = _DOTTED_RELEASE_RE.match(workflow_version)
+    if match is None:
+        return None
+    major, minor, _patch = match.groups()
+    return f"{major}.{minor}"
+
+
+def _check_workflow_version(workflow_version: str, root: Path) -> None:
+    """The two-tier baseline rule: a coarser, cheaper wrong-line refusal
+    first, then the real admission gate -- exact membership of
+    ``VALIDATED_WORKFLOW_RELEASES``. The two refusals carry distinct
+    evidence ``reason`` values so they are never conflated in a report a
+    human reads."""
+    line = _workflow_line(workflow_version)
+    if line != SUPPORTED_WORKFLOW_LINE:
+        raise UnsupportedWorkflowVersionError(
+            f"{root} runs Workflow {workflow_version!r}, which is outside the Controller's "
+            f"supported line {SUPPORTED_WORKFLOW_LINE!r} (reference release "
+            f"{REFERENCE_WORKFLOW_RELEASE!r})",
+            evidence={
+                "root": str(root),
+                "observed_workflow_version": workflow_version,
+                "supported_workflow_line": SUPPORTED_WORKFLOW_LINE,
+                "reference_workflow_release": REFERENCE_WORKFLOW_RELEASE,
+                "reason": "outside_supported_line",
+            },
+        )
+    if workflow_version not in VALIDATED_WORKFLOW_RELEASES:
+        raise UnsupportedWorkflowVersionError(
+            f"{root} runs Workflow {workflow_version!r}, which is in the Controller's supported "
+            f"line {SUPPORTED_WORKFLOW_LINE!r} but has not been individually validated "
+            f"(validated releases: {sorted(VALIDATED_WORKFLOW_RELEASES)})",
+            evidence={
+                "root": str(root),
+                "observed_workflow_version": workflow_version,
+                "supported_workflow_line": SUPPORTED_WORKFLOW_LINE,
+                "validated_workflow_releases": sorted(VALIDATED_WORKFLOW_RELEASES),
+                "reference_workflow_release": REFERENCE_WORKFLOW_RELEASE,
+                "reason": "unvalidated_release",
+            },
+        )
+
+
 def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> ManagedRepository:
     """Run the five ordered checks against ``path`` and return a
     :class:`ManagedRepository` on success. Refuses at the first failing
@@ -214,28 +300,18 @@ def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> Manag
 
     workflow_version = manifest["workflow_version"]
     profile = manifest["profile"]
-    supported_versions = sorted({version for version, _ in SUPPORTED_INSTALLATIONS})
-    if workflow_version not in supported_versions:
-        raise UnsupportedWorkflowVersionError(
-            f"{root} runs Workflow {workflow_version!r}, which is not in the Controller's "
-            f"supported set {supported_versions}",
-            evidence={
-                "root": str(root),
-                "observed_workflow_version": workflow_version,
-                "supported_workflow_versions": supported_versions,
-            },
-        )
 
-    pair = (workflow_version, profile)
-    if pair not in SUPPORTED_INSTALLATIONS:
+    _check_workflow_version(workflow_version, root)
+
+    if profile not in SUPPORTED_PROFILES:
         raise UnsupportedInstallProfileError(
             f"{root} runs Workflow {workflow_version!r} with profile {profile!r}, which is not "
-            f"in the Controller's supported set {sorted(SUPPORTED_INSTALLATIONS)}",
+            f"in the Controller's supported profile set {sorted(SUPPORTED_PROFILES)}",
             evidence={
                 "root": str(root),
                 "observed_workflow_version": workflow_version,
                 "observed_profile": profile,
-                "supported_installations": sorted(SUPPORTED_INSTALLATIONS),
+                "supported_profiles": sorted(SUPPORTED_PROFILES),
             },
         )
 

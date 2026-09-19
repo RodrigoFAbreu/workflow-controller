@@ -1283,9 +1283,67 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   pre-existing `tests.test_cli` failures CP4's own revalidation already
   documented as CP9's residual scope, no errors, no regression against
   CP1-CP4B's own revalidation baseline). `COMPLETE`.
+- `CP6` revalidated: unlike CP2-CP5's own staleness-only revalidations,
+  CP6's own plan section (steps 1-6) genuinely widened under the
+  amendment -- revision 63/64's B2 row 7 (`NoWorkItemYet` bootstrap) needed
+  real, new code, not just a stale-reference fix. `controller/job.py`
+  gained: `PRE_STATE_FIELDS`'s seventeenth member, `pre_work_item_keys`
+  (row 7's own `predicate_input`, a sorted-list snapshot of the
+  pre-snapshot's `work_items` keys, captured for every call, normal or
+  bootstrap alike); a `NoWorkItemYet` branch in `_capture_pre_state`
+  (every work-item-scoped field its own report-only default, `phase:
+  NO_PHASE`, `child_work_item_ids: []` rather than every top-level entry a
+  naive `parent_work_item_id == None` comparison would wrongly match);
+  `_identity_block`/`_no_launch_record`/`_expected_outcome_for`/
+  `_expected_transition` changed to accept `work_item_id`/`observed_phase`/
+  `governing_workflow_version` explicitly rather than deriving them from a
+  `work_item` object a `NoWorkItemYet` target does not have; a new
+  `_durable_pre_state` helper (`phase` written through the new
+  `controller.decision.phase_to_wire`, every other field unchanged) used
+  at every point a `pre_state` dict is embedded in a persisted record --
+  without it, `runtime.write_json` raises `TypeError: Object of type
+  _NoPhaseType is not JSON serializable` the first time a bootstrap job's
+  `PLANNED` flush is attempted, caught by this checkpoint's own new tests;
+  and row 7 itself, added to `EXPECTED_OUTCOMES` (`from_phase=NO_PHASE`,
+  `governing_version=None`, `to_any_of={AWAITING_LOCAL_PLAN_REVIEW}`, the
+  plan's own key-set-difference predicate implemented as
+  `_predicate_row7_new_work_item_created`), which needed
+  `property_table_violations`'s own property-3 converse check to gain the
+  plan's own named `from_phase is NO_PHASE` exemption (row 7 carries a
+  predicate for a defence-in-depth reason its own `to_any_of` containment
+  never requires one for). `controller/decision.py` gained `phase_to_wire`/
+  `phase_from_wire` -- the writer/reader pair "`NO_PHASE`'s durable form"
+  declares but that did not previously exist anywhere in the package --
+  imported and used by `job.py`'s own identity/pre-state/expected-transition
+  writers. **CP6B's own steps 7-9 are untouched and do not yet support row
+  7**: `execute_step` still raises `AttributeError` on `work_item.work_item_id`
+  at step 7's fresh post-state re-read for a bootstrap job, by design --
+  CP6's own new tests (`tests/test_job.py`'s `BootstrapRowSevenTest`)
+  wrap the `execute_step` call in `assertRaises(AttributeError)` and
+  assert only against what CP6's own steps 1-6 left durable on disk before
+  that point (the `PLANNED`/`LAUNCHED`/`COMPLETED` flushes, `pre_work_item_keys`
+  as the pre-state's seventeenth field, and the `NO_PHASE` round-trip
+  across `pre_state.phase`/`observed_phase_before`/`expected_transition.from`,
+  re-read fresh from disk through the new `phase_from_wire`, never from
+  process memory) -- wiring steps 7-9 for row 7 is CP6B's own revalidation,
+  next. `tests/test_job_validation.py`'s pre-existing `test_six_rows`
+  became `test_seven_rows` (the only pre-existing assertion row 7 broke).
+  `tests/test_decision.py` gained `PhaseWireRoundTripTest` (writer/reader
+  correctness directly, independent of `job.py`'s own round trip, including
+  the fail-closed refusal of a literal `null` and a bare `"None"` string).
+  Verified by `python3 -m unittest tests.test_job tests.test_job_validation
+  tests.test_decision tests.test_target_state tests.test_evidence` (167
+  tests, all green) and `python3 -m unittest discover -s tests` (373
+  tests: 2 failures, 1 skip -- the same two pre-existing `tests.test_cli`
+  failures CP4's own revalidation already documented as CP9's residual
+  scope, no errors, no regression against CP1-CP5's own revalidation
+  baseline). `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP6` through `CP9` in registry order, applying the
+revalidating `CP6B` through `CP9` in registry order, wiring CP6B's own
+steps 7-9 (a `work_item_id`-free fresh post-state re-read, and row 7's own
+predicate/verification) for the `NoWorkItemYet` bootstrap CP6 above now
+captures and flushes correctly but cannot itself verify, applying the
 revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
 `NO_PHASE`'s round-trip schema) where each remaining checkpoint's own plan
 section now requires them, through `CP9` where B1's `worker_outcome`

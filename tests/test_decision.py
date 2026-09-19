@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import decision, target_state
-from controller.errors import NoSupportedActionError
+from controller.errors import NoSupportedActionError, UnknownPhaseError
 from tests import fixtures
 
 #: A hand-copied set of the twenty phase names, independent of
@@ -540,6 +540,44 @@ class DecideNoWorkItemTest(unittest.TestCase):
         # comparisons only work if there is exactly one instance.
         self.assertIs(target_state.NO_PHASE, decision.NO_PHASE)
         self.assertEqual(target_state.NO_PHASE_WIRE, decision.NO_PHASE_WIRE)
+
+
+class PhaseWireRoundTripTest(unittest.TestCase):
+    """``phase_to_wire``/``phase_from_wire`` (revision 64, "NO_PHASE's
+    durable form"): the single writer/reader pair every one of
+    ``pre_state.phase``, ``observed_phase_before`` and a job record's
+    ``expected_transition.from`` is written and read through (CP6/CP7)."""
+
+    def test_writer_maps_no_phase_to_the_reserved_literal(self) -> None:
+        self.assertEqual(decision.phase_to_wire(decision.NO_PHASE), decision.NO_PHASE_WIRE)
+
+    def test_writer_maps_every_real_phase_to_its_own_name(self) -> None:
+        for phase in sorted(decision.KNOWN_PHASES):
+            with self.subTest(phase=phase):
+                self.assertEqual(decision.phase_to_wire(phase), phase)
+
+    def test_reader_maps_the_reserved_literal_back_to_no_phase(self) -> None:
+        self.assertIs(decision.phase_from_wire(decision.NO_PHASE_WIRE), decision.NO_PHASE)
+
+    def test_reader_maps_every_real_phase_to_itself(self) -> None:
+        for phase in sorted(decision.KNOWN_PHASES):
+            with self.subTest(phase=phase):
+                self.assertEqual(decision.phase_from_wire(phase), phase)
+
+    def test_round_trip_is_the_identity_for_every_domain_member(self) -> None:
+        self.assertIs(decision.phase_from_wire(decision.phase_to_wire(decision.NO_PHASE)), decision.NO_PHASE)
+        for phase in sorted(decision.KNOWN_PHASES):
+            with self.subTest(phase=phase):
+                self.assertEqual(decision.phase_from_wire(decision.phase_to_wire(phase)), phase)
+
+    def test_reader_refuses_null_bare_none_string_and_unrecognised_strings(self) -> None:
+        # The total, fail-closed half of the round-trip rule: nothing
+        # outside the domain is ever guessed at as "no phase" (revision
+        # 64's own "why a reserved string rather than null").
+        for bad in (None, "None", "not-a-phase", ""):
+            with self.subTest(bad=bad):
+                with self.assertRaises(UnknownPhaseError):
+                    decision.phase_from_wire(bad)
 
 
 if __name__ == "__main__":

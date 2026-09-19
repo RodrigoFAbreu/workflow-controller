@@ -74,7 +74,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from controller.errors import NoSupportedActionError
+from controller.errors import NoSupportedActionError, UnknownPhaseError
 
 class _NoPhaseType:
     """The sentinel type of :data:`NO_PHASE`.
@@ -138,6 +138,38 @@ KNOWN_PHASES: frozenset[str] = frozenset({
     "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
     "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
 })
+
+
+def phase_to_wire(phase: "str | _NoPhaseType") -> str:
+    """``NO_PHASE``'s durable-form round-trip rule (``docs/ai-workflow/
+    CONTROLLER_GEN1_PLAN.md``, "Controller-owned runtime state"), writer
+    half: maps :data:`NO_PHASE` to :data:`NO_PHASE_WIRE` and every real
+    phase to its own, unchanged name. The single function every one of
+    ``pre_state.phase``, ``observed_phase_before`` and a job record's
+    ``expected_transition.from`` is written through, so the mapping can
+    never drift between the three call sites (CP6)."""
+    if phase is NO_PHASE:
+        return NO_PHASE_WIRE
+    return phase
+
+
+def phase_from_wire(wire: Any) -> "str | _NoPhaseType":
+    """The reader half of the same rule: maps :data:`NO_PHASE_WIRE` to
+    :data:`NO_PHASE`, any member of :data:`KNOWN_PHASES` to itself, and
+    anything else -- a literal ``null``, a bare ``"None"``, or an
+    unrecognised string -- to :class:`~controller.errors.UnknownPhaseError`,
+    never a guess. Total over the domain and fail-closed outside it, the
+    same posture :class:`~controller.errors.UnknownPhaseError` already
+    takes for a phase field read out of the *target's* own state."""
+    if wire == NO_PHASE_WIRE:
+        return NO_PHASE
+    if wire in KNOWN_PHASES:
+        return wire
+    raise UnknownPhaseError(
+        f"{wire!r} is neither NO_PHASE_WIRE nor a member of the known-phase set",
+        evidence={"wire": wire},
+    )
+
 
 #: The four vocabulary phases frozen Workflow's ``KNOWN_PHASES``
 #: carries but that no writer in ``scripts/workflow_state.py`` ever

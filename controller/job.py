@@ -67,10 +67,16 @@ import re
 import secrets
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import evidence, runtime, target_state, worker
-from controller.decision import Decision
+from controller.decision import (
+    NO_PHASE,
+    Decision,
+    decide_no_work_item,
+    phase_to_wire,
+)
 from controller.errors import ControllerError, HumanGateError, StaleJobRecordError, UnreconcilableJobError
 
 JobRecord = dict[str, Any]
@@ -97,10 +103,11 @@ STATUS_HANDOFF_PENDING = "HANDOFF_PENDING"
 #: `PRE_STATE_FIELDS` -- the single declaration both `_capture_pre_state`
 #: and (in CP6B) the record-completeness property read, so the two cannot
 #: drift (the plan's own stated defect history: a field declared in the
-#: schema and never captured, round 8's B3). Only three of these sixteen
+#: schema and never captured, round 8's B3). Only four of these seventeen
 #: are ever a predicate *input* (`bundle_id`, `bundle_manifest_readable`,
-#: `bundle_generated_digest` -- CP6B's own concern); the other thirteen are
-#: report data for `inspect`/`explain`/`status` and for a later
+#: `bundle_generated_digest` and, since revision 63's B2, `pre_work_item_keys`
+#: -- CP6B's own concern); the other thirteen are report data for
+#: `inspect`/`explain`/`status` and for a later
 #: generation's own use.
 PRE_STATE_FIELDS: frozenset[str] = frozenset({
     "phase",
@@ -119,6 +126,7 @@ PRE_STATE_FIELDS: frozenset[str] = frozenset({
     "child_work_item_ids",
     "functional_review_consumed_blob",
     "functional_checklist_evidence",
+    "pre_work_item_keys",
 })
 
 #: `acceptEdits` against this (real, managed) target repository --
@@ -185,7 +193,7 @@ def _bundle_generated_digest(root: Path, bundle_dir: Path) -> str | None:
 def _functional_review_consumed_blob(root: Path, work_item_id: str) -> str | None:
     """The current Git blob hash of ``FUNCTIONAL_REVIEW.md`` -- report
     data only (not a predicate input; see :data:`PRE_STATE_FIELDS`'s own
-    three-of-sixteen note), ``None`` when the file does not exist."""
+    four-of-seventeen note), ``None`` when the file does not exist."""
     findings_path = root / evidence.functional_review_findings_path(root, work_item_id)
     if not findings_path.is_file():
         return None
@@ -204,15 +212,59 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
     addition"): every input any CP6B `ExpectedOutcome` predicate reads
     must be a field of it, not merely held in the executing process's own
     memory, because at `resume` (CP7) the process that captured it is
-    gone and this record is the entire input."""
+    gone and this record is the entire input.
+
+    ``pre_work_item_keys`` (revision 63's B2 addition, row 7's own
+    `predicate_input`) is captured here for **every** call, normal or
+    bootstrap alike -- a `frozenset` of the pre-snapshot's own
+    `work_items` keys, serialised in sorted order so two runs over the
+    same pre-state produce byte-identical records; the *post*-snapshot's
+    own keys are read fresh at verification time (CP6B) and never
+    captured here.
+
+    ``work_item is target_state.NoWorkItemYet`` (revision 63's B2, the
+    `NoWorkItemYet` bootstrap) is the one case with no `WorkItemView` to
+    read: there is no work item yet, so every work-item-scoped member is
+    its own field's report-only default (`None`/empty/``False``) and
+    `phase` is the in-memory :data:`~controller.decision.NO_PHASE`
+    sentinel -- never a synthetic phase string, and never Python's
+    `None`, which the schema already gives a distinct meaning ("field
+    absent"). `child_work_item_ids` is `[]` rather than every
+    top-level (`parent_work_item_id is None`) entry in the snapshot: a
+    work item that does not exist yet cannot have children, and a naive
+    `parent_work_item_id == work_item_id` comparison with
+    `work_item_id=None` would match every top-level entry instead."""
     root = managed_repo.root
+    target_head = _current_head(root)
+    pre_work_item_keys = sorted(snapshot.work_items.keys())
+
+    if work_item is target_state.NoWorkItemYet:
+        return {
+            "phase": NO_PHASE,
+            "governing_workflow_version": None,
+            "target_head": target_head,
+            "state_revision": None,
+            "plan_revision": None,
+            "implementation_revision": None,
+            "last_completed_checkpoint_id": None,
+            "checkpoints": {},
+            "bundle_id": None,
+            "bundle_manifest_readable": False,
+            "bundle_manifest_generation_head": None,
+            "bundle_generated_digest": None,
+            "rejected_marker_present": False,
+            "child_work_item_ids": [],
+            "functional_review_consumed_blob": None,
+            "functional_checklist_evidence": None,
+            "pre_work_item_keys": pre_work_item_keys,
+        }
+
     work_item_id = work_item.work_item_id
     phase = work_item.phase
 
     bundle_dir = evidence.resolve_bundle_dir(root, work_item_id, phase=phase)
     manifest = evidence.read_manifest_fields(root, bundle_dir)
     rejected_present, _detail = evidence.rejected_marker_detail(root, work_item_id)
-    target_head = _current_head(root)
     child_work_item_ids = sorted(
         wid for wid, view in snapshot.work_items.items()
         if view.parent_work_item_id == work_item_id
@@ -237,6 +289,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
         "functional_checklist_evidence": evidence.functional_checklist_evidence(
             root, work_item_id, work_item.base_commit, target_head, work_item.implementation_revision,
         ),
+        "pre_work_item_keys": pre_work_item_keys,
     }
 
 
@@ -314,9 +367,16 @@ PredicateFn = Callable[[Path, str, dict], bool]
 
 @dataclasses.dataclass(frozen=True)
 class ExpectedOutcome:
-    """One row of the plan's own `ExpectedOutcome` table."""
+    """One row of the plan's own `ExpectedOutcome` table.
 
-    from_phase: str
+    ``from_phase`` is ``str`` for every row but one: row 7 (the
+    `NoWorkItemYet` bootstrap, revision 63's B2) carries the
+    :data:`~controller.decision.NO_PHASE` sentinel instead, since there is
+    no work item and so no real phase string to name -- never the bare
+    string ``"None"`` or Python's own ``None``, which the
+    ``governing_version`` wildcard convention already claims."""
+
+    from_phase: "str | Any"
     governing_version: str | None
     action: str
     to_any_of: frozenset[str]
@@ -356,8 +416,35 @@ def _predicate_row5_bundle_regenerated(root: Path, work_item_id: str, pre_state:
     return post_digest != pre_state.get("bundle_generated_digest")
 
 
-#: The six rows, transcribed verbatim from the plan's own table (CP6B,
-#: "An `ExpectedOutcome` is data, not prose").
+def _predicate_row7_new_work_item_created(root: Path, work_item_id: Any, pre_state: dict) -> bool:
+    """Row 7's predicate (revision 63's B2, "Row 7's predicate is the
+    plan's own key-set-difference rule, restated as data"): the
+    post-snapshot's own `work_items` key set, read fresh from disk through
+    the one real reader (`target_state.read`) -- never trusted to a
+    captured post-value, the same discipline row 5's own
+    `bundle_generated_digest` predicate follows -- differs from
+    `pre_state["pre_work_item_keys"]` by exactly one new key. Structurally
+    optional (row 7's `to_any_of` never contains `NO_PHASE`, so property
+    3 does not require a predicate here), kept anyway for the same
+    defence-in-depth reason every predicate-bearing row carries one: a
+    `/milestone-plan` that reaches `AWAITING_LOCAL_PLAN_REVIEW` without
+    actually creating a new entry must not verify. `work_item_id` is
+    unused -- row 7's action never supplies one -- and accepted only to
+    keep :data:`PredicateFn`'s signature uniform across every row. Any
+    read/validation failure is treated as "the predicate does not hold"
+    (fail-closed: never a false verification)."""
+    try:
+        post_snapshot = target_state.read(SimpleNamespace(root=root))
+    except ControllerError:
+        return False
+    post_keys = frozenset(post_snapshot.work_items)
+    pre_keys = frozenset(pre_state.get("pre_work_item_keys") or ())
+    return len(post_keys - pre_keys) == 1
+
+
+#: The seven rows, transcribed verbatim from the plan's own table (CP6B,
+#: "An `ExpectedOutcome` is data, not prose"; row 7 added by revision 63's
+#: B2, the `NoWorkItemYet` bootstrap).
 EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="2.1", action="/milestone-plan",
@@ -419,9 +506,19 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
                        "apply-plan-review.md:145", WRITER_KIND_COMPLETION),
         ),
     ),
+    ExpectedOutcome(
+        from_phase=NO_PHASE, governing_version=None, action="/milestone-plan",
+        to_any_of=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        predicate=_predicate_row7_new_work_item_created,
+        predicate_inputs=frozenset({"pre_work_item_keys"}),
+        writer_calls=(
+            WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:208",
+                       WRITER_KIND_COMPLETION),
+        ),
+    ),
 )
 
-_EXPECTED_OUTCOMES_BY_KEY: dict[tuple[str, str | None, str], ExpectedOutcome] = {
+_EXPECTED_OUTCOMES_BY_KEY: dict[tuple["str | Any", str | None, str], ExpectedOutcome] = {
     (eo.from_phase, eo.governing_version, eo.action): eo for eo in EXPECTED_OUTCOMES
 }
 
@@ -444,7 +541,16 @@ def property_table_violations(
     - **Predicate presence and validity** (property 3, the structural
       half): a row whose ``to_any_of`` contains its own ``from_phase``
       must carry a predicate, and vice versa; every ``writer_calls`` entry
-      on a predicate-bearing row must be ``WRITER_KIND_COMPLETION``.
+      on a predicate-bearing row must be ``WRITER_KIND_COMPLETION``. The
+      converse direction exempts a row whose ``from_phase`` **is**
+      :data:`~controller.decision.NO_PHASE` by name -- row 7, revision
+      63's B2 -- since that row carries a predicate for an independent
+      defence-in-depth reason its own docstring states, not because its
+      ``to_any_of`` (which can never contain ``NO_PHASE``: it names real
+      Workflow phases only) requires one. The exemption is keyed to
+      ``from_phase is NO_PHASE``, never to "fails the containment test",
+      so a synthetic non-``NO_PHASE`` row in the same shape still fails
+      this property.
     - **Completion** (property 6): asserted narratively against the
       plan's own per-row analysis and exercised by
       ``tests/test_job_validation.py``'s reachability cases (calling
@@ -467,7 +573,7 @@ def property_table_violations(
             violations.append(
                 f"{key!r}: to_any_of contains its own from_phase but declares no predicate"
             )
-        if not own_phase_reachable:
+        if not own_phase_reachable and eo.from_phase is not NO_PHASE:
             if eo.predicate is not None:
                 violations.append(
                     f"{key!r}: predicate declared but to_any_of never contains from_phase"
@@ -607,31 +713,39 @@ def property_declaration_against_artifact_violations(
 # ---------------------------------------------------------------------------
 
 
-def _expected_outcome_for(work_item: Any, decision: Decision) -> ExpectedOutcome:
+def _expected_outcome_for(phase: Any, governing_workflow_version: str | None, decision: Decision) -> ExpectedOutcome:
     """The single :data:`EXPECTED_OUTCOMES` row an automatic ``decision``
     about to be launched corresponds to. The combined CP4/CP4B decision
     engine can only ever produce an automatic ``Decision`` for one of
-    these six triples, so a miss here is an invariant violation, never an
-    ordinary control-flow path (the same shape as ``cli._reexec``'s own
-    ``AssertionError`` after ``os.execve``)."""
+    these seven triples (row 7's own `from_phase` is
+    :data:`~controller.decision.NO_PHASE`, the `NoWorkItemYet` bootstrap),
+    so a miss here is an invariant violation, never an ordinary
+    control-flow path (the same shape as ``cli._reexec``'s own
+    ``AssertionError`` after ``os.execve``). Takes ``phase``/
+    ``governing_workflow_version`` explicitly, rather than a ``work_item``
+    object, because a `NoWorkItemYet` target has no ``WorkItemView`` to
+    read either off of."""
     command_token = decision.action.command.split()[0]
-    key = (work_item.phase, work_item.governing_workflow_version, command_token)
+    key = (phase, governing_workflow_version, command_token)
     outcome = _EXPECTED_OUTCOMES_BY_KEY.get(key)
     if outcome is None:
         raise AssertionError(
             f"decide() produced an automatic action with no known expected transition: "
-            f"phase={work_item.phase!r} governing_workflow_version="
-            f"{work_item.governing_workflow_version!r} command={decision.action.command!r}"
+            f"phase={phase!r} governing_workflow_version="
+            f"{governing_workflow_version!r} command={decision.action.command!r}"
         )
     return outcome
 
 
-def _expected_transition(work_item: Any, decision: Decision) -> dict:
+def _expected_transition(phase: Any, governing_workflow_version: str | None, decision: Decision) -> dict:
     """``{"from": <phase>, "to_any_of": [...]}`` for the automatic
     ``decision`` about to be launched (step 4's own ``LAUNCHED``-only
-    addition)."""
-    outcome = _expected_outcome_for(work_item, decision)
-    return {"from": work_item.phase, "to_any_of": sorted(outcome.to_any_of)}
+    addition). ``from`` is written through :func:`~controller.decision.
+    phase_to_wire`, the single declared writer every "no phase" site uses,
+    so row 7's record reads ``{"from": "__NO_PHASE__", ...}`` on disk
+    rather than failing to serialise the in-memory sentinel at all."""
+    outcome = _expected_outcome_for(phase, governing_workflow_version, decision)
+    return {"from": phase_to_wire(phase), "to_any_of": sorted(outcome.to_any_of)}
 
 
 # ---------------------------------------------------------------------------
@@ -651,7 +765,7 @@ _VERIFYING_WORKER_OUTCOMES = frozenset({"SUCCESS", "INTERRUPTED"})
 #: (plan section "CP6B -- Job execution, part 2": "no Generation 1 action
 #: can produce it" -- `/apply-implementation-review` reaching
 #: `APPLYING_REVIEW_FEEDBACK` was its only producer, and that action is
-#: not one of :data:`EXPECTED_OUTCOMES`' own six rows). Kept as a per-row
+#: not one of :data:`EXPECTED_OUTCOMES`' own seven rows). Kept as a per-row
 #: mapping, not deleted, because a record written by a *future* generation
 #: that does drive such a landing must still be classifiable by `resume`
 #: (CP7)'s own closed status table.
@@ -1201,7 +1315,18 @@ def _human_gate_dict(gate: Any) -> dict:
     }
 
 
-def _identity_block(managed_repo: Any, ident: Any, work_item: Any, job_id: str) -> dict:
+def _identity_block(
+    managed_repo: Any, ident: Any, work_item_id: str | None, observed_phase: Any, job_id: str,
+) -> dict:
+    """``work_item_id``/``observed_phase`` are accepted explicitly, rather
+    than derived from a ``work_item`` object, because a `NoWorkItemYet`
+    target (row 7, revision 63's B2) has neither: its record's
+    ``work_item_id`` is the declared literal ``None`` (never a name the
+    Controller chose -- frozen Workflow alone derives one), and
+    ``observed_phase_before`` is written from :attr:`Decision.observed_phase`
+    through :func:`~controller.decision.phase_to_wire`, so it carries
+    ``"__NO_PHASE__"`` for that one row and every real phase's own name
+    otherwise -- one writer, no second representation."""
     return {
         "schema_version": SCHEMA_VERSION,
         "job_id": job_id,
@@ -1210,9 +1335,21 @@ def _identity_block(managed_repo: Any, ident: Any, work_item: Any, job_id: str) 
         "controller_source_tree_digest": ident.tree_digest,
         "target_repo": str(managed_repo.root),
         "target_workflow_version": managed_repo.workflow_version,
-        "work_item_id": work_item.work_item_id,
-        "observed_phase_before": work_item.phase,
+        "work_item_id": work_item_id,
+        "observed_phase_before": phase_to_wire(observed_phase),
     }
+
+
+def _durable_pre_state(pre_state: dict) -> dict:
+    """``pre_state``'s own JSON-durable form: ``phase`` written through
+    :func:`~controller.decision.phase_to_wire` -- the same single writer
+    ``observed_phase_before`` and ``expected_transition.from`` go through
+    -- every other field unchanged. The in-memory ``pre_state`` a caller
+    already holds keeps the :data:`~controller.decision.NO_PHASE` sentinel
+    (`_capture_pre_state`'s own contract); only the copy embedded in a
+    persisted record is mapped, here, once, so every one of the record's
+    "no phase" sites agrees on the same wire literal."""
+    return {**pre_state, "phase": phase_to_wire(pre_state["phase"])}
 
 
 def _worker_dict(result: worker.WorkerResult, *, stdout_path: str, stderr_path: str) -> dict:
@@ -1263,16 +1400,16 @@ def _write_worker_streams(runtime_root: Path, job_id: str, result: worker.Worker
 
 
 def _no_launch_record(
-    runtime_root: Path, managed_repo: Any, ident: Any, work_item: Any, pre_state: dict,
-    decision: Decision, *, status: str,
+    runtime_root: Path, managed_repo: Any, ident: Any, work_item_id: str | None, observed_phase: Any,
+    pre_state: dict, decision: Decision, *, status: str,
 ) -> JobRecord:
     """The single-flush record for every outcome that never reaches a
     worker launch: ``GATE_BLOCKED``, ``DECLINED``, ``HANDOFF_PENDING``."""
     job_id = _new_job_id()
     now = _now()
     record: JobRecord = {
-        **_identity_block(managed_repo, ident, work_item, job_id),
-        "pre_state": pre_state,
+        **_identity_block(managed_repo, ident, work_item_id, observed_phase, job_id),
+        "pre_state": _durable_pre_state(pre_state),
         "selected_action": _selected_action_dict(decision),
         "status": status,
         "human_gate_pending": (
@@ -1320,34 +1457,45 @@ def execute_step(
     verification rule held), ``FAILED`` (it did not, carrying
     ``reconciliation_evidence``), or ``INCOMPLETE`` (step 9: a legal
     effect of the action that is never its completion -- unreachable for
-    every one of Generation 1's own six automatic actions, see
+    every one of Generation 1's own seven automatic actions, see
     :data:`_INCOMPLETE_EFFECT_PHASES`). ``COMPLETED`` is never this
     function's own return value; it is an intermediate, durable flush
     step 6 always makes before steps 7-9 run.
     """
     # Step 1: inspect the repository and read Workflow state (already done
     # by the caller producing `managed_repo`); read Workflow state and
-    # capture the pre-state.
+    # capture the pre-state. `work_item` is `target_state.NoWorkItemYet`
+    # (revision 63's B2, row 7) when zero non-terminal work items exist
+    # and none was explicitly named -- there is no `WorkItemView` in that
+    # case, so `work_item_id`/`governing_workflow_version` are resolved
+    # here, once, rather than re-derived at every later site that would
+    # otherwise read them straight off `work_item`.
     snapshot = target_state.read(managed_repo)
     work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
+    is_bootstrap = work_item is target_state.NoWorkItemYet
+    resolved_work_item_id = None if is_bootstrap else work_item.work_item_id
+    governing_workflow_version = None if is_bootstrap else work_item.governing_workflow_version
     pre_state = _capture_pre_state(managed_repo, snapshot, work_item)
 
     # Step 2: decide. The launch guard is positive and total: a worker is
     # launched only when `decision.automatic` is True -- never inferred
     # from the *absence* of a gate or a decline, which is exactly the hole
     # a negative guard reopens every time a new non-launching outcome is
-    # added (round 11's B1).
-    decision = evidence.decide(managed_repo, snapshot, work_item)
+    # added (round 11's B1). `decide_no_work_item` is the distinct,
+    # sibling entry point row 7 needs (CP4's own paragraph): unconditional
+    # and version-independent, since there is no work item yet to key a
+    # phase-dispatch table on.
+    decision = decide_no_work_item(managed_repo) if is_bootstrap else evidence.decide(managed_repo, snapshot, work_item)
 
     if decision.gate is not None:
         return _no_launch_record(
-            runtime, managed_repo, identity, work_item, pre_state, decision,
-            status=STATUS_GATE_BLOCKED,
+            runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
+            decision, status=STATUS_GATE_BLOCKED,
         )
     if decision.declined:
         return _no_launch_record(
-            runtime, managed_repo, identity, work_item, pre_state, decision,
-            status=STATUS_DECLINED,
+            runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
+            decision, status=STATUS_DECLINED,
         )
     if not decision.automatic:
         # LEGACY_READY / MILESTONE_COMPLETE: action=None, automatic=False,
@@ -1360,8 +1508,8 @@ def execute_step(
     # directly, exactly as `cli._capture_pre_existing_state` already does.
     if _pending_handoff(runtime) is not None:
         return _no_launch_record(
-            runtime, managed_repo, identity, work_item, pre_state, decision,
-            status=STATUS_HANDOFF_PENDING,
+            runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
+            decision, status=STATUS_HANDOFF_PENDING,
         )
 
     # Defensive: by construction, every branch above that could return
@@ -1378,8 +1526,8 @@ def execute_step(
     job_id = _new_job_id()
     now = _now()
     record: JobRecord = {
-        **_identity_block(managed_repo, identity, work_item, job_id),
-        "pre_state": pre_state,
+        **_identity_block(managed_repo, identity, resolved_work_item_id, decision.observed_phase, job_id),
+        "pre_state": _durable_pre_state(pre_state),
         "selected_action": _selected_action_dict(decision),
         "status": STATUS_PLANNED,
         "human_gate_pending": None,
@@ -1389,7 +1537,7 @@ def execute_step(
     }
     _persist(runtime, job_id, record)
 
-    expected_transition = _expected_transition(work_item, decision)
+    expected_transition = _expected_transition(decision.observed_phase, governing_workflow_version, decision)
     record = {
         **record,
         "expected_transition": expected_transition,
@@ -1422,16 +1570,25 @@ def execute_step(
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
     # -- never the `snapshot`/`work_item` captured before the worker ran
     # (see this module's own docstring, "CP6B's own scope note on step
-    # 7's 'fresh managed_repo.inspect'").
+    # 7's 'fresh managed_repo.inspect'"). Steps 7-9 are CP6B's own scope
+    # (this checkpoint, CP6, owns only steps 1-6): a row-7 (`NoWorkItemYet`)
+    # job still reaches here today and this line still raises
+    # `AttributeError` on `work_item.work_item_id`, since there is no
+    # `WorkItemView` to read one off of -- CP6's own steps 1-6 (pre-state
+    # capture, the decision, and the `PLANNED`/`LAUNCHED`/`COMPLETED`
+    # flushes) are correct and durable for row 7 by the time execution
+    # reaches this point; wiring steps 7-9 for row 7 (a fresh
+    # `work_item_id`-free re-read, and row 7's own predicate/verification)
+    # is CP6B's own revalidation, next.
     post_snapshot = target_state.read(managed_repo)
     post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item.work_item_id)
     observed_phase_after = post_work_item.phase
 
-    outcome_row = _expected_outcome_for(work_item, decision)
+    outcome_row = _expected_outcome_for(work_item.phase, work_item.governing_workflow_version, decision)
 
     # Step 9: INCOMPLETE takes precedence over step 8's own "otherwise" --
     # a phase that is a legal *effect* of the action but never a
-    # *completion* of it. Empty for every one of Generation 1's six rows
+    # *completion* of it. Empty for every one of Generation 1's seven rows
     # (see `_INCOMPLETE_EFFECT_PHASES`'s own docstring); checked first so
     # a future generation's row can populate it without this call site
     # changing.

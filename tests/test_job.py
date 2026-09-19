@@ -26,7 +26,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import job  # noqa: E402
-from controller.decision import Decision  # noqa: E402
+from controller.decision import NO_PHASE, Decision, phase_from_wire  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT, SOURCE_KIND_WORKTREE  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -367,6 +367,93 @@ class LaunchPathTest(unittest.TestCase):
         self.assertEqual(record["controller_source_commit"], None)
         self.assertEqual(record["controller_source_tree_digest"], FAKE_WORKTREE_IDENTITY.tree_digest)
         self.assertEqual(record["controller_generation"], FAKE_WORKTREE_IDENTITY.generation)
+
+
+class BootstrapRowSevenTest(unittest.TestCase):
+    """Row 7 (revision 63's B2, ``REQ-40``): a target with **zero**
+    non-terminal work items and no explicit ``--work-item`` resolves to
+    ``target_state.NoWorkItemYet``, not ``AmbiguousWorkItemError``. CP6's
+    own steps 1-6 must capture and durably flush a ``PLANNED``/
+    ``LAUNCHED``/``COMPLETED`` record for this target without crashing,
+    wire-mapping every "no phase" field through the single declared
+    writer (``controller.decision.phase_to_wire``) -- never a synthetic
+    phase string, never Python's own ``None``.
+
+    CP6B's own steps 7-9 do not support this row yet (``execute_step``'s
+    own comment at step 7 names it explicitly as CP6B's next
+    revalidation); every test below therefore expects the documented
+    ``AttributeError`` beyond the point CP6 owns, and asserts only against
+    what was durable on disk *before* that point -- never from process
+    memory, since that is the whole reason the round-trip case reads the
+    persisted record back off disk rather than the in-process value."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir(parents=True)
+        root = self.tmp_root / "target"
+        fixtures.build_target_git_repo(root)
+        (root / "README.md").write_text("target fixture\n")
+        fixtures.commit_all(root, "initial")
+        fixtures.write_workflow_state(root, {
+            "schema_version": 1, "active_work_item_id": None, "work_items": {},
+        })
+        self.managed_repo = fixtures.build_target_managed_repository(root)
+        self._orig_job_id = job._new_job_id
+        job._new_job_id = lambda: "fixed-job-id"
+        self.addCleanup(setattr, job, "_new_job_id", self._orig_job_id)
+
+    def _run_far_enough_and_read_back(self) -> dict:
+        with self.assertRaises(AttributeError):
+            job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        # A fresh, process-level read off disk -- the record CP6's own
+        # steps 1-6 left behind before step 7's crash -- never the
+        # in-process value execute_step itself held.
+        job_path = self.runtime_root / "jobs" / "fixed-job-id.json"
+        return json.loads(job_path.read_text())
+
+    def test_planned_launched_completed_flushes_are_durable_and_do_not_crash(self) -> None:
+        record = self._run_far_enough_and_read_back()
+        self.assertEqual(record["status"], "COMPLETED")
+        self.assertIsNone(record["work_item_id"])
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertEqual(record["selected_action"]["command"], "/milestone-plan")
+
+    def test_pre_work_item_keys_is_the_seventeenth_pre_state_field(self) -> None:
+        record = self._run_far_enough_and_read_back()
+        self.assertEqual(len(job.PRE_STATE_FIELDS), 17)
+        self.assertEqual(set(record["pre_state"]), job.PRE_STATE_FIELDS)
+        self.assertEqual(record["pre_state"]["pre_work_item_keys"], [])
+
+    def test_no_phase_round_trips_identically_across_all_three_fields(self) -> None:
+        record = self._run_far_enough_and_read_back()
+        self.assertEqual(record["pre_state"]["phase"], "__NO_PHASE__")
+        self.assertEqual(record["observed_phase_before"], "__NO_PHASE__")
+        self.assertEqual(record["expected_transition"]["from"], "__NO_PHASE__")
+        for wire in (
+            record["pre_state"]["phase"],
+            record["observed_phase_before"],
+            record["expected_transition"]["from"],
+        ):
+            self.assertIs(phase_from_wire(wire), NO_PHASE)
+        self.assertEqual(
+            set(record["expected_transition"]["to_any_of"]), {"AWAITING_LOCAL_PLAN_REVIEW"},
+        )
+
+    def test_no_phase_reader_refuses_null_and_bare_none_string(self) -> None:
+        # The total, fail-closed half of the round-trip rule: a fixture
+        # record carrying "phase": null or "phase": "None" must be
+        # refused, never silently read as NO_PHASE.
+        from controller.errors import UnknownPhaseError
+        with self.assertRaises(UnknownPhaseError):
+            phase_from_wire(None)
+        with self.assertRaises(UnknownPhaseError):
+            phase_from_wire("None")
 
 
 if __name__ == "__main__":

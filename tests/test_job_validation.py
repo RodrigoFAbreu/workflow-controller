@@ -148,13 +148,16 @@ def _write_state_phase_env(root: Path, work_item_id: str, new_phase: str) -> dic
 
 
 class ExpectedOutcomesTableStructureTest(unittest.TestCase):
-    """Six rows, matching CP4's own six automatic triples after revision
-    10's narrowing; the real table passes every structural property, and
-    each property's own negative instantiation fails construction (a
-    property that cannot fail is not a property)."""
+    """Seven rows -- six matching CP4's own six automatic triples after
+    revision 10's narrowing, plus row 7 (revision 63's B2, the
+    `NoWorkItemYet` bootstrap, deliberately not an eighth CP4 triple since
+    `NO_PHASE` is never a phase CP4's own dispatch table is keyed on); the
+    real table passes every structural property, and each property's own
+    negative instantiation fails construction (a property that cannot
+    fail is not a property)."""
 
-    def test_six_rows(self) -> None:
-        self.assertEqual(len(job.EXPECTED_OUTCOMES), 6)
+    def test_seven_rows(self) -> None:
+        self.assertEqual(len(job.EXPECTED_OUTCOMES), 7)
 
     def test_real_table_passes_coverage_and_predicate_validity(self) -> None:
         self.assertEqual(job.property_table_violations(), [])

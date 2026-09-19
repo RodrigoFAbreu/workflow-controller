@@ -37,11 +37,12 @@ from controller.managed_repo import ManagedRepository
 _STATE_REL_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
 _CONFIG_REL_PATH = "docs/ai-workflow/WORKFLOW_CONFIG.json"
 
-#: The closed set of all seventeen phases frozen Workflow v2.3.1's own
-#: ``scripts/workflow_state.py:KNOWN_PHASES`` persists (verified: seventeen
-#: entries). A literal copy, not an import -- the Controller must never
-#: import ``scripts/`` -- kept honest by a two-directional set-equality
-#: test against the real module.
+#: The closed set of all twenty phases the installed reference release's
+#: own ``scripts/workflow_state.py:KNOWN_PHASES`` persists (re-derived at
+#: revision 64 against the installed release by importing that module and
+#: counting: twenty entries). A literal copy, not an import -- the
+#: Controller must never import ``scripts/`` -- kept honest by a
+#: two-directional set-equality test against the real module.
 KNOWN_PHASES: frozenset[str] = frozenset({
     # v1 (docs/ai-workflow/MILESTONE_WORKFLOW.md)
     "PLANNING",
@@ -63,12 +64,82 @@ KNOWN_PHASES: frozenset[str] = frozenset({
     "AWAITING_TECHNICAL_APPROVAL",
     # D-Legacy phase 1 -- dormant, not terminal
     "LEGACY_READY",
+    # workflow-2.4.0 addition (D-Plan-Amendment-1): real and persisted --
+    # entered by request_plan_amendment alone, survives an interruption
+    # between the amendment request and the first post-request
+    # /milestone-plan call.
+    "AMENDING_PLAN",
+    # workflow-2.5.0 additions (D-Implementation-Review-Stages): "2.2"-only,
+    # real and persisted, mirroring AWAITING_LOCAL_PLAN_REVIEW/
+    # AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW's own local-then-manual-external
+    # shape at the implementation stage.
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
 })
 
 #: Only ``MILESTONE_COMPLETE`` is terminal -- ``LEGACY_READY`` is
 #: explicitly dormant, not terminal, matching frozen Workflow v2.3.1's own
 #: ``TERMINAL_PHASES``.
 TERMINAL_PHASES: frozenset[str] = frozenset({"MILESTONE_COMPLETE"})
+
+
+class _NoPhaseType:
+    """The sentinel type of :data:`NO_PHASE`.
+
+    Revision 64 (round 63's B2): the single in-memory value every field
+    that would otherwise need to represent "there is no phase" carries --
+    ``Decision.observed_phase`` for a :data:`NoWorkItemYet` target,
+    ``pre_state.phase``, ``observed_phase_before`` and a job record's
+    ``expected_transition.from``. Never ``None``: ``None`` keeps the one
+    meaning the schema already gives it (an absent optional field) and is
+    never overloaded a second way. ``is``-comparable, deliberately not a
+    plain string -- nothing about a real Workflow phase name should ever
+    compare equal to it.
+    """
+
+    def __repr__(self) -> str:  # pragma: no cover -- diagnostic convenience
+        return "NO_PHASE"
+
+
+#: The single sentinel used everywhere "no phase" needs representing (see
+#: :class:`_NoPhaseType`). Never a Workflow phase, never ``None``.
+NO_PHASE = _NoPhaseType()
+
+#: ``NO_PHASE``'s single durable (JSON) form -- a reserved literal that can
+#: never collide with a real Workflow phase name, since :data:`KNOWN_PHASES`
+#: is a closed set of ``A-Z_`` identifiers none of which begins or ends
+#: with a double underscore. A writer maps ``NO_PHASE -> NO_PHASE_WIRE``
+#: and every real phase to its own name; a reader maps
+#: ``NO_PHASE_WIRE -> NO_PHASE``, any member of :data:`KNOWN_PHASES` to
+#: itself, and anything else to a refusal, never a guess.
+NO_PHASE_WIRE = "__NO_PHASE__"
+
+
+class _NoWorkItemYetType:
+    """The sentinel type of :data:`NoWorkItemYet`.
+
+    Revision 63 (B2, ``REQ-40``): :func:`select_work_item` returns this --
+    never a :class:`WorkItemView` -- when zero non-terminal work items
+    exist in the snapshot and no explicit ``work_item_id`` was given (and
+    no ``active_work_item_id`` resolves one either). There is no work item
+    to view, so there is no ``phase`` to key a decision on; a caller
+    holding this sentinel is expected to take the distinct
+    ``NoWorkItemYet``/bootstrap path (frozen ``/milestone-plan`` with no
+    argument) rather than treat it as an ordinary work item observation.
+    Disjoint from an explicit ``--work-item <id>`` naming an id absent from
+    ``work_items``, which stays :class:`~controller.errors.AmbiguousWorkItemError`
+    exactly as before -- the Controller never treats an operator's
+    explicit, wrong name as an invitation to bootstrap one.
+    """
+
+    def __repr__(self) -> str:  # pragma: no cover -- diagnostic convenience
+        return "NoWorkItemYet"
+
+
+#: The single sentinel :func:`select_work_item` returns for the
+#: zero-non-terminal-candidates, no-explicit-id case (see
+#: :class:`_NoWorkItemYetType`).
+NoWorkItemYet = _NoWorkItemYetType()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -393,13 +464,17 @@ def read(managed_repo: ManagedRepository) -> WorkflowSnapshot:
 
 def select_work_item(
     snapshot: WorkflowSnapshot, *, work_item_id: str | None = None,
-) -> WorkItemView:
+) -> WorkItemView | _NoWorkItemYetType:
     """Resolve the single target work item: an explicit ``work_item_id``
-    wins; else ``snapshot.active_work_item_id`` (already validated by
+    wins -- and, naming an id absent from ``work_items``, is
+    :class:`~controller.errors.AmbiguousWorkItemError`, never a bootstrap
+    trigger; else ``snapshot.active_work_item_id`` (already validated by
     :func:`read` to name a real entry, if not ``None``); else, if exactly
-    one non-terminal work item exists in the snapshot, that one; else
-    :class:`~controller.errors.AmbiguousWorkItemError`, naming every
-    candidate considered (possibly none).
+    one non-terminal work item exists in the snapshot, that one; else, if
+    **zero** non-terminal items exist, :data:`NoWorkItemYet` (revision 63,
+    B2 -- there is no candidate to be ambiguous *among*); else (more than
+    one) :class:`~controller.errors.AmbiguousWorkItemError`, naming every
+    candidate considered.
 
     ``active_work_item_id`` is a resume-focus pointer, never an execution
     lock (D1) -- an explicit override always takes precedence over it,
@@ -422,6 +497,9 @@ def select_work_item(
     ]
     if len(non_terminal) == 1:
         return snapshot.work_items[non_terminal[0]]
+
+    if len(non_terminal) == 0:
+        return NoWorkItemYet
 
     raise AmbiguousWorkItemError(
         "no active_work_item_id is set and the target repository's Workflow state does not "

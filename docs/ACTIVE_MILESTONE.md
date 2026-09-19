@@ -360,35 +360,62 @@ assertions.
 
 `CP3` (read-only Workflow state reader: active work item, phase,
 checkpoints, review and approval state, fail-closed on malformed or
-ambiguous state) is **complete**, verified by `python3 -m unittest
-tests.test_target_state` (34 tests, all green, including two integration
+ambiguous state) is **complete**, revalidated after the B2 plan amendment
+(revision 71) against the widened twenty-phase known-phase set and the
+`NoWorkItemYet` bootstrap sentinel, verified by `python3 -m unittest
+tests.test_target_state` (39 tests, all green, including two integration
 cases run against this repository's own real `WORKFLOW_STATE.json` and
-registry) and by re-running the full suite (`python3 -m unittest discover
--s tests`: 95 tests, all green, no regressions). Delivered:
-`controller/target_state.py` (`read(managed_repo) -> WorkflowSnapshot`,
-producing frozen `WorkflowSnapshot`/`WorkItemView` dataclasses;
-`select_work_item(snapshot, *, work_item_id=None) -> WorkItemView`
-implementing the explicit-override / `active_work_item_id` /
-sole-non-terminal-item / `AmbiguousWorkItemError` selection order; the
-closed, literal, test-verified-equal-to-frozen-Workflow-v2.3.1
-seventeen-member `KNOWN_PHASES` set; the three-outcome
+registry). Delivered: `controller/target_state.py` (`read(managed_repo)
+-> WorkflowSnapshot`, producing frozen `WorkflowSnapshot`/`WorkItemView`
+dataclasses; `select_work_item(snapshot, *, work_item_id=None) ->
+WorkItemView | NoWorkItemYetType` implementing the explicit-override /
+`active_work_item_id` / sole-non-terminal-item / **`NoWorkItemYet`
+(zero candidates, no explicit id)** / `AmbiguousWorkItemError` (more than
+one candidate, or an explicit id absent from `work_items`) selection
+order; the closed, literal, test-verified-equal-to-the-installed-
+reference-release **twenty**-member `KNOWN_PHASES` set (revision 64:
+widened from seventeen by `AMENDING_PLAN`,
+`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`,
+`AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`); the `NO_PHASE`
+sentinel and its single reserved durable form `NO_PHASE_WIRE =
+"__NO_PHASE__"` (revision 64, round 63's B2 -- the one in-memory value
+every "there is no phase" field will carry, declared once here for CP4/
+CP6/CP7 to import by reference rather than reinventing); the three-outcome
 `registry_complete` derivation -- `None` with no declared
 `registry_path`, `True`/`False` for a resolvable self-consistent
 registry, `MalformedTargetRegistryError` for an unresolvable/unreadable/
 unparseable/cross-linked one -- deliberately never reproducing the
 out-of-scope `StalePlanApprovalRegistryReadError` check; and
-`incomplete_children`'s reverse lookup over sibling work items). Five new
-`controller/errors.py` refusals (`MissingWorkflowStateError`,
-`MalformedWorkflowStateError`, `UnknownPhaseError`,
-`AmbiguousWorkItemError`, `MalformedTargetRegistryError`).
-`tests/test_target_state.py`, including an AST-scan structural proof that
-the module contains no writing call and defines no write function.
-`tests/fixtures.py` extended with target-state fixture builders.
-`controller/__init__.py`'s eager-import literal gains `target_state`
-between `managed_repo` and `cli`. `controller/cli.py`'s `inspect` command
-still stays unwired -- CP3 delivers only the reader module the plan
-names for this checkpoint's own files; wiring it into `cli.py` is CP4's
-and later checkpoints' concern, not restated here.
+`incomplete_children`'s reverse lookup over sibling work items). Five
+`controller/errors.py` refusals unchanged in name
+(`MissingWorkflowStateError`, `MalformedWorkflowStateError`,
+`UnknownPhaseError`, `AmbiguousWorkItemError`,
+`MalformedTargetRegistryError`), `AmbiguousWorkItemError`'s docstring
+updated to state the zero-candidate carve-out.
+`tests/test_target_state.py` gained the `NoWorkItemYet`/`NO_PHASE`
+sentinel tests and the zero-non-terminal-candidates case was rewritten
+from an `AmbiguousWorkItemError` assertion to a `NoWorkItemYet` one,
+alongside an AST-scan structural proof that the module contains no
+writing call and defines no write function. `controller/cli.py`'s
+`inspect` command still stays unwired -- CP3 delivers only the reader
+module the plan names for this checkpoint's own files; wiring it into
+`cli.py` is CP4's and later checkpoints' concern, not restated here.
+
+**Residual, expected cross-checkpoint breakage from this revalidation**
+(not fixed here -- out of CP3's own scope, left for each checkpoint's own
+revalidation in registry order, unchanged in shape from CP2's own note):
+`tests.test_decision` still fails against the stale seventeen-phase
+`decision.KNOWN_PHASES` copy and the fifteen-file command-file partition
+(CP4's own scope -- `tests.test_target_state` itself is green again, so
+the equality assertion now names the three phases `decision.KNOWN_PHASES`
+is missing rather than failing to import); `tests.test_cli`'s two
+`InspectCommandTest` assertions remain red for the same `"2.3.1"`-vs-
+`"2.5.1"` reason CP2's revalidation already measured (CP9's own scope).
+`python3 -m unittest discover -s tests`: 343 tests, 4 failures + 6 errors,
+all ten in `tests.test_decision`/`tests.test_cli`, none newly introduced
+by this checkpoint and none in `tests.test_target_state`,
+`tests.test_managed_repo`, `tests.test_runtime`, `tests.test_identity` or
+`tests.test_package_structure`.
 
 `CP4` (next-action decision engine part 1: the phase -> action mapping
 over frozen Workflow v2.3.1's seventeen phases, the user-only denylist,
@@ -1131,15 +1158,31 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   already red before this checkpoint, unaffected by it). Verified by
   `python3 -m unittest tests.test_managed_repo` (24 tests, all green).
   `COMPLETE`.
+- `CP3` revalidated: this checkpoint's own plan section *did* change
+  (revision 63/64's B2 `NoWorkItemYet` bootstrap sentinel plus the
+  seventeen-to-twenty-member `KNOWN_PHASES` widening), so
+  `controller/target_state.py`, `controller/errors.py`'s
+  `AmbiguousWorkItemError` docstring and `tests/test_target_state.py` were
+  updated to match -- see the "Current checkpoint" `CP3` entry above for
+  the full delivered shape (the `NO_PHASE`/`NO_PHASE_WIRE`/`NoWorkItemYet`
+  sentinels, declared here for later checkpoints to import by reference)
+  and its residual, expected cross-checkpoint breakage in
+  `tests.test_decision` (CP4) and `tests.test_cli` (CP9), both already red
+  before this checkpoint and unaffected by it. Verified by `python3 -m
+  unittest tests.test_target_state` (39 tests, all green). `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP3` onward in registry order (`CP3` depends on `CP1`, now
-satisfied), applying the revision-64/68 Workflow-baseline changes (twenty
-known phases, the seventeen-command-file/four-user-only-command union
-denylist, `VALIDATED_WORKFLOW_RELEASES`) and the `NoWorkItemYet` bootstrap
-path where each checkpoint's own plan section now requires them, through
-`CP9` where B1's `worker_outcome` schema mismatch is also fixed, before the
-phase can re-enter `SELF_REVIEWING_IMPLEMENTATION` and a fresh
+revalidating `CP4`/`CP4B` onward in registry order (`CP4` depends on `CP3`,
+now satisfied), applying the revision-64/68 Workflow-baseline changes
+(the twenty-known-phase table, the seventeen-command-file/four-user-only-
+command union denylist, `VALIDATED_WORKFLOW_RELEASES`) and wiring
+`decide_no_work_item(managed_repo) -> Decision` as the distinct,
+version-independent sibling entry point for a `NoWorkItemYet` target
+(`observed_phase=NO_PHASE`, action `/milestone-plan` with no
+`work_item_id`) -- never a twenty-first row in `decide()`'s own table --
+where each remaining checkpoint's own plan section now requires them,
+through `CP9` where B1's `worker_outcome` schema mismatch is also fixed,
+before the phase can re-enter `SELF_REVIEWING_IMPLEMENTATION` and a fresh
 implementation-review bundle is generated.
 
 ## Active plan

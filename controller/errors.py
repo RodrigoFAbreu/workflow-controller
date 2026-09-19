@@ -218,8 +218,8 @@ class MalformedWorkflowStateError(ControllerError):
 
 class UnknownPhaseError(ControllerError):
     """A work item's ``phase`` is outside the Controller's closed,
-    seventeen-member known-phase set (``target_state.KNOWN_PHASES``, a
-    literal copy of frozen Workflow v2.3.1's own
+    twenty-member known-phase set (``target_state.KNOWN_PHASES``, a
+    literal copy of the installed reference release's own
     ``workflow_state.KNOWN_PHASES`` -- the Controller never imports
     ``scripts/``).
 
@@ -236,11 +236,14 @@ class AmbiguousWorkItemError(ControllerError):
     guess.
 
     Raised by ``controller.target_state.select_work_item`` when: an
-    explicit ``--work-item`` names an id absent from the snapshot; no
+    explicit ``--work-item`` names an id absent from the snapshot; or no
     explicit id and no ``active_work_item_id`` are available and the
-    snapshot's non-terminal work items number zero or more than one.
-    ``evidence['candidates']`` names every candidate considered (possibly
-    empty) -- the Controller never picks one on its own.
+    snapshot's non-terminal work items number more than one.
+    ``evidence['candidates']`` names every candidate considered -- the
+    Controller never picks one on its own. The **zero**-candidate case with
+    no explicit id (revision 63, B2) is *not* this refusal -- it returns
+    ``target_state.NoWorkItemYet`` instead, since there is no candidate to
+    be ambiguous among.
     """
 
     code = "AMBIGUOUS_WORK_ITEM"

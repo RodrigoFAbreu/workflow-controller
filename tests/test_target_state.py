@@ -7,12 +7,14 @@ reads cleanly; a missing state file, invalid JSON, a non-object payload,
 an absent/wrong ``schema_version``, a ``work_items`` key/id mismatch, an
 ``active_work_item_id`` naming an absent item, and an unknown ``phase``
 each refuse with their own named error; ``active_work_item_id`` selection
-and its ``--work-item``/single-non-terminal/ambiguous fallbacks;
-``registry_complete``'s three outcomes (``None``, ``True``/``False``,
-``MalformedTargetRegistryError``); ``incomplete_children``'s reverse
-lookup; the known-phase set's two-directional equality against frozen
-Workflow v2.3.1's own ``KNOWN_PHASES``; and the read-only AST-scan proof
-that this module can never write.
+and its ``--work-item``/single-non-terminal/``NoWorkItemYet``/ambiguous
+fallbacks; ``registry_complete``'s three outcomes (``None``, ``True``/
+``False``, ``MalformedTargetRegistryError``); ``incomplete_children``'s
+reverse lookup; the known-phase set's two-directional equality against the
+installed reference release's own ``KNOWN_PHASES`` (revision 64: twenty
+members, including the ``AMENDING_PLAN``/``AWAITING_LOCAL_IMPLEMENTATION_
+REVIEW``/``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` widening); and
+the read-only AST-scan proof that this module can never write.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import target_state  # noqa: E402
+from controller.target_state import NoWorkItemYet  # noqa: E402
 from controller.errors import (  # noqa: E402
     AmbiguousWorkItemError,
     MalformedTargetRegistryError,
@@ -112,8 +115,8 @@ class ReadHappyPathTest(unittest.TestCase):
 
     def test_real_repository_own_workflow_state_reads_cleanly(self) -> None:
         """This repository is itself a real, currently-managed Workflow
-        v2.3.1 repository -- its own WORKFLOW_STATE.json should always
-        read without refusal."""
+        repository -- its own WORKFLOW_STATE.json should always read
+        without refusal."""
         managed_repo = fixtures.build_target_managed_repository(REPO_ROOT)
         snapshot = target_state.read(managed_repo)
         self.assertEqual(snapshot.schema_version, 1)
@@ -230,7 +233,7 @@ class KnownPhaseSetEqualityTest(unittest.TestCase):
         import workflow_state as real_workflow_state  # noqa: PLC0415
 
         self.assertEqual(target_state.KNOWN_PHASES, real_workflow_state.KNOWN_PHASES)
-        self.assertEqual(len(target_state.KNOWN_PHASES), 17)
+        self.assertEqual(len(target_state.KNOWN_PHASES), 20)
 
     def test_terminal_phases_equal_frozen_workflow_v2_3_1(self) -> None:
         scripts_dir = REPO_ROOT / "scripts"
@@ -290,13 +293,51 @@ class SelectWorkItemTest(unittest.TestCase):
             target_state.select_work_item(snapshot)
         self.assertEqual(ctx.exception.evidence["candidates"], ["a", "b"])
 
-    def test_zero_non_terminal_candidates_refuses_ambiguous(self) -> None:
+    def test_zero_non_terminal_candidates_returns_no_work_item_yet(self) -> None:
+        """Revision 63 (B2, REQ-40): zero non-terminal candidates with no
+        explicit id is not ambiguous -- there is no candidate to be
+        ambiguous among -- so this returns the NoWorkItemYet sentinel
+        rather than raising."""
         snapshot = self._snapshot({
             "a": _minimal_work_item(work_item_id="a", phase="MILESTONE_COMPLETE"),
         })
+        self.assertIs(target_state.select_work_item(snapshot), NoWorkItemYet)
+
+    def test_zero_work_items_at_all_returns_no_work_item_yet(self) -> None:
+        """The bootstrap case a fresh, disposable managed repository starts
+        in: no work_items entries at all."""
+        snapshot = self._snapshot({})
+        self.assertIs(target_state.select_work_item(snapshot), NoWorkItemYet)
+
+    def test_explicit_work_item_id_absent_still_refuses_ambiguous_even_with_zero_candidates(
+        self,
+    ) -> None:
+        """An explicit --work-item naming an id absent from work_items is
+        never a bootstrap trigger, even when the snapshot has zero
+        non-terminal work items -- the Controller never treats an
+        operator's explicit, wrong name as an invitation to invent one."""
+        snapshot = self._snapshot({})
         with self.assertRaises(AmbiguousWorkItemError) as ctx:
-            target_state.select_work_item(snapshot)
-        self.assertEqual(ctx.exception.evidence["candidates"], [])
+            target_state.select_work_item(snapshot, work_item_id="does-not-exist")
+        self.assertEqual(ctx.exception.evidence["requested"], "does-not-exist")
+
+
+class NoPhaseSentinelTest(unittest.TestCase):
+    """revision 64 (round 63's B2): NO_PHASE is the single, is-comparable,
+    never-None sentinel; NO_PHASE_WIRE is its one reserved durable form,
+    chosen so it can never collide with a real Workflow phase name."""
+
+    def test_no_phase_is_not_a_known_phase_or_none(self) -> None:
+        self.assertNotIn(target_state.NO_PHASE, target_state.KNOWN_PHASES)
+        self.assertIsNotNone(target_state.NO_PHASE)
+
+    def test_no_phase_wire_is_the_reserved_literal_and_not_a_known_phase(self) -> None:
+        self.assertEqual(target_state.NO_PHASE_WIRE, "__NO_PHASE__")
+        self.assertNotIn(target_state.NO_PHASE_WIRE, target_state.KNOWN_PHASES)
+
+    def test_no_work_item_yet_is_a_singleton_and_not_a_work_item_view(self) -> None:
+        self.assertIs(NoWorkItemYet, target_state.NoWorkItemYet)
+        self.assertNotIsInstance(NoWorkItemYet, target_state.WorkItemView)
 
 
 class IncompleteChildrenTest(unittest.TestCase):

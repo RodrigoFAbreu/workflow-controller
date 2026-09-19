@@ -11,12 +11,19 @@ only ``controller.decision`` -- never the reverse). For every phase this
 module does not itself refine, it is a pure pass-through to
 :func:`controller.decision.decide`.
 
-Three phases genuinely need a ``.ai-review/`` evidence read to resolve
+Four phases genuinely need a ``.ai-review/`` evidence read to resolve
 their "ordinary case vs. blocked/withdrawn/superseded" sub-cases
-correctly -- the same three ``controller.decision`` names in its own
-module docstring as carrying an interim ordinary-case placeholder:
-``AWAITING_LOCAL_PLAN_REVIEW``, ``AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW``,
-and ``AWAITING_EXTERNAL_PLAN_REVIEW`` on a ``"1"``-governed item. Two more
+correctly -- the same four ``controller.decision`` names in its own
+module docstring as carrying an interim, evidence-independent
+placeholder: ``AWAITING_LOCAL_PLAN_REVIEW``,
+``AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW``, and
+``AWAITING_EXTERNAL_PLAN_REVIEW`` on a ``"1"``-governed item, plus
+``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` on a ``"2.2"``-governed
+item (revision 64's own three-way sub-case, added to this checkpoint's own
+scope at the same revision -- CP4's fixed gate text sharpens into the same
+"hand to reviewer / verdict on file / Status: BLOCK" three-way read the
+plan-stage manual gate already performs, one stage over, minus that stage's
+admissibility model, which is deliberately not re-derived here). Two more
 report-only phases (``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW``,
 ``AWAITING_FUNCTIONAL_REVIEW``) gain evidence-driven sub-case reports
 here too, and every bundle-bearing phase gains a **withdrawn-bundle**
@@ -103,9 +110,14 @@ PLAN_STAGE_PHASES: frozenset[str] = frozenset({
 })
 
 #: Every phase whose bundle can be withdrawn and so gains the REJECTED-
-#: marker outcome ahead of all its other rows.
+#: marker outcome ahead of all its other rows. ``AWAITING_MANUAL_EXTERNAL_
+#: IMPLEMENTATION_REVIEW`` joins this set at revision 64:
+#: ``/record-manual-implementation-review`` calls
+#: ``assert_bundle_not_rejected`` exactly as ``/record-manual-plan-review``
+#: does at the plan stage (``.claude/commands/record-manual-implementation-
+#: review.md``, step 5).
 BUNDLE_BEARING_PHASES: frozenset[str] = PLAN_STAGE_PHASES | frozenset(
-    {"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}
+    {"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"}
 )
 
 
@@ -731,6 +743,91 @@ def _decide_awaiting_external_implementation_review(
     )
 
 
+def _decide_awaiting_manual_external_implementation_review(
+    root: Path, work_item_id: str, work_item: Any,
+) -> Decision:
+    """Revision 64's own three-way sub-case, "the same read-only evidence
+    the plan stage's manual gate uses one stage over": no current-round
+    ``REVIEW_FEEDBACK.md`` (or one declaring the *local*-stage role) hands
+    the bundle to a reviewer; a ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``
+    verdict on file names ``/record-manual-implementation-review`` as next;
+    an admissible ``Status: BLOCK`` needs explicit user resolution first.
+    **Report-only at every sub-case, unlike its plan-stage counterpart**:
+    the Controller reports and never launches here, so the plan-stage
+    admissibility model (bundle-id/generation-head currency,
+    ``ClauseFailure``/``AdmissibilityResult``) is deliberately not
+    re-derived -- nothing at this phase turns on it.
+
+    **No legacy-cased role alias** (unlike the plan stage's
+    :func:`_normalize_role`): ``validate_manual_implementation_review_
+    preconditions`` (``scripts/workflow_state.py:12709``) refuses on an
+    exact-spelling mismatch, since the ``implementation_review_stages``
+    ledger is introduced fresh at ``"2.2"`` with no pre-``SCREAMING_SNAKE_
+    CASE`` history behind it -- so this read matches on the literal string,
+    never normalized."""
+    phase = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
+    feedback = read_feedback_fields(root, feedback_dir)
+    feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
+
+    role = feedback.get("reviewer_role") if feedback is not None else None
+    if feedback is None or role != "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW":
+        return Decision(
+            observed_phase=phase, evidence=(), action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=(
+                    "upload the current implementation bundle to a manual external "
+                    "reviewer and paste the verdict into REVIEW_FEEDBACK.md, declaring "
+                    "Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+                ),
+                artifact_path=str(bundle_dir),
+                safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
+            ),
+            declined=False,
+            reason=(
+                f"{phase}: no current-round REVIEW_FEEDBACK.md on file"
+                if feedback is None else
+                f"{phase}: feedback declares Reviewer role {role!r}, not "
+                "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+            ),
+        )
+
+    status = feedback.get("status")
+    if status == "BLOCK":
+        return Decision(
+            observed_phase=phase, evidence=("Status: BLOCK",), action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required="the external reviewer blocked this round; a human "
+                                  "resolves it before anything else runs",
+                artifact_path=str(feedback_path),
+                safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
+            ),
+            declined=False,
+            reason=f"{phase}: Status: BLOCK -- a human resolves before anything else runs",
+        )
+
+    return Decision(
+        observed_phase=phase, evidence=(f"MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW verdict on "
+                                         f"file, Status: {status}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                "a MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW verdict is on file; a human runs "
+                "/record-manual-implementation-review"
+            ),
+            artifact_path=str(feedback_path),
+            safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
+        ),
+        declined=False,
+        reason=f"{phase}: a MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW verdict is on file "
+               f"(Status: {status})",
+    )
+
+
 def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
     phase = "AWAITING_FUNCTIONAL_REVIEW"
     feedback_dir = resolve_feedback_dir(root, work_item_id)
@@ -827,6 +924,7 @@ _EVIDENCE_HANDLERS = {
     "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW": _decide_awaiting_manual_external_plan_review,
     "AWAITING_EXTERNAL_PLAN_REVIEW": _decide_awaiting_external_plan_review,
     "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW": _decide_awaiting_external_implementation_review,
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": _decide_awaiting_manual_external_implementation_review,
     "AWAITING_FUNCTIONAL_REVIEW": _decide_awaiting_functional_review,
 }
 

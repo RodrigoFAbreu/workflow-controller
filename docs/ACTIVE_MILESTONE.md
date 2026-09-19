@@ -1208,16 +1208,57 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   fixtures' now-`"2.5.1"` default, CP2's own revalidation already
   documented these as CP9's residual scope), no errors, no regression
   against CP1-CP3's own revalidation baseline). `COMPLETE`.
+- `CP4B` revalidated: this checkpoint's own plan section *did* change --
+  revision 64 adds a **fourth** evidence-needing phase alongside the three
+  CP4B already refined (`AWAITING_LOCAL_PLAN_REVIEW`,
+  `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, `AWAITING_EXTERNAL_PLAN_REVIEW`
+  on a `"1"`-governed item): `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`
+  (`"2.2"`, revision 64's own "Reporting rules" table), CP4's own
+  revalidation left as a fixed, evidence-independent gate report and named
+  explicitly as pending this checkpoint ("CP4B sharpens all four alike",
+  `controller/decision.py`'s module docstring). Added
+  `_decide_awaiting_manual_external_implementation_review` to
+  `controller/evidence.py`'s `_EVIDENCE_HANDLERS`, implementing the
+  three-way sub-case revision 64 states verbatim ("the same read-only
+  evidence the plan stage's manual gate uses one stage over"): no
+  current-round `REVIEW_FEEDBACK.md`, or one declaring the *local*-stage
+  role, hands the bundle to a reviewer; a `MANUAL_EXTERNAL_IMPLEMENTATION_
+  REVIEW` verdict on file names `/record-manual-implementation-review` as
+  next; an admissible `Status: BLOCK` needs explicit user resolution first
+  -- **report-only at every sub-case** (unlike its plan-stage counterpart:
+  "the Controller reports and never launches at any of the three"), so the
+  plan-stage admissibility model (`evaluate_manual_stage_admissibility`,
+  bundle-id/`generation_head` currency) is deliberately not re-derived,
+  and the reviewer-role match is **exact-spelling only, no legacy-cased
+  alias** (unlike `_normalize_role`'s plan-stage acceptance), mirroring
+  `validate_manual_implementation_review_preconditions`
+  (`scripts/workflow_state.py:12709`). Also added
+  `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` to `BUNDLE_BEARING_
+  PHASES`: `/record-manual-implementation-review` calls
+  `assert_bundle_not_rejected` exactly as `/record-manual-plan-review`
+  does at the plan stage, so a withdrawn implementation bundle must gate
+  ahead of this phase's own ordinary rows too, the same as `AWAITING_
+  EXTERNAL_IMPLEMENTATION_REVIEW` already does. No change was needed to
+  `controller/decision.py` (its own fixed placeholder text for this phase
+  stays defined, and reachable, for a direct `decision.decide` call in
+  isolation -- `evidence.decide`'s `_EVIDENCE_HANDLERS` lookup now takes
+  precedence for any caller going through CP4B's own entry point, which is
+  every real caller per the plan's dependency graph). `tests/test_evidence.py`
+  gained `AwaitingManualExternalImplementationReviewTest` (6 tests): no
+  feedback, wrong (local-stage) role, lowercase role rejected (the
+  no-legacy-alias negative, contrasting `AwaitingManualExternalPlanReviewTest`'s
+  own `test_legacy_lowercase_role_is_accepted`), `Status: BLOCK`, an
+  admissible verdict staying report-only (never `automatic`), and the
+  `REJECTED`-marker-first override at this newly bundle-bearing phase.
+  Verified by `python3 -m unittest tests.test_evidence` (46 tests, all
+  green) and `python3 -m unittest discover -s tests` (362 tests: 2
+  failures, 1 skip -- the same two pre-existing `tests.test_cli` failures
+  CP4's own revalidation already documented as CP9's residual scope, no
+  errors, no regression against CP1-CP4's own revalidation baseline).
+  `COMPLETE`.
 
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP4B` onward in registry order (`CP4B` depends on `CP4`, now
-satisfied): `controller/evidence.py`'s own evidence-reading
-disambiguations (feedback role and `Status:`, the checklist trailer, the
-consumed marker, `incomplete_children`, `reviewed_implementation_head`),
-the `HumanGate` plan-stage/implementation-stage `artifact_path`
-resolution, and the `REJECTED`-marker-first override CP4's own
-`_ordinary_case_placeholder`s and static gate reports are still standing
-in for -- then `CP5` through `CP9` in registry order, applying the
+revalidating `CP5` through `CP9` in registry order, applying the
 revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
 the `USER_ONLY_COMMANDS` union widened to four, `NO_PHASE`'s round-trip
 schema) where each remaining checkpoint's own plan section now requires

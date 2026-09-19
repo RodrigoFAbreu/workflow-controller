@@ -497,6 +497,97 @@ class AwaitingExternalImplementationReviewTest(unittest.TestCase):
         self.assertIn("refuses", result.gate.what_is_required)
 
 
+class AwaitingManualExternalImplementationReviewTest(unittest.TestCase):
+    """Revision 64's own three-way sub-case (CP4B's fourth evidence-needing
+    phase): report-only at every sub-case, and no legacy-cased role alias,
+    unlike its plan-stage counterpart above."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, **overrides):
+        defaults = dict(
+            phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            base_commit="0" * 40, governing_workflow_version="2.2",
+        )
+        defaults.update(overrides)
+        work_item = fixtures.build_work_item_view(**defaults)
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def test_no_feedback_names_handing_the_bundle_to_a_reviewer(self) -> None:
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertIn("manual external reviewer", result.gate.what_is_required)
+        self.assertEqual(result.gate.safe_resume_command,
+                          "/record-manual-implementation-review wi-1")
+
+    def test_local_role_feedback_does_not_satisfy_the_arrival_test(self) -> None:
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(
+                status="APPROVE", reviewer_role="LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+            ),
+        )
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertIsNotNone(result.gate)
+
+    def test_lowercase_role_is_not_accepted_unlike_the_plan_stage(self) -> None:
+        """No legacy-cased alias at this stage: an exact-spelling mismatch
+        is refused, mirroring ``validate_manual_implementation_review_
+        preconditions`` -- unlike ``AwaitingManualExternalPlanReviewTest``'s
+        own ``test_legacy_lowercase_role_is_accepted``."""
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(
+                status="APPROVE", reviewer_role="manual_external_implementation_review",
+            ),
+        )
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertIsNotNone(result.gate)
+        self.assertIn("upload", result.gate.what_is_required.lower())
+
+    def test_block_is_a_gate_naming_explicit_resolution(self) -> None:
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(
+                status="BLOCK", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            ),
+        )
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertIn("resolves", result.gate.what_is_required)
+
+    def test_verdict_on_file_names_record_manual_implementation_review_and_never_launches(self) -> None:
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(
+                status="APPROVE", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            ),
+        )
+        result = self._decide()
+        # Report-only at every sub-case: unlike the plan-stage gate, an
+        # admissible verdict here still never becomes an automatic action.
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertEqual(result.gate.safe_resume_command,
+                          "/record-manual-implementation-review wi-1")
+
+    def test_bundle_bearing_phase_reports_a_withdrawn_bundle_ahead_of_the_ordinary_row(self) -> None:
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=False, detail="finalize failed")
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertIn("finalize failed", result.gate.what_is_required)
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/REJECTED")))
+
+
 class AwaitingFunctionalReviewTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()

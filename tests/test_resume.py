@@ -95,6 +95,25 @@ def _bump_target_revisions(root: Path, work_item_id: str) -> None:
     fixtures.write_workflow_state(root, state)
 
 
+def _add_work_item(root: Path, work_item_id: str, *, phase: str) -> None:
+    """Adds a brand-new ``work_items`` entry alongside whatever
+    :func:`_build_target` already wrote -- row 7's own bootstrap action,
+    materialised directly rather than through a fake-worker env override,
+    since these fixtures simulate an already-completed post-state rather
+    than driving a real worker."""
+    import json as _json
+    state_path = root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+    state = _json.loads(state_path.read_text())
+    state["work_items"][work_item_id] = {
+        "work_item_type": "product", "work_item_kind": "product", "work_item_id": work_item_id,
+        "governing_workflow_version": "2.1", "phase": phase, "plan_revision": 1,
+        "implementation_revision": None, "state_revision": 1, "checkpoints": {},
+        "current_bundle_id": None, "last_completed_checkpoint_id": None,
+        "base_commit": None, "parent_work_item_id": None,
+    }
+    fixtures.write_workflow_state(root, state)
+
+
 def _pre_state(*, phase: str, governing_workflow_version: str | None, target_head=None, **overrides):
     base = {
         "phase": phase, "governing_workflow_version": governing_workflow_version,
@@ -111,9 +130,10 @@ def _pre_state(*, phase: str, governing_workflow_version: str | None, target_hea
 def _record(
     *, job_id: str, target_repo: str, status: str, phase: str,
     governing_workflow_version: str | None = "2.1", command: str = "/milestone-plan",
-    work_item_id: str = "wi-1", schema_version=job.SCHEMA_VERSION,
+    work_item_id: str | None = "wi-1", schema_version=job.SCHEMA_VERSION,
     controller_generation=FAKE_IDENTITY.generation, declined: bool = False,
     pre_state_overrides: dict | None = None, worker_outcome=_OMIT,
+    expected_transition=_OMIT,
 ) -> dict:
     pre_state = _pre_state(
         phase=phase, governing_workflow_version=governing_workflow_version,
@@ -142,6 +162,8 @@ def _record(
     }
     if worker_outcome is not _OMIT:
         record["worker_outcome"] = worker_outcome
+    if expected_transition is not _OMIT:
+        record["expected_transition"] = expected_transition
     return record
 
 
@@ -294,6 +316,49 @@ class Case2UnresolvableSubjectTest(_ResumeTestCase):
         results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         self.assertEqual(results[0]["resume_marked"]["outcome"], "unreadable")
         self.assertEqual(results[0]["resume_marked"]["case"], 2)
+
+    def test_null_work_item_id_row7_record_is_valid_case2_and_reaches_the_table(self) -> None:
+        """Revision 64, round 63's `B2`: a `null` `work_item_id` is not an
+        unresolvable subject -- it is row 7's own declared literal, since
+        frozen Workflow alone derives a bootstrap work item's id. A record
+        carrying it, whose `expected_transition.from` agrees (the NO_PHASE
+        wire literal), must reach the reconciliation table rather than
+        abort the whole `resume` call with `StaleJobRecordError`."""
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING", work_item_id="wi-existing")
+        head = fixtures.current_head(managed_repo.root)
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="__NO_PHASE__", governing_workflow_version=None, command="/milestone-plan",
+            work_item_id=None,
+            expected_transition={"from": "__NO_PHASE__", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]},
+            pre_state_overrides={"target_head": head, "pre_work_item_keys": ["wi-existing"]},
+        )
+        _write_record(self.runtime_root, record)
+        # Never StaleJobRecordError from case 2 -- it reaches reconciliation,
+        # which in this fixture (zero new `work_items` keys, phase and head
+        # both unchanged) is `INTERRUPTED`, never an abort.
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+
+    def test_null_work_item_id_with_real_phase_expected_transition_raises(self) -> None:
+        """The other half of the stated pair (revision 64, round 63's
+        `B2`): `work_item_id` is null but `expected_transition.from` names
+        a real phase, not the NO_PHASE wire literal -- the two disagree,
+        and the record is refused, naming both fields, rather than
+        guessed at."""
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING")
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="PLANNING", governing_workflow_version="2.1", command="/milestone-plan",
+            work_item_id=None,
+            expected_transition={"from": "PLANNING", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]},
+        )
+        _write_record(self.runtime_root, record)
+        with self.assertRaises(StaleJobRecordError) as ctx:
+            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertIsNone(ctx.exception.evidence["work_item_id"])
+        self.assertEqual(ctx.exception.evidence["expected_transition_from"], "PLANNING")
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +644,101 @@ class ReconcileLaunchedTest(_ResumeTestCase):
         self.assertNotEqual(result["job_id"], "j1")
 
 
+class RowPredicateResumePathTest(_ResumeTestCase):
+    """The predicate clause's own trigger on the resume path is keyed on
+    the row's own ``_row_branch``, byte-identical to step 8's own rule
+    (CP6B's revision-65/66 repair) -- never on raw phase equality alone,
+    which leaves row 7's predicate unreachable (its ``from_phase`` is
+    ``NO_PHASE``, never equal to a real observed phase) and, if
+    implemented the other way (evaluating a predicate unconditionally),
+    incorrectly re-consults row 3's own ``BLOCK``-specific predicate on
+    its ``APPROVE``/``REVISE`` observations (revision 64's ``B1``,
+    revision 66's ``B1``/``I2``)."""
+
+    def test_row7_zero_new_keys_with_a_coincidentally_matching_pre_existing_phase_does_not_finish(self) -> None:
+        """Revision 64's `B1`: a LAUNCHED row-7 record whose target's
+        post-phase is `AWAITING_LOCAL_PLAN_REVIEW` but whose `work_items`
+        gained **zero** new keys must not reconcile to `FINISHED` -- it is
+        the `LAUNCHED` phase-unchanged-equivalent branch, `INTERRUPTED`.
+        The one pre-existing work item's own phase coincidentally matches
+        row 7's `to_any_of`, exactly what a bug reading `observed_phase_after`
+        off `select_work_item(work_item_id=None)` (rather than the
+        key-set diff `_observe_post_phase` performs) would report and
+        verify against."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", work_item_id="wi-existing",
+        )
+        head = fixtures.current_head(managed_repo.root)
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="__NO_PHASE__", governing_workflow_version=None, command="/milestone-plan",
+            work_item_id=None,
+            expected_transition={"from": "__NO_PHASE__", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]},
+            pre_state_overrides={"target_head": head, "pre_work_item_keys": ["wi-existing"]},
+        )
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+
+    def test_row7_exactly_one_new_key_at_the_expected_phase_finishes(self) -> None:
+        """Sanity companion to the case above: the true positive still
+        verifies -- the key-set diff finds exactly one new key at
+        `AWAITING_LOCAL_PLAN_REVIEW`, row 7's own predicate (also
+        consulted, redundantly -- defence in depth) agrees, and the
+        record reconciles to `FINISHED`, never relaunched."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="MILESTONE_COMPLETE", work_item_id="wi-existing",
+        )
+        head = fixtures.current_head(managed_repo.root)
+        _add_work_item(managed_repo.root, "wi-new", phase="AWAITING_LOCAL_PLAN_REVIEW")
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="__NO_PHASE__", governing_workflow_version=None, command="/milestone-plan",
+            work_item_id=None,
+            expected_transition={"from": "__NO_PHASE__", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]},
+            pre_state_overrides={"target_head": head, "pre_work_item_keys": ["wi-existing"]},
+        )
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+        self.assertTrue(results[0]["transition_verified"])
+
+    def test_row3_approve_observation_reconciles_to_finished_without_consulting_predicate(self) -> None:
+        """Revision 66's `B1`/`I2`: row 3's predicate (a current-round
+        `REVIEW_FEEDBACK.md` declaring `Status: BLOCK`) must not be
+        consulted on the `APPROVE` observation -- no such file exists on
+        disk at all, and the record still reconciles to `FINISHED`."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", work_item_id="wi-1",
+        )
+        head = fixtures.current_head(managed_repo.root)
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.1",
+            command="/review-plan", pre_state_overrides={"target_head": head},
+        )
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+        self.assertTrue(results[0]["transition_verified"])
+
+    def test_row3_revise_observation_reconciles_to_finished_without_consulting_predicate(self) -> None:
+        """The `REVISING_PLAN` (`REVISE`) half of the same pair."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="REVISING_PLAN", work_item_id="wi-1",
+        )
+        head = fixtures.current_head(managed_repo.root)
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.1",
+            command="/review-plan", pre_state_overrides={"target_head": head},
+        )
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+        self.assertTrue(results[0]["transition_verified"])
+
+
 class _NeverLaunches:
     """Structural proof that `resume` never spawns a worker: patches
     `controller.worker.launch` to raise if it is ever called while
@@ -808,6 +968,72 @@ class EndToEndInterruptionTest(_ResumeTestCase):
         self.assertEqual(len(job_files), 1)
         on_disk = runtime_module.read_json(job_files[0])
         self.assertEqual(on_disk["status"], job.STATUS_LAUNCHED)
+
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+
+
+class BootstrapEndToEndInterruptionTest(_ResumeTestCase):
+    """The declared row-7 fixture (revision 64, round 63's `B2`): "written
+    to disk by a real `execute_step` against a zero-work-item target and
+    re-read from there rather than hand-built" -- `validate_record`'s case
+    2 returns `VALID` for the null `work_item_id`, the record reaches the
+    reconciliation table, and the call does not abort."""
+
+    def test_a_bootstrap_worker_killed_mid_run_leaves_a_null_work_item_id_record_that_resume_reconciles(self) -> None:
+        root = self.tmp_root / "target"
+        fixtures.build_target_git_repo(root)
+        (root / "README.md").write_text("target fixture\n")
+        fixtures.commit_all(root, "initial")
+        fixtures.write_workflow_state(root, {
+            "schema_version": 1, "active_work_item_id": None, "work_items": {},
+        })
+        fixtures.copy_real_commands_dir(root / ".claude" / "commands")
+        managed_repo = fixtures.build_target_managed_repository(root)
+
+        proc = subprocess.Popen(
+            [
+                sys.executable, "-c",
+                "import sys, subprocess; sys.path.insert(0, sys.argv[1]); "
+                "from pathlib import Path; from controller import job; "
+                "from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT; "
+                "ident = ControllerIdentity(generation=7, source_root=Path('/fake'), "
+                "origin_source_root=Path('/fake'), source_kind=SOURCE_KIND_COMMIT, "
+                "source_commit='a'*40, tree_digest='b'*64, generation_source='head', "
+                "pinned_at='2024-01-01T00:00:00Z'); "
+                "from controller.managed_repo import ManagedRepository; "
+                "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
+                "workflow_version='2.3.1', profile='full', "
+                "verify={'returncode': 0, 'stdout': '', 'stderr': ''}, "
+                "status={'returncode': 0, 'stdout': '', 'stderr': ''}); "
+                "job.execute_step(mr, identity=ident, runtime=Path(sys.argv[3]), "
+                "claude_bin=sys.argv[4], timeout=3600)",
+                str(fixtures.REPO_ROOT), str(root), str(self.runtime_root), str(FAKE_CLAUDE),
+            ],
+            env={**__import__("os").environ, "FAKE_CLAUDE_HANG": "1"},
+        )
+        try:
+            jobs_dir = self.runtime_root / "jobs"
+            for _ in range(200):
+                if jobs_dir.is_dir() and any(jobs_dir.glob("*.json")):
+                    break
+                import time
+                time.sleep(0.05)
+            self.assertTrue(jobs_dir.is_dir() and any(jobs_dir.glob("*.json")), "no job record appeared")
+            proc.send_signal(signal.SIGKILL)
+            proc.wait(timeout=10)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
+
+        job_files = list(jobs_dir.glob("*.json"))
+        self.assertEqual(len(job_files), 1)
+        on_disk = runtime_module.read_json(job_files[0])
+        self.assertEqual(on_disk["status"], job.STATUS_LAUNCHED)
+        self.assertIsNone(on_disk["work_item_id"])
+        self.assertEqual(on_disk["expected_transition"]["from"], "__NO_PHASE__")
 
         results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         self.assertEqual(len(results), 1)

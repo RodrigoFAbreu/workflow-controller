@@ -73,8 +73,10 @@ from typing import Any, Callable
 from controller import evidence, runtime, target_state, worker
 from controller.decision import (
     NO_PHASE,
+    NO_PHASE_WIRE,
     Decision,
     decide_no_work_item,
+    phase_from_wire,
     phase_to_wire,
 )
 from controller.errors import ControllerError, HumanGateError, StaleJobRecordError, UnreconcilableJobError
@@ -790,6 +792,40 @@ def _expected_transition(phase: Any, governing_workflow_version: str | None, dec
 # CP6B -- steps 7-9: fresh post-state re-read and verification.
 # ---------------------------------------------------------------------------
 
+
+def _observe_post_phase(managed_repo: Any, work_item_id: str | None, pre_state: dict) -> "str | Any":
+    """A fresh post-state phase read, live from disk -- shared by
+    `execute_step`'s own step 7 (CP6B) and CP7's own `resume` (through
+    `_reconcile_launched`/`_reconcile_completed`), which need the identical
+    bootstrap-aware read for the identical reason (CP6B's own scope note on
+    step 7's "fresh `managed_repo.inspect`", carried over rather than
+    duplicated a second time -- a duplicate copy is exactly what let CP7's
+    own resume path drift from this rule until revision 64's B1 named it: a
+    row-7 (`NoWorkItemYet`) record has no `WorkItemView` to re-select by
+    id -- `work_item_id` is `None` for it -- so its own post-read is a
+    direct key-set comparison against `pre_state["pre_work_item_keys"]`,
+    never a second `select_work_item(work_item_id=None)` call: that call's
+    own "more than one candidate" branch is `AmbiguousWorkItemError`
+    (CP3), which would crash the caller on exactly the two-or-more-key case
+    this checkpoint's own declared row-7 cases require to fail *closed*
+    instead (`observed_phase_after=NO_PHASE`, never a member of any row's
+    `to_any_of`, so verification fails with the ordinary
+    `phase_not_in_to_any_of` reason). Row 7's own predicate
+    (`_predicate_row7_new_work_item_created`) performs the identical
+    key-set comparison independently, at verification time -- the two
+    checks are deliberately redundant (defence in depth), not merged."""
+    post_snapshot = target_state.read(managed_repo)
+    if work_item_id is None:
+        new_work_item_keys = frozenset(post_snapshot.work_items) - frozenset(
+            pre_state.get("pre_work_item_keys") or ()
+        )
+        if len(new_work_item_keys) == 1:
+            return post_snapshot.work_items[next(iter(new_work_item_keys))].phase
+        return NO_PHASE
+    post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item_id)
+    return post_work_item.phase
+
+
 #: The first clause of step 8's rule (CP6B, "The verification rule, stated
 #: in full and in one form"), **stated positively** -- total by
 #: construction: an unrecognised `worker_outcome` fails it wherever it
@@ -1020,15 +1056,61 @@ def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> V
             evidence={"job_id": record.get("job_id"), "target_repo": record.get("target_repo"),
                       "error": str(exc)},
         )
-    if work_item_id not in snapshot.work_items:
-        return _invalid(
-            record, case=2, code="StaleJobRecordError", reason="work_item_absent",
-            message=(
-                f"job {record.get('job_id')!r} names work_item_id {work_item_id!r}, which is "
-                f"absent from {managed_repo.root}'s current Workflow state"
-            ),
-            evidence={"job_id": record.get("job_id"), "work_item_id": work_item_id},
-        )
+
+    # A `null` `work_item_id` is not an unresolvable subject (revision 64,
+    # round 63's B2): it is the declared literal for a row-7 (`NoWorkItemYet`
+    # bootstrap) record -- frozen Workflow alone derives the id, the
+    # Controller never supplies one -- whose own subject is the target
+    # repository the two checks above already confirmed resolvable, not a
+    # name to look up in `snapshot.work_items`. A row-7 record is
+    # distinguishable from a malformed one without guessing, because
+    # `expected_transition.from` reconstructs to the NO_PHASE wire literal
+    # exactly for those records and to a real phase string for every other
+    # row: "`work_item_id` is null" and "`expected_transition.from` is the
+    # NO_PHASE wire literal" must agree, and a record in which one holds and
+    # the other does not is itself a refusal, naming both fields. A `PLANNED`
+    # bootstrap record carries no `expected_transition` at all yet (step 4's
+    # own `LAUNCHED`-only addition), so there is nothing to disagree with --
+    # `null` alone is enough for that record.
+    expected_transition = record.get("expected_transition")
+    expected_from = expected_transition.get("from") if isinstance(expected_transition, dict) else None
+    if work_item_id is None:
+        if expected_transition is not None and expected_from != NO_PHASE_WIRE:
+            return _invalid(
+                record, case=2, code="StaleJobRecordError",
+                reason="null_work_item_id_disagrees_with_expected_transition",
+                message=(
+                    f"job {record.get('job_id')!r} carries work_item_id=null but its "
+                    f"expected_transition.from is {expected_from!r}, not the NO_PHASE wire "
+                    f"literal {NO_PHASE_WIRE!r} -- a null work_item_id is only valid for a "
+                    f"row-7 bootstrap record"
+                ),
+                evidence={"job_id": record.get("job_id"), "work_item_id": work_item_id,
+                          "expected_transition_from": expected_from},
+            )
+    else:
+        if expected_transition is not None and expected_from == NO_PHASE_WIRE:
+            return _invalid(
+                record, case=2, code="StaleJobRecordError",
+                reason="expected_transition_no_phase_disagrees_with_work_item_id",
+                message=(
+                    f"job {record.get('job_id')!r} carries expected_transition.from="
+                    f"{NO_PHASE_WIRE!r} but a non-null work_item_id {work_item_id!r} -- the "
+                    f"NO_PHASE wire literal is only valid for a null-work_item_id bootstrap "
+                    f"record"
+                ),
+                evidence={"job_id": record.get("job_id"), "work_item_id": work_item_id,
+                          "expected_transition_from": expected_from},
+            )
+        if work_item_id not in snapshot.work_items:
+            return _invalid(
+                record, case=2, code="StaleJobRecordError", reason="work_item_absent",
+                message=(
+                    f"job {record.get('job_id')!r} names work_item_id {work_item_id!r}, which is "
+                    f"absent from {managed_repo.root}'s current Workflow state"
+                ),
+                evidence={"job_id": record.get("job_id"), "work_item_id": work_item_id},
+            )
 
     # Case 3: worker_outcome disagrees with the step that owns the
     # record's status -- stated over the three named non-terminal
@@ -1098,12 +1180,24 @@ def _expected_outcome_for_record(record: JobRecord) -> ExpectedOutcome:
     the time :func:`resume` calls this, :func:`validate_record` has
     already confirmed the record is a genuine Generation-1 write (case 1's
     ``controller_generation`` check), and `execute_step` never launches a
-    worker for any key outside this table."""
+    worker for any key outside this table.
+
+    ``pre_state["phase"]`` is read off the persisted record, so it is
+    already in its durable (wire) form -- ``"__NO_PHASE__"`` for a row-7
+    (bootstrap) record, every real phase's own name otherwise
+    (:func:`~controller.job._durable_pre_state`) -- and is mapped back
+    through :func:`~controller.decision.phase_from_wire` before the table
+    lookup, the same single reader every "no phase" site on the resume
+    path uses. :data:`EXPECTED_OUTCOMES`' own table is keyed on the
+    in-memory :data:`~controller.decision.NO_PHASE` sentinel for row 7,
+    never on its wire literal, so looking the wire string up directly
+    would always miss."""
     pre_state = record.get("pre_state") or {}
     selected_action = record.get("selected_action") or {}
     command = selected_action.get("command")
     command_token = command.split()[0] if isinstance(command, str) and command else None
-    key = (pre_state.get("phase"), pre_state.get("governing_workflow_version"), command_token)
+    phase = phase_from_wire(pre_state.get("phase"))
+    key = (phase, pre_state.get("governing_workflow_version"), command_token)
     outcome = _EXPECTED_OUTCOMES_BY_KEY.get(key)
     if outcome is None:
         raise AssertionError(
@@ -1126,7 +1220,22 @@ def _row2_verified(
     value, so the returned reason (when unverified) never misreports what
     the record actually carried. Returns ``(verified, reason)`` --
     ``reason`` is one of ``"worker_outcome"``, ``"phase_not_in_to_any_of"``
-    or ``"predicate_not_satisfied"``, ``None`` when verified."""
+    or ``"predicate_not_satisfied"``, ``None`` when verified.
+
+    The predicate clause's own trigger is keyed on the row's own
+    :func:`_row_branch` -- byte-identical to :func:`_verify_transition`'s
+    own rule (CP6B, step 8's revision-65/66 repair, round 64's `B1`): an
+    unconditional trigger when the branch is ``None`` (row 7's own
+    unconditional writer -- its ``from_phase`` is
+    :data:`~controller.decision.NO_PHASE`, which can never equal a real
+    observed phase, so a phase-equality trigger alone would leave row 7's
+    own predicate declared and never run on this path either), otherwise
+    exactly when ``observed_phase_after`` equals ``outcome.from_phase``
+    (rows 3 and 5, whose writer runs on one named branch only). This
+    function used to trigger on raw phase equality alone -- the exact
+    defect step 8's own repair fixed in `_verify_transition`, left
+    unrepaired here, which is what left row 7's predicate declared and
+    never evaluated on the resume path (revision 64's `B1`)."""
     if status == STATUS_COMPLETED:
         outcome_ok = worker_outcome in _VERIFYING_WORKER_OUTCOMES
     else:
@@ -1135,8 +1244,9 @@ def _row2_verified(
         return False, "worker_outcome"
     if observed_phase_after not in outcome.to_any_of:
         return False, "phase_not_in_to_any_of"
-    if observed_phase_after == outcome.from_phase:
-        if outcome.predicate is None or not outcome.predicate(root, work_item_id, pre_state):
+    branch = _row_branch(outcome)
+    if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
+        if not outcome.predicate(root, work_item_id, pre_state):
             return False, "predicate_not_satisfied"
     return True, None
 
@@ -1158,15 +1268,21 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     succeeded" (row 2, never relaunch), "nothing durable happened" (row 3,
     ``INTERRUPTED``, a fresh ``step`` may retry), and "cannot be
     reconciled" (row 4, :class:`~controller.errors.UnreconcilableJobError`,
-    fail closed and require a human)."""
+    fail closed and require a human). The post-state read is
+    :func:`_observe_post_phase`, the bootstrap-aware helper shared with
+    ``execute_step``'s own step 7 (CP6B) -- a row-7 record's own
+    ``work_item_id`` is ``None``, so this is never a second
+    ``select_work_item(work_item_id=None)`` call, whose own "more than one
+    candidate" branch is ``AmbiguousWorkItemError`` (CP3), which would
+    abort the whole ``resume`` call on exactly the two-key case row 7's own
+    declared cases require to fail closed instead (revision 64's `B1`)."""
     root = managed_repo.root
     work_item_id = record["work_item_id"]
     pre_state = record.get("pre_state") or {}
     outcome = _expected_outcome_for_record(record)
 
-    post_snapshot = target_state.read(managed_repo)
-    post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item_id)
-    observed_phase_after = post_work_item.phase
+    observed_phase_after = _observe_post_phase(managed_repo, work_item_id, pre_state)
+    observed_phase_after_wire = phase_to_wire(observed_phase_after)
     observed_head = _current_head(root)
 
     verified, _reason = _row2_verified(
@@ -1177,26 +1293,26 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     if verified:
         reconciled = {
             **record, "status": STATUS_FINISHED, "transition_verified": True,
-            "observed_phase_after": observed_phase_after, "reconciled_at": now, "updated_at": now,
+            "observed_phase_after": observed_phase_after_wire, "reconciled_at": now, "updated_at": now,
         }
         return _persist(runtime_root, record["job_id"], reconciled)
 
-    phase_unchanged = observed_phase_after == pre_state.get("phase")
+    phase_unchanged = observed_phase_after_wire == pre_state.get("phase")
     head_unchanged = observed_head == pre_state.get("target_head")
     if phase_unchanged and head_unchanged:
         reconciled = {
-            **record, "status": STATUS_INTERRUPTED, "observed_phase_after": observed_phase_after,
+            **record, "status": STATUS_INTERRUPTED, "observed_phase_after": observed_phase_after_wire,
             "reconciled_at": now, "updated_at": now,
         }
         return _persist(runtime_root, record["job_id"], reconciled)
 
     raise UnreconcilableJobError(
         f"job {record['job_id']!r} for {work_item_id!r} cannot be reconciled: pre-phase "
-        f"{pre_state.get('phase')!r} -> observed {observed_phase_after!r}, pre-state target_head "
+        f"{pre_state.get('phase')!r} -> observed {observed_phase_after_wire!r}, pre-state target_head "
         f"{pre_state.get('target_head')!r} -> observed {observed_head!r}",
         evidence={
             "job_id": record["job_id"], "work_item_id": work_item_id,
-            "pre_phase": pre_state.get("phase"), "observed_phase_after": observed_phase_after,
+            "pre_phase": pre_state.get("phase"), "observed_phase_after": observed_phase_after_wire,
             "pre_target_head": pre_state.get("target_head"), "observed_target_head": observed_head,
         },
     )
@@ -1206,16 +1322,17 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
     """Row 2 (verifying) / row 5 (failing): ``COMPLETED``. Mirrors CP6B
     step 8/9's own verification rule exactly -- "exactly as CP6B step 8
     would have" -- against a fresh post-state re-read, never the
-    long-gone process's own memory."""
+    long-gone process's own memory. The post-state read is
+    :func:`_observe_post_phase`, the same bootstrap-aware helper
+    ``_reconcile_launched`` and ``execute_step``'s own step 7 (CP6B) use."""
     root = managed_repo.root
     work_item_id = record["work_item_id"]
     pre_state = record.get("pre_state") or {}
     worker_outcome = record.get("worker_outcome")
     outcome = _expected_outcome_for_record(record)
 
-    post_snapshot = target_state.read(managed_repo)
-    post_work_item = target_state.select_work_item(post_snapshot, work_item_id=work_item_id)
-    observed_phase_after = post_work_item.phase
+    observed_phase_after = _observe_post_phase(managed_repo, work_item_id, pre_state)
+    observed_phase_after_wire = phase_to_wire(observed_phase_after)
 
     verified, reason = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
@@ -1225,7 +1342,7 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
     if verified:
         reconciled = {
             **record, "status": STATUS_FINISHED, "transition_verified": True,
-            "observed_phase_after": observed_phase_after, "reconciled_at": now, "updated_at": now,
+            "observed_phase_after": observed_phase_after_wire, "reconciled_at": now, "updated_at": now,
         }
         return _persist(runtime_root, record["job_id"], reconciled)
 
@@ -1233,12 +1350,12 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         **record,
         "status": STATUS_FAILED,
         "transition_verified": False,
-        "observed_phase_after": observed_phase_after,
+        "observed_phase_after": observed_phase_after_wire,
         "reconciliation_evidence": {
             "code": "TransitionNotObservedError",
             "reason": reason,
             "expected_to_any_of": sorted(outcome.to_any_of),
-            "observed_phase": observed_phase_after,
+            "observed_phase": observed_phase_after_wire,
             "worker_outcome": worker_outcome,
         },
         "reconciled_at": now,
@@ -1619,8 +1736,10 @@ def execute_step(
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
     # -- never the `snapshot`/`work_item` captured before the worker ran
     # (see this module's own docstring, "CP6B's own scope note on step
-    # 7's 'fresh managed_repo.inspect'"). A row-7 (`NoWorkItemYet`) job has
-    # no `WorkItemView` to re-select by id -- `resolved_work_item_id` is
+    # 7's 'fresh managed_repo.inspect'"). `_observe_post_phase` (this
+    # module's shared helper, also `resume`'s own CP7 read) is the
+    # bootstrap-aware read: a row-7 (`NoWorkItemYet`) job has no
+    # `WorkItemView` to re-select by id -- `resolved_work_item_id` is
     # `None` for it -- so its own post-read is a direct key-set comparison
     # against `pre_state["pre_work_item_keys"]`, never a second
     # `select_work_item(work_item_id=None)` call: that call's own "more
@@ -1633,18 +1752,7 @@ def execute_step(
     # (`_predicate_row7_new_work_item_created`) performs the identical
     # key-set comparison independently, at verification time -- the two
     # checks are deliberately redundant (defence in depth), not merged.
-    post_snapshot = target_state.read(managed_repo)
-    if is_bootstrap:
-        new_work_item_keys = frozenset(post_snapshot.work_items) - frozenset(
-            pre_state.get("pre_work_item_keys") or ()
-        )
-        if len(new_work_item_keys) == 1:
-            observed_phase_after = post_snapshot.work_items[next(iter(new_work_item_keys))].phase
-        else:
-            observed_phase_after = NO_PHASE
-    else:
-        post_work_item = target_state.select_work_item(post_snapshot, work_item_id=resolved_work_item_id)
-        observed_phase_after = post_work_item.phase
+    observed_phase_after = _observe_post_phase(managed_repo, resolved_work_item_id, pre_state)
 
     outcome_row = _expected_outcome_for(decision.observed_phase, governing_workflow_version, decision)
 

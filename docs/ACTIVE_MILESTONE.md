@@ -1394,8 +1394,82 @@ mechanical test/schema fix included in CP9's own revalidation pass.
   revalidation already documented as CP9's residual scope, no errors, no
   regression against CP1-CP6's own revalidation baseline). `COMPLETE`.
 
+- `CP7` revalidated: `resume`'s own resume-path mirrors of CP6B's step
+  7-9 logic had not been carried along with either of CP6B's two deltas,
+  and carried a third, CP7-local defect of its own. **(1)
+  `validate_record`'s case 2 rejected every row-7 (bootstrap) record**:
+  it read `work_item_id not in snapshot.work_items`, and `None not in
+  {...}` is always `True`, so a genuinely `null` `work_item_id` --
+  row 7's own declared literal, since frozen Workflow alone derives a
+  bootstrap work item's id -- raised `StaleJobRecordError` and aborted
+  the whole call, exactly revision 64's `B2` (round 63) states must not
+  happen. Fixed by pairing `work_item_id is None` against
+  `expected_transition.from == NO_PHASE_WIRE` (agree -> `VALID`; disagree
+  -> refusal naming both fields), the stated two-field carve-out, leaving
+  the ordinary string-`work_item_id`-absent-from-state refusal unchanged.
+  **(2) `_expected_outcome_for_record` looked up the table by the raw,
+  on-disk wire-form phase** (`"__NO_PHASE__"`, a plain string) rather
+  than mapping it back through `phase_from_wire` first, so the lookup
+  always missed :data:`EXPECTED_OUTCOMES`' own row 7 (keyed on the
+  in-memory `NO_PHASE` sentinel) and raised `AssertionError` for every
+  row-7 `LAUNCHED`/`COMPLETED` record -- a second, independent way for a
+  legitimate bootstrap record to abort `resume` before it ever reached
+  reconciliation. **(3) `_row2_verified` still triggered its predicate
+  clause on raw phase equality alone** -- the exact defect CP6B's own
+  revision-65/66 repair fixed in `_verify_transition` but never carried
+  over to this, its resume-path twin -- so row 7's predicate
+  (`from_phase=NO_PHASE`, which can never equal a real observed phase)
+  was declared and never evaluated on the resume path either, and a
+  `LAUNCHED` row-7 record could in principle reconcile to `FINISHED` off
+  `to_any_of` membership alone. Fixed by keying the trigger on
+  `_row_branch(outcome)`, byte-identical to `_verify_transition`'s own
+  rule. **(4) `_reconcile_launched`/`_reconcile_completed` called
+  `select_work_item(post_snapshot, work_item_id=work_item_id)`
+  unconditionally** -- for a row-7 record (`work_item_id=None`) this is
+  the same `select_work_item(work_item_id=None)` call CP6B's own fix
+  removed from `execute_step`, whose "more than one candidate" branch is
+  `AmbiguousWorkItemError`, uncaught here, crashing `resume` on the exact
+  two-or-more-key case row 7's own declared cases require to fail
+  *closed* instead. Fixed by extracting `execute_step`'s own step-7 logic
+  into a new shared helper, `_observe_post_phase` (bootstrap-aware:
+  a direct key-set comparison against `pre_state["pre_work_item_keys"]`
+  when `work_item_id is None`, `select_work_item` otherwise), used by
+  both `execute_step` and CP7's two reconcile functions -- a single
+  declared reader rather than a second copy that could drift again the
+  way this one already had. `observed_phase_after` and
+  `reconciliation_evidence["observed_phase"]` are now wire-mapped through
+  `phase_to_wire` before being persisted or compared, matching CP6B's own
+  discipline (a raw `NO_PHASE` sentinel is not JSON-serialisable, and the
+  `phase_unchanged` comparison against the on-disk, already-wire-form
+  `pre_state["phase"]` needs both sides in the same form).
+  `tests/test_resume.py` gained: two `Case2UnresolvableSubjectTest` cases
+  (the null-`work_item_id`/`expected_transition.from` pair, both
+  directions); a new `RowPredicateResumePathTest` with the row-7
+  zero-new-keys/one-new-key pair (revision 64's `B1`) and the row-3
+  `APPROVE`/`REVISE` pair proving the predicate is *not* re-consulted on
+  those observations (revision 66's `B1`/`I2`); and a new
+  `BootstrapEndToEndInterruptionTest` driving a real `execute_step`
+  against a genuinely zero-work-item target, `SIGKILL`ing the worker
+  mid-run, and confirming `resume` reconciles the resulting on-disk
+  `work_item_id: null` record without aborting -- the plan's own declared
+  "written to disk by a real `execute_step` ... and re-read from there
+  rather than hand-built" fixture. Every new test was confirmed red
+  against the pre-fix code (all five behavioural cases reproduce; the two
+  row-3 cases pass either way, since raw phase equality already gave the
+  same answer there by coincidence -- kept as regression coverage for the
+  branch-keyed rewrite). No row 1-6 or CP6B step 7-9 behaviour changed
+  (`execute_step`'s own step 7 now calls the extracted helper instead of
+  its inline duplicate, same effect). Verified by `python3 -m unittest
+  tests.test_resume tests.test_job tests.test_job_validation
+  tests.test_decision tests.test_target_state tests.test_evidence` (227
+  tests, all green) and by re-running the full suite (`python3 -m
+  unittest discover -s tests -p "test_*.py"`: 386 tests: 2 failures, 1
+  skip -- the same two pre-existing `tests.test_cli` failures CP4's own
+  revalidation already documented as CP9's residual scope, no errors, no
+  regression against CP1-CP6B's own revalidation baseline). `COMPLETE`.
+
 **Next legal step**: a further `/milestone-implement` invocation continues
-revalidating `CP7` through `CP9` in registry order, applying the
+revalidating `CP8` and `CP9` in registry order, applying the
 revision-64/68 Workflow-baseline changes (`VALIDATED_WORKFLOW_RELEASES`,
 `NO_PHASE`'s round-trip schema) where each remaining checkpoint's own plan
 section now requires them, through `CP9` where B1's `worker_outcome`

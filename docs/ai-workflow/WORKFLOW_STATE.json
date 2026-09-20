@@ -11,7 +11,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-generation-1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json",
       "governing_workflow_version": "2.1",
-      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 71,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -116,8 +116,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 269,
-      "last_transition": "2026-09-20T00:28:05Z",
+      "state_revision": 270,
+      "last_transition": "2026-09-20T00:46:20Z",
       "amendment_history": [
         {
           "amendment_id": "0",

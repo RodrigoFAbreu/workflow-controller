@@ -14,8 +14,15 @@ to ``runtime.assert_contained``/``runtime._assert_contained``. A
 ``subprocess``/``os.system``-mediated write is not a recognized write-call
 form and is never flagged or cleared by this scanner (``identity.py``'s
 ``_extract_clean`` tar invocation is the one instance in ``controller/``
-today); its containment is proved instead by the directory guard already
-placed on the directory it is dispatched into.
+today). Its containment rests on two conjuncts, not one: the directory
+guard already placed on ``tmp_dir`` before ``tar`` is dispatched into it
+*and* the fact that the paths ``tar`` extracts are ``HEAD``'s own
+committed tree, scoped by ``git archive``'s own pathspec argument -- a git
+tree entry cannot carry a ``..`` component or an absolute path, so every
+extracted member is relative and already normalized. The guard alone
+bounds only where ``tar`` is told to write, not what it is told to write
+there; the pathspec-normalization conjunct is what rules out a malicious
+or corrupted archive member steering ``tar`` outside that root.
 """
 
 from __future__ import annotations

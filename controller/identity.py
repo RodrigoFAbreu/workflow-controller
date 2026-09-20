@@ -237,6 +237,7 @@ def _extract_dirty(origin: Path, dest: Path) -> None:
             continue
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
+        runtime.assert_contained(dest, target)
         shutil.copy2(src, target)
         if os.access(src, os.X_OK):
             target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -261,12 +262,14 @@ def _publish_source_pin(source_dir: Path, dest: Path, pin_body: dict) -> None:
     -- and `os.replace`d in, so an interruption between `fsync` and the
     rename can never leave a stray file inside the digested set."""
     tmp = source_dir / f".{_SOURCE_PIN_NAME}.{secrets.token_hex(8)}.tmp"
+    runtime.assert_contained(source_dir, tmp)
     data = json.dumps(pin_body, indent=2, sort_keys=True).encode("utf-8") + b"\n"
     try:
         with open(tmp, "wb") as fh:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
+        runtime.assert_contained(source_dir, dest)
         os.replace(tmp, dest / _SOURCE_PIN_NAME)
     finally:
         tmp.unlink(missing_ok=True)
@@ -292,6 +295,7 @@ def materialise(
     source_dir = runtime_root / "source"
     source_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = source_dir / f".materialise-{secrets.token_hex(8)}.tmp"
+    runtime.assert_contained(source_dir, tmp_dir)
     try:
         if dirty:
             _extract_dirty(origin_source_root, tmp_dir)
@@ -306,6 +310,7 @@ def materialise(
         generation, generation_source = _read_generation(origin_source_root)
 
         dest = source_dir / tree_digest
+        runtime.assert_contained(source_dir, dest)
         pin_body = {
             "schema_version": 1,
             "source_kind": source_kind,

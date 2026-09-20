@@ -95,15 +95,26 @@ def ensure_runtime_root(root: Path, *, ladder_row: int) -> Path:
     return root
 
 
-def _assert_contained(runtime_root: Path, full_path: Path) -> None:
-    runtime_root = runtime_root.resolve()
+def _assert_contained(root: Path, path: Path) -> None:
+    root = root.resolve()
     try:
-        full_path.resolve().relative_to(runtime_root)
+        path.resolve().relative_to(root)
     except ValueError:
         raise RuntimeContainmentError(
-            f"refusing to write {full_path} -- it is outside the runtime root {runtime_root}",
-            evidence={"path": str(full_path), "runtime_root": str(runtime_root)},
+            f"refusing to write {path} -- it is outside the runtime root {root}",
+            evidence={"path": str(path), "runtime_root": str(root)},
         ) from None
+
+
+def assert_contained(root: Path, path: Path) -> None:
+    """Public wrapper over the containment guard, for call sites that
+    already own a narrower root than the full ``runtime_root`` (e.g.
+    ``identity.py``'s snapshot-materialisation sites, each scoped to its
+    own ``source_dir``/``dest``) -- see
+    ``docs/ai-workflow/CONTROLLER_GEN1_HARDENING_PLAN.md``'s CP1. Neither
+    parameter is runtime-root-specific: ``_assert_contained`` already
+    checks any ``(root, path)`` pair."""
+    _assert_contained(root, path)
 
 
 def _atomic_write(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) -> Path:

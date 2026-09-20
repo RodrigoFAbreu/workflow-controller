@@ -2,14 +2,17 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-gen1-correctness-hardening`'s plan
-(revision 2) was approved (`EXTERNAL_APPROVE`) on 2026-09-20 and the work
-item entered `IMPLEMENTING`. It is a narrow, post-Gen1 correctness and
-operator-contract hardening pass — it does not redesign Controller
+**Awaiting functional review.** `workflow-controller-gen1-correctness-hardening`'s
+plan (revision 2) was approved (`EXTERNAL_APPROVE`) on 2026-09-20, all four
+checkpoints below completed, implementation revision 4 was approved
+(`EXTERNAL_APPROVE`, commit `d611c38`) on 2026-09-20, and the work item
+entered `AWAITING_FUNCTIONAL_REVIEW`. It is a narrow, post-Gen1 correctness
+and operator-contract hardening pass — it does not redesign Controller
 architecture and does not include Generation 2 features. The completed
 `workflow-controller-generation-1` entry in `docs/ai-workflow/WORKFLOW_STATE.json`
 is unchanged by this milestone; there is no `docs/ROADMAP.md` in this
-repository to update.
+repository to update. See "Functional review checklist" below for the
+manual testing gate.
 
 - **CP1 — snapshot-materialisation containment invariant: COMPLETE.**
   `controller/runtime.py` now exposes a public `assert_contained(root,
@@ -243,3 +246,148 @@ automated tests are green (the full Controller suite plus the frozen
 Workflow conformance suites); the final fresh review returns 0 Blocking /
 0 Important; Workflow milestone acceptance completes; the repository is
 clean.
+
+## Functional review checklist
+
+Manual functional review for `workflow-controller-gen1-correctness-hardening`
+(implementation revision 4, technical approval recorded at commit
+`d611c38`, `review_content_id`
+`e573ea614749dc93841d14cbf3ce9ca37a39e4b5f089c1d40aeb77f2a1da380a`).
+Findings go to `.ai-review/feedback/FUNCTIONAL_REVIEW.md`
+(`docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location").
+
+This milestone changes no CLI-visible behavior on its own — CP1-CP3 are
+internal correctness fixes (containment guard reuse, a manual-review
+label fix, a reviewer-role-normalization consistency fix) with no new or
+changed user-facing command surface. CP4 corrects four pieces of
+*documentation* accuracy against behavior that was already correct. This
+checklist therefore does two things: (a) a full regression pass proving
+the existing CLI flows still behave exactly as before, since CP1-CP3
+touch shared write/read paths those flows exercise; and (b) direct
+verification of each of CP4's four corrected claims, per
+`docs/ai-workflow/CONTROLLER_GEN1_HARDENING_CHECKLIST_CORRECTIONS.md`
+(linked rather than repeated here, per `/prepare-functional-review`'s own
+instruction).
+
+### Precondition check — read this before Flow 3
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` currently holds **stale content
+from the already-accepted `workflow-controller-generation-1` round**, not
+this work item — the feedback directory is a flat, work-item-unscoped
+path (`workflow_fingerprint.resolve_feedback_dir` falls back to
+`.ai-review/feedback/` whenever no `.ai-review/<work_item_id>/feedback/`
+directory exists, which is the case here), so old findings persist across
+work items. Its `FUNCTIONAL_REVIEW.consumed` marker's recorded hash
+(`88e35533025f473016dccc8e33fc584c6e7a7565`) does **not** match the file's
+current blob (`0bf14d01ed1c92d3bc91c3c8d52bbaedfc971dcc`), so the
+Controller's own "unconsumed findings" check
+(`controller.evidence.functional_review_findings_consumed`) will read this
+leftover file as live, unconsumed findings for *this* work item and route
+`explain`'s automatic decision toward "apply functional review findings"
+instead of the fresh-checklist branch this round actually needs.
+
+Before running Flow 3: open `.ai-review/feedback/FUNCTIONAL_REVIEW.md` and
+confirm by hand that its content is the old Gen1 round (its own header
+reads "Functional review — workflow-controller-generation-1"). If so,
+archive or remove that stale file (and its `.consumed` marker) before
+testing Flow 3, or expect and record `explain`'s automatic-branch behavior
+as the *stale-data* artifact it is rather than as a finding against this
+round. This is an environmental/tooling gap in the shared flat feedback
+layout, not a defect introduced by this milestone's changes — note it for
+the record, but it does not by itself block acceptance of this round.
+
+### Setup
+
+1. From a checkout of this exact repository at commit `d611c38` (or later,
+   with a clean working tree):
+   ```bash
+   pip install -e .
+   ```
+   (skip if already installed from the Gen1 round; confirm with
+   `workflow-controller status`).
+2. No feature flags or seeded data are needed — every flow below is
+   read-only against this repository's own live Workflow state.
+
+### Test data
+
+This repository's own checkout is the target (`.`) for every flow except
+5, which needs any directory with no `.workflow-manager/` (a scratch
+`mkdir` is enough).
+
+### Flows
+
+1. **`status`** — `workflow-controller status`.
+   Expected: exits `0`; prints the resolved runtime root and pinned
+   Controller source identity. Unchanged from the Gen1 round — confirms
+   CP1-CP3's internal changes did not disturb this flow.
+
+2. **`inspect` against this repository (`--json` before the subcommand)**
+   — `workflow-controller --json inspect .` and
+   `workflow-controller inspect .` (text).
+   Expected: exits `0`; reports this repository as managed, the active
+   work item `workflow-controller-gen1-correctness-hardening`, and its
+   current phase `AWAITING_FUNCTIONAL_REVIEW`. **CP4 item 3**: in the
+   `--json` payload's `work_item` object, confirm none of
+   `plan_approval`, `technical_approval`, `functional_acceptance_status`,
+   or `blocking_decisions` appear as keys.
+
+3. **`inspect` with `--json` misplaced after the subcommand (CP4 item 1)**
+   — `workflow-controller inspect . --json`.
+   Expected: exits `2` (`unrecognized arguments`) — `--json` is a global,
+   top-level-only option and is **not** accepted after the subcommand.
+   Confirms the corrected checklist examples (`--json inspect .`, not
+   `inspect . --json`) are the only valid form.
+
+4. **`explain` against this repository (CP4 item 2)** —
+   `workflow-controller explain .` and `--json explain .`.
+   Expected: exits **`0`** (`EXIT_OK`) in both forms — never `10`. The
+   report names the observed phase `AWAITING_FUNCTIONAL_REVIEW`, states
+   plainly that this is a manual gate requiring a human to test and either
+   approve or file findings, and names the safe resume command (this
+   checklist, then `/accept-milestone` once testing is clean). It must
+   **not** launch a worker or write a Controller job record
+   (`workflow-controller status` immediately afterward should show no new
+   job record from this call). See the precondition check above before
+   running this flow.
+
+5. **Unmanaged-repository refusal** — `workflow-controller inspect <a
+   directory with no .workflow-manager/>`.
+   Expected: exits `20`, with a clear `UnmanagedRepositoryError`-style
+   message naming the path — no stack trace, no silent success. Unchanged
+   from the Gen1 round.
+
+6. **`resume` against this repository** — `workflow-controller resume .`.
+   Expected: exits `0` (no non-terminal job records to reconcile) and
+   never attempts to launch a worker. Unchanged from the Gen1 round.
+
+### Expected results summary
+
+| Flow | Exit code | Launches a worker? |
+|---|---|---|
+| 1 `status` | 0 | No |
+| 2 `inspect .` (`--json` before subcommand, and text) | 0 | No |
+| 3 `inspect . --json` (misplaced flag, CP4 item 1) | 2 | No |
+| 4 `explain .` (text and `--json`, CP4 item 2) | 0 | No |
+| 5 `inspect <unmanaged>` | 20 | No |
+| 6 `resume .` | 0 | No |
+
+### Known limitations / out of scope for this milestone
+
+- Generation-2 features, broad Controller lifecycle automation, and
+  everything else listed under "Explicitly out of scope" above — do not
+  file findings against their absence.
+- CP1-CP3 have no CLI-observable surface of their own; they are proven by
+  this milestone's automated regression suite (`tests/test_write_containment.py`,
+  `tests/test_evidence.py::ReadFeedbackFieldsRealArtifactShapeTest`,
+  `tests/test_job.py::PredicateRow3RoleNormalizationTest`), not by this
+  manual checklist. This checklist's own flows 1, 5, and 6 are the
+  regression evidence that those internal changes didn't break anything
+  user-visible.
+- CP4 item 4 (the Flow-3-precondition documentation gap) is checked by
+  this checklist's own "Precondition check" section above, not by a
+  separate flow — there is no CLI output that exercises it directly
+  beyond what Flow 4 already does once the stale file is handled.
+- The stale `.ai-review/feedback/FUNCTIONAL_REVIEW.md` described in the
+  precondition check is a pre-existing environmental artifact of the flat
+  feedback-directory layout, not a defect this milestone introduced or is
+  scoped to fix.

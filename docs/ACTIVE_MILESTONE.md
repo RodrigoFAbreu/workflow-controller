@@ -70,8 +70,43 @@ before. Full plan:
   `tests/test_resume.py` suites pass (108 tests), and the repository's
   full test suite passes (434 tests, 1 skipped -- the live-Claude-gated
   integration test, `CLAUDE_BIN` unset in this environment).
-- CP3-CP6: not started.
+- **CP3 -- COMPLETE.** Added `WorkflowSnapshot.supported_versions:
+  tuple[str, ...] | None` to `controller/target_state.py`, populated by a
+  new `_read_supported_versions(root)` helper that mirrors
+  `_read_default_workflow_version`'s existing fail-soft contract exactly
+  (`None` if `WORKFLOW_CONFIG.json` is missing/unparseable/not a dict, or
+  if `supported_versions` is absent or not a list of strings; otherwise
+  the tuple of strings, in file order). Wired into `read()` alongside the
+  existing `default_workflow_version=...` construction. Purely
+  diagnostic, read-only context -- confirmed still true by the module's
+  existing AST-scan `ReadOnlySourceScanTest`, which continues to pass
+  unchanged; neither field is consumed by any decision, gate, or CLI
+  print path. Added `tests/test_target_state.py` coverage through the
+  real `target_state.read()` path against fixture target repositories:
+  `test_2_2_supported_versions_and_governing_version_read_correctly`
+  confirms `WorkflowSnapshot.default_workflow_version == "2.2"` and
+  `WorkflowSnapshot.supported_versions == ("1", "2.1", "2.2")` when a
+  fixture `WORKFLOW_CONFIG.json` declares them (values chosen to match
+  this repository's own real post-`21a304d` file, but read from the
+  fixture, not from it) and `WorkItemView.governing_workflow_version ==
+  "2.2"` when a work-item entry declares it; the pre-existing happy-path
+  test now also asserts `supported_versions == ("1", "2.1")` against its
+  own fixture; two new fail-soft tests
+  (`test_supported_versions_absent_yields_none`,
+  `test_supported_versions_not_a_list_of_strings_yields_none`) cover the
+  same shape of malformed-config cases `default_workflow_version` already
+  fails soft on. No other production file changes (confirmed by grep:
+  neither `default_workflow_version` nor `supported_versions` is
+  referenced anywhere else in `controller/`). Verified:
+  `tests/test_target_state.py` (42 tests), `tests/test_decision.py`,
+  `tests/test_cli.py`, `tests/test_write_containment.py`,
+  `tests/test_job.py` (102 tests total across those four), and the
+  repository's full test suite (437 tests, 1 skipped -- the
+  live-Claude-gated integration test, `CLAUDE_BIN` unset in this
+  environment) all pass.
+- CP4-CP6: not started.
 
 **Next action:** continue with `/milestone-implement` to select and
-implement CP3 (surface `WORKFLOW_CONFIG.json`'s `supported_versions` in
-`target_state.py`'s `WorkflowSnapshot`).
+implement CP4 (pin `decision.py`/`evidence.py`'s already-correct 2.2
+implementation-review classification, and the 2.1 single-stage parity
+guarantee, with discriminating regression tests).

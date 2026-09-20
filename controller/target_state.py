@@ -159,15 +159,20 @@ class WorkItemView:
 @dataclasses.dataclass(frozen=True)
 class WorkflowSnapshot:
     """The whole of a target repository's ``WORKFLOW_STATE.json``, plus
-    ``WORKFLOW_CONFIG.json``'s ``default_workflow_version`` (``None`` if
-    the config file is absent or unparseable -- there is no named refusal
-    for it in CP3's taxonomy; it is read-only diagnostic context, never a
-    load-bearing gate for anything CP3 itself decides)."""
+    ``WORKFLOW_CONFIG.json``'s ``default_workflow_version`` and
+    ``supported_versions`` (each ``None`` if the config file is absent,
+    unparseable, or does not declare that field in the expected shape --
+    there is no named refusal for either in CP3's taxonomy; both are
+    read-only diagnostic context, never a load-bearing gate for anything
+    Controller itself decides. Workflow's own
+    ``workflow_state.validate_governing_version`` remains the sole
+    authority over version admissibility)."""
 
     schema_version: int
     active_work_item_id: str | None
     work_items: Mapping[str, WorkItemView]
     default_workflow_version: str | None
+    supported_versions: tuple[str, ...] | None
     raw_path: Path
 
 
@@ -185,6 +190,30 @@ def _read_default_workflow_version(root: Path) -> str | None:
         return None
     version = data.get("default_workflow_version")
     return version if isinstance(version, str) else None
+
+
+def _read_supported_versions(root: Path) -> tuple[str, ...] | None:
+    """Mirrors :func:`_read_default_workflow_version`'s fail-soft contract
+    exactly: ``None`` if ``WORKFLOW_CONFIG.json`` is missing, unparseable,
+    or not a JSON object, or if its ``supported_versions`` field is absent
+    or not a list of strings; otherwise the tuple of strings, in file
+    order. Read-only diagnostic context -- not consumed by any decision
+    or gate here."""
+    config_path = root / _CONFIG_REL_PATH
+    try:
+        raw = config_path.read_text()
+    except OSError:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    versions = data.get("supported_versions")
+    if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
+        return None
+    return tuple(versions)
 
 
 def _resolve_registry_complete(root: Path, work_item_id: str, entry: dict) -> bool | None:
@@ -438,6 +467,7 @@ def read(managed_repo: ManagedRepository) -> WorkflowSnapshot:
         active_work_item_id=active_work_item_id,
         work_items=work_items,
         default_workflow_version=_read_default_workflow_version(root),
+        supported_versions=_read_supported_versions(root),
         raw_path=state_path,
     )
 

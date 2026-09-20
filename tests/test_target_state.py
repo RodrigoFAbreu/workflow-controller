@@ -96,6 +96,7 @@ class ReadHappyPathTest(unittest.TestCase):
             self.assertEqual(snapshot.schema_version, 1)
             self.assertEqual(snapshot.active_work_item_id, "wi-1")
             self.assertEqual(snapshot.default_workflow_version, "2.1")
+            self.assertEqual(snapshot.supported_versions, ("1", "2.1"))
             self.assertEqual(snapshot.raw_path, root / "docs/ai-workflow/WORKFLOW_STATE.json")
             view = snapshot.work_items["wi-1"]
             self.assertEqual(view.phase, "IMPLEMENTING")
@@ -112,6 +113,48 @@ class ReadHappyPathTest(unittest.TestCase):
             managed_repo = fixtures.build_target_managed_repository(root)
             snapshot = target_state.read(managed_repo)
             self.assertIsNone(snapshot.default_workflow_version)
+            self.assertIsNone(snapshot.supported_versions)
+
+    def test_2_2_supported_versions_and_governing_version_read_correctly(self) -> None:
+        """CP3: a `"2.2"`-declaring config and work item read correctly,
+        with values chosen to match this repository's own real
+        post-`21a304d` `WORKFLOW_CONFIG.json` -- but read from the
+        fixture the test itself writes, never from this repository's own
+        file."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wi = _minimal_work_item(governing_workflow_version="2.2")
+            fixtures.write_workflow_state(root, _state({"wi-1": wi}, active_work_item_id="wi-1"))
+            fixtures.write_workflow_config(
+                root, {"schema_version": 1, "default_workflow_version": "2.2",
+                       "supported_versions": ["1", "2.1", "2.2"]},
+            )
+            managed_repo = fixtures.build_target_managed_repository(root)
+            snapshot = target_state.read(managed_repo)
+            self.assertEqual(snapshot.default_workflow_version, "2.2")
+            self.assertEqual(snapshot.supported_versions, ("1", "2.1", "2.2"))
+            self.assertEqual(snapshot.work_items["wi-1"].governing_workflow_version, "2.2")
+
+    def test_supported_versions_absent_yields_none(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            fixtures.write_workflow_state(root, _state({}, active_work_item_id=None))
+            fixtures.write_workflow_config(root, {"schema_version": 1, "default_workflow_version": "2.1"})
+            managed_repo = fixtures.build_target_managed_repository(root)
+            snapshot = target_state.read(managed_repo)
+            self.assertEqual(snapshot.default_workflow_version, "2.1")
+            self.assertIsNone(snapshot.supported_versions)
+
+    def test_supported_versions_not_a_list_of_strings_yields_none(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            fixtures.write_workflow_state(root, _state({}, active_work_item_id=None))
+            fixtures.write_workflow_config(
+                root, {"schema_version": 1, "supported_versions": ["1", 2.1]},
+            )
+            managed_repo = fixtures.build_target_managed_repository(root)
+            snapshot = target_state.read(managed_repo)
+            self.assertIsNone(snapshot.supported_versions)
 
     def test_real_repository_own_workflow_state_reads_cleanly(self) -> None:
         """This repository is itself a real, currently-managed Workflow

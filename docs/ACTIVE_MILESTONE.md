@@ -2,30 +2,47 @@
 
 ## Status
 
-**Complete.** `workflow-controller-gen1-correctness-hardening` reached
-`MILESTONE_COMPLETE` on 2026-09-20: functional review round (checklist
-evidence commit `8dd47203c2e407ec14ea7a5f4071a34a24d44d4a`) returned
-**PASS** with no blocking findings
-(`.ai-review/feedback/FUNCTIONAL_REVIEW.md`), all four registry
-checkpoints (`CP1`-`CP4`) are `COMPLETE`, and the user accepted the
-milestone via `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json`
-is the ground-truth record of this transition (`state_revision` 27);
-`active_work_item_id` is now `null`. No `docs/ROADMAP.md` exists in this
-repository to update. The full milestone narrative (goal, required
-capabilities, functional-review checklist) is archived verbatim at
-`docs/milestones/completed/workflow-controller-gen1-correctness-hardening.md`.
+**In progress.** `workflow-controller-protocol-2-2-compatibility`
+(`governing_workflow_version: "2.2"`) is `IMPLEMENTING`. Plan revision 2 was
+approved via the two-stage plan-review protocol (`LOCAL_MODEL_PLAN_REVIEW`
+round 2 APPROVE, `MANUAL_EXTERNAL_PLAN_REVIEW` round 1 APPROVE), recorded at
+commit `7bfa238`. Base commit: `21a304d50a8bb9c08e465e78a4636e353e16b5e9`.
 
-This milestone's own deliverables that remain live in the tree, unmoved
-(see the archive file's own preface for why): `docs/ai-workflow/CONTROLLER_GEN1_HARDENING_PLAN.md`
-and its registry/mapping/artifacts-declaration files (still the paths
-`docs/ai-workflow/WORKFLOW_STATE.json`'s own work-item entry declares),
-and `docs/ai-workflow/CONTROLLER_GEN1_HARDENING_CHECKLIST_CORRECTIONS.md`
-(read live, by exact path, by `tests/test_checklist_corrections.py`). The
-completed `workflow-controller-generation-1` work item and its own
-archived narrative (`docs/milestones/completed/workflow-controller-generation-1.md`)
-remain unaffected.
+Goal: make Controller Generation 1 (`controller/`) correctly understand and
+orchestrate Workflow protocol `2.2`'s split implementation-review lifecycle,
+while continuing to drive `"1"`/`"2.1"`-governed work items exactly as
+before. Full plan:
+`docs/ai-workflow/CONTROLLER_GEN1_PROTOCOL_2_2_COMPAT_PLAN.md`. Registry:
+`docs/ai-workflow/registry/workflow-controller-protocol-2-2-compatibility-registry.json`
+(six checkpoints, `CP1`-`CP6`).
 
-**Next action:** none queued. There is no roadmap-defined next milestone
-in this repository. When new work is scoped, run `/milestone-plan` for it
--- it will create a fresh `work_items` entry and claim
-`active_work_item_id`, ready for `PLANNING`.
+### Checkpoint progress
+
+- **CP1 -- COMPLETE.** Added four `"2.2"` rows to `controller/job.py`'s
+  `EXPECTED_OUTCOMES` table (`PLANNING`, `AWAITING_LOCAL_PLAN_REVIEW`,
+  `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, `REVISING_PLAN`), each
+  byte-identical to its `"2.1"` counterpart apart from
+  `governing_version`, closing the uncaught `AssertionError` a
+  `"2.2"`-governed work item hit today the moment Controller tried to
+  drive it automatically through plan review. The table grew from seven
+  rows to eleven; every row-count-dependent comment naming "seven" that
+  actually describes this table was updated to "eleven"
+  (`job.py`'s `_expected_outcome_for` docstring, the
+  `_INCOMPLETE_EFFECT_PHASES` comment, and both `execute_step`/`resume`
+  narrative comments) -- the unrelated `TERMINAL_STATUSES` "remaining
+  seven members" comment (job status enumeration, not this table) was
+  left untouched, as the plan specifies. Verified: all pre-existing
+  `tests/test_job_validation.py` structural properties
+  (`property_table_violations`, `property_record_completeness_violations`,
+  `property_declaration_against_artifact_violations`, reachability,
+  transition-verification) pass unchanged against the eleven-row table,
+  and all pre-existing `tests/test_job.py` tests pass. The one expected
+  failure, `ExpectedOutcomesTableStructureTest.test_seven_rows`
+  (`11 != 7`), is CP2's own row-count-assertion update, explicitly out of
+  CP1's scope per the plan.
+- CP2-CP6: not started.
+
+**Next action:** continue with `/milestone-implement` to select and
+implement CP2 (regression tests for the new rows on both the execute-time
+and resume/reconciliation paths, plus the `test_seven_rows` ->
+`test_eleven_rows` rename).

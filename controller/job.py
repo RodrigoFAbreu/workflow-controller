@@ -477,12 +477,26 @@ def _predicate_row7_new_work_item_created(root: Path, work_item_id: Any, pre_sta
     return len(post_keys - pre_keys) == 1
 
 
-#: The seven rows, transcribed verbatim from the plan's own table (CP6B,
+#: The eleven rows, transcribed verbatim from the plan's own table (CP6B,
 #: "An `ExpectedOutcome` is data, not prose"; row 7 added by revision 63's
-#: B2, the `NoWorkItemYet` bootstrap).
+#: B2, the `NoWorkItemYet` bootstrap; the four `"2.2"` plan-review rows
+#: added by the `workflow-controller-protocol-2-2-compatibility` milestone's
+#: CP1 -- each byte-identical to its `"2.1"` counterpart except for
+#: `governing_version`, since `docs/ai-workflow/MILESTONE_WORKFLOW.md`'s own
+#: two-stage plan-review protocol does not branch on `"2.1"` vs. `"2.2"` at
+#: all).
 EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="2.1", action="/milestone-plan",
+        to_any_of=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        predicate=None, predicate_inputs=frozenset(),
+        writer_calls=(
+            WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
+                       WRITER_KIND_COMPLETION),
+        ),
+    ),
+    ExpectedOutcome(
+        from_phase="PLANNING", governing_version="2.2", action="/milestone-plan",
         to_any_of=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
         predicate=None, predicate_inputs=frozenset(),
         writer_calls=(
@@ -512,7 +526,29 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
         ),
     ),
     ExpectedOutcome(
+        from_phase="AWAITING_LOCAL_PLAN_REVIEW", governing_version="2.2", action="/review-plan",
+        to_any_of=frozenset({
+            "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "REVISING_PLAN", "AWAITING_LOCAL_PLAN_REVIEW",
+        }),
+        predicate=_predicate_row3_block_feedback_current,
+        predicate_inputs=frozenset({"bundle_id", "bundle_manifest_readable"}),
+        writer_calls=(
+            WriterCall("record_local_plan_review", "review-plan.md", "review-plan.md:107",
+                       WRITER_KIND_COMPLETION, branch=BranchSpec(kind="bullet", label="BLOCK")),
+        ),
+    ),
+    ExpectedOutcome(
         from_phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_version="2.1",
+        action="/record-manual-plan-review",
+        to_any_of=frozenset({"AWAITING_PLAN_APPROVAL", "REVISING_PLAN"}),
+        predicate=None, predicate_inputs=frozenset(),
+        writer_calls=(
+            WriterCall("record_manual_plan_review", "record-manual-plan-review.md",
+                       "record-manual-plan-review.md:96", WRITER_KIND_COMPLETION),
+        ),
+    ),
+    ExpectedOutcome(
+        from_phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_version="2.2",
         action="/record-manual-plan-review",
         to_any_of=frozenset({"AWAITING_PLAN_APPROVAL", "REVISING_PLAN"}),
         predicate=None, predicate_inputs=frozenset(),
@@ -534,6 +570,15 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
     ),
     ExpectedOutcome(
         from_phase="REVISING_PLAN", governing_version="2.1", action="/apply-plan-review",
+        to_any_of=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        predicate=None, predicate_inputs=frozenset(),
+        writer_calls=(
+            WriterCall("transition_to_awaiting_local_plan_review", "apply-plan-review.md",
+                       "apply-plan-review.md:145", WRITER_KIND_COMPLETION),
+        ),
+    ),
+    ExpectedOutcome(
+        from_phase="REVISING_PLAN", governing_version="2.2", action="/apply-plan-review",
         to_any_of=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
         predicate=None, predicate_inputs=frozenset(),
         writer_calls=(
@@ -793,7 +838,7 @@ def _expected_outcome_for(phase: Any, governing_workflow_version: str | None, de
     """The single :data:`EXPECTED_OUTCOMES` row an automatic ``decision``
     about to be launched corresponds to. The combined CP4/CP4B decision
     engine can only ever produce an automatic ``Decision`` for one of
-    these seven triples (row 7's own `from_phase` is
+    these eleven triples (row 7's own `from_phase` is
     :data:`~controller.decision.NO_PHASE`, the `NoWorkItemYet` bootstrap),
     so a miss here is an invariant violation, never an ordinary
     control-flow path (the same shape as ``cli._reexec``'s own
@@ -875,7 +920,7 @@ _VERIFYING_WORKER_OUTCOMES = frozenset({"SUCCESS", "INTERRUPTED"})
 #: (plan section "CP6B -- Job execution, part 2": "no Generation 1 action
 #: can produce it" -- `/apply-implementation-review` reaching
 #: `APPLYING_REVIEW_FEEDBACK` was its only producer, and that action is
-#: not one of :data:`EXPECTED_OUTCOMES`' own seven rows). Kept as a per-row
+#: not one of :data:`EXPECTED_OUTCOMES`' own eleven rows). Kept as a per-row
 #: mapping, not deleted, because a record written by a *future* generation
 #: that does drive such a landing must still be classifiable by `resume`
 #: (CP7)'s own closed status table.
@@ -1681,7 +1726,7 @@ def execute_step(
     verification rule held), ``FAILED`` (it did not, carrying
     ``reconciliation_evidence``), or ``INCOMPLETE`` (step 9: a legal
     effect of the action that is never its completion -- unreachable for
-    every one of Generation 1's own seven automatic actions, see
+    every one of Generation 1's own eleven automatic actions, see
     :data:`_INCOMPLETE_EFFECT_PHASES`). ``COMPLETED`` is never this
     function's own return value; it is an intermediate, durable flush
     step 6 always makes before steps 7-9 run.
@@ -1816,7 +1861,7 @@ def execute_step(
 
     # Step 9: INCOMPLETE takes precedence over step 8's own "otherwise" --
     # a phase that is a legal *effect* of the action but never a
-    # *completion* of it. Empty for every one of Generation 1's seven rows
+    # *completion* of it. Empty for every one of Generation 1's eleven rows
     # (see `_INCOMPLETE_EFFECT_PHASES`'s own docstring); checked first so
     # a future generation's row can populate it without this call site
     # changing.

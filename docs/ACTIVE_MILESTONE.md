@@ -1641,9 +1641,116 @@ rather than absorbed.
 
 ## Functional review checklist
 
-Empty. `/prepare-functional-review` writes the numbered checklist for the
-active work item into this section; `/apply-functional-review` and
-`/accept-milestone` read it back from here.
+Manual functional review for `workflow-controller-generation-1`
+(implementation revision 4, technical approval recorded at commit
+`b41f866`, `review_content_id` `60d9eecf7f82634811738485786b3e822bb3f7b167fece4df8f13dd20d868d50`).
+Findings go to `.ai-review/feedback/FUNCTIONAL_REVIEW.md`
+(`docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location").
+
+### Setup
+
+1. From a checkout of this exact repository at the reviewed commit:
+   ```bash
+   pip install -e .
+   ```
+2. Confirm the console script resolves: `workflow-controller status` should
+   run without a `command not found` error.
+3. No feature flags or seeded data are needed for the read-only flows
+   below. Flow 6 (optional) needs a disposable throwaway directory and a
+   real `claude` binary on `PATH`; flow 5 needs any directory that is
+   *not* a Workflow-managed repository (e.g. `/tmp`, or a fresh empty
+   directory).
+
+### Test data
+
+- **Flow 1-4**: this repository's own checkout is the target (`.`) — it is
+  itself a live, real Workflow-managed repository, already at
+  `AWAITING_FUNCTIONAL_REVIEW` for this very work item, which makes it a
+  genuine non-trivial fixture rather than a synthetic one.
+- **Flow 5**: any directory with no `.workflow-manager/` (a scratch `mkdir`
+  is enough).
+- **Flow 6 (optional, real spend)**: a scratch directory the Controller may
+  freely write into and delete afterward.
+
+### Flows
+
+1. **`status` with no runtime yet** (or an existing one from prior use)
+   — `workflow-controller status`.
+   Expected: exits `0`; prints the resolved runtime root, the pinned
+   Controller source identity, and either "no job records" or a summary of
+   existing ones. Never refuses merely because the runtime root is empty.
+
+2. **`inspect` against this repository** — `workflow-controller inspect .`
+   and `workflow-controller inspect . --json`.
+   Expected: exits `0`; text and JSON both report this repository as
+   managed, the installed Workflow release (`2.5.1`), the active work item
+   `workflow-controller-generation-1`, and its current phase
+   (`AWAITING_FUNCTIONAL_REVIEW`). The JSON report carries the full
+   work-item payload (phase, checkpoints, approval state).
+
+3. **`explain` against this repository** — `workflow-controller explain .`
+   and `--json`.
+   Expected: exits `10` (human gate). The report names the observed phase
+   `AWAITING_FUNCTIONAL_REVIEW`, states plainly that this is a manual
+   gate requiring a human to test and either approve or file findings, and
+   names the safe resume command. It must **not** launch a worker or write
+   a Controller job record (`workflow-controller status` immediately
+   afterward should show no new job record from this call).
+
+4. **`resume` against this repository** — `workflow-controller resume .`.
+   Expected: exits `0` (no non-terminal job records to reconcile, assuming
+   no interrupted run from flow 6 below is still pending) and never
+   attempts to launch a worker.
+
+5. **Unmanaged-repository refusal** — `workflow-controller inspect <a
+   directory with no .workflow-manager/>`.
+   Expected: exits `20`, with a clear `UnmanagedRepositoryError`-style
+   message naming the path — no stack trace dumped as the user-facing
+   output, no silent success.
+
+6. **Optional — real worker end-to-end proof** (skip if you don't want to
+   spend real `claude` usage; this exact flow already has recorded,
+   independently-reproduced automated evidence — see
+   `TEST_RESULTS.md` in the reviewed bundle and I1's closure note in
+   `.ai-review/feedback/REVIEW_FEEDBACK.md`):
+   ```bash
+   workflow-controller --runtime-dir <scratch>/runtime \
+     --permission-mode bypassPermissions step <scratch>/target
+   ```
+   against a freshly seeded disposable target (see
+   `tests/test_integration_disposable_repo.py`'s `_seed_target` for the
+   exact seeding this automated fixture performs, if you want to reproduce
+   it by hand rather than writing a new one).
+   Expected: a real `claude` worker launches, runs a genuine Workflow
+   command, and the Controller verifies the resulting Workflow state
+   transition before exiting `0`.
+
+### Expected results summary
+
+| Flow | Exit code | Launches a worker? |
+|---|---|---|
+| 1 `status` | 0 | No |
+| 2 `inspect .` | 0 | No |
+| 3 `explain .` | 10 | No |
+| 4 `resume .` | 0 | No |
+| 5 `inspect <unmanaged>` | 20 | No |
+| 6 `step` (optional) | 0 (or per the exit-code table on a genuine failure) | Yes |
+
+### Known limitations / out of scope for this milestone
+
+- Generation-2 features, broad Controller lifecycle automation,
+  review-convergence automation, RepFlow orchestration, remote fleet
+  management, daemons, cloud workers, and GUIs are all explicitly out of
+  scope (see "Explicitly out of scope" above) — do not file findings
+  against their absence.
+- `run`'s bounded loop and the generation-handoff/hot-reload proof are
+  covered by automated tests (`CP7`/`CP8`) rather than this manual
+  checklist; they require multi-process orchestration that is impractical
+  to drive by hand safely.
+- Flow 6 costs real `claude` usage and is optional — its evidence already
+  exists from CP9's own recorded live run, independently corroborated
+  during the `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (see
+  `.ai-review/feedback/REVIEW_FEEDBACK.md`'s "Verification performed").
 
 <!--
 This file is `workflow_state.FUNCTIONAL_CHECKLIST_PATH`. It is

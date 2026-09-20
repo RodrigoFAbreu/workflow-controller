@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-protocol-2-2-compatibility",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Add governing_workflow_version \"2.2\" rows to job.py's EXPECTED_OUTCOMES table for the four plan-stage automatic phases, closing the uncaught AssertionError a 2.2-governed item hits today",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Regression-test job.py's new 2.2 plan-stage rows on both the execute-time and resume/reconciliation paths, and update the stale seven-row cardinality assertion",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Surface WORKFLOW_CONFIG.json's supported_versions in target_state.py's WorkflowSnapshot, with regression coverage for default_workflow_version and a work item's governing_workflow_version already reading \"2.2\" correctly",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Pin, with discriminating regression tests, that decision.py/evidence.py already classify both 2.2 implementation-review phases correctly and that a 2.1 fixture's single-stage path is unchanged",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Disposable-repository integration coverage of a genuine 2.2-governed work item through the split implementation-review lifecycle",
+      "depends_on": [
+        "CP1",
+        "CP3",
+        "CP4"
+      ],
+      "complexity": 4,
+      "session_target": 2
+    },
+    {
+      "id": "CP6",
+      "name": "Full verification: Controller suite, all frozen Workflow conformance suites (scripts/*_test.py), and one live-worker run of the new disposable-repo test",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

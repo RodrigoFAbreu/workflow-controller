@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-protocol-2-2-compatibility",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -621,6 +621,78 @@
       "blocking_decisions": [],
       "state_revision": 27,
       "last_transition": "2026-09-20T16:59:44Z"
+    },
+    "workflow-controller-protocol-2-2-compatibility": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-protocol-2-2-compatibility",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_GEN1_PROTOCOL_2_2_COMPAT_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-protocol-2-2-compatibility-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-protocol-2-2-compatibility-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "21a304d50a8bb9c08e465e78a4636e353e16b5e9",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "f6d0ad47be74a6ee53b97c2df54661c7d3de4a1bc32406ad3ab29cc0f86be51a",
+        "approved_review_content_id": "1b83f3ac5ae910dfe3bd7b009ce422a1dca61cc37ff175c743c14fa17b83befb",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_GEN1_PROTOCOL_2_2_COMPAT_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e86bdf2a7bab833af0f7296d4ddf4ed04531c369"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-protocol-2-2-compatibility-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "720f115e154119b2f4766a89935725b6f0ce374d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-protocol-2-2-compatibility-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "37d904700abbc5bf2ebeafb290a15df856ca1ba2"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I confirm plan approval for workflow-controller-protocol-2-2-compatibility.",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-20T20:16:49Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "1b83f3ac5ae910dfe3bd7b009ce422a1dca61cc37ff175c743c14fa17b83befb",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "f6d0ad47be74a6ee53b97c2df54661c7d3de4a1bc32406ad3ab29cc0f86be51a",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-20T18:42:49Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "f6d0ad47be74a6ee53b97c2df54661c7d3de4a1bc32406ad3ab29cc0f86be51a",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-20T20:09:50Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 8,
+      "last_transition": "2026-09-20T20:16:49Z"
     }
   }
 }

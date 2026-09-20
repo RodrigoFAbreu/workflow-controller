@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-protocol-2-2-compatibility",
+  "requirements": {
+    "REQ-1": {
+      "description": "Controller decision/evidence classification, pinned with regression tests, for Workflow 2.2 implementation-review phases (AWAITING_LOCAL_IMPLEMENTATION_REVIEW, AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW, the reused terminal AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW, and any associated review/apply transitions whose behavior differs from the 2.1 single-stage lifecycle), plus the plan-stage EXPECTED_OUTCOMES fix a 2.2-governed item needs before it can ever reach those phases",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4",
+        "CP5"
+      ]
+    },
+    "REQ-2": {
+      "description": "Derive exact 2.2 phase semantics from the installed Workflow 2.5.1 contracts, scripts, documentation and tests -- never inferred from phase names alone",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "REQ-3": {
+      "description": "Preserve existing 2.1 behavior exactly for legacy work items; dispatch according to each work item's immutable governing_workflow_version, never merely the repository default",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "REQ-4": {
+      "description": "Controller target/state discovery correctly surfaces repository default_workflow_version, supported_versions, and a work item's governing_workflow_version of \"2.2\"",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "REQ-5": {
+      "description": "Discriminating tests for every newly supported 2.2 lifecycle decision, demonstrating pre-fix Controller failure or wrong-outcome selection where practical",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "REQ-6": {
+      "description": "Disposable-repository integration coverage using a genuine 2.2-governed work item, exercising reaching local implementation review, stopping/routing correctly there, proceeding to manual external implementation review after local approval, stopping/routing correctly at that gate, preserving human-only approval boundaries, and resuming correctly after the required review result is recorded",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "REQ-7": {
+      "description": "Confirm a 2.1-governed fixture still follows the original single-stage implementation-review path",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "REQ-8": {
+      "description": "Run the full Controller suite (tests/) and all frozen Workflow conformance suites (scripts/*_test.py)",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    }
+  }
+}

@@ -1006,10 +1006,19 @@ CP6B/CP7), 9 (CP8), 10 (CP9's own completed CLI surface).
 
 ## Current blockers
 
-**Blocked at `SELF_REVIEWING_IMPLEMENTATION` (all nine registry checkpoints
+**None. Resolved at plan revision 71** (the B2 amendment, approved at
+`5b33010`, with CP1-CP9 each revalidated against the amended plan through
+`37bd91b`). The blocker recorded below is kept in place, time-labelled
+rather than deleted, because it is the record of why this work item sat at
+`SELF_REVIEWING_IMPLEMENTATION` for a whole amendment cycle; the
+"Next legal step" paragraph that closes this section states the current
+position. The self-review round that followed is recorded after it.
+
+**[Superseded at revision 71 -- historical]** *Blocked at
+`SELF_REVIEWING_IMPLEMENTATION` (all nine registry checkpoints
 CP1-CP9 complete, commit `a62ba4f`). The final self-review invocation of
 `/milestone-implement` (steps 2-5: bundle generation) has not run and must
-not run until this is resolved** -- no implementation-review bundle exists,
+not run until this is resolved* -- no implementation-review bundle exists,
 and none should be generated while it pretends this is resolved.
 
 Two independent findings surfaced during the attempted self-review step 3
@@ -1555,6 +1564,74 @@ under the amended, approved revision-71 plan. A further
 generates a fresh implementation-review bundle (step 4) -- this is a hard
 gate: the invocation stops there for external implementation review, and
 no further checkpoint work happens until that review returns.
+
+### Self-review round (implementation revision 1)
+
+`/milestone-implement`'s step 1 selected no checkpoint
+(`resolve_checkpoint_ownership` returned `NO_CHECKPOINT`; every registry
+checkpoint was already `COMPLETE`), so step 2's
+`enter_self_reviewing_implementation` was a true no-op (phase already
+`SELF_REVIEWING_IMPLEMENTATION`, `state_revision` unchanged at 268, nothing
+written and nothing committed) and the invocation proceeded to the
+full-milestone self-review.
+
+**No Blocking findings.** Five Important findings, all fixed in this round:
+
+1. **Property 3's derivation was not total** (`controller/job.py`). A row
+   with zero `writer_calls` derives an *empty* branch set, so
+   `property_table_violations`' `len(...) > 1` clause admitted it, and
+   `_row_branch` then raised `AssertionError` at execution time inside
+   `_verify_transition`/`_row2_verified` -- the exact "validated here,
+   crashes there" split property 3's own "total, fail-closed derivation"
+   clause exists to close. Property 5 is silent about the same row (its
+   per-`WriterCall` loop never runs), so this property is the only place it
+   can be reported. Now reported as data, with a negative test
+   (`tests/test_job_validation.py::test_row_with_no_writer_calls_at_all_fails`)
+   that also pins property 5's silence.
+2. **`controller.decision.decide`'s docstring misstated what it reads**: it
+   claimed a per-decision read of `managed_repo.root/.claude/commands/*.md`.
+   It performs no such read -- `classify_command_files`/
+   `derive_user_only_commands` have no production call site at all; they
+   are the plan's own *test-time* property over the installed artifact
+   ("computed fresh from the seventeen files at test time"). A wrong
+   statement about what a security-relevant function reads; corrected in
+   both the function's and the module's own docstring, naming
+   `controller.worker`'s independent token scan as the runtime layer.
+3. **Stale `handoff` note** (`controller/job.py` module docstring): "`handoff`
+   does not exist yet (CP8 adds it)" was false. Restated with the real
+   current reason step 3 reads `handoff.json` directly -- `controller.handoff`
+   publishes that record and exposes no reader.
+4. **Stale 2.3.1 baseline facts in shipped code and docs.** The Manager
+   updated this repository from 2.3.1 to 2.5.1 mid-flight (revision 64) and
+   `VALIDATED_WORKFLOW_RELEASES` became `{"2.5.1"}` at revision 68, but
+   `controller/job.py`, `controller/errors.py`, `controller/target_state.py`,
+   `controller/decision.py` (including a user-visible refusal message),
+   `tests/fixtures.py`, `tests/test_job_validation.py`, `README.md` and the
+   ADR still named "frozen Workflow v2.3.1", and two of them still named
+   **fifteen** command files where the installed release ships
+   **seventeen**. Corrected.
+5. **`README.md` and the ADR understated the human-gate invariant**: both
+   named only `/approve-review` and `/accept-milestone`, while the derived
+   denylist and `controller.worker.USER_ONLY_COMMANDS` are **four**
+   commands. Re-measured against the installed `.claude/commands/`:
+   `approve-review` and `accept-milestone` carry both recognisers,
+   `recover-implementation-provenance` carries only the guard literal and
+   `request-plan-amendment` only the front-matter flag -- so neither
+   recogniser alone is total, which is why the rule is their union. Both
+   documents now state the derived four; the ADR's stale revision/round
+   counts were corrected at the same time.
+
+**Full verification** (step 3) was run in full on Python 3.14.7, the
+interpreter the revision-64 baseline table names, and its exact commands
+and results are recorded in the bundle's `TEST_RESULTS.md`. The Controller
+suite is 391 tests green with 1 correctly skipped (390 + this round's new
+negative test); all seven frozen conformance suites match the revision-64
+baseline table exactly. The opt-in live-worker integration test
+(`CONTROLLER_LIVE_WORKER=1`, real spend) was **not** re-run this round --
+it was last executed live during CP9's original implementation, and the B1
+schema fix applied to it during CP9's revalidation has still only been
+verified structurally. That gap is carried into the bundle explicitly
+rather than absorbed.
 
 ## Active plan
 

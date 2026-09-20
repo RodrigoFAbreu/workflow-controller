@@ -79,8 +79,8 @@ KNOWN_PHASES: frozenset[str] = frozenset({
 })
 
 #: Only ``MILESTONE_COMPLETE`` is terminal -- ``LEGACY_READY`` is
-#: explicitly dormant, not terminal, matching frozen Workflow v2.3.1's own
-#: ``TERMINAL_PHASES``.
+#: explicitly dormant, not terminal, matching the installed reference
+#: release's own ``TERMINAL_PHASES``.
 TERMINAL_PHASES: frozenset[str] = frozenset({"MILESTONE_COMPLETE"})
 
 
@@ -128,8 +128,8 @@ class WorkItemView:
     repository. Every field is populated from ``WORKFLOW_STATE.json``
     except ``incomplete_children`` (a reverse lookup over every work item
     in the same snapshot) and ``registry_complete`` (this work item's own
-    read-only derivation of the registry-completion half of frozen
-    Workflow v2.3.1's ``is_terminal`` predicate -- see its own docstring
+    read-only derivation of the registry-completion half of the installed
+    reference release's ``is_terminal`` predicate -- see its own docstring
     for the three-outcome contract)."""
 
     work_item_id: str
@@ -192,8 +192,8 @@ def _resolve_registry_complete(root: Path, work_item_id: str, entry: dict) -> bo
     no ``registry_path`` declared, vacuously terminal; ``True``/``False``
     -- a resolvable, readable, self-consistent registry, derived purely
     from the work item's own ``checkpoints`` map and the registry's own
-    declared checkpoint ids (mirroring frozen Workflow v2.3.1's own
-    ``select_next_checkpoint``/``registry_completion_status``, without
+    declared checkpoint ids (mirroring the installed reference release's
+    own ``select_next_checkpoint``/``registry_completion_status``, without
     importing them); ``MalformedTargetRegistryError`` -- unresolvable,
     unreadable, unparseable, or cross-linked to a different work item.
     Deliberately does not reproduce ``StalePlanApprovalRegistryReadError``

@@ -287,11 +287,12 @@ def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
 def copy_real_commands_dir(dest: Path) -> Path:
     """A real, on-disk copy of this repository's own
     ``.claude/commands/`` -- this repository is itself a frozen Workflow
-    v2.3.1 installation, so its fifteen command files are the same
-    external artifact a target managed repository carries. Copying rather
-    than pointing at ``REAL_COMMANDS_DIR`` directly keeps a fixture that
-    mutates a file (the 16th-file / discriminating-recogniser tests)
-    from ever touching this repository's own working tree."""
+    installation (2.5.1 since revision 64's baseline update), so its
+    seventeen command files are the same external artifact a target
+    managed repository carries. Copying rather than pointing at
+    ``REAL_COMMANDS_DIR`` directly keeps a fixture that mutates a file
+    (the extra-file / discriminating-recogniser tests) from ever touching
+    this repository's own working tree."""
     dest.mkdir(parents=True, exist_ok=True)
     for path in REAL_COMMANDS_DIR.glob("*.md"):
         shutil.copy2(path, dest / path.name)
@@ -300,8 +301,8 @@ def copy_real_commands_dir(dest: Path) -> Path:
 
 def write_command_file(commands_dir: Path, name: str, text: str) -> Path:
     """Write a single synthetic command file -- for the partition and
-    denylist-recogniser fixtures that need a file the real fifteen do not
-    carry."""
+    denylist-recogniser fixtures that need a file the real seventeen do
+    not carry."""
     commands_dir.mkdir(parents=True, exist_ok=True)
     path = commands_dir / f"{name}.md"
     path.write_text(text)

@@ -274,8 +274,8 @@ class NoSupportedActionError(ControllerError):
     not one of the deliberately inert phases (``LEGACY_READY``,
     ``MILESTONE_COMPLETE``).
 
-    Raised for the four vocabulary phases frozen Workflow v2.3.1's own
-    ``KNOWN_PHASES`` carries but no writer ever persists
+    Raised for the four vocabulary phases the frozen Workflow release's
+    own ``KNOWN_PHASES`` carries but no writer ever persists
     (``SELF_REVIEWING_PLAN``, ``AWAITING_TECHNICAL_APPROVAL``,
     ``FIXING_FUNCTIONAL_FINDINGS``, ``AWAITING_USER_ACCEPTANCE``) --
     ``evidence['phase']`` names the phase and ``message`` explains that no

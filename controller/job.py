@@ -16,12 +16,17 @@ function.
 
 Dependency graph (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
 "Dependency direction"): ``job -> {managed_repo, target_state, evidence,
-worker, handoff} -> decision -> {identity, runtime, errors}``. ``handoff``
-does not exist yet (CP8 adds it); step 3's pending-handoff check therefore
-reads ``<runtime_root>/handoff.json`` directly through
-``controller.runtime.read_json`` -- the exact read ``controller.cli``'s
-own ``status`` command already performs -- rather than importing a module
-that is not there yet.
+worker, handoff} -> decision -> {identity, runtime, errors}``. Step 3's
+pending-handoff check reads ``<runtime_root>/handoff.json`` directly
+through ``controller.runtime.read_json`` -- the exact read
+``controller.cli``'s own ``status`` command already performs. It was
+written that way in CP6, before ``controller/handoff.py`` existed, and it
+stays that way now that CP8 has added it: ``controller.handoff`` *publishes*
+that record (``controller.handoff.write_handoff_record``) and exposes no
+reader, so there is nothing there for this check to call. Detecting a
+*new* handoff is the orchestration boundary's job
+(``controller.cli._run_one_step``), never this function's -- step 3 only
+asks whether one is already on disk.
 
 **A deliberate name shadow.** :func:`execute_step`'s own parameters are
 named ``identity`` (an already-resolved
@@ -402,9 +407,11 @@ def _row_branch(outcome: ExpectedOutcome) -> BranchSpec | None:
     ``AssertionError`` -- an invariant violation, never ordinary
     control-flow, the same shape as this module's other table-invariant
     checks -- when ``outcome`` itself was never validated by
-    :func:`property_table_violations` (whose own check reports the
-    identical disagreement as data instead, for a row that is being
-    validated rather than executed)."""
+    :func:`property_table_violations`, for either of the two shapes that
+    leave no single value to return: ``writer_calls`` entries that
+    disagree on ``branch``, or no ``writer_calls`` at all.
+    :func:`property_table_violations` reports **both** as data instead,
+    for a row that is being validated rather than executed."""
     branches = {wc.branch for wc in outcome.writer_calls}
     if len(branches) != 1:
         raise AssertionError(
@@ -582,9 +589,13 @@ def property_table_violations(
       derivation** (revision 65/66, step 8's own repair): every
       ``WriterCall`` on one row must declare the identical ``branch`` --
       a row whose entries disagree fails here, naming the row and every
-      distinct value found (:func:`_row_branch` is what step 8's
-      ``_verify_transition`` calls at runtime to read this same, already
-      total, value back).
+      distinct value found, and so does a row that declares **no**
+      ``writer_calls`` at all, which is the other shape that leaves
+      :func:`_row_branch` without a single value to return
+      (:func:`_row_branch` is what step 8's ``_verify_transition`` calls
+      at runtime to read this same, already total, value back, and it
+      raises for both shapes alike -- so both must be reported as data
+      here rather than one of them reaching execution unvalidated).
     - **Completion** (property 6): asserted narratively against the
       plan's own per-row analysis and exercised by
       ``tests/test_job_validation.py``'s reachability cases (calling
@@ -624,7 +635,18 @@ def property_table_violations(
                     )
 
         row_branches = {wc.branch for wc in eo.writer_calls}
-        if len(row_branches) > 1:
+        if not eo.writer_calls:
+            # The *other* shape that makes `_row_branch` non-total (and so
+            # the other way a row reaches `_verify_transition`/
+            # `_row2_verified` and raises `AssertionError` at execution
+            # time instead of being reported as data here): zero declared
+            # writer calls, which derives an empty branch set rather than
+            # a disagreeing one. Property 3's derivation is only "total
+            # and fail-closed" if this row fails validation too -- and
+            # property 5 says nothing about it either, since its own
+            # per-call loop simply does not run.
+            violations.append(f"{key!r}: declares no writer_calls at all")
+        elif len(row_branches) > 1:
             violations.append(
                 f"{key!r}: writer_calls disagree on branch: {sorted(row_branches, key=repr)!r}"
             )
@@ -705,8 +727,9 @@ def property_declaration_against_artifact_violations(
     other than a repeated call to the same declared function) occurs
     later in plain file order within that same span. ``repo_root`` is the
     Controller's own checkout (this repository is itself a frozen
-    Workflow v2.3.1 installation, and its fifteen command files are the
-    same external artifact a target managed repository carries -- see
+    Workflow installation -- 2.5.1 since revision 64's baseline update --
+    and its seventeen command files are the same external artifact a
+    target managed repository carries; see
     ``tests/fixtures.copy_real_commands_dir``'s own docstring)."""
     violations: list[str] = []
     for eo in outcomes:

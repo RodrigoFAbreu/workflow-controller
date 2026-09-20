@@ -10,9 +10,11 @@ This repository is developed independently from the Workflow Manager and from co
 Workflow  ->  Workflow Manager / Bootstrapper  ->  Workflow Controller  ->  managed development repositories
 ```
 
-The Controller automates operation of the Workflow (frozen v2.3.1) against
-a managed development repository. Generation 1's own scope is
-deliberately narrow (see the ADR below for why):
+The Controller automates operation of the Workflow (frozen v2.5.1 --
+`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES` is the admission
+gate, and a target on any other release is refused) against a managed
+development repository. Generation 1's own scope is deliberately narrow
+(see the ADR below for why):
 
 - at the **plan-stage** phases (`PLANNING`, `REVISING_PLAN`,
   `AWAITING_LOCAL_PLAN_REVIEW`, `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`/
@@ -25,8 +27,11 @@ deliberately narrow (see the ADR below for why):
 Two invariants hold throughout: **the Controller never writes Workflow
 lifecycle state itself** (every durable transition is made by a worker
 running a real Workflow command), and **the Controller never crosses a
-human gate** (`/approve-review` and `/accept-milestone` are never
-selected or executed).
+human gate** (the user-only denylist is *derived* from the installed
+`.claude/commands/*.md`, and at the 2.5.1 reference release it is four
+commands -- `/approve-review`, `/accept-milestone`,
+`/recover-implementation-provenance` and `/request-plan-amendment` --
+none of which is ever selected or executed).
 
 ## Installation
 
@@ -87,9 +92,11 @@ does that.
   no write function at all; every durable Workflow lifecycle change is
   made by a worker running a real Workflow command in the target
   repository.
-- **Never crosses a human gate.** The decision engine never selects
-  `/approve-review` or `/accept-milestone`, and the worker layer refuses
-  to execute either even if handed one directly.
+- **Never crosses a human gate.** The decision engine selects only from
+  its own four-command selected set, and the worker layer refuses to
+  execute any of the four user-only commands
+  (`controller.worker.USER_ONLY_COMMANDS`) even if handed one directly --
+  two independent mechanisms fed by two different sources.
 - **Never hot-reloads.** A running Controller generation executes from an
   immutable, content-addressed snapshot of its own source and never
   mutates or reloads it; a newer approved generation triggers an

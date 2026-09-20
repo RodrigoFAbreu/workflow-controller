@@ -43,10 +43,10 @@ FAKE_IDENTITY = ControllerIdentity(
     pinned_at="2024-01-01T00:00:00Z",
 )
 
-#: This repository's own checkout -- itself a frozen Workflow v2.3.1
-#: installation, per ``tests/fixtures.copy_real_commands_dir``'s own
-#: docstring -- is what property 5 checks its declared branches/calls
-#: against.
+#: This repository's own checkout -- itself a frozen Workflow
+#: installation (2.5.1 since revision 64's baseline update), per
+#: ``tests/fixtures.copy_real_commands_dir``'s own docstring -- is what
+#: property 5 checks its declared branches/calls against.
 REPO_ROOT = fixtures.REPO_ROOT
 
 
@@ -219,6 +219,29 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
         broken = dataclasses.replace(row3, writer_calls=(wc1, wc2))
         with self.assertRaises(AssertionError):
             job._row_branch(broken)
+
+    def test_row_with_no_writer_calls_at_all_fails(self) -> None:
+        """The *other* shape that leaves property 3's derivation
+        non-total: zero ``writer_calls`` derives an empty branch set
+        rather than a disagreeing one, so the ``len(...) > 1`` half alone
+        admits it -- and ``_row_branch`` then raises ``AssertionError`` at
+        execution time on a row validation called well-formed, which is
+        exactly the "validated here, crashes there" split property 3's own
+        "total, fail-closed derivation" clause exists to close. Property 5
+        does not catch it either (its per-``WriterCall`` loop simply does
+        not run), so this property is the only place it can be reported."""
+        row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
+        broken = dataclasses.replace(row3, writer_calls=())
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(any("no writer_calls" in v for v in violations), violations)
+        # ... and the helper it protects really does raise on that row.
+        with self.assertRaises(AssertionError):
+            job._row_branch(broken)
+        # The negative direction: property 5 is silent about the same row,
+        # which is why property 3 has to speak.
+        self.assertEqual(
+            job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,)), [],
+        )
 
     def test_real_table_rows_each_derive_a_single_consistent_branch(self) -> None:
         for eo in job.EXPECTED_OUTCOMES:

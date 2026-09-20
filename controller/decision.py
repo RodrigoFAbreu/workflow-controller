@@ -35,10 +35,11 @@ be the earliest one that needs it.
 CP4B -- Next-action decision engine and human-gate classification"): this
 checkpoint owns the phase -> action mapping over all twenty known
 phases, the union-derived user-only denylist and command-file partition
-(both derived by scanning the target repository's own
-``.claude/commands/`` -- a structural fact about the installed Workflow
-version, not a per-work-item evidence read, so reading it here does not
-cross the "reads nothing outside WorkItemView" line), the phase-set
+(:func:`classify_command_files`/:func:`derive_user_only_commands`, which
+scan a ``.claude/commands/`` directory -- a structural fact about the
+installed Workflow version, not a per-work-item evidence read, and
+asserted *at test time* against the installed artifact rather than called
+from :func:`decide`, which reads no command file at all), the phase-set
 equality assertion, and the ``Decision``/``Action``/``HumanGate`` shapes.
 It does **not** read any ``.ai-review/`` bundle, feedback or manifest file
 scoped to the work item's current review round -- that is CP4B's
@@ -232,7 +233,7 @@ _DECLINED_COMMAND_BY_PHASE: dict[str, str] = {
 # The command-file partition and the user-only denylist.
 # ---------------------------------------------------------------------------
 
-#: Where the target repository's own copy of frozen Workflow v2.3.1's
+#: Where the target repository's own copy of the frozen Workflow release's
 #: command files lives, relative to ``managed_repo.root``.
 COMMANDS_REL_DIR = ".claude/commands"
 
@@ -658,8 +659,8 @@ def _decide_milestone_complete(managed_repo: Any, work_item: Any) -> Decision:
 def _decide_vocabulary(phase: str, managed_repo: Any, work_item: Any) -> Decision:
     raise NoSupportedActionError(
         f"{_work_item_id(work_item)!r} is at {phase!r}, one of the four vocabulary phases no "
-        "writer in frozen Workflow v2.3.1 ever persists -- recognising it as a known phase is "
-        "not the same as being able to act on it",
+        "writer in the frozen Workflow release ever persists -- recognising it as a known "
+        "phase is not the same as being able to act on it",
         evidence={"work_item_id": _work_item_id(work_item), "phase": phase},
     )
 
@@ -678,10 +679,20 @@ _DISPATCH = {
 
 def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     """The whole of CP4's decision engine: a pure mapping from
-    ``work_item.phase`` (plus, for the command-file partition, a read of
-    ``managed_repo.root/.claude/commands/*.md``) to a :class:`Decision`.
-    Reads no ``.ai-review/`` bundle/feedback content -- that is CP4B's
-    extension of this function.
+    ``work_item.phase`` to a :class:`Decision`. Reads no ``.ai-review/``
+    bundle/feedback content -- that is CP4B's extension of this function
+    -- and, deliberately, reads no command file either: the command-file
+    partition and the user-only denylist above
+    (:func:`classify_command_files`, :func:`derive_user_only_commands`)
+    are a **test-time** property over the installed artifact (the plan's
+    own "computed fresh from the seventeen files *at test time*"), not a
+    per-decision read. The runtime enforcement of "never fabricate user
+    approval" lives in the second, independent layer --
+    ``controller.worker``'s own literal copy of the resulting four-name
+    set and its own token scan, checked before any subprocess is spawned
+    -- so this function selecting only from :data:`SELECTED_COMMANDS` and
+    that scan refusing anything on the denylist are two different
+    mechanisms fed by two different sources, which is the point.
 
     ``snapshot`` is accepted for CP4B's own future evidence reads (e.g.
     resolving sibling work items) and is not read by CP4's own mapping.

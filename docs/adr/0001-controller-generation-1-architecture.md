@@ -1,14 +1,17 @@
 # ADR 0001: Workflow Controller, Generation 1 -- architecture and interface
 
 Status: accepted. See `docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` for the
-full design record (sixty-two plan revisions, sixty-one local review
-rounds and a manual external round). This document records the decisions
+full design record (seventy-one plan revisions, seventy local review
+rounds, and manual external rounds at 31, 67 and 71). This document
+records the decisions
 most likely to be revisited by Generation 2, and carries the one table
 that is normative rather than descriptive: the exit-code contract below.
 
 ## Context
 
-The Controller automates operation of the Workflow (frozen v2.3.1). It
+The Controller automates operation of the Workflow (frozen v2.5.1 --
+`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES` is the admission
+gate, and a target on any other release is refused). It
 sits between the Workflow Manager (which owns install/update/verify/drift
 for a managed repository) and a managed development repository's own
 Workflow lifecycle:
@@ -24,9 +27,18 @@ Two structural invariants run through the whole design:
    Workflow lifecycle change is made by a *worker* running a real
    Workflow command in the target repository -- never by the Controller
    editing `WORKFLOW_STATE.json` directly.
-2. **The Controller never crosses a human gate.** `/approve-review` and
-   `/accept-milestone` carry `disable-model-invocation: true` and are
-   never selected or executed by the Controller.
+2. **The Controller never crosses a human gate.** The user-only denylist
+   is *derived* from the installed `.claude/commands/*.md`, as the union
+   of two recognisers -- the qualified
+   `workflow_state.validate_...confirmation` guard literal, and the
+   front-matter `disable-model-invocation: true` flag -- never from a
+   hand-written name list. At the 2.5.1 reference release that union is
+   four commands: `/approve-review`, `/accept-milestone`,
+   `/recover-implementation-provenance` (guard only) and
+   `/request-plan-amendment` (flag only). None is ever selected or
+   executed by the Controller. Neither recogniser alone is total: each
+   misses exactly one of the last two, which is why the rule is the
+   union.
 
 Generation 1's own scope (`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md`,
 "Scope reassessment (revision 10)") is narrower than "automate every

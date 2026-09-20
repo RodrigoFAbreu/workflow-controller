@@ -1414,7 +1414,23 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
     a case-4 failure, ``"unreadable"`` for case 1 or 2) -- the record on
     disk is never rewritten (a terminal record is history, and one bad
     file from an old generation must not stop the reconciliation of live
-    work beside it)."""
+    work beside it).
+
+    Every record that was **non-terminal on read** and went through one of
+    the three reconciliation branches below (``PLANNED``/``LAUNCHED``/
+    ``COMPLETED``) carries ``reconciled_this_call: True`` in the returned
+    dict -- an in-memory-only marker, added after :func:`_persist` has
+    already written the record's real, unmarked shape to disk, so it is
+    never part of the persisted job-record schema and never read back on a
+    later invocation. This is what lets a caller (``cli.cmd_resume``,
+    exit 40) distinguish a record this very invocation reconciled to
+    ``INTERRUPTED`` from a record that was *already* terminal
+    ``INTERRUPTED`` history returned unchanged by the ``status in
+    TERMINAL_STATUSES`` branch, which never carries the marker (fixes
+    `I2`, MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 1: exit 40 must mean
+    "the Controller itself was interrupted, or `resume` reconciled a
+    record to `INTERRUPTED`" -- a historical terminal record satisfies
+    neither clause)."""
     root = managed_repo.root
     target_repo_str = str(root)
     jobs_dir = runtime / "jobs"
@@ -1450,11 +1466,17 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
         if status in TERMINAL_STATUSES:
             results.append(record)  # reported, never reconciled, never relaunched.
         elif status == STATUS_PLANNED:
-            results.append(_reconcile_planned(record, runtime_root=runtime))
+            results.append({**_reconcile_planned(record, runtime_root=runtime), "reconciled_this_call": True})
         elif status == STATUS_LAUNCHED:
-            results.append(_reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime))
+            results.append({
+                **_reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime),
+                "reconciled_this_call": True,
+            })
         elif status == STATUS_COMPLETED:
-            results.append(_reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime))
+            results.append({
+                **_reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime),
+                "reconciled_this_call": True,
+            })
         else:
             # The closed table's own last row: a status outside the
             # ten-member enumeration entirely (or absent) is dispatched as

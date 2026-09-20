@@ -572,7 +572,17 @@ class ResumeCommandTest(unittest.TestCase):
         self.assertEqual(exit_code, cli.EXIT_OK)
         self.assertIn("j1: FINISHED", buf.getvalue())
 
-    def test_terminal_interrupted_record_exits_40(self) -> None:
+    def test_historical_terminal_interrupted_record_alone_does_not_exit_40(self) -> None:
+        """`I2`, MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 1: exit 40 means
+        "the Controller itself was interrupted, or `resume` reconciled a
+        record to `INTERRUPTED`" (`CONTROLLER_GEN1_PLAN.md`'s exit code
+        table) -- an event of *this* invocation, not the mere presence of a
+        historical terminal `INTERRUPTED` record from an earlier one.
+        `status in TERMINAL_STATUSES` records are reported verbatim by
+        `job.resume` and reconcile nothing, so a record already terminal
+        before this call must not by itself produce exit 40. This test used
+        to pin the opposite (wrong) behavior under the name
+        `test_terminal_interrupted_record_exits_40`."""
         record = _job_record(job_id="j2", target_repo=str(self.repo.resolve()),
                               status=job.STATUS_INTERRUPTED)
         record.pop("worker_outcome")
@@ -582,7 +592,28 @@ class ResumeCommandTest(unittest.TestCase):
         runtime.write_json(self.runtime_root, "jobs/j2.json", record)
 
         exit_code = cli.cmd_resume(self._args(), self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+
+    def test_a_record_this_invocation_reconciles_to_interrupted_exits_40(self) -> None:
+        """M2's other discriminating case: a non-terminal record (`PLANNED`)
+        that *this* `resume` invocation reconciles to `INTERRUPTED` (row 1,
+        unconditional) must still produce exit 40 -- the positive case the
+        fix above must not have broken while narrowing the negative one."""
+        record = _job_record(job_id="j5", target_repo=str(self.repo.resolve()),
+                              status=job.STATUS_PLANNED)
+        for key in ("worker_outcome", "observed_phase_after", "transition_verified"):
+            record.pop(key, None)
+        runtime.write_json(self.runtime_root, "jobs/j5.json", record)
+
+        exit_code = cli.cmd_resume(self._args(), self.runtime_root, FAKE_IDENTITY)
         self.assertEqual(exit_code, cli.EXIT_INTERRUPTED)
+
+        on_disk = json.loads((self.runtime_root / "jobs" / "j5.json").read_text())
+        self.assertEqual(on_disk["status"], job.STATUS_INTERRUPTED)
+        # The marker that discriminates "reconciled this call" is an
+        # in-memory-only signal for `cmd_resume` -- never part of the
+        # persisted job-record schema.
+        self.assertNotIn("reconciled_this_call", on_disk)
 
     def test_json_output_is_a_list_of_records(self) -> None:
         record = _job_record(job_id="j3", target_repo=str(self.repo.resolve()),

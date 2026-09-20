@@ -514,7 +514,22 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
             else:
                 print(f"{job_id}: {status}")
 
-    any_interrupted = any(record.get("status") == job.STATUS_INTERRUPTED for record in records)
+    # Exit 40 means "the Controller itself was interrupted, or `resume`
+    # reconciled a record to `INTERRUPTED`" (CONTROLLER_GEN1_PLAN.md's exit
+    # code table) -- the *event*, not the mere presence of INTERRUPTED
+    # status anywhere in job history. `job.resume` marks every record it
+    # actually reconciled this call with `reconciled_this_call: True`; a
+    # record returned unchanged because it was *already* terminal
+    # (`status in TERMINAL_STATUSES`, including a historical INTERRUPTED
+    # from an earlier invocation) never carries that marker, so it cannot
+    # by itself trigger exit 40 here (fixes `I2`,
+    # MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 1: this previously fired
+    # on any historical terminal INTERRUPTED record, forever, regardless of
+    # whether this invocation reconciled anything).
+    any_interrupted = any(
+        record.get("status") == job.STATUS_INTERRUPTED and record.get("reconciled_this_call")
+        for record in records
+    )
     return EXIT_INTERRUPTED if any_interrupted else EXIT_OK
 
 

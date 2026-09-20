@@ -629,6 +629,39 @@ class ResumeCommandTest(unittest.TestCase):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["job_id"], "j3")
 
+    def test_json_output_strips_reconciled_this_call_marker(self) -> None:
+        """`O1`/`M2` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2):
+        `job.resume` adds `reconciled_this_call: True` in memory to every
+        record this invocation actually reconciled, but `job.py`'s own
+        docstring declares it "never part of the persisted job-record
+        schema" -- `resume --json` must report the same durable shape
+        `jobs/<job_id>.json` holds, not a superset of it. Uses a `PLANNED`
+        record (row 1, unconditionally reconciled) so the marker is
+        actually present on the in-memory record `cmd_resume` receives,
+        the one case `test_json_output_is_a_list_of_records`'s terminal
+        `FINISHED` fixture is structurally incapable of exercising."""
+        record = _job_record(job_id="j6", target_repo=str(self.repo.resolve()),
+                              status=job.STATUS_PLANNED)
+        for key in ("worker_outcome", "observed_phase_after", "transition_verified"):
+            record.pop(key, None)
+        runtime.write_json(self.runtime_root, "jobs/j6.json", record)
+
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_resume(self._args(json_out=True), self.runtime_root, FAKE_IDENTITY)
+        # The record this call reconciled to INTERRUPTED must still drive
+        # exit 40 -- stripping the marker from the *printed* payload must
+        # not also blind the exit-code computation, which reads the
+        # original (unstripped) records.
+        self.assertEqual(exit_code, cli.EXIT_INTERRUPTED)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["job_id"], "j6")
+        self.assertEqual(payload[0]["status"], job.STATUS_INTERRUPTED)
+        self.assertNotIn("reconciled_this_call", payload[0])
+
     def test_never_launches_a_worker(self) -> None:
         """`controller.job.resume` contains no call to
         `controller.worker.launch` at all -- proven here by monkeypatching

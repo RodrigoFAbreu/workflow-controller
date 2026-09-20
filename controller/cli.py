@@ -501,7 +501,22 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     records = job.resume(target, identity=ident, runtime=runtime_root)
 
     if args.json:
-        print(json.dumps(records))
+        # `O1` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): `job.py`'s
+        # own docstring for `resume` states `reconciled_this_call` is "an
+        # in-memory-only marker ... never part of the persisted job-record
+        # schema and never read back on a later invocation" -- `--json`
+        # must report the same durable shape `jobs/<job_id>.json` holds,
+        # not a superset of it, so the ephemeral marker is stripped from a
+        # copy used for serialisation only; the exit-code computation below
+        # still reads `reconciled_this_call` off the original `records`
+        # list, unaffected. `resume_marked` (a real field `resume` may add
+        # to a *terminal* record) is left alone -- only
+        # `reconciled_this_call` is stripped, per this finding's fix.
+        json_records = [
+            {k: v for k, v in record.items() if k != "reconciled_this_call"}
+            for record in records
+        ]
+        print(json.dumps(json_records))
     else:
         if not records:
             print(f"no job records for {target.root}")

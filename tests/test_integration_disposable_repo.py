@@ -321,6 +321,17 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
             runtime_root = tmp_root / "runtime"
             _seed_target(target)
 
+            # `O2` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): step 5's
+            # declared post-condition is the post-run `work_items.keys()`
+            # minus *this fixture's own recorded pre-run* `work_items.keys()`
+            # -- identified the same way row 7's own predicate is -- not a
+            # bare `len(work_items) == 1`, which is only equivalent to it
+            # under step 3's own precondition (a freshly seeded target's
+            # `work_items` is `{}`) holding.
+            state_path = target / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+            pre_run_state = json.loads(state_path.read_text())
+            pre_run_work_item_keys = set(pre_run_state.get("work_items", {}).keys())
+
             argv = ["--runtime-dir", str(runtime_root)]
             if _source_is_dirty():
                 argv.append("--allow-dirty-source")
@@ -343,11 +354,17 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
                 f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
             )
 
-            state_path = target / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
             state = json.loads(state_path.read_text())
             work_items = state["work_items"]
-            self.assertEqual(len(work_items), 1, f"expected exactly one work item, got {work_items!r}")
-            work_item_id, entry = next(iter(work_items.items()))
+            post_run_work_item_keys = set(work_items.keys())
+            new_work_item_keys = post_run_work_item_keys - pre_run_work_item_keys
+            self.assertEqual(
+                len(new_work_item_keys), 1,
+                f"expected exactly one new work item, pre-run keys={pre_run_work_item_keys!r} "
+                f"post-run keys={post_run_work_item_keys!r}",
+            )
+            work_item_id = next(iter(new_work_item_keys))
+            entry = work_items[work_item_id]
             self.assertEqual(entry["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
 
             registry_path = entry.get("registry_path")

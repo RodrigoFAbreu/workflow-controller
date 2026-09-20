@@ -75,6 +75,42 @@ class BundleDirResolutionTest(unittest.TestCase):
         self.assertEqual(bundle_dir, Path(".ai-review/wi-1/current"))
 
 
+class FeedbackDirResolutionTest(unittest.TestCase):
+    """`resolve_feedback_dir` is keyed on the feedback leaf's own
+    existence, never on the work item's root directory the way
+    `resolve_bundle_dir`/`resolve_rejected_marker_path` are
+    (`docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location": "`feedback/`
+    ... keyed on `.ai-review/<work_item_id>/feedback/`'s own existence").
+    `test_resolves_flat_when_work_item_root_exists_but_feedback_subdir_does_not`
+    is the regression case: a work item that already has a scoped bundle
+    round (`.ai-review/<work_item_id>/` exists, e.g. holding `current/`)
+    but has never had a scoped `feedback/` round of its own must still
+    resolve flat, matching `scripts/workflow_fingerprint.py`'s own
+    `resolve_feedback_dir` exactly -- before this fix, this function
+    returned the scoped path instead, disagreeing with the resolver every
+    real Workflow command actually uses."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+
+    def test_resolves_flat_when_no_scoped_layout_exists(self) -> None:
+        # No .ai-review/wi-1/ directory exists at all.
+        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1"),
+                          Path(".ai-review/feedback"))
+
+    def test_resolves_flat_when_work_item_root_exists_but_feedback_subdir_does_not(self) -> None:
+        (self.root / ".ai-review" / "wi-1" / "current").mkdir(parents=True)
+        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1"),
+                          Path(".ai-review/feedback"))
+
+    def test_resolves_scoped_once_the_feedback_subdir_itself_exists(self) -> None:
+        (self.root / ".ai-review" / "wi-1" / "feedback").mkdir(parents=True)
+        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1"),
+                          Path(".ai-review/wi-1/feedback"))
+
+
 class RejectedMarkerTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()

@@ -138,8 +138,29 @@ def _scoped_else_flat(root: Path, work_item_id: str, *, leaf: str) -> Path:
 
 def resolve_feedback_dir(root: Path, work_item_id: str) -> Path:
     """``<feedback_dir>``, at every stage: scoped-else-flat, taking no
-    stage argument."""
-    return _scoped_else_flat(root, work_item_id, leaf="feedback")
+    stage argument -- but keyed on the feedback leaf's **own** existence
+    (``.ai-review/<work_item_id>/feedback/``), never on the work item's
+    root directory the way ``resolve_bundle_dir``/``resolve_rejected_marker_path``
+    are (``_scoped_else_flat``). ``docs/ai-workflow/REVIEW_PROTOCOL.md``'s
+    "Bundle location" section states this explicitly: "`feedback/` is
+    stage-agnostic and always follows this same scoped-else-flat rule, for
+    every stage alike, keyed on `.ai-review/<work_item_id>/feedback/`'s own
+    existence" -- deliberately different from the bundle directory's own
+    rule, and exactly what ``scripts/workflow_fingerprint.py``'s own
+    ``resolve_feedback_dir`` implements. Reusing ``_scoped_else_flat``'s
+    root-existence gate here (the prior shape of this function) made this
+    resolver disagree with that one for a work item that already has a
+    scoped bundle round (so ``.ai-review/<work_item_id>/`` exists) but has
+    never had a scoped ``feedback/`` round of its own -- exactly the state
+    a real work item reaches immediately after its first implementation
+    review: this function returned the scoped path while the Workflow
+    commands that actually write/read feedback resolved to the flat one,
+    so a human gate's reported ``artifact_path`` named a location nothing
+    downstream ever reads."""
+    scoped = _scoped_root(work_item_id) / "feedback"
+    if (root / scoped).is_dir():
+        return scoped
+    return Path(".ai-review") / "feedback"
 
 
 def resolve_bundle_dir(root: Path, work_item_id: str, *, phase: str) -> Path:

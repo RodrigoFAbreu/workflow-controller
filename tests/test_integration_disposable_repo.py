@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from controller import identity  # noqa: E402
 from controller.managed_repo import (  # noqa: E402
     REFERENCE_WORKFLOW_RELEASE, SUPPORTED_PROFILES, VALIDATED_WORKFLOW_RELEASES,
 )
@@ -142,6 +144,46 @@ def _source_is_dirty() -> bool:
         cwd=REPO_ROOT, check=False,
     )
     return bool(result.stdout.strip())
+
+
+def _expected_controller_source_tree_digest(runtime_root: Path) -> str:
+    """Independently derive the Controller source-tree digest the launched
+    subprocess's own snapshot must carry (`REQ-T18` step 4, round 3's
+    `I1`/`M1`): calls the *same* immutable source/pin primitive
+    (`identity.materialise`) the subprocess itself goes through on its
+    unpinned-source branch (`cli._dispatch`), against the same origin
+    (`REPO_ROOT`) and the same dirty/clean classification
+    (`_source_is_dirty`), rather than trusting the job record's own
+    self-reported value. `materialise()`'s destination directory is always
+    named after the digest it just computed (`identity.materialise`'s own
+    `dest = source_dir / tree_digest`), so `.name` is that digest."""
+    snapshot_dir = identity.materialise(REPO_ROOT, runtime_root, allow_dirty=_source_is_dirty())
+    return snapshot_dir.name
+
+
+def _assert_job_record_source_tree_digest_matches_expected(
+    job_record: dict, expected_digest: str,
+) -> str:
+    """The binding assertion `REQ-T18` step 4 requires: not merely that
+    `job_record["controller_source_tree_digest"]` looks like a sha256 digest,
+    but that it equals `expected_digest`. Raises `AssertionError` (never
+    returns falsy) so a regression that persists a different, syntactically
+    valid 64-hex digest into the job record is caught rather than passing on
+    shape alone. Returns the validated digest for the caller to log/print."""
+    source_tree_digest = job_record.get("controller_source_tree_digest")
+    if not isinstance(source_tree_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", source_tree_digest):
+        raise AssertionError(
+            f"controller_source_tree_digest must be a 64-hex sha256 digest, "
+            f"got {source_tree_digest!r}"
+        )
+    if source_tree_digest != expected_digest:
+        raise AssertionError(
+            f"job record's controller_source_tree_digest {source_tree_digest!r} does not "
+            f"match the independently derived expected Controller source-tree digest "
+            f"{expected_digest!r} -- the live run did not execute from the exact Controller "
+            f"bytes under review"
+        )
+    return source_tree_digest
 
 
 def _seed_target(target: Path) -> None:
@@ -306,6 +348,52 @@ class InstallationAdmissibilityTest(unittest.TestCase):
             self.assertIn("no installation manifest found", str(ctx.exception))
 
 
+class ControllerSourceTreeDigestVerificationTest(unittest.TestCase):
+    """Default-suite coverage for `_expected_controller_source_tree_digest`
+    and `_assert_job_record_source_tree_digest_matches_expected` (`REQ-T18`
+    step 4, round 3's `I1`/`M1`): the live fixture below is skipped unless
+    `CONTROLLER_LIVE_WORKER=1`, so the discriminating behavior the round-3
+    external review asked for -- that a job record carrying a different but
+    syntactically valid 64-hex digest is rejected, not merely shape-checked
+    -- must also be provable without a live worker. None of the cases here
+    spend a live `claude` call; `test_expected_digest_is_well_formed` is the
+    only one that touches `identity.materialise`, and it does so against
+    this repository's own current source, exactly as the live fixture would."""
+
+    def test_expected_digest_is_well_formed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="controller-digest-verify-") as td:
+            expected = _expected_controller_source_tree_digest(Path(td))
+        self.assertRegex(expected, r"^[0-9a-f]{64}$")
+
+    def test_matching_digest_is_accepted(self) -> None:
+        expected = "a" * 64
+        result = _assert_job_record_source_tree_digest_matches_expected(
+            {"controller_source_tree_digest": expected}, expected,
+        )
+        self.assertEqual(result, expected)
+
+    def test_different_but_syntactically_valid_digest_is_rejected(self) -> None:
+        expected = "a" * 64
+        forged = "b" * 64
+        with self.assertRaises(AssertionError) as ctx:
+            _assert_job_record_source_tree_digest_matches_expected(
+                {"controller_source_tree_digest": forged}, expected,
+            )
+        self.assertIn(forged, str(ctx.exception))
+        self.assertIn(expected, str(ctx.exception))
+
+    def test_malformed_digest_is_rejected_on_shape_alone(self) -> None:
+        with self.assertRaises(AssertionError) as ctx:
+            _assert_job_record_source_tree_digest_matches_expected(
+                {"controller_source_tree_digest": "not-a-digest"}, "a" * 64,
+            )
+        self.assertIn("64-hex", str(ctx.exception))
+
+    def test_missing_digest_is_rejected(self) -> None:
+        with self.assertRaises(AssertionError):
+            _assert_job_record_source_tree_digest_matches_expected({}, "a" * 64)
+
+
 @unittest.skipUnless(
     os.environ.get("CONTROLLER_LIVE_WORKER") == "1",
     "requires a live claude binary, network access and real spend -- set "
@@ -401,21 +489,23 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
             worker_outcome = job_record["worker_outcome"]
             self.assertIsNotNone(worker.get("session_id"))
 
-            # `REQ-T18` step 4 (revision 71, round 2's `I1`/`M3`): the
-            # binding identifier of the bytes this run executed is
-            # `controller_source_tree_digest`, present under both the
-            # `commit` and `worktree` pin outcomes -- never
+            # `REQ-T18` step 4 (revision 71, round 2's `I1`/`M3`; round 3's
+            # `I1`/`M1`): the binding identifier of the bytes this run
+            # executed is `controller_source_tree_digest`, present under
+            # both the `commit` and `worktree` pin outcomes -- never
             # `controller_source_commit` alone, which is `None` under the
             # `worktree` outcome by design (`identity.py`'s own scope
-            # rule). Asserting on the digest, not merely printing it, is
-            # what ties this round's live evidence to the exact Controller
-            # bytes under review rather than to a description of them.
-            source_tree_digest = job_record.get("controller_source_tree_digest")
-            self.assertIsInstance(source_tree_digest, str)
-            self.assertRegex(
-                source_tree_digest, r"^[0-9a-f]{64}$",
-                f"controller_source_tree_digest must be a 64-hex sha256 digest, "
-                f"got {source_tree_digest!r}",
+            # rule). Shape-checking the digest alone would pass for an
+            # arbitrary or stale 64-hex value; the binding proof round 3
+            # asked for is equality with the digest independently derived
+            # from the same immutable source/pin model
+            # (`_expected_controller_source_tree_digest`), which the
+            # subprocess above could not have influenced.
+            expected_source_tree_digest = _expected_controller_source_tree_digest(
+                tmp_root / "verify-runtime"
+            )
+            source_tree_digest = _assert_job_record_source_tree_digest_matches_expected(
+                job_record, expected_source_tree_digest,
             )
             source_commit = job_record.get("controller_source_commit")
 

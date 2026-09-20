@@ -125,8 +125,11 @@ class InspectJsonPayloadTest(unittest.TestCase):
 
 
 class FunctionalReviewPreconditionTest(unittest.TestCase):
-    """REQ-10 (prose-only per M1): the checklist names both the artifact
-    and the unconsumed-findings precondition."""
+    """REQ-9's Flow-3 clause (prose-only per M1): the checklist names both
+    the artifact and the unconsumed-findings precondition. The mapping
+    (``docs/ai-workflow/requirements/workflow-controller-gen1-correctness-
+    hardening-mapping.json``) runs REQ-1..REQ-9 only; this clause lives in
+    REQ-9's own text, not in a separate requirement."""
 
     def test_checklist_names_functional_review_artifact_and_precondition(self) -> None:
         text = _CHECKLIST_PATH.read_text()

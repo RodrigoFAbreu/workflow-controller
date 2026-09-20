@@ -54,6 +54,23 @@ repository to update.
   `evidence.read_feedback_fields`'s real on-disk read path, not a bare
   in-memory string comparison — built as a local literal, independent of
   CP2's `tests/fixtures.py` rewrite.
+- **CP4 — operator-contract and functional-review-checklist
+  documentation accuracy: COMPLETE.** New, committed
+  `docs/ai-workflow/CONTROLLER_GEN1_HARDENING_CHECKLIST_CORRECTIONS.md`
+  (declared in `implementation_stage.protected_paths`, per plan review
+  round 1's finding B1) records all four corrections: `--json`'s global,
+  before-the-subcommand-only placement; `explain`'s `EXIT_OK`/`0`
+  contract in every branch; `inspect --json`'s payload stated as the
+  negative claim only (none of `plan_approval`, `technical_approval`,
+  `functional_acceptance_status`, `blocking_decisions`); and Flow 3's
+  unconsumed-`FUNCTIONAL_REVIEW.md` precondition. New
+  `tests/test_checklist_corrections.py` automates three of the four
+  (finding M1): a regex over the file's own examples, an AST walk
+  asserting every `Return` in `controller/cli.py`'s `cmd_explain` is
+  `EXIT_OK`, and a direct call into `controller.cli._work_item_payload`
+  with a twelve-attribute stub proving the four excluded names are absent
+  from the real returned keys. The fourth stays prose-only, checked by
+  this work item's own future functional-review round.
 
 ## Milestone
 
@@ -190,12 +207,18 @@ a Controller defect:
   which branch would fire. This is a documentation gap, not a code defect:
   the code already handles and tests the case correctly.
 
-This milestone's own functional-review checklist (authored later, when
-this work item itself reaches `AWAITING_FUNCTIONAL_REVIEW`) must get all
-four of these right from the start — this scope item is the standing
-requirement that it does, not a one-time edit to Gen1's now-historical
-checklist text. No regression test applies to prose; correctness here is
-checked by the functional-review round itself.
+Plan revision 2 (findings B1/M1) turned this scope item into a real,
+implementation-time deliverable rather than a standing requirement on a
+not-yet-written checklist: the four corrections are recorded in the
+committed, implementation-stage-protected
+`docs/ai-workflow/CONTROLLER_GEN1_HARDENING_CHECKLIST_CORRECTIONS.md`, and
+three of the four are mechanically asserted by
+`tests/test_checklist_corrections.py` (REQ-7/8/9). This milestone's own
+functional-review checklist (authored later, when this work item reaches
+`AWAITING_FUNCTIONAL_REVIEW`) links that file rather than re-deriving its
+content. Only the fourth item — whether Flow 3's precondition step reads
+adequately for a human tester — stays prose-only, checked by the
+functional-review round itself.
 
 ## Explicitly out of scope
 

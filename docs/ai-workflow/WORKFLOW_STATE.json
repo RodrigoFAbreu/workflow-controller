@@ -452,12 +452,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-gen1-correctness-hardening-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-gen1-correctness-hardening-mapping.json",
       "governing_workflow_version": "2.1",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 2,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "398caa13f26233b338ca1573a9dc4b3a576a8e50",
-      "reviewed_implementation_head": "5d40d56e4c3215bad70df84e8326734bb8e41e5f",
+      "reviewed_implementation_head": "68d4573f0b38f547e7ffa88ee1c1ea2e78ec7535",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP4",
       "checkpoints": {
@@ -529,8 +529,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 20,
-      "last_transition": "2026-09-20T13:56:17Z"
+      "state_revision": 21,
+      "last_transition": "2026-09-20T14:06:23Z"
     }
   }
 }

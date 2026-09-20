@@ -435,7 +435,7 @@ def _predicate_row3_block_feedback_current(root: Path, work_item_id: str, pre_st
         return False
     return (
         feedback.get("status") == "BLOCK"
-        and feedback.get("reviewer_role") == "LOCAL_MODEL_PLAN_REVIEW"
+        and evidence._normalize_role(feedback.get("reviewer_role")) == "LOCAL_MODEL_PLAN_REVIEW"
         and feedback.get("reviewed_bundle_id") == pre_state.get("bundle_id")
     )
 

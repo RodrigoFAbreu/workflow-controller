@@ -464,5 +464,34 @@ class BootstrapRowSevenTest(unittest.TestCase):
             phase_from_wire("None")
 
 
+class PredicateRow3RoleNormalizationTest(unittest.TestCase):
+    """CP3: ``_predicate_row3_block_feedback_current``'s ``Reviewer
+    role:`` comparison must agree with ``evidence._normalize_role``
+    (the comparison ``evidence.py``'s manual-stage admissibility check
+    already applies), exercised through the real on-disk read path
+    (``evidence.read_feedback_fields``) rather than a pure in-memory
+    string comparison -- a legacy-spelling role line that the two readers
+    previously disagreed on (plan review round 1, finding O2). Built as a
+    local literal, not through ``tests/fixtures.py``'s
+    ``build_review_feedback_text``/``write_review_feedback`` (CP2 rewrites
+    those in the same revision window; plan review round 1, finding I5)."""
+
+    def test_legacy_lowercase_role_spelling_is_recognized(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_id = "a" * 64
+            feedback_dir = Path(".ai-review/feedback")
+            (root / feedback_dir).mkdir(parents=True)
+            (root / feedback_dir / "REVIEW_FEEDBACK.md").write_text(
+                "Status: BLOCK\n"
+                "Reviewer role: local_model_plan_review\n"
+                f"Reviewed bundle ID: {bundle_id}\n"
+            )
+            pre_state = {"bundle_manifest_readable": True, "bundle_id": bundle_id}
+            self.assertTrue(
+                job._predicate_row3_block_feedback_current(root, "wi-1", pre_state)
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

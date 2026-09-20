@@ -42,6 +42,18 @@ repository to update.
   round-1 plan review produced, never to the fixture that reproduces the
   recogniser's own literal — confirmed to fail against the pre-fix label
   and pass against the post-fix one.
+- **CP3 — reviewer-role normalization consistency: COMPLETE.**
+  `controller/job.py`'s `_predicate_row3_block_feedback_current` now
+  routes its `Reviewer role:` comparison through
+  `evidence._normalize_role`, the same normalization
+  `evaluate_manual_stage_admissibility` already applies, so both readers
+  of the field agree on every input. New
+  `tests/test_job.py::PredicateRow3RoleNormalizationTest` writes a real
+  `REVIEW_FEEDBACK.md` (legacy lowercase `Reviewer role:` spelling) to a
+  temporary feedback directory and exercises the predicate through
+  `evidence.read_feedback_fields`'s real on-disk read path, not a bare
+  in-memory string comparison — built as a local literal, independent of
+  CP2's `tests/fixtures.py` rewrite.
 
 ## Milestone
 

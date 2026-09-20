@@ -75,7 +75,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from controller.errors import NoSupportedActionError, UnknownPhaseError
+from controller.errors import MissingCommandsDirectoryError, NoSupportedActionError, UnknownPhaseError
 
 class _NoPhaseType:
     """The sentinel type of :data:`NO_PHASE`.
@@ -339,6 +339,16 @@ CATEGORY_USER_ONLY = "user_only"
 
 
 def _iter_command_files(commands_dir: Path) -> list[Path]:
+    # `Path.glob` treats a missing directory as vacuously empty, not a
+    # refusal -- indistinguishable from a genuinely empty, existing one.
+    # Fail closed instead (`O1`, MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW
+    # round 1): `classify_command_files`'s contract is total classification
+    # of an existing command surface, not a silent empty one.
+    if not commands_dir.is_dir():
+        raise MissingCommandsDirectoryError(
+            f"commands directory not found: {commands_dir}",
+            evidence={"commands_dir": str(commands_dir)},
+        )
     return sorted(commands_dir.glob("*.md"))
 
 

@@ -269,6 +269,25 @@ class MalformedTargetRegistryError(ControllerError):
 # ---------------------------------------------------------------------------
 
 
+class MissingCommandsDirectoryError(ControllerError):
+    """``controller.decision.classify_command_files``'s ``commands_dir``
+    does not exist, or exists but is not a directory.
+
+    ``Path.glob`` treats an absent directory as vacuously empty rather than
+    refusing, which would otherwise let ``classify_command_files`` return
+    ``{}`` for a missing/mis-pointed directory -- indistinguishable from a
+    genuinely empty one, and weaker than the function's own declared
+    fail-closed, total-classification contract (`O1`,
+    MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 1: non-gating for
+    Generation 1 today, since the only current callers already point at an
+    existing directory, but left total against a future caller or a
+    mis-pointed property check that would otherwise silently observe an
+    empty command surface). ``evidence['commands_dir']`` names the path.
+    """
+
+    code = "MISSING_COMMANDS_DIRECTORY"
+
+
 class NoSupportedActionError(ControllerError):
     """The observed phase has no automatic action, no human gate, and is
     not one of the deliberately inert phases (``LEGACY_READY``,

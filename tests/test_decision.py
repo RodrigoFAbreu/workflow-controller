@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import decision, target_state
-from controller.errors import NoSupportedActionError, UnknownPhaseError
+from controller.errors import MissingCommandsDirectoryError, NoSupportedActionError, UnknownPhaseError
 from tests import fixtures
 
 #: A hand-copied set of the twenty phase names, independent of
@@ -364,6 +364,25 @@ class CommandFilePartitionTest(unittest.TestCase):
         )
         with self.assertRaises(NoSupportedActionError):
             decision.classify_command_files(self.commands_dir)
+
+    def test_missing_commands_directory_fails_closed(self) -> None:
+        """`O1`, MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 1: a missing
+        (or mis-pointed) ``commands_dir`` must refuse, not return ``{}`` --
+        ``Path.glob`` on an absent directory is vacuously empty, which
+        would otherwise be indistinguishable from a genuinely empty,
+        existing one and weaker than this function's declared fail-closed
+        contract."""
+        missing = Path(self._tmp.name) / "does-not-exist"
+        with self.assertRaises(MissingCommandsDirectoryError):
+            decision.classify_command_files(missing)
+
+    def test_commands_path_that_is_a_file_fails_closed(self) -> None:
+        """The same refusal for a path that exists but is not a
+        directory -- ``is_dir()`` is the exact check, not mere existence."""
+        not_a_dir = Path(self._tmp.name) / "not-a-directory"
+        not_a_dir.write_text("not a directory\n")
+        with self.assertRaises(MissingCommandsDirectoryError):
+            decision.classify_command_files(not_a_dir)
 
     def test_front_matter_flag_alone_classifies_a_file_user_only(self) -> None:
         """A file that carries only the front-matter flag (never the guard

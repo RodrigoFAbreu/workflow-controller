@@ -303,9 +303,13 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
 # ---------------------------------------------------------------------------
 # CP6B -- the `ExpectedOutcome` table (plan section "CP6B -- Job execution,
 # part 2", the table transcribed under "An `ExpectedOutcome` is data, not
-# prose"). Six rows, one per automatic `(from_phase, governing_workflow_
-# version, action)` triple the combined CP4/CP4B decision engine can ever
-# produce. `to_any_of` alone drives step 4's `expected_transition`; the
+# prose"). Eleven rows: one per automatic `(from_phase,
+# governing_workflow_version, action)` triple the combined CP4/CP4B
+# decision engine can ever produce -- CP6B's own six, revision 63's B2
+# `NoWorkItemYet` bootstrap row (whose `from_phase` is `NO_PHASE`, never a
+# phase CP4's dispatch table is keyed on), and the four `"2.2"` plan-review
+# rows the `workflow-controller-protocol-2-2-compatibility` milestone's CP1
+# added. `to_any_of` alone drives step 4's `expected_transition`; the
 # `predicate`/`predicate_inputs`/`writer_calls` columns are step 8's own
 # verification concern.
 # ---------------------------------------------------------------------------

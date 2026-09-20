@@ -484,16 +484,20 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
         -- with a real registry file (``tests.fixtures.write_target_
         registry``) plus a mapping file and an artifacts-declaration file
         (real files at the same paths a genuine work item's own entry would
-        name; neither is read by any Controller code path, so their
-        content is inert beyond existing)."""
+        name -- the mapping under ``docs/ai-workflow/requirements/`` and the
+        artifacts declaration under ``docs/ai-workflow/registry/``, exactly
+        as this repository's own work items place them; neither is read by
+        any Controller code path, so their content is inert beyond
+        existing)."""
         registry_rel = f"docs/ai-workflow/registry/{work_item_id}-registry.json"
-        mapping_rel = f"docs/ai-workflow/registry/{work_item_id}-mapping.json"
+        mapping_rel = f"docs/ai-workflow/requirements/{work_item_id}-mapping.json"
         artifacts_rel = f"docs/ai-workflow/registry/{work_item_id}-artifacts.json"
 
         fixtures.write_target_registry(root, registry_rel, {
             "work_item_id": work_item_id,
             "checkpoints": [{"id": "CP1"}],
         })
+        (root / mapping_rel).parent.mkdir(parents=True, exist_ok=True)
         (root / mapping_rel).write_text(
             json.dumps({"work_item_id": work_item_id, "requirements": []}, indent=2) + "\n"
         )

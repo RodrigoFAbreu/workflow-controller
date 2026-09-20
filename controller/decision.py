@@ -298,9 +298,17 @@ def carries_disable_model_invocation_flag(text: str) -> bool:
 
 
 #: The four command files ``decide()`` may return as an :class:`Action`.
-#: Seven is the *row* count of the automatic mapping above -- two of these
-#: four files are selected from two rows each, and ``milestone-plan.md``
-#: from three; this partition is over *files*, not rows.
+#: Eleven is the *row* count of the automatic mapping this partition is
+#: drawn from -- the plan's own CP6B table, transcribed as
+#: ``controller/job.py``'s ``EXPECTED_OUTCOMES``; a documentation
+#: cross-reference only, since ``job`` imports this module and never the
+#: reverse. It was seven until the
+#: ``workflow-controller-protocol-2-2-compatibility`` milestone's CP1 added
+#: four ``"2.2"`` plan-review rows. ``milestone-plan.md`` is selected from
+#: four of those eleven rows, ``apply-plan-review.md`` from three, and
+#: ``review-plan.md``/``record-manual-plan-review.md`` from two each -- this
+#: partition is over *files*, not rows, so CP1's four extra rows left it
+#: unchanged.
 SELECTED_COMMANDS: frozenset[str] = frozenset({
     "milestone-plan",
     "review-plan",

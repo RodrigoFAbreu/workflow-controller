@@ -236,9 +236,98 @@ before. Full plan:
   errors=16** (baseline recorded `errors=17`, i.e. one *fewer* error
   than at base -- not a regression, and not a narrowing of the list).
 
-**Next action:** all six checkpoints (`CP1`-`CP6`) are now `COMPLETE` and
-the phase is `SELF_REVIEWING_IMPLEMENTATION`. Invoke
-`/milestone-implement` again to run the self-review of the full milestone
-diff, the full verification, and the implementation-review bundle
-generation (this work item is `"2.2"`-governed, so the bundle targets
-`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`).
+### Self-review of the full milestone diff
+
+Performed at `SELF_REVIEWING_IMPLEMENTATION` over `21a304d..HEAD`. **No
+blocking findings.** Two Important findings and one Minor one, all three
+fixed in the tree before bundle generation:
+
+- **Important -- stale row-count prose CP1's own sweep missed, in
+  `controller/job.py`.** The plan scoped CP1's prose sweep by `grep -n
+  "seven\|six-triple" job.py`, which does not match the `ExpectedOutcome`
+  table's own section banner at `job.py:306`: it read "Six rows, one per
+  automatic `(from_phase, governing_workflow_version, action)` triple the
+  combined CP4/CP4B decision engine can ever produce" -- correct before CP1
+  (six automatic triples, with row 7's `NO_PHASE` bootstrap deliberately
+  not counted among them), false after it, since the four new `"2.2"` rows
+  are four more such triples. Restated to name all eleven rows and the
+  three groups they come from.
+- **Important -- the same staleness in `controller/decision.py:301`.** The
+  plan's sweep was scoped to `job.py` alone, so it could not see
+  `SELECTED_COMMANDS`' own comment ("Seven is the *row* count of the
+  automatic mapping above -- two of these four files are selected from two
+  rows each, and `milestone-plan.md` from three"). Both the count and the
+  per-file breakdown moved with CP1: the mapping now has eleven rows, and
+  `milestone-plan.md` is selected from four of them, `apply-plan-review.md`
+  from three, `review-plan.md`/`record-manual-plan-review.md` from two
+  each. Restated, and the dangling "above" replaced with an explicit,
+  documentation-only cross-reference to `job.EXPECTED_OUTCOMES` (naming the
+  direction of the real dependency, `job` -> `decision`, so the note cannot
+  be misread as an import). The *conclusion* the comment draws is unchanged
+  and still correct: the partition is over files, so four more rows leave
+  `SELECTED_COMMANDS` at four members.
+- **Minor -- CP5's seeded fixture wrote its mapping file to the wrong
+  directory.** `Protocol22ImplementationReviewGatesTest._seed` placed
+  `<id>-mapping.json` under `docs/ai-workflow/registry/` while its own
+  docstring claimed the files sit "at the same paths a genuine work item's
+  own entry would name"; real mapping files live under
+  `docs/ai-workflow/requirements/` (this repository's own work item
+  included). Inert either way -- no Controller code path reads
+  `mapping_path` -- but the fixture now matches the convention it claims to
+  reproduce.
+
+No production behaviour changed in this pass: both Important fixes are
+comment-only, and the Minor one moves a test fixture file. The eleven-row
+table, `WorkflowSnapshot.supported_versions`, and every test CP1-CP5 added
+are byte-identical to their checkpoint commits.
+
+**One out-of-scope observation, recorded for the reviewer, deliberately not
+fixed here.** `controller/evidence.py`'s `AWAITING_FUNCTIONAL_REVIEW`
+branch returns `automatic=True` with `/apply-functional-review
+<work-item-id>` when `FUNCTIONAL_REVIEW.md` findings are present and
+unconsumed (pinned by `tests/test_evidence.py::...::
+test_unconsumed_findings_are_automatic`), but `job.EXPECTED_OUTCOMES` has
+no row for that action at any `governing_workflow_version`, so
+`job.execute_step` would reach `_expected_outcome_for` and raise the same
+uncaught `AssertionError` CP1 fixed for `"2.2"` plan review. This predates
+this milestone's base commit `21a304d`, is entirely
+version-independent (it affects `"1"`, `"2.1"` and `"2.2"` items alike),
+and is not in this milestone's diff or plan -- adding a row is new
+behaviour needing its own plan approval, so it is reported rather than
+silently fixed.
+
+### Full verification
+
+Run from the repository root at the self-reviewed tree, in this
+repository's `unittest` idiom, exactly as CP6's own section specifies:
+
+1. `python3 -m unittest discover -s tests -t .` -- **OK, 444 tests, 2
+   skipped** (both skips are `DisposableRepoRealWorkflowActionTest`'s
+   live-Claude-gated tests, `CLAUDE_BIN` not exported in this session).
+2. The seven frozen Workflow conformance suites, each as `python3
+   scripts/<name>_test.py`: `workflow_acceptance_matrix_test.py` (OK, 146,
+   18 skipped), `workflow_fingerprint_generalization_test.py` (OK, 79),
+   `workflow_fingerprint_test.py` (OK, 218), `workflow_integration_test.py`
+   (OK, 260, 1 skipped), `workflow_state_completion_obligations_test.py`
+   (OK, 106), `workflow_state_test.py` (OK, 853),
+   `workflow_test_harness_test.py` (OK, 19).
+
+**Zero failures across (1) and all seven.** `scripts/
+workflow_fingerprint_demo_test.py` and `scripts/workflow_state_demo_test.py`
+remain excluded for the reason CP6 records above, unchanged by this pass.
+
+The live-worker run (`CONTROLLER_LIVE_WORKER=1`, real `CLAUDE_BIN`) was
+**not** repeated at this tree: CP6 already ran it once end to end at
+`839777b` (14 tests, zero skipped, 632.7s), which is the "at least once"
+the plan asks for, and this self-review pass changed only comments in
+`controller/` and one fixture path inside the *offline*
+`Protocol22ImplementationReviewGatesTest` -- the offline half of that same
+module re-ran green in (1) above. No orchestration behaviour the live test
+exercises was touched.
+
+**Next action:** the self-review and full verification are complete and the
+implementation-review bundle has been generated. This work item is
+`"2.2"`-governed, so the phase is now
+`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`: run `/review-implementation` for
+the authoritative `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage, which on
+`APPROVE` hands off to `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.

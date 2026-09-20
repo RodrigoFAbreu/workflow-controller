@@ -415,6 +415,50 @@ class PairKeyedReachabilityTest(unittest.TestCase):
         wi = fixtures.build_work_item_view(phase="REVISING_PLAN")
         self._assert_reachable(wi, "/apply-plan-review")
 
+    # -- the four "2.2" rows CP1 added (workflow-controller-protocol-2-2-
+    # compatibility), each proven directly against evidence.decide() here
+    # rather than only transitively through TwoPointTwoPlanReviewTransitionTest's
+    # full execute_step path, exactly like every other row in this class.
+
+    def test_row1_planning_22_reaches_milestone_plan(self) -> None:
+        wi = fixtures.build_work_item_view(phase="PLANNING", governing_workflow_version="2.2")
+        self._assert_reachable(wi, "/milestone-plan")
+
+    def test_row3_awaiting_local_plan_review_22_reaches_review_plan(self) -> None:
+        wi = fixtures.build_work_item_view(phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2")
+        self._assert_reachable(wi, "/review-plan")
+
+    def test_row4_awaiting_manual_external_plan_review_22_reaches_record_manual_plan_review(self) -> None:
+        root, managed_repo = self._managed_repo()
+        head = fixtures.current_head(root)
+        fixtures.write_manifest(
+            root, ".ai-review/wi-1/current",
+            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=head),
+        )
+        fixtures.write_review_feedback(
+            root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(
+                status="APPROVE", reviewer_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+                reviewed_bundle_id="b" * 64, reviewed_base_commit="0" * 40,
+                reviewed_content_id="c" * 64,
+            ),
+        )
+        wi = fixtures.build_work_item_view(
+            phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_workflow_version="2.2",
+            base_commit="0" * 40,
+            plan_review_stages={
+                "review_content_id": "c" * 64,
+                "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
+            },
+        )
+        result = evidence.decide(managed_repo, snapshot=None, work_item=wi)
+        self.assertTrue(result.automatic, result.reason)
+        self.assertEqual(result.action.command.split()[0], "/record-manual-plan-review")
+
+    def test_row6_revising_plan_22_reaches_apply_plan_review(self) -> None:
+        wi = fixtures.build_work_item_view(phase="REVISING_PLAN", governing_workflow_version="2.2")
+        self._assert_reachable(wi, "/apply-plan-review")
+
 
 # ---------------------------------------------------------------------------
 # Steps 7-9, end to end: the transition_verified rule (step 8) and

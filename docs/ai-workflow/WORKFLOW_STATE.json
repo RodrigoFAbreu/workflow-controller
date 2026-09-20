@@ -631,14 +631,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-protocol-2-2-compatibility-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-protocol-2-2-compatibility-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 2,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "21a304d50a8bb9c08e465e78a4636e353e16b5e9",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP5",
+      "last_completed_checkpoint_id": "CP6",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -659,6 +659,10 @@
         "CP5": {
           "status": "COMPLETE",
           "start_commit": "114dd38630bd6e5053b3e620fd2a4a79d257d7ef"
+        },
+        "CP6": {
+          "status": "COMPLETE",
+          "start_commit": "839777b957d3dd80665f6a34d2471130f58692ea"
         }
       },
       "current_bundle_id": null,
@@ -712,8 +716,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 18,
-      "last_transition": "2026-09-20T21:05:24Z"
+      "state_revision": 20,
+      "last_transition": "2026-09-20T21:56:07Z"
     }
   }
 }

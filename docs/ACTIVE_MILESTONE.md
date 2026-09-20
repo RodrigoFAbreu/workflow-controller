@@ -3,7 +3,8 @@
 ## Status
 
 **In progress.** `workflow-controller-protocol-2-2-compatibility`
-(`governing_workflow_version: "2.2"`) is `IMPLEMENTING`. Plan revision 2 was
+(`governing_workflow_version: "2.2"`) is `SELF_REVIEWING_IMPLEMENTATION`:
+all six checkpoints are `COMPLETE`. Plan revision 2 was
 approved via the two-stage plan-review protocol (`LOCAL_MODEL_PLAN_REVIEW`
 round 2 APPROVE, `MANUAL_EXTERNAL_PLAN_REVIEW` round 1 APPROVE), recorded at
 commit `7bfa238`. Base commit: `21a304d50a8bb9c08e465e78a4636e353e16b5e9`.
@@ -182,9 +183,62 @@ before. Full plan:
   tests, 2 skipped -- both live-Claude-gated, `CLAUDE_BIN` unset in this
   environment) and the repository's full test suite (444 tests, 2
   skipped) pass with no regressions.
-- CP6: not started.
+- **CP6 -- COMPLETE.** Full verification, verification-only (no source
+  file changed by this checkpoint). Run from the repository root at
+  `839777b`, in this repository's `unittest` idiom (there is no `pytest`
+  here):
+  1. Controller suite -- `python3 -m unittest discover -s tests -t .`:
+     **OK, 444 tests, 2 skipped** (both skips are
+     `DisposableRepoRealWorkflowActionTest`'s live-Claude-gated tests,
+     which item 3 below then runs un-skipped).
+  2. The frozen Workflow conformance suites under `scripts/`, each
+     invoked directly as `python3 scripts/<name>_test.py` (`unittest
+     discover`'s default `test*.py` pattern matches none of them). The
+     set was **re-listed at implementation time** rather than taken from
+     the plan's count: `find . -maxdepth 2 -iname "*_test.py"` returns
+     nine files, and minus the two excluded below that is exactly the
+     seven the plan names -- `workflow_acceptance_matrix_test.py` (OK,
+     146, 18 skipped), `workflow_fingerprint_generalization_test.py`
+     (OK, 79), `workflow_fingerprint_test.py` (OK, 218),
+     `workflow_integration_test.py` (OK, 260, 1 skipped),
+     `workflow_state_completion_obligations_test.py` (OK, 106),
+     `workflow_state_test.py` (OK, 853), `workflow_test_harness_test.py`
+     (OK, 19). **Zero failures across (1) and all seven** -- this
+     checkpoint's exit condition.
+  3. One live-worker end-to-end run, with a real `CLAUDE_BIN`
+     (`/home/rodrigo/.local/bin/claude`) and `CONTROLLER_LIVE_WORKER=1`:
+     `python3 -m unittest tests.test_integration_disposable_repo` --
+     **OK, 14 tests in 632.7s, zero skipped**, so both live-Claude tests
+     really executed rather than being gated out. The first emitted
+     `DISPOSABLE_REPO_INTEGRATION_EVIDENCE` with
+     `worker_outcome_classification: "SUCCESS"`, `pre_phase:
+     "__NO_PHASE__"` -> `post_phase: "AWAITING_LOCAL_PLAN_REVIEW"`,
+     `worker_session_id: 8a6ad7e7-f2f5-475b-a8f9-a0f83442489d`,
+     `wall_clock_seconds: 306.5`, `controller_source_commit:
+     839777b957d3dd80665f6a34d2471130f58692ea`; the second,
+     `test_real_review_plan_reaches_the_2_2_plan_review_expected_outcomes_row`,
+     passed too, confirming the seeded-state assertions and the
+     live-orchestration path agree rather than each merely passing in
+     isolation.
 
-**Next action:** continue with `/milestone-implement` to select and
-implement CP6 (full verification: Controller suite, all frozen Workflow
-conformance suites, and one live-worker run of the new disposable-repo
-test).
+  **Excluded from the exit condition entirely**, not merely allowed to
+  fail, and named here rather than silently dropped:
+  `scripts/workflow_fingerprint_demo_test.py` and
+  `scripts/workflow_state_demo_test.py`. Both assert against the
+  **Workflow** repository's own real artifacts (a `workflow-v2-1-core`
+  work item, `.ai-review/current` bundle content), none of which exists
+  in this repository; `scripts/` is this work item's declared
+  `implementation_stage.excluded_prefixes` entry and repairing them is
+  out of scope per Non-goals. Measured at `839777b`:
+  `workflow_fingerprint_demo_test.py` **Ran 15, FAILED, errors=5,
+  skipped=4** (identical to the plan's base-commit baseline) and
+  `workflow_state_demo_test.py` **Ran 47, FAILED, failures=11,
+  errors=16** (baseline recorded `errors=17`, i.e. one *fewer* error
+  than at base -- not a regression, and not a narrowing of the list).
+
+**Next action:** all six checkpoints (`CP1`-`CP6`) are now `COMPLETE` and
+the phase is `SELF_REVIEWING_IMPLEMENTATION`. Invoke
+`/milestone-implement` again to run the self-review of the full milestone
+diff, the full verification, and the implementation-review bundle
+generation (this work item is `"2.2"`-governed, so the bundle targets
+`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`).

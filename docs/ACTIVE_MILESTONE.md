@@ -28,6 +28,20 @@ repository to update.
   guard call. Confirmed red (all seven sites flagged) against the
   pre-fix `identity.py`, green post-fix, with the three synthetic
   positive/negative instantiations plan CP1 names.
+- **CP2 — manual-plan-review content-id label mismatch: COMPLETE.**
+  `controller/evidence.py`'s `read_feedback_fields` now reads the
+  manual-plan-review verdict's content-id field from `Reviewed review
+  content ID:`, matching the real, installed Workflow contract.
+  `tests/fixtures.py`'s `build_review_feedback_text`/`write_review_feedback`
+  emit the corrected label so existing fixture-based tests keep exercising
+  the recogniser's real, intended behavior. New
+  `tests/test_evidence.py::ReadFeedbackFieldsRealArtifactShapeTest` binds
+  the regression to a literal, plan-stage-shaped (`Reviewer role:
+  MANUAL_EXTERNAL_PLAN_REVIEW`) copy of the real
+  `.ai-review/feedback/REVIEW_FEEDBACK.md` artifact this work item's own
+  round-1 plan review produced, never to the fixture that reproduces the
+  recogniser's own literal — confirmed to fail against the pre-fix label
+  and pass against the post-fix one.
 
 ## Milestone
 

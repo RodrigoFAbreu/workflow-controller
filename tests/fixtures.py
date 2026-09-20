@@ -376,7 +376,7 @@ def build_review_feedback_text(
     if work_item is not None:
         lines.append(f"Work item: {work_item}")
     if reviewed_content_id is not None:
-        lines.append(f"Reviewed content ID: {reviewed_content_id}")
+        lines.append(f"Reviewed review content ID: {reviewed_content_id}")
     lines.extend(extra_lines)
     lines.append("")
     lines.append("## Blocking findings")

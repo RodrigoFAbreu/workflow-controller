@@ -244,7 +244,7 @@ def read_feedback_fields(root: Path, feedback_dir: Path) -> dict[str, str | None
         "reviewed_bundle_id": read_labelled_line(text, "Reviewed bundle ID:"),
         "reviewed_base_commit": read_labelled_line(text, "Reviewed base commit:"),
         "work_item": read_labelled_line(text, "Work item:"),
-        "reviewed_content_id": read_labelled_line(text, "Reviewed content ID:"),
+        "reviewed_content_id": read_labelled_line(text, "Reviewed review content ID:"),
     }
 
 

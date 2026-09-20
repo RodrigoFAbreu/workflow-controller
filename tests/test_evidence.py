@@ -45,6 +45,53 @@ class ProvenanceBlockTest(unittest.TestCase):
         self.assertIsNone(evidence.read_labelled_line(text, "Status:"))
 
 
+class ReadFeedbackFieldsRealArtifactShapeTest(unittest.TestCase):
+    """CP2/REQ-4 (workflow-controller-gen1-correctness-hardening): the
+    label the code reads for ``reviewed_content_id`` must match what a
+    real plan-stage ``REVIEW_FEEDBACK.md`` actually carries, not a label
+    ``tests/fixtures.py`` happens to agree with by construction. This
+    text is a literal copy of the real, plan-stage-shaped
+    ``.ai-review/feedback/REVIEW_FEEDBACK.md`` produced by this work
+    item's own round-1 plan review (``Reviewer role:
+    MANUAL_EXTERNAL_PLAN_REVIEW``) -- never built through
+    ``fixtures.build_review_feedback_text``, which would make this test
+    self-confirming against the recogniser's own literal instead of
+    against the real artifact contract."""
+
+    _REAL_FEEDBACK_TEXT = (
+        "# Review Decision\n"
+        "\n"
+        "Reviewer role: MANUAL_EXTERNAL_PLAN_REVIEW\n"
+        "Status: APPROVE\n"
+        "\n"
+        "Reviewed bundle ID: 361c4fbd0194ca935d008255a580eb6e16a5a2133ea6e044f2c824db2c2f250b\n"
+        "Reviewed base commit: 398caa13f26233b338ca1573a9dc4b3a576a8e50\n"
+        "Work item: workflow-controller-gen1-correctness-hardening\n"
+        "Reviewed review content ID: b80a6044ddbb3613ade692fa97bac00d11b567f7dfd41e468031e235ffe45c06\n"
+        "Round: 1\n"
+        "Completed at: 2026-09-20T12:15:00Z\n"
+        "\n"
+        "## Verdict\n"
+        "\n"
+        "APPROVE.\n"
+    )
+
+    def test_reviewed_content_id_resolves_from_the_real_plan_stage_label(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            feedback_dir = Path("feedback")
+            (root / feedback_dir).mkdir(parents=True)
+            (root / feedback_dir / "REVIEW_FEEDBACK.md").write_text(self._REAL_FEEDBACK_TEXT)
+
+            fields = evidence.read_feedback_fields(root, feedback_dir)
+
+            self.assertEqual(fields["reviewer_role"], "MANUAL_EXTERNAL_PLAN_REVIEW")
+            self.assertEqual(
+                fields["reviewed_content_id"],
+                "b80a6044ddbb3613ade692fa97bac00d11b567f7dfd41e468031e235ffe45c06",
+            )
+
+
 class BundleDirResolutionTest(unittest.TestCase):
     """Round 3's I3 / round 6's I2: the plan-stage rule is unconditional
     (no existence gate); every other phase is scoped-else-flat."""

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-gen1-correctness-hardening",
+  "requirements": {
+    "REQ-1": {
+      "checkpoint_ids": [
+        "CP1"
+      ],
+      "description": "Route every durable write in controller/identity.py's snapshot-materialisation paths (first-materialisation SOURCE_PIN.json write, _publish_source_pin's reuse-path pin rewrite, the os.replace that publishes the snapshot directory, the _extract_clean/_extract_dirty extraction writes, and the tmp-cleanup writes at identity.py:272/:337) through the runtime containment guard, choosing the narrowest already-in-scope root per site (source_dir or dest, never a plumbed-in runtime_root), making CONTROLLER_GEN1_PLAN.md's and runtime.py's containment claim true as implemented."
+    },
+    "REQ-2": {
+      "checkpoint_ids": [
+        "CP1"
+      ],
+      "description": "Add package-wide write-path regression coverage: generalize ReadOnlySourceScanTest's AST-walk pattern (its own existing write-form set plus unlink) from target_state.py alone to every module in controller/, exempting calls inside controller/runtime.py and calls to runtime.py's own already-containment-checked runtime.<name> write API, with three ast.parse-based synthetic instantiations proving the unguarded case is flagged, the guarded case is not, and the runtime.<name> exemption is real and scoped, and stating explicitly that subprocess-mediated writes are outside this scanner's detectable vocabulary."
+    },
+    "REQ-3": {
+      "checkpoint_ids": [
+        "CP2"
+      ],
+      "description": "Correct controller/evidence.py's read_feedback_fields to read the manual-plan-review content-id field under its real label (`Reviewed review content ID:`), matching the installed Workflow's actual artifact contract, and correct tests/fixtures.py's synthesized label so it no longer masks the mismatch."
+    },
+    "REQ-4": {
+      "checkpoint_ids": [
+        "CP2"
+      ],
+      "description": "Add a regression test binding the manual-plan-review content-id recogniser to a plan-stage-shaped real artifact input (a `Reviewer role: MANUAL_EXTERNAL_PLAN_REVIEW` line, exercising the plan-stage admissibility path this field actually feeds), not to a fixture that reproduces the recogniser's own literal and not only to the sibling implementation-stage artifact."
+    },
+    "REQ-5": {
+      "checkpoint_ids": [
+        "CP3"
+      ],
+      "description": "Route controller/job.py's _predicate_row3_block_feedback_current Reviewer-role comparison through the same normalization controller/evidence.py's _normalize_role already applies, so both readers of the field agree."
+    },
+    "REQ-6": {
+      "checkpoint_ids": [
+        "CP3"
+      ],
+      "description": "Add a regression test, exercised through the real on-disk read path (evidence.read_feedback_fields against a real written feedback file, not a pure unit comparison) and built without depending on tests/fixtures.py's CP2-rewritten builders, proving evidence.py's and job.py's Reviewer-role readers now agree on a case that would previously have diverged (e.g. the legacy lowercase spelling)."
+    },
+    "REQ-7": {
+      "checkpoint_ids": [
+        "CP4"
+      ],
+      "description": "Author this milestone's own committed checklist-corrections file (docs/ai-workflow/CONTROLLER_GEN1_HARDENING_CHECKLIST_CORRECTIONS.md, protected at the implementation stage) stating --json's global, before-the-subcommand-only placement correctly in every example, verified by an automated regex assertion over that file, and later linked into the functional-review checklist by /prepare-functional-review."
+    },
+    "REQ-8": {
+      "checkpoint_ids": [
+        "CP4"
+      ],
+      "description": "Ensure the checklist-corrections file states explain's real, tested exit-code contract (EXIT_OK/0 in every branch, never 10), verified both by an assertion on the file's own text and by an independent AST-walk assertion that every return in controller/cli.py's cmd_explain is EXIT_OK."
+    },
+    "REQ-9": {
+      "checkpoint_ids": [
+        "CP4"
+      ],
+      "description": "Ensure the checklist-corrections file states, as a negative claim only, that inspect --json's payload carries none of plan_approval/technical_approval/functional_acceptance_status/blocking_decisions -- verified by an automated test asserting none of those four names appears in controller.cli._work_item_payload's actual returned keys -- and documents the AWAITING_FUNCTIONAL_REVIEW precondition-check step (and the already-automatic unconsumed-findings branch) that Gen1's checklist omitted for Flow 3."
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-gen1-correctness-hardening",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -442,6 +442,78 @@
         }
       ],
       "amendment_base_commit": "659ca39060b47966d28ba0f6a605ae2cb74a34d2"
+    },
+    "workflow-controller-gen1-correctness-hardening": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-gen1-correctness-hardening",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_GEN1_HARDENING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-gen1-correctness-hardening-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-gen1-correctness-hardening-mapping.json",
+      "governing_workflow_version": "2.1",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "398caa13f26233b338ca1573a9dc4b3a576a8e50",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "361c4fbd0194ca935d008255a580eb6e16a5a2133ea6e044f2c824db2c2f250b",
+        "approved_review_content_id": "b80a6044ddbb3613ade692fa97bac00d11b567f7dfd41e468031e235ffe45c06",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_GEN1_HARDENING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9ef4e044a62649061331ce9c041de04cb6383e72"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-gen1-correctness-hardening-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "acc3d8358134993946447d70a630e011a0a39063"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-gen1-correctness-hardening-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "be1973de83e5552ea86ee9df4cc9dbf3b0c8276a"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the plan for workflow-controller-gen1-correctness-hardening",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-20T12:28:26Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "b80a6044ddbb3613ade692fa97bac00d11b567f7dfd41e468031e235ffe45c06",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "361c4fbd0194ca935d008255a580eb6e16a5a2133ea6e044f2c824db2c2f250b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-20T12:01:38Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "361c4fbd0194ca935d008255a580eb6e16a5a2133ea6e044f2c824db2c2f250b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-20T12:15:00Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 9,
+      "last_transition": "2026-09-20T12:28:26Z"
     }
   }
 }

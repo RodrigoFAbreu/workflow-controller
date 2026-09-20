@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-gen1-correctness-hardening",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Guard identity.py's snapshot-write paths under the runtime containment invariant, with package-wide write-path regression coverage",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Correct CP4B's manual-plan-review content-id label to match the real Workflow artifact contract, with real-artifact-bound regression coverage",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Normalize the two Reviewer-role readers (evidence.py / job.py) to agree, with a discriminating regression test",
+      "depends_on": [],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Author and test this milestone's own committed checklist-corrections deliverable, closing the operator-contract/functional-review-checklist inaccuracies found during Gen1 acceptance",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    }
+  ]
+}

@@ -32,6 +32,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from controller.managed_repo import (  # noqa: E402
+    REFERENCE_WORKFLOW_RELEASE, SUPPORTED_PROFILES, VALIDATED_WORKFLOW_RELEASES,
+)
 from tests import fixtures  # noqa: E402
 
 REPO_ROOT = fixtures.REPO_ROOT
@@ -79,6 +82,57 @@ never overwrites it on update.
 """
 
 
+def _release_to_install() -> str:
+    """`REQ-T18` step 2's rule, stated once: install a member of
+    `VALIDATED_WORKFLOW_RELEASES` -- `REFERENCE_WORKFLOW_RELEASE` when it is
+    itself a member, otherwise any other named member (the lexicographically
+    smallest, for determinism). Never the Manager's newest release and never
+    this repository's own installed release -- neither is a statement about
+    validation (revision 69, round 68's `B1`)."""
+    if REFERENCE_WORKFLOW_RELEASE in VALIDATED_WORKFLOW_RELEASES:
+        return REFERENCE_WORKFLOW_RELEASE
+    return sorted(VALIDATED_WORKFLOW_RELEASES)[0]
+
+
+def _assert_target_installation_admissible(target: Path) -> None:
+    """`REQ-T18C` (revision 69, round 68's missing test): after step 2's
+    install and before step 4's real Controller run, read the *target's own*
+    `.workflow-manager/installation.json` -- the file the Manager actually
+    wrote, never the value this fixture asked for -- and assert its
+    `workflow_version` is a member of `VALIDATED_WORKFLOW_RELEASES` and its
+    `profile` a member of `SUPPORTED_PROFILES`. This is what refuses to let
+    live evidence run ahead of the Controller's own admission gate, whether
+    the divergence came from the preferred mechanism's `--release-version`
+    being dropped/mistyped/unhonoured, or from the fallback mechanism
+    copying an `installation.json` this repository's own Manager update has
+    moved to an unvalidated release. Fails with a message naming the
+    observed value, the current membership of `VALIDATED_WORKFLOW_RELEASES`,
+    and the "Supported Workflow baseline" growth procedure."""
+    manifest_path = target / ".workflow-manager" / "installation.json"
+    if not manifest_path.is_file():
+        raise AssertionError(
+            f"REQ-T18C: no installation manifest found at {manifest_path} after step 2's install"
+        )
+    manifest = json.loads(manifest_path.read_text())
+    observed_version = manifest.get("workflow_version")
+    observed_profile = manifest.get("profile")
+    if observed_version not in VALIDATED_WORKFLOW_RELEASES:
+        raise AssertionError(
+            f"REQ-T18C: target installation declares workflow_version {observed_version!r}, "
+            f"which is not a member of VALIDATED_WORKFLOW_RELEASES "
+            f"({sorted(VALIDATED_WORKFLOW_RELEASES)!r}). This fixture's install step (REQ-T18 "
+            f"step 2) must produce a validated release; if the Manager has genuinely moved on, "
+            f"re-derive the three inventories and re-run the seven baseline-verification suites "
+            f"against the newly-installed release, then add it to VALIDATED_WORKFLOW_RELEASES by "
+            f"name in a plan revision that states what was measured."
+        )
+    if observed_profile not in SUPPORTED_PROFILES:
+        raise AssertionError(
+            f"REQ-T18C: target installation declares profile {observed_profile!r}, which is not "
+            f"a member of SUPPORTED_PROFILES ({sorted(SUPPORTED_PROFILES)!r})."
+        )
+
+
 def _source_is_dirty() -> bool:
     """The exact pathspec-scoped dirty check CP1's own ``materialise()``
     uses: the tree is dirty iff ``git status --porcelain -- controller
@@ -91,9 +145,10 @@ def _source_is_dirty() -> bool:
 
 
 def _seed_target(target: Path) -> None:
-    """Steps 1-3: a throwaway repository, a real Workflow v2.3.1
-    installation, and a trivial committed milestone for `/milestone-plan`
-    to plan."""
+    """Steps 1-3: a throwaway repository, a real installation of a
+    `VALIDATED_WORKFLOW_RELEASES` member (never the Manager's default, never
+    this repository's own installed release -- `REQ-T18` step 2, revision
+    69), and a trivial committed milestone for `/milestone-plan` to plan."""
     target.mkdir(parents=True, exist_ok=True)
     fixtures.run(["git", "init", "-q"], cwd=target)
     fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
@@ -102,22 +157,37 @@ def _seed_target(target: Path) -> None:
     fixtures.run(["git", "add", "-A"], cwd=target)
     fixtures.run(["git", "commit", "-q", "-m", "seed"], cwd=target)
 
+    release = _release_to_install()
+
     if WORKFLOW_MANAGER_BIN is not None:
+        # Preferred mechanism: the real installation path, naming the
+        # release it wants. `--release-version` is a *global* option and is
+        # written *before* the subcommand -- measured, not assumed
+        # (`workflow-manager bootstrap --help`: the bootstrap subparser
+        # accepts only `--profile`/`--force`; the release selector sits on
+        # the top-level parser).
         result = fixtures.run(
-            [WORKFLOW_MANAGER_BIN, "bootstrap", str(target), "--profile", "full"],
+            [WORKFLOW_MANAGER_BIN, "--release-version", release, "bootstrap", str(target),
+             "--profile", "full"],
             cwd=target, check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"workflow-manager bootstrap failed (exit {result.returncode}): "
-                f"{result.stdout}\n{result.stderr}"
+                f"workflow-manager --release-version {release} bootstrap failed "
+                f"(exit {result.returncode}): {result.stdout}\n{result.stderr}"
             )
     else:
         # Fallback fixture detail, not a reimplementation of install
-        # semantics: copy this repository's own frozen Workflow v2.3.1
-        # installation. CP2 still asks the real Manager to verify the
-        # result at `step` time; if the Manager refuses this fixture, the
-        # test fails rather than proceeding.
+        # semantics: copy this repository's own installed Workflow tree and
+        # manifest. CP2 still asks the real Manager to verify the result at
+        # `step` time; if the Manager refuses this fixture, the test fails
+        # rather than proceeding. The copied `installation.json`'s own
+        # `workflow_version` is validated below by
+        # `_assert_target_installation_admissible` (REQ-T18C) -- if it is
+        # not a member of `VALIDATED_WORKFLOW_RELEASES`, the fallback does
+        # not silently produce an unvalidated fixture and does not rewrite
+        # the manifest to claim a release it did not copy: this call fails
+        # with that named assertion instead.
         shutil.copytree(REPO_ROOT / ".claude" / "commands", target / ".claude" / "commands",
                          dirs_exist_ok=True)
         shutil.copytree(REPO_ROOT / "scripts", target / "scripts", dirs_exist_ok=True,
@@ -130,6 +200,12 @@ def _seed_target(target: Path) -> None:
         )
         shutil.copytree(REPO_ROOT / ".workflow-manager", target / ".workflow-manager",
                          dirs_exist_ok=True)
+
+    # Step 3b (`REQ-T18C`): assert the target's own installation is
+    # admissible before anything is launched against it -- the one
+    # instrument that keeps both mechanisms' divergence from this
+    # repository's installed release audible rather than silent.
+    _assert_target_installation_admissible(target)
 
     (target / "docs" / "ACTIVE_MILESTONE.md").write_text(_TRIVIAL_MILESTONE)
     fixtures.run(["git", "add", "-A"], cwd=target)

@@ -227,6 +227,85 @@ def _seed_target(target: Path) -> None:
     fixtures.run(["git", "commit", "-q", "-m", "seed trivial milestone"], cwd=target)
 
 
+class InstallationAdmissibilityTest(unittest.TestCase):
+    """Default-suite coverage for `_release_to_install` and
+    `_assert_target_installation_admissible` (`M1`,
+    MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): both were previously
+    exercised only from inside `DisposableRepoRealWorkflowActionTest`,
+    which the default suite never runs (`CONTROLLER_LIVE_WORKER=1`-gated) --
+    so the one instrument whose entire value is "where it fires" ran only
+    under a real live worker. None of the cases here needs a live `claude`
+    binary, the real Manager, or network access: each writes a synthetic
+    `.workflow-manager/installation.json` straight into a `tmp_path`. These
+    belong outside the skipped class so the growth procedure named in
+    `_assert_target_installation_admissible`'s own refusal message stays
+    load-bearing after a future `VALIDATED_WORKFLOW_RELEASES` change."""
+
+    def _write_manifest(self, target: Path, *, workflow_version, profile) -> None:
+        manifest_dir = target / ".workflow-manager"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        payload: dict = {}
+        if workflow_version is not None:
+            payload["workflow_version"] = workflow_version
+        if profile is not None:
+            payload["profile"] = profile
+        (manifest_dir / "installation.json").write_text(json.dumps(payload))
+
+    def test_release_to_install_returns_a_validated_release(self) -> None:
+        self.assertIn(_release_to_install(), VALIDATED_WORKFLOW_RELEASES)
+
+    def test_admissible_installation_raises_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            self._write_manifest(
+                target,
+                workflow_version=sorted(VALIDATED_WORKFLOW_RELEASES)[0],
+                profile=sorted(SUPPORTED_PROFILES)[0],
+            )
+            _assert_target_installation_admissible(target)  # must not raise
+
+    def test_unvalidated_inline_release_is_refused(self) -> None:
+        # A release one point release ahead of every VALIDATED_WORKFLOW_
+        # RELEASES member -- plausible "the Manager moved on" drift, not a
+        # typo of a validated one.
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            self._write_manifest(target, workflow_version="2.5.2", profile="full")
+            with self.assertRaises(AssertionError) as ctx:
+                _assert_target_installation_admissible(target)
+            self.assertIn("2.5.2", str(ctx.exception))
+            self.assertIn("VALIDATED_WORKFLOW_RELEASES", str(ctx.exception))
+
+    def test_wrong_line_release_is_refused(self) -> None:
+        # A release on an entirely different line (2.3.x) -- distinguishes
+        # "not this exact validated version" from "not even the same
+        # generation of Workflow".
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            self._write_manifest(target, workflow_version="2.3.1", profile="full")
+            with self.assertRaises(AssertionError) as ctx:
+                _assert_target_installation_admissible(target)
+            self.assertIn("2.3.1", str(ctx.exception))
+
+    def test_unsupported_profile_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            self._write_manifest(
+                target, workflow_version=sorted(VALIDATED_WORKFLOW_RELEASES)[0], profile="minimal",
+            )
+            with self.assertRaises(AssertionError) as ctx:
+                _assert_target_installation_admissible(target)
+            self.assertIn("minimal", str(ctx.exception))
+            self.assertIn("SUPPORTED_PROFILES", str(ctx.exception))
+
+    def test_absent_manifest_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            with self.assertRaises(AssertionError) as ctx:
+                _assert_target_installation_admissible(target)
+            self.assertIn("no installation manifest found", str(ctx.exception))
+
+
 @unittest.skipUnless(
     os.environ.get("CONTROLLER_LIVE_WORKER") == "1",
     "requires a live claude binary, network access and real spend -- set "

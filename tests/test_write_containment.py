@@ -118,14 +118,23 @@ def _is_guard_call(callee: str) -> bool:
     return callee.rsplit(".", 1)[-1] in _GUARD_SUFFIXES
 
 
+#: ``runtime.py``'s own containment-checked public write API -- both routed
+#: through the guarded ``_atomic_write`` (round-2 implementation-review
+#: finding O4: a blanket ``runtime.<name>`` head-match would silently
+#: exempt a future ``runtime.remove``/``runtime.unlink``/``runtime.move``
+#: added without a guard; this allowlist matches only the entry points that
+#: are actually checked today).
+_EXEMPT_RUNTIME_API_NAMES = {"write_json", "write_bytes"}
+
+
 def _is_exempt_runtime_api_call(callee: str) -> bool:
-    """``runtime.<name>`` for any name other than the guard itself -- a
+    """``runtime.<name>`` for ``name`` in ``_EXEMPT_RUNTIME_API_NAMES`` -- a
     call into ``runtime.py``'s own already-containment-checked public
-    write API (e.g. ``runtime.write_bytes``), treated as safe on the same
-    basis as living inside ``runtime.py``, never requiring a redundant
-    local guard at its call site."""
-    head = callee.split(".", 1)[0]
-    return head == "runtime" and not _is_guard_call(callee)
+    write API, treated as safe on the same basis as living inside
+    ``runtime.py``, never requiring a redundant local guard at its call
+    site."""
+    head, _, name = callee.partition(".")
+    return head == "runtime" and name in _EXEMPT_RUNTIME_API_NAMES
 
 
 def scan_module(source: str, *, exempt: bool) -> list[str]:
@@ -193,6 +202,15 @@ class SyntheticInstantiationTest(unittest.TestCase):
     def test_a_bare_runtime_write_api_call_is_not_flagged(self) -> None:
         source = "def f():\n    runtime.write_bytes(root, 'rel', b'data')\n"
         self.assertEqual(scan_module(source, exempt=False), [])
+
+    def test_a_runtime_call_outside_the_checked_api_is_still_flagged(self) -> None:
+        """Round-2 implementation-review finding O4: a hypothetical
+        ``runtime.remove`` with no local guard must be flagged -- the
+        allowlist is scoped to the two entry points actually routed
+        through ``_atomic_write``, not a blanket ``runtime.<name>``
+        head-match."""
+        source = "def f():\n    runtime.remove('x')\n"
+        self.assertEqual(scan_module(source, exempt=False), ["line 2: runtime.remove(...)"])
 
 
 if __name__ == "__main__":

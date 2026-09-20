@@ -33,7 +33,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import identity  # noqa: E402
+from controller import identity, job  # noqa: E402
+from controller.cli import EXIT_INCOMPLETE, EXIT_OK, EXIT_WORKER_FAILED  # noqa: E402
+from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from controller.managed_repo import (  # noqa: E402
     REFERENCE_WORKFLOW_RELEASE, SUPPORTED_PROFILES, VALIDATED_WORKFLOW_RELEASES,
 )
@@ -269,6 +271,36 @@ def _seed_target(target: Path) -> None:
     fixtures.run(["git", "commit", "-q", "-m", "seed trivial milestone"], cwd=target)
 
 
+def _seed_target_2_2(target: Path) -> None:
+    """CP5's own sibling to :func:`_seed_target`: the same disposable
+    target, plus the one extra fact ``scripts/workflow_state.py``'s own
+    ``validate_governing_version`` (around line 7007) requires before a
+    ``"2.2"``-governed work item can even be *created*: ``WORKFLOW_CONFIG.
+    json``'s ``default_workflow_version`` set to ``"2.2"`` **and** ``"2.2"``
+    added to ``supported_versions``. Both keys are required -- seeding only
+    the default leaves ``validate_governing_version`` refusing the work
+    item at creation, before the Controller ever dispatches it, exactly the
+    mistake this repository's own activation commit ``21a304d`` had to
+    correct by hand (adding ``"2.2"`` to ``supported_versions``). The
+    reference bootstrap template
+    (``workflow-manager/distribution/workflow/2.5.1/templates/docs/
+    ai-workflow/WORKFLOW_CONFIG.json``) declares ``supported_versions:
+    ["1", "2.1"]`` with no ``"2.2"`` at all, so this patch is never a no-op
+    against either the real-Manager or the fallback install path
+    :func:`_seed_target` itself chooses between."""
+    _seed_target(target)
+    config_path = target / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json"
+    config = json.loads(config_path.read_text())
+    config["default_workflow_version"] = "2.2"
+    supported_versions = list(config.get("supported_versions") or [])
+    if "2.2" not in supported_versions:
+        supported_versions.append("2.2")
+    config["supported_versions"] = supported_versions
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    fixtures.run(["git", "add", "-A"], cwd=target)
+    fixtures.run(["git", "commit", "-q", "-m", "seed 2.2 governing-version support"], cwd=target)
+
+
 class InstallationAdmissibilityTest(unittest.TestCase):
     """Default-suite coverage for `_release_to_install` and
     `_assert_target_installation_admissible` (`M1`,
@@ -392,6 +424,266 @@ class ControllerSourceTreeDigestVerificationTest(unittest.TestCase):
     def test_missing_digest_is_rejected(self) -> None:
         with self.assertRaises(AssertionError):
             _assert_job_record_source_tree_digest_matches_expected({}, "a" * 64)
+
+
+#: A fixed, non-``None`` identity for CP5's own seeded-state test below --
+#: every one of its five decisions is a report/decline, never a real
+#: worker launch, so this identity is never compared against a live pin;
+#: it exists only so ``job.execute_step``/``job.resume`` have something to
+#: stamp ``controller_generation``/``controller_source_commit``/
+#: ``controller_source_tree_digest`` with, and so ``resume``'s own case-1
+#: ``validate_record`` check (``record_generation > running_generation``)
+#: reads the same generation on both the write and the read side.
+_FAKE_2_2_IDENTITY = ControllerIdentity(
+    generation=1,
+    source_root=Path("/fake/source"),
+    origin_source_root=Path("/fake/origin"),
+    source_kind=SOURCE_KIND_COMMIT,
+    source_commit="a" * 40,
+    tree_digest="b" * 64,
+    generation_source="head",
+    pinned_at="2024-01-01T00:00:00Z",
+)
+
+
+class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
+    """CP5: a genuine ``"2.2"``-governed work item, seeded in turn at five
+    real on-disk states of the split implementation-review lifecycle
+    (``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``, then
+    ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` across its own
+    no-ledger / BLOCK / not-yet-ingested-APPROVE sub-cases, then the reused
+    terminal ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` with an APPROVE on
+    file) -- proving CP4's ``declined=True`` classification and CP4B's
+    evidence-reading gate classification against **real** ``git``-committed
+    target state, real ``WORKFLOW_STATE.json``, and real ``.ai-review/``
+    ``MANIFEST.md``/``REVIEW_FEEDBACK.md`` files written through
+    ``tests.fixtures``'s own builders -- never a live ``claude`` worker,
+    since every one of these five decisions is a report or a decline and
+    ``job.execute_step`` never reaches its own worker-launch guard for any
+    of them (``controller/job.py``'s own positive launch guard: a worker is
+    launched only when ``decision.automatic`` is ``True``, which none of
+    these five ever is).
+
+    Calls ``controller.job.execute_step``/``controller.job.resume``
+    directly against a real, disposable target repository -- the same
+    "real git repo, synthetic (root-only) ``ManagedRepository``" fixture
+    shape ``tests/test_job.py`` already establishes for exercising
+    ``execute_step`` without a live worker or a real Workflow Manager
+    install -- rather than the pinned-re-exec ``python -P -m controller``
+    CLI invocation :class:`DisposableRepoRealWorkflowActionTest` below
+    uses: nothing about a declined/gated decision needs pinned execution or
+    a real installation to prove, and every fact ``controller step``/
+    ``explain`` would themselves read (``evidence.decide`` off real
+    on-disk state) is exactly what ``execute_step`` already calls."""
+
+    def _seed(self, root: Path, *, work_item_id: str, base_commit: str) -> dict:
+        """The base, mostly-constant work-item entry a genuine ``"2.2"``
+        item would carry by the time it first reaches
+        ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` -- past ``PLANNING``/
+        ``IMPLEMENTING``, so its own registry is fully checkpoint-complete
+        -- with a real registry file (``tests.fixtures.write_target_
+        registry``) plus a mapping file and an artifacts-declaration file
+        (real files at the same paths a genuine work item's own entry would
+        name; neither is read by any Controller code path, so their
+        content is inert beyond existing)."""
+        registry_rel = f"docs/ai-workflow/registry/{work_item_id}-registry.json"
+        mapping_rel = f"docs/ai-workflow/registry/{work_item_id}-mapping.json"
+        artifacts_rel = f"docs/ai-workflow/registry/{work_item_id}-artifacts.json"
+
+        fixtures.write_target_registry(root, registry_rel, {
+            "work_item_id": work_item_id,
+            "checkpoints": [{"id": "CP1"}],
+        })
+        (root / mapping_rel).write_text(
+            json.dumps({"work_item_id": work_item_id, "requirements": []}, indent=2) + "\n"
+        )
+        (root / artifacts_rel).write_text(
+            json.dumps({"work_item_id": work_item_id, "artifacts": []}, indent=2) + "\n"
+        )
+
+        return {
+            "work_item_type": "product",
+            "work_item_kind": "product",
+            "work_item_id": work_item_id,
+            "governing_workflow_version": "2.2",
+            "plan_revision": 1,
+            "implementation_revision": 1,
+            "state_revision": 1,
+            "checkpoints": {"CP1": {"status": "COMPLETE"}},
+            "current_bundle_id": "b" * 64,
+            "last_completed_checkpoint_id": "CP1",
+            "base_commit": base_commit,
+            "parent_work_item_id": None,
+            "registry_path": registry_rel,
+            "mapping_path": mapping_rel,
+        }
+
+    def test_five_seeded_states_report_or_gate_and_resume_never_self_approves(self) -> None:
+        work_item_id = "wi-2-2-impl-review"
+
+        with tempfile.TemporaryDirectory(prefix="controller-2-2-impl-review-") as td:
+            tmp_root = Path(td)
+            root = tmp_root / "target"
+            runtime_root = tmp_root / "runtime"
+
+            fixtures.build_target_git_repo(root)
+            (root / "README.md").write_text("2.2 implementation-review fixture\n")
+            base_commit = fixtures.commit_all(root, "initial")
+
+            managed_repo = fixtures.build_target_managed_repository(root)
+            base_entry = self._seed(root, work_item_id=work_item_id, base_commit=base_commit)
+
+            def _write_phase(phase: str) -> None:
+                entry = {**base_entry, "phase": phase}
+                fixtures.write_workflow_state(root, {
+                    "schema_version": 1,
+                    "active_work_item_id": work_item_id,
+                    "work_items": {work_item_id: entry},
+                })
+
+            def _run() -> dict:
+                result = job.execute_step(
+                    managed_repo, work_item_id=work_item_id, identity=_FAKE_2_2_IDENTITY,
+                    runtime=runtime_root,
+                )
+                self.assertIsInstance(
+                    result, dict,
+                    "every one of these five decisions is a report/decline, never the "
+                    "no-action (LEGACY_READY/MILESTONE_COMPLETE) class, so execute_step "
+                    "must always return a JobRecord dict here, never a bare Decision",
+                )
+                # The human-only-approval boundary, checked at every one of
+                # the five states alike: the Controller itself never
+                # selects /approve-review or /accept-milestone as its own
+                # automatic action, and never marks a decision automatic
+                # here at all.
+                self.assertFalse(result["selected_action"]["automatic"])
+                command = result["selected_action"]["command"]
+                if command is not None:
+                    self.assertNotIn("/approve-review", command)
+                    self.assertNotIn("/accept-milestone", command)
+                return result
+
+            feedback_dir_rel = Path(".ai-review") / work_item_id / "feedback"
+
+            # 1. AWAITING_LOCAL_IMPLEMENTATION_REVIEW, no ledger yet:
+            # declined=True, names /review-implementation, no worker.
+            with self.subTest(state="AWAITING_LOCAL_IMPLEMENTATION_REVIEW"):
+                _write_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+                record_1 = _run()
+                self.assertEqual(record_1["status"], job.STATUS_DECLINED)
+                self.assertIsNone(record_1["human_gate_pending"])
+                self.assertTrue(record_1["selected_action"]["declined"])
+                self.assertEqual(
+                    record_1["selected_action"]["command"], f"/review-implementation {work_item_id}",
+                )
+
+            # 2. AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW, no
+            # current-round feedback: reports the gate, names
+            # /record-manual-implementation-review.
+            with self.subTest(state="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW/no-feedback"):
+                _write_phase("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+                record_2 = _run()
+                self.assertEqual(record_2["status"], job.STATUS_GATE_BLOCKED)
+                gate_2 = record_2["human_gate_pending"]
+                self.assertIsNotNone(gate_2)
+                self.assertEqual(
+                    gate_2["safe_resume_command"],
+                    f"/record-manual-implementation-review {work_item_id}",
+                )
+                self.assertIn("MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", gate_2["what_is_required"])
+
+            # 3. Same phase, Status: BLOCK on file: reports the BLOCK gate;
+            # still declines to act.
+            with self.subTest(state="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW/BLOCK"):
+                fixtures.write_review_feedback(root, feedback_dir_rel, fixtures.build_review_feedback_text(
+                    status="BLOCK", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+                    reviewed_bundle_id="b" * 64, reviewed_base_commit=base_commit,
+                    work_item=work_item_id, reviewed_content_id="c" * 64,
+                ))
+                record_3 = _run()
+                self.assertEqual(record_3["status"], job.STATUS_GATE_BLOCKED)
+                gate_3 = record_3["human_gate_pending"]
+                self.assertIsNotNone(gate_3)
+                self.assertEqual(
+                    gate_3["safe_resume_command"],
+                    f"/record-manual-implementation-review {work_item_id}",
+                )
+                self.assertIn("blocked", gate_3["what_is_required"])
+
+            # 4. Same phase, Status: APPROVE on file but not yet ingested
+            # (phase unchanged, ledger not yet updated): reports "a verdict
+            # is on file; run /record-manual-implementation-review" --
+            # never invents the approval itself.
+            with self.subTest(state="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW/APPROVE-not-ingested"):
+                fixtures.write_review_feedback(root, feedback_dir_rel, fixtures.build_review_feedback_text(
+                    status="APPROVE", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+                    reviewed_bundle_id="b" * 64, reviewed_base_commit=base_commit,
+                    work_item=work_item_id, reviewed_content_id="c" * 64,
+                ))
+                record_4 = _run()
+                self.assertEqual(record_4["status"], job.STATUS_GATE_BLOCKED)
+                gate_4 = record_4["human_gate_pending"]
+                self.assertIsNotNone(gate_4)
+                self.assertEqual(
+                    gate_4["safe_resume_command"],
+                    f"/record-manual-implementation-review {work_item_id}",
+                )
+                self.assertIn("verdict is on file", gate_4["what_is_required"])
+                self.assertIn("/record-manual-implementation-review", gate_4["what_is_required"])
+
+            # 5. The reused terminal AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW,
+            # APPROVE on file: reports the user-only
+            # /approve-review implementation gate, exactly as for a
+            # "2.1"/"1" item -- the same current-round REVIEW_FEEDBACK.md
+            # written at step 4 is read again here (resolve_feedback_dir is
+            # stage-agnostic), and a fresh, current MANIFEST.md is all this
+            # state adds.
+            with self.subTest(state="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW/APPROVE"):
+                bundle_dir_rel = Path(".ai-review") / work_item_id / "current"
+                fixtures.write_manifest(root, bundle_dir_rel, fixtures.build_manifest_text(
+                    bundle_id="b" * 64, generation_head=base_commit,
+                ))
+                _write_phase("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW")
+                record_5 = _run()
+                self.assertEqual(record_5["status"], job.STATUS_GATE_BLOCKED)
+                gate_5 = record_5["human_gate_pending"]
+                self.assertIsNotNone(gate_5)
+                self.assertEqual(
+                    gate_5["safe_resume_command"],
+                    f"/approve-review implementation {work_item_id}",
+                )
+                self.assertIn("user-only", gate_5["what_is_required"])
+                self.assertIn("/approve-review implementation", gate_5["what_is_required"])
+
+            # A `controller resume` pass across the same five seeded
+            # states must not crash or misclassify at any of them: every
+            # one of the five job records above is already terminal
+            # (GATE_BLOCKED/DECLINED), so `resume` must report each back
+            # unchanged (never reconciled, never relaunched, never
+            # rewritten as `resume_marked`), and none of them may have
+            # become an automatic /approve-review or /accept-milestone
+            # selection along the way.
+            all_records = [record_1, record_2, record_3, record_4, record_5]
+            resumed = job.resume(managed_repo, identity=_FAKE_2_2_IDENTITY, runtime=runtime_root)
+            self.assertEqual(len(resumed), len(all_records))
+
+            resumed_by_job_id = {r["job_id"]: r for r in resumed}
+            self.assertEqual(set(resumed_by_job_id), {r["job_id"] for r in all_records})
+            for original in all_records:
+                with self.subTest(job_id=original["job_id"]):
+                    reconciled = resumed_by_job_id[original["job_id"]]
+                    self.assertNotIn(
+                        "resume_marked", reconciled,
+                        f"job {original['job_id']!r} was marked malformed/unreadable by resume",
+                    )
+                    self.assertEqual(reconciled["status"], original["status"])
+                    self.assertIn(reconciled["status"], (job.STATUS_DECLINED, job.STATUS_GATE_BLOCKED))
+                    self.assertFalse(reconciled["selected_action"]["automatic"])
+                    command = reconciled["selected_action"]["command"]
+                    if command is not None:
+                        self.assertNotIn("/approve-review", command)
+                        self.assertNotIn("/accept-milestone", command)
 
 
 @unittest.skipUnless(
@@ -521,6 +813,123 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
                 "controller_source_commit": source_commit,
             }
             print("DISPOSABLE_REPO_INTEGRATION_EVIDENCE " + json.dumps(evidence))
+
+    def test_real_review_plan_reaches_the_2_2_plan_review_expected_outcomes_row(self) -> None:
+        """CP5's own live-Claude sibling: the discriminating regression for
+        CP1's ``("AWAITING_LOCAL_PLAN_REVIEW", "2.2", "/review-plan")``
+        ``EXPECTED_OUTCOMES`` row (``controller/job.py``), added by the
+        ``workflow-controller-protocol-2-2-compatibility`` milestone's CP1.
+        Before CP1, ``_expected_outcome_for`` raised an uncaught
+        ``AssertionError`` for that exact key -- there was no row for it at
+        all, since only the ``"2.1"``/``"1"`` rows existed. Two real
+        ``controller step`` calls, not one:
+
+        1. Row 7's own ``NoWorkItemYet`` bootstrap
+           (``from_phase=NO_PHASE, governing_version=None``) -- unaffected
+           by CP1's fix (row 7 never keys on ``governing_workflow_version``
+           at all), so this step alone proves nothing about CP1; it only
+           creates the ``"2.2"``-governed work item CP1's own row needs a
+           real target for.
+        2. The discriminating step: ``/review-plan`` from
+           ``AWAITING_LOCAL_PLAN_REVIEW`` on that same, now-``"2.2"``-
+           governed work item -- exactly CP1's own added row. A crash here
+           (an uncaught ``AssertionError``, not one of the closed,
+           named exit codes) is exactly the pre-CP1 defect; CP1's fix is
+           that this step instead launches a real ``/review-plan`` session
+           and the work item durably reconciles to one of that row's own
+           ``to_any_of`` outcomes.
+
+        Deliberately does not drive a live run through the full
+        ``IMPLEMENTING`` lifecycle to reach the five states
+        :class:`Protocol22ImplementationReviewGatesTest` seeds directly --
+        those are all ``declined``/``gate`` outcomes, so Controller never
+        launches a worker at any of them regardless of how the target
+        repository reached them, and seeding them is both sufficient and
+        far cheaper than a real multi-round implementation round-trip."""
+        self.assertIsNotNone(CLAUDE_BIN, "a live claude binary is required for this test")
+
+        with tempfile.TemporaryDirectory(prefix="controller-live-2-2-") as td:
+            tmp_root = Path(td)
+            target = tmp_root / "target"
+            runtime_root = tmp_root / "runtime"
+            _seed_target_2_2(target)
+
+            state_path = target / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+            pre_run_state = json.loads(state_path.read_text())
+            pre_run_work_item_keys = set(pre_run_state.get("work_items", {}).keys())
+
+            def _run_step(*, work_item_id: str | None) -> subprocess.CompletedProcess:
+                argv = ["--runtime-dir", str(runtime_root)]
+                if work_item_id is not None:
+                    argv += ["--work-item", work_item_id]
+                if _source_is_dirty():
+                    argv.append("--allow-dirty-source")
+                argv += ["--permission-mode", "bypassPermissions", "step", str(target)]
+
+                env = dict(os.environ)
+                env["PYTHONPATH"] = str(REPO_ROOT)
+                env.pop("WORKFLOW_CONTROLLER_EXEC_HANDOFF", None)
+
+                return subprocess.run(
+                    [sys.executable, "-P", "-m", "controller", *argv],
+                    cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=1800,
+                )
+
+            # Step 1: row 7's own NoWorkItemYet bootstrap. Passes identically
+            # with or without CP1's fix -- it does not by itself prove
+            # anything about the discriminating row below.
+            proc_1 = _run_step(work_item_id=None)
+            self.assertEqual(
+                proc_1.returncode, 0,
+                f"bootstrap `step` did not exit 0 (exit {proc_1.returncode})\n"
+                f"stdout:\n{proc_1.stdout}\nstderr:\n{proc_1.stderr}",
+            )
+
+            state_after_bootstrap = json.loads(state_path.read_text())
+            work_items_after_bootstrap = state_after_bootstrap["work_items"]
+            new_work_item_keys = set(work_items_after_bootstrap.keys()) - pre_run_work_item_keys
+            self.assertEqual(
+                len(new_work_item_keys), 1,
+                f"expected exactly one new work item, pre-run keys={pre_run_work_item_keys!r} "
+                f"post-run keys={set(work_items_after_bootstrap)!r}",
+            )
+            work_item_id = next(iter(new_work_item_keys))
+            entry_after_bootstrap = work_items_after_bootstrap[work_item_id]
+            self.assertEqual(entry_after_bootstrap.get("governing_workflow_version"), "2.2")
+            self.assertEqual(entry_after_bootstrap["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+
+            # Step 2: the discriminating row,
+            # ("AWAITING_LOCAL_PLAN_REVIEW", "2.2", "/review-plan"). Named
+            # explicitly by --work-item, rather than relying on
+            # active_work_item_id/the single-non-terminal-item fallback, so
+            # this step is unambiguously the same work item step 1 created.
+            proc_2 = _run_step(work_item_id=work_item_id)
+            self.assertNotIn(
+                "Traceback (most recent call last)", proc_2.stderr,
+                f"the discriminating /review-plan step crashed with an uncaught exception "
+                f"(the pre-CP1 defect) instead of resolving to one of job.py's closed exit "
+                f"codes:\nstdout:\n{proc_2.stdout}\nstderr:\n{proc_2.stderr}",
+            )
+            self.assertIn(
+                proc_2.returncode, (EXIT_OK, EXIT_WORKER_FAILED, EXIT_INCOMPLETE),
+                f"expected one of EXIT_OK/EXIT_WORKER_FAILED/EXIT_INCOMPLETE (CP6B's own "
+                f"FINISHED/FAILED/INCOMPLETE outcomes for a launched action), got "
+                f"{proc_2.returncode!r}\nstdout:\n{proc_2.stdout}\nstderr:\n{proc_2.stderr}",
+            )
+
+            state_after_review = json.loads(state_path.read_text())
+            post_phase = state_after_review["work_items"][work_item_id]["phase"]
+            self.assertIn(
+                post_phase,
+                {"AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "REVISING_PLAN", "AWAITING_LOCAL_PLAN_REVIEW"},
+                f"expected {work_item_id!r}'s phase to durably reconcile to one of "
+                f"(\"AWAITING_LOCAL_PLAN_REVIEW\", \"2.2\", \"/review-plan\")'s own to_any_of, "
+                f"got {post_phase!r}",
+            )
+
+            jobs_dir = runtime_root / "jobs"
+            job_files = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+            self.assertEqual(len(job_files), 2, f"expected exactly two job records, got {job_files!r}")
 
 
 if __name__ == "__main__":

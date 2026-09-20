@@ -142,9 +142,49 @@ before. Full plan:
   (101 tests) pass; the repository's full test suite (442 tests, 1
   skipped -- the live-Claude-gated integration test, `CLAUDE_BIN` unset
   in this environment) passes.
-- CP5-CP6: not started.
+- **CP5 -- COMPLETE.** Disposable-repository integration coverage of a
+  genuine `"2.2"`-governed work item through the split
+  implementation-review lifecycle. Added
+  `tests/test_integration_disposable_repo.py::Protocol22ImplementationReviewGatesTest.
+  test_five_seeded_states_report_or_gate_and_resume_never_self_approves`:
+  builds one real git-committed disposable target repo with a real
+  `WORKFLOW_STATE.json` entry, registry/mapping/artifacts-declaration
+  files, and real `.ai-review/` `MANIFEST.md`/`REVIEW_FEEDBACK.md` files
+  (via `tests.fixtures`'s existing builders -- no new fixture helper
+  earned its keep), then drives the same `"2.2"` work item directly
+  through `controller.job.execute_step` at all five states the plan
+  names -- `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` (no ledger, declined,
+  names `/review-implementation`); `AWAITING_MANUAL_EXTERNAL_
+  IMPLEMENTATION_REVIEW` with no feedback (gate, names
+  `/record-manual-implementation-review`); the same phase with `Status:
+  BLOCK` on file (gate reports BLOCK, still declines); the same phase
+  with `Status: APPROVE` not yet ingested (gate reports a verdict is on
+  file, never invents the approval); and the reused terminal
+  `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` with `APPROVE` on file (gate
+  names the user-only `/approve-review implementation`) -- asserting at
+  every step that `selected_action.automatic` is `False` and no command
+  ever names `/approve-review`/`/accept-milestone`. A final
+  `controller.job.resume` pass across the same five job records asserts
+  none is reconciled, relaunched, or marked malformed, and none becomes
+  an automatic self-approval. Also added
+  `DisposableRepoRealWorkflowActionTest.
+  test_real_review_plan_reaches_the_2_2_plan_review_expected_outcomes_row`
+  (same live-Claude/`CLAUDE_BIN` gate as its existing sibling): seeds
+  `WORKFLOW_CONFIG.json` with `default_workflow_version: "2.2"` and
+  `"2.2"` added to `supported_versions` (both required, per
+  `validate_governing_version`), then runs two real `controller step`
+  calls -- row 7's `NoWorkItemYet` bootstrap (unaffected by CP1, proves
+  nothing alone), then the discriminating step through
+  `("AWAITING_LOCAL_PLAN_REVIEW", "2.2", "/review-plan")`, CP1's own
+  added row, asserting no uncaught-exception crash (the pre-CP1 defect)
+  and a durable reconciliation to one of that row's `to_any_of`
+  outcomes. Verified: `tests/test_integration_disposable_repo.py` (14
+  tests, 2 skipped -- both live-Claude-gated, `CLAUDE_BIN` unset in this
+  environment) and the repository's full test suite (444 tests, 2
+  skipped) pass with no regressions.
+- CP6: not started.
 
 **Next action:** continue with `/milestone-implement` to select and
-implement CP5 (disposable-repository integration coverage of a genuine
-`"2.2"`-governed work item through the split implementation-review
-lifecycle).
+implement CP6 (full verification: Controller suite, all frozen Workflow
+conformance suites, and one live-worker run of the new disposable-repo
+test).

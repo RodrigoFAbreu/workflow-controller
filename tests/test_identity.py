@@ -413,6 +413,89 @@ class GenerationSourceRuleTest(unittest.TestCase):
             self.assertEqual(ctx.exception.evidence["raised_by"], "materialise")
 
 
+class DirectoryCreationOrderingTest(unittest.TestCase):
+    """Implementation-review round 1, finding I1: every snapshot-
+    materialisation directory-creation write must be preceded, in the same
+    function body, by the containment assertion for the exact path being
+    created. ``mkdir`` is not a call form ``test_write_containment.py``'s
+    package-wide scanner recognizes, so these two sites are pinned
+    directly by recording call order for the one path each test cares
+    about -- a fabricated ``mkdir``-before-``guard`` order fails, and the
+    fixed ``guard``-before-``mkdir`` order passes."""
+
+    def test_extract_dirty_target_guard_precedes_its_parent_mkdir(self) -> None:
+        calls: list[str] = []
+        original_mkdir = Path.mkdir
+        original_guard = runtime.assert_contained
+
+        def recording_mkdir(self, *a, **kw):  # noqa: ANN001
+            if self.name == "sub":
+                calls.append("mkdir")
+            return original_mkdir(self, *a, **kw)
+
+        def recording_guard(root, path):  # noqa: ANN001
+            if Path(path).name == "leaf.txt":
+                calls.append("guard")
+            return original_guard(root, path)
+
+        with tempfile.TemporaryDirectory() as td:
+            origin = Path(td) / "origin"
+            (origin / "sub").mkdir(parents=True)
+            (origin / "sub" / "leaf.txt").write_text("hi\n")
+            dest = Path(td) / "dest"
+
+            class _FakeListing:
+                stdout = "sub/leaf.txt\n"
+
+            original_run_git = identity._run_git
+            identity._run_git = lambda args, cwd: _FakeListing()
+            Path.mkdir = recording_mkdir
+            runtime.assert_contained = recording_guard
+            try:
+                identity._extract_dirty(origin, dest)
+            finally:
+                identity._run_git = original_run_git
+                Path.mkdir = original_mkdir
+                runtime.assert_contained = original_guard
+
+            # "mkdir" can appear more than once: pathlib's own parents=True
+            # fallback re-enters self.mkdir(...) after creating a missing
+            # parent, which re-triggers the (still-patched) recorder. Only
+            # the first occurrence of each reflects the call site under
+            # test, and that is what the ordering claim is about.
+            self.assertLess(calls.index("guard"), calls.index("mkdir"))
+            self.assertEqual((dest / "sub" / "leaf.txt").read_text(), "hi\n")
+
+    def test_materialise_guards_source_dir_before_creating_it(self) -> None:
+        calls: list[str] = []
+        original_mkdir = Path.mkdir
+        original_guard = runtime.assert_contained
+
+        def recording_mkdir(self, *a, **kw):  # noqa: ANN001
+            if self.name == "source":
+                calls.append("mkdir")
+            return original_mkdir(self, *a, **kw)
+
+        def recording_guard(root, path):  # noqa: ANN001
+            if Path(path).name == "source":
+                calls.append("guard")
+            return original_guard(root, path)
+
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "origin")
+            runtime_root = Path(td) / "runtime"
+            Path.mkdir = recording_mkdir
+            runtime.assert_contained = recording_guard
+            try:
+                identity.materialise(checkout, runtime_root, allow_dirty=False)
+            finally:
+                Path.mkdir = original_mkdir
+                runtime.assert_contained = original_guard
+
+        # see the sibling test above for why "mkdir" may repeat.
+        self.assertLess(calls.index("guard"), calls.index("mkdir"))
+
+
 class PinCachingTest(unittest.TestCase):
     def test_current_returns_identical_object_and_git_is_invoked_at_most_once(self) -> None:
         identity._reset_for_tests()

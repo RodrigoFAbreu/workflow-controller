@@ -236,8 +236,8 @@ def _extract_dirty(origin: Path, dest: Path) -> None:
         if not src.is_file():
             continue
         target = dest / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
         runtime.assert_contained(dest, target)
+        target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, target)
         if os.access(src, os.X_OK):
             target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -293,6 +293,7 @@ def materialise(
         )
 
     source_dir = runtime_root / "source"
+    runtime.assert_contained(runtime_root, source_dir)
     source_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = source_dir / f".materialise-{secrets.token_hex(8)}.tmp"
     runtime.assert_contained(source_dir, tmp_dir)

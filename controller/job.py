@@ -618,12 +618,25 @@ def property_table_violations(
             violations.append(
                 f"{key!r}: to_any_of contains its own from_phase but declares no predicate"
             )
-        if not own_phase_reachable and eo.from_phase is not NO_PHASE:
-            if eo.predicate is not None:
+        if not own_phase_reachable:
+            # `O4` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): the
+            # `NO_PHASE` exemption documented above is scoped to exactly
+            # one check -- "`to_any_of` never contains `from_phase`", which
+            # can never hold for row 7 by construction (`NO_PHASE` names no
+            # real Workflow phase) -- not to "`predicate_inputs` declared
+            # with no predicate", an independent malformation this table
+            # would still want caught on a `NO_PHASE` row. Only the first
+            # check is gated on `eo.from_phase is not NO_PHASE`; the second
+            # is gated on `eo.predicate is None` instead (the condition its
+            # own message names), which is what lets row 7's real
+            # `predicate`+`predicate_inputs` pair -- a legitimate
+            # defence-in-depth predicate, not an error -- stay clean under
+            # the now-narrower `NO_PHASE` exemption.
+            if eo.predicate is not None and eo.from_phase is not NO_PHASE:
                 violations.append(
                     f"{key!r}: predicate declared but to_any_of never contains from_phase"
                 )
-            if eo.predicate_inputs:
+            if eo.predicate is None and eo.predicate_inputs:
                 violations.append(f"{key!r}: predicate_inputs declared with no predicate")
 
         if eo.predicate is not None:

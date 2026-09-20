@@ -24,9 +24,9 @@ class ControllerError(Exception):
     """Base class for every named Controller refusal.
 
     Carries a machine-readable ``code`` (defaults to the class name), a
-    human-readable sentence (the exception's own ``str()``), and an
-    ``evidence`` mapping the CLI reports verbatim rather than reconstructing
-    from a traceback.
+    human-readable sentence (``message``), and an ``evidence`` mapping
+    available for callers to inspect programmatically. ``controller.cli.main``
+    itself reports only ``message``; it does not render ``evidence``.
     """
 
     code: str = "CONTROLLER_ERROR"
@@ -41,11 +41,13 @@ class ControllerError(Exception):
 
 
 class RuntimeContainmentError(ControllerError):
-    """A write was attempted outside the resolved runtime root.
+    """A write was attempted outside its permitted root.
 
-    Raised by ``controller.runtime.write_json`` (and by anything that writes
-    through it, including snapshot materialisation). There is no other write
-    path in the package, so this is what makes "the Controller never writes
+    Raised by ``controller.runtime._assert_contained``, the package-wide
+    containment guard: reached via ``write_json``/``write_bytes`` (through
+    ``_atomic_write``) for the runtime root, and directly by
+    ``identity.py``'s snapshot-materialisation sites against their own
+    narrower roots. This is what makes "the Controller never writes
     Workflow state" a checked invariant rather than a promise.
     """
 

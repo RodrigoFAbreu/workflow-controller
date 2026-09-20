@@ -101,8 +101,8 @@ def _assert_contained(root: Path, path: Path) -> None:
         path.resolve().relative_to(root)
     except ValueError:
         raise RuntimeContainmentError(
-            f"refusing to write {path} -- it is outside the runtime root {root}",
-            evidence={"path": str(path), "runtime_root": str(root)},
+            f"refusing to write {path} -- it is outside the permitted root {root}",
+            evidence={"path": str(path), "root": str(root)},
         ) from None
 
 
@@ -143,9 +143,11 @@ def _atomic_write(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) 
 def write_json(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
     """Atomically write ``obj`` as canonical JSON to
     ``<runtime_root>/<rel_path>``. Raises ``RuntimeContainmentError`` unless
-    the resolved destination is inside ``runtime_root`` -- this is the sole
-    JSON write path in the package, so every JSON writer in it (including
-    snapshot materialisation) is confined by this one guard.
+    the resolved destination is inside ``runtime_root`` -- containment is a
+    package-wide invariant, enforced everywhere by
+    ``assert_contained``/``_assert_contained``; this function reaches it via
+    :func:`_atomic_write`, while ``identity.py``'s snapshot-materialisation
+    sites call it directly against their own narrower roots.
 
     Atomic: writes to a ``.tmp`` sibling in the same directory, ``fsync``s
     it, then ``os.replace``s it onto the target -- an interruption never

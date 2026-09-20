@@ -401,6 +401,24 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
             worker_outcome = job_record["worker_outcome"]
             self.assertIsNotNone(worker.get("session_id"))
 
+            # `REQ-T18` step 4 (revision 71, round 2's `I1`/`M3`): the
+            # binding identifier of the bytes this run executed is
+            # `controller_source_tree_digest`, present under both the
+            # `commit` and `worktree` pin outcomes -- never
+            # `controller_source_commit` alone, which is `None` under the
+            # `worktree` outcome by design (`identity.py`'s own scope
+            # rule). Asserting on the digest, not merely printing it, is
+            # what ties this round's live evidence to the exact Controller
+            # bytes under review rather than to a description of them.
+            source_tree_digest = job_record.get("controller_source_tree_digest")
+            self.assertIsInstance(source_tree_digest, str)
+            self.assertRegex(
+                source_tree_digest, r"^[0-9a-f]{64}$",
+                f"controller_source_tree_digest must be a 64-hex sha256 digest, "
+                f"got {source_tree_digest!r}",
+            )
+            source_commit = job_record.get("controller_source_commit")
+
             evidence = {
                 "worker_session_id": worker.get("session_id"),
                 "worker_outcome_classification": worker_outcome,
@@ -409,6 +427,8 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
                 "target_repo_commit_before": job_record["pre_state"].get("target_head"),
                 "wall_clock_seconds": round(wall_clock, 1),
                 "worker_duration_ms": worker.get("duration_ms"),
+                "controller_source_tree_digest": source_tree_digest,
+                "controller_source_commit": source_commit,
             }
             print("DISPOSABLE_REPO_INTEGRATION_EVIDENCE " + json.dumps(evidence))
 

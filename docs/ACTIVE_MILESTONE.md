@@ -1,5 +1,23 @@
 # Active Milestone
 
+## Status
+
+**Complete.** `workflow-controller-generation-1` reached
+`MILESTONE_COMPLETE` on 2026-09-20: functional review round (checklist
+evidence commit `622eb7c3e389eb72065f66418d0e85fe67798754`) returned PASS
+with no findings (`.ai-review/feedback/FUNCTIONAL_REVIEW.md`), all 9
+registry checkpoints (`CP1`-`CP9`) are `COMPLETE`, and the user accepted
+the milestone via `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json`
+is the ground-truth record of this transition (`state_revision` 280);
+`active_work_item_id` is now `null`. No `docs/ROADMAP.md` exists in this
+repository to update -- this work item is this repository's sole
+tracked product-level item, not one of several milestones on a roadmap.
+
+**Next action:** none queued. There is no roadmap-defined next milestone
+in this repository. When new work is scoped, run `/milestone-plan` for it
+-- it will create a fresh `work_items` entry and claim
+`active_work_item_id`, ready for `PLANNING`.
+
 ## Milestone
 
 `workflow-controller-generation-1` — Controller Generation 1.
@@ -1635,9 +1653,23 @@ rather than absorbed.
 
 ## Active plan
 
-`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` (to be created by
-`/milestone-plan`, which records the plan document path on the work item's
-`WORKFLOW_STATE.json` entry).
+None -- this milestone is complete; there is no plan in flight.
+
+`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` (plan revision 71, technically
+approved at commit `79da21a`) is this work item's permanent design record,
+not a disposable milestone-planning scratchpad: it is actively read by
+shipped production code (`controller/cli.py`, `controller/evidence.py`,
+`controller/identity.py`, `controller/worker.py`, and others, by
+docstring cross-reference) and cross-checked byte-for-byte against
+`docs/adr/0001-controller-generation-1-architecture.md` by a live,
+currently-green automated test
+(`tests/test_plan_document_consistency.py`, `PLAN_PATH` hard-coded to
+this exact path). It therefore stays at
+`docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` rather than being moved to
+`docs/milestones/completed/` -- moving it would break that test and the
+docstring cross-references above. This is a deliberate deviation from
+`/accept-milestone`'s generic archival step, recorded here rather than
+silently applied.
 
 ## Functional review checklist
 

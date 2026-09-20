@@ -20,13 +20,14 @@ import copy
 import json
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import job  # noqa: E402
-from controller.decision import NO_PHASE, Decision, phase_from_wire  # noqa: E402
+from controller.decision import Action, NO_PHASE, Decision, phase_from_wire  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT, SOURCE_KIND_WORKTREE  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -491,6 +492,37 @@ class PredicateRow3RoleNormalizationTest(unittest.TestCase):
             self.assertTrue(
                 job._predicate_row3_block_feedback_current(root, "wi-1", pre_state)
             )
+
+
+class MissingGoverningVersionRowRegressionTest(unittest.TestCase):
+    """Permanent regression proof for CP1's own fix
+    (`workflow-controller-protocol-2-2-compatibility`'s CP2): reproduced
+    from data, not from reverting a commit, so it keeps proving the fix
+    is load-bearing even as :data:`job.EXPECTED_OUTCOMES` grows further.
+    Shrinks ``_EXPECTED_OUTCOMES_BY_KEY`` down to exactly the seven
+    entries that existed before CP1 (every entry whose own
+    ``governing_version`` is not ``"2.2"``) and asserts that
+    ``_expected_outcome_for`` raises ``AssertionError`` for a `"2.2"`
+    `PLANNING` `/milestone-plan` decision against that patched table --
+    the exact crash shape Controller hit before CP1 added the `"2.2"`
+    plan-review rows."""
+
+    def test_pre_cp1_table_raises_on_a_2_2_planning_decision(self) -> None:
+        pre_cp1_outcomes = {
+            key: outcome
+            for key, outcome in job._EXPECTED_OUTCOMES_BY_KEY.items()
+            if outcome.governing_version != "2.2"
+        }
+        self.assertEqual(len(pre_cp1_outcomes), 7)
+        decision = Decision(
+            observed_phase="PLANNING", evidence=(), action=Action(command="/milestone-plan wi-1"),
+            automatic=True, gate=None, declined=False, reason="test fixture",
+        )
+        with unittest.mock.patch.dict(
+            job._EXPECTED_OUTCOMES_BY_KEY, pre_cp1_outcomes, clear=True,
+        ):
+            with self.assertRaises(AssertionError):
+                job._expected_outcome_for("PLANNING", "2.2", decision)
 
 
 if __name__ == "__main__":

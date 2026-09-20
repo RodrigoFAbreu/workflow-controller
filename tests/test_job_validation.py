@@ -148,16 +148,20 @@ def _write_state_phase_env(root: Path, work_item_id: str, new_phase: str) -> dic
 
 
 class ExpectedOutcomesTableStructureTest(unittest.TestCase):
-    """Seven rows -- six matching CP4's own six automatic triples after
+    """Eleven rows -- six matching CP4's own six automatic triples after
     revision 10's narrowing, plus row 7 (revision 63's B2, the
     `NoWorkItemYet` bootstrap, deliberately not an eighth CP4 triple since
-    `NO_PHASE` is never a phase CP4's own dispatch table is keyed on); the
-    real table passes every structural property, and each property's own
-    negative instantiation fails construction (a property that cannot
-    fail is not a property)."""
+    `NO_PHASE` is never a phase CP4's own dispatch table is keyed on), plus
+    four `"2.2"` plan-review rows added by the
+    `workflow-controller-protocol-2-2-compatibility` milestone's CP1 (each
+    byte-identical to its `"2.1"` counterpart except for
+    `governing_version`, since the two-stage plan-review protocol does not
+    branch on `"2.1"` vs. `"2.2"`); the real table passes every structural
+    property, and each property's own negative instantiation fails
+    construction (a property that cannot fail is not a property)."""
 
-    def test_seven_rows(self) -> None:
-        self.assertEqual(len(job.EXPECTED_OUTCOMES), 7)
+    def test_eleven_rows(self) -> None:
+        self.assertEqual(len(job.EXPECTED_OUTCOMES), 11)
 
     def test_real_table_passes_coverage_and_predicate_validity(self) -> None:
         self.assertEqual(job.property_table_violations(), [])
@@ -579,6 +583,118 @@ class TransitionVerificationTest(unittest.TestCase):
         self.assertEqual(record["status"], job.STATUS_FAILED)
         ev = record["reconciliation_evidence"]
         self.assertEqual(ev["reason"], "predicate_not_satisfied")
+
+
+class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
+    """The `"2.2"` analogues of :class:`TransitionVerificationTest`'s own
+    rows 1/3/4/6 (`workflow-controller-protocol-2-2-compatibility`'s CP2):
+    each of CP1's four new `"2.2"` `EXPECTED_OUTCOMES` rows, driven end to
+    end through the real `execute_step`, reconciling to every member of
+    its own `to_any_of` set -- the exact rows a `"2.2"`-governed item
+    crashed on before CP1 (`AssertionError: decide() produced an
+    automatic action with no known expected transition`)."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir()
+
+    def test_row1_planning_reaches_awaiting_local_plan_review(self) -> None:
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.2")
+        env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        with _WriteSpy() as spy:
+            record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "COMPLETED", "FINISHED"])
+
+    def test_row3_ordinary_reaches_awaiting_manual_external_plan_review(self) -> None:
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
+        )
+        env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+
+    def test_row3_revise_reaches_revising_plan(self) -> None:
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
+        )
+        env = _write_state_phase_env(managed_repo.root, "wi-1", "REVISING_PLAN")
+        record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "REVISING_PLAN")
+
+    def test_row3_block_verdict_with_evidence_predicate_satisfied_is_finished_not_failed(self) -> None:
+        """Row 3's own `"2.2"` positive predicate case, mirroring
+        :meth:`TransitionVerificationTest.
+        test_block_verdict_with_evidence_predicate_satisfied_is_finished_not_failed`
+        exactly, but for a `"2.2"`-governed item -- a `/review-plan`
+        worker that stays at the pre-phase while writing a current-round
+        `Status: BLOCK` feedback verifies."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
+            current_bundle_id="b" * 64,
+        )
+        root = managed_repo.root
+        fixtures.write_manifest(
+            root, ".ai-review/wi-1/current",
+            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+        )
+        feedback_path = root / ".ai-review" / "wi-1" / "feedback" / "REVIEW_FEEDBACK.md"
+        feedback_text = fixtures.build_review_feedback_text(
+            status="BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW",
+            reviewed_bundle_id="b" * 64,
+        )
+        env = {"FAKE_CLAUDE_WRITE_PATH": str(feedback_path), "FAKE_CLAUDE_WRITE_TEXT": feedback_text}
+        record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+
+    def test_row4_awaiting_manual_external_plan_review_reaches_awaiting_plan_approval(self) -> None:
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_workflow_version="2.2",
+            base_commit="0" * 40, current_bundle_id="b" * 64,
+            plan_review_stages={
+                "review_content_id": "c" * 64,
+                "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
+            },
+        )
+        root = managed_repo.root
+        fixtures.write_manifest(
+            root, ".ai-review/wi-1/current",
+            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+        )
+        fixtures.write_review_feedback(
+            root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(
+                status="APPROVE", reviewer_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+                reviewed_bundle_id="b" * 64, reviewed_base_commit="0" * 40,
+                reviewed_content_id="c" * 64,
+            ),
+        )
+        env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_PLAN_APPROVAL")
+        record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_PLAN_APPROVAL")
+
+    def test_row6_revising_plan_reaches_awaiting_local_plan_review(self) -> None:
+        managed_repo = _build_target(
+            self.tmp_root, phase="REVISING_PLAN", governing_workflow_version="2.2",
+        )
+        env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
 
 
 # ---------------------------------------------------------------------------

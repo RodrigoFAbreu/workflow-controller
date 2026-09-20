@@ -549,6 +549,30 @@ class ReconcileLaunchedTest(_ResumeTestCase):
         self.assertTrue(results[0]["transition_verified"])
         self.assertEqual(results[0]["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
 
+    def test_2_2_planning_launched_record_reconciles_to_finished_never_relaunches(self) -> None:
+        """CP2's own resume-path proof (`workflow-controller-protocol-2-2-
+        compatibility`): the second, independent call site the CP1 gap
+        could have hit -- `resume`'s own `_expected_outcome_for_record`
+        lookup, via a job record's persisted `(phase,
+        governing_workflow_version, command)` triple -- reconciles a
+        `"2.2"`-governed `LAUNCHED` `PLANNING` record correctly rather
+        than raising."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
+        )
+        head = fixtures.current_head(managed_repo.root)
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="PLANNING", governing_workflow_version="2.2",
+            pre_state_overrides={"target_head": head},
+        )
+        _write_record(self.runtime_root, record)
+        with _NeverLaunches():
+            results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+        self.assertTrue(results[0]["transition_verified"])
+        self.assertEqual(results[0]["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+
     def test_nothing_happened_reconciles_to_interrupted(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING")
         head = fixtures.current_head(managed_repo.root)

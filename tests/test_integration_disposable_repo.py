@@ -198,6 +198,21 @@ def _seed_target(target: Path) -> None:
             json.dumps({"schema_version": 1, "active_work_item_id": None, "work_items": {}}, indent=2)
             + "\n"
         )
+        # `O3` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): step 2 says
+        # "state **and config** reset to the bootstrap template" -- the
+        # wholesale `docs/ai-workflow/` copy above carries this repository's
+        # own operational `WORKFLOW_CONFIG.json` along with it, the same
+        # "an operations fact treated as an installation fact" class round
+        # 68's `B1` found in this fixture's own install step. Reset it to
+        # the real bootstrap template's own value, not this repository's
+        # copied one.
+        (target / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json").write_text(
+            json.dumps(
+                {"schema_version": 1, "default_workflow_version": "2.1", "supported_versions": ["1", "2.1"]},
+                indent=2,
+            )
+            + "\n"
+        )
         shutil.copytree(REPO_ROOT / ".workflow-manager", target / ".workflow-manager",
                          dirs_exist_ok=True)
 

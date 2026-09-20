@@ -686,6 +686,42 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         self.assertTrue(record["transition_verified"])
         self.assertEqual(record["observed_phase_after"], "AWAITING_PLAN_APPROVAL")
 
+    def test_row4_revise_reaches_revising_plan(self) -> None:
+        """Row 4's other `to_any_of` member -- a `Status: REVISE` manual
+        external plan verdict routes the same phase to `REVISING_PLAN`
+        instead of `AWAITING_PLAN_APPROVAL`. This is the seventh member
+        across the four `"2.2"` rows' `to_any_of` sets; the other six are
+        covered by this class's other five tests (`test_row3_ordinary_...`
+        and `test_row3_block_...` both reconcile to
+        `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, so row 3's three-member
+        `to_any_of` set is fully covered by two tests)."""
+        managed_repo = _build_target(
+            self.tmp_root, phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_workflow_version="2.2",
+            base_commit="0" * 40, current_bundle_id="b" * 64,
+            plan_review_stages={
+                "review_content_id": "c" * 64,
+                "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
+            },
+        )
+        root = managed_repo.root
+        fixtures.write_manifest(
+            root, ".ai-review/wi-1/current",
+            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+        )
+        fixtures.write_review_feedback(
+            root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(
+                status="REVISE", reviewer_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+                reviewed_bundle_id="b" * 64, reviewed_base_commit="0" * 40,
+                reviewed_content_id="c" * 64,
+            ),
+        )
+        env = _write_state_phase_env(managed_repo.root, "wi-1", "REVISING_PLAN")
+        record = _run(managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "REVISING_PLAN")
+
     def test_row6_revising_plan_reaches_awaiting_local_plan_review(self) -> None:
         managed_repo = _build_target(
             self.tmp_root, phase="REVISING_PLAN", governing_workflow_version="2.2",

@@ -104,9 +104,47 @@ before. Full plan:
   repository's full test suite (437 tests, 1 skipped -- the
   live-Claude-gated integration test, `CLAUDE_BIN` unset in this
   environment) all pass.
-- CP4-CP6: not started.
+- **CP4 -- COMPLETE.** Audit-and-harden pass over `decision.py`/
+  `evidence.py`'s already-correct `"2.2"` implementation-review
+  classification (per the plan's own investigation, no production code
+  changed) -- three genuinely new regression tests, no others needed.
+  Added `tests/test_evidence.py::AwaitingManualExternalImplementationReviewTest.
+  test_revise_status_also_names_record_manual_implementation_review`, the
+  one sub-case that class's existing coverage left uncovered
+  (`Status: REVISE` on file with the admissible
+  `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` role): falls into the same
+  non-`BLOCK` branch as `APPROVE`, report-only, naming
+  `/record-manual-implementation-review`. Added
+  `tests/test_evidence.py::AwaitingExternalImplementationReviewTest.
+  test_2_2_item_reports_identically_to_2_1_at_this_reused_terminal_phase`,
+  the concrete regression guard for `MILESTONE_WORKFLOW.md:425-434`'s
+  "byte-for-byte" reuse claim: `_decide_awaiting_external_implementation_
+  review` consults neither `governing_workflow_version` nor the
+  `implementation_review_stages` ledger, so a `"1"`, a `"2.1"`, and a
+  `"2.2"` item in the identical bundle state decide identically --
+  genuinely new coverage, since that class had no `"2.2"` fixture
+  anywhere before this. Closed the explicit `"1"`/`"2.1"` parity half
+  with a new `tests/test_decision.py::ProtocolTwoTwoCompatibilityParityTest`:
+  `decide()`'s `DECLINED_PHASES`/`GATE_REPORT_PHASES` classification is
+  keyed on `work_item.phase` alone (never on `governing_workflow_version`),
+  pinned by asserting every member of both sets classifies identically
+  for `"1"`, `"2.1"`, and `"2.2"` -- including the two `"2.2"`-only
+  phases (`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`/
+  `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`) a `"1"`/`"2.1"` item
+  never actually reaches in practice -- plus a direct `KNOWN_PHASES`
+  cardinality/membership pin. No production file changes; this
+  checkpoint is its own test addition, exactly as the plan specifies.
+  Verified: the three new tests plus their surrounding classes
+  (`tests/test_decision.py::ProtocolTwoTwoCompatibilityParityTest`,
+  `tests/test_evidence.py::AwaitingManualExternalImplementationReviewTest`,
+  `tests/test_evidence.py::AwaitingExternalImplementationReviewTest`, 15
+  tests) pass; `tests/test_decision.py`+`tests/test_evidence.py` together
+  (101 tests) pass; the repository's full test suite (442 tests, 1
+  skipped -- the live-Claude-gated integration test, `CLAUDE_BIN` unset
+  in this environment) passes.
+- CP5-CP6: not started.
 
 **Next action:** continue with `/milestone-implement` to select and
-implement CP4 (pin `decision.py`/`evidence.py`'s already-correct 2.2
-implementation-review classification, and the 2.1 single-stage parity
-guarantee, with discriminating regression tests).
+implement CP5 (disposable-repository integration coverage of a genuine
+`"2.2"`-governed work item through the split implementation-review
+lifecycle).

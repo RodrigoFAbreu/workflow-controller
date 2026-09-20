@@ -231,6 +231,62 @@ class TwoShapeAssertionTest(unittest.TestCase):
             self.assertNotIn(phase, decision.DECLINED_PHASES)
 
 
+class ProtocolTwoTwoCompatibilityParityTest(unittest.TestCase):
+    """CP4's own "1"/"2.1" parity half (``workflow-controller-protocol-2-
+    2-compatibility``): this milestone's entire production surface is
+    job.py's ``EXPECTED_OUTCOMES`` table (CP1) and target_state.py's
+    read-only ``supported_versions`` field (CP3) -- ``decision.py`` itself
+    is untouched. ``decide()`` dispatches ``DECLINED_PHASES``/
+    ``GATE_REPORT_PHASES`` classification on ``work_item.phase`` alone
+    (see ``decide``'s own body: neither branch below ever inspects
+    ``governing_workflow_version``), so a "1"/"2.1"/"2.2" item must
+    classify identically at every phase in either set -- including the
+    two 2.2-only phases (revision 64) a "1"/"2.1" item never actually
+    reaches in practice. This is the regression guard that this
+    milestone's changes elsewhere never turn phase classification into a
+    version-conditioned branch."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name) / "target"
+        self.managed_repo = fixtures.build_target_managed_repository(root)
+        fixtures.copy_real_commands_dir(root / ".claude" / "commands")
+
+    def _decide(self, phase: str, version: str):
+        work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version=version)
+        return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def test_known_phases_unaffected_still_twenty_including_both_2_2_phases(self) -> None:
+        self.assertEqual(len(decision.KNOWN_PHASES), 20)
+        self.assertIn("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", decision.KNOWN_PHASES)
+        self.assertIn("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", decision.KNOWN_PHASES)
+
+    def test_declined_classification_is_identical_across_governing_versions(self) -> None:
+        for phase in sorted(decision.DECLINED_PHASES):
+            baseline = self._decide(phase, "1")
+            for version in ("2.1", "2.2"):
+                with self.subTest(phase=phase, governing_workflow_version=version):
+                    result = self._decide(phase, version)
+                    self.assertEqual(result.declined, baseline.declined)
+                    self.assertEqual(result.automatic, baseline.automatic)
+                    self.assertEqual(result.action, baseline.action)
+                    self.assertIsNone(result.gate)
+
+    def test_gate_classification_is_identical_across_governing_versions(self) -> None:
+        for phase in sorted(decision.GATE_REPORT_PHASES):
+            baseline = self._decide(phase, "1")
+            for version in ("2.1", "2.2"):
+                with self.subTest(phase=phase, governing_workflow_version=version):
+                    result = self._decide(phase, version)
+                    self.assertEqual(result.declined, baseline.declined)
+                    self.assertEqual(result.automatic, baseline.automatic)
+                    self.assertIsNone(result.action)
+                    self.assertEqual(result.gate.what_is_required, baseline.gate.what_is_required)
+                    self.assertEqual(result.gate.safe_resume_command,
+                                      baseline.gate.safe_resume_command)
+
+
 class UserOnlyDenylistTest(unittest.TestCase):
     """The four-command user-only denylist, derived as the union of the
     qualified-literal recogniser and the front-matter-flag recogniser,

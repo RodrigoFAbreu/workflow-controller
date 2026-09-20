@@ -579,6 +579,37 @@ class AwaitingExternalImplementationReviewTest(unittest.TestCase):
         self.assertEqual(result.gate.safe_resume_command, "/recover-implementation-provenance wi-1")
         self.assertIn("refuses", result.gate.what_is_required)
 
+    def test_2_2_item_reports_identically_to_2_1_at_this_reused_terminal_phase(self) -> None:
+        """`MILESTONE_WORKFLOW.md:425-434`'s "byte-for-byte" reuse claim,
+        made concrete: this terminal phase is reached by a "2.2" item only
+        once both its `implementation_review_stages` ledger stages
+        (`LOCAL_MODEL_IMPLEMENTATION_REVIEW` and
+        `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`) already read `APPROVE` --
+        but `_decide_awaiting_external_implementation_review` consults
+        neither `governing_workflow_version` nor that ledger at all, only
+        `MANIFEST.md`/`REVIEW_FEEDBACK.md` on disk, so a "2.2" item and a
+        "2.1"/"1" item in the identical bundle state must decide
+        identically. `AwaitingExternalImplementationReviewTest` had no
+        `governing_workflow_version="2.2"` fixture anywhere before this."""
+        fixtures.write_manifest(
+            self.root, ".ai-review/current", fixtures.build_manifest_text(generation_head=self.head),
+        )
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(status="APPROVE"),
+        )
+        result_1 = self._decide(governing_workflow_version="1")
+        result_21 = self._decide(governing_workflow_version="2.1")
+        result_22 = self._decide(governing_workflow_version="2.2")
+        for other in (result_21, result_22):
+            self.assertEqual(result_1.automatic, other.automatic)
+            self.assertEqual(result_1.declined, other.declined)
+            self.assertEqual(result_1.action, other.action)
+            self.assertEqual(result_1.gate.what_is_required, other.gate.what_is_required)
+            self.assertEqual(result_1.gate.safe_resume_command, other.gate.safe_resume_command)
+            self.assertEqual(result_1.gate.artifact_path, other.gate.artifact_path)
+        self.assertEqual(result_22.gate.safe_resume_command, "/approve-review implementation wi-1")
+
 
 class AwaitingManualExternalImplementationReviewTest(unittest.TestCase):
     """Revision 64's own three-way sub-case (CP4B's fourth evidence-needing
@@ -669,6 +700,24 @@ class AwaitingManualExternalImplementationReviewTest(unittest.TestCase):
         self.assertIsNone(result.action)
         self.assertIn("finalize failed", result.gate.what_is_required)
         self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/REJECTED")))
+
+    def test_revise_status_also_names_record_manual_implementation_review(self) -> None:
+        """CP4's own genuinely-uncovered sub-case: ``Status: REVISE`` on
+        file, admissible role. Falls into the same non-BLOCK branch as
+        ``APPROVE`` above (``_decide_awaiting_manual_external_implementation_
+        review`` only special-cases ``BLOCK``) -- report-only here, unlike
+        the plan stage's own REVISE handling, which is automatic."""
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(
+                status="REVISE", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            ),
+        )
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertEqual(result.gate.safe_resume_command,
+                          "/record-manual-implementation-review wi-1")
 
 
 class AwaitingFunctionalReviewTest(unittest.TestCase):

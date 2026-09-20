@@ -11,7 +11,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-generation-1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-generation-1-mapping.json",
       "governing_workflow_version": "2.1",
-      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 71,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -98,10 +98,10 @@
         "recorded_at": "2026-09-19T18:33:58Z"
       },
       "technical_approval": {
-        "status": "STALE",
-        "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "286b6f5631cd6f5fef3c5ff0787b7313e307f55c28e232eb459f214f5922e1ec",
-        "approved_review_content_id": "60d9eecf7f82634811738485786b3e822bb3f7b167fece4df8f13dd20d868d50",
+        "status": "CURRENT",
+        "basis": "USER_OVERRIDE",
+        "reviewed_bundle_id": "3523998f64ea669103ef2e872dd1a1d8b95724441b05e203bbb00955610e3db3",
+        "approved_review_content_id": "501e9c3e68aec06db3d9bfa6519d93ae2a42800b39a571a101f606a2c1e4db5b",
         "review_content_manifest": [
           {
             "path": "controller/GENERATION.json",
@@ -143,7 +143,7 @@
             "path": "controller/evidence.py",
             "exists": true,
             "mode": "100644",
-            "blob": "b6dbdc2b834de944c3d1635aa3b21cd5e31afef8"
+            "blob": "57ca8cbf9da9256ac4475e101a03f2d0ac79c5b5"
           },
           {
             "path": "controller/handoff.py",
@@ -239,7 +239,7 @@
             "path": "tests/test_evidence.py",
             "exists": true,
             "mode": "100644",
-            "blob": "9a35f939411f50c1fd7a28b6d2070aaf69860511"
+            "blob": "759f3544b773a15feefaa965e09b6c1f8f782b11"
           },
           {
             "path": "tests/test_handoff.py",
@@ -314,11 +314,11 @@
             "blob": "fddf5c332313d0d2df596f2153fd9736691395e6"
           }
         ],
-        "reviewed_content_commit": "0300cb66ff67ad7332e069608ed59c5fb1ed366b",
+        "reviewed_content_commit": "f715049cf65608806aab68273e3a5b2b194deb2b",
         "legacy_evidence": null,
-        "user_confirmation": "implementation workflow-controller-generation-1",
+        "user_confirmation": "I approve the implementation review for workflow-controller-generation-1",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-20T03:25:04Z"
+        "recorded_at": "2026-09-20T03:58:16Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -338,8 +338,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 278,
-      "last_transition": "2026-09-20T03:43:16Z",
+      "state_revision": 279,
+      "last_transition": "2026-09-20T03:58:16Z",
       "amendment_history": [
         {
           "amendment_id": "0",

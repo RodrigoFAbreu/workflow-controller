@@ -1642,10 +1642,17 @@ rather than absorbed.
 ## Functional review checklist
 
 Manual functional review for `workflow-controller-generation-1`
-(implementation revision 4, technical approval recorded at commit
-`b41f866`, `review_content_id` `60d9eecf7f82634811738485786b3e822bb3f7b167fece4df8f13dd20d868d50`).
+(implementation revision 5, technical approval recorded at commit
+`79da21a` (basis `USER_OVERRIDE`), `review_content_id`
+`501e9c3e68aec06db3d9bfa6519d93ae2a42800b39a571a101f606a2c1e4db5b`).
 Findings go to `.ai-review/feedback/FUNCTIONAL_REVIEW.md`
 (`docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location").
+
+Checklist content is otherwise unchanged from the prior round: the one
+defect that round found (`evidence.resolve_feedback_dir`'s wrong
+scoped-vs-flat resolution for the feedback directory, exercised by flow 3
+below) was fixed at commit `f715049` and is now covered by a regression
+test (`tests/test_evidence.py::FeedbackDirResolutionTest::test_resolves_flat_when_work_item_root_exists_but_feedback_subdir_does_not`).
 
 ### Setup
 

@@ -735,10 +735,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         external plan verdict routes the same phase to `REVISING_PLAN`
         instead of `AWAITING_PLAN_APPROVAL`. This is the seventh member
         across the four `"2.2"` rows' `to_any_of` sets; the other six are
-        covered by this class's other five tests (`test_row3_ordinary_...`
-        and `test_row3_block_...` both reconcile to
-        `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`, so row 3's three-member
-        `to_any_of` set is fully covered by two tests)."""
+        covered by this class's other six tests, one-to-one."""
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_workflow_version="2.2",
             base_commit="0" * 40, current_bundle_id="b" * 64,

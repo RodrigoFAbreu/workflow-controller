@@ -365,6 +365,38 @@ fast, direct smoke check of the same dispatch against two real,
 already-existing `"2.2"`/`"2.1"` work items in this very repository, plus
 the CLI-visible regressions CP1-CP5 could have disturbed.
 
+### Precondition check -- read this before Flow 3
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` currently holds **stale content
+from the already-accepted `workflow-controller-gen1-correctness-hardening`
+round**, not this work item -- the feedback directory is a flat,
+work-item-unscoped path (`workflow_fingerprint.resolve_feedback_dir` falls
+back to `.ai-review/feedback/` whenever no
+`.ai-review/<work_item_id>/feedback/` directory exists, which is the case
+here), so old findings persist across work items. No
+`FUNCTIONAL_REVIEW.consumed` marker exists at all for it, so Controller's
+own "unconsumed findings" check
+(`controller.evidence.functional_review_findings_consumed`) reads this
+leftover file as live, unconsumed findings for *this* work item: measured
+directly, `workflow-controller explain .` reports `evidence: unconsumed
+FUNCTIONAL_REVIEW.md findings` and names
+`/apply-functional-review workflow-controller-protocol-2-2-compatibility`
+as the next automatic action, rather than the ordinary functional-review-
+gate text Flow 3 below describes.
+
+Before running Flow 3: open `.ai-review/feedback/FUNCTIONAL_REVIEW.md` and
+confirm by hand that its content is the old gen1-correctness-hardening
+round (its own header reads "Functional review --
+workflow-controller-gen1-correctness-hardening"). If so, archive or remove
+that stale file before testing Flow 3, or expect and record `explain`'s
+automatic-branch behavior as the *stale-data* artifact it is rather than
+as a finding against this round. This is the identical environmental/
+tooling gap the prior milestone's own checklist already recorded (shared
+flat feedback layout, not scoped to any one work item) -- it recurred here
+because no round since has given this repository a scoped
+`.ai-review/<work_item_id>/feedback/` directory. It does not by itself
+block acceptance of this round.
+
 ### Setup
 
 1. From a checkout of this exact repository at commit `9c119dc` (or later,
@@ -406,20 +438,34 @@ This repository's own checkout is the target (`.`) for every flow except
    is the single most direct regression proof this checklist can offer.
 
 3. **`explain` against the active `"2.2"` item** --
-   `workflow-controller explain .` and `--json explain .`.
+   `workflow-controller explain .` and `--json explain .`. Run this
+   **after** resolving the Precondition check above (archiving/removing
+   the stale `FUNCTIONAL_REVIEW.md`), not before.
    Expected: exits `0`; reports a human gate at `AWAITING_FUNCTIONAL_REVIEW`,
    names a safe resume command, and does **not** launch a worker or write
    a Controller job record (`workflow-controller status` immediately
-   afterward should still show no job record). Measured immediately
-   before this checklist's own evidence commit landed: `reason:
-   AWAITING_FUNCTIONAL_REVIEW: no current-round Workflow-Functional-Checklist
-   evidence found`, safe resume command `/prepare-functional-review
-   workflow-controller-protocol-2-2-compatibility`. By the time you read
-   this, this checklist's own evidence commit has already landed (see step
-   3a of `/prepare-functional-review`), so re-running `explain .` now
-   should no longer report that pre-evidence text -- confirm it reports
-   the ordinary functional-review-gate text instead (naming this checklist
-   and, once testing is clean, `/accept-milestone`).
+   afterward should still show no job record). Three states were measured
+   directly, in order, against this exact repository:
+   - Before this checklist's own evidence commit landed: `reason:
+     AWAITING_FUNCTIONAL_REVIEW: no current-round Workflow-Functional-Checklist
+     evidence found`, safe resume command `/prepare-functional-review
+     workflow-controller-protocol-2-2-compatibility`.
+   - After the evidence commit landed but with the stale
+     `FUNCTIONAL_REVIEW.md` from the Precondition check still in place:
+     `reason: AWAITING_FUNCTIONAL_REVIEW: findings are present and
+     unconsumed`, next automatic action `/apply-functional-review
+     workflow-controller-protocol-2-2-compatibility` -- the stale-data
+     artifact the Precondition check describes, not a defect in this
+     milestone's own dispatch.
+   - After archiving/removing the stale file (verified directly by
+     temporarily moving it aside): `reason: AWAITING_FUNCTIONAL_REVIEW:
+     checklist is current and no FUNCTIONAL_REVIEW.md exists yet`, human
+     gate text "the checklist is current; a human must perform manual
+     functional testing and place findings at
+     .ai-review/feedback/FUNCTIONAL_REVIEW.md", safe resume command
+     `/apply-functional-review workflow-controller-protocol-2-2-compatibility`.
+     Confirm you see this exact reason once you have cleared the stale
+     file yourself.
 
 4. **`inspect`/`explain` against the completed `"2.1"` item (regression)**
    -- `workflow-controller --json --work-item

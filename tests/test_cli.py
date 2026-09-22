@@ -378,7 +378,11 @@ class ExplainCommandTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class StepCommandTest(unittest.TestCase):
+class _StepFixture:
+    """The managed target, stub manager, pinned identity and
+    ``job.execute_step`` save/restore shared by the ``step``/``run``
+    command tests below."""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -423,6 +427,8 @@ class StepCommandTest(unittest.TestCase):
     def _step(self) -> int:
         return cli.cmd_step(self._args(), self.runtime_root, self.ident)
 
+
+class StepCommandTest(_StepFixture, unittest.TestCase):
     def test_finished_status_exits_ok_after_exactly_one_call(self) -> None:
         calls = []
 
@@ -479,6 +485,43 @@ class StepCommandTest(unittest.TestCase):
         handoff_record = runtime.read_json(self.runtime_root / "handoff.json")
         self.assertEqual(handoff_record["running"]["generation"], 1)
         self.assertEqual(handoff_record["approved"]["generation"], 2)
+
+
+class PermissionModePassThroughTest(_StepFixture, unittest.TestCase):
+    """Worker-execution hardening CP1: a default ``step``/``run`` hands
+    ``execute_step`` the lifecycle-worker default ``auto``; an explicit
+    ``--permission-mode`` reaches it unchanged."""
+
+    def _received_mode(self, command, permission_mode: str | None) -> str:
+        received = []
+
+        def fake_execute_step(*a, **k):
+            received.append(k["permission_mode"])
+            return {"status": job.STATUS_GATE_BLOCKED}
+
+        job.execute_step = fake_execute_step
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                     permission_mode=permission_mode)
+        self.assertEqual(command(args, self.runtime_root, self.ident), cli.EXIT_GATE)
+        self.assertEqual(len(received), 1)
+        return received[0]
+
+    def test_step_defaults_to_auto(self) -> None:
+        self.assertEqual(self._received_mode(cli.cmd_step, None), "auto")
+
+    def test_step_passes_explicit_modes_through(self) -> None:
+        for mode in ("acceptEdits", "bypassPermissions"):
+            with self.subTest(mode=mode):
+                self.assertEqual(self._received_mode(cli.cmd_step, mode), mode)
+
+    def test_run_defaults_to_auto(self) -> None:
+        self.assertEqual(self._received_mode(cli.cmd_run, None), "auto")
+
+    def test_run_passes_explicit_modes_through(self) -> None:
+        for mode in ("acceptEdits", "bypassPermissions"):
+            with self.subTest(mode=mode):
+                self.assertEqual(self._received_mode(cli.cmd_run, mode), mode)
+
 
 
 # ---------------------------------------------------------------------------

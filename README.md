@@ -62,9 +62,10 @@ anywhere.
 
 Global options -- declared on the top-level parser, so they are accepted
 only *before* the subcommand: `--runtime-dir`, `--work-item`,
-`--workflow-manager`, `--claude-binary`, `--permission-mode`, `--timeout`,
-`--allow-dirty-source`, `--json`. `WORKFLOW_CONTROLLER_HOME` sets the
-runtime root when `--runtime-dir` is absent (`--runtime-dir` >
+`--workflow-manager`, `--claude-binary`, `--permission-mode` (default
+`auto` for lifecycle workers; an explicit value such as `acceptEdits` is
+passed through unchanged), `--timeout`, `--allow-dirty-source`, `--json`.
+`WORKFLOW_CONTROLLER_HOME` sets the runtime root when `--runtime-dir` is absent (`--runtime-dir` >
 `WORKFLOW_CONTROLLER_HOME` > default); it is the only environment
 variable in the CLI's operator-facing contract.
 

@@ -525,5 +525,47 @@ class MissingGoverningVersionRowRegressionTest(unittest.TestCase):
                 job._expected_outcome_for("PLANNING", "2.2", decision)
 
 
+class DefaultPermissionModeTest(unittest.TestCase):
+    """Worker-execution hardening CP1: lifecycle workers default to
+    ``auto``, and the mode ``execute_step`` receives -- default or
+    explicit -- is exactly what reaches the real worker subprocess argv."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir(parents=True)
+
+    def test_default_permission_mode_is_auto(self) -> None:
+        import inspect
+        self.assertEqual(job.DEFAULT_PERMISSION_MODE, "auto")
+        self.assertEqual(
+            inspect.signature(job.execute_step).parameters["permission_mode"].default, "auto",
+        )
+
+    def _observed_argv(self, name: str, **kwargs) -> list[str]:
+        managed_repo = _build_target(
+            self.tmp_root / name, phase="PLANNING", governing_workflow_version="2.1",
+        )
+        diag = self.tmp_root / f"{name}-diag.json"
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_DIAG_FILE": str(diag)}):
+            job.execute_step(
+                managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10, **kwargs,
+            )
+        return json.loads(diag.read_text())["argv"]
+
+    def _mode_in(self, argv: list[str]) -> str:
+        return argv[argv.index("--permission-mode") + 1]
+
+    def test_worker_argv_carries_auto_by_default(self) -> None:
+        self.assertEqual(self._mode_in(self._observed_argv("default")), "auto")
+
+    def test_worker_argv_carries_an_explicit_mode_unchanged(self) -> None:
+        argv = self._observed_argv("explicit", permission_mode="acceptEdits")
+        self.assertEqual(self._mode_in(argv), "acceptEdits")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -255,7 +255,8 @@ def launch(
     """Launch one fresh, bounded ``claude -p`` worker against ``cwd`` and
     wait synchronously for it to finish.
 
-    ``permission_mode`` has no default: ``acceptEdits`` against a real
+    ``permission_mode`` has no default: ``auto`` (the lifecycle-worker
+    default, ``controller.job.DEFAULT_PERMISSION_MODE``) against a real
     development repository, ``bypassPermissions`` only against a
     disposable throwaway repository -- the caller states its posture
     explicitly every time.

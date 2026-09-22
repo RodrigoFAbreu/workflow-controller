@@ -136,11 +136,14 @@ PRE_STATE_FIELDS: frozenset[str] = frozenset({
     "pre_work_item_keys",
 })
 
-#: `acceptEdits` against this (real, managed) target repository --
-#: `bypassPermissions` is reserved for disposable throwaway repositories
-#: only (`docs/ACTIVE_MILESTONE.md`, capability 4), which `execute_step`
-#: never targets.
-DEFAULT_PERMISSION_MODE = "acceptEdits"
+#: `auto` is the default for lifecycle workers against this (real,
+#: managed) target repository: `acceptEdits` permits file edits but denies
+#: the Bash/Python Workflow operations a non-interactive lifecycle worker
+#: must run. `bypassPermissions` is reserved for disposable throwaway
+#: repositories only, which `execute_step` never targets, and is never a
+#: default. Any explicit `--permission-mode` is passed through unchanged --
+#: the `claude` CLI, not Controller, is the authority over which modes exist.
+DEFAULT_PERMISSION_MODE = "auto"
 
 #: Generous enough for a full Workflow command turn (`/milestone-plan`,
 #: `/apply-plan-review`, ...); overridable per call (and, from a later

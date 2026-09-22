@@ -2,12 +2,20 @@
 
 ## Status
 
-**In progress.** `workflow-controller-protocol-2-2-compatibility`
-(`governing_workflow_version: "2.2"`) is `SELF_REVIEWING_IMPLEMENTATION`:
-all six checkpoints are `COMPLETE`. Plan revision 2 was
-approved via the two-stage plan-review protocol (`LOCAL_MODEL_PLAN_REVIEW`
-round 2 APPROVE, `MANUAL_EXTERNAL_PLAN_REVIEW` round 1 APPROVE), recorded at
-commit `7bfa238`. Base commit: `21a304d50a8bb9c08e465e78a4636e353e16b5e9`.
+**Awaiting functional review.** `workflow-controller-protocol-2-2-compatibility`
+(`governing_workflow_version: "2.2"`) has completed all six checkpoints,
+plan approval, and implementation approval, and entered
+`AWAITING_FUNCTIONAL_REVIEW`. Plan revision 2 was approved via the
+two-stage plan-review protocol (`LOCAL_MODEL_PLAN_REVIEW` round 2 APPROVE,
+`MANUAL_EXTERNAL_PLAN_REVIEW` round 1 APPROVE), recorded at commit
+`7bfa238`. Implementation revision 3 went through the two-stage
+implementation-review protocol -- three `LOCAL_MODEL_IMPLEMENTATION_REVIEW`
+rounds (round 1 REVISE, round 2 REVISE, round 3 APPROVE), then
+`MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` round 1 APPROVE -- and technical
+approval was recorded (`EXTERNAL_APPROVE`) at commit `9c119dc`,
+`review_content_id` `b21ff2ffb070e4336cdfcbf339982e13e08fcf0eeac4a34b6ba1a706503841d9`.
+Base commit: `21a304d50a8bb9c08e465e78a4636e353e16b5e9`. See "Functional
+review checklist" below for the manual testing gate.
 
 Goal: make Controller Generation 1 (`controller/`) correctly understand and
 orchestrate Workflow protocol `2.2`'s split implementation-review lifecycle,
@@ -325,9 +333,146 @@ the plan asks for, and this self-review pass changed only comments in
 module re-ran green in (1) above. No orchestration behaviour the live test
 exercises was touched.
 
-**Next action:** the self-review and full verification are complete and the
-implementation-review bundle has been generated. This work item is
-`"2.2"`-governed, so the phase is now
-`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`: run `/review-implementation` for
-the authoritative `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage, which on
-`APPROVE` hands off to `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
+**Next action:** implementation is fully approved and the work item is at
+`AWAITING_FUNCTIONAL_REVIEW`. See "Functional review checklist" below for
+the manual testing gate; findings go to
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md`. Once testing is clean,
+`/accept-milestone` is the acceptance command (all six registry
+checkpoints are already `COMPLETE`).
+
+## Functional review checklist
+
+Manual functional review for `workflow-controller-protocol-2-2-compatibility`
+(implementation revision 3, technical approval recorded at commit
+`9c119dc`, `review_content_id`
+`b21ff2ffb070e4336cdfcbf339982e13e08fcf0eeac4a34b6ba1a706503841d9`).
+Findings go to `.ai-review/feedback/FUNCTIONAL_REVIEW.md`
+(`docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location").
+
+This milestone's core deliverable -- Controller correctly driving a
+`"2.2"`-governed work item through the full plan-review lifecycle
+automatically, and correctly reporting/gating (never launching, never
+self-approving) through the split implementation-review lifecycle -- is
+already proven end to end by the automated suite:
+`tests/test_integration_disposable_repo.py::Protocol22ImplementationReviewGatesTest`
+drives a real disposable repo through all five implementation-review
+states, and `DisposableRepoRealWorkflowActionTest::
+test_real_review_plan_reaches_the_2_2_plan_review_expected_outcomes_row`
+ran a real live-Claude worker end to end at CP6 (632.7s, zero skipped).
+This checklist does not re-run that live-worker pass -- CP6 already
+satisfied the plan's "at least once" requirement -- it instead does a
+fast, direct smoke check of the same dispatch against two real,
+already-existing `"2.2"`/`"2.1"` work items in this very repository, plus
+the CLI-visible regressions CP1-CP5 could have disturbed.
+
+### Setup
+
+1. From a checkout of this exact repository at commit `9c119dc` (or later,
+   with a clean working tree): `pip install -e .` (skip if already
+   installed; confirm with `workflow-controller status`).
+2. No feature flags or seeded data are needed. This repository's own
+   `docs/ai-workflow/WORKFLOW_STATE.json` already carries the two work
+   items every flow below exercises:
+   `workflow-controller-protocol-2-2-compatibility` (`"2.2"`, this
+   milestone's own subject, currently at `AWAITING_FUNCTIONAL_REVIEW` --
+   this checklist's own gate) and `workflow-controller-gen1-correctness-hardening`
+   (`"2.1"`, `MILESTONE_COMPLETE`, the regression witness).
+
+### Test data
+
+This repository's own checkout is the target (`.`) for every flow except
+5, which needs any directory with no `.workflow-manager/` (a scratch
+`mkdir` is enough).
+
+### Flows
+
+1. **`status`** -- `workflow-controller status`.
+   Expected: exits `0`; prints the resolved runtime root and pinned
+   Controller source identity (unpinned at this commit, since no worker
+   has launched here). Unchanged from prior rounds -- confirms this
+   milestone's changes didn't disturb this flow.
+
+2. **`inspect` against the active `"2.2"` item** --
+   `workflow-controller --json inspect .` and the text form
+   `workflow-controller inspect .`.
+   Expected: exits `0`; reports `work_item_id:
+   workflow-controller-protocol-2-2-compatibility`,
+   `governing_workflow_version: "2.2"`, `phase: AWAITING_FUNCTIONAL_REVIEW`.
+   This is CP1-CP3's real payoff made visible: before this milestone,
+   `default_workflow_version: "2.2"` (already active in this repository
+   since commit `21a304d`) made Controller crash the moment it tried to
+   drive any `"2.2"` item automatically -- confirming this no longer
+   happens, on the repository's own real, currently-active `"2.2"` item,
+   is the single most direct regression proof this checklist can offer.
+
+3. **`explain` against the active `"2.2"` item** --
+   `workflow-controller explain .` and `--json explain .`.
+   Expected: exits `0`; reports a human gate at `AWAITING_FUNCTIONAL_REVIEW`,
+   names a safe resume command, and does **not** launch a worker or write
+   a Controller job record (`workflow-controller status` immediately
+   afterward should still show no job record). Measured immediately
+   before this checklist's own evidence commit landed: `reason:
+   AWAITING_FUNCTIONAL_REVIEW: no current-round Workflow-Functional-Checklist
+   evidence found`, safe resume command `/prepare-functional-review
+   workflow-controller-protocol-2-2-compatibility`. By the time you read
+   this, this checklist's own evidence commit has already landed (see step
+   3a of `/prepare-functional-review`), so re-running `explain .` now
+   should no longer report that pre-evidence text -- confirm it reports
+   the ordinary functional-review-gate text instead (naming this checklist
+   and, once testing is clean, `/accept-milestone`).
+
+4. **`inspect`/`explain` against the completed `"2.1"` item (regression)**
+   -- `workflow-controller --json --work-item
+   workflow-controller-gen1-correctness-hardening inspect .` and
+   `workflow-controller --work-item
+   workflow-controller-gen1-correctness-hardening explain .`.
+   Expected: `inspect` exits `0`, reports `governing_workflow_version:
+   "2.1"`, `phase: MILESTONE_COMPLETE`; `explain` exits `0` and reports the
+   item is already complete, naming no further action. Confirms `"2.1"`
+   dispatch is byte-for-byte unaffected by this milestone's four new
+   `"2.2"` `EXPECTED_OUTCOMES` rows and by `WorkflowSnapshot.supported_versions`'s
+   new read path.
+
+5. **Unmanaged-repository refusal** -- `workflow-controller inspect <a
+   directory with no .workflow-manager/>`.
+   Expected: exits `20`, with a clear `UnmanagedRepositoryError`-style
+   message naming the path -- no stack trace, no silent success. Unchanged
+   from prior rounds.
+
+6. **`resume` against this repository** -- `workflow-controller resume .`.
+   Expected: exits `0` (no non-terminal job records to reconcile) and
+   never attempts to launch a worker.
+
+### Expected results summary
+
+| Flow | Exit code | Launches a worker? |
+|---|---|---|
+| 1 `status` | 0 | No |
+| 2 `inspect .` (`"2.2"` item, `--json` and text) | 0 | No |
+| 3 `explain .` (`"2.2"` item, text and `--json`) | 0 | No |
+| 4 `inspect`/`explain` (`"2.1"` item via `--work-item`) | 0 | No |
+| 5 `inspect <unmanaged>` | 20 | No |
+| 6 `resume .` | 0 | No |
+
+### Known limitations / out of scope for this milestone
+
+- Controller Generation 2, model/provider abstraction, and everything else
+  listed under "Non-goals" in
+  `docs/ai-workflow/CONTROLLER_GEN1_PROTOCOL_2_2_COMPAT_PLAN.md` -- do not
+  file findings against their absence.
+- The end-to-end live-Claude-worker drive through the real plan-review
+  dispatch for a `"2.2"` item is already proven once, end to end, by CP6's
+  own live run (`DisposableRepoRealWorkflowActionTest`, 632.7s) -- this
+  checklist does not ask you to repeat it.
+- `WorkflowSnapshot.supported_versions` (CP3) is purely diagnostic,
+  internal state: it is never printed by any CLI flow above and never
+  consulted by any decision/gate. There is no user-visible surface to
+  check it against; its correctness is proven entirely by
+  `tests/test_target_state.py`, not by this checklist.
+- The split implementation-review lifecycle's five gated states
+  (`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` through the reused terminal
+  `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`) cannot be exercised live
+  against this repository's own `"2.2"` item any more -- it has already
+  passed through and beyond all of them. That lifecycle is proven instead
+  by `tests/test_integration_disposable_repo.py::Protocol22ImplementationReviewGatesTest`'s
+  five-state disposable-repo pass, cited above.

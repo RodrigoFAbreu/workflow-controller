@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-worker-execution-hardening",
+  "requirements": {
+    "R1": {
+      "description": "Controller lifecycle workers launch with --permission-mode auto by default",
+      "checkpoint_ids": [
+        "CP1",
+        "CP6"
+      ]
+    },
+    "R2": {
+      "description": "An explicit user-supplied --permission-mode is passed to the worker unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A phase transition alone does not verify a job whose action must produce a coherent plan review bundle; the bundle manifest must match the published plan_revision, on both execute and resume paths, using authoritative artifacts without importing Workflow scripts",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Controller does not launch a plan review against an incoherent plan bundle after such a failure, and the recovery it advertises is executable",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4",
+        "CP6"
+      ]
+    },
+    "R5": {
+      "description": "Regression coverage reproduces the observed partial /apply-plan-review case on execute, COMPLETED and LAUNCHED resume, next-step and recovery-guidance paths",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R6": {
+      "description": "Full Controller and frozen Workflow conformance suites pass",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    }
+  }
+}

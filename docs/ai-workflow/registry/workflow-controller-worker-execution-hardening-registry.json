@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-worker-execution-hardening",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Default lifecycle-worker permission mode to auto, preserving explicit --permission-mode overrides, with CLI/execute_step/worker-argv regression coverage",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Single plan-bundle coherence reader in evidence.py (manifest stage/work_item_id/plan_revision vs. state plan_revision), with per-clause tests",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Postcondition column on ExpectedOutcome, evaluated identically by execute_step and resume (LAUNCHED and COMPLETED), attached to every plan-bundle-producing row; table properties and existing-fixture repair",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Decision-time gate refusing to launch plan review against an incoherent or withdrawn plan bundle at AWAITING_LOCAL_PLAN_REVIEW/AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW (REJECTED gate included), advertising an executable author-file write-or-refresh-then-regenerate recovery",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Regression reproducing the observed partial /apply-plan-review (state at revision 11, bundle at 10) on execute, COMPLETED/LAUNCHED resume, next-step, recovery-guidance and CLI paths, with a durable pre-fix demonstration",
+      "depends_on": [
+        "CP3",
+        "CP4"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Full verification: Controller suite, green frozen Workflow conformance suites, live disposable-repo runs including one default-auto lifecycle worker and a stale-bundle recovery drill",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    }
+  ]
+}

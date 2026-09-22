@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-worker-execution-hardening",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -811,6 +811,78 @@
           "completed_at": "2026-09-21T01:20:00Z"
         }
       }
+    },
+    "workflow-controller-worker-execution-hardening": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-worker-execution-hardening",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_WORKER_EXECUTION_HARDENING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-execution-hardening-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "27be244d19df1c5c21e6c7c9fb9b83143c7e45a2",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "e024c72379527511b3fb8cd0cdca15fc3473f0b0998fe9cbf72785f395dfb01f",
+        "approved_review_content_id": "792dd7ee11fd93f6d9141da83451057c8bda5d0aa58682afcc6b433a783de1eb",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_WORKER_EXECUTION_HARDENING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "26292ed47d0645796cef52b61f91db0a9f698c99"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5751ccfbe4c50837ae0c7393f2e3d9b3578dffd2"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-worker-execution-hardening-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1966cfbbe5233b7b00bdcfa74075f58134700c9d"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the plan stage for workflow-controller-worker-execution-hardening",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-22T22:31:01Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "792dd7ee11fd93f6d9141da83451057c8bda5d0aa58682afcc6b433a783de1eb",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "e024c72379527511b3fb8cd0cdca15fc3473f0b0998fe9cbf72785f395dfb01f",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-22T20:59:00Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "e024c72379527511b3fb8cd0cdca15fc3473f0b0998fe9cbf72785f395dfb01f",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-22T21:36:22Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 12,
+      "last_transition": "2026-09-22T22:31:01Z"
     }
   }
 }

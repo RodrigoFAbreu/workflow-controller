@@ -523,6 +523,76 @@ class PermissionModePassThroughTest(_StepFixture, unittest.TestCase):
                 self.assertEqual(self._received_mode(cli.cmd_run, mode), mode)
 
 
+class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):
+    """Worker-execution hardening CP5, the RepFlow case end to end through
+    the CLI: a real ``step`` whose fake worker publishes plan revision 11
+    but leaves the revision-10 bundle exits ``EXIT_WORKER_FAILED``, and
+    ``explain`` then renders CP4's recovery steps."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = fixtures.build_managed_repo(self.tmp_root / "partial")
+        head = fixtures.current_head(self.repo)
+        fixtures.write_workflow_state(self.repo, {
+            "schema_version": 1, "active_work_item_id": "wi-1",
+            "work_items": {"wi-1": {
+                "work_item_type": "product", "work_item_kind": "product", "work_item_id": "wi-1",
+                "governing_workflow_version": "2.2", "phase": "REVISING_PLAN", "plan_revision": 10,
+                "implementation_revision": None, "state_revision": 1, "checkpoints": {},
+                "current_bundle_id": None, "last_completed_checkpoint_id": None,
+                "base_commit": head, "parent_work_item_id": None,
+            }},
+        })
+        self.base_commit = head
+        fixtures.write_plan_manifest(self.repo, "wi-1", 10, generation_head=head)
+        current = self.repo / ".ai-review" / "wi-1" / "current"
+        (current / "REVIEW_REQUEST.md").write_text("review_content_id: " + "c" * 64 + "\n")
+        (current / "TEST_RESULTS.md").write_text(f"stage: plan (revision 10)\nhead: {head}\n")
+        (current / "CONTEXT_FILES.txt").write_text("docs/ai-workflow/REVIEW_PROTOCOL.md\n")
+        fixtures.write_review_feedback(
+            self.repo, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(status="REVISE", reviewed_base_commit=head),
+        )
+
+    def _worker_env(self) -> dict[str, str]:
+        state_path = self.repo / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+        state = json.loads(state_path.read_text())
+        state["work_items"]["wi-1"].update(phase="AWAITING_LOCAL_PLAN_REVIEW", plan_revision=11, state_revision=2)
+        return {"FAKE_CLAUDE_WRITES": json.dumps([
+            {"path": str(state_path), "text": json.dumps(state, indent=2) + "\n"},
+        ])}
+
+    def _args(self, **kwargs) -> _Args:
+        return _Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                     claude_binary=str(Path(__file__).resolve().parent / "fake_claude.py"),
+                     timeout=10, **kwargs)
+
+    def test_step_exits_worker_failed_then_explain_renders_the_recovery_steps(self) -> None:
+        import contextlib
+        import io
+        import unittest.mock
+        with unittest.mock.patch.dict("os.environ", self._worker_env()):
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = cli.cmd_step(self._args(), self.runtime_root, self.ident)
+        self.assertEqual(exit_code, cli.EXIT_WORKER_FAILED)
+        records = [runtime.read_json(p) for p in (self.runtime_root / "jobs").glob("*.json")]
+        self.assertEqual([r["status"] for r in records], [job.STATUS_FAILED])
+        self.assertEqual(records[0]["reconciliation_evidence"]["reason"], "postcondition_not_satisfied")
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(cli.cmd_explain(self._args(), self.runtime_root, self.ident), cli.EXIT_OK)
+        out = buf.getvalue()
+        self.assertIn("phase: AWAITING_LOCAL_PLAN_REVIEW", out)
+        self.assertIn("human gate", out)
+        self.assertNotIn("next automatic action", out)
+        self.assertIn("1. refresh .ai-review/wi-1/current/REVIEW_REQUEST.md", out)
+        self.assertIn("2. refresh .ai-review/wi-1/current/TEST_RESULTS.md", out)
+        self.assertIn("`stage: plan (revision 11)`", out)
+        self.assertIn(f"3. run scripts/prepare-ai-review.sh {self.base_commit} plan wi-1", out)
+        self.assertIn("manifest plan_revision 10 != state plan_revision 11", out)
+
+
 
 # ---------------------------------------------------------------------------
 # `resume`

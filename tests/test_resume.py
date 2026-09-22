@@ -1241,5 +1241,89 @@ class PlanBundlePostconditionRowSevenResumeTest(_ResumeTestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# Worker-execution hardening CP5 -- the observed partial `/apply-plan-review`
+# (RepFlow) on both resume paths: state already published at plan revision
+# 11, current plan bundle still at 10.
+# ---------------------------------------------------------------------------
+
+
+_PARTIAL_APPLY_DETAIL = "manifest plan_revision 10 != state plan_revision 11"
+
+
+class PartialApplyPlanReviewResumeTest(_ResumeTestCase):
+    def _seed(self, *, status: str, manifest_revision: int = 10, version: str = "2.2",
+              post_phase: str = "AWAITING_LOCAL_PLAN_REVIEW", from_phase: str = "REVISING_PLAN"):
+        """The target as the interrupted worker left it, plus a job record
+        for that worker (``pre_state`` at revision 10, the unchanged HEAD)."""
+        managed_repo = _build_target(
+            self.tmp_root, phase=post_phase, governing_workflow_version=version, plan_revision=11,
+        )
+        root = managed_repo.root
+        head = fixtures.current_head(root)
+        fixtures.write_plan_manifest(root, "wi-1", manifest_revision, generation_head=head)
+        fixtures.write_review_feedback(
+            root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(status="REVISE", reviewed_base_commit=head),
+        )
+        extra = {"worker_outcome": "SUCCESS"} if status == job.STATUS_COMPLETED else {}
+        record = _record(
+            job_id="j1", target_repo=str(root), status=status, phase=from_phase,
+            governing_workflow_version=version, command="/apply-plan-review wi-1",
+            pre_state_overrides={"target_head": head, "plan_revision": 10}, **extra,
+        )
+        _write_record(self.runtime_root, record)
+        return managed_repo
+
+    def test_completed_record_becomes_failed_never_finished(self) -> None:
+        managed_repo = self._seed(status=job.STATUS_COMPLETED)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FAILED)
+        self.assertFalse(results[0]["transition_verified"])
+        ev = results[0]["reconciliation_evidence"]
+        self.assertEqual(ev["reason"], "postcondition_not_satisfied")
+        self.assertEqual(ev["postcondition_detail"], _PARTIAL_APPLY_DETAIL)
+        self.assertEqual(_read_record(self.runtime_root, "j1")["status"], job.STATUS_FAILED)
+
+    def test_launched_record_is_unreconcilable_never_finished_or_interrupted(self) -> None:
+        managed_repo = self._seed(status=job.STATUS_LAUNCHED)
+        with _NeverLaunches(), self.assertRaises(UnreconcilableJobError) as ctx:
+            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        ev = ctx.exception.evidence
+        self.assertEqual(ev["pre_phase"], "REVISING_PLAN")
+        self.assertEqual(ev["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(ev["postcondition_detail"], _PARTIAL_APPLY_DETAIL)
+        self.assertEqual(_read_record(self.runtime_root, "j1")["status"], job.STATUS_LAUNCHED)
+
+    def test_launched_positive_control_revision_11_manifest_finishes(self) -> None:
+        managed_repo = self._seed(status=job.STATUS_LAUNCHED, manifest_revision=11)
+        with _NeverLaunches():
+            results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+        self.assertTrue(results[0]["transition_verified"])
+
+    def test_1_self_loop_unchanged_phase_and_head_is_interrupted_then_retries_apply(self) -> None:
+        """The `"1"` item whose worker published revision 11 but left the
+        revision-10 bundle and the round's feedback: row 3's
+        ``INTERRUPTED``, and the next decision is the automatic
+        ``/apply-plan-review`` retry, not a gate ("Scope judgments")."""
+        from controller import evidence, target_state
+
+        managed_repo = self._seed(
+            status=job.STATUS_LAUNCHED, version="1",
+            post_phase="AWAITING_EXTERNAL_PLAN_REVIEW", from_phase="AWAITING_EXTERNAL_PLAN_REVIEW",
+        )
+        with _NeverLaunches():
+            results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+
+        snapshot = target_state.read(managed_repo)
+        work_item = target_state.select_work_item(snapshot, work_item_id=None)
+        decision = evidence.decide(managed_repo, snapshot, work_item)
+        self.assertIsNone(decision.gate)
+        self.assertTrue(decision.automatic)
+        self.assertEqual(decision.action.command, "/apply-plan-review wi-1")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,7 @@ of this checkpoint's scope and is not asserted here.
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import sys
 import unittest
@@ -565,6 +566,138 @@ class DefaultPermissionModeTest(unittest.TestCase):
     def test_worker_argv_carries_an_explicit_mode_unchanged(self) -> None:
         argv = self._observed_argv("explicit", permission_mode="acceptEdits")
         self.assertEqual(self._mode_in(argv), "acceptEdits")
+
+
+# ---------------------------------------------------------------------------
+# Worker-execution hardening CP5 -- the observed partial `/apply-plan-review`
+# (RepFlow): state published at plan revision 11, bundle still at 10.
+# ---------------------------------------------------------------------------
+
+
+def seed_partial_apply_plan_review(tmp_root: Path):
+    """A `"2.2"` work item at ``REVISING_PLAN``, ``plan_revision: 10``, whose
+    current plan bundle is a complete revision-10 bundle (manifest plus the
+    three author files) and whose feedback is the `REVISE` round that
+    selected ``/apply-plan-review``."""
+    managed_repo = _build_target(
+        tmp_root, phase="REVISING_PLAN", governing_workflow_version="2.2", plan_revision=10,
+    )
+    root = managed_repo.root
+    head = fixtures.current_head(root)
+    fixtures.write_plan_manifest(root, "wi-1", 10, generation_head=head)
+    current = root / ".ai-review" / "wi-1" / "current"
+    (current / "REVIEW_REQUEST.md").write_text("stage: plan\nreview_content_id: " + "c" * 64 + "\n")
+    (current / "TEST_RESULTS.md").write_text(f"stage: plan (revision 10)\nhead: {head}\n")
+    (current / "CONTEXT_FILES.txt").write_text("docs/ai-workflow/REVIEW_PROTOCOL.md\n")
+    fixtures.write_review_feedback(
+        root, ".ai-review/wi-1/feedback",
+        fixtures.build_review_feedback_text(
+            status="REVISE", reviewer_role="LOCAL_MODEL_PLAN_REVIEW",
+            reviewed_base_commit=head,
+        ),
+    )
+    return managed_repo
+
+
+def partial_apply_plan_review_worker_env(root: Path, *, manifest_revision: int | None = None) -> dict[str, str]:
+    """A fake worker performing only the state half of `/apply-plan-review`
+    step 5 (``publish_plan_revision``: ``plan_revision: 11``, phase
+    ``AWAITING_LOCAL_PLAN_REVIEW``) and leaving the bundle untouched -- or,
+    with ``manifest_revision``, also writing a manifest at that revision
+    (the positive control)."""
+    state_path = root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+    state = json.loads(state_path.read_text())
+    entry = state["work_items"]["wi-1"]
+    entry.update(phase="AWAITING_LOCAL_PLAN_REVIEW", plan_revision=11, state_revision=entry["state_revision"] + 1)
+    writes = [{"path": str(state_path), "text": json.dumps(state, indent=2) + "\n"}]
+    if manifest_revision is not None:
+        writes.append({
+            "path": str(root / ".ai-review" / "wi-1" / "current" / "MANIFEST.md"),
+            "text": fixtures.build_plan_manifest_text("wi-1", manifest_revision),
+        })
+    return {"FAKE_CLAUDE_WRITES": json.dumps(writes)}
+
+
+#: The ``postcondition_detail`` naming both revisions of the observed case.
+PARTIAL_APPLY_DETAIL = "manifest plan_revision 10 != state plan_revision 11"
+
+
+class PartialApplyPlanReviewExecuteTest(unittest.TestCase):
+    """The RepFlow case through ``execute_step``: ``FAILED`` (never
+    ``FINISHED``) on the worker's own job, then ``GATE_BLOCKED`` with CP4's
+    recovery steps -- and no worker -- on the next one."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir(parents=True)
+        self.managed_repo = seed_partial_apply_plan_review(self.tmp_root)
+        self.root = self.managed_repo.root
+
+    def _execute(self, env: dict[str, str]):
+        with unittest.mock.patch.dict("os.environ", env):
+            return job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+
+    def test_state_published_bundle_stale_fails_with_postcondition_not_satisfied(self) -> None:
+        record = self._execute(partial_apply_plan_review_worker_env(self.root))
+        self.assertEqual(record["selected_action"]["command"], "/apply-plan-review wi-1")
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["reason"], "postcondition_not_satisfied")
+        self.assertEqual(ev["postcondition_detail"], PARTIAL_APPLY_DETAIL)
+
+    def test_next_step_gates_with_the_recovery_steps_and_launches_no_worker(self) -> None:
+        self._execute(partial_apply_plan_review_worker_env(self.root))
+        never = self.tmp_root / "never-exists"
+        with _WriteSpy() as spy:
+            record = self._execute({"FAKE_CLAUDE_REQUIRE_FILE": str(never), "FAKE_CLAUDE_WRITES": ""})
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertNotIn(job.STATUS_LAUNCHED, spy.statuses())
+        self.assertNotIn("worker", record)
+        self.assertNotIn("worker_outcome", record)
+        self.assertEqual(record["observed_phase_before"], "AWAITING_LOCAL_PLAN_REVIEW")
+
+        gate = record["human_gate_pending"]
+        base_commit = json.loads(
+            (self.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_text()
+        )["work_items"]["wi-1"]["base_commit"]
+        steps = gate["safe_resume_command"].split("; ")
+        self.assertEqual([s.split(" ", 1)[0] for s in steps], ["1.", "2.", "3."])
+        self.assertTrue(steps[0].startswith("1. refresh .ai-review/wi-1/current/REVIEW_REQUEST.md"))
+        self.assertIn("compute_review_content_id_plan_stage_for_work_item", steps[0])
+        self.assertTrue(steps[1].startswith("2. refresh .ai-review/wi-1/current/TEST_RESULTS.md"))
+        self.assertIn("`stage: plan (revision 11)`", steps[1])
+        self.assertTrue(steps[2].startswith(f"3. run scripts/prepare-ai-review.sh {base_commit} plan wi-1"))
+        self.assertNotEqual(gate["safe_resume_command"], "scripts/prepare-ai-review.sh <base-sha> plan wi-1")
+        self.assertIn(PARTIAL_APPLY_DETAIL, gate["what_is_required"])
+        self.assertIn(" ".join(steps), gate["what_is_required"])
+
+    def test_positive_control_revision_11_manifest_finishes(self) -> None:
+        record = self._execute(partial_apply_plan_review_worker_env(self.root, manifest_revision=11))
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertTrue(record["transition_verified"])
+
+    def test_pre_fix_table_without_the_postcondition_verifies_the_same_scenario(self) -> None:
+        """The durable pre-fix demonstration: strip only this row's
+        postcondition and the identical run is ``FINISHED`` -- so the
+        postcondition is what makes the scenario above fail closed."""
+        key = ("REVISING_PLAN", "2.2", "/apply-plan-review")
+        row = job._EXPECTED_OUTCOMES_BY_KEY[key]
+        self.assertIsNotNone(row.postcondition)
+        pre_fix = dataclasses.replace(row, postcondition=None, postcondition_phases=frozenset())
+        with unittest.mock.patch.dict(job._EXPECTED_OUTCOMES_BY_KEY, {key: pre_fix}):
+            record = self._execute(partial_apply_plan_review_worker_env(self.root))
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertIs(job._EXPECTED_OUTCOMES_BY_KEY[key], row)
 
 
 if __name__ == "__main__":

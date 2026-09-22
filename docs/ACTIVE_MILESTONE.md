@@ -75,4 +75,22 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
   assertion weakened). Verified: `python3 -m unittest tests.test_evidence
   tests.test_job_validation tests.test_decision` -- 191 tests OK. Full Controller suite:
   503 tests OK, 2 live tests skipped. With the gate disabled, 10 of the new tests fail.
-- CP5-CP6 -- not started.
+- **CP5 -- complete.** The RepFlow case (a `"2.2"` item at `REVISING_PLAN`, revision 10,
+  whose `/apply-plan-review` worker publishes revision 11 but leaves the revision-10
+  bundle) is pinned end to end. `tests/test_job.py::PartialApplyPlanReviewExecuteTest`:
+  `execute_step` -> `FAILED` / `postcondition_not_satisfied` naming revisions 10 and 11;
+  the next `execute_step` -> `GATE_BLOCKED` with no worker launched (a fake worker that
+  would fail on `FAKE_CLAUDE_REQUIRE_FILE`), and its gate carries CP4's three `refresh`/`run`
+  steps with revision 11 and the seeded `base_commit`; a positive control with a revision-11
+  manifest -> `FINISHED`; the pre-fix demonstration (`patch.dict` over
+  `_EXPECTED_OUTCOMES_BY_KEY` with only this row's postcondition stripped) -> `FINISHED`.
+  `tests/test_resume.py::PartialApplyPlanReviewResumeTest`: `COMPLETED` -> `FAILED`;
+  `LAUNCHED` -> `UnreconcilableJobError` with `postcondition_detail`, with a revision-11
+  positive control -> `FINISHED`; the `"1"` self-loop with unchanged phase and HEAD ->
+  `INTERRUPTED`, then the next decision is the automatic `/apply-plan-review wi-1`.
+  `tests/test_cli.py::PartialApplyPlanReviewCliTest`: `controller step` exits
+  `EXIT_WORKER_FAILED` (30), then `explain` renders the recovery steps. Verified:
+  `python3 -m unittest tests.test_job tests.test_resume tests.test_cli` -- 120 tests OK. Full
+  Controller suite: 512 tests OK, 2 live tests skipped. With `plan_bundle_coherence` forced
+  coherent, the 5 fail-closed tests fail. The 4 controls still pass.
+- CP6 -- not started.

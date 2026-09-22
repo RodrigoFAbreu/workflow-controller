@@ -390,7 +390,9 @@ class PairKeyedReachabilityTest(unittest.TestCase):
         return root, fixtures.build_target_managed_repository(root)
 
     def _assert_reachable(self, work_item, expected_command_token: str) -> None:
-        _root, managed_repo = self._managed_repo()
+        root, managed_repo = self._managed_repo()
+        if work_item.phase in evidence.PLAN_BUNDLE_CONSUMING_PHASES:
+            fixtures.write_plan_manifest(root, work_item.work_item_id, work_item.plan_revision)
         result = evidence.decide(managed_repo, snapshot=None, work_item=work_item)
         self.assertTrue(result.automatic, result.reason)
         self.assertEqual(result.action.command.split()[0], expected_command_token)
@@ -412,7 +414,7 @@ class PairKeyedReachabilityTest(unittest.TestCase):
         head = fixtures.current_head(root)
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=head),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=head),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",
@@ -438,7 +440,7 @@ class PairKeyedReachabilityTest(unittest.TestCase):
         head = fixtures.current_head(root)
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=head),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=head),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",
@@ -476,7 +478,7 @@ class PairKeyedReachabilityTest(unittest.TestCase):
         head = fixtures.current_head(root)
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=head),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=head),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",
@@ -589,7 +591,7 @@ class TransitionVerificationTest(unittest.TestCase):
         root = managed_repo.root
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(root)),
         )
         feedback_path = root / ".ai-review" / "wi-1" / "feedback" / "REVIEW_FEEDBACK.md"
         feedback_text = fixtures.build_review_feedback_text(
@@ -613,7 +615,7 @@ class TransitionVerificationTest(unittest.TestCase):
         root = managed_repo.root
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(root)),
         )
         record = _run(managed_repo, self.runtime_root)
         self.assertEqual(record["status"], job.STATUS_FAILED)
@@ -662,7 +664,7 @@ class TransitionVerificationTest(unittest.TestCase):
         head = fixtures.current_head(root)
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=head),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=head),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",
@@ -707,6 +709,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
         )
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1)
         env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
         record = _run(managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["status"], job.STATUS_FINISHED)
@@ -717,6 +720,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
         )
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1)
         env = _write_state_phase_env(managed_repo.root, "wi-1", "REVISING_PLAN")
         record = _run(managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["status"], job.STATUS_FINISHED)
@@ -737,7 +741,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         root = managed_repo.root
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(root)),
         )
         feedback_path = root / ".ai-review" / "wi-1" / "feedback" / "REVIEW_FEEDBACK.md"
         feedback_text = fixtures.build_review_feedback_text(
@@ -762,7 +766,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         root = managed_repo.root
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(root)),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",
@@ -795,7 +799,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         root = managed_repo.root
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(root)),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",

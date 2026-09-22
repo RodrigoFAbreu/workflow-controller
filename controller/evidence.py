@@ -34,8 +34,9 @@ This module imports nothing from ``controller.managed_repo`` or
 does not: both sit later in the dependency order. ``managed_repo``,
 ``snapshot`` and ``work_item`` are accepted as plain, duck-typed objects;
 this module only ever reads ``managed_repo.root`` and, off ``work_item``:
-``work_item_id``, ``phase``, ``base_commit``, ``implementation_revision``,
-``plan_review_stages``, ``incomplete_children``, ``registry_complete``.
+``work_item_id``, ``phase``, ``base_commit``, ``plan_revision``,
+``implementation_revision``, ``plan_review_stages``, ``incomplete_children``,
+``registry_complete``.
 
 **What this module does not do.** It never recomputes ``review_content_id``
 or ``bundle_id`` -- ``controller.target_state`` already declares that
@@ -1007,12 +1008,172 @@ def _regeneration_command(phase: str, work_item_id: str) -> str:
     return f"scripts/prepare-ai-review.sh <base-sha> post-fix {work_item_id}"
 
 
+# ---------------------------------------------------------------------------
+# The stale-plan-bundle gate (worker-execution hardening, CP4).
+# ---------------------------------------------------------------------------
+
+#: The two phases whose automatic actions (``/review-plan``,
+#: ``/record-manual-plan-review``) consume the current plan bundle, and so
+#: must never run against one that belongs to an earlier plan revision.
+#: ``AWAITING_EXTERNAL_PLAN_REVIEW`` (``"1"``) is deliberately absent: its
+#: stale-bundle recovery is re-running ``/apply-plan-review``, which its
+#: own handler already selects.
+PLAN_BUNDLE_CONSUMING_PHASES: frozenset[str] = frozenset({
+    "AWAITING_LOCAL_PLAN_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+})
+
+#: The plan-stage author-written bundle files. The generator only ever
+#: creates them as empty stubs (``prepare-ai-review.sh``), so a missing one
+#: must be *written*, not refreshed.
+_PLAN_AUTHOR_FILES: tuple[str, ...] = ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt")
+
+
+def _newest_quarantine_dir(root: Path, work_item_id: str) -> Path | None:
+    """The newest ``.ai-review/<id>/current.rejected-*/`` directory a
+    completed withdrawal left behind, root-relative, or ``None``."""
+    parent = _scoped_root(work_item_id)
+    try:
+        candidates = [
+            (path.stat().st_mtime_ns, path.name, path)
+            for path in (root / parent).glob("current.rejected-*") if path.is_dir()
+        ]
+    except OSError:
+        return None
+    if not candidates:
+        return None
+    return parent / max(candidates)[2].name
+
+
+def _plan_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
+    """The ordered human steps that actually regenerate a coherent plan
+    bundle after ``publish_plan_revision`` ran but bundle generation did
+    not complete. The bare generator is not enough on its own: its closing
+    checks refuse or withdraw a bundle whose ``REVIEW_REQUEST.md``/
+    ``TEST_RESULTS.md`` still describe the previous round, and no Workflow
+    command performs these refreshes once the item is past
+    ``REVISING_PLAN``. Controller performs none of the steps itself.
+
+    When ``<bundle_dir>`` or any author file is absent (a completed
+    withdrawal, or a first-round generator failure) the steps say "write"
+    rather than "refresh", name the protocol's request format, and a step
+    0 restoring ``CONTEXT_FILES.txt`` is prepended -- naming the newest
+    quarantine directory, when one exists, as the previous round's source."""
+    work_item_id = work_item.work_item_id
+    bundle_dir = resolve_bundle_dir(root, work_item_id, phase="AWAITING_LOCAL_PLAN_REVIEW")
+    base_commit = work_item.base_commit or "<base-sha>"
+    revision = work_item.plan_revision if work_item.plan_revision is not None else "<plan_revision>"
+    absent = not (root / bundle_dir).is_dir() or any(
+        not (root / bundle_dir / name).is_file() for name in _PLAN_AUTHOR_FILES
+    )
+    verb = "write" if absent else "refresh"
+    shape = " (in REVIEW_PROTOCOL.md's \"Review request format\" shape)" if absent else ""
+
+    steps: list[str] = []
+    if absent:
+        quarantine = _newest_quarantine_dir(root, work_item_id)
+        source = (
+            f", restoring the previous round's author files from {quarantine}/"
+            if quarantine is not None else ""
+        )
+        steps.append(f"write {bundle_dir / 'CONTEXT_FILES.txt'}{source}")
+    steps.append(
+        f"{verb} {bundle_dir / 'REVIEW_REQUEST.md'}{shape} so that it states "
+        f"`review_content_id: <hex>` with the value from "
+        f"workflow_fingerprint.compute_review_content_id_plan_stage_for_work_item(repo_root, "
+        f"\"{work_item_id}\")[0] (REVIEW_PROTOCOL.md's \"Computing `review_content_id`\" "
+        "entry point), never the previous round's value"
+    )
+    steps.append(
+        f"{verb} {bundle_dir / 'TEST_RESULTS.md'}{shape} so that its labelled lines read "
+        f"`stage: plan (revision {revision})` and `head: <output of git rev-parse HEAD>`"
+    )
+    steps.append(
+        f"run scripts/prepare-ai-review.sh {base_commit} plan {work_item_id} -- if this "
+        "refuses at preflight (base_commit, plan_revision mirror vs. registry, or plan-stage "
+        "metadata such as the plan document's (Revision N) marker), its message names the "
+        "upstream plan/registry artifact to repair first"
+    )
+    first = 0 if absent else 1
+    return tuple(f"{number}. {step}" for number, step in enumerate(steps, start=first))
+
+
+def _stale_plan_bundle_gate(root: Path, work_item: Any, detail: str) -> Decision:
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
+    steps = _plan_bundle_recovery_steps(root, work_item)
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"plan bundle is not coherent with the work item's state: {detail}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"the current plan bundle does not belong to this work item's current plan "
+                f"revision ({detail}); before any plan review runs, perform in order: "
+                + " ".join(steps)
+            ),
+            artifact_path=str(bundle_dir / "MANIFEST.md"),
+            safe_resume_command="; ".join(steps),
+        ),
+        declined=False,
+        reason=f"{phase}: the current plan bundle is stale or withdrawn ({detail}), checked "
+               "ahead of the per-phase handlers",
+    )
+
+
+def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Decision:
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    marker_path = resolve_rejected_marker_path(root, work_item_id)
+    if phase in PLAN_BUNDLE_CONSUMING_PHASES:
+        # A marker survives only an in-progress or partially failed
+        # withdrawal, after which the author files may be stale or gone
+        # exactly as in the stale-bundle gate -- so the bare generator is
+        # never the advertised recovery here either.
+        steps = _plan_bundle_recovery_steps(root, work_item)
+        clear = (
+            f"resolve the withdrawal the REJECTED marker at {marker_path} records ({detail}) "
+            "-- its named failed step and surviving paths are cleared first; a successful "
+            "generation then clears the marker itself"
+        )
+        what_is_required = (
+            f"the current bundle was withdrawn ({detail}); {clear}; then, before any plan "
+            "review runs, perform in order: " + " ".join(steps)
+        )
+        safe_resume_command = "; ".join((clear,) + steps)
+    else:
+        regen = _regeneration_command(phase, work_item_id)
+        what_is_required = (
+            f"the current bundle was withdrawn ({detail}); regenerate it with "
+            f"{regen} before any further command runs"
+        )
+        safe_resume_command = regen
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"REJECTED marker present at {marker_path}: {detail}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=what_is_required,
+            artifact_path=str(marker_path), safe_resume_command=safe_resume_command,
+        ),
+        declined=False,
+        reason=f"{phase}: a REJECTED marker is present at {marker_path}, checked "
+               "ahead of every other row",
+    )
+
+
 def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     """CP4B's real entry point: checks the withdrawn-bundle outcome ahead
     of every other row for a bundle-bearing phase, then either resolves a
     phase this module owns evidence for, or falls through unchanged to
     :func:`controller.decision.decide` for every phase whose mapping needs
-    no ``.ai-review/`` read at all."""
+    no ``.ai-review/`` read at all. At the two plan-bundle-consuming
+    phases, a plan bundle incoherent with the state's ``plan_revision``
+    (:func:`plan_bundle_coherence`) gates next -- still ahead of the
+    per-phase handlers, so ahead of the local-review BLOCK gate."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     root = managed_repo.root
@@ -1020,24 +1181,12 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     if phase in BUNDLE_BEARING_PHASES:
         rejected, detail = rejected_marker_detail(root, work_item_id)
         if rejected:
-            marker_path = resolve_rejected_marker_path(root, work_item_id)
-            regen = _regeneration_command(phase, work_item_id)
-            return Decision(
-                observed_phase=phase,
-                evidence=(f"REJECTED marker present at {marker_path}: {detail}",),
-                action=None, automatic=False,
-                gate=HumanGate(
-                    repository=str(root), work_item_id=work_item_id, phase=phase,
-                    what_is_required=(
-                        f"the current bundle was withdrawn ({detail}); regenerate it with "
-                        f"{regen} before any further command runs"
-                    ),
-                    artifact_path=str(marker_path), safe_resume_command=regen,
-                ),
-                declined=False,
-                reason=f"{phase}: a REJECTED marker is present at {marker_path}, checked "
-                       "ahead of every other row",
-            )
+            return _rejected_marker_gate(root, work_item, detail)
+
+    if phase in PLAN_BUNDLE_CONSUMING_PHASES:
+        coherent, detail = plan_bundle_coherence(root, work_item_id, work_item.plan_revision)
+        if not coherent:
+            return _stale_plan_bundle_gate(root, work_item, detail)
 
     handler = _EVIDENCE_HANDLERS.get(phase)
     if handler is not None:

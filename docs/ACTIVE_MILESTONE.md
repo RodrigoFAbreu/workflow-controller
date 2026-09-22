@@ -58,4 +58,21 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
   tests.test_job tests.test_job_validation tests.test_resume` OK, and the full Controller
   suite (`python3 -m unittest discover -s tests -t .`) -- 490 tests OK, 2 live tests
   skipped. With postconditions stripped from the table, 22 of the new assertions fail.
-- CP4-CP6 -- not started.
+- **CP4 -- complete.** `evidence.decide` now gates at `AWAITING_LOCAL_PLAN_REVIEW`/
+  `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` when `plan_bundle_coherence` fails, after the
+  `REJECTED`-marker check and ahead of the per-phase handlers (so ahead of the local BLOCK
+  gate). The gate's `what_is_required`/`safe_resume_command` carry
+  `_plan_bundle_recovery_steps`: refresh `REVIEW_REQUEST.md` (`review_content_id` from
+  `compute_review_content_id_plan_stage_for_work_item`), refresh `TEST_RESULTS.md`
+  (`stage: plan (revision N)`, `head:`), then `prepare-ai-review.sh <base_commit> plan <id>`
+  with the preflight-refusal clause. When `current/` or any author file is absent, the steps
+  say "write", name the "Review request format", and a step 0 writes `CONTEXT_FILES.txt`
+  from the newest `current.rejected-*` quarantine, if one exists. At those two phases the
+  `REJECTED` gate keeps its precedence but now advertises the marker detail plus the same
+  steps. Elsewhere it is unchanged. `AWAITING_EXTERNAL_PLAN_REVIEW` (`"1"`) and
+  implementation-stage phases are not gated. Existing fixtures at the gated phases now write
+  coherent plan manifests (`tests/test_evidence.py`, `tests/test_job_validation.py`; no
+  assertion weakened). Verified: `python3 -m unittest tests.test_evidence
+  tests.test_job_validation tests.test_decision` -- 191 tests OK. Full Controller suite:
+  503 tests OK, 2 live tests skipped. With the gate disabled, 10 of the new tests fail.
+- CP5-CP6 -- not started.

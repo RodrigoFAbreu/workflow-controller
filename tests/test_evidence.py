@@ -344,6 +344,7 @@ class AwaitingLocalPlanReviewTest(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = _make_target(Path(self._tmp.name))
         fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
         self.managed_repo = fixtures.build_target_managed_repository(self.root)
 
     def _decide(self):
@@ -402,7 +403,7 @@ class AwaitingManualExternalPlanReviewTest(unittest.TestCase):
         self.head = fixtures.current_head(self.root)
         fixtures.write_manifest(
             self.root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=self.head),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=self.head),
         )
         self.managed_repo = fixtures.build_target_managed_repository(self.root)
 
@@ -530,7 +531,7 @@ class AwaitingManualExternalPlanReviewTest(unittest.TestCase):
     def test_stale_generation_head_is_hard(self) -> None:
         fixtures.write_manifest(
             self.root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head="9" * 40),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head="9" * 40),
         )
         fixtures.write_review_feedback(
             self.root, ".ai-review/wi-1/feedback",
@@ -569,7 +570,7 @@ class AwaitingExternalPlanReviewV1Test(unittest.TestCase):
         self.head = fixtures.current_head(self.root)
         fixtures.write_manifest(
             self.root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=self.head),
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=self.head),
         )
         self.managed_repo = fixtures.build_target_managed_repository(self.root)
 
@@ -911,6 +912,221 @@ class AwaitingFunctionalReviewTest(unittest.TestCase):
         self.assertIsNone(result.action)
         self.assertIn("wi-1-remediation-1", result.gate.what_is_required)
         self.assertNotEqual(result.gate.safe_resume_command, "/accept-milestone wi-1")
+
+
+
+class StalePlanBundleGateTest(unittest.TestCase):
+    """CP4 (worker-execution hardening): at the two phases whose automatic
+    actions consume the current plan bundle, a bundle incoherent with the
+    state's ``plan_revision`` gates -- and the gate advertises the ordered,
+    executable recovery, never the bare generator."""
+
+    BASE = "a" * 40
+    GATED = ("AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+    BUNDLE = Path(".ai-review/wi-1/current")
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, phase: str, plan_revision: int = 2, **overrides):
+        work_item = fixtures.build_work_item_view(
+            phase=phase, governing_workflow_version="2.2", plan_revision=plan_revision,
+            base_commit=self.BASE, **overrides,
+        )
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def _write_author_files(self) -> None:
+        for name in ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt"):
+            (self.root / self.BUNDLE / name).write_text("previous round\n")
+
+    def _assert_in_order(self, text: str, needles: list[str]) -> None:
+        position = -1
+        for needle in needles:
+            found = text.find(needle, position + 1)
+            self.assertGreater(found, position, f"{needle!r} missing or out of order in {text!r}")
+            position = found
+
+    def _assert_executable_recovery(self, gate, phase: str) -> None:
+        needles = [
+            "REVIEW_REQUEST.md", "review_content_id",
+            "compute_review_content_id_plan_stage_for_work_item",
+            "TEST_RESULTS.md", "stage: plan (revision 2)", "head:",
+            f"scripts/prepare-ai-review.sh {self.BASE} plan wi-1",
+            "refuses at preflight",
+        ]
+        self._assert_in_order(gate.safe_resume_command, needles)
+        self._assert_in_order(gate.what_is_required, needles)
+        self.assertNotEqual(gate.safe_resume_command, evidence._regeneration_command(phase, "wi-1"))
+
+    def test_stale_manifest_gates_at_both_phases(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self._write_author_files()
+        for phase in self.GATED:
+            with self.subTest(phase=phase):
+                result = self._decide(phase)
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                self.assertFalse(result.declined)
+                self.assertEqual(result.gate.artifact_path, str(self.BUNDLE / "MANIFEST.md"))
+                self.assertIn("manifest plan_revision 1 != state plan_revision 2",
+                              result.gate.what_is_required)
+                self._assert_executable_recovery(result.gate, phase)
+                self.assertIn("refresh", result.gate.safe_resume_command)
+                self.assertNotIn("0. ", result.gate.safe_resume_command)
+                self.assertNotIn("Review request format", result.gate.safe_resume_command)
+
+    def test_coherent_manifest_leaves_the_decision_unchanged(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 2)
+        result = self._decide("AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertTrue(result.automatic)
+        self.assertEqual(result.action.command, "/review-plan wi-1")
+        result = self._decide("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.assertEqual(result.gate.safe_resume_command, "/record-manual-plan-review wi-1")
+
+    def test_staleness_is_checked_ahead_of_the_local_block_gate(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(status="BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW"),
+        )
+        result = self._decide("AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(result.gate.artifact_path, str(self.BUNDLE / "MANIFEST.md"))
+
+    def test_rejected_marker_wins_over_staleness(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")
+        for phase in self.GATED:
+            with self.subTest(phase=phase):
+                result = self._decide(phase)
+                self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/REJECTED")))
+
+    def test_rejected_marker_gate_at_the_gated_phases_carries_the_recovery_steps(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self._write_author_files()
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")
+        for phase in self.GATED:
+            with self.subTest(phase=phase):
+                gate = self._decide(phase).gate
+                self.assertIn("step rename failed", gate.safe_resume_command)
+                self.assertIn("step rename failed", gate.what_is_required)
+                self._assert_executable_recovery(gate, phase)
+
+    def test_rejected_marker_gate_elsewhere_is_unchanged(self) -> None:
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")
+        for phase, version in (
+            ("AWAITING_EXTERNAL_PLAN_REVIEW", "1"),
+            ("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "2.1"),
+        ):
+            with self.subTest(phase=phase):
+                work_item = fixtures.build_work_item_view(
+                    phase=phase, governing_workflow_version=version, base_commit=self.BASE,
+                )
+                result = evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+                regen = evidence._regeneration_command(phase, "wi-1")
+                self.assertEqual(result.gate.safe_resume_command, regen)
+                self.assertEqual(
+                    result.gate.what_is_required,
+                    f"the current bundle was withdrawn (step rename failed); regenerate it with "
+                    f"{regen} before any further command runs",
+                )
+                self.assertEqual(
+                    result.evidence,
+                    ("REJECTED marker present at .ai-review/wi-1/REJECTED: step rename failed",),
+                )
+
+    def test_withdrawn_bundle_asks_for_writes_and_names_the_quarantine(self) -> None:
+        quarantine = self.root / ".ai-review" / "wi-1" / "current.rejected-0123abcd"
+        quarantine.mkdir(parents=True)
+        (quarantine / "REVIEW_REQUEST.md").write_text("previous round\n")
+        for phase in self.GATED:
+            with self.subTest(phase=phase):
+                gate = self._decide(phase).gate
+                self.assertIn("is absent (withdrawn or never generated)", gate.what_is_required)
+                self._assert_executable_recovery(gate, phase)
+                for text in (gate.safe_resume_command, gate.what_is_required):
+                    self._assert_in_order(text, [
+                        f"0. write {self.BUNDLE / 'CONTEXT_FILES.txt'}",
+                        ".ai-review/wi-1/current.rejected-0123abcd/",
+                        f"1. write {self.BUNDLE / 'REVIEW_REQUEST.md'}",
+                        "Review request format",
+                        f"2. write {self.BUNDLE / 'TEST_RESULTS.md'}",
+                        "3. run scripts/prepare-ai-review.sh",
+                    ])
+                    self.assertNotIn("refresh", text)
+
+    def test_newest_quarantine_directory_is_named(self) -> None:
+        import os
+
+        older = self.root / ".ai-review" / "wi-1" / "current.rejected-zzzz"
+        newer = self.root / ".ai-review" / "wi-1" / "current.rejected-aaaa"
+        older.mkdir(parents=True)
+        newer.mkdir()
+        os.utime(older, ns=(1_000_000_000, 1_000_000_000))
+        os.utime(newer, ns=(2_000_000_000, 2_000_000_000))
+        gate = self._decide("AWAITING_LOCAL_PLAN_REVIEW").gate
+        self.assertIn("current.rejected-aaaa/", gate.safe_resume_command)
+        self.assertNotIn("current.rejected-zzzz", gate.safe_resume_command)
+
+    def test_first_round_shape_with_absent_author_files_asks_for_writes(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        for phase in self.GATED:
+            with self.subTest(phase=phase):
+                gate = self._decide(phase).gate
+                self._assert_executable_recovery(gate, phase)
+                self._assert_in_order(gate.safe_resume_command, [
+                    f"0. write {self.BUNDLE / 'CONTEXT_FILES.txt'}",
+                    f"1. write {self.BUNDLE / 'REVIEW_REQUEST.md'}", "Review request format",
+                    f"2. write {self.BUNDLE / 'TEST_RESULTS.md'}",
+                ])
+                self.assertNotIn("current.rejected-", gate.safe_resume_command)
+
+    def test_one_missing_author_file_is_enough_for_the_write_variant(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self._write_author_files()
+        (self.root / self.BUNDLE / "CONTEXT_FILES.txt").unlink()
+        gate = self._decide("AWAITING_LOCAL_PLAN_REVIEW").gate
+        self.assertTrue(gate.safe_resume_command.startswith("0. write "))
+
+    def test_base_commit_placeholder_when_the_state_carries_none(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        work_item = fixtures.build_work_item_view(
+            phase="AWAITING_LOCAL_PLAN_REVIEW", plan_revision=2, base_commit=None,
+        )
+        gate = evidence.decide(self.managed_repo, snapshot=None, work_item=work_item).gate
+        self.assertIn("scripts/prepare-ai-review.sh <base-sha> plan wi-1", gate.safe_resume_command)
+
+    def test_external_plan_review_v1_is_not_gated_on_staleness(self) -> None:
+        fixtures.write_plan_manifest(
+            self.root, "wi-1", 1, generation_head=fixtures.current_head(self.root),
+        )
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(
+                status="REVISE", reviewed_bundle_id="b" * 64, reviewed_base_commit=self.BASE,
+            ),
+        )
+        work_item = fixtures.build_work_item_view(
+            phase="AWAITING_EXTERNAL_PLAN_REVIEW", governing_workflow_version="1",
+            plan_revision=2, base_commit=self.BASE,
+        )
+        result = evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+        self.assertTrue(result.automatic, result.reason)
+        self.assertEqual(result.action.command, "/apply-plan-review wi-1")
+
+    def test_implementation_stage_phases_are_not_gated_on_staleness(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        for phase in ("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+                      "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"):
+            with self.subTest(phase=phase):
+                result = self._decide(phase, implementation_revision=1)
+                self.assertFalse(any("plan bundle is not coherent" in line for line in result.evidence))
+                self.assertNotIn("before any plan review runs", result.reason)
+                if result.gate is not None:
+                    self.assertNotIn("before any plan review runs", result.gate.what_is_required)
 
 
 if __name__ == "__main__":

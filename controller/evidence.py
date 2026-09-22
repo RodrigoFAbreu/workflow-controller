@@ -211,21 +211,72 @@ def rejected_marker_detail(root: Path, work_item_id: str) -> tuple[bool, str | N
 # ---------------------------------------------------------------------------
 
 
+_MANIFEST_LABELS: tuple[str, ...] = (
+    "bundle_id", "generation_head", "stage", "work_item_id", "plan_revision",
+)
+
+
 def read_manifest_fields(root: Path, bundle_dir: Path) -> dict[str, Any]:
     """Read ``<bundle_dir>/MANIFEST.md``'s ``bundle_id:``/
-    ``generation_head:`` labelled lines. ``_exists`` is ``False`` when the
+    ``generation_head:``/``stage:``/``work_item_id:``/``plan_revision:``
+    labelled lines (the last three are the generator's own
+    ``render_manifest_md`` identity lines, read by
+    :func:`plan_bundle_coherence`). ``_exists`` is ``False`` when the
     file itself cannot be read -- distinct from the file existing but
-    lacking one of the two lines, which each read as ``None``."""
+    lacking one of the lines, which each read as ``None``."""
     path = root / bundle_dir / "MANIFEST.md"
     try:
         text = path.read_text()
     except OSError:
-        return {"bundle_id": None, "generation_head": None, "_exists": False}
+        return {**{label: None for label in _MANIFEST_LABELS}, "_exists": False}
     return {
-        "bundle_id": read_labelled_line(text, "bundle_id:"),
-        "generation_head": read_labelled_line(text, "generation_head:"),
+        **{label: read_labelled_line(text, f"{label}:") for label in _MANIFEST_LABELS},
         "_exists": True,
     }
+
+
+_DECIMAL_RE = re.compile(r"[0-9]+")
+
+
+def plan_bundle_coherence(root: Path, work_item_id: str, plan_revision: int | None) -> tuple[bool, str]:
+    """``(coherent, detail)``: the single definition of "the current plan
+    bundle belongs to this work item's current plan revision", shared by
+    reconciliation postconditions and the decision-time plan-review gate.
+
+    Coherent iff the plan-stage ``<bundle_dir>``
+    (``.ai-review/<work_item_id>/current/``) has a readable ``MANIFEST.md``
+    declaring ``stage: plan``, ``work_item_id`` equal to ``work_item_id``,
+    a ``bundle_id``, and a ``plan_revision`` that is a plain decimal
+    integer equal to ``plan_revision``. The check is revision-level only:
+    it never recomputes ``review_content_id``/``bundle_id``, which stays
+    Workflow's own fingerprinting authority. A state-side
+    ``plan_revision`` of ``None`` is incoherent (fail closed). ``detail``
+    names the first failing clause and the value observed there."""
+    if plan_revision is None or isinstance(plan_revision, bool) or not isinstance(plan_revision, int):
+        return False, f"state plan_revision is {plan_revision!r}, not an integer"
+    bundle_dir = resolve_bundle_dir(root, work_item_id, phase="AWAITING_LOCAL_PLAN_REVIEW")
+    if not (root / bundle_dir).is_dir():
+        return False, f"plan bundle directory {bundle_dir} is absent (withdrawn or never generated)"
+    manifest = read_manifest_fields(root, bundle_dir)
+    if not manifest["_exists"]:
+        return False, f"{bundle_dir / 'MANIFEST.md'} is missing or unreadable"
+    if manifest["stage"] != "plan":
+        return False, f"manifest stage {manifest['stage']!r} != 'plan'"
+    if manifest["work_item_id"] != work_item_id:
+        return False, f"manifest work_item_id {manifest['work_item_id']!r} != {work_item_id!r}"
+    if not manifest["bundle_id"]:
+        return False, "manifest bundle_id is missing"
+    observed = manifest["plan_revision"]
+    if observed is None:
+        return False, "manifest plan_revision is missing"
+    if not _DECIMAL_RE.fullmatch(observed):
+        return False, f"manifest plan_revision {observed!r} is not an integer"
+    if int(observed) != plan_revision:
+        return False, f"manifest plan_revision {int(observed)} != state plan_revision {plan_revision}"
+    return True, (
+        f"manifest at {bundle_dir / 'MANIFEST.md'} matches work_item_id {work_item_id!r}, "
+        f"plan_revision {plan_revision}"
+    )
 
 
 def read_feedback_fields(root: Path, feedback_dir: Path) -> dict[str, str | None] | None:

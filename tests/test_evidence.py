@@ -188,6 +188,117 @@ class RejectedMarkerTest(unittest.TestCase):
                           Path(".ai-review/REJECTED"))
 
 
+class ReadManifestFieldsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def test_identity_lines_are_read_additively(self) -> None:
+        fixtures.write_manifest(self.root, "b", fixtures.build_manifest_text(
+            bundle_id="b" * 64, generation_head="0" * 40,
+            stage="plan", work_item_id="wi-1", plan_revision=3,
+        ))
+        self.assertEqual(evidence.read_manifest_fields(self.root, Path("b")), {
+            "bundle_id": "b" * 64, "generation_head": "0" * 40,
+            "stage": "plan", "work_item_id": "wi-1", "plan_revision": "3", "_exists": True,
+        })
+
+    def test_absent_lines_and_absent_file_read_as_none(self) -> None:
+        fixtures.write_manifest(self.root, "b", fixtures.build_manifest_text())
+        fields = evidence.read_manifest_fields(self.root, Path("b"))
+        self.assertTrue(fields["_exists"])
+        self.assertIsNone(fields["stage"])
+        self.assertIsNone(fields["work_item_id"])
+        self.assertIsNone(fields["plan_revision"])
+        missing = evidence.read_manifest_fields(self.root, Path("nowhere"))
+        self.assertFalse(missing["_exists"])
+        self.assertTrue(all(missing[k] is None for k in missing if k != "_exists"))
+
+    def test_fixture_output_is_unchanged_when_identity_lines_are_not_requested(self) -> None:
+        self.assertEqual(
+            fixtures.build_manifest_text(bundle_id="c" * 64, generation_head="1" * 40),
+            "# Bundle manifest\n\nbundle_id: " + "c" * 64 + "\ngeneration_head: " + "1" * 40
+            + "\n\n## Protected paths\n\n",
+        )
+
+
+class PlanBundleCoherenceTest(unittest.TestCase):
+    """CP2: the single plan-bundle coherence reader -- one test per
+    clause, each failing independently against an otherwise coherent
+    manifest."""
+
+    BUNDLE = Path(".ai-review/wi-1/current")
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def _write(self, **overrides) -> None:
+        fields = {"bundle_id": "b" * 64, "stage": "plan", "work_item_id": "wi-1", "plan_revision": 11}
+        fields.update(overrides)
+        fixtures.write_manifest(self.root, self.BUNDLE, fixtures.build_manifest_text(**fields))
+
+    def _assert_incoherent(self, plan_revision, *fragments: str) -> None:
+        coherent, detail = evidence.plan_bundle_coherence(self.root, "wi-1", plan_revision)
+        self.assertFalse(coherent)
+        for fragment in fragments:
+            self.assertIn(fragment, detail)
+
+    def test_coherent_manifest(self) -> None:
+        self._write()
+        coherent, detail = evidence.plan_bundle_coherence(self.root, "wi-1", 11)
+        self.assertTrue(coherent)
+        self.assertIn("plan_revision 11", detail)
+
+    def test_missing_manifest(self) -> None:
+        (self.root / self.BUNDLE).mkdir(parents=True)
+        self._assert_incoherent(11, "MANIFEST.md", "missing or unreadable")
+
+    def test_withdrawn_current_directory(self) -> None:
+        """A completed withdrawal renames ``current/`` away and removes its
+        own marker, leaving only the quarantine sibling behind."""
+        self._write()
+        (self.root / self.BUNDLE).rename(self.root / ".ai-review/wi-1/current.rejected-abc")
+        self._assert_incoherent(11, "absent", "withdrawn")
+
+    def test_implementation_stage_manifest(self) -> None:
+        self._write(stage="implementation")
+        self._assert_incoherent(11, "manifest stage 'implementation'")
+
+    def test_missing_stage_line(self) -> None:
+        self._write(stage=None)
+        self._assert_incoherent(11, "manifest stage None")
+
+    def test_wrong_work_item_id(self) -> None:
+        self._write(work_item_id="wi-2")
+        self._assert_incoherent(11, "manifest work_item_id 'wi-2'")
+
+    def test_missing_plan_revision(self) -> None:
+        self._write(plan_revision=None)
+        self._assert_incoherent(11, "plan_revision is missing")
+
+    def test_non_integer_plan_revision(self) -> None:
+        for bad in ("abc", "+11", "1_1", "11.0"):
+            with self.subTest(value=bad):
+                self._write(plan_revision=bad)
+                self._assert_incoherent(11, repr(bad), "not an integer")
+
+    def test_stale_plan_revision(self) -> None:
+        """The observed RepFlow shape: state at revision 11, bundle at 10."""
+        self._write(plan_revision=10)
+        self._assert_incoherent(11, "manifest plan_revision 10 != state plan_revision 11")
+
+    def test_missing_bundle_id(self) -> None:
+        self._write(bundle_id=None)
+        self._assert_incoherent(11, "bundle_id is missing")
+
+    def test_state_plan_revision_none_fails_closed(self) -> None:
+        self._write()
+        self._assert_incoherent(None, "state plan_revision is None")
+
+
 class DecideWithdrawnBundleTest(unittest.TestCase):
     """A REJECTED marker yields the withdrawn-bundle outcome ahead of
     every other row."""

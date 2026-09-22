@@ -1,31 +1,46 @@
 # Active Milestone
 
-## Status
+## Milestone
 
-**Complete.** `workflow-controller-protocol-2-2-compatibility` reached
-`MILESTONE_COMPLETE` on 2026-09-22: functional review (checklist evidence
-commit `080024f6af032017abdffcf418594fd9f6886d4b`) returned **PASS** with
-no blocking findings (no findings filed at
-`.ai-review/feedback/FUNCTIONAL_REVIEW.md` for this round), all six
-registry checkpoints (`CP1`-`CP6`) are `COMPLETE`, and the user accepted
-the milestone via `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json`
-is the ground-truth record of this transition (`state_revision` 29);
-`active_work_item_id` is now `null`. No `docs/ROADMAP.md` exists in this
-repository to update. The full milestone narrative (goal, checkpoint
-progress, self-review, functional-review checklist) is archived verbatim
-at `docs/milestones/completed/workflow-controller-protocol-2-2-compatibility.md`.
+`workflow-controller-worker-execution-hardening`
 
-This milestone's own deliverables that remain live in the tree, unmoved
-(see the archive file's own preface for why):
-`docs/ai-workflow/CONTROLLER_GEN1_PROTOCOL_2_2_COMPAT_PLAN.md` and its
-registry/mapping files (still the paths
-`docs/ai-workflow/WORKFLOW_STATE.json`'s own work-item entry declares).
-The two previously completed work items and their own archived narratives
-(`docs/milestones/completed/workflow-controller-generation-1.md`,
-`docs/milestones/completed/workflow-controller-gen1-correctness-hardening.md`)
-remain unaffected.
+## Goal
 
-**Next action:** none queued. There is no roadmap-defined next milestone
-in this repository. When new work is scoped, run `/milestone-plan` for it
--- it will create a fresh `work_items` entry and claim
-`active_work_item_id`, ready for `PLANNING`.
+Harden Workflow Controller worker execution and reconciliation based on defects observed during real RepFlow dogfooding.
+
+### Scope
+
+1. **Default lifecycle-worker permission mode**
+   - Controller lifecycle workers currently default/effectively launch with `--permission-mode acceptEdits`.
+   - This allowed file edits but denied required Bash/Python Workflow operations in non-interactive workers.
+   - Change the default lifecycle-worker permission mode to `auto`.
+   - Preserve explicit user-supplied `--permission-mode` overrides.
+   - Add regression coverage proving the default worker invocation uses `--permission-mode auto` and explicit overrides remain respected.
+
+2. **Post-worker reconciliation correctness**
+   - Controller can currently mark a job `FINISHED` when the expected Workflow phase transition is observed even if required durable postconditions are incomplete.
+   - RepFlow dogfooding reproduced `/apply-plan-review` transitioning `REVISING_PLAN -> AWAITING_LOCAL_PLAN_REVIEW` while bundle regeneration failed, leaving Workflow state at plan revision 11 with the current review bundle still at revision 10.
+   - Strengthen reconciliation so phase transition alone is not sufficient for successful completion where the action requires coherent review/bundle artifacts.
+   - Use authoritative Workflow state/artifacts and existing invariants rather than trusting worker prose or duplicating Workflow business logic unnecessarily.
+   - Add regression coverage reproducing the observed partial `/apply-plan-review` case.
+
+### Out of Scope
+
+- Workflow Manager bootstrap classification of `.workflow-manager/installation.json`.
+- Changes to Workflow `/apply-plan-review` publication ordering.
+- Agent/harness portability or multi-harness runtime work.
+
+## Checkpoint progress
+
+Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
+`docs/ai-workflow/CONTROLLER_WORKER_EXECUTION_HARDENING_PLAN.md` (revision 3, approved).
+
+- **CP1 -- complete** (commit `5c14e70`). `job.DEFAULT_PERMISSION_MODE` is `auto`;
+  explicit `--permission-mode` values pass through unchanged.
+- **CP2 -- complete.** `evidence.read_manifest_fields` additively reads the manifest's
+  `stage:`/`work_item_id:`/`plan_revision:` lines; `evidence.plan_bundle_coherence(root,
+  work_item_id, plan_revision)` is the single revision-level coherence reader CP3/CP4 will
+  call. `tests/fixtures.build_manifest_text` gained the matching optional lines
+  (byte-identical output when omitted). Verified: `python3 -m unittest tests.test_evidence
+  tests.test_job_validation tests.test_resume` -- 162 tests OK.
+- CP3-CP6 -- not started.

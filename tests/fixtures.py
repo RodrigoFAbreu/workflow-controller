@@ -396,10 +396,20 @@ def write_manifest(root: Path, bundle_dir_rel: Path | str, text: str) -> Path:
 
 def build_manifest_text(
     *, bundle_id: str | None = "b" * 64, generation_head: str | None = "0" * 40,
+    stage: str | None = None, work_item_id: str | None = None, plan_revision: int | str | None = None,
 ) -> str:
+    """A ``MANIFEST.md`` in the generator's own line order. ``stage``/
+    ``work_item_id``/``plan_revision`` default to ``None`` (line omitted),
+    so every caller that does not pass them gets byte-identical output."""
     lines = ["# Bundle manifest", ""]
+    if stage is not None:
+        lines.append(f"stage: {stage}")
     if bundle_id is not None:
         lines.append(f"bundle_id: {bundle_id}")
+    if work_item_id is not None:
+        lines.append(f"work_item_id: {work_item_id}")
+    if plan_revision is not None:
+        lines.append(f"plan_revision: {plan_revision}")
     if generation_head is not None:
         lines.append(f"generation_head: {generation_head}")
     lines.append("")

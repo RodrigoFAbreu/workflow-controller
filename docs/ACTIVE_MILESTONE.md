@@ -43,4 +43,19 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
   call. `tests/fixtures.build_manifest_text` gained the matching optional lines
   (byte-identical output when omitted). Verified: `python3 -m unittest tests.test_evidence
   tests.test_job_validation tests.test_resume` -- 162 tests OK.
-- CP3-CP6 -- not started.
+- **CP3 -- complete.** `ExpectedOutcome` gained a `postcondition`/`postcondition_phases`
+  column; `_postcondition_plan_bundle_coherent` (row 7 resolves the single new work item
+  key) calls `evidence.plan_bundle_coherence` and is attached to all seven
+  plan-bundle-producing rows. One shared helper, `_row_clauses_failure`, now evaluates the
+  phase/predicate/postcondition clauses for both `_verify_transition` (`execute_step`) and
+  `_row2_verified` (resume): a failed postcondition is `FAILED` /
+  `postcondition_not_satisfied` with `postcondition_detail` on execute and `COMPLETED`
+  resume; on `LAUNCHED` resume, moved state raises `UnreconcilableJobError` carrying
+  `postcondition_detail`, unchanged phase+HEAD stays `INTERRUPTED`.
+  `property_table_violations` checks the column's shape (with negative tests).
+  `tests/fake_claude.py` gained `FAKE_CLAUDE_WRITES`; 11 existing `FINISHED` fixtures now
+  also write the coherent manifest (no assertion weakened). Verified: `python3 -m unittest
+  tests.test_job tests.test_job_validation tests.test_resume` OK, and the full Controller
+  suite (`python3 -m unittest discover -s tests -t .`) -- 490 tests OK, 2 live tests
+  skipped. With postconditions stripped from the table, 22 of the new assertions fail.
+- CP4-CP6 -- not started.

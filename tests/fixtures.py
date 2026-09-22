@@ -418,6 +418,38 @@ def build_manifest_text(
     return "\n".join(lines) + "\n"
 
 
+def build_plan_manifest_text(
+    work_item_id: str, plan_revision: int | str, *, bundle_id: str = "b" * 64,
+    generation_head: str | None = "0" * 40,
+) -> str:
+    """A plan-stage ``MANIFEST.md`` coherent with ``work_item_id`` at
+    ``plan_revision`` (``evidence.plan_bundle_coherence``)."""
+    return build_manifest_text(
+        bundle_id=bundle_id, generation_head=generation_head, stage="plan",
+        work_item_id=work_item_id, plan_revision=plan_revision,
+    )
+
+
+def write_plan_manifest(root: Path, work_item_id: str, plan_revision: int | str, **kwargs) -> Path:
+    """Write a coherent plan-stage ``MANIFEST.md`` at the work item's own
+    plan-stage bundle dir (``.ai-review/<id>/current/``)."""
+    return write_manifest(
+        root, f".ai-review/{work_item_id}/current",
+        build_plan_manifest_text(work_item_id, plan_revision, **kwargs),
+    )
+
+
+def fake_worker_plan_manifest_env(root: Path, work_item_id: str, plan_revision: int | str) -> dict[str, str]:
+    """``FAKE_CLAUDE_WRITES`` env override making the fake worker itself
+    write a coherent plan-stage ``MANIFEST.md`` -- the artifact every
+    plan-bundle-producing ``ExpectedOutcome`` row's postcondition requires
+    (`workflow-controller-worker-execution-hardening` CP3)."""
+    path = root / ".ai-review" / work_item_id / "current" / "MANIFEST.md"
+    return {"FAKE_CLAUDE_WRITES": json.dumps([
+        {"path": str(path), "text": build_plan_manifest_text(work_item_id, plan_revision)},
+    ])}
+
+
 def write_rejected_marker(root: Path, work_item_id: str, *, scoped: bool, detail: str = "withdrawn") -> Path:
     """Write the ``REJECTED`` marker at its scoped or flat path."""
     base = (root / ".ai-review" / work_item_id) if scoped else (root / ".ai-review")

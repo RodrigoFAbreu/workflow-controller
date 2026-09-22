@@ -313,8 +313,10 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
 # phase CP4's dispatch table is keyed on), and the four `"2.2"` plan-review
 # rows the `workflow-controller-protocol-2-2-compatibility` milestone's CP1
 # added. `to_any_of` alone drives step 4's `expected_transition`; the
-# `predicate`/`predicate_inputs`/`writer_calls` columns are step 8's own
-# verification concern.
+# `predicate`/`predicate_inputs`/`writer_calls` columns -- and the
+# `postcondition`/`postcondition_phases` pair
+# `workflow-controller-worker-execution-hardening`'s CP3 added -- are step
+# 8's own verification concern.
 # ---------------------------------------------------------------------------
 
 WRITER_KIND_COMPLETION = "COMPLETION"
@@ -378,6 +380,14 @@ class WriterCall:
 
 PredicateFn = Callable[[Path, str, dict], bool]
 
+#: A row's artifact postcondition (`workflow-controller-worker-execution-
+#: hardening` CP3): ``(root, work_item_id, pre_state) -> (satisfied,
+#: detail)``, evaluated fresh against disk. Distinct from
+#: :data:`PredicateFn`: a predicate disambiguates a self-loop, a
+#: postcondition asserts that the durable artifact a completion phase
+#: promises is actually coherent, whichever way the phase was reached.
+PostconditionFn = Callable[[Path, "str | None", dict], tuple[bool, str]]
+
 
 @dataclasses.dataclass(frozen=True)
 class ExpectedOutcome:
@@ -397,6 +407,12 @@ class ExpectedOutcome:
     predicate: PredicateFn | None
     predicate_inputs: frozenset[str]
     writer_calls: tuple[WriterCall, ...]
+    #: Evaluated only when the observed post-phase is a member of
+    #: ``postcondition_phases`` (non-empty iff ``postcondition`` is set,
+    #: and a subset of ``to_any_of`` -- :func:`property_table_violations`).
+    #: Not subject to the predicate's own "iff self-loop" rule.
+    postcondition: PostconditionFn | None = None
+    postcondition_phases: frozenset[str] = frozenset()
 
 
 def _row_branch(outcome: ExpectedOutcome) -> BranchSpec | None:
@@ -484,6 +500,33 @@ def _predicate_row7_new_work_item_created(root: Path, work_item_id: Any, pre_sta
     return len(post_keys - pre_keys) == 1
 
 
+def _postcondition_plan_bundle_coherent(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """The plan-bundle-producing rows' postcondition (CP3): the current
+    plan bundle's ``MANIFEST.md`` belongs to the work item's fresh
+    post-state ``plan_revision`` -- :func:`controller.evidence.
+    plan_bundle_coherence`, the single definition the decision-time gate
+    shares. Row 7's ``work_item_id`` is ``None``; the id is then the
+    single new key against ``pre_state["pre_work_item_keys"]``, exactly
+    as :func:`_observe_post_phase` resolves it (no single new key -> not
+    satisfied). Any read failure is "not satisfied", never a false
+    verification."""
+    try:
+        post_snapshot = target_state.read(SimpleNamespace(root=root))
+    except ControllerError as exc:
+        return False, f"post-state could not be read: {exc}"
+    if work_item_id is None:
+        new_keys = frozenset(post_snapshot.work_items) - frozenset(pre_state.get("pre_work_item_keys") or ())
+        if len(new_keys) != 1:
+            return False, f"expected exactly one new work item, found {len(new_keys)}: {sorted(new_keys)!r}"
+        work_item_id = next(iter(new_keys))
+    post_work_item = post_snapshot.work_items.get(work_item_id)
+    if post_work_item is None:
+        return False, f"work item {work_item_id!r} is absent from the post-state"
+    return evidence.plan_bundle_coherence(root, work_item_id, post_work_item.plan_revision)
+
+
 #: The eleven rows, transcribed verbatim from the plan's own table (CP6B,
 #: "An `ExpectedOutcome` is data, not prose"; row 7 added by revision 63's
 #: B2, the `NoWorkItemYet` bootstrap; the four `"2.2"` plan-review rows
@@ -501,6 +544,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
                        WRITER_KIND_COMPLETION),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
     ),
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="2.2", action="/milestone-plan",
@@ -510,6 +555,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
                        WRITER_KIND_COMPLETION),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
     ),
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="1", action="/milestone-plan",
@@ -519,6 +566,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
                        WRITER_KIND_COMPLETION),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
     ),
     ExpectedOutcome(
         from_phase="AWAITING_LOCAL_PLAN_REVIEW", governing_version="2.1", action="/review-plan",
@@ -574,6 +623,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
                        WRITER_KIND_COMPLETION, branch=BranchSpec(kind="step", label="5"),
                        match_text="prepare-ai-review.sh"),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
     ),
     ExpectedOutcome(
         from_phase="REVISING_PLAN", governing_version="2.1", action="/apply-plan-review",
@@ -583,6 +634,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("transition_to_awaiting_local_plan_review", "apply-plan-review.md",
                        "apply-plan-review.md:145", WRITER_KIND_COMPLETION),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
     ),
     ExpectedOutcome(
         from_phase="REVISING_PLAN", governing_version="2.2", action="/apply-plan-review",
@@ -592,6 +645,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("transition_to_awaiting_local_plan_review", "apply-plan-review.md",
                        "apply-plan-review.md:145", WRITER_KIND_COMPLETION),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
     ),
     ExpectedOutcome(
         from_phase=NO_PHASE, governing_version=None, action="/milestone-plan",
@@ -602,6 +657,8 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:208",
                        WRITER_KIND_COMPLETION),
         ),
+        postcondition=_postcondition_plan_bundle_coherent,
+        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
     ),
 )
 
@@ -648,6 +705,11 @@ def property_table_violations(
       at runtime to read this same, already total, value back, and it
       raises for both shapes alike -- so both must be reported as data
       here rather than one of them reaching execution unvalidated).
+    - **Postcondition shape** (`workflow-controller-worker-execution-
+      hardening` CP3): ``postcondition_phases`` is non-empty iff
+      ``postcondition`` is set, and is a subset of ``to_any_of``. A
+      postcondition is not subject to the predicate's "iff self-loop"
+      rule.
     - **Completion** (property 6): asserted narratively against the
       plan's own per-row analysis and exercised by
       ``tests/test_job_validation.py``'s reachability cases (calling
@@ -714,6 +776,18 @@ def property_table_violations(
         elif len(row_branches) > 1:
             violations.append(
                 f"{key!r}: writer_calls disagree on branch: {sorted(row_branches, key=repr)!r}"
+            )
+
+        if (eo.postcondition is None) != (not eo.postcondition_phases):
+            violations.append(
+                f"{key!r}: postcondition_phases must be non-empty iff postcondition is set "
+                f"(postcondition={eo.postcondition!r}, postcondition_phases="
+                f"{sorted(eo.postcondition_phases)!r})"
+            )
+        stray_phases = eo.postcondition_phases - eo.to_any_of
+        if stray_phases:
+            violations.append(
+                f"{key!r}: postcondition_phases {sorted(stray_phases)!r} are not members of to_any_of"
             )
     return violations
 
@@ -934,55 +1008,95 @@ _VERIFYING_WORKER_OUTCOMES = frozenset({"SUCCESS", "INTERRUPTED"})
 _INCOMPLETE_EFFECT_PHASES: dict[tuple[str, str | None, str], frozenset[str]] = {}
 
 
+def _row_clauses_failure(
+    *, root: Path, work_item_id: str | None, outcome: ExpectedOutcome, pre_state: dict,
+    observed_phase_after: "str | Any",
+) -> tuple[str | None, str | None]:
+    """The phase, predicate and postcondition clauses of step 8's rule,
+    stated once and shared by :func:`_verify_transition` (``execute_step``)
+    and :func:`_row2_verified` (``resume``) -- so the two sites cannot
+    drift again (the drift :func:`_row2_verified`'s own docstring records,
+    revision 64's `B1`). The worker-outcome clause stays with each caller,
+    since only they know whether an outcome exists at all.
+
+    Returns ``(reason, postcondition_detail)``: ``reason`` is ``None`` when
+    every clause holds, else ``"phase_not_in_to_any_of"``,
+    ``"predicate_not_satisfied"`` or ``"postcondition_not_satisfied"``;
+    ``postcondition_detail`` is the postcondition's own detail string, set
+    only for the last reason.
+
+    The predicate clause's trigger is keyed on the row's own
+    :func:`_row_branch` (revision 65's repair, round 64's `B1`): evaluated
+    **unconditionally** when that branch is ``None`` (row 7's own
+    unconditional writer -- its ``from_phase`` is
+    :data:`~controller.decision.NO_PHASE`, which can never equal a real
+    observed phase), exactly when ``observed_phase_after`` equals
+    ``outcome.from_phase`` otherwise (rows 3 and 5, whose writer runs on
+    one named branch only). The postcondition clause (CP3) is evaluated
+    after both, exactly when ``observed_phase_after`` is in
+    ``outcome.postcondition_phases``."""
+    if observed_phase_after not in outcome.to_any_of:
+        return "phase_not_in_to_any_of", None
+    branch = _row_branch(outcome)
+    if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
+        if not outcome.predicate(root, work_item_id, pre_state):
+            return "predicate_not_satisfied", None
+    if outcome.postcondition is not None and observed_phase_after in outcome.postcondition_phases:
+        satisfied, detail = outcome.postcondition(root, work_item_id, pre_state)
+        if not satisfied:
+            return "postcondition_not_satisfied", detail
+    return None, None
+
+
 def _verify_transition(
     *, root: Path, work_item_id: str | None, outcome: ExpectedOutcome, pre_state: dict,
     observed_phase_after: "str | Any", worker_outcome: str,
 ) -> tuple[bool, dict]:
     """Step 8's rule, stated in full and in one form (CP6B): ``verified``
     is ``True`` iff ``worker_outcome`` is ``SUCCESS`` or ``INTERRUPTED``,
-    **and** ``observed_phase_after`` is in ``outcome.to_any_of``, **and**,
-    whenever the row carries an evidence predicate at all, that predicate
-    holds against ``pre_state`` (evaluated fresh, against disk -- never
-    against process memory, since `resume` has none).
-
-    The predicate clause's own trigger is revision 65's repair (round
-    64's `B1`), keyed on the row's own :func:`_row_branch` rather than on
-    raw phase equality: evaluated **unconditionally** when that branch is
-    ``None`` (row 7's own unconditional writer -- its ``from_phase`` is
-    :data:`~controller.decision.NO_PHASE`, which can never equal a real
-    observed phase, so a phase-equality trigger would leave row 7's own
-    predicate declared and never run); evaluated exactly when
-    ``observed_phase_after`` equals ``outcome.from_phase`` otherwise (the
-    row's writer runs on one named branch only, and that branch's own
-    step is a true no-op, so the branch's own observation *is* the
-    from-phase observation -- rows 3 and 5). Returns ``(verified,
-    evidence)`` -- ``evidence`` is a ``TransitionNotObservedError``-shaped
-    dict naming the expected set, the observed phase, the worker outcome,
-    and (for the predicate clause) that the predicate did not hold; ``{}``
-    when ``verified``."""
-    outcome_ok = worker_outcome in _VERIFYING_WORKER_OUTCOMES
-    predicate_checked = False
-    predicate_ok = True
-    if outcome_ok and observed_phase_after in outcome.to_any_of:
-        branch = _row_branch(outcome)
-        if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
-            predicate_checked = True
-            predicate_ok = outcome.predicate(root, work_item_id, pre_state)
-        if predicate_ok:
+    **and** every clause of :func:`_row_clauses_failure` holds --
+    ``observed_phase_after`` is in ``outcome.to_any_of``, the row's
+    evidence predicate (if any, on its own trigger) holds, and the row's
+    postcondition (if any, on ``postcondition_phases``) is satisfied --
+    each evaluated fresh, against disk, never against process memory,
+    since `resume` has none. Returns ``(verified, evidence)`` --
+    ``evidence`` is a ``TransitionNotObservedError``-shaped dict naming the
+    expected set, the observed phase, the worker outcome, the failing
+    clause as ``reason``, and (for the postcondition clause) its
+    ``postcondition_detail``; ``{}`` when ``verified``."""
+    if worker_outcome not in _VERIFYING_WORKER_OUTCOMES:
+        reason, postcondition_detail = "worker_outcome", None
+    else:
+        reason, postcondition_detail = _row_clauses_failure(
+            root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
+            observed_phase_after=observed_phase_after,
+        )
+        if reason is None:
             return True, {}
-
-    reason = (
-        "worker_outcome" if not outcome_ok
-        else "predicate_not_satisfied" if predicate_checked
-        else "phase_not_in_to_any_of"
+    return False, _transition_not_observed_evidence(
+        outcome=outcome, observed_phase_after=phase_to_wire(observed_phase_after),
+        worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
     )
-    return False, {
+
+
+def _transition_not_observed_evidence(
+    *, outcome: ExpectedOutcome, observed_phase_after: str, worker_outcome: str | None,
+    reason: str, postcondition_detail: str | None,
+) -> dict:
+    """The ``TransitionNotObservedError``-shaped ``reconciliation_evidence``
+    both ``execute_step`` and ``_reconcile_completed`` write. The optional
+    ``postcondition_detail`` key is present only on the
+    ``postcondition_not_satisfied`` reason."""
+    evidence_dict = {
         "code": "TransitionNotObservedError",
         "reason": reason,
         "expected_to_any_of": sorted(outcome.to_any_of),
-        "observed_phase": phase_to_wire(observed_phase_after),
+        "observed_phase": observed_phase_after,
         "worker_outcome": worker_outcome,
     }
+    if postcondition_detail is not None:
+        evidence_dict["postcondition_detail"] = postcondition_detail
+    return evidence_dict
 
 
 # ---------------------------------------------------------------------------
@@ -1298,7 +1412,7 @@ def _expected_outcome_for_record(record: JobRecord) -> ExpectedOutcome:
 def _row2_verified(
     *, root: Path, work_item_id: str, outcome: ExpectedOutcome, pre_state: dict,
     observed_phase_after: str, status: str, worker_outcome: str | None,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str | None]:
     """The ``LAUNCHED``/``COMPLETED`` row's own rule (CP7's reconciliation
     table, row 2), stated once for both statuses. ``worker_outcome`` is
     guaranteed absent on a ``LAUNCHED`` record and present-and-known on a
@@ -1306,37 +1420,30 @@ def _row2_verified(
     case 3), so a ``LAUNCHED`` record's own clause-1 is always satisfied --
     stated positively here rather than by substituting a fake outcome
     value, so the returned reason (when unverified) never misreports what
-    the record actually carried. Returns ``(verified, reason)`` --
-    ``reason`` is one of ``"worker_outcome"``, ``"phase_not_in_to_any_of"``
-    or ``"predicate_not_satisfied"``, ``None`` when verified.
+    the record actually carried. Returns ``(verified, reason,
+    postcondition_detail)`` -- ``reason`` is one of ``"worker_outcome"``,
+    ``"phase_not_in_to_any_of"``, ``"predicate_not_satisfied"`` or
+    ``"postcondition_not_satisfied"``, ``None`` when verified;
+    ``postcondition_detail`` is set only for the last.
 
-    The predicate clause's own trigger is keyed on the row's own
-    :func:`_row_branch` -- byte-identical to :func:`_verify_transition`'s
-    own rule (CP6B, step 8's revision-65/66 repair, round 64's `B1`): an
-    unconditional trigger when the branch is ``None`` (row 7's own
-    unconditional writer -- its ``from_phase`` is
-    :data:`~controller.decision.NO_PHASE`, which can never equal a real
-    observed phase, so a phase-equality trigger alone would leave row 7's
-    own predicate declared and never run on this path either), otherwise
-    exactly when ``observed_phase_after`` equals ``outcome.from_phase``
-    (rows 3 and 5, whose writer runs on one named branch only). This
-    function used to trigger on raw phase equality alone -- the exact
-    defect step 8's own repair fixed in `_verify_transition`, left
-    unrepaired here, which is what left row 7's predicate declared and
-    never evaluated on the resume path (revision 64's `B1`)."""
+    Every clause after the worker-outcome one is
+    :func:`_row_clauses_failure`, the helper :func:`_verify_transition`
+    also calls -- this function used to restate the predicate trigger
+    itself, on raw phase equality alone, which is what left row 7's
+    predicate declared and never evaluated on the resume path (revision
+    64's `B1`); sharing the helper is what keeps the two sites from
+    drifting again."""
     if status == STATUS_COMPLETED:
         outcome_ok = worker_outcome in _VERIFYING_WORKER_OUTCOMES
     else:
         outcome_ok = True  # STATUS_LAUNCHED, validated absent by case 3.
     if not outcome_ok:
-        return False, "worker_outcome"
-    if observed_phase_after not in outcome.to_any_of:
-        return False, "phase_not_in_to_any_of"
-    branch = _row_branch(outcome)
-    if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
-        if not outcome.predicate(root, work_item_id, pre_state):
-            return False, "predicate_not_satisfied"
-    return True, None
+        return False, "worker_outcome", None
+    reason, postcondition_detail = _row_clauses_failure(
+        root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
+        observed_phase_after=observed_phase_after,
+    )
+    return reason is None, reason, postcondition_detail
 
 
 def _reconcile_planned(record: JobRecord, *, runtime_root: Path) -> JobRecord:
@@ -1373,7 +1480,7 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     observed_phase_after_wire = phase_to_wire(observed_phase_after)
     observed_head = _current_head(root)
 
-    verified, _reason = _row2_verified(
+    verified, reason, postcondition_detail = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after, status=STATUS_LAUNCHED, worker_outcome=None,
     )
@@ -1394,16 +1501,23 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
         }
         return _persist(runtime_root, record["job_id"], reconciled)
 
-    raise UnreconcilableJobError(
+    unreconcilable_evidence = {
+        "job_id": record["job_id"], "work_item_id": work_item_id,
+        "pre_phase": pre_state.get("phase"), "observed_phase_after": observed_phase_after_wire,
+        "pre_target_head": pre_state.get("target_head"), "observed_target_head": observed_head,
+    }
+    message = (
         f"job {record['job_id']!r} for {work_item_id!r} cannot be reconciled: pre-phase "
         f"{pre_state.get('phase')!r} -> observed {observed_phase_after_wire!r}, pre-state target_head "
-        f"{pre_state.get('target_head')!r} -> observed {observed_head!r}",
-        evidence={
-            "job_id": record["job_id"], "work_item_id": work_item_id,
-            "pre_phase": pre_state.get("phase"), "observed_phase_after": observed_phase_after_wire,
-            "pre_target_head": pre_state.get("target_head"), "observed_target_head": observed_head,
-        },
+        f"{pre_state.get('target_head')!r} -> observed {observed_head!r}"
     )
+    # CP3: moved state that failed only its artifact postcondition says why
+    # it did not verify -- the one purpose `_row2_verified`'s reason is not
+    # discarded for here.
+    if reason == "postcondition_not_satisfied":
+        unreconcilable_evidence["postcondition_detail"] = postcondition_detail
+        message += f"; postcondition not satisfied: {postcondition_detail}"
+    raise UnreconcilableJobError(message, evidence=unreconcilable_evidence)
 
 
 def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
@@ -1422,7 +1536,7 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
     observed_phase_after = _observe_post_phase(managed_repo, work_item_id, pre_state)
     observed_phase_after_wire = phase_to_wire(observed_phase_after)
 
-    verified, reason = _row2_verified(
+    verified, reason, postcondition_detail = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after, status=STATUS_COMPLETED, worker_outcome=worker_outcome,
     )
@@ -1439,13 +1553,10 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         "status": STATUS_FAILED,
         "transition_verified": False,
         "observed_phase_after": observed_phase_after_wire,
-        "reconciliation_evidence": {
-            "code": "TransitionNotObservedError",
-            "reason": reason,
-            "expected_to_any_of": sorted(outcome.to_any_of),
-            "observed_phase": observed_phase_after_wire,
-            "worker_outcome": worker_outcome,
-        },
+        "reconciliation_evidence": _transition_not_observed_evidence(
+            outcome=outcome, observed_phase_after=observed_phase_after_wire,
+            worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
+        ),
         "reconciled_at": now,
         "updated_at": now,
     }

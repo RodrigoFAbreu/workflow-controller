@@ -251,6 +251,49 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
         for eo in job.EXPECTED_OUTCOMES:
             self.assertEqual(job._row_branch(eo), eo.writer_calls[0].branch)
 
+    def test_postcondition_without_postcondition_phases_fails(self) -> None:
+        """CP3's column shape: ``postcondition`` set with empty
+        ``postcondition_phases`` fails construction."""
+        eo = job.EXPECTED_OUTCOMES[0]
+        broken = dataclasses.replace(eo, postcondition_phases=frozenset())
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(any("non-empty iff postcondition is set" in v for v in violations), violations)
+
+    def test_postcondition_phases_without_postcondition_fails(self) -> None:
+        eo = job.EXPECTED_OUTCOMES[0]
+        broken = dataclasses.replace(eo, postcondition=None)
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(any("non-empty iff postcondition is set" in v for v in violations), violations)
+
+    def test_postcondition_phases_outside_to_any_of_fails(self) -> None:
+        eo = job.EXPECTED_OUTCOMES[0]
+        broken = dataclasses.replace(eo, postcondition_phases=frozenset({"REVISING_PLAN"}))
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(any("are not members of to_any_of" in v for v in violations), violations)
+
+    def test_postcondition_is_attached_to_exactly_the_plan_bundle_producing_rows(self) -> None:
+        """CP3's attachment list: every row whose action publishes a plan
+        revision and generates a plan bundle, on its plan-review-awaiting
+        destination -- and no `/review-plan`/`/record-manual-plan-review`
+        row (neither generates a bundle)."""
+        attached = {
+            (eo.from_phase, eo.governing_version, eo.action): eo.postcondition_phases
+            for eo in job.EXPECTED_OUTCOMES if eo.postcondition is not None
+        }
+        self.assertEqual(attached, {
+            ("PLANNING", "2.1", "/milestone-plan"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+            ("PLANNING", "2.2", "/milestone-plan"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+            ("PLANNING", "1", "/milestone-plan"): frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
+            ("AWAITING_EXTERNAL_PLAN_REVIEW", "1", "/apply-plan-review"):
+                frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
+            ("REVISING_PLAN", "2.1", "/apply-plan-review"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+            ("REVISING_PLAN", "2.2", "/apply-plan-review"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+            (job.NO_PHASE, None, "/milestone-plan"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        })
+        for eo in job.EXPECTED_OUTCOMES:
+            if eo.postcondition is not None:
+                self.assertIs(eo.postcondition, job._postcondition_plan_bundle_coherent)
+
     def test_record_completeness_negative_input_outside_pre_state_fields_fails(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         broken = dataclasses.replace(row3, predicate_inputs=frozenset({"not_a_real_field"}))
@@ -480,6 +523,7 @@ class TransitionVerificationTest(unittest.TestCase):
     def test_successful_worker_reaches_finished_with_exact_status_sequence(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
         env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        env.update(fixtures.fake_worker_plan_manifest_env(managed_repo.root, "wi-1", 1))
         with _WriteSpy() as spy:
             record = _run(managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["status"], job.STATUS_FINISHED)
@@ -526,6 +570,7 @@ class TransitionVerificationTest(unittest.TestCase):
     def test_interrupted_worker_with_completed_transition_is_verified(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
         env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        env.update(fixtures.fake_worker_plan_manifest_env(managed_repo.root, "wi-1", 1))
         env["FAKE_CLAUDE_SELF_TERM"] = "1"
         record = _run(managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["worker_outcome"], "INTERRUPTED")
@@ -586,7 +631,9 @@ class TransitionVerificationTest(unittest.TestCase):
         head = fixtures.current_head(root)
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
-            fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=head),
+            fixtures.build_manifest_text(
+                bundle_id="b" * 64, generation_head=head, stage="plan", work_item_id="wi-1", plan_revision=1,
+            ),
         )
         fixtures.write_review_feedback(
             root, ".ai-review/wi-1/feedback",
@@ -648,6 +695,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
     def test_row1_planning_reaches_awaiting_local_plan_review(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.2")
         env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        env.update(fixtures.fake_worker_plan_manifest_env(managed_repo.root, "wi-1", 1))
         with _WriteSpy() as spy:
             record = _run(managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["status"], job.STATUS_FINISHED)
@@ -768,6 +816,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
             self.tmp_root, phase="REVISING_PLAN", governing_workflow_version="2.2",
         )
         env = _write_state_phase_env(managed_repo.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        env.update(fixtures.fake_worker_plan_manifest_env(managed_repo.root, "wi-1", 1))
         record = _run(managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["status"], job.STATUS_FINISHED)
         self.assertTrue(record["transition_verified"])
@@ -844,6 +893,7 @@ class BootstrapRowSevenVerificationTest(unittest.TestCase):
 
     def test_exactly_one_new_work_item_verifies_and_reaches_finished(self) -> None:
         env = _write_new_work_items_env(self.root, "wi-new")
+        env.update(fixtures.fake_worker_plan_manifest_env(self.root, "wi-new", 1))
         record = _run(self.managed_repo, self.runtime_root, env_overrides=env)
         self.assertEqual(record["status"], job.STATUS_FINISHED)
         self.assertTrue(record["transition_verified"])
@@ -904,6 +954,185 @@ class IncompleteEffectPhaseTest(unittest.TestCase):
 
     def test_no_generation_1_row_declares_an_effect_only_phase(self) -> None:
         self.assertEqual(job._INCOMPLETE_EFFECT_PHASES, {})
+
+
+# ---------------------------------------------------------------------------
+# CP3 (`workflow-controller-worker-execution-hardening`) -- the plan-bundle
+# postcondition, end to end through `execute_step`, per row group.
+# ---------------------------------------------------------------------------
+
+
+#: One representative per postcondition-bearing row: ``(from_phase,
+#: governing_workflow_version, post_phase)``. Row 7 (`NO_PHASE`) is covered
+#: by :class:`PlanBundlePostconditionRowSevenTest` below.
+_POSTCONDITION_ROWS = (
+    ("PLANNING", "2.1", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("PLANNING", "2.2", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("PLANNING", "1", "AWAITING_EXTERNAL_PLAN_REVIEW"),
+    ("REVISING_PLAN", "2.1", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("REVISING_PLAN", "2.2", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("AWAITING_EXTERNAL_PLAN_REVIEW", "1", "AWAITING_EXTERNAL_PLAN_REVIEW"),
+)
+
+
+def _seed_postcondition_row(tmp_root: Path, from_phase: str, version: str):
+    """A target at ``from_phase`` whose current plan bundle is coherent
+    with its own ``plan_revision: 1`` -- plus, for the `"1"`
+    `/apply-plan-review` row, the `REVISE` feedback that selects it."""
+    managed_repo = _build_target(tmp_root, phase=from_phase, governing_workflow_version=version)
+    root = managed_repo.root
+    fixtures.write_plan_manifest(root, "wi-1", 1, generation_head=fixtures.current_head(root))
+    if from_phase == "AWAITING_EXTERNAL_PLAN_REVIEW":
+        fixtures.write_review_feedback(
+            root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(
+                status="REVISE", reviewed_bundle_id="b" * 64,
+                reviewed_base_commit=fixtures.current_head(root),
+            ),
+        )
+    return managed_repo
+
+
+def _publishing_worker_env(root: Path, from_phase: str, post_phase: str, *, manifest_revision: int | None):
+    """A fake worker that publishes ``plan_revision: 2`` at ``post_phase``
+    (the state half of the command) and, when ``manifest_revision`` is not
+    ``None``, writes a plan manifest at that revision (the generator half).
+    For the `"1"` `/apply-plan-review` row it also regenerates
+    ``CHANGED_FILES.txt`` so row 5's own digest predicate holds and the
+    postcondition is the only clause under test."""
+    state_path = root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+    state = json.loads(state_path.read_text())
+    state["work_items"]["wi-1"]["phase"] = post_phase
+    state["work_items"]["wi-1"]["plan_revision"] = 2
+    writes = [{"path": str(state_path), "text": json.dumps(state, indent=2) + "\n"}]
+    current = root / ".ai-review" / "wi-1" / "current"
+    if manifest_revision is not None:
+        writes.append({
+            "path": str(current / "MANIFEST.md"),
+            "text": fixtures.build_plan_manifest_text(
+                "wi-1", manifest_revision, generation_head=fixtures.current_head(root),
+            ),
+        })
+    if from_phase == "AWAITING_EXTERNAL_PLAN_REVIEW":
+        writes.append({"path": str(current / "CHANGED_FILES.txt"), "text": "generated: round 2\nREADME.md\n"})
+    return {"FAKE_CLAUDE_WRITES": json.dumps(writes)}
+
+
+class PlanBundlePostconditionExecuteTest(unittest.TestCase):
+    """`execute_step` per postcondition-bearing row: ``FINISHED`` when the
+    worker leaves a plan bundle coherent with the published revision,
+    ``FAILED`` (``postcondition_not_satisfied``, naming both revisions)
+    when the bundle is still the previous revision's."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+
+    def _execute(self, name: str, from_phase: str, version: str, post_phase: str, manifest_revision):
+        managed_repo = _seed_postcondition_row(self.tmp_root / name, from_phase, version)
+        runtime_root = self.tmp_root / name / "runtime"
+        runtime_root.mkdir(parents=True)
+        env = _publishing_worker_env(
+            managed_repo.root, from_phase, post_phase, manifest_revision=manifest_revision,
+        )
+        return _run(managed_repo, runtime_root, env_overrides=env)
+
+    def test_coherent_manifest_finishes(self) -> None:
+        for i, (from_phase, version, post_phase) in enumerate(_POSTCONDITION_ROWS):
+            with self.subTest(from_phase=from_phase, version=version):
+                record = self._execute(f"ok-{i}", from_phase, version, post_phase, 2)
+                self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+                self.assertTrue(record["transition_verified"])
+                self.assertEqual(record["observed_phase_after"], post_phase)
+
+    def test_stale_manifest_fails_with_postcondition_not_satisfied(self) -> None:
+        for i, (from_phase, version, post_phase) in enumerate(_POSTCONDITION_ROWS):
+            with self.subTest(from_phase=from_phase, version=version):
+                record = self._execute(f"stale-{i}", from_phase, version, post_phase, None)
+                self.assertEqual(record["status"], job.STATUS_FAILED)
+                self.assertFalse(record["transition_verified"])
+                self.assertEqual(record["observed_phase_after"], post_phase)
+                ev = record["reconciliation_evidence"]
+                self.assertEqual(ev["code"], "TransitionNotObservedError")
+                self.assertEqual(ev["reason"], "postcondition_not_satisfied")
+                self.assertEqual(ev["observed_phase"], post_phase)
+                self.assertEqual(
+                    ev["postcondition_detail"], "manifest plan_revision 1 != state plan_revision 2",
+                )
+
+    def test_other_failure_reasons_carry_no_postcondition_detail(self) -> None:
+        managed_repo = _seed_postcondition_row(self.tmp_root / "nothing", "PLANNING", "2.2")
+        runtime_root = self.tmp_root / "nothing" / "runtime"
+        runtime_root.mkdir(parents=True)
+        record = _run(managed_repo, runtime_root)
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["reason"], "phase_not_in_to_any_of")
+        self.assertNotIn("postcondition_detail", ev)
+
+
+class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
+    """Row 7 (`NoWorkItemYet`): the postcondition resolves the new work
+    item as the single new ``work_items`` key, never ``work_item_id``
+    (which is ``None``); zero or two new keys are "not satisfied"."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir()
+        self.root, self.managed_repo = _build_bootstrap_target(self.tmp_root)
+
+    def test_new_work_item_without_a_plan_bundle_fails_postcondition(self) -> None:
+        env = _write_new_work_items_env(self.root, "wi-new")
+        record = _run(self.managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["reason"], "postcondition_not_satisfied")
+        self.assertIn(".ai-review/wi-new/current", ev["postcondition_detail"])
+
+    def test_new_work_item_with_a_stale_plan_bundle_fails_postcondition(self) -> None:
+        env = _write_new_work_items_env(self.root, "wi-new")
+        env.update(fixtures.fake_worker_plan_manifest_env(self.root, "wi-new", 0))
+        record = _run(self.managed_repo, self.runtime_root, env_overrides=env)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["reason"], "postcondition_not_satisfied")
+        self.assertEqual(ev["postcondition_detail"], "manifest plan_revision 0 != state plan_revision 1")
+
+    def test_postcondition_with_zero_or_two_new_keys_is_not_satisfied(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-a", 1)
+        pre_state = {"pre_work_item_keys": []}
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state)
+        self.assertFalse(satisfied)
+        self.assertIn("found 0", detail)
+
+        state_path = self.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+        env = _write_new_work_items_env(self.root, "wi-a", "wi-b")
+        state_path.write_text(env["FAKE_CLAUDE_WRITE_TEXT"])
+        fixtures.write_plan_manifest(self.root, "wi-b", 1)
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state)
+        self.assertFalse(satisfied)
+        self.assertIn("found 2", detail)
+
+        # Positive control: the same two-key state, with one key already
+        # pre-existing, resolves the single new key and is satisfied.
+        satisfied, _detail = job._postcondition_plan_bundle_coherent(
+            self.root, None, {"pre_work_item_keys": ["wi-a"]},
+        )
+        self.assertTrue(satisfied)
+
+    def test_postcondition_with_an_unreadable_post_state_is_not_satisfied(self) -> None:
+        (self.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-1", {})
+        self.assertFalse(satisfied)
+        self.assertIn("post-state could not be read", detail)
+
+    def test_postcondition_for_an_absent_work_item_is_not_satisfied(self) -> None:
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-missing", {})
+        self.assertFalse(satisfied)
+        self.assertIn("absent from the post-state", detail)
 
 
 if __name__ == "__main__":

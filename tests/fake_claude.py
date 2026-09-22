@@ -59,6 +59,14 @@ Recognised environment variables (all optional):
     target repository is otherwise indistinguishable, from
     ``controller.job.execute_step``'s own step 7 re-read, from one that
     ran and did nothing.
+``FAKE_CLAUDE_WRITES``
+    A JSON list of ``{"path", "text"}`` objects, each written the same way
+    (parent directories created) *after* the single-file
+    ``FAKE_CLAUDE_WRITE_PATH``/``_TEXT`` write above, which stays for
+    backward compatibility -- for a worker whose completion promises more
+    than one durable artifact (e.g. ``WORKFLOW_STATE.json`` *and* a
+    coherent plan-bundle ``MANIFEST.md``, `workflow-controller-worker-
+    execution-hardening` CP3).
 """
 
 from __future__ import annotations
@@ -118,10 +126,21 @@ def _write_requested_file() -> None:
         fh.write(text)
 
 
+def _write_requested_files() -> None:
+    raw = os.environ.get("FAKE_CLAUDE_WRITES")
+    if not raw:
+        return
+    for entry in json.loads(raw):
+        os.makedirs(os.path.dirname(entry["path"]), exist_ok=True)
+        with open(entry["path"], "w") as fh:
+            fh.write(entry["text"])
+
+
 def main() -> None:
     _write_diagnostics()
     _check_required_file()
     _write_requested_file()
+    _write_requested_files()
 
     if os.environ.get("FAKE_CLAUDE_SELF_TERM"):
         os.kill(os.getpid(), signal.SIGTERM)

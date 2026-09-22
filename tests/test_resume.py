@@ -537,6 +537,7 @@ class ReconcilePlannedTest(_ResumeTestCase):
 class ReconcileLaunchedTest(_ResumeTestCase):
     def test_already_succeeded_reconciles_to_finished_never_relaunches(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW")
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1)
         head = fixtures.current_head(managed_repo.root)
         record = _record(
             job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
@@ -560,6 +561,7 @@ class ReconcileLaunchedTest(_ResumeTestCase):
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
         )
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1)
         head = fixtures.current_head(managed_repo.root)
         record = _record(
             job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
@@ -646,6 +648,7 @@ class ReconcileLaunchedTest(_ResumeTestCase):
         changed_files = managed_repo.root / ".ai-review" / "wi-1" / "current" / "CHANGED_FILES.txt"
         changed_files.parent.mkdir(parents=True, exist_ok=True)
         changed_files.write_text("generated: round 2\nREADME.md\n")
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1)
         results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
         self.assertTrue(results[0]["transition_verified"])
@@ -715,6 +718,7 @@ class RowPredicateResumePathTest(_ResumeTestCase):
         )
         head = fixtures.current_head(managed_repo.root)
         _add_work_item(managed_repo.root, "wi-new", phase="AWAITING_LOCAL_PLAN_REVIEW")
+        fixtures.write_plan_manifest(managed_repo.root, "wi-new", 1)
         record = _record(
             job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
             phase="__NO_PHASE__", governing_workflow_version=None, command="/milestone-plan",
@@ -850,6 +854,7 @@ class ReconcileCompletedTest(_ResumeTestCase):
 
     def test_completed_that_actually_succeeded_reconciles_to_finished(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW")
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1)
         record = _record(
             job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_COMPLETED,
             phase="PLANNING", worker_outcome="SUCCESS",
@@ -1062,6 +1067,178 @@ class BootstrapEndToEndInterruptionTest(_ResumeTestCase):
         results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+
+
+# ---------------------------------------------------------------------------
+# CP3 (`workflow-controller-worker-execution-hardening`) -- the plan-bundle
+# postcondition on both resume paths, per row group.
+# ---------------------------------------------------------------------------
+
+
+#: ``(from_phase, governing_workflow_version, command, post_phase)`` for
+#: every postcondition-bearing row with a real work item (row 7 below).
+_POSTCONDITION_ROWS = (
+    ("PLANNING", "2.1", "/milestone-plan", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("PLANNING", "2.2", "/milestone-plan", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("PLANNING", "1", "/milestone-plan", "AWAITING_EXTERNAL_PLAN_REVIEW"),
+    ("REVISING_PLAN", "2.1", "/apply-plan-review", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("REVISING_PLAN", "2.2", "/apply-plan-review", "AWAITING_LOCAL_PLAN_REVIEW"),
+    ("AWAITING_EXTERNAL_PLAN_REVIEW", "1", "/apply-plan-review", "AWAITING_EXTERNAL_PLAN_REVIEW"),
+)
+
+
+class PlanBundlePostconditionResumeTest(_ResumeTestCase):
+    """The postcondition evaluated identically on resume: a target already
+    published at ``plan_revision: 2`` whose plan bundle is either coherent
+    (revision 2 -> ``FINISHED``) or still the previous round's (revision 1
+    -> ``COMPLETED``: ``FAILED``; ``LAUNCHED`` with moved state:
+    ``UnreconcilableJobError`` carrying ``postcondition_detail``)."""
+
+    def _seed(self, name: str, from_phase: str, version: str, command: str, post_phase: str,
+              *, status: str, manifest_revision: int):
+        managed_repo = _build_target(
+            self.tmp_root / name, phase=post_phase, governing_workflow_version=version, plan_revision=2,
+        )
+        root = managed_repo.root
+        head = fixtures.current_head(root)
+        fixtures.write_plan_manifest(root, "wi-1", manifest_revision)
+        if from_phase == "AWAITING_EXTERNAL_PLAN_REVIEW":
+            # Row 5's own digest predicate holds (the bundle's generated
+            # files changed), so the postcondition is the clause under test.
+            changed = root / ".ai-review" / "wi-1" / "current" / "CHANGED_FILES.txt"
+            changed.write_text("generated: round 2\nREADME.md\n")
+        runtime_root = self.tmp_root / name / "runtime"
+        runtime_root.mkdir(parents=True)
+        extra = {"worker_outcome": "SUCCESS"} if status == job.STATUS_COMPLETED else {}
+        record = _record(
+            job_id="j1", target_repo=str(root), status=status, phase=from_phase,
+            governing_workflow_version=version, command=command,
+            pre_state_overrides={"target_head": head, "bundle_generated_digest": None},
+            **extra,
+        )
+        _write_record(runtime_root, record)
+        return managed_repo, runtime_root
+
+    def test_completed_coherent_finishes_and_stale_fails(self) -> None:
+        for i, (from_phase, version, command, post_phase) in enumerate(_POSTCONDITION_ROWS):
+            with self.subTest(from_phase=from_phase, version=version):
+                managed_repo, runtime_root = self._seed(
+                    f"c-ok-{i}", from_phase, version, command, post_phase,
+                    status=job.STATUS_COMPLETED, manifest_revision=2,
+                )
+                results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                self.assertEqual(results[0]["status"], job.STATUS_FINISHED, results[0])
+
+                managed_repo, runtime_root = self._seed(
+                    f"c-stale-{i}", from_phase, version, command, post_phase,
+                    status=job.STATUS_COMPLETED, manifest_revision=1,
+                )
+                results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                self.assertEqual(results[0]["status"], job.STATUS_FAILED)
+                self.assertFalse(results[0]["transition_verified"])
+                ev = results[0]["reconciliation_evidence"]
+                self.assertEqual(ev["reason"], "postcondition_not_satisfied")
+                self.assertEqual(
+                    ev["postcondition_detail"], "manifest plan_revision 1 != state plan_revision 2",
+                )
+                self.assertEqual(_read_record(runtime_root, "j1")["status"], job.STATUS_FAILED)
+
+    def test_launched_coherent_finishes_never_relaunches(self) -> None:
+        for i, (from_phase, version, command, post_phase) in enumerate(_POSTCONDITION_ROWS):
+            with self.subTest(from_phase=from_phase, version=version):
+                managed_repo, runtime_root = self._seed(
+                    f"l-ok-{i}", from_phase, version, command, post_phase,
+                    status=job.STATUS_LAUNCHED, manifest_revision=2,
+                )
+                with _NeverLaunches():
+                    results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+                self.assertTrue(results[0]["transition_verified"])
+
+    def test_launched_stale_with_moved_phase_is_unreconcilable_naming_the_postcondition(self) -> None:
+        moved = [row for row in _POSTCONDITION_ROWS if row[0] != row[3]]
+        self.assertEqual(len(moved), 5)
+        for i, (from_phase, version, command, post_phase) in enumerate(moved):
+            with self.subTest(from_phase=from_phase, version=version):
+                managed_repo, runtime_root = self._seed(
+                    f"l-stale-{i}", from_phase, version, command, post_phase,
+                    status=job.STATUS_LAUNCHED, manifest_revision=1,
+                )
+                with self.assertRaises(UnreconcilableJobError) as ctx:
+                    job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                ev = ctx.exception.evidence
+                self.assertEqual(ev["pre_phase"], from_phase)
+                self.assertEqual(ev["observed_phase_after"], post_phase)
+                self.assertEqual(
+                    ev["postcondition_detail"], "manifest plan_revision 1 != state plan_revision 2",
+                )
+                self.assertIn("postcondition not satisfied", str(ctx.exception))
+
+    def test_launched_self_loop_stale_with_unchanged_phase_and_head_is_interrupted(self) -> None:
+        """The `"1"` self-loop row: phase and HEAD both unchanged, so a
+        failed postcondition keeps row 3's ``INTERRUPTED`` (a fresh `step`
+        may retry) -- "Scope judgments", `LAUNCHED` bullet."""
+        managed_repo, runtime_root = self._seed(
+            "l-self-loop", "AWAITING_EXTERNAL_PLAN_REVIEW", "1", "/apply-plan-review",
+            "AWAITING_EXTERNAL_PLAN_REVIEW", status=job.STATUS_LAUNCHED, manifest_revision=1,
+        )
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+
+    def test_launched_moved_state_failing_another_clause_carries_no_postcondition_detail(self) -> None:
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING")
+        head = fixtures.current_head(managed_repo.root)
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_LAUNCHED,
+            phase="PLANNING", pre_state_overrides={"target_head": head},
+        )
+        _write_record(self.runtime_root, record)
+        _set_target_phase(managed_repo.root, "wi-1", "SELF_REVIEWING_IMPLEMENTATION")
+        with self.assertRaises(UnreconcilableJobError) as ctx:
+            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertNotIn("postcondition_detail", ctx.exception.evidence)
+
+
+class PlanBundlePostconditionRowSevenResumeTest(_ResumeTestCase):
+    """Row 7 on both resume paths: the new work item is the single new
+    key; its own plan bundle decides."""
+
+    def _seed(self, *, status: str, manifest_revision: int | None):
+        managed_repo = _build_target(self.tmp_root, phase="MILESTONE_COMPLETE", work_item_id="wi-existing")
+        head = fixtures.current_head(managed_repo.root)
+        _add_work_item(managed_repo.root, "wi-new", phase="AWAITING_LOCAL_PLAN_REVIEW")
+        if manifest_revision is not None:
+            fixtures.write_plan_manifest(managed_repo.root, "wi-new", manifest_revision)
+        extra = {"worker_outcome": "SUCCESS"} if status == job.STATUS_COMPLETED else {}
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=status,
+            phase="__NO_PHASE__", governing_workflow_version=None, command="/milestone-plan",
+            work_item_id=None,
+            expected_transition={"from": "__NO_PHASE__", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]},
+            pre_state_overrides={"target_head": head, "pre_work_item_keys": ["wi-existing"]},
+            **extra,
+        )
+        _write_record(self.runtime_root, record)
+        return managed_repo
+
+    def test_completed_stale_fails(self) -> None:
+        managed_repo = self._seed(status=job.STATUS_COMPLETED, manifest_revision=None)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FAILED)
+        self.assertEqual(results[0]["reconciliation_evidence"]["reason"], "postcondition_not_satisfied")
+
+    def test_completed_coherent_finishes(self) -> None:
+        managed_repo = self._seed(status=job.STATUS_COMPLETED, manifest_revision=1)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+
+    def test_launched_stale_is_unreconcilable_naming_the_postcondition(self) -> None:
+        managed_repo = self._seed(status=job.STATUS_LAUNCHED, manifest_revision=0)
+        with self.assertRaises(UnreconcilableJobError) as ctx:
+            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(
+            ctx.exception.evidence["postcondition_detail"], "manifest plan_revision 0 != state plan_revision 1",
+        )
 
 
 if __name__ == "__main__":

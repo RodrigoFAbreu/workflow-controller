@@ -93,4 +93,44 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
   `python3 -m unittest tests.test_job tests.test_resume tests.test_cli` -- 120 tests OK. Full
   Controller suite: 512 tests OK, 2 live tests skipped. With `plan_bundle_coherence` forced
   coherent, the 5 fail-closed tests fail. The 4 controls still pass.
-- CP6 -- not started.
+- **CP6 -- complete** (verification only, no code change). Run 2026-09-22/23 at HEAD
+  `6598638`:
+  1. `python3 -m unittest discover -s tests -t .` -- 512 tests OK, 2 live tests skipped.
+  2. Frozen Workflow conformance suites, each `python3 scripts/<name>.py`, all exit 0:
+     `workflow_acceptance_matrix_test` 146 OK (18 skipped),
+     `workflow_fingerprint_generalization_test` 79 OK, `workflow_fingerprint_test` 218 OK,
+     `workflow_integration_test` 260 OK (1 skipped),
+     `workflow_state_completion_obligations_test` 106 OK, `workflow_state_test` 853 OK,
+     `workflow_test_harness_test` 19 OK. `workflow_fingerprint_demo_test.py` and
+     `workflow_state_demo_test.py` excluded as the plan names (they already fail at base).
+  3. `CONTROLLER_LIVE_WORKER=1 python3 -m unittest -v tests.test_integration_disposable_repo`
+     with the real `claude` binary: 14 tests OK (both live tests pass `bypassPermissions`
+     explicitly; the `/milestone-plan` job was `FINISHED`, worker `SUCCESS`, session
+     `632a3e62-...`). Manual live `python3 -P -m controller --runtime-dir <rt> step
+     <target>` with **no** `--permission-mode` (so `DEFAULT_PERMISSION_MODE = "auto"`,
+     `controller/cli.py:376`) against a disposable Workflow 2.5.1 / `"2.2"` target: exit 0,
+     job `FINISHED`, `transition_verified: true`, `worker.permission_denials: []`, worker
+     `SUCCESS` (session `a61e56c1-...`, 17 Bash tool calls, 125 s),
+     `__NO_PHASE__ -> AWAITING_LOCAL_PLAN_REVIEW` (work item `hello-file`). The stop
+     condition did not fire.
+  4. Stale-bundle recovery drill on that same target, frozen Workflow entry points only
+     (`generate_registry`/`generate_mapping`/`write_registry_and_mapping`, the plan table
+     re-embedded from `render_registry_markdown`, `(Revision N)` bumped,
+     `publish_plan_revision` through `state_transaction`):
+     - Stale leg: revision 2 published over the revision-1 bundle. `controller step` exit
+       10 (`GATE_BLOCKED`, no worker), gate `manifest plan_revision 1 != state
+       plan_revision 2` with the three `refresh`/`refresh`/`run` steps
+       (`stage: plan (revision 2)`, `prepare-ai-review.sh 5aa8a73... plan hello-file`).
+       Those steps performed verbatim -> generator exit 0, manifest `plan_revision: 2`;
+       `controller explain` -> `next automatic action: /review-plan hello-file`.
+     - Withdrawal leg: revision 3 published; only `REVIEW_REQUEST.md` refreshed; the
+       generator withdrew the bundle (`TEST_RESULTS.md states 'stage: plan (revision
+       2)'`, `current/` quarantined to `current.rejected-0bfff56b...`). `controller step`
+       exit 10 with the withdrawn variant: `current is absent (withdrawn or never
+       generated)`, step 0 `write .../CONTEXT_FILES.txt` naming the quarantine directory,
+       steps 1-2 `write ... (in REVIEW_PROTOCOL.md's "Review request format" shape)`,
+       step 3 the generator -- never the bare generator. Those steps performed verbatim
+       (author files restored from the quarantine, then the two lines refreshed) ->
+       generator exit 0, manifest `plan_revision: 3`; `controller explain` ->
+       `/review-plan hello-file`.
+     Neither leg needed a step the gate did not name.

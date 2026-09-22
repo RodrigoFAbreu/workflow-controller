@@ -821,14 +821,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-execution-hardening-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 3,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "27be244d19df1c5c21e6c7c9fb9b83143c7e45a2",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP5",
+      "last_completed_checkpoint_id": "CP6",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -849,6 +849,10 @@
         "CP5": {
           "status": "COMPLETE",
           "start_commit": "3b48dcf2bd2d2a9ddf4d0a41ee3bfaa598af373f"
+        },
+        "CP6": {
+          "status": "COMPLETE",
+          "start_commit": "6598638ac65288c653fddf0e0aed5283e91e773b"
         }
       },
       "current_bundle_id": null,
@@ -902,8 +906,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 22,
-      "last_transition": "2026-09-22T23:12:27Z"
+      "state_revision": 24,
+      "last_transition": "2026-09-22T23:24:19Z"
     }
   }
 }

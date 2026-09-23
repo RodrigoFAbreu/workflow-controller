@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-automatic-lifecycle-orchestration",
+  "plan_revision": 5,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Plan-stage decision golden generated first from base code, and implementation-stage evidence readers: WorkItemView.implementation_review_stages/technical_review_block_pins, implementation-stage MANIFEST.md labels, implementation_bundle_coherence, two-stage ledger reads, committed work-item and checkpoint reads, the generation-record view and the admissibility evaluators, with per-clause tests",
+      "depends_on": [],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "ExpectedOutcome rows, per-phase postconditions and predicates for every newly automated implementation-stage command, execute/resume parity, WriterCall trailing-call allowlist, and the plan-stage BLOCK-predicate bundle-id fix",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "General automatic-dispatch rule (automatic iff a declared ExpectedOutcome triple exists, declined otherwise, including at unreachable version combinations), golden-asserted plan-stage decisions, IMPLEMENTING/SELF_REVIEWING_IMPLEMENTATION dispatch, the /apply-functional-review AssertionError fix, and every named test whose assertion changes",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Implementation-review decision handlers: REJECTED and implementation-bundle coherence gates, 2.2 local review, admissible manual-verdict ingestion, the corrected APPLYING_REVIEW_FEEDBACK gate, and ledger-, feedback- and pin-aware AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "depends_on": [
+        "CP1",
+        "CP3"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4B",
+      "name": "Implementation-bundle recovery and row-18 remediation: generation-record-aware recovery gate (malformed record, provenance-only, regeneration with the stage derived from the record's parent phase), 2.2 APPLYING_REVIEW_FEEDBACK automation with the pending-write task addendum, and the apply relaunch bound",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Worker lifecycle and concurrency safety: worker-inherited worktree lock with a non-acquiring, pid-namespace-aware probe, recorded lock and worker process, refusal while an earlier job is pending reconciliation, boot- and host-keyed, start_ticks- and zombie-aware liveness, a terminal disposition for unreconcilable jobs and resume --abandon, exit 45, unbounded default worker timeout",
+      "depends_on": [],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Role-based model/effort routing: routing table with Opus 5.5 xhigh defaults for the five named lifecycle roles, single-agent fresh-session review workers, CLI/config override precedence, worker argv and job-record route provenance",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "End-to-end lifecycle regression suite with a scripted fake worker: checkpoints, self-review, local REVISE, remediation with the pending-write addendum, fresh review, manual gate, manual-verdict ingestion, fail-closed bundle cases, literal-worker and relaunch-bound apply rounds, same_content recovery, resume, concurrency and unchanged plan stage",
+      "depends_on": [
+        "CP3",
+        "CP4",
+        "CP4B",
+        "CP5",
+        "CP6"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP8",
+      "name": "Operator documentation: README CLI surface, options, job dispositions and safety model; ADR 0001 exit-code table and automatic-dispatch rule; exit-code consistency test rewired to the live CLI constants",
+      "depends_on": [
+        "CP3",
+        "CP4",
+        "CP4B",
+        "CP5",
+        "CP6"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP9",
+      "name": "Full verification: Controller suite, frozen Workflow conformance suites, live disposable-repository implementation-lifecycle run with a real apply round and routing evidence, live single-agent probe, and a live concurrency drill",
+      "depends_on": [
+        "CP7",
+        "CP8"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    }
+  ]
+}

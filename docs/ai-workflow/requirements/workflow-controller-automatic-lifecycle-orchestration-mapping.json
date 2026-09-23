@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-automatic-lifecycle-orchestration",
+  "requirements": {
+    "R1": {
+      "description": "Controller launches a Workflow action automatically by one general rule -- the action is selected from evidence, is model-invocable and not user-only, is not gated, and has a declared, verifiable ExpectedOutcome -- and reports (declines or gates) every other case; unknown or ambiguous states fail closed",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4",
+        "CP4B"
+      ]
+    },
+    "R2": {
+      "description": "IMPLEMENTING and SELF_REVIEWING_IMPLEMENTATION automatically launch /milestone-implement for 2.1/2.2 work items, one checkpoint per worker, verified against durable checkpoint completion and, on the final pass, a coherent implementation bundle",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP7",
+        "CP9"
+      ]
+    },
+    "R3": {
+      "description": "A 2.2 work item at AWAITING_LOCAL_IMPLEMENTATION_REVIEW automatically launches /review-implementation in a fresh single-agent worker unless a gate applies",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4",
+        "CP7",
+        "CP9"
+      ]
+    },
+    "R4": {
+      "description": "A 2.2 work item at APPLYING_REVIEW_FEEDBACK with admissible feedback automatically launches /apply-implementation-review, and local REVISE -> remediation -> fresh review continues to convergence without human action",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4",
+        "CP4B",
+        "CP7",
+        "CP9"
+      ]
+    },
+    "R5": {
+      "description": "No worker is launched at a genuine manual external review or user gate; an already-supplied, admissible manual external implementation verdict is consumed only through /record-manual-implementation-review, and the Controller never performs a manual external review itself",
+      "checkpoint_ids": [
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R6": {
+      "description": "Every newly automated implementation-stage command has an ExpectedOutcome row whose postconditions reject a phase transition when the required durable implementation-review artifacts are stale, missing, rejected or bound to the wrong revision/content, on execute, resume and next-decision paths, reusing Workflow's own state and artifact invariants",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP4",
+        "CP4B",
+        "CP7"
+      ]
+    },
+    "R7": {
+      "description": "Protocol-2.2 guidance is correct: APPLYING_REVIEW_FEEDBACK names /apply-implementation-review as legal, and AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is reviewer-role- and current-bundle/content-aware for 2.2 while 1/2.1 behavior is preserved",
+      "checkpoint_ids": [
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R8": {
+      "description": "At most one lifecycle worker runs per target worktree at a time; silence, long-running work or a paused worker is never treated as termination; no replacement worker launches until the previous one is definitively terminal; durable repository/Workflow state is authoritative over worker prose",
+      "checkpoint_ids": [
+        "CP5",
+        "CP7",
+        "CP9"
+      ]
+    },
+    "R9": {
+      "description": "Worker model/effort selection is an explicit, testable role table defaulting /milestone-implement, /apply-plan-review, /apply-implementation-review, /review-plan and /review-implementation to Claude Opus 5.5 at xhigh; review workers run in fresh single-agent sessions; explicit CLI/config overrides take precedence",
+      "checkpoint_ids": [
+        "CP6",
+        "CP7",
+        "CP9"
+      ]
+    },
+    "R10": {
+      "description": "Existing plan-stage decisions and verification behavior remain unchanged at every (phase, governing_workflow_version) combination a Workflow writer can reach, except the named plan-stage BLOCK-predicate defect fix; the combinations no writer reaches, which crash execute_step today, are declined",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP7"
+      ]
+    },
+    "R11": {
+      "description": "Operator documentation states the automatic-dispatch rule, new options, routing defaults, concurrency behavior and exit codes",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "R12": {
+      "description": "Full Controller and frozen Workflow conformance suites pass, and live evidence shows a real implementation-lifecycle run with the routed model/effort and the concurrency guarantee",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-automatic-lifecycle-orchestration",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -1007,6 +1007,78 @@
           "completed_at": "2026-09-23T08:26:09Z"
         }
       }
+    },
+    "workflow-controller-automatic-lifecycle-orchestration": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-automatic-lifecycle-orchestration",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-automatic-lifecycle-orchestration-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automatic-lifecycle-orchestration-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "abd34a01bb1afef0a376b11128569920c4dd2210",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "06698855d162d43a23abb562b52b72c1b777bc1f642e8b4d9ac1bca5264d9213",
+        "approved_review_content_id": "dd4a1b476bb55971c81f8df891f7652dd30acdd8489fa137d77f7134f8bc850f",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5c64e5634d62c48045afd2bfc22533e2bf1a4d7f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-automatic-lifecycle-orchestration-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2dfe4b23f902e77558852c12b334d355a6a813e1"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-automatic-lifecycle-orchestration-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2bd0bc11e0a16370ab40d0b63b63b525cd8ab461"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the plan stage for workflow-controller-automatic-lifecycle-orchestration",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-23T17:20:03Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "dd4a1b476bb55971c81f8df891f7652dd30acdd8489fa137d77f7134f8bc850f",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "06698855d162d43a23abb562b52b72c1b777bc1f642e8b4d9ac1bca5264d9213",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-09-23T14:44:44Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "06698855d162d43a23abb562b52b72c1b777bc1f642e8b4d9ac1bca5264d9213",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-23T17:11:00Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 17,
+      "last_transition": "2026-09-23T17:20:03Z"
     }
   }
 }

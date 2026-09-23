@@ -140,18 +140,37 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
 Implementation revision 2, technical approval `920c8fd` (both implementation-review stages
 `APPROVE`, `review_content_id` `0aa60044...`). Automated state is current: 514 Controller
 tests OK (2 live skips) and the seven frozen Workflow suites green at `7904088`. Only
-`WORKFLOW_STATE.json` changed after that. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+`WORKFLOW_STATE.json` and this file changed after that. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+**Round 1 findings (applied, no code change).** The first pass found two defects in this
+checklist and none in the implementation. Its `FUNCTIONAL_REVIEW.md` is now marked consumed.
+- F1: `python3 -P -m controller` failed as written with `No module named controller`. `-P` keeps
+  `$C` off `sys.path`, and here the Controller is installed only through pipx. Setup step 2 now
+  exports `PYTHONPATH=$C`.
+- F2: `inspect`/`explain` had no `--runtime-dir`, so they wrote `$C/.controller/identity.json`.
+  They now use `$RT`, and step 8 checks that `$C/.controller/` is untouched.
+
+No expected result changed. That pass saw every expected result in flows 1-7 with `PYTHONPATH=$C`
+added. The new lines are Setup steps 2 and 4, the `explain` command form, and the step 8 check.
 
 ### Setup
 
 1. In this checkout (`C=/home/rodrigo/Workspace/workflow-controller`), `git status --porcelain`
    is empty. `workflow-manager` and `claude` are on `PATH`.
-2. Scratch paths: `W=$(mktemp -d); T=$W/target; RT=$W/rt; RTF=$W/rt-fake`.
+2. In one shell, used for every later step:
+   `C=/home/rodrigo/Workspace/workflow-controller; export PYTHONPATH=$C; W=$(mktemp -d); T=$W/target; RT=$W/rt; RTF=$W/rt-fake; touch $W/.start`.
+   `python3 -P` keeps the current directory off `sys.path`. Unless `controller` is installed into
+   the system `python3` (here it is installed only through pipx), `PYTHONPATH=$C` is what lets
+   `-m controller` import this checkout. The Controller's own tests use the same form
+   (`tests/test_integration_disposable_repo.py`). Workers never inherit it.
 3. Build a disposable `"2.2"` target with the same fixture the live tests use:
    `cd $C && python3 -c "from pathlib import Path; from tests.test_integration_disposable_repo import _seed_target_2_2; _seed_target_2_2(Path('$T'))"`.
    Expected: `workflow-manager verify $T` exits 0 (Workflow 2.5.1). `$T` is clean.
    `docs/ACTIVE_MILESTONE.md` there names the trivial `hello-file` milestone.
-4. `cd $C && python3 -P -m controller inspect $T` exits 0 and reports no work item yet.
+4. `cd $C && python3 -P -m controller --runtime-dir $RT inspect $T` exits 0 and reports no work
+   item yet. Below, `explain` always means `python3 -P -m controller --runtime-dir $RT explain $T`,
+   run from `$C`. Every Controller invocation passes `--runtime-dir`, so none of them writes
+   `$C/.controller/`.
 
 ### Test data
 
@@ -179,10 +198,10 @@ the disposable `$T`, never in this repository. Let `B=$T/.ai-review/hello-file`.
      `worker.permission_denials: []` and `worker.is_error: false`.
    - `$T`'s `hello-file` is at `AWAITING_LOCAL_PLAN_REVIEW`, `plan_revision` 1.
    - `$B/current/MANIFEST.md` says `plan_revision: 1`.
-   - `python3 -P -m controller explain $T` reports `next automatic action: /review-plan hello-file`.
+   - `explain` reports `next automatic action: /review-plan hello-file`.
 4. **Zero-byte stubs select the "write" recovery (the round-1 manual `I1` fix).** Needs flow 3.
    `mv $B/current $B/current.rejected-manualcheck && mkdir $B/current && : > $B/current/REVIEW_REQUEST.md && : > $B/current/TEST_RESULTS.md && : > $B/current/CONTEXT_FILES.txt`.
-   Then run `python3 -P -m controller explain $T`, and
+   Then run `explain`, and
    `python3 -P -m controller --runtime-dir $RT step $T; echo exit=$?`.
    Expected:
    - `explain` shows a human gate naming `.../current/MANIFEST.md is missing or unreadable`.
@@ -210,7 +229,8 @@ the disposable `$T`, never in this repository. Let `B=$T/.ai-review/hello-file`.
    - then `GATE_BLOCKED` with no worker;
    - `controller step` exit 30;
    - the resume paths.
-8. Clean up with `rm -rf $W`.
+8. `find $C/.controller -newer $W/.start 2>/dev/null` prints nothing, because this checkout's
+   runtime root was never written. Then clean up with `rm -rf $W`.
 
 ### Known limitations and out of scope
 

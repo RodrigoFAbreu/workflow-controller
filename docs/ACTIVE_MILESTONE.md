@@ -797,4 +797,137 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
       `PLANNED` flush, or ignoring `registry_complete`;
     - `cli` not passing the options, never loading the config, dropping `--role-model`,
       accepting a duplicate role, or not validating `--model`.
-- **CP7-CP9 -- pending**, in registry order.
+- **CP7 -- complete.** The end-to-end lifecycle regression suite, in `tests/fake_claude.py`,
+  `tests/fixtures.py` and the new `tests/test_lifecycle_orchestration.py`. No `controller/` change.
+  - `tests/fake_claude.py` gains `FAKE_CLAUDE_SCRIPT`: a JSON file mapping an exact task string (the
+    `-p` argument, addendum included) to an ordered list of per-invocation action lists.
+    - Each invocation appends `{"task", "invocation"}` to the counter file beside it
+      (`<script>.invocations`), then performs that task's next action list in the target.
+    - A task the script does not name, or an invocation past its list, exits 92 before any action.
+    - The actions are `write {path, text}`, `commit {paths, message}` (stages exactly `paths`) and
+      `delete {path}` (a file or a directory tree). A failing action raises, so a script error is
+      never silent.
+    - `perform_actions` is the one implementation, shared by the worker process and in-process
+      seeding.
+  - `tests/fixtures.py` adds `script_write`, `script_commit`, `script_delete`, `trailer_message`,
+    `write_worker_script`, `scripted_worker_tasks` and `perform_script_actions`.
+  - `tests/test_lifecycle_orchestration.py`:
+    - `Lifecycle` models the work item's `WORKFLOW_STATE.json` entry, advances it as each
+      Workflow writer does, and returns each command's scripted effect in that command's commit
+      order: checkpoint commits with their trailers, the step-2 state-only commit, the
+      generation-record commit `T` with its trailers (plus `Workflow-Supersedes` for
+      `same_content`), then the author files and a manifest whose `generation_head` is `T`, and
+      the review-stage writes left uncommitted.
+    - Every scenario runs through the real `cli.main` (`run`, `step`, `explain`, `resume`), so
+      through the real `execute_step`, verification and next decision. Only `identity.pin`/
+      `identity.current` are patched, to a pinned identity whose origin checkout declares the
+      same generation, and the Workflow Manager is the offline stub.
+    - The scenarios, as numbered in the plan:
+      1. `run` from `IMPLEMENTING` with two checkpoints: six workers (two checkpoints, the final
+         pass, a local `REVISE`, the remediation round, a local `APPROVE`), each `FINISHED`, then
+         the manual gate (exit 10). The job records show each role, `claude-opus-5-5`/`xhigh`
+         and single-agent where the table says so. The remediation task carries the addendum,
+         the worker makes the state-only commit, a fix and `T`, and `T`'s parent records
+         `APPLYING_REVIEW_FEEDBACK`. A second `run` launches nothing.
+      2. From that gate: a manual `APPROVE` is ingested by one worker and stops at the
+         `/approve-review implementation` gate; a manual `REVISE` loops through remediation and
+         a fresh local review back to the manual gate; a manual `BLOCK` launches nothing. No
+         worker is ever handed a user-only command.
+      3. Ten fail-closed cases (below): each is `FAILED` with the postcondition detail. The next
+         decision launches nothing. `resume` of the same job is `FAILED` as `COMPLETED` and exit
+         20 (`UnreconcilableJobError`, persisted `FAILED`) as `LAUNCHED`. With only that row's
+         postconditions removed (`mock.patch.dict` over `_EXPECTED_OUTCOMES_BY_KEY`) the same
+         worker verifies `FINISHED`. A second test is the positive control for every row with
+         the postconditions in place.
+      4. Every new row (13 twice, 15, 16 both ways, 17 both ways, 18 twice), stepped one at a
+         time: each record rewritten `COMPLETED` and then `LAUNCHED` reconciles `FINISHED`, and
+         nothing relaunches. A `LAUNCHED` record with nothing changed is `INTERRUPTED` (exit 40).
+         The I2 orphan: a child Controller is killed during an `/apply-implementation-review`;
+         while its worker runs, `step` and `resume` exit 45. Released, the worker commits the
+         pending write, a fix and `T`, and its generator fails. `resume` persists `FAILED` and
+         exits 20, and the next `step` is CP4B's regeneration gate at `post-fix`, launching
+         nothing.
+      5. `PlanStageUnchangedTest` runs the unmodified stale-plan-bundle classes
+         (`tests.test_job.PartialApplyPlanReviewExecuteTest`,
+         `tests.test_cli.PartialApplyPlanReviewCliTest`,
+         `tests.test_resume.PartialApplyPlanReviewResumeTest`) and the plan-stage golden module,
+         from their own modules.
+      6. Seventeen gate sub-cases (the plan-approval gates, every `"2.2"` implementation-review
+         gate and sub-case, `AWAITING_PLAN_APPROVAL`, `AWAITING_FUNCTIONAL_REVIEW`): `run` exits
+         10 and the fail-if-invoked fake never starts. The relaunch-bound gate is scenario 8.
+      7. A literal apply worker (fix, then `T` staging only the state file, no manifest) fails,
+         and the next `step` is the malformed-`T` gate naming `T` and `OPUS-R101-001`, never the
+         regeneration steps. With the pending write committed first by a human, the task has no
+         addendum and the same worker verifies.
+      8. An apply worker that only rewrites `IMPLEMENTATION_SUMMARY.md` fails, and the next
+         `run` is the relaunch-bound gate naming the job; no second worker runs.
+      9. A `same_content` round (recovered-role `T`, revision unchanged, no manifest) fails, and
+         the next `step` names the regeneration at `post-fix`, never
+         `/recover-implementation-provenance`.
+      10. From `IMPLEMENTING` with every checkpoint `COMPLETE`, a worker making only step 2's
+          state-only commit verifies, and the next `run` launches the final pass.
+    - The fail-closed cases of scenario 3 and their next decision:
+      - the last checkpoint completion left uncommitted, and the step-2 transition left
+        uncommitted: see the deviation below;
+      - the final pass leaving the manifest from before `T` (stale), a completed withdrawal
+        (quarantine, no `current/`) or a `REJECTED` marker: CP4B's regeneration gate, or CP4's
+        `"2.2"` `REJECTED` branch, at `implementation`;
+      - the remediation round leaving the previous round's manifest, a withdrawal or a `REJECTED`
+        marker: the same gates at `post-fix`;
+      - a local `APPROVE` and a manual ingestion recording a ledger bound to another
+        `review_content_id`: the bundle is coherent, so the next decision is the manual gate and
+        the `/approve-review implementation would refuse here` gate respectively. Both launch
+        nothing, but neither is a bundle gate.
+    - The harness tests itself: an unscripted task changes nothing and fails (exit 92), and the
+      revision tokens resolve at write time.
+  - **Deviation for review.** The plan says the next `step` after every fail-closed case gates.
+    That does not hold for the two uncommitted-transition cases. The working tree then records
+    `SELF_REVIEWING_IMPLEMENTATION`, which has no bundle to gate on, and CP3's approved handler
+    gates it only on the plan approval. So the next decision re-selects `/milestone-implement`
+    (the self-review role). The test pins this through `explain`, which launches nothing. Only
+    the `FAILED` record, and `run`'s exit 30, stop the loop. Closing the gap needs a new decision
+    gate in `controller/decision.py`, outside CP7's files, so it is left to the review.
+  - Judgment calls, where the plan text left a detail open:
+    - Besides `{HEAD}`, a write resolves `{HEAD^}` and `{HEAD~N}`. The manifest's
+      `reviewed_implementation_head` is `T`'s parent, and so is the reviewed head in every
+      review-stage write made while `T` is `HEAD`. With `{HEAD}` alone, no script written before a
+      `run` could state it.
+    - An action is `{"action": ..., ...}`. The counter is JSON lines, one per invocation, which
+      also records every task a worker received.
+    - A pre-state that is not under test is seeded in-process with `perform_actions`, never by
+      launching a worker. Scenarios 1, 2, 4 and 10 build their states through workers.
+    - "Stale" is read as the final pass's manifest written before `T` and the previous round's
+      manifest left after a published revision.
+    - "`resume` of the same job" rewrites its `FAILED` record on disk to the `COMPLETED` or
+      `LAUNCHED` shape, dropping the fields a later flush adds, as a Controller that died at that
+      flush leaves it.
+    - The uncommitted step-2 transition joined scenario 3 (CP2 lists it as a postcondition
+      clause), because the mutation check showed the committed-phase clause otherwise went
+      unexercised end to end.
+    - In scenario 10, the next `run` continues through a local `APPROVE` to the manual gate.
+    - Records are ordered by file modification time within one CLI call; each job's last write
+      precedes the next job's first.
+    - Every CLI call passes `--timeout 60`, so a broken fake can never hang the suite.
+  - Verified with `python3 -m unittest tests.test_lifecycle_orchestration`: 18 tests OK in about
+    3.5 s. The full suite (`python3 -m unittest discover -s tests -t .`) ran 950 tests: OK, 2
+    skipped. No `tests/fake_claude.py` process was left behind (0 before, 0 after).
+    `python3 tests/golden/generate_external_implementation_review_decisions.py --check` reports
+    that golden as current, and the plan-stage golden test is green.
+  - Mutation checks were run in a scratch copy, against `controller/`. The new file catches 22 of
+    23 mutants:
+    - no pending-write addendum; no malformed-`T` case; no provenance-only case; no relaunch
+      bound, or no job history read for it;
+    - the generator stage always naming both forms; the `REJECTED` branch 1 dropped; the
+      implementation-bundle gate dropped;
+    - no plan-approval gate; a local `BLOCK` not gated; manual or apply admissibility skipped;
+      manual ingestion never automatic;
+    - the self-review postcondition's committed-checkpoint or committed-phase clause dropped; the
+      row 16 or row 17 content clause dropped; verification ignoring postconditions;
+    - the self-review role made multi-agent;
+    - `resume` verifying every `COMPLETED` record, reconciling every `LAUNCHED` one
+      `INTERRUPTED`, or not persisting an unreconcilable one `FAILED`.
+
+    The survivor drops row 18's "a new generation ran" clause. Only a phase flip with no
+    generation discriminates it, and CP2's `test_a_phase_flip_with_no_generation_fails_the_postcondition`
+    (with its resume twin) catches it: 3 failures in `tests.test_job_validation tests.test_resume`.
+- **CP8-CP9 -- pending**, in registry order.

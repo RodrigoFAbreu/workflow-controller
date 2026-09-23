@@ -789,6 +789,63 @@ def review_writes_effect(*, feedback: str | None = None, **state_fields):
     return effect
 
 
+# ---------------------------------------------------------------------------
+# `workflow-controller-automatic-lifecycle-orchestration` CP7 -- the scripted
+# fake worker (`tests/fake_claude.py`'s `FAKE_CLAUDE_SCRIPT`): a real worker
+# subprocess whose effect is a list of writes, commits and deletes, keyed on
+# the exact task it is launched with.
+# ---------------------------------------------------------------------------
+
+
+def script_write(path: str, text: str) -> dict:
+    """A scripted ``write`` of ``text`` to the target-relative ``path``
+    (``{HEAD}``/``{HEAD^}``/``{HEAD~N}`` resolved at write time)."""
+    return {"action": "write", "path": path, "text": text}
+
+
+def script_commit(message: str, *paths: str) -> dict:
+    """A scripted commit of exactly ``paths`` with ``message``."""
+    return {"action": "commit", "paths": list(paths), "message": message}
+
+
+def script_delete(path: str) -> dict:
+    """A scripted removal of a target-relative file or directory tree."""
+    return {"action": "delete", "path": path}
+
+
+def trailer_message(subject: str, *trailers: tuple[str, str]) -> str:
+    """A commit message whose final paragraph is exactly ``trailers``, in
+    order -- the shape ``git interpret-trailers --parse`` reads."""
+    return subject + "\n\n" + "\n".join(f"{key}: {value}" for key, value in trailers)
+
+
+def write_worker_script(path: Path, script: dict[str, list[list[dict]]]) -> Path:
+    """Write a ``FAKE_CLAUDE_SCRIPT`` file: exact task -> the action list of
+    each successive invocation of it."""
+    path.write_text(json.dumps(script, indent=2) + "\n")
+    return path
+
+
+def scripted_worker_tasks(script_path: Path) -> list[str]:
+    """The task of every scripted-worker invocation so far, in order (read
+    from the counter file beside ``script_path``)."""
+    from tests.fake_claude import script_invocations_path
+
+    counter = Path(script_invocations_path(script_path))
+    if not counter.exists():
+        return []
+    return [json.loads(line)["task"] for line in counter.read_text().splitlines() if line.strip()]
+
+
+def perform_script_actions(root: Path, actions: list[dict]) -> None:
+    """Perform scripted actions in-process against ``root`` -- the same
+    implementation the scripted worker runs, for seeding a pre-state
+    without launching one."""
+    from tests.fake_claude import perform_actions
+
+    perform_actions(actions, root)
+
+
 def build_target_managed_repository(root: Path):
     """A minimal, real ``managed_repo.ManagedRepository`` pointed at
     ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so

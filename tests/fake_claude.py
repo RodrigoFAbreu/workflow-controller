@@ -86,12 +86,45 @@ Recognised environment variables (all optional):
     than one durable artifact (e.g. ``WORKFLOW_STATE.json`` *and* a
     coherent plan-bundle ``MANIFEST.md``, `workflow-controller-worker-
     execution-hardening` CP3).
+``FAKE_CLAUDE_SCRIPT``
+    A scripted worker (`workflow-controller-automatic-lifecycle-
+    orchestration` CP7): the path of a JSON file mapping an exact task
+    string -- the ``-p`` argument, addendum included -- to an ordered list
+    of per-invocation action lists. Each invocation appends one JSON line,
+    ``{"task", "invocation"}``, to the counter file beside it
+    (:func:`script_invocations_path`), then performs that task's next
+    action list (:func:`perform_actions`) in the current directory, which
+    is the target repository. A task the script does not name, or an
+    invocation past the end of its list, exits ``92`` naming it, after the
+    counter line and before any action. Checked after
+    ``FAKE_CLAUDE_REQUIRE_FILE`` and ``FAKE_CLAUDE_HANG_UNTIL_FILE``, and
+    before the ``FAKE_CLAUDE_WRITE*`` writes.
+
+The scripted actions (:func:`perform_actions`), each a JSON object with an
+``"action"`` key:
+
+- ``{"action": "write", "path", "text"}`` writes ``text`` to ``path``
+  (parent directories created). Every ``{HEAD}``, ``{HEAD^}`` or
+  ``{HEAD~N}`` token in ``text`` is replaced with that revision's full SHA
+  at the moment of the write -- so a manifest written after the
+  generation-record commit ``T`` records ``generation_head: {HEAD}`` (``T``)
+  and ``reviewed_implementation_head: {HEAD^}`` (the commit
+  ``record_bundle_generation`` recorded).
+- ``{"action": "commit", "paths", "message"}`` stages exactly ``paths``
+  (``git add --``) and commits them with ``message``.
+- ``{"action": "delete", "path"}`` removes a file or a whole directory
+  tree (a withdrawn ``current/``).
+
+A failing action (a commit with nothing staged, a missing path to delete)
+raises, so the worker exits non-zero -- a script error is never silent.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -185,11 +218,86 @@ def _git_commit() -> None:
     subprocess.run(["git", "commit", "-q", "-m", message], check=True)
 
 
+#: ``{HEAD}``, ``{HEAD^}`` and ``{HEAD~N}`` in a scripted write's text.
+_REVISION_TOKEN_RE = re.compile(r"\{(HEAD(?:\^|~[0-9]+)?)\}")
+
+
+def _substitute_revisions(text: str, cwd: str) -> str:
+    def resolve(match: re.Match) -> str:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{match.group(1)}^{{commit}}"],
+            cwd=cwd, capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip()
+
+    return _REVISION_TOKEN_RE.sub(resolve, text)
+
+
+def perform_actions(actions: list, cwd: "str | os.PathLike" = ".") -> None:
+    """Perform one scripted invocation's ``actions`` in ``cwd``, in order
+    (the module docstring's action list). The one implementation both the
+    scripted worker process and a test's in-process seeding use, so a
+    seeded state is exactly what a scripted worker would have left."""
+    cwd = os.fspath(cwd)
+    for action in actions:
+        kind = action["action"]
+        if kind == "write":
+            path = os.path.join(cwd, action["path"])
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as fh:
+                fh.write(_substitute_revisions(action["text"], cwd))
+        elif kind == "commit":
+            subprocess.run(["git", "add", "--", *action["paths"]], cwd=cwd, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", action["message"]], cwd=cwd, check=True)
+        elif kind == "delete":
+            path = os.path.join(cwd, action["path"])
+            if os.path.isdir(path) and not os.path.islink(path):
+                shutil.rmtree(path)
+            else:
+                os.unlink(path)
+        else:
+            raise ValueError(f"unknown scripted action {kind!r}")
+
+
+def script_invocations_path(script_path: "str | os.PathLike") -> str:
+    """The counter file beside a ``FAKE_CLAUDE_SCRIPT`` file."""
+    return os.fspath(script_path) + ".invocations"
+
+
+def _task() -> str | None:
+    argv = sys.argv[1:]
+    if "-p" in argv and argv.index("-p") + 1 < len(argv):
+        return argv[argv.index("-p") + 1]
+    return None
+
+
+def _run_script() -> None:
+    script_path = os.environ.get("FAKE_CLAUDE_SCRIPT")
+    if not script_path:
+        return
+    task = _task()
+    counter = script_invocations_path(script_path)
+    prior = 0
+    if os.path.exists(counter):
+        with open(counter) as fh:
+            prior = sum(1 for line in fh if line.strip() and json.loads(line)["task"] == task)
+    with open(counter, "a") as fh:
+        fh.write(json.dumps({"task": task, "invocation": prior}) + "\n")
+    with open(script_path) as fh:
+        script = json.load(fh)
+    invocations = script.get(task)
+    if invocations is None or prior >= len(invocations):
+        sys.stderr.write(f"FAKE_CLAUDE_SCRIPT: no scripted invocation #{prior} for task {task!r}\n")
+        sys.exit(92)
+    perform_actions(invocations[prior])
+
+
 def main() -> None:
     _count_invocation()
     _write_diagnostics()
     _check_required_file()
     _hang_until_file()
+    _run_script()
     _write_requested_file()
     _write_requested_files()
     _git_commit()

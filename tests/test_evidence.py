@@ -1091,6 +1091,52 @@ class StalePlanBundleGateTest(unittest.TestCase):
         gate = self._decide("AWAITING_LOCAL_PLAN_REVIEW").gate
         self.assertTrue(gate.safe_resume_command.startswith("0. write "))
 
+    def test_zero_byte_generator_stubs_ask_for_writes_and_name_the_quarantine(self) -> None:
+        """Manual-external implementation review round 1, ``I1``: a later
+        generator run that refused or withdrew after ``prepare-ai-review.sh``
+        created its empty author-file stubs leaves ``current/`` present, all
+        three author files present but zero bytes, no ``MANIFEST.md``, and
+        the previous round's real author files only in the quarantine. The
+        stubs carry nothing to refresh, so this is the "write" variant --
+        step 0 restoring ``CONTEXT_FILES.txt`` from the quarantine, the
+        request format named -- never "refresh"."""
+        quarantine = self.root / ".ai-review" / "wi-1" / "current.rejected-0123abcd"
+        quarantine.mkdir(parents=True)
+        for name in ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt"):
+            (quarantine / name).write_text("previous round\n")
+        bundle = self.root / self.BUNDLE
+        bundle.mkdir(parents=True)
+        for name in ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt"):
+            (bundle / name).write_bytes(b"")
+        self.assertFalse((bundle / "MANIFEST.md").exists())
+        for phase in self.GATED:
+            with self.subTest(phase=phase):
+                result = self._decide(phase)
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                gate = result.gate
+                self.assertIn("MANIFEST.md is missing or unreadable", gate.what_is_required)
+                self._assert_executable_recovery(gate, phase)
+                for text in (gate.safe_resume_command, gate.what_is_required):
+                    self._assert_in_order(text, [
+                        f"0. write {self.BUNDLE / 'CONTEXT_FILES.txt'}",
+                        ".ai-review/wi-1/current.rejected-0123abcd/",
+                        f"1. write {self.BUNDLE / 'REVIEW_REQUEST.md'}",
+                        "Review request format",
+                        f"2. write {self.BUNDLE / 'TEST_RESULTS.md'}",
+                        "Review request format",
+                        "3. run scripts/prepare-ai-review.sh",
+                    ])
+                    self.assertNotIn("refresh", text)
+
+    def test_one_zero_byte_author_file_is_enough_for_the_write_variant(self) -> None:
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self._write_author_files()
+        (self.root / self.BUNDLE / "CONTEXT_FILES.txt").write_bytes(b"")
+        gate = self._decide("AWAITING_LOCAL_PLAN_REVIEW").gate
+        self.assertTrue(gate.safe_resume_command.startswith("0. write "))
+        self.assertNotIn("refresh", gate.safe_resume_command)
+
     def test_base_commit_placeholder_when_the_state_carries_none(self) -> None:
         fixtures.write_plan_manifest(self.root, "wi-1", 1)
         work_item = fixtures.build_work_item_view(

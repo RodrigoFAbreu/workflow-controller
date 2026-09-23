@@ -1025,8 +1025,22 @@ PLAN_BUNDLE_CONSUMING_PHASES: frozenset[str] = frozenset({
 
 #: The plan-stage author-written bundle files. The generator only ever
 #: creates them as empty stubs (``prepare-ai-review.sh``), so a missing one
-#: must be *written*, not refreshed.
+#: -- or a zero-byte one, which is exactly such a stub -- must be
+#: *written*, not refreshed.
 _PLAN_AUTHOR_FILES: tuple[str, ...] = ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt")
+
+
+def _author_file_has_content(path: Path) -> bool:
+    """Whether ``path`` is a regular, non-empty file. A zero-byte file is
+    the generator's own empty stub (``prepare-ai-review.sh`` creates each
+    missing author file as ``: > "$path"`` before its closing checks can
+    refuse or withdraw), so it carries no previous-round content to
+    refresh and counts as absent. A stat that cannot complete counts as
+    absent too -- "write" is the safe variant."""
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
 
 
 def _newest_quarantine_dir(root: Path, work_item_id: str) -> Path | None:
@@ -1054,8 +1068,10 @@ def _plan_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
     command performs these refreshes once the item is past
     ``REVISING_PLAN``. Controller performs none of the steps itself.
 
-    When ``<bundle_dir>`` or any author file is absent (a completed
-    withdrawal, or a first-round generator failure) the steps say "write"
+    When ``<bundle_dir>`` or any author file is absent or zero bytes (a
+    completed withdrawal, a first-round generator failure, or the empty
+    stubs a later generator run left behind before refusing or
+    withdrawing -- :func:`_author_file_has_content`) the steps say "write"
     rather than "refresh", name the protocol's request format, and a step
     0 restoring ``CONTEXT_FILES.txt`` is prepended -- naming the newest
     quarantine directory, when one exists, as the previous round's source."""
@@ -1064,7 +1080,7 @@ def _plan_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
     base_commit = work_item.base_commit or "<base-sha>"
     revision = work_item.plan_revision if work_item.plan_revision is not None else "<plan_revision>"
     absent = not (root / bundle_dir).is_dir() or any(
-        not (root / bundle_dir / name).is_file() for name in _PLAN_AUTHOR_FILES
+        not _author_file_has_content(root / bundle_dir / name) for name in _PLAN_AUTHOR_FILES
     )
     verb = "write" if absent else "refresh"
     shape = " (in REVIEW_PROTOCOL.md's \"Review request format\" shape)" if absent else ""

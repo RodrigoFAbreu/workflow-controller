@@ -821,7 +821,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-execution-hardening-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -906,8 +906,18 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 25,
-      "last_transition": "2026-09-22T23:31:53Z"
+      "state_revision": 27,
+      "last_transition": "2026-09-23T07:57:48Z",
+      "implementation_review_stages": {
+        "review_content_id": "cda5ff4e3f410ae13af7c03052fe930fda741d5b01caa49f5f254d191844ed40",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "f9ad74ecf8f5dd8c082800fc537c69ab1834a99cde403ca47ba5c8054d6ff294",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-23T00:00:45Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

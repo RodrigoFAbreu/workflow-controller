@@ -475,6 +475,17 @@ class LaunchPathTest(unittest.TestCase):
         self.assertEqual(completed["worker_outcome"], "SUCCESS")
         self.assertIsInstance(record, dict)
 
+    def test_an_ordinary_launch_is_the_bare_command_with_a_null_addendum(self) -> None:
+        diag = self.tmp_root / "diag.json"
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_DIAG_FILE": str(diag)}):
+            record = job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        self.assertEqual(json.loads(diag.read_text())["argv"][1], "/milestone-plan wi-1")
+        self.assertIn("task_addendum", record["selected_action"])
+        self.assertIsNone(record["selected_action"]["task_addendum"])
+
     def test_write_sequence_prefix_is_planned_launched_completed(self) -> None:
         with _WriteSpy() as spy:
             job.execute_step(
@@ -950,6 +961,318 @@ class PartialApplyPlanReviewExecuteTest(unittest.TestCase):
         self.assertEqual(record["status"], job.STATUS_FINISHED)
         self.assertTrue(record["transition_verified"])
         self.assertIs(job._EXPECTED_OUTCOMES_BY_KEY[key], row)
+
+
+
+# ---------------------------------------------------------------------------
+# Automatic-lifecycle-orchestration CP4B: the apply relaunch bound's job
+# history, and the "2.2" APPLYING_REVIEW_FEEDBACK launch with its task
+# addendum.
+# ---------------------------------------------------------------------------
+
+_APPLY_PHASE = "APPLYING_REVIEW_FEEDBACK"
+
+
+def _apply_job_record(
+    target_repo: str | None, *, job_id: str, status: str, created_at: str, bundle_id: str | None = "b" * 64,
+    work_item_id: str = "wi-1", from_phase: str = _APPLY_PHASE,
+    command: str = "/apply-implementation-review wi-1", launched: bool = True, code: str | None = None,
+) -> dict:
+    """A job record as ``execute_step`` writes one for a launched apply (or,
+    with ``launched=False``, one that never reached ``LAUNCHED``), carrying
+    only what ``last_launched_apply_job_view`` reads plus the identity
+    fields."""
+    record = {
+        "schema_version": job.SCHEMA_VERSION, "job_id": job_id, "controller_generation": 7,
+        "target_repo": target_repo, "work_item_id": work_item_id, "observed_phase_before": from_phase,
+        "pre_state": {"phase": from_phase, "bundle_manifest_bundle_id": bundle_id},
+        "selected_action": {
+            "kind": "slash_command", "command": command, "task_addendum": None, "automatic": True,
+            "declined": False, "reason": "seeded", "evidence": [],
+        },
+        "status": status, "human_gate_pending": None, "handoff_pending": False,
+        "created_at": created_at, "updated_at": created_at,
+    }
+    if launched:
+        record["expected_transition"] = {"from": from_phase, "to_any_of": ["AWAITING_LOCAL_IMPLEMENTATION_REVIEW"]}
+    if code is not None:
+        record["reconciliation_evidence"] = {"code": code, "error": "WorkerLaunchError"}
+    return record
+
+
+def _seed_job(runtime_root: Path, record: dict, *, name: str | None = None) -> Path:
+    jobs_dir = runtime_root / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    path = jobs_dir / f"{name or record['job_id']}.json"
+    path.write_text(json.dumps(record))
+    return path
+
+
+class LastLaunchedApplyJobViewTest(unittest.TestCase):
+    """``job.last_launched_apply_job_view`` (CP4B, "Where the job history
+    comes from"): J is the most recent terminal ``/apply-implementation-
+    review`` record this Controller launched for the work item from
+    ``APPLYING_REVIEW_FEEDBACK``, never a non-terminal or never-started one,
+    read tolerantly and without ever raising on a job file (round 3's O5)."""
+
+    TARGET = "/targets/repo"
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.runtime_root = Path(self._tmp.name) / "runtime"
+
+    def _view(self, work_item_id: str | None = "wi-1"):
+        return job.last_launched_apply_job_view(self.runtime_root, Path(self.TARGET), work_item_id)
+
+    def _seed(self, job_id: str, status: str, created_at: str, **fields) -> None:
+        _seed_job(self.runtime_root, _apply_job_record(
+            self.TARGET, job_id=job_id, status=status, created_at=created_at, **fields,
+        ))
+
+    def test_no_runtime_no_jobs_or_no_work_item_is_none(self) -> None:
+        self.assertIsNone(self._view())
+        (self.runtime_root / "jobs").mkdir(parents=True)
+        self.assertIsNone(self._view())
+        self._seed("j1", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self.assertIsNone(self._view(None))
+
+    def test_a_terminal_launched_apply_record_is_read(self) -> None:
+        self._seed("j1", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self.assertEqual(self._view(), evidence.LaunchedJobView(
+            job_id="j1", command="/apply-implementation-review", from_phase=_APPLY_PHASE,
+            status=job.STATUS_FAILED, pre_bundle_manifest_bundle_id="b" * 64,
+        ))
+
+    def test_the_most_recent_candidate_wins(self) -> None:
+        self._seed("zz-older", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self._seed("aa-newer", job.STATUS_FINISHED, "2026-01-02T00:00:00Z")
+        self.assertEqual(self._view().job_id, "aa-newer")
+        self._seed("mm-newest", job.STATUS_INTERRUPTED, "2026-01-03T00:00:00Z")
+        self.assertEqual(self._view().status, job.STATUS_INTERRUPTED)
+
+    def test_a_non_terminal_record_is_never_j(self) -> None:
+        """Round 4's O3: a record still ``LAUNCHED`` (for example, the
+        Controller was killed during the apply and the worker is orphaned)
+        is never J, so neither ``explain`` nor ``step`` advises a rerun while
+        it may still be editing the worktree."""
+        for status in (job.STATUS_PLANNED, job.STATUS_LAUNCHED, job.STATUS_COMPLETED):
+            with self.subTest(status=status):
+                self._seed("newest", status, "2026-01-09T00:00:00Z")
+                self.assertIsNone(self._view())
+        self._seed("earlier", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self.assertEqual(self._view().job_id, "earlier")
+
+    def test_a_worker_not_started_record_is_skipped_so_an_earlier_attempt_counts(self) -> None:
+        self._seed("not-started", job.STATUS_FAILED, "2026-01-09T00:00:00Z", code=job.WORKER_NOT_STARTED_CODE)
+        self.assertIsNone(self._view())
+        self._seed("earlier", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self.assertEqual(self._view().job_id, "earlier")
+
+    def test_non_candidates_are_skipped_without_raising(self) -> None:
+        jobs_dir = self.runtime_root / "jobs"
+        jobs_dir.mkdir(parents=True)
+        (jobs_dir / "unparseable.json").write_text("{not json")
+        (jobs_dir / "binary.json").write_bytes(b"\xff\xfe\x00")
+        (jobs_dir / "a-list.json").write_text("[1, 2]")
+        (jobs_dir / "a-directory.json").mkdir()
+        # `resume --abandon`'s minimal record: no field of it names a target.
+        (jobs_dir / "abandoned.json").write_text(json.dumps({
+            "job_id": "abandoned", "target_repo": None, "status": job.STATUS_FAILED,
+            "reconciliation_evidence": {"code": "OperatorAbandoned"},
+        }))
+        later = "2026-01-09T00:00:00Z"
+        for name, fields in (
+            ("other-target", dict(target_repo_override="/targets/other")),
+            ("other-item", dict(work_item_id="wi-2")),
+            ("other-phase", dict(from_phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW")),
+            ("other-command", dict(command="/review-implementation wi-1")),
+            ("never-launched", dict(launched=False, status=job.STATUS_GATE_BLOCKED)),
+            ("unknown-status", dict(status="EXOTIC")),
+        ):
+            target = fields.pop("target_repo_override", self.TARGET)
+            status = fields.pop("status", job.STATUS_FAILED)
+            _seed_job(self.runtime_root, _apply_job_record(
+                target, job_id=name, status=status, created_at=later, **fields,
+            ))
+        for name, mutate in (
+            ("no-job-id", lambda r: r.pop("job_id")),
+            ("no-created-at", lambda r: r.pop("created_at")),
+            ("no-pre-state", lambda r: r.update(pre_state=None)),
+            ("no-selected-action", lambda r: r.update(selected_action="x")),
+            ("empty-command", lambda r: r["selected_action"].update(command="  ")),
+            ("transition-not-object", lambda r: r.update(expected_transition=["from"])),
+        ):
+            record = _apply_job_record(self.TARGET, job_id=name, status=job.STATUS_FAILED, created_at=later)
+            mutate(record)
+            _seed_job(self.runtime_root, record, name=name)
+        self.assertIsNone(self._view())
+        self._seed("the-one", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self.assertEqual(self._view().job_id, "the-one")
+
+    def test_a_record_without_the_pre_state_bundle_id_reads_as_none(self) -> None:
+        record = _apply_job_record(self.TARGET, job_id="pre-cp2", status=job.STATUS_FAILED,
+                                   created_at="2026-01-01T00:00:00Z")
+        del record["pre_state"]["bundle_manifest_bundle_id"]
+        _seed_job(self.runtime_root, record)
+        view = self._view()
+        self.assertEqual(view.job_id, "pre-cp2")
+        self.assertIsNone(view.pre_bundle_manifest_bundle_id)
+        self.assertTrue(evidence.relaunch_bound_applies(view, "b" * 64))
+
+
+class ApplyingReviewFeedbackExecuteTest(unittest.TestCase):
+    """``execute_step`` at ``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` (CP4B),
+    against a real target whose ``HEAD`` records the previous round's
+    ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and whose working tree holds
+    the review-stage writer's uncommitted ``APPLYING_REVIEW_FEEDBACK`` plus
+    an admissible local ``REVISE``. A launching case runs
+    ``tests/fake_claude.py`` as a no-op (its diagnostic file records the
+    task); a gated case runs it fail-if-invoked."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.managed_repo = fixtures.build_implementation_target(
+            self.tmp_root, phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW", implementation_revision=1,
+            reviewed_implementation_head="1" * 40,
+        )
+        self.root = self.managed_repo.root
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, reviewed_implementation_head="1" * 40)
+        fixtures.write_review_feedback(self.root, ".ai-review/wi-1/feedback", fixtures.build_review_feedback_text(
+            status="REVISE", reviewer_role="LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+            reviewed_base_commit=fixtures.state_entry(self.root)["base_commit"],
+        ))
+        fixtures.update_workflow_state(self.root, "wi-1", phase=_APPLY_PHASE)
+        self.addendum = evidence.pending_review_stage_write_addendum(
+            "wi-1", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+        )
+        self._runs = 0
+
+    def _execute(self, *, seeded: tuple[dict, ...] = (), launches: bool) -> tuple[dict, Path, Path]:
+        self._runs += 1
+        runtime_root = self.tmp_root / f"runtime-{self._runs}"
+        for record in seeded:
+            _seed_job(runtime_root, record)
+        diag = self.tmp_root / f"diag-{self._runs}.json"
+        env = {"FAKE_CLAUDE_DIAG_FILE": str(diag)}
+        if not launches:
+            env["FAKE_CLAUDE_REQUIRE_FILE"] = str(self.tmp_root / "never-created")
+        with unittest.mock.patch.dict("os.environ", env):
+            record = job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        self.assertEqual(diag.exists(), launches)
+        self.assertEqual(record["selected_action"]["automatic"], launches)
+        return record, diag, runtime_root
+
+    def _record(self, job_id: str, status: str, created_at: str = "2026-01-01T00:00:00Z", **fields) -> dict:
+        return _apply_job_record(str(self.root), job_id=job_id, status=status, created_at=created_at, **fields)
+
+    def test_the_pending_write_addendum_is_in_the_launched_task_and_recorded(self) -> None:
+        record, diag, _runtime = self._execute(launches=True)
+        argv = json.loads(diag.read_text())["argv"]
+        self.assertEqual(argv[1], f"/apply-implementation-review wi-1\n\n{self.addendum}")
+        self.assertEqual(record["selected_action"]["command"], "/apply-implementation-review wi-1")
+        self.assertEqual(record["selected_action"]["task_addendum"], self.addendum)
+        self.assertEqual(record["expected_transition"]["from"], _APPLY_PHASE)
+        # A no-op worker regenerates nothing, so nothing verifies.
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+
+    def test_head_recording_the_phase_launches_the_bare_command(self) -> None:
+        fixtures.commit_paths(self.root, "Record the review-stage state write", "docs/ai-workflow/WORKFLOW_STATE.json")
+        record, diag, _runtime = self._execute(launches=True)
+        self.assertEqual(json.loads(diag.read_text())["argv"][1], "/apply-implementation-review wi-1")
+        self.assertIsNone(record["selected_action"]["task_addendum"])
+
+    def test_an_unverified_earlier_attempt_is_the_relaunch_bound_and_nothing_launches(self) -> None:
+        for status in (job.STATUS_FAILED, job.STATUS_INTERRUPTED, job.STATUS_INCOMPLETE):
+            with self.subTest(status=status):
+                record, _diag, _runtime = self._execute(
+                    seeded=(self._record("earlier-apply", status),), launches=False,
+                )
+                self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+                gate = record["human_gate_pending"]
+                self.assertIn(f"job earlier-apply, ended {status}", gate["what_is_required"])
+                self.assertEqual(gate["safe_resume_command"], "workflow-controller explain --work-item wi-1")
+
+    def test_a_null_recorded_bundle_is_the_bound(self) -> None:
+        record, _diag, _runtime = self._execute(
+            seeded=(self._record("earlier-apply", job.STATUS_FAILED, bundle_id=None),), launches=False,
+        )
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+
+    def test_no_bound_after_a_finished_attempt_another_phase_or_another_bundle(self) -> None:
+        """The last case is round 2's O1: a human completed the apply and
+        the next local review outside this Controller, and a later
+        ``REVISE`` returned the item here with that failed job still the
+        most recent apply job. The manifest is new, so the bound lapsed."""
+        for name, seeded in (
+            ("FINISHED", self._record("earlier-apply", job.STATUS_FINISHED)),
+            ("another phase", self._record(
+                "earlier-review", job.STATUS_FAILED, from_phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+                command="/review-implementation wi-1",
+            )),
+            ("another bundle", self._record("earlier-apply", job.STATUS_FAILED, bundle_id="a" * 64)),
+        ):
+            with self.subTest(case=name):
+                record, diag, _runtime = self._execute(seeded=(seeded,), launches=True)
+                self.assertEqual(record["selected_action"]["command"], "/apply-implementation-review wi-1")
+                self.assertEqual(record["selected_action"]["task_addendum"], self.addendum)
+
+    def test_a_worker_not_started_record_is_skipped_but_an_earlier_attempt_behind_it_counts(self) -> None:
+        not_started = self._record(
+            "not-started", job.STATUS_FAILED, created_at="2026-01-09T00:00:00Z",
+            code=job.WORKER_NOT_STARTED_CODE,
+        )
+        with self.subTest(case="alone"):
+            self._execute(seeded=(not_started,), launches=True)
+        with self.subTest(case="in front of an earlier real attempt"):
+            record, _diag, _runtime = self._execute(
+                seeded=(not_started, self._record("real-attempt", job.STATUS_FAILED)), launches=False,
+            )
+            self.assertIn("job real-attempt, ended FAILED", record["human_gate_pending"]["what_is_required"])
+
+    def test_a_non_terminal_record_is_never_j(self) -> None:
+        pending = self._record("still-launched", job.STATUS_LAUNCHED, created_at="2026-01-09T00:00:00Z")
+        with self.subTest(case="alone"):
+            self._execute(seeded=(pending,), launches=True)
+        with self.subTest(case="in front of an earlier terminal attempt"):
+            record, _diag, _runtime = self._execute(
+                seeded=(pending, self._record("earlier-apply", job.STATUS_FAILED)), launches=False,
+            )
+            self.assertIn("job earlier-apply, ended FAILED", record["human_gate_pending"]["what_is_required"])
+
+    def test_the_unverified_job_this_step_leaves_is_the_next_steps_bound(self) -> None:
+        """State 7's shape at the unit level: the first ``step`` launches
+        and lands ``FAILED`` (no-op worker); the next ``step`` against the
+        same, unchanged bundle is the relaunch-bound gate naming that job."""
+        first, _diag, runtime_root = self._execute(launches=True)
+        self.assertEqual(first["pre_state"]["bundle_manifest_bundle_id"], "b" * 64)
+        env = {"FAKE_CLAUDE_REQUIRE_FILE": str(self.tmp_root / "never-created")}
+        with unittest.mock.patch.dict("os.environ", env):
+            second = job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        self.assertEqual(second["status"], job.STATUS_GATE_BLOCKED)
+        self.assertIn(f"job {first['job_id']}, ended FAILED", second["human_gate_pending"]["what_is_required"])
+
+
+class WorkerTaskTest(unittest.TestCase):
+    """``job.worker_task``: the bare command unless the action carries a
+    ``task_addendum`` (CP4B)."""
+
+    def test_bare_command_without_an_addendum(self) -> None:
+        self.assertEqual(job.worker_task(Action(command="/milestone-plan wi-1")), "/milestone-plan wi-1")
+
+    def test_command_blank_line_addendum(self) -> None:
+        self.assertEqual(
+            job.worker_task(Action(command="/apply-implementation-review wi-1", task_addendum="note")),
+            "/apply-implementation-review wi-1\n\nnote",
+        )
 
 
 if __name__ == "__main__":

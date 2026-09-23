@@ -405,4 +405,110 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
     - restoring the old `APPLYING_REVIEW_FEEDBACK` text;
     - dropping either new bundle-bearing phase;
     - dropping the provenance text.
-- **CP4B-CP9 -- pending**, in registry order.
+- **CP4B -- complete.** Implementation-bundle recovery and row-18 remediation, in
+  `controller/evidence.py`, `controller/decision.py`, `controller/job.py` and
+  `controller/cli.py`.
+  - The implementation-bundle gate, final form (`_implementation_bundle_gate`). It reads
+    `implementation_bundle_coherence`'s clause and `generation_record_view`, never job records,
+    and is evaluated in order:
+    1. malformed `T`: `HEAD` is this work item's ordinary-role record and its committed phase
+       equals `HEAD^`'s. The gate names the commit and `OPUS-R101-001`, says no Workflow command
+       repairs it (a human repairs the unpushed history so the pending write lands alone before
+       `T`, then reruns step 7), and resumes with `workflow-controller explain`;
+    2. provenance only: the only failing clause is `generation_head`, `generation_head..HEAD`
+       holds no record for this work item, and the phase is in
+       `PROVENANCE_RECOVERY_LEGAL_PHASES` (a literal copy of
+       `bundle_generation_recovered_role_legal_committed_phases("2.2")`, held equal by a test).
+       The evidence lists each intervening commit, oldest first, with its subject and paths
+       (`commits_since`). The text and `safe_resume_command` name
+       `/recover-implementation-provenance` only on the excluded-only condition, and otherwise
+       say to revert the commits or carry the change through a review round;
+    3. everything else: the ordered steps of `_implementation_bundle_recovery_steps`, including
+       a `generation_head`-only failure with a newer record (a `same_content` round whose
+       generator failed). `safe_resume_command` is the steps, never the bare generator.
+  - `"2.2"` `APPLYING_REVIEW_FEEDBACK` gets the automatic path in front of CP4's corrected gate
+    (`_decide_applying_review_feedback_two_stage`). In order:
+    1. absent or inadmissible feedback (`evaluate_apply_implementation_review_admissibility`)
+       gives the corrected gate with the reason appended;
+    2. the relaunch bound (`relaunch_bound_applies`) gives a gate naming J's id and status, the
+       step-4/step-1 consequence, the `review-bundle.tar.gz` archive beside `current/`, and the
+       human's two options. It resumes with `workflow-controller explain`;
+    3. an unreadable committed phase at `HEAD` gives the corrected gate;
+    4. otherwise `/apply-implementation-review <id>` is selected. It carries the pinned
+       `PENDING_REVIEW_STAGE_WRITE_ADDENDUM`, formatted with the id and the committed phase,
+       exactly when `HEAD` does not record `APPLYING_REVIEW_FEEDBACK`.
+
+    `"1"`/`"2.1"` keep the static corrected gate unchanged.
+  - Job history: `evidence.decide(..., *, last_apply_job=None)` takes an
+    `evidence.LaunchedJobView`. `job.last_launched_apply_job_view` builds it from the runtime's
+    `jobs/*.json`: the most recent (`created_at`, then `job_id`) terminal record for the target
+    and work item that reached `LAUNCHED` from `APPLYING_REVIEW_FEEDBACK` with the
+    `/apply-implementation-review` token. It skips `WorkerNotStarted` records and never raises
+    on a job file. `execute_step` and `cmd_explain` both pass it.
+  - Task assembly: `decision.Action` gains `task_addendum: str | None = None`. `job.worker_task`
+    launches `command` or `f"{command}\n\n{task_addendum}"`, and `selected_action.task_addendum`
+    records it (`null` for a bare task). `explain` prints the addendum, and `explain --json`
+    gains `task_addendum`.
+  - `_PHASES_AWAITING_EVIDENCE_HANDLER` and its `interim_decline_reason` are deleted.
+    `InterimSetRemovalTest` asserts that neither exists and that no `controller/` module names
+    either.
+  - Judgment calls, where the plan text left a detail open:
+    - Generator stage: with no manifest anchor (no readable manifest, or no `generation_head`
+      line) and `HEAD` itself this work item's record, `HEAD`'s parent phase decides. Without
+      this, a first-round final pass whose generator failed would name both forms, not
+      `implementation`. A present but non-ancestor `generation_head` still names both forms.
+    - An unreadable committed phase at `HEAD` gates (fail closed) rather than attaching an
+      addendum with an unknown phase.
+    - The malformed-`T` check needs a readable committed phase at `HEAD`.
+    - A record missing `pre_state.bundle_manifest_bundle_id` reads as `None`, which the bound
+      counts as the same bundle, rather than being skipped. The evidence side also re-checks
+      J's command and phase.
+    - `commits_since` follows the plan's `git log --reverse --name-only` without
+      `--first-parent`.
+  - Tests whose assertions change. Each follows from CP4B replacing CP4's first-form texts, and
+    none is weakened:
+    - `test_evidence`: the local/manual/external incoherent-bundle tests now assert the ordered
+      steps (`_assert_regeneration_steps`). The two `generation_head`-only tests assert the
+      conditional provenance text (`_assert_provenance_only`); one is renamed
+      `test_a_generation_head_only_failure_names_the_conditional_provenance_recovery`.
+    - `test_decision`: `_INTERIM_PHASES` is gone. The coherence-gate test asserts the steps.
+      The interim-phase test became `test_the_former_interim_phases_classify_by_the_rule_alone`.
+    - `test_integration_disposable_repo`: `_run` expects the command plus any recorded addendum
+      as the worker's task.
+  - New tests:
+    - `ImplementationBundleRecoveryGateTest`, per ordered case against real repositories:
+      malformed `T`, excluded-only commits, the legal-phase copy, `same_content` -> `post-fix`,
+      ordinary post-fix -> `post-fix`, final pass -> `implementation` (first round and after a
+      re-approval), and both forms;
+    - `ApplyingReviewFeedbackAutomaticPathTest` and `PendingReviewStageWriteAddendumTest`
+      (byte-for-byte pin, no user-only name, passes `_assert_not_user_only`);
+    - `test_job`: `LastLaunchedApplyJobViewTest`, `ApplyingReviewFeedbackExecuteTest` (the
+      addendum in the fake worker's recorded argv; FAILED/INTERRUPTED/INCOMPLETE bounds under
+      the fail-if-invoked fake; FINISHED, another phase, another bundle; null bundle;
+      `WorkerNotStarted` alone and in front of a real attempt; a non-terminal record never J),
+      `WorkerTaskTest`, and a bare-task check in `LaunchPathTest`;
+    - `test_cli`: `ApplyingReviewFeedbackCliTest`: `explain` shows the addendum, `explain` and
+      `step` record the same gate, and `explain` tolerates an unparseable file, an abandoned
+      minimal record and another target's record;
+    - `Protocol22ImplementationReviewGatesTest` gains state 6 (automatic, with the addendum in
+      the recorded task) and state 7 (the relaunch-bound gate naming state 6's job).
+  - Verified with `python3 -m unittest tests.test_evidence tests.test_decision tests.test_job
+    tests.test_cli tests.test_integration_disposable_repo`: 383 tests OK, 2 skipped. The full
+    suite (`python3 -m unittest discover -s tests -t .`) ran 767 tests: OK, 2 skipped.
+    `python3 tests/golden/generate_external_implementation_review_decisions.py --check` reports
+    that golden as current. The plan-stage golden test is green; its generator's raw `--check`
+    still reports the CP3-documented `AMENDING_PLAN` difference.
+  - Mutation checks were run in a scratch copy. Each of these 25 mutants fails at least one
+    test:
+    - dropping the malformed-`T` case, the no-newer-record or legal-phase condition of the
+      provenance case, or the `HEAD` fallback, or widening that fallback over a non-ancestor
+      anchor;
+    - the bound ignoring the bundle, a null bundle, `FINISHED`, or J's phase/command; no bound
+      at all;
+    - skipping admissibility; the addendum always or never; no unreadable-phase gate; the
+      automatic path at every version; drift in the addendum text;
+    - the builder keeping `WorkerNotStarted`, accepting non-terminal or never-launched records,
+      ignoring the target or recency;
+    - launching the bare command, not recording the addendum, or `execute_step`/`explain` not
+      passing the job history.
+- **CP5-CP9 -- pending**, in registry order.

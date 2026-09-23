@@ -104,18 +104,12 @@ _GATE_PHASES = {
 #: The phases with no action and no gate.
 _NO_ACTION_PHASES = {"LEGACY_READY", "MILESTONE_COMPLETE"}
 
-#: The interim set (CP3 item 5), restated independently. CP4 removed
-#: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and
-#: ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` once their evidence
-#: gates were installed; CP4B removes the set.
-_INTERIM_PHASES = {"APPLYING_REVIEW_FEEDBACK"}
-
-
 def _expected_automatic(phase: str, version: str | None) -> bool:
     """The rule, restated: a selected action launches iff its triple is
-    declared and its phase is not an interim one."""
+    declared. (CP3's interim ``_PHASES_AWAITING_EVIDENCE_HANDLER`` exception
+    is gone since CP4B -- ``InterimSetRemovalTest``.)"""
     token = _SELECTED_TOKEN_BY_PHASE[phase]
-    return (phase, version, token) in decision.AUTOMATIC_TRIPLES and phase not in _INTERIM_PHASES
+    return (phase, version, token) in decision.AUTOMATIC_TRIPLES
 
 
 class KnownPhaseSetTest(unittest.TestCase):
@@ -681,7 +675,15 @@ class Revision64PhaseWideningTest(unittest.TestCase):
         self.assertFalse(gated.declined)
         self.assertIsNone(gated.action)
         self.assertIn("implementation bundle is not coherent", gated.evidence[0])
-        self.assertEqual(gated.gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+        # CP4B: the gate's final form answers an absent bundle with the
+        # ordered recovery steps, never the bare generator.
+        self.assertIn("before any implementation review runs, perform in order: 0. write",
+                      gated.gate.what_is_required)
+        self.assertIn("scripts/prepare-ai-review.sh", gated.gate.safe_resume_command)
+        self.assertNotEqual(
+            gated.gate.safe_resume_command,
+            evidence._regeneration_command("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "wi-1"),
+        )
 
         fixtures.write_implementation_bundle(root, "wi-1", 1, reviewed_implementation_head="1" * 40)
         result = evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
@@ -727,11 +729,11 @@ class Revision64PhaseWideningTest(unittest.TestCase):
 
         for phase in ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"):
             with self.subTest(phase=phase):
-                self.assertNotIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
                 self.assertIn(phase, evidence._EVIDENCE_HANDLERS)
                 self.assertIn(phase, evidence.BUNDLE_BEARING_PHASES)
                 self.assertIn(phase, evidence.IMPLEMENTATION_BUNDLE_CONSUMING_PHASES)
-        self.assertEqual(decision._PHASES_AWAITING_EVIDENCE_HANDLER, frozenset({"APPLYING_REVIEW_FEEDBACK"}))
+        # CP4B deleted the interim set altogether (`InterimSetRemovalTest`).
+        self.assertFalse(hasattr(decision, "_PHASES_AWAITING_EVIDENCE_HANDLER"))
 
 
 class AutomaticTriplesTest(unittest.TestCase):
@@ -807,27 +809,21 @@ class DispatchRuleTest(unittest.TestCase):
         self.assertTrue(result.declined)
         self.assertFalse(result.automatic)
 
-    def test_the_interim_phase_is_declined_even_though_its_triple_exists(self) -> None:
-        """CP3's three interim phases, after CP4: ``APPLYING_REVIEW_FEEDBACK``
-        is still declined despite its triple (CP4B installs its gates); the
-        two CP4 phases classify by the rule alone."""
-        phase, token = "APPLYING_REVIEW_FEEDBACK", "/apply-implementation-review"
-        self.assertIn((phase, "2.2", token), decision.AUTOMATIC_TRIPLES)
-        self.assertIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
-        classification = decision.classify_selected_action(phase, "2.2", f"{token} wi-1")
-        self.assertFalse(classification.automatic)
-        self.assertEqual(
-            classification.decline_reason, decision.interim_decline_reason(phase, "2.2", f"{token} wi-1"),
-        )
-        self.assertIn("evidence gates are not installed yet", classification.decline_reason)
+    def test_the_former_interim_phases_classify_by_the_rule_alone(self) -> None:
+        """CP3's three interim phases, after CP4B: each implementation-review
+        triple is automatic at ``"2.2"`` and declined, with the uniform
+        reason, at ``"2.1"`` -- the rule alone decides, behind the evidence
+        gates ``controller.evidence`` installs ahead of it."""
         for phase, token in (
             ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "/review-implementation"),
             ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "/record-manual-implementation-review"),
+            ("APPLYING_REVIEW_FEEDBACK", "/apply-implementation-review"),
         ):
             with self.subTest(phase=phase):
                 self.assertIn((phase, "2.2", token), decision.AUTOMATIC_TRIPLES)
-                self.assertNotIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
-                self.assertTrue(decision.classify_selected_action(phase, "2.2", f"{token} wi-1").automatic)
+                classification = decision.classify_selected_action(phase, "2.2", f"{token} wi-1")
+                self.assertTrue(classification.automatic)
+                self.assertIsNone(classification.decline_reason)
                 declined = decision.classify_selected_action(phase, "2.1", f"{token} wi-1")
                 self.assertFalse(declined.automatic)
                 self.assertEqual(
@@ -949,6 +945,28 @@ class PerPhaseSetRemovalTest(unittest.TestCase):
             str(path.relative_to(package.parent))
             for path in sorted(package.glob("*.py"))
             if path.name != "decision.py" and pattern.search(path.read_text())
+        ]
+        self.assertEqual(offenders, [])
+
+
+class InterimSetRemovalTest(unittest.TestCase):
+    """CP4B: CP3's interim ``_PHASES_AWAITING_EVIDENCE_HANDLER`` (and its
+    own ``interim_decline_reason``) no longer exist, and no ``controller/``
+    module references either, so no behaviour can depend on them."""
+
+    NAMES = ("_PHASES_AWAITING_EVIDENCE_HANDLER", "interim_decline_reason")
+
+    def test_decision_no_longer_defines_them(self) -> None:
+        for name in self.NAMES:
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(decision, name))
+
+    def test_no_controller_module_references_them(self) -> None:
+        package = Path(decision.__file__).resolve().parent
+        pattern = re.compile(r"\b(" + "|".join(self.NAMES) + r")\b")
+        offenders = [
+            str(path.relative_to(package.parent))
+            for path in sorted(package.glob("*.py")) if pattern.search(path.read_text())
         ]
         self.assertEqual(offenders, [])
 

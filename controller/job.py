@@ -2308,6 +2308,98 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
 
 
 # ---------------------------------------------------------------------------
+# The apply relaunch bound's job history (automatic-lifecycle-orchestration
+# CP4B, "Where the job history comes from").
+# ---------------------------------------------------------------------------
+
+_APPLYING_REVIEW_FEEDBACK = "APPLYING_REVIEW_FEEDBACK"
+_APPLY_IMPLEMENTATION_REVIEW = "/apply-implementation-review"
+
+#: `reconciliation_evidence.code` of a record whose worker never started --
+#: no process ever touched the bundle, so the relaunch bound never counts it.
+WORKER_NOT_STARTED_CODE = "WorkerNotStarted"
+
+
+def _launched_apply_job_view(
+    record: Any, target_repo: str, work_item_id: str,
+) -> tuple[tuple[str, str], evidence.LaunchedJobView] | None:
+    """``((created_at, job_id), view)`` when ``record`` is a candidate J
+    for :func:`last_launched_apply_job_view`, else ``None`` -- never
+    raises. A candidate is a JSON object for this target and work item,
+    whose status is terminal, which reached ``LAUNCHED`` (it carries
+    ``expected_transition``) from ``APPLYING_REVIEW_FEEDBACK`` with the
+    ``/apply-implementation-review`` token, whose worker was not recorded
+    as never started, and which carries every field read here. A missing
+    ``pre_state.bundle_manifest_bundle_id`` (a record written before CP2)
+    reads as ``None``, which the bound counts as the same bundle (fail
+    closed) -- never as a reason to skip the record."""
+    if not isinstance(record, dict):
+        return None
+    if record.get("target_repo") != target_repo or record.get("work_item_id") != work_item_id:
+        return None
+    status = record.get("status")
+    if not isinstance(status, str) or status not in TERMINAL_STATUSES:
+        return None
+    expected_transition = record.get("expected_transition")
+    if not isinstance(expected_transition, dict) or expected_transition.get("from") != _APPLYING_REVIEW_FEEDBACK:
+        return None
+    selected_action = record.get("selected_action")
+    command = selected_action.get("command") if isinstance(selected_action, dict) else None
+    if not isinstance(command, str) or not command.split() or command.split()[0] != _APPLY_IMPLEMENTATION_REVIEW:
+        return None
+    reconciliation_evidence = record.get("reconciliation_evidence")
+    if isinstance(reconciliation_evidence, dict) and reconciliation_evidence.get("code") == WORKER_NOT_STARTED_CODE:
+        return None
+    job_id = record.get("job_id")
+    created_at = record.get("created_at")
+    pre_state = record.get("pre_state")
+    if not isinstance(job_id, str) or not isinstance(created_at, str) or not isinstance(pre_state, dict):
+        return None
+    bundle_id = pre_state.get("bundle_manifest_bundle_id")
+    return (created_at, job_id), evidence.LaunchedJobView(
+        job_id=job_id, command=_APPLY_IMPLEMENTATION_REVIEW, from_phase=_APPLYING_REVIEW_FEEDBACK,
+        status=status, pre_bundle_manifest_bundle_id=bundle_id if isinstance(bundle_id, str) else None,
+    )
+
+
+def last_launched_apply_job_view(
+    runtime_root: Path, target_root: Path, work_item_id: str | None,
+) -> evidence.LaunchedJobView | None:
+    """J for the apply relaunch bound (``evidence.relaunch_bound_applies``):
+    the most recent (by ``created_at``, then ``job_id``) **terminal**
+    ``/apply-implementation-review`` record this Controller launched for
+    ``work_item_id`` against ``target_root`` from ``APPLYING_REVIEW_FEEDBACK``
+    (:func:`_launched_apply_job_view`), or ``None``. A non-terminal record
+    is never J, and a ``WorkerNotStarted`` record is skipped, so an earlier
+    attempt behind it still counts.
+
+    Reads tolerantly, over the same non-recursive ``jobs/*.json`` scan
+    :func:`resume` makes, and never raises on a job file: a file that does
+    not read or parse as a JSON object, another target's record (including
+    a record whose ``target_repo`` is ``null``), and a record missing a
+    field it reads are all skipped -- so ``explain`` still reports its
+    decision while such a file is on disk."""
+    if work_item_id is None:
+        return None
+    jobs_dir = Path(runtime_root) / "jobs"
+    try:
+        paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+    except OSError:
+        return None
+    target_repo = str(target_root)
+    best: tuple[tuple[str, str], evidence.LaunchedJobView] | None = None
+    for path in paths:
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        candidate = _launched_apply_job_view(record, target_repo, work_item_id)
+        if candidate is not None and (best is None or candidate[0] > best[0]):
+            best = candidate
+    return best[1] if best is not None else None
+
+
+# ---------------------------------------------------------------------------
 # Record assembly.
 # ---------------------------------------------------------------------------
 
@@ -2322,14 +2414,28 @@ def _now() -> str:
 
 
 def _selected_action_dict(decision: Decision) -> dict:
+    """``selected_action``. ``task_addendum`` (automatic-lifecycle-
+    orchestration CP4B, additive) records the addendum the worker's task
+    carried after the command, ``None`` when the task was the bare
+    command; ``command`` stays the bare command every reader keys on."""
     return {
         "kind": "slash_command",
         "command": decision.action.command if decision.action is not None else None,
+        "task_addendum": decision.action.task_addendum if decision.action is not None else None,
         "automatic": decision.automatic,
         "declined": decision.declined,
         "reason": decision.reason,
         "evidence": list(decision.evidence),
     }
+
+
+def worker_task(action: Any) -> str:
+    """The task a worker is launched with: ``action.command`` when it
+    carries no ``task_addendum``, else ``f"{command}\\n\\n{task_addendum}"``
+    (CP4B). ``worker.launch``'s user-only scan sees this whole string."""
+    if action.task_addendum is None:
+        return action.command
+    return f"{action.command}\n\n{action.task_addendum}"
 
 
 def _human_gate_dict(gate: Any) -> dict:
@@ -2513,7 +2619,13 @@ def execute_step(
     # sibling entry point row 7 needs (CP4's own paragraph): unconditional
     # and version-independent, since there is no work item yet to key a
     # phase-dispatch table on.
-    decision = decide_no_work_item(managed_repo) if is_bootstrap else evidence.decide(managed_repo, snapshot, work_item)
+    # `last_apply_job` (automatic-lifecycle-orchestration CP4B) is the job
+    # history the "2.2" APPLYING_REVIEW_FEEDBACK relaunch bound reads -- the
+    # same read `cli`'s `explain` makes, so both reach the same decision.
+    decision = decide_no_work_item(managed_repo) if is_bootstrap else evidence.decide(
+        managed_repo, snapshot, work_item,
+        last_apply_job=last_launched_apply_job_view(runtime, managed_repo.root, resolved_work_item_id),
+    )
 
     if decision.gate is not None:
         return _no_launch_record(
@@ -2574,10 +2686,12 @@ def execute_step(
     }
     _persist(runtime, job_id, record)
 
-    # Step 5: launch the worker and wait synchronously.
+    # Step 5: launch the worker and wait synchronously. The task is the
+    # selected command, plus its `task_addendum` when the decision carries
+    # one (CP4B; recorded above as `selected_action.task_addendum`).
     resolved_timeout = DEFAULT_WORKER_TIMEOUT if timeout is None else timeout
     result = worker.launch(
-        decision.action.command,
+        worker_task(decision.action),
         cwd=managed_repo.root,
         permission_mode=permission_mode,
         timeout=resolved_timeout,

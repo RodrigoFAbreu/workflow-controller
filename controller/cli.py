@@ -296,10 +296,16 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     target = _inspect_target(args)
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
+    # The same job-history read `job.execute_step` makes (automatic-
+    # lifecycle-orchestration CP4B), so `explain` and `step` see the same
+    # apply relaunch bound. It never raises on a job file and writes nothing.
     decision = (
         decide_no_work_item(target)
         if work_item is target_state.NoWorkItemYet
-        else evidence.decide(target, snapshot, work_item)
+        else evidence.decide(
+            target, snapshot, work_item,
+            last_apply_job=job.last_launched_apply_job_view(runtime_root, target.root, work_item.work_item_id),
+        )
     )
 
     if args.json:
@@ -310,6 +316,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             "automatic": decision.automatic,
             "declined": decision.declined,
             "action": decision.action.command if decision.action is not None else None,
+            "task_addendum": decision.action.task_addendum if decision.action is not None else None,
             "reason": decision.reason,
             "gate": None if gate is None else {
                 "repository": gate.repository,
@@ -334,6 +341,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         print(f"  safe resume command: {gate.safe_resume_command}")
     elif decision.automatic:
         print(f"next automatic action: {decision.action.command}")
+        if decision.action.task_addendum is not None:
+            print(f"  task addendum: {decision.action.task_addendum}")
     elif decision.declined:
         print(f"declined by this generation (automation-safe, but not automated here): "
               f"{decision.action.command}")

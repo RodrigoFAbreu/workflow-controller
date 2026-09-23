@@ -233,20 +233,6 @@ AUTOMATIC_TRIPLES: frozenset[tuple["str | _NoPhaseType", str | None, str]] = fro
     ("APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review"),
 })
 
-#: **Interim, removed by CP4B.** The phase whose ``ExpectedOutcome`` row
-#: (18) exists but whose evidence gates (feedback admissibility, the apply
-#: relaunch bound) are installed only by a later checkpoint.
-#: :func:`classify_selected_action` declines any action selected there, so
-#: it keeps its non-launching decision until then. CP3 introduced the set
-#: with ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and
-#: ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` too; CP4 installed
-#: their ``REJECTED``/implementation-bundle coherence/``BLOCK``/admissibility
-#: gates (``controller.evidence``) and removed them, and CP4B removes the set.
-_PHASES_AWAITING_EVIDENCE_HANDLER: frozenset[str] = frozenset({
-    "APPLYING_REVIEW_FEEDBACK",
-})
-
-
 def command_token(command: str) -> str:
     """The one action normalisation: the slash-prefixed command token
     (``"/milestone-plan"``) of a full ``Action.command``
@@ -270,18 +256,6 @@ def uniform_decline_reason(phase: "str | _NoPhaseType", version: str | None, com
     )
 
 
-def interim_decline_reason(phase: str, version: str | None, command: str) -> str:
-    """The reason for an action selected at a
-    :data:`_PHASES_AWAITING_EVIDENCE_HANDLER` phase. Distinct from
-    :func:`uniform_decline_reason` because its ``ExpectedOutcome`` *is*
-    declared -- the uniform text would be false here."""
-    return (
-        f"{phase} selects {command}; an ExpectedOutcome is declared for "
-        f"{_triple_text(phase, version, command_token(command))}, but this phase's evidence "
-        "gates are not installed yet, so this Controller reports it instead of launching it"
-    )
-
-
 @dataclasses.dataclass(frozen=True)
 class ActionClassification:
     """:func:`classify_selected_action`'s answer: ``automatic`` iff the
@@ -297,15 +271,19 @@ def classify_selected_action(
 ) -> ActionClassification:
     """The general automatic-dispatch rule, in one place for every phase
     alike: a selected ``command`` is **automatic** iff ``(phase, version,
-    command_token(command))`` is a member of :data:`AUTOMATIC_TRIPLES` (and
-    ``phase`` is not the interim :data:`_PHASES_AWAITING_EVIDENCE_HANDLER`
-    phase), and **declined** otherwise. "Model-invocable and not
-    user-only" is already guaranteed by :func:`classify_command_files`'s
-    partition (test time) and ``worker.USER_ONLY_COMMANDS`` (launch time);
-    "not otherwise blocked" is the phase handler's own gate, which never
-    reaches this function."""
-    if phase in _PHASES_AWAITING_EVIDENCE_HANDLER:
-        return ActionClassification(False, interim_decline_reason(phase, version, command))
+    command_token(command))`` is a member of :data:`AUTOMATIC_TRIPLES`, and
+    **declined** otherwise. "Model-invocable and not user-only" is already
+    guaranteed by :func:`classify_command_files`'s partition (test time)
+    and ``worker.USER_ONLY_COMMANDS`` (launch time); "not otherwise
+    blocked" is the phase handler's own gate, which never reaches this
+    function.
+
+    CP3's interim set of phases awaiting their evidence handlers (whose
+    rows existed before their evidence gates did) is gone: CP4
+    installed the gates of ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and
+    ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``, and CP4B those of
+    ``APPLYING_REVIEW_FEEDBACK`` (feedback admissibility and the apply
+    relaunch bound, ``controller.evidence``), so the rule alone decides."""
     if (phase, version, command_token(command)) in AUTOMATIC_TRIPLES:
         return ActionClassification(True, None)
     return ActionClassification(False, uniform_decline_reason(phase, version, command))
@@ -517,9 +495,19 @@ class Action:
 
     ``command`` is the literal invocation text, e.g.
     ``"/milestone-plan workflow-controller-generation-1"`` -- ready to hand
-    to CP5's worker launcher unchanged."""
+    to CP5's worker launcher unchanged.
+
+    ``task_addendum`` (automatic-lifecycle-orchestration CP4B, additive:
+    every existing construction leaves it ``None``) is the one place a
+    worker's task is not the bare selected command: when set, the launcher
+    hands the worker ``f"{command}\\n\\n{task_addendum}"``. Only the
+    ``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` handler sets it, with
+    ``controller.evidence``'s pinned pending-review-stage-write addendum.
+    ``command`` alone still keys the ``ExpectedOutcome`` lookup and the
+    dispatch rule."""
 
     command: str
+    task_addendum: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -865,12 +853,14 @@ def _decide_vocabulary(phase: str, managed_repo: Any, work_item: Any) -> Decisio
 #: The evidence-independent gate each of these phases reports from this
 #: module: ``(what_is_required, safe_resume_command template)``. Three of
 #: the four are refined by ``controller.evidence``'s own handlers, which
-#: run first; ``APPLYING_REVIEW_FEEDBACK`` is decided here, with the
-#: corrected text of automatic-lifecycle-orchestration CP4:
-#: ``/apply-implementation-review`` skips its own entry transition exactly
-#: when the phase is already ``APPLYING_REVIEW_FEEDBACK`` and then runs its
-#: steps 1-8, so it *is* legal from this phase (the ``"2.2"`` two-stage
-#: writers set this phase directly on ``REVISE``).
+#: run first; ``APPLYING_REVIEW_FEEDBACK`` is decided here at ``"1"``/
+#: ``"2.1"``, with the corrected text of automatic-lifecycle-orchestration
+#: CP4: ``/apply-implementation-review`` skips its own entry transition
+#: exactly when the phase is already ``APPLYING_REVIEW_FEEDBACK`` and then
+#: runs its steps 1-8, so it *is* legal from this phase (the ``"2.2"``
+#: two-stage writers set this phase directly on ``REVISE``). At ``"2.2"``,
+#: ``controller.evidence``'s automatic path (CP4B) runs in front of it and
+#: falls back to the same text, naming what stops the launch.
 _STATIC_GATES: dict[str, tuple[str, str]] = {
     "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW": (
         "an external implementation review must be uploaded and its verdict "

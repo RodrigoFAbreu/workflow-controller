@@ -476,7 +476,14 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
        but no ledger -- the ledger-incomplete gate, never
        ``/approve-review implementation``;
     5'. the same with a complete ledger -- names the user-only
-       ``/approve-review implementation``, never as an automatic action.
+       ``/approve-review implementation``, never as an automatic action;
+    6. ``APPLYING_REVIEW_FEEDBACK`` after a local ``REVISE``, with ``HEAD``
+       still recording ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` (the
+       review-stage write uncommitted) and an admissible ``REVISE`` on file
+       -- automatic ``/apply-implementation-review`` under the no-op fake,
+       whose recorded task carries the pending-write addendum (CP4B);
+    7. the same state after state 6's unverified job -- the relaunch-bound
+       gate naming that job, under the fail-if-invoked fake.
 
     Never a live ``claude`` worker: every ``execute_step`` call names
     ``tests/fake_claude.py``. A state meant to launch runs it as a no-op
@@ -594,8 +601,12 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                 self.assertEqual(diag.exists(), launches, f"worker invocation at {state}")
                 if launches:
                     self.assertIn("worker", result)
+                    # The task is the command, plus the recorded addendum
+                    # when the decision carried one (CP4B).
+                    addendum = result["selected_action"]["task_addendum"]
+                    command = result["selected_action"]["command"]
                     self.assertEqual(json.loads(diag.read_text())["argv"][1],
-                                     result["selected_action"]["command"])
+                                     command if addendum is None else f"{command}\n\n{addendum}")
                     # A no-op worker changes nothing, so nothing transitions.
                     self.assertEqual(result["status"], job.STATUS_FAILED)
                     self.assertFalse(result["transition_verified"])
@@ -714,6 +725,46 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                 self.assertIn("user-only", gate_5b["what_is_required"])
                 self.assertIn("/approve-review implementation", gate_5b["what_is_required"])
 
+            # 6. APPLYING_REVIEW_FEEDBACK after a local REVISE: HEAD records
+            # the round's AWAITING_LOCAL_IMPLEMENTATION_REVIEW (committed by
+            # its generation-record commit), while the review-stage writer's
+            # APPLYING_REVIEW_FEEDBACK stays uncommitted -- so the launched
+            # task carries the pending-write addendum.
+            with self.subTest(state="6/APPLYING_REVIEW_FEEDBACK/admissible-REVISE-pending-write"):
+                _write_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+                fixtures.commit_paths(root, "Record implementation bundle generation",
+                                      "docs/ai-workflow/WORKFLOW_STATE.json")
+                _write_phase("APPLYING_REVIEW_FEEDBACK")
+                fixtures.write_review_feedback(root, feedback_dir_rel, fixtures.build_review_feedback_text(
+                    status="REVISE", reviewer_role="LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+                    reviewed_bundle_id="b" * 64, reviewed_base_commit=base_commit,
+                    work_item=work_item_id, reviewed_content_id="c" * 64,
+                ))
+                record_6 = _run("6", launches=True)
+                self.assertEqual(
+                    record_6["selected_action"]["command"], f"/apply-implementation-review {work_item_id}",
+                )
+                addendum_6 = record_6["selected_action"]["task_addendum"]
+                self.assertIsNotNone(addendum_6)
+                self.assertIn("Controller note (pending review-stage state write)", addendum_6)
+                self.assertIn("`HEAD` records `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`", addendum_6)
+                self.assertIn(f"`Workflow-Work-Item: {work_item_id}`", addendum_6)
+                self.assertEqual(json.loads((tmp_root / "diag-6.json").read_text())["argv"][1],
+                                 f"/apply-implementation-review {work_item_id}\n\n{addendum_6}")
+                self.assertEqual(record_6["pre_state"]["bundle_manifest_bundle_id"], "b" * 64)
+
+            # 7. The same state after state 6's unverified job: the relaunch
+            # bound gates instead of relaunching against the same bundle.
+            with self.subTest(state="7/APPLYING_REVIEW_FEEDBACK/relaunch-bound"):
+                record_7 = _run("7", launches=False)
+                self.assertEqual(record_7["status"], job.STATUS_GATE_BLOCKED)
+                gate_7 = record_7["human_gate_pending"]
+                self.assertIn(f"job {record_6['job_id']}, ended FAILED", gate_7["what_is_required"])
+                self.assertIn("review-bundle.tar.gz", gate_7["what_is_required"])
+                self.assertEqual(
+                    gate_7["safe_resume_command"], f"workflow-controller explain --work-item {work_item_id}",
+                )
+
             # A `controller resume` pass across the same seeded states must
             # not crash or misclassify at any of them: every job record
             # above is already terminal (FAILED/GATE_BLOCKED), so `resume`
@@ -721,7 +772,9 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
             # relaunched, never rewritten as `resume_marked`), and none of
             # them may have become an automatic /approve-review or
             # /accept-milestone selection along the way.
-            all_records = [record_1, record_2, record_3, record_4, record_4b, record_5, record_5b]
+            all_records = [
+                record_1, record_2, record_3, record_4, record_4b, record_5, record_5b, record_6, record_7,
+            ]
             resumed = job.resume(managed_repo, identity=_FAKE_2_2_IDENTITY, runtime=runtime_root)
             self.assertEqual(len(resumed), len(all_records))
 

@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, job, managed_repo, runtime  # noqa: E402
+from controller import cli, evidence, job, managed_repo, runtime  # noqa: E402
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import UnmanagedRepositoryError  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
@@ -614,6 +614,125 @@ class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):
         self.assertIn("`stage: plan (revision 11)`", out)
         self.assertIn(f"3. run scripts/prepare-ai-review.sh {self.base_commit} plan wi-1", out)
         self.assertIn("manifest plan_revision 10 != state plan_revision 11", out)
+
+
+class ApplyingReviewFeedbackCliTest(_StepFixture, unittest.TestCase):
+    """Automatic-lifecycle-orchestration CP4B through the CLI: a ``"2.2"``
+    work item at ``APPLYING_REVIEW_FEEDBACK`` with an admissible local
+    ``REVISE`` and the review-stage write still uncommitted. ``explain``
+    reports the launch with its task addendum; with an unverified earlier
+    apply job against the same bundle, ``explain`` and ``step`` report the
+    same relaunch-bound gate; and ``explain`` reads the job history
+    tolerantly (round 3's O5)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = fixtures.build_managed_repo(self.tmp_root / "apply")
+        base = fixtures.current_head(self.repo)
+        fixtures.write_workflow_state(self.repo, {
+            "schema_version": 1, "active_work_item_id": "wi-1",
+            "work_items": {"wi-1": {
+                "work_item_type": "product", "work_item_kind": "product", "work_item_id": "wi-1",
+                "governing_workflow_version": "2.2", "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+                "plan_revision": 1, "implementation_revision": 1, "reviewed_implementation_head": "1" * 40,
+                "state_revision": 1, "checkpoints": {"CP1": {"status": "COMPLETE"}},
+                "current_bundle_id": None, "last_completed_checkpoint_id": "CP1", "base_commit": base,
+                "parent_work_item_id": None, "plan_approval": {"status": "CURRENT"},
+            }},
+        })
+        fixtures.commit_paths(self.repo, "Record implementation bundle generation",
+                              "docs/ai-workflow/WORKFLOW_STATE.json")
+        fixtures.write_implementation_bundle(self.repo, "wi-1", 1, reviewed_implementation_head="1" * 40)
+        fixtures.write_review_feedback(self.repo, ".ai-review/wi-1/feedback", fixtures.build_review_feedback_text(
+            status="REVISE", reviewer_role="LOCAL_MODEL_IMPLEMENTATION_REVIEW", reviewed_base_commit=base,
+        ))
+        fixtures.update_workflow_state(self.repo, "wi-1", phase="APPLYING_REVIEW_FEEDBACK")
+        self.target_repo = str(managed_repo.inspect(str(self.repo), manager_bin=str(self.stub_manager)).root)
+        self.addendum = evidence.pending_review_stage_write_addendum(
+            "wi-1", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+        )
+
+    def _args(self, **kwargs) -> _Args:
+        return _Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                     claude_binary=str(Path(__file__).resolve().parent / "fake_claude.py"),
+                     timeout=10, **kwargs)
+
+    def _explain(self, *, json_out: bool = False) -> str:
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(cli.cmd_explain(self._args(json_out=json_out), self.runtime_root, self.ident),
+                             cli.EXIT_OK)
+        return buf.getvalue()
+
+    def _seed_failed_apply(self, job_id: str, *, target_repo: str | None = None) -> None:
+        runtime.write_json(self.runtime_root, f"jobs/{job_id}.json", {
+            "schema_version": job.SCHEMA_VERSION, "job_id": job_id,
+            "target_repo": self.target_repo if target_repo is None else target_repo,
+            "work_item_id": "wi-1", "observed_phase_before": "APPLYING_REVIEW_FEEDBACK",
+            "pre_state": {"phase": "APPLYING_REVIEW_FEEDBACK", "bundle_manifest_bundle_id": "b" * 64},
+            "selected_action": {"kind": "slash_command", "command": "/apply-implementation-review wi-1",
+                                "task_addendum": None, "automatic": True, "declined": False,
+                                "reason": "seeded", "evidence": []},
+            "expected_transition": {"from": "APPLYING_REVIEW_FEEDBACK",
+                                    "to_any_of": ["AWAITING_LOCAL_IMPLEMENTATION_REVIEW"]},
+            "status": job.STATUS_FAILED, "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        })
+
+    def test_explain_reports_the_launch_and_its_task_addendum(self) -> None:
+        out = self._explain()
+        self.assertIn("next automatic action: /apply-implementation-review wi-1", out)
+        self.assertIn(f"  task addendum: {self.addendum}", out)
+        payload = json.loads(self._explain(json_out=True))
+        self.assertTrue(payload["automatic"])
+        self.assertEqual(payload["action"], "/apply-implementation-review wi-1")
+        self.assertEqual(payload["task_addendum"], self.addendum)
+
+    def test_explain_and_step_report_the_same_relaunch_bound_gate(self) -> None:
+        import unittest.mock
+        self._seed_failed_apply("earlier-apply")
+        payload = json.loads(self._explain(json_out=True))
+        self.assertFalse(payload["automatic"])
+        self.assertIsNone(payload["action"])
+        self.assertIn("job earlier-apply, ended FAILED", payload["gate"]["what_is_required"])
+
+        diag = self.tmp_root / "diag.json"
+        env = {"FAKE_CLAUDE_DIAG_FILE": str(diag),
+               "FAKE_CLAUDE_REQUIRE_FILE": str(self.tmp_root / "never-created")}
+        with unittest.mock.patch.dict("os.environ", env):
+            self.assertEqual(self._step_with(self._args()), cli.EXIT_GATE)
+        self.assertFalse(diag.exists(), "the fail-if-invoked worker must never start")
+        records = [runtime.read_json(p) for p in sorted((self.runtime_root / "jobs").glob("*.json"))]
+        gated = [r for r in records if r["status"] == job.STATUS_GATE_BLOCKED]
+        self.assertEqual(len(gated), 1)
+        self.assertEqual(gated[0]["human_gate_pending"], payload["gate"])
+
+    def _step_with(self, args: _Args) -> int:
+        return cli.cmd_step(args, self.runtime_root, self.ident)
+
+    def test_explain_reads_the_job_history_tolerantly(self) -> None:
+        jobs_dir = self.runtime_root / "jobs"
+        jobs_dir.mkdir(parents=True)
+        (jobs_dir / "unparseable.json").write_text("{not json")
+        (jobs_dir / "abandoned.json").write_text(json.dumps({
+            "job_id": "abandoned", "target_repo": None, "status": job.STATUS_FAILED,
+            "reconciliation_evidence": {"code": "OperatorAbandoned"},
+        }))
+        self._seed_failed_apply("other-target", target_repo="/somewhere/else")
+        out = self._explain()
+        self.assertIn("next automatic action: /apply-implementation-review wi-1", out)
+        self.assertIsNone(job.last_launched_apply_job_view(self.runtime_root, Path(self.target_repo), "wi-1"))
+
+        self._seed_failed_apply("this-target")
+        out = self._explain()
+        self.assertIn("human gate", out)
+        self.assertIn("job this-target, ended FAILED", out)
+        self.assertEqual(
+            job.last_launched_apply_job_view(self.runtime_root, Path(self.target_repo), "wi-1").job_id,
+            "this-target",
+        )
 
 
 # ---------------------------------------------------------------------------

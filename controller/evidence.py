@@ -19,6 +19,12 @@ an admissible manual verdict), and a ledger-, feedback- and pin-aware
 ``"2.2"`` ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW``; at ``"2.2"`` an
 implementation bundle incoherent with the work item's implementation round
 gates ahead of all of them (:func:`implementation_bundle_coherence`).
+**CP4B** gives that gate its generation-record-aware recovery (a malformed
+record, provenance only, or the ordered regeneration steps) and adds the
+``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` automatic path: an admissible
+two-stage ``REVISE`` launches ``/apply-implementation-review`` -- with the
+pinned pending-review-stage-write task addendum while ``HEAD`` does not yet
+record the phase -- unless the apply relaunch bound applies.
 
 Four phases genuinely need a ``.ai-review/`` evidence read to resolve
 their "ordinary case vs. blocked/withdrawn/superseded" sub-cases
@@ -1532,10 +1538,11 @@ def _decide_awaiting_external_implementation_review_legacy(
 
 
 def _provenance_only_text(manifest_head: str | None, current_head: str | None) -> str:
-    """The ``generation_head``-only provenance text, stated once: the
-    ``"1"``/``"2.1"`` ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` handler's
-    own, and the ``"2.2"`` implementation-bundle gate's for the same
-    single failing clause (CP4 keeps "today's text" there)."""
+    """The ``generation_head``-only provenance text of the ``"1"``/``"2.1"``
+    ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` handler, unconditional and
+    byte-identical (pinned by its golden). The ``"2.2"``
+    implementation-bundle gate replaced its own use of it with
+    :func:`_provenance_only_gate`'s conditional text (CP4B)."""
     return (
         f"MANIFEST.md's generation_head ({manifest_head}) is behind the target's "
         f"committed HEAD ({current_head}); an ordinary post-fix regeneration refuses "
@@ -2131,10 +2138,18 @@ def _latest_generation_record_parent_phase(root: Path, work_item: Any) -> str | 
     generation-record commit, located from the manifest's own
     ``generation_head`` (:func:`generation_record_view`): the newest record
     in ``generation_head..HEAD`` when there is one, else ``generation_head``
-    itself when it is one of this work item's records. ``None`` when no
-    record can be located that way -- no readable manifest, a
-    ``generation_head`` that is not an ancestor of ``HEAD``, or no record at
-    all -- or when that parent's committed phase is unreadable."""
+    itself when it is one of this work item's records.
+
+    When there is no anchor at all -- no readable manifest, or one without
+    a ``generation_head`` line: a first round whose generator failed right
+    after its record, or a withdrawn ``current/`` -- and ``HEAD`` itself
+    carries this work item's generation-record trailer, ``HEAD`` *is* the
+    most recent record, and its parent's committed phase decides (CP4B).
+
+    ``None`` when no record can be located that way -- a ``generation_head``
+    that is not an ancestor of ``HEAD`` (never overridden by ``HEAD``: the
+    plan names both forms there), or no record at all -- or when that
+    parent's committed phase is unreadable."""
     work_item_id = work_item.work_item_id
     manifest = read_manifest_fields(root, implementation_bundle_dir(root, work_item_id))
     generation_head = manifest.get("generation_head")
@@ -2145,6 +2160,10 @@ def _latest_generation_record_parent_phase(root: Path, work_item: Any) -> str | 
         commit_trailers(root, generation_head), work_item_id,
     ):
         return _committed_phase(root, work_item_id, f"{generation_head}^")
+    if generation_head is None and view.head is not None and _names_work_item_generation_record(
+        commit_trailers(root, view.head), work_item_id,
+    ):
+        return view.parent_phase
     return None
 
 
@@ -2248,33 +2267,146 @@ def _implementation_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[s
     return tuple(f"{number}. {step}" for number, step in enumerate(steps, start=first))
 
 
-def _implementation_bundle_gate(
-    root: Path, work_item: Any, clause: str, detail: str, current_head: str | None,
+#: The phases ``/recover-implementation-provenance`` is legal from at
+#: ``"2.2"`` -- a literal copy of ``workflow_state.
+#: bundle_generation_recovered_role_legal_committed_phases("2.2")`` (this
+#: module never imports ``scripts/``), held equal to it by a test. The
+#: implementation-bundle gate names that command only at one of these; they
+#: are exactly the phases at which it evaluates the ``generation_head``
+#: clause (never ``APPLYING_REVIEW_FEEDBACK``).
+PROVENANCE_RECOVERY_LEGAL_PHASES: frozenset[str] = frozenset({
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+})
+
+
+def _incoherence_evidence(clause: str, detail: str) -> str:
+    return f"implementation bundle is not coherent with the work item's state ({clause}): {detail}"
+
+
+def commits_since(root: Path, generation_head: str | None) -> tuple[tuple[str, str, tuple[str, ...]], ...] | None:
+    """Every commit in ``generation_head..HEAD``, oldest first, as
+    ``(sha, subject, changed paths)`` (``git log --reverse --name-only``) --
+    the evidence the provenance-only gate lists. ``None`` when
+    ``generation_head`` is absent, is not a full object name (a value read
+    from a file never becomes a ``git`` option), or the log cannot be
+    read."""
+    if not generation_head or not _FULL_OBJECT_NAME_RE.fullmatch(generation_head):
+        return None
+    result = _run_git(root, [
+        "log", "--reverse", "--name-only", "--format=%x1e%H%x1f%s", f"{generation_head}..HEAD",
+    ])
+    if result.returncode != 0:
+        return None
+    commits: list[tuple[str, str, tuple[str, ...]]] = []
+    for chunk in result.stdout.split("\x1e"):
+        if not chunk.strip():
+            continue
+        header, _, rest = chunk.partition("\n")
+        sha, _, subject = header.partition("\x1f")
+        commits.append((sha, subject, tuple(line for line in rest.splitlines() if line.strip())))
+    return tuple(commits)
+
+
+def _malformed_generation_record_gate(
+    root: Path, work_item: Any, view: GenerationRecordView, clause: str, detail: str,
 ) -> Decision:
-    """The ``"2.2"`` implementation-bundle gate, first form (CP4): an
-    incoherent bundle names the failing clause and its detail, with the
-    neutral ``workflow-controller explain`` resume command. The
-    ``generation_head``-only provenance case keeps today's text and names
-    the user-only ``/recover-implementation-provenance`` (legal from every
-    ``"2.2"`` phase this gate evaluates that clause at). The bare
-    ``_regeneration_command`` is never advertised."""
+    """Case 1 of the implementation-bundle gate ("The pending review-stage
+    state write", item 2): ``HEAD`` is this work item's ordinary-role
+    generation-record commit ``T`` whose committed phase equals ``HEAD^``'s,
+    so ``phase`` is not in ``T``'s own field diff and
+    ``validate_bundle_generation_record_commit`` rejects it
+    (``OPUS-R101-001``) -- the shape a worker leaves when it folds the
+    pending review-stage state write into ``T``. Every regeneration would
+    refuse at the generator's preflight, so the steps are never offered;
+    no Workflow command repairs ``T``."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     bundle_dir = implementation_bundle_dir(root, work_item_id)
-    manifest_head = read_manifest_fields(root, bundle_dir).get("generation_head")
-    if clause == "generation_head" and manifest_head is not None and current_head is not None:
-        what = _provenance_only_text(manifest_head, current_head)
-        safe = f"/recover-implementation-provenance {work_item_id}"
-    else:
-        what = (
-            "the current implementation bundle does not belong to this work item's current "
-            f"implementation round ({clause}: {detail}); a human repairs it before any "
-            "implementation review runs -- this Controller never regenerates it"
-        )
-        safe = _explain_command(work_item_id)
+    what = (
+        f"HEAD ({view.head}) is this work item's ordinary-role bundle-generation-record commit, but "
+        f"the work item's committed phase at HEAD^ ({view.parent_phase}) equals its committed phase "
+        f"at HEAD ({view.head_phase}): phase is not in the record's own field diff, so "
+        "validate_bundle_generation_record_commit rejects it (OPUS-R101-001) and the generator's "
+        "preflight refuses every regeneration against it. No Workflow command repairs this: a human "
+        "repairs the unpushed history so that the pending review-stage state write lands alone, in "
+        "its own commit, before the generation-record commit, and then reruns the generation-record "
+        "step (/apply-implementation-review step 7)"
+    )
     return Decision(
         observed_phase=phase,
-        evidence=(f"implementation bundle is not coherent with the work item's state ({clause}): {detail}",),
+        evidence=(
+            _incoherence_evidence(clause, detail),
+            f"HEAD {view.head} carries this work item's ordinary-role Workflow-Bundle-Generation-Record "
+            f"trailer set, and its committed phase ({view.head_phase}) equals HEAD^'s "
+            f"({view.parent_phase})",
+        ),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=what, artifact_path=str(bundle_dir / "MANIFEST.md"),
+            safe_resume_command=_explain_command(work_item_id),
+        ),
+        declined=False,
+        reason=f"{phase}: HEAD {view.head} is a malformed bundle-generation-record commit "
+               "(OPUS-R101-001), checked ahead of every regeneration step",
+    )
+
+
+def _provenance_only_gate(
+    root: Path, work_item: Any, generation_head: str, current_head: str, detail: str,
+) -> Decision:
+    """Case 2 of the implementation-bundle gate (round 2's O3): the only
+    failing clause is ``generation_head``, and no generation-record commit
+    for this work item lies in ``generation_head..HEAD``, so ``HEAD`` moved
+    only through non-record commits after ``T``. ``/recover-implementation-
+    provenance`` is that case's command only when those commits are
+    excluded-only -- it refuses (``ImplementationProvenanceRecoveryNot
+    ApplicableError``) when one changes protected content. This Controller
+    does not classify paths, so the gate lists the commits as evidence and
+    conditions both its text and its ``safe_resume_command`` on them. The
+    command stays user-only and never automatic."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    commits = commits_since(root, generation_head)
+    if commits:
+        listing = "; ".join(
+            f"{sha} ({subject}): {', '.join(paths) if paths else 'no changed paths'}"
+            for sha, subject, paths in commits
+        )
+        commit_evidence = tuple(
+            f"commit in {generation_head}..HEAD: {sha} {subject!r} changes "
+            f"{', '.join(paths) if paths else 'no paths'}"
+            for sha, subject, paths in commits
+        )
+    else:
+        listing = "(the commits could not be listed)"
+        commit_evidence = (f"the commits in {generation_head}..HEAD could not be listed",)
+    condition = (
+        "if every listed commit changes only paths the implementation stage excludes (the "
+        "implementation_stage excluded paths/prefixes of "
+        f"workflow_fingerprint.artifacts_path_for_work_item(\"{work_item_id}\")), a human runs "
+        "/recover-implementation-provenance. Otherwise the listed content is not what was reviewed, "
+        "and that command refuses: revert those commits, or carry the change through a review "
+        "round, before any implementation review runs"
+    )
+    what = (
+        f"MANIFEST.md's generation_head ({generation_head}) is behind the target's committed HEAD "
+        f"({current_head}), and no generation-record commit for this work item lies in "
+        f"{generation_head}..HEAD, so HEAD moved only through these commits, oldest first: {listing}; "
+        + condition
+    )
+    safe = (
+        f"/recover-implementation-provenance {work_item_id} -- only if every commit in "
+        f"{generation_head}..HEAD changes only paths the implementation stage excludes; otherwise "
+        "revert those commits, or carry the change through a review round, before any "
+        "implementation review runs"
+    )
+    return Decision(
+        observed_phase=phase,
+        evidence=(_incoherence_evidence("generation_head", detail),) + commit_evidence,
         action=None, automatic=False,
         gate=HumanGate(
             repository=str(root), work_item_id=work_item_id, phase=phase,
@@ -2282,9 +2414,89 @@ def _implementation_bundle_gate(
             safe_resume_command=safe,
         ),
         declined=False,
+        reason=f"{phase}: only generation_head is stale and HEAD moved through non-record commits -- "
+               "/recover-implementation-provenance applies only if they are excluded-only",
+    )
+
+
+def _implementation_bundle_regeneration_gate(
+    root: Path, work_item: Any, view: GenerationRecordView, generation_head: str | None, clause: str,
+    detail: str,
+) -> Decision:
+    """Case 3 of the implementation-bundle gate: every other incoherence,
+    answered with the ordered recovery steps
+    (:func:`_implementation_bundle_recovery_steps`, mirroring the
+    plan-stage stale-bundle gate). This includes a ``generation_head``-only
+    failure whose ``generation_head..HEAD`` holds a newer generation-record
+    commit -- a ``same_content`` post-fix whose generator failed, where
+    ``/recover-implementation-provenance`` would refuse ("nothing to
+    recover"). ``safe_resume_command`` is the steps, never the bare
+    ``_regeneration_command``."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    steps = _implementation_bundle_recovery_steps(root, work_item)
+    evidence_lines: tuple[str, ...] = (_incoherence_evidence(clause, detail),)
+    if view.newer_records:
+        evidence_lines += (
+            f"generation-record commit(s) for this work item newer than MANIFEST.md's generation_head "
+            f"({generation_head}), newest first: {', '.join(view.newer_records)} -- that round's "
+            "bundle generation did not complete",
+        )
+    return Decision(
+        observed_phase=phase,
+        evidence=evidence_lines,
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                "the current implementation bundle does not belong to this work item's current "
+                f"implementation round ({clause}: {detail}); before any implementation review runs, "
+                "perform in order: " + " ".join(steps)
+            ),
+            artifact_path=str(bundle_dir / "MANIFEST.md"),
+            safe_resume_command="; ".join(steps),
+        ),
+        declined=False,
         reason=f"{phase}: the implementation bundle is incoherent ({clause}: {detail}), checked "
                "ahead of the per-phase handlers",
     )
+
+
+def _implementation_bundle_gate(
+    root: Path, work_item: Any, clause: str, detail: str, current_head: str | None,
+) -> Decision:
+    """The ``"2.2"`` implementation-bundle gate, final form (CP4B). Its
+    inputs are :func:`implementation_bundle_coherence`'s ``clause`` and
+    :func:`generation_record_view` -- read-only ``git``/file facts, never
+    Controller job records. Evaluated in order:
+
+    1. **Malformed T** (``head_role == "ordinary"`` and the committed phase
+       at ``HEAD`` equals ``HEAD^``'s): :func:`_malformed_generation_record_gate`
+       -- first, because every other recovery ends in a generator run the
+       generator's preflight would refuse;
+    2. **Provenance only** (the only failing clause is ``generation_head``,
+       no generation-record commit for this work item lies in
+       ``generation_head..HEAD``, and the phase is one
+       ``/recover-implementation-provenance`` is legal from):
+       :func:`_provenance_only_gate`;
+    3. **everything else**: :func:`_implementation_bundle_regeneration_gate`.
+
+    The bare ``_regeneration_command`` is never advertised."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    generation_head = read_manifest_fields(root, implementation_bundle_dir(root, work_item_id)).get(
+        "generation_head",
+    )
+    view = generation_record_view(root, work_item_id, generation_head)
+    if view.head_role == "ordinary" and view.head_phase is not None and view.head_phase == view.parent_phase:
+        return _malformed_generation_record_gate(root, work_item, view, clause, detail)
+    if (
+        clause == "generation_head" and view.newer_records == () and generation_head is not None
+        and current_head is not None and phase in PROVENANCE_RECOVERY_LEGAL_PHASES
+    ):
+        return _provenance_only_gate(root, work_item, generation_head, current_head, detail)
+    return _implementation_bundle_regeneration_gate(root, work_item, view, generation_head, clause, detail)
 
 
 def _marker_clearing_clause(marker_path: Path, detail: str | None) -> str:
@@ -2377,7 +2589,219 @@ def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Dec
     )
 
 
-def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
+# ---------------------------------------------------------------------------
+# ``"2.2"`` ``APPLYING_REVIEW_FEEDBACK``: the automatic path in front of the
+# corrected gate (automatic-lifecycle-orchestration CP4B).
+# ---------------------------------------------------------------------------
+
+_APPLYING_REVIEW_FEEDBACK = "APPLYING_REVIEW_FEEDBACK"
+_APPLY_IMPLEMENTATION_REVIEW = "/apply-implementation-review"
+
+#: The governing versions whose ``APPLYING_REVIEW_FEEDBACK`` gets the
+#: automatic path. ``"1"``/``"2.1"`` keep the corrected gate
+#: (``controller.decision``'s static one): their feedback carries no
+#: reviewer-role or content binding ("Scope judgments").
+_APPLY_AUTOMATION_VERSIONS: frozenset[str] = frozenset({"2.2"})
+
+#: The one launched-job status that is not an unverified attempt.
+_VERIFIED_JOB_STATUS = "FINISHED"
+
+#: The task addendum for row 18 only ("The pending review-stage state
+#: write", item 1), pinned byte-for-byte by a test. A worker following the
+#: frozen ``/apply-implementation-review`` text literally folds the ``"2.2"``
+#: review-stage writer's uncommitted state write into step 7's
+#: generation-record commit ``T``, whose own diff then carries no phase
+#: change -- a malformed ``T`` (``OPUS-R101-001``). The addendum authorizes
+#: exactly the one state-only commit every precedent's operator made before
+#: ``T``, and nothing else. It names no user-only command
+#: (``worker._assert_not_user_only`` checks the whole task). Formatted with
+#: ``work_item_id`` and ``committed_phase`` (the work item's phase at
+#: ``HEAD``) by :func:`pending_review_stage_write_addendum`.
+PENDING_REVIEW_STAGE_WRITE_ADDENDUM = (
+    "Controller note (pending review-stage state write): `docs/ai-workflow/WORKFLOW_STATE.json` "
+    "carries this work item's uncommitted review-stage write (working-tree phase "
+    "`APPLYING_REVIEW_FEEDBACK`; `HEAD` records `{committed_phase}`). Before any other commit this "
+    "command makes, commit that pending change alone: stage exactly "
+    "`docs/ai-workflow/WORKFLOW_STATE.json`, unmodified from what the review-stage writer "
+    "produced, with a message whose final paragraph is the single trailer "
+    "`Workflow-Work-Item: {work_item_id}` and no other Workflow trailer. This is the same shape "
+    "`/milestone-implement` step 2 uses for its state-only transition commit. Without it, step 7's "
+    "generation-record commit has no phase change in its own diff, and "
+    "`validate_bundle_generation_record_commit` rejects it (`OPUS-R101-001`)."
+)
+
+
+def pending_review_stage_write_addendum(work_item_id: str, committed_phase: str) -> str:
+    """:data:`PENDING_REVIEW_STAGE_WRITE_ADDENDUM`, formatted."""
+    return PENDING_REVIEW_STAGE_WRITE_ADDENDUM.format(
+        work_item_id=work_item_id, committed_phase=committed_phase,
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class LaunchedJobView:
+    """The one Controller job record the apply relaunch bound reads, as
+    ``controller.job.last_launched_apply_job_view`` builds it (this module
+    cannot import ``job``): the most recent *terminal* record for the work
+    item that reached ``LAUNCHED`` with the ``/apply-implementation-review``
+    token from ``APPLYING_REVIEW_FEEDBACK``, skipping a record whose worker
+    never started (``reconciliation_evidence.code == "WorkerNotStarted"``).
+
+    ``command`` is the slash-prefixed command token; ``from_phase`` the
+    phase the launch was keyed on; ``pre_bundle_manifest_bundle_id`` the
+    record's ``pre_state.bundle_manifest_bundle_id`` -- the bundle the
+    attempt started from, ``None`` when the record carries none."""
+
+    job_id: str
+    command: str
+    from_phase: str
+    status: str
+    pre_bundle_manifest_bundle_id: str | None
+
+
+def relaunch_bound_applies(job: LaunchedJobView | None, manifest_bundle_id: str | None) -> bool:
+    """The apply relaunch bound (round 2's O1): ``job`` -- J, the last
+    launched ``/apply-implementation-review`` from this phase -- ended in a
+    status other than ``FINISHED``, against the bundle the current manifest
+    still names. Keyed on the bundle, never on job order: it lapses exactly
+    when a new generation replaces the manifest. A null
+    ``pre_bundle_manifest_bundle_id`` counts as equal (fail closed)."""
+    if job is None or job.command != _APPLY_IMPLEMENTATION_REVIEW or job.from_phase != _APPLYING_REVIEW_FEEDBACK:
+        return False
+    if job.status == _VERIFIED_JOB_STATUS:
+        return False
+    return job.pre_bundle_manifest_bundle_id is None or job.pre_bundle_manifest_bundle_id == manifest_bundle_id
+
+
+def _decide_applying_review_feedback_two_stage(
+    root: Path, work_item_id: str, work_item: Any, *, last_apply_job: LaunchedJobView | None,
+) -> Decision:
+    """``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` (CP4B), after the ``REJECTED``
+    and implementation-bundle gates, in front of CP4's corrected gate:
+
+    1. the feedback on file must be admissible
+       (:func:`evaluate_apply_implementation_review_admissibility`: a
+       ``REVISE`` from one of the two ``"2.2"`` roles, bound to the
+       manifest's ``bundle_id``); absent or inadmissible -> the corrected
+       gate, naming why;
+    2. the relaunch bound (:func:`relaunch_bound_applies`) -> a gate naming
+       the earlier job, never an automatic relaunch;
+    3. the work item's committed phase at ``HEAD`` must be readable (fail
+       closed: otherwise nothing tells whether the review-stage write is
+       pending);
+    4. otherwise ``/apply-implementation-review <id>`` is selected (automatic
+       by the dispatch rule), carrying the pending-write ``task_addendum``
+       exactly when ``HEAD`` does not yet record ``APPLYING_REVIEW_FEEDBACK``."""
+    phase = _APPLYING_REVIEW_FEEDBACK
+    corrected_what, corrected_resume = _decision._STATIC_GATES[phase]
+    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    manifest = read_manifest_fields(root, bundle_dir)
+    manifest_bundle_id = manifest.get("bundle_id")
+
+    def _corrected_gate(problem: str, evidence_lines: tuple[str, ...]) -> Decision:
+        return Decision(
+            observed_phase=phase, evidence=evidence_lines, action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=f"{corrected_what} -- this Controller does not run it automatically: {problem}",
+                artifact_path=str(feedback_path),
+                safe_resume_command=corrected_resume.format(wid=work_item_id),
+            ),
+            declined=False, reason=f"{phase}: {problem}",
+        )
+
+    feedback = read_feedback_fields(root, feedback_dir)
+    if feedback is None:
+        return _corrected_gate(
+            f"no REVIEW_FEEDBACK.md is on file at {feedback_path}",
+            ("no current-round REVIEW_FEEDBACK.md on file",),
+        )
+    result = evaluate_apply_implementation_review_admissibility(
+        feedback=feedback, manifest=manifest, work_item=work_item, current_head=_current_head(root),
+    )
+    if not result.admissible:
+        failing = result.failure_summary()
+        return _corrected_gate(
+            f"the feedback on file is not an admissible two-stage REVISE for the current bundle ({failing})",
+            (f"inadmissible apply-stage feedback: {failing}",),
+        )
+
+    if relaunch_bound_applies(last_apply_job, manifest_bundle_id):
+        recorded = last_apply_job.pre_bundle_manifest_bundle_id
+        same_bundle = (
+            f"the same bundle (bundle_id {manifest_bundle_id})" if recorded is not None else
+            f"the current bundle (bundle_id {manifest_bundle_id}; the job recorded no pre-state "
+            "bundle_id, which counts as the same one -- fail closed)"
+        )
+        archive = bundle_dir.parent / "review-bundle.tar.gz"
+        return Decision(
+            observed_phase=phase,
+            evidence=(
+                f"last launched {_APPLY_IMPLEMENTATION_REVIEW} job from {phase}: {last_apply_job.job_id} "
+                f"({last_apply_job.status}), pre-state bundle_manifest_bundle_id {recorded!r}",
+                f"current MANIFEST.md bundle_id: {manifest_bundle_id}",
+            ),
+            action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=(
+                    f"the previous {_APPLY_IMPLEMENTATION_REVIEW} attempt from this phase, job "
+                    f"{last_apply_job.job_id}, ended {last_apply_job.status} against {same_bundle}, and "
+                    "this Controller never relaunches an attempt that did not verify against the bundle "
+                    f"it started from. If that attempt passed its own step 4, {bundle_dir} no longer "
+                    "matches its MANIFEST.md's bundle_id, so every retry would refuse at step 1 "
+                    "(assert_feedback_matches_bundle). A human either restores the edited bundle file "
+                    f"from the bundle's archive ({archive}) and reruns {_APPLY_IMPLEMENTATION_REVIEW} "
+                    f"{work_item_id} in a supervised session, or completes the round by hand"
+                ),
+                artifact_path=str(bundle_dir),
+                safe_resume_command=_explain_command(work_item_id),
+            ),
+            declined=False,
+            reason=f"{phase}: the previous {_APPLY_IMPLEMENTATION_REVIEW} job {last_apply_job.job_id} ended "
+                   f"{last_apply_job.status} against the current bundle -- the relaunch bound gates "
+                   "instead of relaunching",
+        )
+
+    committed = committed_work_item(root, work_item_id)
+    committed_phase = committed.get("phase") if committed is not None else None
+    if not isinstance(committed_phase, str):
+        return _corrected_gate(
+            f"the work item's committed phase at HEAD cannot be read (git show "
+            f"HEAD:{_STATE_REL_PATH}), so nothing tells whether the review-stage state write is "
+            "still pending",
+            ("committed phase at HEAD: unreadable",),
+        )
+
+    role = feedback.get("reviewer_role")
+    command = f"{_APPLY_IMPLEMENTATION_REVIEW} {work_item_id}"
+    evidence_lines = (
+        f"admissible {role} Status: REVISE, bound to bundle {manifest_bundle_id}",
+        f"committed phase at HEAD: {committed_phase}",
+    )
+    if committed_phase == phase:
+        return Decision(
+            observed_phase=phase, evidence=evidence_lines, action=Action(command=command),
+            automatic=True, gate=None, declined=False,
+            reason=f"{phase}: admissible {role} REVISE on file and HEAD already records {phase} -- the "
+                   "remediation round runs as the bare command",
+        )
+    return Decision(
+        observed_phase=phase, evidence=evidence_lines,
+        action=Action(
+            command=command, task_addendum=pending_review_stage_write_addendum(work_item_id, committed_phase),
+        ),
+        automatic=True, gate=None, declined=False,
+        reason=f"{phase}: admissible {role} REVISE on file; HEAD records {committed_phase}, so the "
+               "review-stage state write is pending and the task carries the pending-write addendum",
+    )
+
+
+def decide(
+    managed_repo: Any, snapshot: Any, work_item: Any, *, last_apply_job: LaunchedJobView | None = None,
+) -> Decision:
     """CP4B's real entry point: checks the withdrawn-bundle outcome ahead
     of every other row for a bundle-bearing phase, then either resolves a
     phase this module owns evidence for, or falls through unchanged to
@@ -2392,7 +2816,14 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     (automatic-lifecycle-orchestration CP4). A handler's selected action
     then goes through the same general automatic-dispatch rule
     (``decision.apply_dispatch_rule``) as every selection
-    :func:`controller.decision.decide` makes."""
+    :func:`controller.decision.decide` makes.
+
+    ``last_apply_job`` (CP4B) is the job history the ``"2.2"``
+    ``APPLYING_REVIEW_FEEDBACK`` relaunch bound reads -- built by
+    ``controller.job.last_launched_apply_job_view``, which this module
+    cannot import. Both callers (``job.execute_step`` and ``cli``'s
+    ``explain``) pass it, so both see the same J and make the same
+    decision; it is read at no other phase."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     root = managed_repo.root
@@ -2418,6 +2849,14 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
         )
         if not coherent:
             return _implementation_bundle_gate(root, work_item, clause, detail, current_head)
+
+    if phase == _APPLYING_REVIEW_FEEDBACK and work_item.governing_workflow_version in _APPLY_AUTOMATION_VERSIONS:
+        return _decision.apply_dispatch_rule(
+            _decide_applying_review_feedback_two_stage(
+                root, work_item_id, work_item, last_apply_job=last_apply_job,
+            ),
+            work_item.governing_workflow_version,
+        )
 
     handler = _EVIDENCE_HANDLERS.get(phase)
     if handler is not None:

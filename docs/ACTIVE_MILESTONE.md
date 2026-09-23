@@ -257,4 +257,152 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
     - defining `REPORT_ONLY_PHASES` in `job.py`;
     - changing the uniform reason wording;
     - letting `decide_no_work_item` bypass the rule.
-- **CP4-CP9 -- pending**, in registry order.
+- **CP4 -- complete.** The implementation-review decision handlers, in `controller/evidence.py`
+  and `controller/decision.py`.
+  - **First act, before any code change:** `tests/golden/generate_external_implementation_review_decisions.py`
+    generated `tests/golden/external_implementation_review_decisions.json` from CP3's unchanged
+    code. It pins `"1"`/`"2.1"` `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` over 19 scenarios (38
+    cases, 13 distinct decisions): the existing test cases, plus every input the new `"2.2"`
+    handler reads (ledger, pins, scoped layout, `BLOCK`, the `REJECTED` marker). It reuses the
+    plan-stage generator's normalisation and document form.
+    `ExternalImplementationReviewGoldenTest` requires a byte-equal re-derivation, with no
+    permitted difference.
+  - Order inside `evidence.decide`:
+    1. the `REJECTED` marker. `BUNDLE_BEARING_PHASES` gains `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`
+       and `APPLYING_REVIEW_FEEDBACK`;
+    2. the plan-bundle gate, unchanged;
+    3. new: at `"2.2"` only, the implementation-bundle gate at the four
+       `IMPLEMENTATION_BUNDLE_CONSUMING_PHASES`. It calls `implementation_bundle_coherence`, and
+       requires a current `generation_head` everywhere except `APPLYING_REVIEW_FEEDBACK`;
+    4. the per-phase handler.
+  - The implementation-bundle gate, first form. An incoherent bundle names the failing clause
+    and its detail, with `safe_resume_command` `workflow-controller explain --work-item <id>`. A
+    `generation_head`-only failure keeps today's provenance text and names
+    `/recover-implementation-provenance`. That text now lives in `_provenance_only_text`, shared
+    with the `"1"`/`"2.1"` handler. CP4B replaces both texts.
+  - The `REJECTED` gate has four branches, in order:
+    1. `"2.2"` at an implementation-bundle-consuming phase: the marker-clearing clause, then
+       `_implementation_bundle_recovery_steps`. The steps are:
+       - step 0, when the bundle or an author file is absent or zero bytes: write
+         `CONTEXT_FILES.txt` from the newest quarantine. At `APPLYING_REVIEW_FEEDBACK` the
+         source is "the bundle REVIEW_FEEDBACK.md reviewed";
+       - `IMPLEMENTATION_SUMMARY.md`'s `implementation_revision:`;
+       - `REVIEW_REQUEST.md`'s `review_content_id:` from `approval_review_content_id(...)`;
+       - `TEST_RESULTS.md`;
+       - the generator, with the preflight clause.
+    2. The plan-bundle-consuming phases: unchanged.
+    3. `"1"`/`"2.1"` `APPLYING_REVIEW_FEEDBACK`: the clause, then the facts. The reviewed bundle
+       was withdrawn. Step 1 refuses until a successful generation clears the marker. Restore
+       from the newest quarantine, and rerun only if the regenerated `bundle_id` equals the
+       feedback's. No generator is named, and `safe_resume_command` is
+       `workflow-controller explain`.
+    4. Everywhere else: today's bare text, byte-identical.
+  - The generator `<stage>` comes from `implementation_generator_stages`. It reads the
+    committed phase at the parent of this work item's most recent generation-record commit,
+    found from the manifest's `generation_head`: the newest record in `generation_head..HEAD`,
+    else `generation_head` itself when it is a record. `SELF_REVIEWING_IMPLEMENTATION` means
+    `implementation`, and any other phase means `post-fix`. If no record is found, both forms
+    are named.
+  - Handlers:
+    - `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` (new). A local `BLOCK` on file is the A7
+      user-resolution gate. The role is compared case-insensitively and no binding line is
+      required, which fails closed. Otherwise `/review-implementation <id>` is selected, and
+      it is automatic at `"2.2"`.
+    - `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`, in this order:
+      - no manual-role verdict: the manual gate, naming the bundle path, `bundle_id` and ledger
+        `review_content_id`;
+      - an inadmissible verdict (`evaluate_manual_implementation_stage_admissibility`): a gate
+        naming every failing clause, including the step-1 reason for a `REVISE` bound to
+        another bundle;
+      - an admissible `BLOCK`: the resolution gate;
+      - an admissible `APPROVE`/`REVISE`: `/record-manual-implementation-review <id>` is
+        selected and is automatic. Advisories go into `evidence` and `reason`.
+    - `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` splits by version. `"1"`/`"2.1"`/`None` keep
+      the legacy handler byte for byte. `"2.2"` checks, in order:
+      1. a manual `REVISE`/`BLOCK` bound to the manifest's `review_content_id`: the "later
+         manual verdict" gate, with `safe_resume_command` `/apply-implementation-review`;
+      2. the ledger has both stages `APPROVE` for the manifest's content, the feedback is
+         `REVISE`/`APPROVE`, and no pin names the manifest's `bundle_id`: the
+         `/approve-review implementation` gate;
+      3. otherwise, a gate listing every missing clause ("/approve-review implementation would
+         refuse here: ..."), with `safe_resume_command` `workflow-controller explain`.
+    - `APPLYING_REVIEW_FEEDBACK`, at every version: the corrected static gate in
+      `decision._STATIC_GATES`. `/apply-implementation-review` is legal from this phase,
+      because it skips its own entry transition, and `safe_resume_command` is
+      `/apply-implementation-review <id>`.
+  - `_PHASES_AWAITING_EVIDENCE_HANDLER` shrinks to `{APPLYING_REVIEW_FEEDBACK}`.
+  - `tests/fixtures.py` adds `write_implementation_bundle`: a coherent manifest plus the four
+    author files, each stating what the generator requires of it.
+  - Judgment calls, where the plan text left a detail open:
+    - The `"1"`/`"2.1"` golden lives under `tests/golden/`, beside the plan-stage one. Its
+      test is in `tests/test_evidence.py`.
+    - The inadmissible manual gate's `safe_resume_command` is
+      `/record-manual-implementation-review <id>`. This re-pins the original "names it, never
+      launches" shape and mirrors the plan stage. Its `what_is_required` says to correct and
+      re-paste first.
+    - The `"2.2"` external handler's clause-1 role match is case-insensitive. Unlike an
+      arrival test, it can only turn a decision into the "a human decides" gate, so a
+      mis-cased manual verdict never falls through to naming approval.
+    - The local `BLOCK` gate's `safe_resume_command` is `/review-implementation <id>`, as the
+      plan stage's is `/review-plan <id>`.
+    - `decision.decide`, which no launcher calls, now selects an automatic
+      `/review-implementation` at `"2.2"` `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`. That is the
+      same evidence-free shape its plan-stage placeholders have. `evidence.decide`'s handler and
+      gates run first.
+    - `tests/test_job_validation.py` is in the plan's file list, but needed no change: its
+      rows force the selection.
+  - Tests whose assertions change. Each is an intended change, and none is deleted without a
+    replacement:
+    - `test_evidence`: `AwaitingManualExternalImplementationReviewTest` now has coherent
+      flat-layout fixtures. The two "names it, never launches" tests became automatic-ingestion
+      assertions, and the shape is re-pinned for an inadmissible verdict.
+      `test_2_2_item_reports_identically_to_2_1...` is replaced by
+      `AwaitingExternalImplementationReviewTwoStageTest` and the golden.
+    - `test_decision`:
+      - `_INTERIM_PHASES` is now `{APPLYING_REVIEW_FEEDBACK}`;
+      - `("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2")` moves to the automatic spot checks;
+      - `Revision64PhaseWideningTest`'s decline test became an `evidence.decide` test:
+        automatic with a coherent bundle, the coherence gate without one;
+      - its interim-set half now asserts that both phases left the set and have evidence
+        handlers;
+      - `DispatchRuleTest`'s three-interim test now covers the one remaining interim phase.
+    - `test_integration_disposable_repo`: `Protocol22ImplementationReviewGatesTest` has
+      coherent fixtures and per-state expectations:
+      - state 1 is automatic: one no-op fake invocation, `FAILED`;
+      - states 2 and 3 are gates;
+      - state 4 (no ledger) is the inadmissible gate;
+      - new state 4' launches `/record-manual-implementation-review`;
+      - state 5 is the ledger-incomplete gate;
+      - new state 5' names `/approve-review implementation`.
+
+      Every non-launching state runs fail-if-invoked, and its diagnostic file proves the fake
+      never started.
+  - New tests:
+    - `AwaitingLocalImplementationReviewTest`;
+    - `ApplyingReviewFeedbackCorrectedGateTest`;
+    - `ImplementationRejectedMarkerGateTest`: all four `"2.2"` phases, plus branch 3 at
+      `"1"`/`"2.1"`;
+    - `ImplementationGeneratorStageTest`, against real git repositories;
+    - `HumanGateShapeTest.test_applying_review_feedback_names_apply_implementation_review_as_legal`.
+  - Verified with `python3 -m unittest tests.test_evidence tests.test_decision
+    tests.test_job_validation tests.test_integration_disposable_repo`: 385 tests OK, 2 skipped.
+    The full suite (`python3 -m unittest discover -s tests -t .`) ran 723 tests: OK, 2 skipped.
+    `python3 tests/golden/generate_external_implementation_review_decisions.py --check`
+    reports the new golden as current. The plan-stage golden test is green.
+  - Mutation checks were run in a scratch copy, against the unmutated copy's baseline of 0
+    failures. Each of these 25 mutants fails at least one test:
+    - dropping the implementation-bundle gate, running it at every version, or always
+      requiring `generation_head`;
+    - applying `REJECTED` branch 1 at every version, or giving branch 3 the bare generator;
+    - skipping manual admissibility;
+    - dropping the local `BLOCK` gate, or matching its role exactly;
+    - dropping any of the approval clauses: pin, feedback status, feedback absence, manual
+      stage, ledger content;
+    - dropping clause 1, or matching its role exactly;
+    - routing `"2.2"` to the legacy handler, or every version to the two-stage one;
+    - always naming both generator stages, or dropping the `generation_head` fallback;
+    - keeping either phase in the interim set;
+    - restoring the old `APPLYING_REVIEW_FEEDBACK` text;
+    - dropping either new bundle-bearing phase;
+    - dropping the provenance text.
+- **CP4B-CP9 -- pending**, in registry order.

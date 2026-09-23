@@ -11,6 +11,15 @@ only ``controller.decision`` -- never the reverse). For every phase this
 module does not itself refine, it is a pure pass-through to
 :func:`controller.decision.decide`.
 
+**Automatic-lifecycle-orchestration CP4** gives the implementation-review
+phases their evidence handlers: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``
+(automatic ``/review-implementation`` unless a local ``BLOCK`` is on file),
+``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` (automatic ingestion of
+an admissible manual verdict), and a ledger-, feedback- and pin-aware
+``"2.2"`` ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW``; at ``"2.2"`` an
+implementation bundle incoherent with the work item's implementation round
+gates ahead of all of them (:func:`implementation_bundle_coherence`).
+
 Four phases genuinely need a ``.ai-review/`` evidence read to resolve
 their "ordinary case vs. blocked/withdrawn/superseded" sub-cases
 correctly -- the same four ``controller.decision`` names in its own
@@ -23,7 +32,8 @@ item (revision 64's own three-way sub-case, added to this checkpoint's own
 scope at the same revision -- CP4's fixed gate text sharpens into the same
 "hand to reviewer / verdict on file / Status: BLOCK" three-way read the
 plan-stage manual gate already performs, one stage over, minus that stage's
-admissibility model, which is deliberately not re-derived here). Two more
+admissibility model -- which automatic-lifecycle-orchestration CP4 then
+added, with :func:`evaluate_manual_implementation_stage_admissibility`). Two more
 report-only phases (``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW``,
 ``AWAITING_FUNCTIONAL_REVIEW``) gain evidence-driven sub-case reports
 here too, and every bundle-bearing phase gains a **withdrawn-bundle**
@@ -36,9 +46,11 @@ does not: both sit later in the dependency order. ``managed_repo``,
 this module only ever reads ``managed_repo.root`` and, off ``work_item``:
 ``work_item_id``, ``phase``, ``base_commit``, ``plan_revision``,
 ``implementation_revision``, ``plan_review_stages``, ``incomplete_children``,
-``registry_complete``, and -- for the implementation-stage readers
-(automatic-lifecycle-orchestration CP1) -- ``reviewed_implementation_head``
-and ``implementation_review_stages``.
+``registry_complete``, and -- for the implementation-stage readers and
+handlers (automatic-lifecycle-orchestration CP1/CP4) --
+``governing_workflow_version``, ``work_item_type``,
+``reviewed_implementation_head``, ``implementation_review_stages`` and
+``technical_review_block_pins``.
 
 **What this module does not do.** It never recomputes ``review_content_id``
 or ``bundle_id`` -- ``controller.target_state`` already declares that
@@ -119,10 +131,17 @@ PLAN_STAGE_PHASES: frozenset[str] = frozenset({
 #: ``/record-manual-implementation-review`` calls
 #: ``assert_bundle_not_rejected`` exactly as ``/record-manual-plan-review``
 #: does at the plan stage (``.claude/commands/record-manual-implementation-
-#: review.md``, step 5).
-BUNDLE_BEARING_PHASES: frozenset[str] = PLAN_STAGE_PHASES | frozenset(
-    {"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"}
-)
+#: review.md``, step 5). ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and
+#: ``APPLYING_REVIEW_FEEDBACK`` join it with automatic-lifecycle-
+#: orchestration CP4: ``/review-implementation`` (A3, A6) and
+#: ``/apply-implementation-review`` (step 1) call ``assert_bundle_not_rejected``
+#: too, at every version.
+BUNDLE_BEARING_PHASES: frozenset[str] = PLAN_STAGE_PHASES | frozenset({
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "APPLYING_REVIEW_FEEDBACK",
+})
 
 
 def _scoped_root(work_item_id: str) -> Path:
@@ -1447,13 +1466,24 @@ def _decide_awaiting_external_plan_review(root: Path, work_item_id: str, work_it
 
 
 # ---------------------------------------------------------------------------
-# Report-only phases whose report is now evidence-driven.
+# The implementation-review phases (automatic-lifecycle-orchestration CP4).
+# Each handler runs after the REJECTED marker gate and -- at "2.2" -- the
+# implementation-bundle gate (:func:`decide`), so it reads a bundle that
+# belongs to the work item's current implementation round.
 # ---------------------------------------------------------------------------
 
 
-def _decide_awaiting_external_implementation_review(
+def _explain_command(work_item_id: str) -> str:
+    return f"workflow-controller explain --work-item {work_item_id}"
+
+
+def _decide_awaiting_external_implementation_review_legacy(
     root: Path, work_item_id: str, work_item: Any,
 ) -> Decision:
+    """The ``"1"``/``"2.1"`` handler (and any version other than
+    ``"2.2"``), byte-identical to the one before automatic-lifecycle-
+    orchestration CP4 -- pinned by ``tests/golden/external_implementation_
+    review_decisions.json``."""
     phase = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
     feedback_dir = resolve_feedback_dir(root, work_item_id)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
@@ -1471,11 +1501,7 @@ def _decide_awaiting_external_implementation_review(
         # /recover-implementation-provenance is the human's action, and
         # the Controller never selects it -- it can never be automatic
         # (round 9's B1).
-        what = (
-            f"MANIFEST.md's generation_head ({manifest_head}) is behind the target's "
-            f"committed HEAD ({current_head}); an ordinary post-fix regeneration refuses "
-            "in this state -- a human runs /recover-implementation-provenance"
-        )
+        what = _provenance_only_text(manifest_head, current_head)
         safe = f"/recover-implementation-provenance {work_item_id}"
     elif feedback is None:
         what = (
@@ -1505,44 +1531,259 @@ def _decide_awaiting_external_implementation_review(
     )
 
 
+def _provenance_only_text(manifest_head: str | None, current_head: str | None) -> str:
+    """The ``generation_head``-only provenance text, stated once: the
+    ``"1"``/``"2.1"`` ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` handler's
+    own, and the ``"2.2"`` implementation-bundle gate's for the same
+    single failing clause (CP4 keeps "today's text" there)."""
+    return (
+        f"MANIFEST.md's generation_head ({manifest_head}) is behind the target's "
+        f"committed HEAD ({current_head}); an ordinary post-fix regeneration refuses "
+        "in this state -- a human runs /recover-implementation-provenance"
+    )
+
+
+def _pinned_bundle(work_item: Any, bundle_id: str | None) -> bool:
+    """``workflow_state.is_technical_review_block_pinned``, read-only: a
+    ``technical_review_block_pins`` entry names ``bundle_id`` exactly."""
+    pins = getattr(work_item, "technical_review_block_pins", ()) or ()
+    return bundle_id is not None and any(
+        isinstance(pin, dict) and pin.get("bundle_id") == bundle_id for pin in pins
+    )
+
+
+def _decide_awaiting_external_implementation_review_two_stage(
+    root: Path, work_item_id: str, work_item: Any,
+) -> Decision:
+    """The ``"2.2"`` handler. This phase is reached only through a recorded
+    manual ``APPROVE`` (``record_manual_implementation_review``), so "no
+    feedback -> hand the bundle to an external reviewer" is wrong here; the
+    real next action is the user-only ``/approve-review implementation``,
+    named only when every clause of ``technical_approval_gate_reachable``
+    this Controller can see holds. Read in order:
+
+    1. a ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` ``REVISE``/``BLOCK`` on
+       file, bound to the current content -> a gate: a later manual verdict
+       is on file, and a human decides whether to reopen remediation (never
+       automatic);
+    2. the ledger records both stages ``APPROVE`` against the manifest's
+       ``review_content_id``, ``REVIEW_FEEDBACK.md`` is on file with
+       ``Status`` ``REVISE`` or ``APPROVE`` (``approval_gate_reachable``;
+       ``/approve-review`` step 1 reads the file), and no
+       ``technical_review_block_pins`` entry names the manifest's
+       ``bundle_id`` -> the ``/approve-review implementation`` gate;
+    3. otherwise -> a gate naming every missing clause, and why
+       ``/approve-review implementation`` would refuse.
+
+    Clauses the Controller cannot see (an uncommitted protected-content
+    edit) stay ``/approve-review``'s own recomputation to refuse on."""
+    phase = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    feedback = read_feedback_fields(root, feedback_dir)
+    manifest = read_manifest_fields(root, bundle_dir)
+    ledger = read_implementation_review_ledger(work_item)
+    manifest_content_id = manifest.get("review_content_id")
+    manifest_bundle_id = manifest.get("bundle_id")
+    status = feedback.get("status") if feedback is not None else None
+
+    # Matched case-insensitively (unlike the manual-stage arrival test):
+    # this clause only ever turns a decision into the "a human decides"
+    # gate, so a mis-cased role must not fall through to naming approval.
+    if (
+        feedback is not None
+        and _normalize_role(feedback.get("reviewer_role")) == MANUAL_IMPLEMENTATION_ROLE
+        and status in ("REVISE", "BLOCK") and manifest_content_id is not None
+        and feedback.get("reviewed_content_id") == manifest_content_id
+    ):
+        what = (
+            f"a later manual verdict is on file (Status: {status}, bound to the current "
+            f"review_content_id {manifest_content_id}); /apply-implementation-review is legal from "
+            "this phase (it re-enters APPLYING_REVIEW_FEEDBACK); a human decides whether to reopen "
+            "remediation"
+        )
+        return Decision(
+            observed_phase=phase,
+            evidence=(f"{MANUAL_IMPLEMENTATION_ROLE} Status: {status} on file for the current content",),
+            action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=what, artifact_path=str(feedback_path),
+                safe_resume_command=f"/apply-implementation-review {work_item_id}",
+            ),
+            declined=False,
+            reason=f"{phase}: a later {MANUAL_IMPLEMENTATION_ROLE} {status} is on file -- never "
+                   "automatic; a human decides whether to reopen remediation",
+        )
+
+    missing: list[str] = []
+    if ledger.malformed is not None:
+        missing.append(f"the implementation_review_stages ledger is malformed ({ledger.malformed})")
+    else:
+        if ledger.local is None:
+            missing.append(f"the ledger records no {LOCAL_IMPLEMENTATION_ROLE} APPROVE")
+        if ledger.manual is None:
+            missing.append(f"the ledger records no {MANUAL_IMPLEMENTATION_ROLE} APPROVE")
+        if ledger.review_content_id is None or ledger.review_content_id != manifest_content_id:
+            missing.append(
+                f"the ledger's review_content_id {ledger.review_content_id!r} is not the current "
+                f"content's (MANIFEST.md states {manifest_content_id!r})"
+            )
+    if feedback is None:
+        missing.append(
+            f"no REVIEW_FEEDBACK.md is on file at {feedback_path} (/approve-review step 1 reads it)"
+        )
+    elif status not in ("REVISE", "APPROVE"):
+        missing.append(
+            f"REVIEW_FEEDBACK.md's Status is {status!r}, and approval_gate_reachable admits only "
+            "REVISE or APPROVE"
+        )
+    if manifest_bundle_id is None:
+        missing.append("MANIFEST.md states no bundle_id to check technical_review_block_pins against")
+    elif _pinned_bundle(work_item, manifest_bundle_id):
+        missing.append(
+            f"technical_review_block_pins pins a BLOCK against the current bundle_id {manifest_bundle_id}"
+        )
+
+    if not missing:
+        return Decision(
+            observed_phase=phase,
+            evidence=(
+                f"ledger: {LOCAL_IMPLEMENTATION_ROLE} and {MANUAL_IMPLEMENTATION_ROLE} APPROVE for "
+                f"review_content_id {manifest_content_id}",
+                f"REVIEW_FEEDBACK.md Status: {status}",
+            ),
+            action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=(
+                    "both implementation-review stages approved the current content; a human runs "
+                    "the user-only /approve-review implementation"
+                ),
+                artifact_path=str(bundle_dir),
+                safe_resume_command=f"/approve-review implementation {work_item_id}",
+            ),
+            declined=False,
+            reason=f"{phase}: both ledger stages approve the current content, the feedback on file "
+                   f"is {status}, and no pin names the bundle -- the user-only technical approval is next",
+        )
+
+    summary = "; ".join(missing)
+    return Decision(
+        observed_phase=phase, evidence=tuple(missing), action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"/approve-review implementation would refuse here: {summary} -- a human resolves "
+                "that first"
+            ),
+            artifact_path=str(bundle_dir),
+            safe_resume_command=_explain_command(work_item_id),
+        ),
+        declined=False,
+        reason=f"{phase}: the technical-approval gate is not reachable ({summary})",
+    )
+
+
+def _decide_awaiting_external_implementation_review(
+    root: Path, work_item_id: str, work_item: Any,
+) -> Decision:
+    """``"2.2"`` is ledger-, feedback- and pin-aware
+    (:func:`_decide_awaiting_external_implementation_review_two_stage`);
+    every other version keeps its pre-CP4 decision, byte for byte
+    (:func:`_decide_awaiting_external_implementation_review_legacy`)."""
+    if getattr(work_item, "governing_workflow_version", None) == "2.2":
+        return _decide_awaiting_external_implementation_review_two_stage(root, work_item_id, work_item)
+    return _decide_awaiting_external_implementation_review_legacy(root, work_item_id, work_item)
+
+
+def _decide_awaiting_local_implementation_review(
+    root: Path, work_item_id: str, work_item: Any,
+) -> Decision:
+    """A ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` ``BLOCK`` on file gates:
+    ``review-implementation.md`` A7 requires explicit user resolution
+    before any further command runs. Like the plan-stage handler's
+    any-local-``BLOCK`` rule, the role is compared case-insensitively and
+    no binding line is required -- fail closed, since the alternative
+    turns a genuine ``BLOCK`` with one malformed field into a launch.
+    Otherwise ``/review-implementation <id>`` is selected (automatic by the
+    dispatch rule at ``"2.2"``)."""
+    phase = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback = read_feedback_fields(root, feedback_dir)
+    if (
+        feedback is not None and feedback.get("status") == "BLOCK"
+        and _normalize_role(feedback.get("reviewer_role")) == LOCAL_IMPLEMENTATION_ROLE
+    ):
+        return Decision(
+            observed_phase=phase,
+            evidence=(f"current-round {LOCAL_IMPLEMENTATION_ROLE} Status: BLOCK",),
+            action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=(
+                    "the local implementation reviewer blocked this round; explicit user "
+                    "resolution is required before any further command runs"
+                ),
+                artifact_path=str(feedback_dir / "REVIEW_FEEDBACK.md"),
+                safe_resume_command=f"/review-implementation {work_item_id}",
+            ),
+            declined=False,
+            reason=f"{phase}: review-implementation.md A7 requires explicit user resolution "
+                   "before any further command runs after a BLOCK",
+        )
+    return Decision(
+        observed_phase=phase, evidence=(),
+        action=Action(command=f"/review-implementation {work_item_id}"),
+        automatic=True, gate=None, declined=False,
+        reason=f"{phase}: no current-round local BLOCK on file and the implementation bundle is "
+               "coherent -- a fresh worker is the independent local review this stage asks for",
+    )
+
+
 def _decide_awaiting_manual_external_implementation_review(
     root: Path, work_item_id: str, work_item: Any,
 ) -> Decision:
-    """Revision 64's own three-way sub-case, "the same read-only evidence
-    the plan stage's manual gate uses one stage over": no current-round
-    ``REVIEW_FEEDBACK.md`` (or one declaring the *local*-stage role) hands
-    the bundle to a reviewer; a ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``
-    verdict on file names ``/record-manual-implementation-review`` as next;
-    an admissible ``Status: BLOCK`` needs explicit user resolution first.
-    **Report-only at every sub-case, unlike its plan-stage counterpart**:
-    the Controller reports and never launches here, so the plan-stage
-    admissibility model (bundle-id/generation-head currency,
-    ``ClauseFailure``/``AdmissibilityResult``) is deliberately not
-    re-derived -- nothing at this phase turns on it.
+    """The ``"2.2"`` manual stage, mirroring the plan stage's
+    ``/record-manual-plan-review`` ingestion. Every sub-case but the last is
+    a gate:
 
-    **No legacy-cased role alias** (unlike the plan stage's
-    :func:`_normalize_role`): ``validate_manual_implementation_review_
-    preconditions`` (``scripts/workflow_state.py:12709``) refuses on an
-    exact-spelling mismatch, since the ``implementation_review_stages``
-    ledger is introduced fresh at ``"2.2"`` with no pre-``SCREAMING_SNAKE_
-    CASE`` history behind it -- so this read matches on the literal string,
-    never normalized."""
+    - no feedback, or feedback not declaring the manual role (matched on the
+      literal string -- no legacy-cased alias at this stage,
+      ``validate_manual_implementation_review_preconditions`` refuses an
+      exact-spelling mismatch) -> the genuine manual gate, naming the bundle
+      and the ``bundle_id``/``review_content_id`` the user must hand over;
+    - inadmissible (:func:`evaluate_manual_implementation_stage_admissibility`)
+      -> a gate naming every failing clause (a ``REVISE`` bound to another
+      bundle included: ingesting it would wedge the item at
+      ``APPLYING_REVIEW_FEEDBACK``);
+    - an admissible ``BLOCK`` -> the user-resolution gate;
+    - an admissible ``APPROVE``/``REVISE`` -> ``/record-manual-implementation-
+      review <id>`` is selected (automatic by the dispatch rule), its
+      advisories carried into ``evidence``.
+
+    The Controller never writes ``REVIEW_FEEDBACK.md``: ingestion launches
+    only once a human has placed the verdict there."""
     phase = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
     feedback_dir = resolve_feedback_dir(root, work_item_id)
-    bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
     feedback = read_feedback_fields(root, feedback_dir)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
+    manifest = read_manifest_fields(root, bundle_dir)
 
     role = feedback.get("reviewer_role") if feedback is not None else None
-    if feedback is None or role != "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW":
+    if feedback is None or role != MANUAL_IMPLEMENTATION_ROLE:
+        ledger = read_implementation_review_ledger(work_item)
         return Decision(
             observed_phase=phase, evidence=(), action=None, automatic=False,
             gate=HumanGate(
                 repository=str(root), work_item_id=work_item_id, phase=phase,
                 what_is_required=(
-                    "upload the current implementation bundle to a manual external "
-                    "reviewer and paste the verdict into REVIEW_FEEDBACK.md, declaring "
-                    "Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+                    f"upload {bundle_dir} (bundle_id {manifest.get('bundle_id')}, review_content_id "
+                    f"{ledger.review_content_id} from the ledger) to a manual external reviewer and "
+                    f"paste the verdict into {feedback_path}, declaring Reviewer role: "
+                    f"{MANUAL_IMPLEMENTATION_ROLE}"
                 ),
                 artifact_path=str(bundle_dir),
                 safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
@@ -1551,15 +1792,41 @@ def _decide_awaiting_manual_external_implementation_review(
             reason=(
                 f"{phase}: no current-round REVIEW_FEEDBACK.md on file"
                 if feedback is None else
-                f"{phase}: feedback declares Reviewer role {role!r}, not "
-                "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+                f"{phase}: feedback declares Reviewer role {role!r}, not {MANUAL_IMPLEMENTATION_ROLE}"
             ),
+        )
+
+    result = evaluate_manual_implementation_stage_admissibility(
+        feedback=feedback, manifest=manifest,
+        review_request=read_review_request_fields(root, bundle_dir),
+        work_item=work_item, current_head=_current_head(root),
+        current_worktree_root=target_worktree_root(root),
+    )
+    if not result.admissible:
+        failing = result.failure_summary()
+        return Decision(
+            observed_phase=phase, evidence=(f"inadmissible manual-stage feedback: {failing}",),
+            action=None, automatic=False,
+            gate=HumanGate(
+                repository=str(root), work_item_id=work_item_id, phase=phase,
+                what_is_required=(
+                    f"a {MANUAL_IMPLEMENTATION_ROLE} verdict is on file but it is not ingestible "
+                    f"({failing}) -- correct the named field and re-paste the verdict; this "
+                    "Controller never ingests a verdict /record-manual-implementation-review, or the "
+                    "/apply-implementation-review its REVISE leads to, would refuse on"
+                ),
+                artifact_path=str(feedback_path),
+                safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
+            ),
+            declined=False, reason=f"{phase}: {failing}",
         )
 
     status = feedback.get("status")
     if status == "BLOCK":
         return Decision(
-            observed_phase=phase, evidence=("Status: BLOCK",), action=None, automatic=False,
+            observed_phase=phase,
+            evidence=("admissible manual-stage Status: BLOCK",) + result.advisories,
+            action=None, automatic=False,
             gate=HumanGate(
                 repository=str(root), work_item_id=work_item_id, phase=phase,
                 what_is_required="the external reviewer blocked this round; a human "
@@ -1568,25 +1835,17 @@ def _decide_awaiting_manual_external_implementation_review(
                 safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
             ),
             declined=False,
-            reason=f"{phase}: Status: BLOCK -- a human resolves before anything else runs",
+            reason=f"{phase}: admissible Status: BLOCK -- a human resolves before anything else runs",
         )
 
+    evidence = (f"admissible manual-stage Status: {status}",) + result.advisories
+    reason = f"{phase}: admissible {MANUAL_IMPLEMENTATION_ROLE} feedback, Status: {status}"
+    if result.advisories:
+        reason += " (" + "; ".join(result.advisories) + ")"
     return Decision(
-        observed_phase=phase, evidence=(f"MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW verdict on "
-                                         f"file, Status: {status}",),
-        action=None, automatic=False,
-        gate=HumanGate(
-            repository=str(root), work_item_id=work_item_id, phase=phase,
-            what_is_required=(
-                "a MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW verdict is on file; a human runs "
-                "/record-manual-implementation-review"
-            ),
-            artifact_path=str(feedback_path),
-            safe_resume_command=f"/record-manual-implementation-review {work_item_id}",
-        ),
-        declined=False,
-        reason=f"{phase}: a MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW verdict is on file "
-               f"(Status: {status})",
+        observed_phase=phase, evidence=evidence,
+        action=Action(command=f"/record-manual-implementation-review {work_item_id}"),
+        automatic=True, gate=None, declined=False, reason=reason,
     )
 
 
@@ -1687,6 +1946,7 @@ _EVIDENCE_HANDLERS = {
     "AWAITING_EXTERNAL_PLAN_REVIEW": _decide_awaiting_external_plan_review,
     "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW": _decide_awaiting_external_implementation_review,
     "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": _decide_awaiting_manual_external_implementation_review,
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW": _decide_awaiting_local_implementation_review,
     "AWAITING_FUNCTIONAL_REVIEW": _decide_awaiting_functional_review,
 }
 
@@ -1828,29 +2088,273 @@ def _stale_plan_bundle_gate(root: Path, work_item: Any, detail: str) -> Decision
     )
 
 
-def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Decision:
+# ---------------------------------------------------------------------------
+# The implementation-bundle gates (automatic-lifecycle-orchestration CP4).
+# ---------------------------------------------------------------------------
+
+#: The four phases whose ``"2.2"`` actions consume the current
+#: implementation bundle, and so gate on :func:`implementation_bundle_coherence`
+#: ahead of their per-phase handler. The first two exist only at ``"2.2"``;
+#: at ``"1"``/``"2.1"`` nothing at ``APPLYING_REVIEW_FEEDBACK`` is automatic
+#: and ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` stays byte-identical, so no
+#: bundle gate stands in front of either there
+#: (:data:`_IMPLEMENTATION_BUNDLE_GATED_VERSIONS`).
+IMPLEMENTATION_BUNDLE_CONSUMING_PHASES: frozenset[str] = frozenset({
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "APPLYING_REVIEW_FEEDBACK",
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+})
+
+#: The governing versions at which the implementation-bundle gate runs.
+_IMPLEMENTATION_BUNDLE_GATED_VERSIONS: frozenset[str] = frozenset({"2.2"})
+
+#: The one phase at which ``HEAD`` legitimately runs ahead of the manifest's
+#: ``generation_head`` (the pending review-stage state commit and any fix
+#: commits land before the next generation record), so the coherence check
+#: there never requires a current ``generation_head``.
+_GENERATION_HEAD_EXEMPT_PHASE = "APPLYING_REVIEW_FEEDBACK"
+
+#: The implementation-stage author-written bundle files
+#: (``/milestone-implement`` step 4; ``prepare-ai-review.sh``'s
+#: ``STUB_FILES``). The generator only ever creates them as empty stubs, so
+#: a missing or zero-byte one must be *written*, not refreshed.
+_IMPLEMENTATION_AUTHOR_FILES: tuple[str, ...] = (
+    "IMPLEMENTATION_SUMMARY.md", "REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt",
+)
+
+_SELF_REVIEWING_IMPLEMENTATION = "SELF_REVIEWING_IMPLEMENTATION"
+
+
+def _latest_generation_record_parent_phase(root: Path, work_item: Any) -> str | None:
+    """The committed phase at the parent of this work item's most recent
+    generation-record commit, located from the manifest's own
+    ``generation_head`` (:func:`generation_record_view`): the newest record
+    in ``generation_head..HEAD`` when there is one, else ``generation_head``
+    itself when it is one of this work item's records. ``None`` when no
+    record can be located that way -- no readable manifest, a
+    ``generation_head`` that is not an ancestor of ``HEAD``, or no record at
+    all -- or when that parent's committed phase is unreadable."""
+    work_item_id = work_item.work_item_id
+    manifest = read_manifest_fields(root, implementation_bundle_dir(root, work_item_id))
+    generation_head = manifest.get("generation_head")
+    view = generation_record_view(root, work_item_id, generation_head)
+    if view.newer_records:
+        return view.latest_record_parent_phase
+    if view.newer_records is not None and _names_work_item_generation_record(
+        commit_trailers(root, generation_head), work_item_id,
+    ):
+        return _committed_phase(root, work_item_id, f"{generation_head}^")
+    return None
+
+
+def implementation_generator_stages(root: Path, work_item: Any) -> tuple[str, ...]:
+    """The ``prepare-ai-review.sh`` ``<stage>`` a regeneration must use,
+    derived from Workflow's own durable fact -- the committed phase of the
+    parent of this work item's most recent generation-record commit
+    (:func:`_latest_generation_record_parent_phase`), never Controller job
+    records: ``SELF_REVIEWING_IMPLEMENTATION`` means ``("implementation",)``
+    (``/milestone-implement`` step 4's record, whose parent is step 1f's
+    checkpoint commit or step 2's state-only commit), any other phase means
+    ``("post-fix",)`` (``/apply-implementation-review`` step 7's). When no
+    record can be located, both forms, ``("implementation", "post-fix")``."""
+    parent_phase = _latest_generation_record_parent_phase(root, work_item)
+    if parent_phase is None:
+        return ("implementation", "post-fix")
+    if parent_phase == _SELF_REVIEWING_IMPLEMENTATION:
+        return ("implementation",)
+    return ("post-fix",)
+
+
+def _implementation_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
+    """The ordered human steps that regenerate a coherent implementation
+    bundle -- the implementation-stage counterpart of
+    :func:`_plan_bundle_recovery_steps`. The bare generator is never enough
+    on its own: ``IMPLEMENTATION_SUMMARY.md``'s ``implementation_revision:``
+    line and ``REVIEW_REQUEST.md``'s ``review_content_id:`` line are hard
+    generator preconditions (``assert_stage_completeness``,
+    ``assert_review_request_states_review_content_id``), and after a
+    withdrawal the author files may be stale or gone. Controller performs
+    none of the steps itself.
+
+    When ``<bundle_dir>`` or any author file is absent or zero bytes, the
+    steps say "write" rather than "refresh", and a step 0 writing
+    ``CONTEXT_FILES.txt`` is prepended, naming the newest
+    ``current.rejected-*`` quarantine, when one exists, as the source to
+    restore from -- at ``APPLYING_REVIEW_FEEDBACK``, the bundle the feedback
+    on file reviewed. The generator's ``<stage>`` comes from
+    :func:`implementation_generator_stages`; when it cannot be derived, both
+    forms are named, each with the command whose record it follows."""
+    work_item_id = work_item.work_item_id
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    base_commit = work_item.base_commit or "<base-sha>"
+    revision = (
+        work_item.implementation_revision if work_item.implementation_revision is not None
+        else "<implementation_revision>"
+    )
+    work_item_type = getattr(work_item, "work_item_type", None) or "<work_item_type>"
+    absent = not (root / bundle_dir).is_dir() or any(
+        not _author_file_has_content(root / bundle_dir / name) for name in _IMPLEMENTATION_AUTHOR_FILES
+    )
+    verb = "write" if absent else "refresh"
+
+    steps: list[str] = []
+    if absent:
+        quarantine = _newest_quarantine_dir(root, work_item_id)
+        if quarantine is None:
+            source = ""
+        elif work_item.phase == _GENERATION_HEAD_EXEMPT_PHASE:
+            source = (
+                f", restoring the author files of the bundle REVIEW_FEEDBACK.md reviewed from "
+                f"{quarantine}/"
+            )
+        else:
+            source = f", restoring the previous round's author files from {quarantine}/"
+        steps.append(f"write {bundle_dir / 'CONTEXT_FILES.txt'}{source}")
+    steps.append(
+        f"{verb} {bundle_dir / 'IMPLEMENTATION_SUMMARY.md'} so that it states "
+        f"`implementation_revision: {revision}` as a plain labelled line (assert_stage_completeness)"
+    )
+    shape = " (in REVIEW_PROTOCOL.md's \"Review request format\" shape)" if absent else ""
+    steps.append(
+        f"{verb} {bundle_dir / 'REVIEW_REQUEST.md'}{shape} so that it states "
+        "`review_content_id: <hex>` with the value from "
+        f"workflow_state.approval_review_content_id(repo_root, stage=\"implementation\", "
+        f"base_commit=\"{base_commit}\", head=\"HEAD\", work_item_type=\"{work_item_type}\", "
+        f"work_item_id=\"{work_item_id}\", "
+        f"artifacts_path=workflow_fingerprint.artifacts_path_for_work_item(\"{work_item_id}\")) "
+        "(REVIEW_PROTOCOL.md's \"Computing `review_content_id`\" entry point), never the previous "
+        "round's value"
+    )
+    steps.append(
+        f"{verb} {bundle_dir / 'TEST_RESULTS.md'} with the exact commands and results of this round"
+    )
+    preflight = "if this refuses at preflight, its message names the upstream artifact to repair first"
+    stages = implementation_generator_stages(root, work_item)
+    if len(stages) == 1:
+        steps.append(
+            f"run scripts/prepare-ai-review.sh {base_commit} {stages[0]} {work_item_id} -- {preflight}"
+        )
+    else:
+        steps.append(
+            f"run scripts/prepare-ai-review.sh {base_commit} implementation {work_item_id} if this "
+            "work item's most recent generation-record commit is /milestone-implement's (step 4, "
+            f"its parent records {_SELF_REVIEWING_IMPLEMENTATION}), or scripts/prepare-ai-review.sh "
+            f"{base_commit} post-fix {work_item_id} if it is /apply-implementation-review's (step 7) "
+            "-- no generation-record commit could be located from MANIFEST.md's generation_head, so "
+            f"this Controller cannot derive which; {preflight}"
+        )
+    first = 0 if absent else 1
+    return tuple(f"{number}. {step}" for number, step in enumerate(steps, start=first))
+
+
+def _implementation_bundle_gate(
+    root: Path, work_item: Any, clause: str, detail: str, current_head: str | None,
+) -> Decision:
+    """The ``"2.2"`` implementation-bundle gate, first form (CP4): an
+    incoherent bundle names the failing clause and its detail, with the
+    neutral ``workflow-controller explain`` resume command. The
+    ``generation_head``-only provenance case keeps today's text and names
+    the user-only ``/recover-implementation-provenance`` (legal from every
+    ``"2.2"`` phase this gate evaluates that clause at). The bare
+    ``_regeneration_command`` is never advertised."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
-    marker_path = resolve_rejected_marker_path(root, work_item_id)
-    if phase in PLAN_BUNDLE_CONSUMING_PHASES:
-        # A marker survives only an in-progress or partially failed
-        # withdrawal, after which the author files may be stale or gone
-        # exactly as in the stale-bundle gate -- so the bare generator is
-        # never the advertised recovery here either. The marker's
-        # "surviving" path can be ``current/`` itself (a failed quarantine
-        # rename), whose author files the steps below then refresh, so the
-        # text never tells the operator to delete surviving paths.
-        steps = _plan_bundle_recovery_steps(root, work_item)
-        clear = (
-            f"resolve the failure the REJECTED marker at {marker_path} records ({detail}); "
-            "do not delete surviving author files unless that specific failure requires it "
-            "-- a successful generation then clears the marker itself"
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    manifest_head = read_manifest_fields(root, bundle_dir).get("generation_head")
+    if clause == "generation_head" and manifest_head is not None and current_head is not None:
+        what = _provenance_only_text(manifest_head, current_head)
+        safe = f"/recover-implementation-provenance {work_item_id}"
+    else:
+        what = (
+            "the current implementation bundle does not belong to this work item's current "
+            f"implementation round ({clause}: {detail}); a human repairs it before any "
+            "implementation review runs -- this Controller never regenerates it"
         )
+        safe = _explain_command(work_item_id)
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"implementation bundle is not coherent with the work item's state ({clause}): {detail}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=what, artifact_path=str(bundle_dir / "MANIFEST.md"),
+            safe_resume_command=safe,
+        ),
+        declined=False,
+        reason=f"{phase}: the implementation bundle is incoherent ({clause}: {detail}), checked "
+               "ahead of the per-phase handlers",
+    )
+
+
+def _marker_clearing_clause(marker_path: Path, detail: str | None) -> str:
+    return (
+        f"resolve the failure the REJECTED marker at {marker_path} records ({detail}); "
+        "do not delete surviving author files unless that specific failure requires it "
+        "-- a successful generation then clears the marker itself"
+    )
+
+
+def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Decision:
+    """The withdrawn-bundle gate, by version and phase (CP4, four branches
+    in order):
+
+    1. ``"2.2"``, at a phase of :data:`IMPLEMENTATION_BUNDLE_CONSUMING_PHASES`:
+       the marker-clearing clause, then the ordered implementation-bundle
+       recovery steps (:func:`_implementation_bundle_recovery_steps`);
+    2. a phase of :data:`PLAN_BUNDLE_CONSUMING_PHASES`: the clause, then the
+       plan-bundle recovery steps, unchanged;
+    3. ``"1"``/``"2.1"`` ``APPLYING_REVIEW_FEEDBACK`` (newly bundle-bearing,
+       so no earlier text binds): the clause, then the facts -- the reviewed
+       bundle was withdrawn, and ``/apply-implementation-review``'s step 1
+       refuses until a successful generation clears the marker. No
+       generator command is named: nothing is automatic there, a
+       regenerated bundle cannot in general reproduce the reviewed
+       ``bundle_id``, and a human decides;
+    4. every other bundle-bearing phase: today's bare text, byte-identical.
+
+    A marker survives only an in-progress or partially failed withdrawal,
+    after which the author files may be stale or gone -- so, outside branch
+    4, the bare generator is never the advertised recovery. The marker's
+    "surviving" path can be ``current/`` itself (a failed quarantine
+    rename), whose author files the steps then refresh, so the text never
+    tells the operator to delete surviving paths."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    version = work_item.governing_workflow_version
+    marker_path = resolve_rejected_marker_path(root, work_item_id)
+    clear = _marker_clearing_clause(marker_path, detail)
+    if version in _IMPLEMENTATION_BUNDLE_GATED_VERSIONS and phase in IMPLEMENTATION_BUNDLE_CONSUMING_PHASES:
+        steps = _implementation_bundle_recovery_steps(root, work_item)
+        what_is_required = (
+            f"the current bundle was withdrawn ({detail}); {clear}; then, before any "
+            "implementation review runs, perform in order: " + " ".join(steps)
+        )
+        safe_resume_command = "; ".join((clear,) + steps)
+    elif phase in PLAN_BUNDLE_CONSUMING_PHASES:
+        steps = _plan_bundle_recovery_steps(root, work_item)
         what_is_required = (
             f"the current bundle was withdrawn ({detail}); {clear}; then, before any plan "
             "review runs, perform in order: " + " ".join(steps)
         )
         safe_resume_command = "; ".join((clear,) + steps)
+    elif phase == "APPLYING_REVIEW_FEEDBACK":
+        quarantine = _newest_quarantine_dir(root, work_item_id)
+        quarantine_text = (
+            f"the newest current.rejected-* quarantine ({quarantine}/)" if quarantine is not None
+            else "the newest current.rejected-* quarantine"
+        )
+        what_is_required = (
+            f"the bundle REVIEW_FEEDBACK.md reviewed was withdrawn ({detail}); {clear}. "
+            "/apply-implementation-review is legal from this phase (it skips its own entry "
+            "transition), but its step 1 (assert_bundle_not_rejected) refuses until a successful "
+            f"generation clears the marker: a human restores that bundle from {quarantine_text} and "
+            "regenerates it, then reruns /apply-implementation-review only if the regenerated "
+            "bundle_id equals the feedback's Reviewed bundle ID (step 1's "
+            "assert_feedback_matches_bundle) -- otherwise the verdict has to be obtained again, "
+            "for the regenerated bundle"
+        )
+        safe_resume_command = _explain_command(work_item_id)
     else:
         regen = _regeneration_command(phase, work_item_id)
         what_is_required = (
@@ -1881,10 +2385,14 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     no ``.ai-review/`` read at all. At the two plan-bundle-consuming
     phases, a plan bundle incoherent with the state's ``plan_revision``
     (:func:`plan_bundle_coherence`) gates next -- still ahead of the
-    per-phase handlers, so ahead of the local-review BLOCK gate. A
-    handler's selected action then goes through the same general
-    automatic-dispatch rule (``decision.apply_dispatch_rule``) as every
-    selection :func:`controller.decision.decide` makes."""
+    per-phase handlers, so ahead of the local-review BLOCK gate. At a
+    ``"2.2"`` implementation-bundle-consuming phase, an implementation
+    bundle incoherent with the state's implementation round
+    (:func:`implementation_bundle_coherence`) gates in the same position
+    (automatic-lifecycle-orchestration CP4). A handler's selected action
+    then goes through the same general automatic-dispatch rule
+    (``decision.apply_dispatch_rule``) as every selection
+    :func:`controller.decision.decide` makes."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     root = managed_repo.root
@@ -1898,6 +2406,18 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
         coherent, detail = plan_bundle_coherence(root, work_item_id, work_item.plan_revision)
         if not coherent:
             return _stale_plan_bundle_gate(root, work_item, detail)
+
+    if (
+        work_item.governing_workflow_version in _IMPLEMENTATION_BUNDLE_GATED_VERSIONS
+        and phase in IMPLEMENTATION_BUNDLE_CONSUMING_PHASES
+    ):
+        current_head = _current_head(root)
+        coherent, clause, detail = implementation_bundle_coherence(
+            root, work_item, current_head,
+            require_current_generation_head=phase != _GENERATION_HEAD_EXEMPT_PHASE,
+        )
+        if not coherent:
+            return _implementation_bundle_gate(root, work_item, clause, detail, current_head)
 
     handler = _EVIDENCE_HANDLERS.get(phase)
     if handler is not None:

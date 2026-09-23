@@ -233,17 +233,16 @@ AUTOMATIC_TRIPLES: frozenset[tuple["str | _NoPhaseType", str | None, str]] = fro
     ("APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review"),
 })
 
-#: **Interim, removed by CP4/CP4B.** The three phases whose
-#: ``ExpectedOutcome`` rows (16-18) exist but whose evidence gates
-#: (``REJECTED``/implementation-bundle coherence/``BLOCK``/admissibility)
-#: are installed only by a later checkpoint. :func:`classify_selected_action`
-#: declines any action selected at one of them, so each keeps its base,
-#: non-launching decision until then -- without this set, row 16 would make
-#: ``/review-implementation`` automatic with none of those gates in front of
-#: it. CP4 removes the first two phases, and CP4B removes the set.
+#: **Interim, removed by CP4B.** The phase whose ``ExpectedOutcome`` row
+#: (18) exists but whose evidence gates (feedback admissibility, the apply
+#: relaunch bound) are installed only by a later checkpoint.
+#: :func:`classify_selected_action` declines any action selected there, so
+#: it keeps its non-launching decision until then. CP3 introduced the set
+#: with ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and
+#: ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` too; CP4 installed
+#: their ``REJECTED``/implementation-bundle coherence/``BLOCK``/admissibility
+#: gates (``controller.evidence``) and removed them, and CP4B removes the set.
 _PHASES_AWAITING_EVIDENCE_HANDLER: frozenset[str] = frozenset({
-    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
-    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
     "APPLYING_REVIEW_FEEDBACK",
 })
 
@@ -299,7 +298,7 @@ def classify_selected_action(
     """The general automatic-dispatch rule, in one place for every phase
     alike: a selected ``command`` is **automatic** iff ``(phase, version,
     command_token(command))`` is a member of :data:`AUTOMATIC_TRIPLES` (and
-    ``phase`` is not an interim :data:`_PHASES_AWAITING_EVIDENCE_HANDLER`
+    ``phase`` is not the interim :data:`_PHASES_AWAITING_EVIDENCE_HANDLER`
     phase), and **declined** otherwise. "Model-invocable and not
     user-only" is already guaranteed by :func:`classify_command_files`'s
     partition (test time) and ``worker.USER_ONLY_COMMANDS`` (launch time);
@@ -866,8 +865,12 @@ def _decide_vocabulary(phase: str, managed_repo: Any, work_item: Any) -> Decisio
 #: The evidence-independent gate each of these phases reports from this
 #: module: ``(what_is_required, safe_resume_command template)``. Three of
 #: the four are refined by ``controller.evidence``'s own handlers, which
-#: run first; ``APPLYING_REVIEW_FEEDBACK`` is decided here (its corrected
-#: text is CP4's).
+#: run first; ``APPLYING_REVIEW_FEEDBACK`` is decided here, with the
+#: corrected text of automatic-lifecycle-orchestration CP4:
+#: ``/apply-implementation-review`` skips its own entry transition exactly
+#: when the phase is already ``APPLYING_REVIEW_FEEDBACK`` and then runs its
+#: steps 1-8, so it *is* legal from this phase (the ``"2.2"`` two-stage
+#: writers set this phase directly on ``REVISE``).
 _STATIC_GATES: dict[str, tuple[str, str]] = {
     "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW": (
         "an external implementation review must be uploaded and its verdict "
@@ -876,10 +879,10 @@ _STATIC_GATES: dict[str, tuple[str, str]] = {
         "/apply-implementation-review {wid}",
     ),
     "APPLYING_REVIEW_FEEDBACK": (
-        "an implementation-review apply was interrupted here; no Workflow "
-        "command can legally run from this phase -- a human must decide how "
-        "to recover",
-        "workflow-controller explain --work-item {wid}",
+        "an implementation-review remediation is in progress or was interrupted; "
+        "/apply-implementation-review is legal from this phase (it skips its own entry "
+        "transition), so rerun it once the feedback on file is confirmed current",
+        "/apply-implementation-review {wid}",
     ),
     "AWAITING_FUNCTIONAL_REVIEW": (
         "manual functional testing findings must be prepared, placed and "

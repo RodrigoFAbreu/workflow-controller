@@ -9,6 +9,7 @@ outcome and the two evidence-driven report-only phases.
 
 from __future__ import annotations
 
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -695,145 +696,188 @@ class AwaitingExternalImplementationReviewTest(unittest.TestCase):
         self.assertEqual(result.gate.safe_resume_command, "/recover-implementation-provenance wi-1")
         self.assertIn("refuses", result.gate.what_is_required)
 
-    def test_2_2_item_reports_identically_to_2_1_at_this_reused_terminal_phase(self) -> None:
-        """`MILESTONE_WORKFLOW.md:425-434`'s "byte-for-byte" reuse claim,
-        made concrete: this terminal phase is reached by a "2.2" item only
-        once both its `implementation_review_stages` ledger stages
-        (`LOCAL_MODEL_IMPLEMENTATION_REVIEW` and
-        `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`) already read `APPROVE` --
-        but `_decide_awaiting_external_implementation_review` consults
-        neither `governing_workflow_version` nor that ledger at all, only
-        `MANIFEST.md`/`REVIEW_FEEDBACK.md` on disk, so a "2.2" item and a
-        "2.1"/"1" item in the identical bundle state must decide
-        identically. `AwaitingExternalImplementationReviewTest` had no
-        `governing_workflow_version="2.2"` fixture anywhere before this."""
-        fixtures.write_manifest(
-            self.root, ".ai-review/current", fixtures.build_manifest_text(generation_head=self.head),
-        )
-        fixtures.write_review_feedback(
-            self.root, ".ai-review/feedback",
-            fixtures.build_review_feedback_text(status="APPROVE"),
-        )
-        result_1 = self._decide(governing_workflow_version="1")
-        result_21 = self._decide(governing_workflow_version="2.1")
-        result_22 = self._decide(governing_workflow_version="2.2")
-        for other in (result_21, result_22):
-            self.assertEqual(result_1.automatic, other.automatic)
-            self.assertEqual(result_1.declined, other.declined)
-            self.assertEqual(result_1.action, other.action)
-            self.assertEqual(result_1.gate.what_is_required, other.gate.what_is_required)
-            self.assertEqual(result_1.gate.safe_resume_command, other.gate.safe_resume_command)
-            self.assertEqual(result_1.gate.artifact_path, other.gate.artifact_path)
-        self.assertEqual(result_22.gate.safe_resume_command, "/approve-review implementation wi-1")
+    # `test_2_2_item_reports_identically_to_2_1_at_this_reused_terminal_phase`
+    # is replaced (automatic-lifecycle-orchestration CP4): "2.2" is now
+    # ledger-, feedback- and pin-aware (`AwaitingExternalImplementationReviewTwoStageTest`
+    # below), and the "1"/"2.1" half of that comparison is kept, byte for
+    # byte, by `ExternalImplementationReviewGoldenTest`.
+
+
+_REVIEWED_HEAD = "1" * 40
+_LOCAL_APPROVE_LEDGER = fixtures.implementation_review_ledger("c" * 64, local_bundle_id="b" * 64)
+_COMPLETE_LEDGER = fixtures.implementation_review_ledger(
+    "c" * 64, local_bundle_id="b" * 64, manual_bundle_id="b" * 64,
+)
+_MANUAL_ROLE = "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+_LOCAL_ROLE = "LOCAL_MODEL_IMPLEMENTATION_REVIEW"
+
+
+def _implementation_work_item(phase: str, **overrides):
+    """A ``"2.2"`` work item at ``phase`` whose implementation round matches
+    :func:`fixtures.write_implementation_bundle`'s default bundle."""
+    fields = dict(
+        phase=phase, governing_workflow_version="2.2", base_commit="0" * 40, implementation_revision=1,
+        reviewed_implementation_head=_REVIEWED_HEAD, implementation_review_stages=_LOCAL_APPROVE_LEDGER,
+    )
+    fields.update(overrides)
+    return fixtures.build_work_item_view(**fields)
 
 
 class AwaitingManualExternalImplementationReviewTest(unittest.TestCase):
-    """Revision 64's own three-way sub-case (CP4B's fourth evidence-needing
-    phase): report-only at every sub-case, and no legacy-cased role alias,
-    unlike its plan-stage counterpart above."""
+    """The ``"2.2"`` manual stage (automatic-lifecycle-orchestration CP4):
+    no verdict, a local-role verdict, an inadmissible verdict and a
+    ``BLOCK`` gate; an admissible ``APPROVE``/``REVISE`` is ingested
+    automatically through ``/record-manual-implementation-review``, as the
+    plan stage ingests through ``/record-manual-plan-review``. No
+    legacy-cased role alias, unlike the plan stage. Every fixture carries a
+    coherent (flat-layout) implementation bundle, so the implementation-
+    bundle gate in front of the handler passes."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.root = _make_target(Path(self._tmp.name))
         fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        self.bundle = fixtures.write_implementation_bundle(
+            self.root, "wi-1", 1, scoped=False, reviewed_implementation_head=_REVIEWED_HEAD,
+        )
         self.managed_repo = fixtures.build_target_managed_repository(self.root)
 
     def _decide(self, **overrides):
-        defaults = dict(
-            phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-            base_commit="0" * 40, governing_workflow_version="2.2",
-        )
-        defaults.update(overrides)
-        work_item = fixtures.build_work_item_view(**defaults)
+        work_item = _implementation_work_item("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", **overrides)
         return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def _feedback(self, status: str, role: str | None = _MANUAL_ROLE, **fields) -> None:
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/feedback",
+            fixtures.build_review_feedback_text(status=status, reviewer_role=role, **fields),
+        )
+
+    def _assert_gate_never_launches(self, result) -> None:
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertIsNotNone(result.gate)
 
     def test_no_feedback_names_handing_the_bundle_to_a_reviewer(self) -> None:
         result = self._decide()
-        self.assertIsNone(result.action)
-        self.assertFalse(result.automatic)
+        self._assert_gate_never_launches(result)
         self.assertIn("manual external reviewer", result.gate.what_is_required)
         self.assertEqual(result.gate.safe_resume_command,
-                          "/record-manual-implementation-review wi-1")
+                         "/record-manual-implementation-review wi-1")
+        # The "At every stop" values the user must hand over.
+        self.assertIn(".ai-review/current", result.gate.what_is_required)
+        self.assertIn(f"bundle_id {'b' * 64}", result.gate.what_is_required)
+        self.assertIn(f"review_content_id {'c' * 64} from the ledger", result.gate.what_is_required)
+        self.assertIn(_MANUAL_ROLE, result.gate.what_is_required)
 
     def test_local_role_feedback_does_not_satisfy_the_arrival_test(self) -> None:
-        fixtures.write_review_feedback(
-            self.root, ".ai-review/feedback",
-            fixtures.build_review_feedback_text(
-                status="APPROVE", reviewer_role="LOCAL_MODEL_IMPLEMENTATION_REVIEW",
-            ),
-        )
+        """A local-role verdict at the manual phase is never admitted, even
+        an otherwise perfectly bound ``APPROVE``."""
+        self._feedback("APPROVE", role=_LOCAL_ROLE)
         result = self._decide()
-        self.assertIsNone(result.action)
-        self.assertIsNotNone(result.gate)
+        self._assert_gate_never_launches(result)
+        self.assertIn("upload", result.gate.what_is_required)
+        self.assertIn(_LOCAL_ROLE, result.reason)
 
     def test_lowercase_role_is_not_accepted_unlike_the_plan_stage(self) -> None:
         """No legacy-cased alias at this stage: an exact-spelling mismatch
         is refused, mirroring ``validate_manual_implementation_review_
         preconditions`` -- unlike ``AwaitingManualExternalPlanReviewTest``'s
         own ``test_legacy_lowercase_role_is_accepted``."""
-        fixtures.write_review_feedback(
-            self.root, ".ai-review/feedback",
-            fixtures.build_review_feedback_text(
-                status="APPROVE", reviewer_role="manual_external_implementation_review",
-            ),
-        )
+        self._feedback("APPROVE", role="manual_external_implementation_review")
         result = self._decide()
-        self.assertIsNone(result.action)
-        self.assertIsNotNone(result.gate)
+        self._assert_gate_never_launches(result)
         self.assertIn("upload", result.gate.what_is_required.lower())
 
     def test_block_is_a_gate_naming_explicit_resolution(self) -> None:
-        fixtures.write_review_feedback(
-            self.root, ".ai-review/feedback",
-            fixtures.build_review_feedback_text(
-                status="BLOCK", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-            ),
-        )
+        self._feedback("BLOCK")
         result = self._decide()
-        self.assertIsNone(result.action)
-        self.assertFalse(result.automatic)
+        self._assert_gate_never_launches(result)
         self.assertIn("resolves", result.gate.what_is_required)
+        self.assertEqual(result.gate.safe_resume_command, "/record-manual-implementation-review wi-1")
 
-    def test_verdict_on_file_names_record_manual_implementation_review_and_never_launches(self) -> None:
-        fixtures.write_review_feedback(
-            self.root, ".ai-review/feedback",
-            fixtures.build_review_feedback_text(
-                status="APPROVE", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-            ),
-        )
+    def test_admissible_approve_is_ingested_automatically(self) -> None:
+        """Was ``test_verdict_on_file_names_record_manual_implementation_review_and_never_launches``
+        (report-only at every sub-case before CP4). With admissible fixtures
+        -- a coherent manifest, ``REVIEW_REQUEST.md`` stating its content
+        id, a local ``APPROVE`` in the ledger -- the verdict is ingested by
+        the automatic ``/record-manual-implementation-review``."""
+        self._feedback("APPROVE")
         result = self._decide()
-        # Report-only at every sub-case: unlike the plan-stage gate, an
-        # admissible verdict here still never becomes an automatic action.
-        self.assertIsNone(result.action)
-        self.assertFalse(result.automatic)
-        self.assertEqual(result.gate.safe_resume_command,
-                          "/record-manual-implementation-review wi-1")
+        self.assertTrue(result.automatic, result.reason)
+        self.assertFalse(result.declined)
+        self.assertIsNone(result.gate)
+        self.assertEqual(result.action.command, "/record-manual-implementation-review wi-1")
+        self.assertEqual(result.evidence, ("admissible manual-stage Status: APPROVE",))
+
+    def test_admissible_revise_is_ingested_automatically(self) -> None:
+        """Was ``test_revise_status_also_names_record_manual_implementation_review``."""
+        self._feedback("REVISE")
+        result = self._decide()
+        self.assertTrue(result.automatic, result.reason)
+        self.assertEqual(result.action.command, "/record-manual-implementation-review wi-1")
+
+    def test_inadmissible_verdict_names_the_command_and_never_launches(self) -> None:
+        """The original "names ``/record-manual-implementation-review``,
+        never launches" shape, re-pinned for an inadmissible verdict: here
+        the ledger records no local ``APPROVE``."""
+        self._feedback("APPROVE")
+        result = self._decide(implementation_review_stages={"review_content_id": "c" * 64})
+        self._assert_gate_never_launches(result)
+        self.assertEqual(result.gate.safe_resume_command, "/record-manual-implementation-review wi-1")
+        self.assertIn("not ingestible", result.gate.what_is_required)
+        self.assertIn("local approval", result.gate.what_is_required)
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/feedback/REVIEW_FEEDBACK.md")))
+
+    def test_inadmissible_verdict_names_every_failing_clause(self) -> None:
+        self._feedback("APPROVE", reviewed_base_commit="9" * 40, reviewed_content_id="d" * 64)
+        result = self._decide()
+        self._assert_gate_never_launches(result)
+        for clause in ("Reviewed base commit", "review_content_id"):
+            self.assertIn(clause, result.gate.what_is_required)
+
+    def test_revise_bound_to_another_bundle_gates_and_says_why(self) -> None:
+        self._feedback("REVISE", reviewed_bundle_id="a" * 64)
+        result = self._decide()
+        self._assert_gate_never_launches(result)
+        self.assertIn("Reviewed bundle ID", result.gate.what_is_required)
+        self.assertIn("/apply-implementation-review step 1", result.gate.what_is_required)
+        self.assertIn("assert_feedback_matches_bundle", result.gate.what_is_required)
+
+    def test_approve_bound_to_another_bundle_stays_advisory_and_automatic(self) -> None:
+        self._feedback("APPROVE", reviewed_bundle_id="a" * 64)
+        result = self._decide()
+        self.assertTrue(result.automatic, result.reason)
+        self.assertEqual(result.action.command, "/record-manual-implementation-review wi-1")
+        self.assertEqual(len(result.evidence), 2)
+        self.assertIn("advisory only", result.evidence[1])
+        self.assertIn("advisory only", result.reason)
+
+    def test_review_request_disagreeing_with_the_manifest_gates(self) -> None:
+        (self.root / self.bundle / "REVIEW_REQUEST.md").write_text("review_content_id: " + "d" * 64 + "\n")
+        self._feedback("APPROVE")
+        result = self._decide()
+        self._assert_gate_never_launches(result)
+        self.assertIn("REVIEW_REQUEST.md review_content_id", result.gate.what_is_required)
 
     def test_bundle_bearing_phase_reports_a_withdrawn_bundle_ahead_of_the_ordinary_row(self) -> None:
+        """Assertions unchanged by CP4; the text at this ``"2.2"`` phase is
+        now the marker-clearing clause plus the recovery steps
+        (``ImplementationRejectedMarkerGateTest``)."""
         fixtures.write_rejected_marker(self.root, "wi-1", scoped=False, detail="finalize failed")
         result = self._decide()
         self.assertIsNone(result.action)
         self.assertIn("finalize failed", result.gate.what_is_required)
         self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/REJECTED")))
 
-    def test_revise_status_also_names_record_manual_implementation_review(self) -> None:
-        """CP4's own genuinely-uncovered sub-case: ``Status: REVISE`` on
-        file, admissible role. Falls into the same non-BLOCK branch as
-        ``APPROVE`` above (``_decide_awaiting_manual_external_implementation_
-        review`` only special-cases ``BLOCK``) -- report-only here, unlike
-        the plan stage's own REVISE handling, which is automatic."""
-        fixtures.write_review_feedback(
-            self.root, ".ai-review/feedback",
-            fixtures.build_review_feedback_text(
-                status="REVISE", reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-            ),
-        )
-        result = self._decide()
-        self.assertIsNone(result.action)
-        self.assertFalse(result.automatic)
-        self.assertEqual(result.gate.safe_resume_command,
-                          "/record-manual-implementation-review wi-1")
+    def test_an_incoherent_bundle_gates_ahead_of_an_admissible_verdict(self) -> None:
+        self._feedback("APPROVE")
+        result = self._decide(implementation_revision=2)
+        self._assert_gate_never_launches(result)
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/current/MANIFEST.md")))
+        self.assertIn("implementation_revision", result.gate.what_is_required)
+        self.assertEqual(result.gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
 
 
 class AwaitingFunctionalReviewTest(unittest.TestCase):
@@ -2034,6 +2078,597 @@ class ApplyImplementationReviewAdmissibilityTest(unittest.TestCase):
         self.assertIn("changed after the transition", summary)
         self.assertIn("A7", summary)
         self.assertIn("explicit user resolution", summary)
+
+
+# ---------------------------------------------------------------------------
+# Automatic-lifecycle-orchestration CP4: the implementation-review decision
+# handlers, the implementation-bundle gate and the REJECTED gate's branches.
+# ---------------------------------------------------------------------------
+
+
+def _assert_in_order(test: unittest.TestCase, text: str, needles: list[str]) -> None:
+    position = -1
+    for needle in needles:
+        found = text.find(needle, position + 1)
+        test.assertGreater(found, position, f"{needle!r} missing or out of order in {text!r}")
+        position = found
+
+
+class ExternalImplementationReviewGoldenTest(unittest.TestCase):
+    """``"1"``/``"2.1"`` ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` is
+    byte-identical to its pre-CP4 decisions: every case of
+    ``tests/golden/external_implementation_review_decisions.json``
+    (generated from CP3's unchanged code) re-derives byte-equal, with no
+    permitted difference at all."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tests.golden import generate_external_implementation_review_decisions as golden
+
+        cls.golden = golden
+        cls.checked_in = golden.GOLDEN_PATH.read_text()
+        cls.derived_cases = golden.derive_cases()
+
+    def test_every_case_reproduces_from_the_code_as_it_stands(self) -> None:
+        expected = self.golden.load_cases(self.checked_in)
+        self.assertEqual(sorted(expected), sorted(self.derived_cases))
+        moved = [key for key in sorted(expected) if expected[key] != self.derived_cases[key]]
+        self.assertEqual(moved, [], f"\"1\"/\"2.1\" decisions moved: {moved[:10]}")
+
+    def test_normalised_rederivation_is_byte_equal_to_the_golden(self) -> None:
+        self.assertEqual(self.golden.render_document(self.derived_cases), self.checked_in)
+
+    def test_coverage_is_every_scenario_at_both_versions(self) -> None:
+        import json
+
+        document = json.loads(self.checked_in)
+        expected_pairs = {("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "1"),
+                          ("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "2.1")}
+        self.assertEqual({tuple(pair) for pair in document["phase_versions"]}, expected_pairs)
+        self.assertEqual(set(self.golden.PHASE_VERSIONS), expected_pairs)
+        from tests.golden.generate_plan_stage_decisions import case_key
+
+        self.assertEqual(set(document["cases"]), {
+            case_key(scenario_id, phase, version)
+            for scenario_id, _setup, _overrides in self.golden.SCENARIOS for phase, version in expected_pairs
+        })
+
+    def test_the_matrix_exercises_every_row_of_the_legacy_handler(self) -> None:
+        bodies = list(self.golden.load_cases(self.checked_in).values())
+        self.assertFalse([body for body in bodies if "raises" in body])
+        resumes = {body["gate"]["safe_resume_command"] for body in bodies}
+        self.assertEqual(resumes, {
+            "/apply-implementation-review wi-1", "/approve-review implementation wi-1",
+            "/recover-implementation-provenance wi-1", "scripts/prepare-ai-review.sh <base-sha> post-fix wi-1",
+        })
+        self.assertTrue(all(not body["automatic"] and not body["declined"] for body in bodies))
+
+
+class AwaitingExternalImplementationReviewTwoStageTest(unittest.TestCase):
+    """``"2.2"`` ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` (CP4): reached
+    only through a recorded manual ``APPROVE``, so it names the user-only
+    ``/approve-review implementation`` only when every clause of
+    ``technical_approval_gate_reachable`` this Controller can see holds --
+    the inverted revision-1 test (I3)."""
+
+    PHASE = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, reviewed_implementation_head=_REVIEWED_HEAD)
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, **overrides):
+        overrides.setdefault("implementation_review_stages", _COMPLETE_LEDGER)
+        work_item = _implementation_work_item(self.PHASE, **overrides)
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def _feedback(self, status: str | None, role: str | None = _MANUAL_ROLE, **fields) -> None:
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(status=status, reviewer_role=role, **fields),
+        )
+
+    def _assert_not_named(self, result, *fragments: str) -> None:
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertIsNotNone(result.gate)
+        self.assertNotEqual(result.gate.safe_resume_command, "/approve-review implementation wi-1")
+        self.assertEqual(result.gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+        self.assertIn("/approve-review implementation would refuse", result.gate.what_is_required)
+        for fragment in fragments:
+            self.assertIn(fragment, result.gate.what_is_required)
+
+    def test_complete_ledger_and_an_approve_on_file_names_approve_review(self) -> None:
+        self._feedback("APPROVE")
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertEqual(result.gate.safe_resume_command, "/approve-review implementation wi-1")
+        self.assertIn("both implementation-review stages approved the current content",
+                      result.gate.what_is_required)
+        self.assertIn("user-only", result.gate.what_is_required)
+
+    def test_a_revise_status_also_reaches_the_approval_gate(self) -> None:
+        """``approval_gate_reachable`` admits ``REVISE`` as well as
+        ``APPROVE`` -- here a ``REVISE`` that is not a later manual verdict
+        on the current content (no reviewer role)."""
+        self._feedback("REVISE", role=None)
+        result = self._decide()
+        self.assertEqual(result.gate.safe_resume_command, "/approve-review implementation wi-1")
+
+    def test_absent_feedback_does_not_name_approve_review(self) -> None:
+        self._assert_not_named(self._decide(), "no REVIEW_FEEDBACK.md is on file")
+
+    def test_a_block_status_does_not_name_approve_review(self) -> None:
+        self._feedback("BLOCK", role=None)
+        self._assert_not_named(self._decide(), "Status is 'BLOCK'", "approval_gate_reachable")
+
+    def test_a_pin_on_the_manifest_bundle_does_not_name_approve_review(self) -> None:
+        self._feedback("APPROVE")
+        pins = ({"bundle_id": "b" * 64, "review_content_id": "c" * 64, "recorded_at": "t"},)
+        self._assert_not_named(self._decide(technical_review_block_pins=pins),
+                               "technical_review_block_pins", "b" * 64)
+
+    def test_a_pin_on_another_bundle_does_not_block_the_gate(self) -> None:
+        self._feedback("APPROVE")
+        pins = ({"bundle_id": "a" * 64, "review_content_id": "c" * 64, "recorded_at": "t"},)
+        result = self._decide(technical_review_block_pins=pins)
+        self.assertEqual(result.gate.safe_resume_command, "/approve-review implementation wi-1")
+
+    def test_a_half_empty_ledger_does_not_name_approve_review(self) -> None:
+        self._feedback("APPROVE")
+        self._assert_not_named(self._decide(implementation_review_stages=_LOCAL_APPROVE_LEDGER),
+                               f"no {_MANUAL_ROLE} APPROVE")
+        self._assert_not_named(self._decide(implementation_review_stages=None),
+                               f"no {_LOCAL_ROLE} APPROVE", f"no {_MANUAL_ROLE} APPROVE")
+
+    def test_a_ledger_for_other_content_does_not_name_approve_review(self) -> None:
+        self._feedback("APPROVE")
+        ledger = fixtures.implementation_review_ledger(
+            "d" * 64, local_bundle_id="b" * 64, manual_bundle_id="b" * 64,
+        )
+        self._assert_not_named(self._decide(implementation_review_stages=ledger),
+                               "is not the current content's")
+
+    def test_a_malformed_ledger_does_not_name_approve_review(self) -> None:
+        self._feedback("APPROVE")
+        self._assert_not_named(self._decide(implementation_review_stages=["not", "an", "object"]),
+                               "ledger is malformed")
+
+    def test_a_later_manual_verdict_on_the_current_content_is_a_gate_never_automatic(self) -> None:
+        for status in ("REVISE", "BLOCK"):
+            with self.subTest(status=status):
+                self._feedback(status)
+                result = self._decide()
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                self.assertFalse(result.declined)
+                self.assertIn("a later manual verdict is on file", result.gate.what_is_required)
+                self.assertIn("re-enters APPLYING_REVIEW_FEEDBACK", result.gate.what_is_required)
+                self.assertIn("a human decides whether to reopen remediation", result.gate.what_is_required)
+                self.assertEqual(result.gate.safe_resume_command, "/apply-implementation-review wi-1")
+
+    def test_a_mis_cased_later_manual_verdict_never_falls_through_to_naming_approval(self) -> None:
+        self._feedback("REVISE", role="manual_external_implementation_review")
+        result = self._decide()
+        self.assertIn("a later manual verdict is on file", result.gate.what_is_required)
+        self.assertNotEqual(result.gate.safe_resume_command, "/approve-review implementation wi-1")
+
+    def test_a_manual_revise_on_other_content_is_not_the_later_verdict_gate(self) -> None:
+        self._feedback("REVISE", reviewed_content_id="d" * 64)
+        result = self._decide()
+        self.assertNotIn("a later manual verdict", result.gate.what_is_required)
+
+    def test_an_incoherent_bundle_gates_ahead_of_the_handler(self) -> None:
+        self._feedback("APPROVE")
+        result = self._decide(implementation_revision=2)
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/current/MANIFEST.md")))
+        self.assertIn("implementation_revision", result.gate.what_is_required)
+        self.assertEqual(result.gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+
+    def test_a_generation_head_only_failure_keeps_the_provenance_text(self) -> None:
+        self._feedback("APPROVE")
+        (self.root / "later.txt").write_text("a commit after generation\n")
+        head = fixtures.commit_all(self.root, "later")
+        result = self._decide()
+        self.assertEqual(result.gate.safe_resume_command, "/recover-implementation-provenance wi-1")
+        self.assertIn(f"is behind the target's committed HEAD ({head})", result.gate.what_is_required)
+        self.assertIn("a human runs /recover-implementation-provenance", result.gate.what_is_required)
+
+
+class AwaitingLocalImplementationReviewTest(unittest.TestCase):
+    """``"2.2"`` ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` (CP4): automatic
+    ``/review-implementation`` behind the ``REJECTED``, implementation-bundle
+    and local-``BLOCK`` gates. Replaces ``tests/test_decision.py``'s
+    ``test_awaiting_local_implementation_review_is_declined_naming_review_implementation``
+    at the ``evidence.decide`` level."""
+
+    PHASE = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, **overrides):
+        work_item = _implementation_work_item(self.PHASE, implementation_review_stages=None, **overrides)
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def _bundle(self, **kwargs) -> Path:
+        kwargs.setdefault("reviewed_implementation_head", _REVIEWED_HEAD)
+        return fixtures.write_implementation_bundle(self.root, "wi-1", 1, **kwargs)
+
+    def _feedback(self, status: str, role: str | None = _LOCAL_ROLE, **fields) -> None:
+        fixtures.write_review_feedback(
+            self.root, ".ai-review/wi-1/feedback",
+            fixtures.build_review_feedback_text(status=status, reviewer_role=role, **fields),
+        )
+
+    def test_coherent_bundle_is_automatic_at_2_2(self) -> None:
+        self._bundle()
+        result = self._decide()
+        self.assertTrue(result.automatic, result.reason)
+        self.assertFalse(result.declined)
+        self.assertIsNone(result.gate)
+        self.assertEqual(result.action.command, "/review-implementation wi-1")
+
+    def test_a_previous_rounds_non_block_verdict_does_not_gate(self) -> None:
+        self._bundle()
+        for status in ("APPROVE", "REVISE"):
+            with self.subTest(status=status):
+                self._feedback(status)
+                self.assertTrue(self._decide().automatic)
+
+    def test_without_a_coherent_bundle_it_is_the_coherence_gate(self) -> None:
+        def absent() -> None:
+            (self.root / ".ai-review" / "wi-1").mkdir(parents=True)
+
+        def stale_revision() -> None:
+            fixtures.write_implementation_bundle(
+                self.root, "wi-1", 2, reviewed_implementation_head=_REVIEWED_HEAD,
+            )
+
+        cases = (
+            ("absent", absent),
+            ("stage", lambda: self._bundle(stage="plan")),
+            ("implementation_revision", stale_revision),
+            ("reviewed_implementation_head", lambda: self._bundle(reviewed_implementation_head="9" * 40)),
+            ("worktree_root", lambda: self._bundle(worktree_root="/elsewhere")),
+        )
+        for clause, setup in cases:
+            with self.subTest(clause=clause):
+                shutil.rmtree(self.root / ".ai-review", ignore_errors=True)
+                setup()
+                result = self._decide()
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                self.assertIn(f"({clause})", result.evidence[0])
+                self.assertIn(f"({clause}: ", result.gate.what_is_required)
+                self.assertIn("before any implementation review runs", result.gate.what_is_required)
+                self.assertEqual(result.gate.safe_resume_command,
+                                 "workflow-controller explain --work-item wi-1")
+
+    def test_a_generation_head_behind_head_names_recover_implementation_provenance(self) -> None:
+        self._bundle()
+        (self.root / "later.txt").write_text("a commit after generation\n")
+        fixtures.commit_all(self.root, "later")
+        result = self._decide()
+        self.assertFalse(result.automatic)
+        self.assertEqual(result.gate.safe_resume_command, "/recover-implementation-provenance wi-1")
+
+    def test_a_local_block_is_a_gate(self) -> None:
+        self._bundle()
+        self._feedback("BLOCK")
+        result = self._decide()
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertIn("explicit user resolution is required before any further command runs",
+                      result.gate.what_is_required)
+        self.assertEqual(result.gate.safe_resume_command, "/review-implementation wi-1")
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/feedback/REVIEW_FEEDBACK.md")))
+
+    def test_the_block_rule_is_fail_closed_on_role_case_and_binding(self) -> None:
+        """Mirrors the plan-stage any-local-``BLOCK`` rule: a lower-case
+        role or a missing binding line never turns a ``BLOCK`` into a
+        launch."""
+        self._bundle()
+        for kwargs in ({"role": "local_model_implementation_review"}, {"reviewed_base_commit": None},
+                       {"reviewed_bundle_id": None, "work_item": None}):
+            with self.subTest(**{k: str(v) for k, v in kwargs.items()}):
+                self._feedback("BLOCK", **kwargs)
+                result = self._decide()
+                self.assertFalse(result.automatic)
+                self.assertIsNotNone(result.gate)
+
+    def test_a_manual_role_block_does_not_gate_the_local_stage(self) -> None:
+        self._bundle()
+        self._feedback("BLOCK", role=_MANUAL_ROLE)
+        self.assertTrue(self._decide().automatic)
+
+    def test_the_bundle_gate_is_checked_ahead_of_the_block_gate(self) -> None:
+        self._bundle(stage="plan")
+        self._feedback("BLOCK")
+        result = self._decide()
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/current/MANIFEST.md")))
+
+    def test_rejected_wins_over_staleness(self) -> None:
+        self._bundle(stage="plan")
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")
+        result = self._decide()
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/REJECTED")))
+
+    def test_other_versions_get_no_bundle_gate_and_are_declined(self) -> None:
+        """The phase exists only at ``"2.2"``; elsewhere the dispatch rule
+        declines the selection (no row), and no bundle gate runs."""
+        for version in ("1", "2.1"):
+            with self.subTest(governing_workflow_version=version):
+                result = self._decide(governing_workflow_version=version)
+                self.assertTrue(result.declined)
+                self.assertIsNone(result.gate)
+                self.assertEqual(result.action.command, "/review-implementation wi-1")
+
+
+class ApplyingReviewFeedbackCorrectedGateTest(unittest.TestCase):
+    """``APPLYING_REVIEW_FEEDBACK`` in CP4: the corrected gate at every
+    version (CP4B adds the ``"2.2"`` automatic path in front of it), behind
+    the ``"2.2"``-only implementation-bundle gate, which never requires a
+    current ``generation_head`` here."""
+
+    PHASE = "APPLYING_REVIEW_FEEDBACK"
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, version: str, **overrides):
+        work_item = _implementation_work_item(self.PHASE, governing_workflow_version=version, **overrides)
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def _assert_corrected_gate(self, result) -> None:
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertEqual(result.gate.safe_resume_command, "/apply-implementation-review wi-1")
+        self.assertIn("/apply-implementation-review is legal from this phase", result.gate.what_is_required)
+        self.assertIn("it skips its own entry transition", result.gate.what_is_required)
+        self.assertIn("in progress or was interrupted", result.gate.what_is_required)
+        self.assertNotIn("no Workflow command can legally run", result.gate.what_is_required)
+        self.assertNotIn("no Workflow command can legally run", result.reason)
+
+    def test_1_and_2_1_reach_the_corrected_gate_with_an_absent_or_incoherent_bundle(self) -> None:
+        for version in ("1", "2.1"):
+            with self.subTest(governing_workflow_version=version, bundle="absent"):
+                self._assert_corrected_gate(self._decide(version))
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, stage="plan")
+        for version in ("1", "2.1"):
+            with self.subTest(governing_workflow_version=version, bundle="incoherent"):
+                self._assert_corrected_gate(self._decide(version))
+
+    def test_2_2_with_a_coherent_bundle_reaches_the_corrected_gate(self) -> None:
+        """Even with ``HEAD`` ahead of ``generation_head``: the pending
+        review-stage state commit and fix commits land before the next
+        generation record."""
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, reviewed_implementation_head=_REVIEWED_HEAD)
+        (self.root / "fix.txt").write_text("a review fix\n")
+        fixtures.commit_all(self.root, "fix")
+        self._assert_corrected_gate(self._decide("2.2"))
+
+    def test_2_2_with_an_incoherent_bundle_is_the_bundle_gate(self) -> None:
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, reviewed_implementation_head="9" * 40)
+        result = self._decide("2.2")
+        self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/current/MANIFEST.md")))
+        self.assertIn("reviewed_implementation_head", result.gate.what_is_required)
+
+    def test_rejected_wins_over_staleness(self) -> None:
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, stage="plan")
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")
+        for version in ("1", "2.1", "2.2"):
+            with self.subTest(governing_workflow_version=version):
+                result = self._decide(version)
+                self.assertEqual(result.gate.artifact_path, str(Path(".ai-review/wi-1/REJECTED")))
+
+
+class ImplementationRejectedMarkerGateTest(unittest.TestCase):
+    """The ``REJECTED`` gate's text by version and phase (CP4, round 2's I3
+    and round 4's O1): the ``"2.2"`` implementation-bundle-consuming phases
+    carry the marker-clearing clause and the ordered recovery steps;
+    ``"1"``/``"2.1"`` ``APPLYING_REVIEW_FEEDBACK`` names no generator at
+    all. ``StalePlanBundleGateTest.test_rejected_marker_gate_elsewhere_is_unchanged``
+    stays the byte-identical pin for branch 4."""
+
+    BASE = "a" * 40
+    BUNDLE = Path(".ai-review/wi-1/current")
+    CLEAR = [
+        "resolve the failure the REJECTED marker at .ai-review/wi-1/REJECTED records (step rename failed)",
+        "do not delete surviving author files unless that specific failure requires it",
+        "a successful generation then clears the marker itself",
+    ]
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")
+
+    def _decide(self, phase: str, version: str, **overrides):
+        work_item = _implementation_work_item(
+            phase, governing_workflow_version=version, base_commit=self.BASE, **overrides,
+        )
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def _steps_needles(self, *, verb: str) -> list[str]:
+        return [
+            f"{verb} {self.BUNDLE / 'IMPLEMENTATION_SUMMARY.md'}", "`implementation_revision: 1`",
+            "assert_stage_completeness",
+            f"{verb} {self.BUNDLE / 'REVIEW_REQUEST.md'}", "`review_content_id: <hex>`",
+            "workflow_state.approval_review_content_id(repo_root, stage=\"implementation\", "
+            f"base_commit=\"{self.BASE}\", head=\"HEAD\", work_item_type=\"product\", work_item_id=\"wi-1\", "
+            "artifacts_path=workflow_fingerprint.artifacts_path_for_work_item(\"wi-1\"))",
+            f"{verb} {self.BUNDLE / 'TEST_RESULTS.md'}",
+            f"scripts/prepare-ai-review.sh {self.BASE} implementation wi-1",
+            f"scripts/prepare-ai-review.sh {self.BASE} post-fix wi-1",
+            "refuses at preflight",
+        ]
+
+    def test_each_2_2_implementation_bundle_consuming_phase_carries_the_recovery_steps(self) -> None:
+        fixtures.write_implementation_bundle(self.root, "wi-1", 1, reviewed_implementation_head=_REVIEWED_HEAD)
+        self.assertEqual(evidence.IMPLEMENTATION_BUNDLE_CONSUMING_PHASES, {
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "APPLYING_REVIEW_FEEDBACK", "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        })
+        for phase in sorted(evidence.IMPLEMENTATION_BUNDLE_CONSUMING_PHASES):
+            with self.subTest(phase=phase):
+                result = self._decide(phase, "2.2")
+                gate = result.gate
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                self.assertEqual(gate.artifact_path, str(Path(".ai-review/wi-1/REJECTED")))
+                for text in (gate.what_is_required, gate.safe_resume_command):
+                    _assert_in_order(self, text, self.CLEAR + self._steps_needles(verb="refresh"))
+                    self.assertTrue("1. refresh" in text and "0. " not in text, text)
+                self.assertIn("then, before any implementation review runs, perform in order: 1. ",
+                              gate.what_is_required)
+                self.assertTrue(gate.what_is_required.startswith(
+                    "the current bundle was withdrawn (step rename failed); "))
+                self.assertNotEqual(gate.safe_resume_command, evidence._regeneration_command(phase, "wi-1"))
+
+    def test_a_withdrawn_bundle_asks_for_writes_and_names_the_quarantine(self) -> None:
+        quarantine = self.root / ".ai-review" / "wi-1" / "current.rejected-0123abcd"
+        quarantine.mkdir(parents=True)
+        for phase, source in (
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "restoring the previous round's author files from"),
+            ("APPLYING_REVIEW_FEEDBACK",
+             "restoring the author files of the bundle REVIEW_FEEDBACK.md reviewed from"),
+        ):
+            with self.subTest(phase=phase):
+                gate = self._decide(phase, "2.2").gate
+                for text in (gate.what_is_required, gate.safe_resume_command):
+                    _assert_in_order(self, text, [
+                        f"0. write {self.BUNDLE / 'CONTEXT_FILES.txt'}", source,
+                        ".ai-review/wi-1/current.rejected-0123abcd/",
+                        f"1. write {self.BUNDLE / 'IMPLEMENTATION_SUMMARY.md'}",
+                        f"2. write {self.BUNDLE / 'REVIEW_REQUEST.md'}", "Review request format",
+                        f"3. write {self.BUNDLE / 'TEST_RESULTS.md'}",
+                        "4. run scripts/prepare-ai-review.sh",
+                    ])
+                    self.assertNotIn("refresh", text)
+
+    def test_a_zero_byte_author_file_asks_for_writes(self) -> None:
+        bundle = fixtures.write_implementation_bundle(
+            self.root, "wi-1", 1, reviewed_implementation_head=_REVIEWED_HEAD,
+        )
+        (bundle / "IMPLEMENTATION_SUMMARY.md").write_bytes(b"")
+        gate = self._decide("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2").gate
+        _assert_in_order(self, gate.safe_resume_command, [
+            "0. write", "1. write", "IMPLEMENTATION_SUMMARY.md",
+        ])
+
+    def test_1_and_2_1_applying_review_feedback_names_no_generator(self) -> None:
+        quarantine = self.root / ".ai-review" / "wi-1" / "current.rejected-0123abcd"
+        quarantine.mkdir(parents=True)
+        for version in ("1", "2.1"):
+            with self.subTest(governing_workflow_version=version):
+                result = self._decide("APPLYING_REVIEW_FEEDBACK", version)
+                gate = result.gate
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                _assert_in_order(self, gate.what_is_required, self.CLEAR + [
+                    "/apply-implementation-review is legal from this phase",
+                    "its step 1 (assert_bundle_not_rejected) refuses until a successful generation "
+                    "clears the marker",
+                    ".ai-review/wi-1/current.rejected-0123abcd/",
+                    "reruns /apply-implementation-review only if the regenerated bundle_id equals the "
+                    "feedback's Reviewed bundle ID",
+                ])
+                self.assertIn("the bundle REVIEW_FEEDBACK.md reviewed was withdrawn", gate.what_is_required)
+                self.assertEqual(gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+                for text in (gate.what_is_required, gate.safe_resume_command):
+                    self.assertNotIn("prepare-ai-review.sh", text)
+                    self.assertNotIn(evidence._regeneration_command("APPLYING_REVIEW_FEEDBACK", "wi-1"), text)
+
+    def test_1_and_2_1_applying_review_feedback_without_a_quarantine_still_names_the_source(self) -> None:
+        gate = self._decide("APPLYING_REVIEW_FEEDBACK", "2.1").gate
+        self.assertIn("restores that bundle from the newest current.rejected-* quarantine and "
+                      "regenerates it", gate.what_is_required)
+
+    def test_1_and_2_1_external_implementation_review_keeps_the_bare_text(self) -> None:
+        """Branch 4, byte-identical (also pinned by the golden)."""
+        for version in ("1", "2.1"):
+            with self.subTest(governing_workflow_version=version):
+                gate = self._decide("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", version).gate
+                regen = evidence._regeneration_command("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "wi-1")
+                self.assertEqual(gate.safe_resume_command, regen)
+
+
+class ImplementationGeneratorStageTest(unittest.TestCase):
+    """The generator ``<stage>`` the recovery steps name, derived from the
+    committed phase of the parent of this work item's most recent
+    generation-record commit -- never from job records -- against a real
+    temporary git repository. (CP4B's recovery gate reuses the helper and
+    adds its own per-case tests.)"""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        self.base = fixtures.current_head(self.root)
+
+    def _commit_phase(self, phase: str, *, record: bool = False, revision: int = 1,
+                      supersedes: bool = False) -> str:
+        _write_state(self.root, {_WI: {"phase": phase, "checkpoints": {}}})
+        trailers = (
+            _record_trailers(revision=revision, supersedes="x" * 40 if supersedes else None) if record else ()
+        )
+        return _commit(self.root, f"{phase}{' record' if record else ''}", trailers=trailers)
+
+    def _stages(self, generation_head: str | None):
+        if generation_head is not None:
+            fixtures.write_implementation_manifest(self.root, _WI, 1, generation_head=generation_head)
+        work_item = _implementation_work_item("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", base_commit=self.base)
+        return evidence.implementation_generator_stages(self.root, work_item)
+
+    def test_a_final_pass_record_at_generation_head_is_implementation(self) -> None:
+        self._commit_phase("SELF_REVIEWING_IMPLEMENTATION")
+        record = self._commit_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", record=True)
+        self.assertEqual(self._stages(record), ("implementation",))
+
+    def test_a_post_fix_record_at_generation_head_is_post_fix(self) -> None:
+        self._commit_phase("APPLYING_REVIEW_FEEDBACK")
+        record = self._commit_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", record=True, revision=2)
+        self.assertEqual(self._stages(record), ("post-fix",))
+
+    def test_a_newer_record_after_generation_head_decides(self) -> None:
+        """The generator failed after the round's record ``T``: the manifest
+        is the previous round's, and ``T``'s parent decides."""
+        self._commit_phase("SELF_REVIEWING_IMPLEMENTATION")
+        first = self._commit_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", record=True)
+        self._commit_phase("APPLYING_REVIEW_FEEDBACK")
+        self._commit_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", record=True, revision=2)
+        self.assertEqual(self._stages(first), ("post-fix",))
+
+    def test_a_same_content_record_is_post_fix(self) -> None:
+        self._commit_phase("SELF_REVIEWING_IMPLEMENTATION")
+        first = self._commit_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", record=True)
+        self._commit_phase("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", record=True, supersedes=True)
+        self.assertEqual(self._stages(first), ("post-fix",))
+
+    def test_no_record_or_no_manifest_or_a_non_ancestor_names_both(self) -> None:
+        self.assertEqual(self._stages(None), ("implementation", "post-fix"))
+        self.assertEqual(self._stages(self.base), ("implementation", "post-fix"))
+        self.assertEqual(self._stages("9" * 40), ("implementation", "post-fix"))
 
 
 if __name__ == "__main__":

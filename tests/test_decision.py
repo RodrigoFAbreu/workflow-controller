@@ -104,11 +104,11 @@ _GATE_PHASES = {
 #: The phases with no action and no gate.
 _NO_ACTION_PHASES = {"LEGACY_READY", "MILESTONE_COMPLETE"}
 
-#: The interim set (CP3 item 5), restated independently.
-_INTERIM_PHASES = {
-    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-    "APPLYING_REVIEW_FEEDBACK",
-}
+#: The interim set (CP3 item 5), restated independently. CP4 removed
+#: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` and
+#: ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` once their evidence
+#: gates were installed; CP4B removes the set.
+_INTERIM_PHASES = {"APPLYING_REVIEW_FEEDBACK"}
 
 
 def _expected_automatic(phase: str, version: str | None) -> bool:
@@ -251,13 +251,16 @@ class ScopeAssertionTest(unittest.TestCase):
         for phase, version in (
             ("PLANNING", "1"), ("REVISING_PLAN", "2.2"), ("AWAITING_EXTERNAL_PLAN_REVIEW", "1"),
             ("IMPLEMENTING", "2.1"), ("SELF_REVIEWING_IMPLEMENTATION", "2.2"),
+            # CP4: no longer interim -- its evidence gates run in
+            # `controller.evidence` ahead of this (evidence-free) selection.
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2"),
         ):
             with self.subTest(phase=phase, governing_workflow_version=version):
                 self.assertTrue(self._decide(phase, version).automatic)
         for phase, version in (
             ("AWAITING_EXTERNAL_PLAN_REVIEW", "2.1"), ("REVISING_PLAN", "1"), ("PLANNING", None),
             ("IMPLEMENTING", "1"), ("AMENDING_PLAN", "2.2"),
-            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2"),
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.1"),
         ):
             with self.subTest(phase=phase, governing_workflow_version=version):
                 self.assertTrue(self._decide(phase, version).declined)
@@ -590,6 +593,30 @@ class HumanGateShapeTest(unittest.TestCase):
         self.assertEqual(result.gate.work_item_id, "wi-1")
         self.assertEqual(result.gate.repository, str(self.managed_repo.root))
 
+    def test_applying_review_feedback_names_apply_implementation_review_as_legal(self) -> None:
+        """CP4's corrected gate, at every version: ``/apply-implementation-
+        review`` skips its own entry transition when the phase is already
+        ``APPLYING_REVIEW_FEEDBACK``, so it *is* legal from here -- the old
+        "no Workflow command can legally run" text was wrong (regression)."""
+        for version in ("1", "2.1", "2.2"):
+            with self.subTest(governing_workflow_version=version):
+                work_item = fixtures.build_work_item_view(
+                    phase="APPLYING_REVIEW_FEEDBACK", governing_workflow_version=version,
+                )
+                result = decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+                self.assertIsNone(result.action)
+                self.assertFalse(result.automatic)
+                self.assertFalse(result.declined)
+                self.assertEqual(
+                    result.gate.what_is_required,
+                    "an implementation-review remediation is in progress or was interrupted; "
+                    "/apply-implementation-review is legal from this phase (it skips its own entry "
+                    "transition), so rerun it once the feedback on file is confirmed current",
+                )
+                self.assertEqual(result.gate.safe_resume_command, "/apply-implementation-review wi-1")
+                for text in (result.gate.what_is_required, result.reason):
+                    self.assertNotIn("no Workflow command can legally run", text)
+
     def test_awaiting_manual_external_implementation_review_is_a_gate(self) -> None:
         work_item = fixtures.build_work_item_view(
             phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
@@ -629,16 +656,38 @@ class Revision64PhaseWideningTest(unittest.TestCase):
         self.assertIsNotNone(result.action)
         self.assertEqual(result.action.command, "/milestone-plan wi-1")
 
-    def test_awaiting_local_implementation_review_is_declined_naming_review_implementation(
+    def test_awaiting_local_implementation_review_is_automatic_with_a_coherent_bundle_and_gated_without(
         self,
     ) -> None:
-        result = self._decide(
-            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", governing_workflow_version="2.2",
+        """Was ``..._is_declined_naming_review_implementation`` (CP3's interim
+        decline). Since CP4 the decision is ``evidence.decide``'s: automatic
+        at ``"2.2"`` with a coherent implementation bundle, and the
+        implementation-bundle coherence gate without one. The per-clause
+        cases are ``tests/test_evidence.py``'s
+        ``AwaitingLocalImplementationReviewTest``."""
+        from controller import evidence
+
+        root = self.managed_repo.root
+        fixtures.build_target_git_repo(root)
+        (root / "README.md").write_text("target fixture\n")
+        fixtures.commit_all(root, "initial")
+        work_item = fixtures.build_work_item_view(
+            phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW", governing_workflow_version="2.2",
+            implementation_revision=1, reviewed_implementation_head="1" * 40,
         )
-        self.assertTrue(result.declined)
-        self.assertFalse(result.automatic)
+
+        gated = evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+        self.assertFalse(gated.automatic)
+        self.assertFalse(gated.declined)
+        self.assertIsNone(gated.action)
+        self.assertIn("implementation bundle is not coherent", gated.evidence[0])
+        self.assertEqual(gated.gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+
+        fixtures.write_implementation_bundle(root, "wi-1", 1, reviewed_implementation_head="1" * 40)
+        result = evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+        self.assertTrue(result.automatic, result.reason)
+        self.assertFalse(result.declined)
         self.assertIsNone(result.gate)
-        self.assertIsNotNone(result.action)
         self.assertEqual(result.action.command, "/review-implementation wi-1")
 
     def test_awaiting_manual_external_implementation_review_is_a_gate_not_declined(self) -> None:
@@ -653,10 +702,12 @@ class Revision64PhaseWideningTest(unittest.TestCase):
     def test_all_three_are_members_of_known_phases_and_report_only(self) -> None:
         """The ``KNOWN_PHASES`` half is unchanged. The report-only half
         under the general dispatch rule (CP3): ``AMENDING_PLAN`` is declined
-        by the rule, because no row declares it at any version, and the two
-        implementation-review phases are members of the interim
-        ``_PHASES_AWAITING_EVIDENCE_HANDLER`` (CP4 changes this clause
-        again)."""
+        by the rule, because no row declares it at any version. The two
+        implementation-review phases were members of the interim
+        ``_PHASES_AWAITING_EVIDENCE_HANDLER`` until CP4, which installed
+        their evidence handlers (and gates) in ``controller.evidence`` and
+        took them out of the set: whether they launch is now the rule's
+        call, behind those gates."""
         for phase in (
             "AMENDING_PLAN", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
             "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
@@ -672,9 +723,15 @@ class Revision64PhaseWideningTest(unittest.TestCase):
                     result.reason,
                     decision.uniform_decline_reason("AMENDING_PLAN", version, "/milestone-plan wi-1"),
                 )
+        from controller import evidence
+
         for phase in ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"):
             with self.subTest(phase=phase):
-                self.assertIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
+                self.assertNotIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
+                self.assertIn(phase, evidence._EVIDENCE_HANDLERS)
+                self.assertIn(phase, evidence.BUNDLE_BEARING_PHASES)
+                self.assertIn(phase, evidence.IMPLEMENTATION_BUNDLE_CONSUMING_PHASES)
+        self.assertEqual(decision._PHASES_AWAITING_EVIDENCE_HANDLER, frozenset({"APPLYING_REVIEW_FEEDBACK"}))
 
 
 class AutomaticTriplesTest(unittest.TestCase):
@@ -750,25 +807,32 @@ class DispatchRuleTest(unittest.TestCase):
         self.assertTrue(result.declined)
         self.assertFalse(result.automatic)
 
-    def test_the_three_interim_phases_are_declined_even_though_their_triples_exist(self) -> None:
+    def test_the_interim_phase_is_declined_even_though_its_triple_exists(self) -> None:
+        """CP3's three interim phases, after CP4: ``APPLYING_REVIEW_FEEDBACK``
+        is still declined despite its triple (CP4B installs its gates); the
+        two CP4 phases classify by the rule alone."""
+        phase, token = "APPLYING_REVIEW_FEEDBACK", "/apply-implementation-review"
+        self.assertIn((phase, "2.2", token), decision.AUTOMATIC_TRIPLES)
+        self.assertIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
+        classification = decision.classify_selected_action(phase, "2.2", f"{token} wi-1")
+        self.assertFalse(classification.automatic)
+        self.assertEqual(
+            classification.decline_reason, decision.interim_decline_reason(phase, "2.2", f"{token} wi-1"),
+        )
+        self.assertIn("evidence gates are not installed yet", classification.decline_reason)
         for phase, token in (
             ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "/review-implementation"),
             ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "/record-manual-implementation-review"),
-            ("APPLYING_REVIEW_FEEDBACK", "/apply-implementation-review"),
         ):
             with self.subTest(phase=phase):
                 self.assertIn((phase, "2.2", token), decision.AUTOMATIC_TRIPLES)
-                self.assertIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
-                classification = decision.classify_selected_action(phase, "2.2", f"{token} wi-1")
-                self.assertFalse(classification.automatic)
+                self.assertNotIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
+                self.assertTrue(decision.classify_selected_action(phase, "2.2", f"{token} wi-1").automatic)
+                declined = decision.classify_selected_action(phase, "2.1", f"{token} wi-1")
+                self.assertFalse(declined.automatic)
                 self.assertEqual(
-                    classification.decline_reason,
-                    decision.interim_decline_reason(phase, "2.2", f"{token} wi-1"),
+                    declined.decline_reason, decision.uniform_decline_reason(phase, "2.1", f"{token} wi-1"),
                 )
-        result = self._decide("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2")
-        self.assertTrue(result.declined)
-        self.assertEqual(result.action.command, "/review-implementation wi-1")
-        self.assertIn("evidence gates are not installed yet", result.reason)
 
     def test_the_uniform_reason_names_the_phase_version_and_command(self) -> None:
         reason = decision.uniform_decline_reason("AMENDING_PLAN", "2.2", "/milestone-plan wi-1")

@@ -500,6 +500,34 @@ def write_implementation_manifest(
     )
 
 
+def write_implementation_bundle(
+    root: Path, work_item_id: str, implementation_revision: int | str, *, scoped: bool = True,
+    review_content_id: str = "c" * 64, author_files: bool = True, **manifest_kwargs,
+) -> Path:
+    """A coherent implementation-stage bundle (`workflow-controller-
+    automatic-lifecycle-orchestration` CP4): :func:`write_implementation_manifest`
+    plus, unless ``author_files`` is false, the four author files
+    ``/milestone-implement`` step 4 writes, each stating what the generator
+    requires of it -- ``IMPLEMENTATION_SUMMARY.md``'s
+    ``implementation_revision:`` and ``REVIEW_REQUEST.md``'s
+    ``review_content_id:`` (the manifest's). Returns the bundle directory."""
+    manifest_path = write_implementation_manifest(
+        root, work_item_id, implementation_revision, scoped=scoped, review_content_id=review_content_id,
+        **manifest_kwargs,
+    )
+    bundle = manifest_path.parent
+    if author_files:
+        (bundle / "IMPLEMENTATION_SUMMARY.md").write_text(
+            f"# Implementation summary\n\nimplementation_revision: {implementation_revision}\n",
+        )
+        (bundle / "REVIEW_REQUEST.md").write_text(
+            f"# Review request\n\nstage: implementation\nreview_content_id: {review_content_id}\n",
+        )
+        (bundle / "TEST_RESULTS.md").write_text("# Test results\n\nall green\n")
+        (bundle / "CONTEXT_FILES.txt").write_text("README.md\n")
+    return bundle
+
+
 def fake_worker_plan_manifest_env(root: Path, work_item_id: str, plan_revision: int | str) -> dict[str, str]:
     """``FAKE_CLAUDE_WRITES`` env override making the fake worker itself
     write a coherent plan-stage ``MANIFEST.md`` -- the artifact every

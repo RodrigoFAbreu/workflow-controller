@@ -1,0 +1,268 @@
+{
+  "cases": {
+    "flat_current_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "27229ccf0975",
+    "flat_current_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "27229ccf0975",
+    "flat_current_block | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "ebf03f123f0f",
+    "flat_current_block | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "ebf03f123f0f",
+    "flat_current_no_feedback | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "25e043718ab4",
+    "flat_current_no_feedback | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "25e043718ab4",
+    "flat_current_revise | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "6907da49a8f2",
+    "flat_current_revise | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "6907da49a8f2",
+    "flat_current_status_absent | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "e2b893dcb507",
+    "flat_current_status_absent | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "e2b893dcb507",
+    "flat_current_unparseable_status | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "11a925e719d2",
+    "flat_current_unparseable_status | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "11a925e719d2",
+    "flat_stale_generation_head | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "670b3b5c184f",
+    "flat_stale_generation_head | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "670b3b5c184f",
+    "flat_stale_generation_head_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "670b3b5c184f",
+    "flat_stale_generation_head_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "670b3b5c184f",
+    "no_manifest_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "27229ccf0975",
+    "no_manifest_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "27229ccf0975",
+    "nothing_on_disk | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "25e043718ab4",
+    "nothing_on_disk | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "25e043718ab4",
+    "rejected_flat | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "49f5fd9fb674",
+    "rejected_flat | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "49f5fd9fb674",
+    "rejected_scoped | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "37c481c7b851",
+    "rejected_scoped | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "37c481c7b851",
+    "scoped_coherent_approve_pinned_bundle | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "235d4f4d91a7",
+    "scoped_coherent_approve_pinned_bundle | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "235d4f4d91a7",
+    "scoped_coherent_manual_approve_complete_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "235d4f4d91a7",
+    "scoped_coherent_manual_approve_complete_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "235d4f4d91a7",
+    "scoped_coherent_manual_approve_no_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "235d4f4d91a7",
+    "scoped_coherent_manual_approve_no_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "235d4f4d91a7",
+    "scoped_coherent_manual_block_complete_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "2821b413e2d4",
+    "scoped_coherent_manual_block_complete_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "2821b413e2d4",
+    "scoped_coherent_manual_revise_complete_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "18d839a01ca3",
+    "scoped_coherent_manual_revise_complete_ledger | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "18d839a01ca3",
+    "scoped_coherent_no_feedback | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "59c711e6f2f4",
+    "scoped_coherent_no_feedback | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "59c711e6f2f4",
+    "scoped_incoherent_revision_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 1": "235d4f4d91a7",
+    "scoped_incoherent_revision_approve | AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW | 2.1": "235d4f4d91a7"
+  },
+  "decisions": {
+    "11a925e719d2": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "REVIEW_FEEDBACK.md's Status field does not parse ('MAYBE')",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): REVIEW_FEEDBACK.md's Status field does not parse ('MAYBE')"
+    },
+    "18d839a01ca3": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/wi-1/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "Status: REVISE is on file; run /apply-implementation-review",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): Status: REVISE is on file; run /apply-implementation-review"
+    },
+    "235d4f4d91a7": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/wi-1/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/approve-review implementation wi-1",
+        "what_is_required": "an APPROVE is on file; a human runs the user-only /approve-review implementation",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): an APPROVE is on file; a human runs the user-only /approve-review implementation"
+    },
+    "25e043718ab4": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "hand the current implementation bundle to an external reviewer and paste the verdict into REVIEW_FEEDBACK.md",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): hand the current implementation bundle to an external reviewer and paste the verdict into REVIEW_FEEDBACK.md"
+    },
+    "27229ccf0975": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/approve-review implementation wi-1",
+        "what_is_required": "an APPROVE is on file; a human runs the user-only /approve-review implementation",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): an APPROVE is on file; a human runs the user-only /approve-review implementation"
+    },
+    "2821b413e2d4": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/wi-1/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "Status: BLOCK is on file; run /apply-implementation-review",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): Status: BLOCK is on file; run /apply-implementation-review"
+    },
+    "37c481c7b851": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [
+        "REJECTED marker present at .ai-review/wi-1/REJECTED: step rename failed"
+      ],
+      "gate": {
+        "artifact_path": ".ai-review/wi-1/REJECTED",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "scripts/prepare-ai-review.sh <base-sha> post-fix wi-1",
+        "what_is_required": "the current bundle was withdrawn (step rename failed); regenerate it with scripts/prepare-ai-review.sh <base-sha> post-fix wi-1 before any further command runs",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW: a REJECTED marker is present at .ai-review/wi-1/REJECTED, checked ahead of every other row"
+    },
+    "49f5fd9fb674": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [
+        "REJECTED marker present at .ai-review/REJECTED: finalize failed"
+      ],
+      "gate": {
+        "artifact_path": ".ai-review/REJECTED",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "scripts/prepare-ai-review.sh <base-sha> post-fix wi-1",
+        "what_is_required": "the current bundle was withdrawn (finalize failed); regenerate it with scripts/prepare-ai-review.sh <base-sha> post-fix wi-1 before any further command runs",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW: a REJECTED marker is present at .ai-review/REJECTED, checked ahead of every other row"
+    },
+    "59c711e6f2f4": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/wi-1/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "hand the current implementation bundle to an external reviewer and paste the verdict into REVIEW_FEEDBACK.md",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): hand the current implementation bundle to an external reviewer and paste the verdict into REVIEW_FEEDBACK.md"
+    },
+    "670b3b5c184f": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/recover-implementation-provenance wi-1",
+        "what_is_required": "MANIFEST.md's generation_head (<SHA>) is behind the target's committed HEAD (<SHA>); an ordinary post-fix regeneration refuses in this state -- a human runs /recover-implementation-provenance",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): MANIFEST.md's generation_head (<SHA>) is behind the target's committed HEAD (<SHA>); an ordinary post-fix regeneration refuses in this state -- a human runs /recover-implementation-provenance"
+    },
+    "6907da49a8f2": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "Status: REVISE is on file; run /apply-implementation-review",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): Status: REVISE is on file; run /apply-implementation-review"
+    },
+    "e2b893dcb507": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "REVIEW_FEEDBACK.md's Status field does not parse (None)",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): REVIEW_FEEDBACK.md's Status field does not parse (None)"
+    },
+    "ebf03f123f0f": {
+      "action_command": null,
+      "automatic": false,
+      "declined": false,
+      "evidence": [],
+      "gate": {
+        "artifact_path": ".ai-review/current",
+        "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+        "repository": "<ROOT>",
+        "safe_resume_command": "/apply-implementation-review wi-1",
+        "what_is_required": "Status: BLOCK is on file; run /apply-implementation-review",
+        "work_item_id": "wi-1"
+      },
+      "observed_phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "reason": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW is a report-only phase (revision 10's scope): Status: BLOCK is on file; run /apply-implementation-review"
+    }
+  },
+  "description": "\"1\"/\"2.1\" AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW decisions of controller.evidence.decide, generated before automatic-lifecycle-orchestration CP4 from CP3's unchanged decision.py/evidence.py (tests/golden/generate_external_implementation_review_decisions.py). 'cases' maps 'scenario | phase | version' to a key of 'decisions'.",
+  "phase_versions": [
+    [
+      "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "1"
+    ],
+    [
+      "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "2.1"
+    ]
+  ],
+  "schema_version": 1
+}

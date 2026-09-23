@@ -930,4 +930,85 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
     The survivor drops row 18's "a new generation ran" clause. Only a phase flip with no
     generation discriminates it, and CP2's `test_a_phase_flip_with_no_generation_fails_the_postcondition`
     (with its resume twin) catches it: 3 failures in `tests.test_job_validation tests.test_resume`.
-- **CP8-CP9 -- pending**, in registry order.
+- **CP8 -- complete.** Operator documentation, in `README.md`,
+  `docs/adr/0001-controller-generation-1-architecture.md` and
+  `tests/test_plan_document_consistency.py`. No `controller/` change.
+  `tests/test_checklist_corrections.py` needed no change: it pins only the Gen-1 hardening
+  checklist-corrections file, which this milestone does not touch.
+  - `README.md`:
+    - "What it does" names the implementation-stage automation, and that one `run` carries a
+      `"2.2"` work item to the next genuine human gate;
+    - the CLI table: `explain`'s pending report and lock line, `inspect`'s lock line, `run`'s stop
+      conditions, and `resume --abandon JOB_ID [--acknowledge-unverifiable-worker]`;
+    - the global options gain the five routing options, and `--timeout` defaults to no limit;
+    - new sections: "Automatic dispatch" (the rule and its automatic set), "Worker routing" (the
+      role table, the precedence, a config example, single-agent and fresh sessions),
+      "Implementation-review apply rounds" (the addendum, the malformed-`T` gate, the relaunch
+      bound), "Concurrency and worker lifecycle" (the lock, exit 45 and what it names, the probe,
+      `LifecycleLockError` and the NFS remedies, no default timeout, Ctrl-C) and "Job
+      dispositions" (the pending refusal, `resume`, `--abandon` and its refusals,
+      `WorkerNotStarted`, the liveness verdict, the no-wedge guarantee);
+    - the safety model: the rule plus the eight-command selected set; user-only commands
+      unchanged.
+  - The ADR:
+    - a status note naming what this work item amended, and the "Context" scope paragraph now
+      in the past tense, followed by the widening;
+    - the exit-code table gains 45, and 15's meaning becomes "no verifiable expected outcome is
+      declared for the selected action ...". Every other row is verbatim. The new exit-20
+      refusals are named in prose under the table, because the 20 row is a Gen-1 row;
+    - new sections "Automatic-dispatch rule" and "`resume` and job dispositions".
+  - `tests/test_plan_document_consistency.py`, the exit-code half:
+    - `adr_exit_code_constant_violations`: the ADR table's codes against `cli`'s `EXIT_*`
+      constants (`cli_exit_constants`, `int` and never `bool`), both directions, one row per
+      constant. A duplicate row and two constants sharing a code both fail;
+    - `gen1_exit_code_row_violations`: every completed Gen-1 plan row is still in the ADR,
+      unchanged, one direction only. `GEN1_ROW_MEANING_EXCEPTIONS` is `{15: <this work item's
+      id>}` and covers the meaning only, so a dropped 15 still fails;
+    - `LiveDocumentTest`'s bidirectional plan-vs-ADR test is replaced by three: the constants,
+      the Gen-1 rows, and a staleness check that the exception is exactly code 15 and is in use
+      (without it the comparison fails on 15 alone);
+    - `exit_code_violations` and its two instantiations are unchanged;
+    - new instantiations: a missing constant row, an extra row, a duplicate row, a shared
+      constant, the constant scan; the same rows, an ADR-only row, the named exception, a
+      dropped Gen-1 row, the dropped excepted row, a changed meaning outside the exception,
+      and 15 without the exception.
+  - Optional findings folded in, as the user decided:
+    - O2: the README and the ADR state the narrowed no-wedge guarantee. A `jobs/` entry that is
+      not a regular file, or a regular one the Controller cannot read, is cleared by hand.
+    - O3: the README states the qualified kill guidance for a member-scan `active`, and that a
+      pending record's clearing command can be plain `resume`, which then names the next step
+      (the round-5 local review's usability note).
+    - The round-5 local review's NFS answer: the README names both remedies, a
+      `local_lock=flock` mount or a local filesystem.
+    - O4's wording and citation drifts are all in the approved plan's text, which is
+      plan-stage protected. Editing it would stale the plan approval, so it is not edited.
+      CP8 reads those citations correctly: the `:60`, `:224-234` and `:372-374` of its own
+      section are `tests/test_plan_document_consistency.py`'s lines.
+  - Judgment calls, where the plan text left a detail open:
+    - The fourth half's invocation-line check also runs over `README.md` and the ADR
+      (`OperatorDocumentCommandLineTest`, at least five README lines recognised). It caught a
+      bare `workflow-controller run` in the first draft.
+    - The README explains the gates' `explain` resume hint as shorthand and gives the form that
+      parses, `workflow-controller --work-item <id> explain <repo>`.
+    - The ADR no longer says `README.md` is not bound by `technical_approval`: this work item's
+      artifact declaration protects it.
+  - Found while documenting, not fixed: each needs a `controller/` change outside CP8's files,
+    so it is left to step 2's self-review.
+    - `resume --abandon` on an unreadable regular job file. The pending report and `resume` name
+      `--abandon` for it, but `_abandon_locked`'s `path.read_bytes()` raises a bare
+      `PermissionError`, which `cli.main` does not catch: a traceback, not exit 20. Reproduced in
+      a scratch probe (a `chmod 000` job file). The README states the manual disposition.
+    - The gates' `safe_resume_command` `workflow-controller explain --work-item <id>` does not
+      parse under the live parser (a global option after the subcommand, and no repository):
+      exit 2. It is pre-existing at the base commit, and the approved plan pins that text
+      (CP3, CP4, CP4B).
+  - Verified with `python3 -m unittest tests.test_plan_document_consistency
+    tests.test_checklist_corrections`: 43 tests OK. The full suite (`python3 -m unittest discover
+    -s tests -t .`) ran 967 tests: OK, 2 skipped, and left no `tests/fake_claude.py` process
+    behind.
+  - Mutation checks were run in a scratch copy, and all 11 were caught: the ADR's 45 row
+    renumbered, 15 reverted to the Gen-1 wording, the 20 row reworded, the 16 row dropped, a new
+    `EXIT_*` constant, the exception covering a dropped row, no duplicate-row check, no
+    shared-constant check, `bool` accepted as a constant, a README invocation that does not
+    parse, and every meaning difference ignored.
+- **CP9 -- pending.**

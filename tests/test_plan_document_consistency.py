@@ -26,8 +26,22 @@ description. Four halves, each compared against its own authority:
    ``CPn`` token; this suite trades a small amount of the fullest
    specification's own coverage for zero false positives, and states the
    trade rather than silently narrowing it.
-2. **The exit-codes table** against the ADR's own copy
-   (``docs/adr/0001-controller-generation-1-architecture.md``).
+2. **The exit-codes table.** ``exit_code_violations`` is the original
+   bidirectional comparison of two documents' tables, and is still tested
+   on synthetic text. The live documents are bound differently since
+   ``workflow-controller-automatic-lifecycle-orchestration`` (its plan's
+   CP8), which added exit code 45 and reworded 15's meaning in the living
+   ADR (``docs/adr/0001-controller-generation-1-architecture.md``) while
+   the completed Gen-1 plan stays a closed record:
+
+   - the ADR's table against ``controller.cli``'s own ``EXIT_*``
+     constants, in both directions -- every constant has exactly one row,
+     and every row a constant (``adr_exit_code_constant_violations``);
+   - the completed Gen-1 plan's table against the ADR, one direction only
+     -- every Gen-1 row is still in the ADR, unchanged, apart from the one
+     named exception, code 15's meaning
+     (``gen1_exit_code_row_violations``). A row only the ADR states (45)
+     is allowed by construction.
 3. **Round counts** (``executed/ran/has run it N times/rounds``) against
    the registry's own ``plan_revision - 1``.
 4. **Controller invocation lines** (code spans or fenced lines beginning
@@ -40,6 +54,10 @@ Every half's own live-document instance is asserted first (this document
 must currently be green against its own claims), then each half's own
 negative/positive instantiation pins the polarity a property that "cannot
 fail" would hide.
+
+The fourth half's recogniser is also run over the two operator documents,
+``README.md`` and the ADR (automatic-lifecycle-orchestration CP8): every
+Controller invocation line they state must parse under the live parser.
 """
 
 from __future__ import annotations
@@ -49,7 +67,9 @@ import io
 import json
 import re
 import sys
+import types
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -63,6 +83,7 @@ REGISTRY_PATH = (
     / "workflow-controller-generation-1-registry.json"
 )
 ADR_PATH = REPO_ROOT / "docs" / "adr" / "0001-controller-generation-1-architecture.md"
+README_PATH = REPO_ROOT / "README.md"
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +255,71 @@ def exit_code_violations(plan_text: str, adr_text: str) -> list[str]:
     return violations
 
 
+#: The work item that reworded a Gen-1 exit-code row's meaning in the ADR.
+AUTOMATIC_LIFECYCLE_WORK_ITEM_ID = "workflow-controller-automatic-lifecycle-orchestration"
+
+#: The one named exception to the Gen-1 comparison: exit code -> the work
+#: item that reworded its meaning. It covers the meaning only -- the code's
+#: row must still be in the ADR.
+GEN1_ROW_MEANING_EXCEPTIONS: Mapping[int, str] = types.MappingProxyType({
+    15: AUTOMATIC_LIFECYCLE_WORK_ITEM_ID,
+})
+
+
+def cli_exit_constants(module: types.ModuleType = cli) -> dict[str, int]:
+    """``module``'s ``EXIT_*`` constants: every module-level name beginning
+    ``EXIT_`` bound to an ``int`` (never a ``bool``)."""
+    return {
+        name: value for name, value in vars(module).items()
+        if name.startswith("EXIT_") and isinstance(value, int) and not isinstance(value, bool)
+    }
+
+
+def adr_exit_code_constant_violations(adr_text: str, constants: Mapping[str, int]) -> list[str]:
+    """The ADR's "Exit codes" table against the live CLI constants, in both
+    directions: every constant has exactly one row, and every row a
+    constant."""
+    codes = [code for code, _ in _parse_two_cell_rows(_find_heading_table(adr_text, "Exit codes"))]
+    names_by_code: dict[int, list[str]] = {}
+    for name, value in constants.items():
+        names_by_code.setdefault(value, []).append(name)
+    violations = []
+    for code in sorted({code for code in codes if codes.count(code) > 1}):
+        violations.append(f"ADR states more than one row for exit code {code}")
+    for code, names in sorted(names_by_code.items()):
+        if len(names) > 1:
+            violations.append(f"constants {sorted(names)} share exit code {code}, so its row is not one constant's")
+    for code in sorted(set(names_by_code) - set(codes)):
+        violations.append(f"constant(s) {sorted(names_by_code[code])} = {code} have no row in the ADR")
+    for code in sorted(set(codes) - set(names_by_code)):
+        violations.append(f"ADR states exit-code row {code}, which no EXIT_* constant carries")
+    return violations
+
+
+def gen1_exit_code_row_violations(
+    plan_text: str, adr_text: str, *, meaning_exceptions: Mapping[int, str] = GEN1_ROW_MEANING_EXCEPTIONS,
+) -> list[str]:
+    """The completed Gen-1 plan's "Exit codes" table against the ADR's, one
+    direction only: every plan row is still in the ADR with the same
+    meaning, except that a code in ``meaning_exceptions`` may carry another
+    meaning there. A row only the ADR states is not compared."""
+    plan_rows = [(code, _normalize_meaning(meaning)) for code, meaning in _parse_two_cell_rows(
+        _find_heading_table(plan_text, "Exit codes"))]
+    adr_meanings: dict[int, set[str]] = {}
+    for code, meaning in _parse_two_cell_rows(_find_heading_table(adr_text, "Exit codes")):
+        adr_meanings.setdefault(code, set()).add(_normalize_meaning(meaning))
+    violations = []
+    for code, meaning in plan_rows:
+        if code not in adr_meanings:
+            violations.append(f"Gen-1 plan row {code} ({meaning!r}) is absent from the ADR")
+        elif meaning not in adr_meanings[code] and code not in meaning_exceptions:
+            violations.append(
+                f"Gen-1 plan row {code}'s meaning {meaning!r} differs in the ADR "
+                f"({sorted(adr_meanings[code])!r}), and code {code} is not a named exception"
+            )
+    return violations
+
+
 # ---------------------------------------------------------------------------
 # Half 3: round counts, against the registry's own `plan_revision - 1`.
 # ---------------------------------------------------------------------------
@@ -369,9 +455,25 @@ class LiveDocumentTest(unittest.TestCase):
         violations = complexity_violations(self.plan_text, self.registry)
         self.assertEqual(violations, [])
 
-    def test_exit_code_table_agrees_with_the_adr(self) -> None:
-        violations = exit_code_violations(self.plan_text, self.adr_text)
+    def test_adr_exit_code_table_matches_the_live_cli_constants(self) -> None:
+        constants = cli_exit_constants()
+        self.assertIn("EXIT_WORKER_ACTIVE", constants, "the constant scan must see the live module")
+        violations = adr_exit_code_constant_violations(self.adr_text, constants)
         self.assertEqual(violations, [])
+
+    def test_every_gen1_plan_exit_code_row_is_still_in_the_adr(self) -> None:
+        violations = gen1_exit_code_row_violations(self.plan_text, self.adr_text)
+        self.assertEqual(violations, [])
+
+    def test_the_one_named_exception_is_code_15_and_is_in_use(self) -> None:
+        """Exactly one exception, naming this work item, and not a stale
+        one: the ADR really does state code 15 differently from the Gen-1
+        plan, and without the exception the comparison fails on 15
+        alone."""
+        self.assertEqual(dict(GEN1_ROW_MEANING_EXCEPTIONS), {15: AUTOMATIC_LIFECYCLE_WORK_ITEM_ID})
+        without = gen1_exit_code_row_violations(self.plan_text, self.adr_text, meaning_exceptions={})
+        self.assertEqual(len(without), 1, without)
+        self.assertIn("row 15's meaning", without[0])
 
     def test_round_counts_agree_with_plan_revision_minus_one(self) -> None:
         expected = self.registry["plan_revision"] - 1
@@ -389,6 +491,26 @@ class LiveDocumentTest(unittest.TestCase):
         step 4, and five of CP9's own surface-table rows)."""
         lines = extract_invocation_lines(self.plan_text)
         self.assertEqual(len(lines), 7)
+
+
+class OperatorDocumentCommandLineTest(unittest.TestCase):
+    """The fourth half's recogniser over the two operator documents
+    (automatic-lifecycle-orchestration CP8): every Controller invocation
+    line ``README.md`` or the ADR states parses under the live parser, so
+    an operator who copies one never meets a usage error (exit 2)."""
+
+    def setUp(self) -> None:
+        self.parser = cli.build_parser()
+
+    def test_every_readme_invocation_line_parses_under_the_live_parser(self) -> None:
+        text = README_PATH.read_text()
+        # Not vacuous: the README's recovery commands (`resume`, `resume
+        # --abandon`, the routing examples) are recognised invocation lines.
+        self.assertGreaterEqual(len(extract_invocation_lines(text)), 5)
+        self.assertEqual(command_line_violations(text, self.parser), [])
+
+    def test_every_adr_invocation_line_parses_under_the_live_parser(self) -> None:
+        self.assertEqual(command_line_violations(ADR_PATH.read_text(), self.parser), [])
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +581,91 @@ class ExitCodeHalfInstantiationTest(unittest.TestCase):
         )
         violations = exit_code_violations(plan_text, self._ADR_TEXT)
         self.assertEqual(violations, [])
+
+
+def _exit_table(heading: str, *rows: tuple[int, str]) -> str:
+    return (f"{heading}\n\n| Code | Meaning |\n|---|---|\n"
+            + "".join(f"| {code} | {meaning} |\n" for code, meaning in rows))
+
+
+class AdrExitCodeConstantsInstantiationTest(unittest.TestCase):
+    """The ADR-against-constants half, on synthetic text and constants."""
+
+    _CONSTANTS = {"EXIT_OK": 0, "EXIT_GATE": 10, "EXIT_WORKER_ACTIVE": 45}
+
+    def test_one_row_per_constant_does_not_fail(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (45, "held"))
+        self.assertEqual(adr_exit_code_constant_violations(adr, self._CONSTANTS), [])
+
+    def test_a_constant_with_no_row_fails(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"))
+        violations = adr_exit_code_constant_violations(adr, self._CONSTANTS)
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("EXIT_WORKER_ACTIVE", violations[0])
+
+    def test_a_row_no_constant_carries_fails(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (45, "held"), (60, "invented"))
+        violations = adr_exit_code_constant_violations(adr, self._CONSTANTS)
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("row 60", violations[0])
+
+    def test_two_rows_for_one_code_fail(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (45, "held"), (45, "held again"))
+        self.assertTrue(adr_exit_code_constant_violations(adr, self._CONSTANTS))
+
+    def test_two_constants_sharing_one_code_fail(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (45, "held"))
+        constants = {**self._CONSTANTS, "EXIT_ALSO_GATE": 10}
+        self.assertTrue(adr_exit_code_constant_violations(adr, constants))
+
+    def test_the_constant_scan_reads_only_int_exit_names(self) -> None:
+        module = types.ModuleType("fake_cli")
+        module.EXIT_OK = 0
+        module.EXIT_FLAG = True
+        module.EXIT_NAME = "20"
+        module.OTHER = 30
+        self.assertEqual(cli_exit_constants(module), {"EXIT_OK": 0})
+
+
+class Gen1ExitCodeRowInstantiationTest(unittest.TestCase):
+    """The one-directional Gen-1-plan-against-ADR half, on synthetic
+    text."""
+
+    _PLAN = _exit_table("### Exit codes", (0, "ok"), (10, "gate"), (15, "declined, old wording"))
+
+    def test_the_same_rows_do_not_fail(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "**ok**"), (10, "`gate`"), (15, "declined, old wording"))
+        self.assertEqual(gen1_exit_code_row_violations(self._PLAN, adr), [])
+
+    def test_a_row_only_the_adr_states_does_not_fail(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (15, "declined, old wording"), (45, "held"))
+        self.assertEqual(gen1_exit_code_row_violations(self._PLAN, adr), [])
+
+    def test_the_named_exception_allows_code_15s_new_meaning(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (15, "declined, new wording"))
+        self.assertEqual(gen1_exit_code_row_violations(self._PLAN, adr), [])
+
+    def test_a_dropped_gen1_row_fails(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (15, "declined, old wording"))
+        violations = gen1_exit_code_row_violations(self._PLAN, adr)
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("row 10", violations[0])
+
+    def test_dropping_the_excepted_row_itself_still_fails(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"))
+        violations = gen1_exit_code_row_violations(self._PLAN, adr)
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("row 15", violations[0])
+
+    def test_a_changed_gen1_meaning_outside_the_exception_fails(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate, reworded"), (15, "declined, new wording"))
+        violations = gen1_exit_code_row_violations(self._PLAN, adr)
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("row 10's meaning", violations[0])
+
+    def test_without_the_exception_code_15s_new_meaning_fails(self) -> None:
+        adr = _exit_table("## Exit codes", (0, "ok"), (10, "gate"), (15, "declined, new wording"))
+        self.assertTrue(gen1_exit_code_row_violations(self._PLAN, adr, meaning_exceptions={}))
 
 
 class RoundCountHalfInstantiationTest(unittest.TestCase):

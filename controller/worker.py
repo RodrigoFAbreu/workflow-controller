@@ -2,12 +2,13 @@
 ``docs/ACTIVE_MILESTONE.md``).
 
 ``launch(task, *, cwd, permission_mode, timeout, claude_bin=None,
-pass_fds=(), on_spawn=None) -> WorkerResult`` is the whole launch entry
-point: it runs exactly the mechanism
-``docs/ACTIVE_MILESTONE.md`` records as proven --
+pass_fds=(), on_spawn=None, model=None, effort=None, disallowed_tools=None)
+-> WorkerResult`` is the whole launch entry point: it runs exactly the
+mechanism ``docs/ACTIVE_MILESTONE.md`` records as proven --
 
     claude -p "<task>" --output-format json --permission-mode <mode> \\
-        < /dev/null
+        [--model <model>] [--effort <effort>] \\
+        [--disallowedTools <tool>,<tool>] < /dev/null
 
 against ``cwd``, waits for it to finish (or times out), and classifies the
 result into exactly one of four outcomes. It never inspects, repairs, or
@@ -25,6 +26,15 @@ host-keyed, zombie-aware liveness verdict a later ``resume``/``--abandon``
 applies to it (:func:`assess_worker_liveness`). ``timeout=None`` waits
 until the worker returns control: silence or a long run is never treated
 as termination.
+
+CP6 of the same milestone adds the worker's route: ``model``/``effort``
+(each omitted when ``None``, so the ``claude`` CLI's own configuration
+applies) and ``disallowed_tools``, passed as one comma-joined argv element
+placed last, so the CLI's variadic option cannot swallow anything after
+it. ``launch`` never passes ``--resume``/``-r``, ``--continue``/``-c``,
+``--fork-session`` or ``--session-id``: every worker is a fresh session.
+The route itself is ``controller.routing``'s; this module only places it
+on the command line.
 """
 
 from __future__ import annotations
@@ -265,6 +275,9 @@ def launch(
     claude_bin: str | None = None,
     pass_fds: Iterable[int] = (),
     on_spawn: Callable[["WorkerProcess"], None] | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    disallowed_tools: Iterable[str] | None = None,
 ) -> WorkerResult:
     """Launch one fresh ``claude -p`` worker against ``cwd`` and wait
     synchronously for it to return control.
@@ -290,6 +303,13 @@ def launch(
     worker's process group is killed and reaped, and then the original
     exception propagates unchanged, so no untracked worker survives.
 
+    ``model``/``effort`` add ``--model``/``--effort`` when not ``None``,
+    passed through unvalidated (the ``claude`` CLI is the authority, as for
+    ``permission_mode``). A non-empty ``disallowed_tools`` adds
+    ``--disallowedTools`` with the names comma-joined into one argv
+    element, placed last. No session-reuse flag is ever passed, so every
+    worker is a fresh session.
+
     Raises :class:`~controller.errors.UserOnlyCommandError` before
     spawning anything if ``task`` names one of :data:`USER_ONLY_COMMANDS`
     (the second denylist layer -- CP4's ``decision.decide`` already never
@@ -309,6 +329,15 @@ def launch(
         resolved_claude_bin, "-p", task, "--output-format", "json",
         "--permission-mode", permission_mode,
     ]
+    # CP6: the worker's route. The disallow list goes last -- the CLI's
+    # `--disallowedTools <tools...>` is variadic, so nothing may follow it.
+    if model is not None:
+        args += ["--model", model]
+    if effort is not None:
+        args += ["--effort", effort]
+    tools = tuple(disallowed_tools or ())
+    if tools:
+        args += ["--disallowedTools", ",".join(tools)]
 
     # The worker's environment is the Controller's own, with PYTHONPATH
     # removed (revision 35, local round 34's OPUS-R34-O1): CP1's re-exec

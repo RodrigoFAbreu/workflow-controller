@@ -28,7 +28,7 @@ CONTROLLER_DIR = REPO_ROOT / "controller"
 #: index *i* may import (from `controller`) only a module at an index < i.
 DEPENDENCY_ORDER = [
     "errors", "runtime", "lock", "identity", "decision", "managed_repo",
-    "target_state", "evidence", "worker", "handoff", "job", "cli",
+    "target_state", "evidence", "routing", "worker", "handoff", "job", "cli",
 ]
 
 _ALLOWLISTED_RESOURCE_READ_SITES = {

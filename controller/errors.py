@@ -544,3 +544,25 @@ class JobAbandonRefusedError(ControllerError):
     """
 
     code = "JOB_ABANDON_REFUSED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-automatic-lifecycle-orchestration CP6 -- role-based
+# worker routing (``controller.routing``).
+# ---------------------------------------------------------------------------
+
+
+class RoutingConfigError(ControllerError):
+    """The ``--routing-config`` file cannot be used: it is unreadable or not
+    JSON, its ``schema_version`` is not ``1``, or it carries an unknown
+    key, an unknown role, a duplicate key, or a value that is not a
+    non-empty string (or that begins with ``-``, so it would be read as an
+    option). Raised before any job record is written or any worker is
+    launched: exit ``20``, like every other malformed configuration.
+    ``evidence`` names the path and the offending entry.
+
+    A malformed ``--role-model``/``--role-effort`` on the command line is
+    never this error: argparse refuses it as a usage error (exit ``2``).
+    """
+
+    code = "ROUTING_CONFIG_ERROR"

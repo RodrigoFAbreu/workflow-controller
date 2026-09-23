@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, evidence, job, lock, managed_repo, runtime, worker  # noqa: E402
+from controller import cli, evidence, job, lock, managed_repo, routing, runtime, worker  # noqa: E402
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
     GitDirectoryUnresolvableError,
@@ -49,6 +49,8 @@ from controller.errors import (  # noqa: E402
 )
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
+
+FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
 FAKE_IDENTITY = ControllerIdentity(
     generation=7,
@@ -558,6 +560,154 @@ class PermissionModePassThroughTest(_StepFixture, unittest.TestCase):
         for mode in ("acceptEdits", "bypassPermissions"):
             with self.subTest(mode=mode):
                 self.assertEqual(self._received_mode(cli.cmd_run, mode), mode)
+
+
+class RoutingOptionsParserTest(unittest.TestCase):
+    """Automatic-lifecycle-orchestration CP6: the routing global options.
+    A malformed ``--role-model``/``--role-effort`` (no ``=``, an unknown
+    role, an unusable value, one role assigned twice) or an unusable
+    ``--model``/``--effort`` is a usage error, exit 2, that writes
+    nothing."""
+
+    def test_the_routing_options_parse_before_the_subcommand(self) -> None:
+        args = cli.build_parser().parse_args([
+            "--model", "claude-sonnet-5", "--effort", "high",
+            "--role-model", "review-plan=claude-opus-5-5", "--role-model", "milestone-plan=m",
+            "--role-effort", "review-implementation=max", "--routing-config", "/cfg.json",
+            "run", "/target",
+        ])
+        self.assertEqual((args.model, args.effort), ("claude-sonnet-5", "high"))
+        self.assertEqual(args.role_model, {"review-plan": "claude-opus-5-5", "milestone-plan": "m"})
+        self.assertEqual(args.role_effort, {"review-implementation": "max"})
+        self.assertEqual(args.routing_config, "/cfg.json")
+
+    def test_the_defaults_are_no_overrides(self) -> None:
+        args = cli.build_parser().parse_args(["step", "/target"])
+        for name in ("model", "effort", "role_model", "role_effort", "routing_config"):
+            self.assertIsNone(getattr(args, name), name)
+        self.assertEqual(cli._routing_options(args), routing.NO_OVERRIDES)
+
+    def test_every_malformed_routing_option_exits_2_and_writes_nothing(self) -> None:
+        cases = {
+            "unknown role model": ["--role-model", "review-everything=m"],
+            "unknown role effort": ["--role-effort", "nobody=high"],
+            "no equals": ["--role-model", "review-plan"],
+            "empty role value": ["--role-effort", "review-plan="],
+            "option-like role value": ["--role-model", "review-plan=--resume"],
+            "role assigned twice": ["--role-model", "review-plan=a", "--role-model", "review-plan=b"],
+            "empty model": ["--model="],
+            "option-like effort": ["--effort=-c"],
+        }
+        for name, options in cases.items():
+            for command in ("step", "run"):
+                with self.subTest(case=name, command=command), tempfile.TemporaryDirectory() as td:
+                    runtime_dir = Path(td) / "runtime"
+                    dispatched = []
+                    stderr = io.StringIO()
+                    with unittest.mock.patch.object(cli, "_dispatch", lambda *a: dispatched.append(a)), \
+                            contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:
+                        cli.main(["--runtime-dir", str(runtime_dir), *options, command, td])
+                    self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
+                    self.assertEqual(dispatched, [])
+                    self.assertFalse(runtime_dir.exists(), "a usage error must write nothing")
+                    self.assertIn(f"argument {options[0].split('=')[0]}: ", stderr.getvalue())
+
+
+class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
+    """``step`` and ``run`` hand ``execute_step`` the operator's
+    ``routing.RoutingOptions``, the config file parsed once, before any job
+    runs; a malformed config is ``RoutingConfigError`` (exit 20) before a
+    ``PLANNED`` record is written."""
+
+    def _args_with(self, **routing_args) -> _Args:
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager))
+        for name, value in routing_args.items():
+            setattr(args, name, value)
+        return args
+
+    def _received(self, command, args) -> list:
+        received = []
+
+        def fake_execute_step(*a, **k):
+            received.append(k["routing"])
+            return {"status": job.STATUS_GATE_BLOCKED}
+
+        job.execute_step = fake_execute_step
+        self.assertEqual(command(args, self.runtime_root, self.ident), cli.EXIT_GATE)
+        return received
+
+    def test_step_and_run_pass_the_options_and_the_parsed_config(self) -> None:
+        config_path = self.tmp_root / "routing.json"
+        config_path.write_text(json.dumps({"schema_version": 1, "roles": {"review-plan": {"effort": "max"}}}))
+        args = self._args_with(model="m", effort=None, role_model={"review-plan": "rm"},
+                               role_effort={"milestone-plan": "low"}, routing_config=str(config_path))
+        for command in (cli.cmd_step, cli.cmd_run):
+            with self.subTest(command=command.__name__):
+                [options] = self._received(command, args)
+                self.assertEqual((options.cli_model, options.cli_effort), ("m", None))
+                self.assertEqual(dict(options.cli_role_models), {"review-plan": "rm"})
+                self.assertEqual(dict(options.cli_role_efforts), {"milestone-plan": "low"})
+                self.assertEqual(dict(options.config.roles["review-plan"]), {"effort": "max"})
+
+    def test_a_namespace_without_the_options_routes_by_the_built_in_table(self) -> None:
+        for command in (cli.cmd_step, cli.cmd_run):
+            with self.subTest(command=command.__name__):
+                self.assertEqual(self._received(command, self._args_with()), [routing.NO_OVERRIDES])
+
+    def test_an_invalid_config_exits_20_before_any_record_or_worker(self) -> None:
+        job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
+        invocations = self.tmp_root / "invocations"
+        bad = self.tmp_root / "bad-routing.json"
+        configs = {
+            "unparseable": "{",
+            "schema_version": json.dumps({"schema_version": 2}),
+            "unknown role": json.dumps({"schema_version": 1, "roles": {"review-everything": {}}}),
+            "unknown key": json.dumps({"schema_version": 1, "default": {"single_agent": False}}),
+            "missing file": None,
+        }
+        env = {"FAKE_CLAUDE_INVOCATIONS_FILE": str(invocations),
+               "FAKE_CLAUDE_REQUIRE_FILE": str(self.tmp_root / "never-created")}
+        for name, text in configs.items():
+            for command in (cli.cmd_step, cli.cmd_run):
+                with self.subTest(config=name, command=command.__name__):
+                    if text is None:
+                        bad.unlink(missing_ok=True)
+                    else:
+                        bad.write_text(text)
+                    args = _Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                                 claude_binary=str(FAKE_CLAUDE))
+                    args.routing_config = str(bad)
+                    stderr = io.StringIO()
+                    with unittest.mock.patch.dict("os.environ", env), \
+                            unittest.mock.patch.object(cli, "_dispatch",
+                                                       lambda a, argv: command(args, self.runtime_root, self.ident)), \
+                            contextlib.redirect_stderr(stderr):
+                        self.assertEqual(cli.main(["step", str(self.repo)]), cli.EXIT_FAIL_CLOSED)
+                    self.assertIn(f"error: the routing config {bad} cannot be used", stderr.getvalue())
+                    self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
+                    self.assertFalse(invocations.exists())
+
+    def test_a_valid_config_routes_the_real_launch(self) -> None:
+        job.execute_step = self._orig_execute_step
+        config_path = self.tmp_root / "routing.json"
+        config_path.write_text(json.dumps({
+            "schema_version": 1, "default": {"effort": "low"},
+            "roles": {"milestone-plan": {"model": "claude-sonnet-5"}},
+        }))
+        diag = self.tmp_root / "diag.json"
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager), claude_binary=str(FAKE_CLAUDE),
+                     timeout=10)
+        args.routing_config = str(config_path)
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_DIAG_FILE": str(diag)}):
+            # A no-op fake publishes no plan revision, so nothing verifies.
+            self.assertEqual(cli.cmd_step(args, self.runtime_root, self.ident), cli.EXIT_WORKER_FAILED)
+        [record] = [json.loads(path.read_text()) for path in self.runtime_root.glob("jobs/*.json")]
+        self.assertEqual(record["worker_route"], {
+            "role": "milestone-plan", "model": "claude-sonnet-5", "effort": "low", "single_agent": False,
+            "fresh_session": True, "sources": {"model": "config-role", "effort": "config-default"},
+        })
+        argv = json.loads(diag.read_text())["argv"]
+        self.assertEqual(argv[-4:], ["--model", "claude-sonnet-5", "--effort", "low"])
 
 
 class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):

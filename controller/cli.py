@@ -24,7 +24,7 @@ import sys
 import time
 from pathlib import Path
 
-from controller import evidence, handoff, identity, job, lock, managed_repo, runtime, target_state
+from controller import evidence, handoff, identity, job, lock, managed_repo, routing, runtime, target_state
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
 
@@ -146,6 +146,40 @@ def _write_identity_record(runtime_root: Path, ident: identity.ControllerIdentit
     runtime.write_json(runtime_root, "identity.json", record)
 
 
+def _route_value(text: str) -> str:
+    """``--model``/``--effort``'s ``type=``: a non-empty value that does not
+    begin with ``-`` (``routing.check_value``); anything else is a usage
+    error (exit 2)."""
+    try:
+        return routing.check_value(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _role_assignment(text: str) -> tuple[str, str]:
+    """``--role-model``/``--role-effort``'s ``type=``: ``ROLE=VALUE`` with
+    ``ROLE`` one of ``routing.ROLES``. A missing ``=``, an unknown role or
+    an unusable value is a usage error (exit 2), before anything runs."""
+    try:
+        return routing.parse_role_assignment(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+class _RoleAssignmentAction(argparse.Action):
+    """Collects repeated ``ROLE=VALUE`` assignments into a ``{role: value}``
+    dict. Assigning one role twice is ambiguous, so it is a usage error
+    (exit 2), never a silent last-wins."""
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        role, value = values
+        assignments = dict(getattr(namespace, self.dest, None) or {})
+        if role in assignments:
+            raise argparse.ArgumentError(self, f"role {role!r} is assigned more than once")
+        assignments[role] = value
+        setattr(namespace, self.dest, assignments)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="workflow-controller")
     parser.add_argument("--runtime-dir", default=None)
@@ -154,6 +188,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--claude-binary", default=None)
     parser.add_argument("--permission-mode", default=None)
     parser.add_argument("--timeout", type=int, default=None)
+    # Role-based worker routing (automatic-lifecycle-orchestration CP6). The
+    # per-role options beat the global ones, which beat the config file's
+    # role entry, then its default, then the built-in route.
+    parser.add_argument("--model", type=_route_value, default=None,
+                        help="model for every launched worker, unless a --role-model overrides it")
+    parser.add_argument("--effort", type=_route_value, default=None,
+                        help="effort for every launched worker, unless a --role-effort overrides it")
+    parser.add_argument("--role-model", metavar="ROLE=MODEL", type=_role_assignment,
+                        action=_RoleAssignmentAction, default=None,
+                        help="model for one role's workers (repeatable, once per role)")
+    parser.add_argument("--role-effort", metavar="ROLE=EFFORT", type=_role_assignment,
+                        action=_RoleAssignmentAction, default=None,
+                        help="effort for one role's workers (repeatable, once per role)")
+    parser.add_argument("--routing-config", metavar="PATH", default=None,
+                        help="JSON routing config: {\"schema_version\": 1, \"default\": {...}, \"roles\": {...}}")
     parser.add_argument("--allow-dirty-source", action="store_true", default=False)
     parser.add_argument("--json", action="store_true", default=False)
 
@@ -395,9 +444,26 @@ def _print_pending_jobs(pending: list) -> None:
               f"clear it with: {entry.clearing_command}")
 
 
+def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
+    """The operator's routing overrides (CP6), with the ``--routing-config``
+    file parsed now -- before any job record is written -- so a malformed
+    one is ``RoutingConfigError`` (exit 20) and nothing runs. Read with
+    ``getattr`` defaults, as ``cmd_resume`` reads ``--abandon``, so a
+    caller's hand-built namespace without these options routes by the
+    built-in table."""
+    config_path = getattr(args, "routing_config", None)
+    return routing.RoutingOptions(
+        cli_model=getattr(args, "model", None),
+        cli_effort=getattr(args, "effort", None),
+        cli_role_models=getattr(args, "role_model", None) or {},
+        cli_role_efforts=getattr(args, "role_effort", None) or {},
+        config=None if config_path is None else routing.load_routing_config(config_path),
+    )
+
+
 def _run_one_step(
     args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
-    target: managed_repo.ManagedRepository,
+    target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions = routing.NO_OVERRIDES,
 ) -> tuple[int, dict | Decision | None]:
     """One orchestration boundary: a generation-handoff check, then (at
     most) one job execution. Shared by ``step`` (one call) and ``run``'s
@@ -429,6 +495,7 @@ def _run_one_step(
         permission_mode=args.permission_mode or job.DEFAULT_PERMISSION_MODE,
         timeout=args.timeout,
         claude_bin=args.claude_binary,
+        routing=routing_options,
     )
 
     if isinstance(result, Decision):
@@ -456,8 +523,9 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     """``step``: execute exactly one automatic action, validate the
     transition, stop (capabilities 5, 7, 8)."""
     require_pinned_execution()
+    routing_options = _routing_options(args)
     target = _inspect_target(args)
-    exit_code, _result = _run_one_step(args, runtime_root, ident, target)
+    exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
     return exit_code
 
 
@@ -512,6 +580,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
             file=sys.stderr,
         )
 
+    routing_options = _routing_options(args)
     target = _inspect_target(args)
 
     steps_run = 0
@@ -524,7 +593,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
         # boundary where detect() runs".
         _await_pause_file(args.pause_file)
 
-        exit_code, result = _run_one_step(args, runtime_root, ident, target)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
         steps_run += 1
 
         if isinstance(result, dict) and result["status"] == job.STATUS_FINISHED:

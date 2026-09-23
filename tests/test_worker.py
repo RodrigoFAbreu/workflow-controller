@@ -21,6 +21,7 @@ integration test only.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import errno
 import json
@@ -37,7 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import lock, worker  # noqa: E402
+from controller import lock, routing, worker  # noqa: E402
 from controller.errors import UserOnlyCommandError, WorkerLaunchError  # noqa: E402
 from tests import process_fixtures  # noqa: E402
 
@@ -253,6 +254,81 @@ class LaunchMechanicsTest(unittest.TestCase):
                     os.environ["PYTHONPATH"] = old
             diag = json.loads(marker.read_text())
             self.assertIsNone(diag["pythonpath"])
+
+
+class RouteArgvTest(unittest.TestCase):
+    """``workflow-controller-automatic-lifecycle-orchestration`` CP6: the
+    route's ``--model``/``--effort`` and, for a single-agent route only,
+    ``--disallowedTools`` naming ``routing.SUBAGENT_TOOLS`` as one
+    comma-joined element placed last; never a session-reuse flag."""
+
+    #: Every ``claude`` flag that would resume, continue or fork an earlier
+    #: session instead of starting a fresh one.
+    SESSION_REUSE_FLAGS = frozenset({"--resume", "-r", "--continue", "-c", "--fork-session", "--session-id"})
+
+    def _argv(self, **route) -> list[str]:
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td) / "diag.json"
+            with _environment({"FAKE_CLAUDE_DIAG_FILE": str(marker)}):
+                result = worker.launch(
+                    "/review-plan wi-1", cwd=td, permission_mode="auto", timeout=10,
+                    claude_bin=str(FAKE_CLAUDE), **route,
+                )
+            self.assertEqual(result.outcome, worker.SUCCESS)
+            return json.loads(marker.read_text())["argv"]
+
+    def test_without_a_route_the_argv_is_unchanged(self) -> None:
+        self.assertEqual(self._argv(), ["-p", "/review-plan wi-1", "--output-format", "json",
+                                        "--permission-mode", "auto"])
+        self.assertEqual(self._argv(model=None, effort=None, disallowed_tools=()), self._argv())
+
+    def test_model_effort_and_the_disallow_list_last(self) -> None:
+        argv = self._argv(model="claude-opus-5-5", effort="xhigh", disallowed_tools=routing.SUBAGENT_TOOLS)
+        self.assertEqual(argv, [
+            "-p", "/review-plan wi-1", "--output-format", "json", "--permission-mode", "auto",
+            "--model", "claude-opus-5-5", "--effort", "xhigh", "--disallowedTools", "Agent,Workflow",
+        ])
+
+    def test_each_flag_is_independent(self) -> None:
+        self.assertEqual(self._argv(model="m")[-2:], ["--model", "m"])
+        self.assertNotIn("--effort", self._argv(model="m"))
+        self.assertEqual(self._argv(effort="high")[-2:], ["--effort", "high"])
+        self.assertNotIn("--model", self._argv(effort="high"))
+        self.assertEqual(self._argv(disallowed_tools=["Agent"])[-2:], ["--disallowedTools", "Agent"])
+
+    def test_every_resolved_route_reaches_the_argv_with_no_session_reuse_flag(self) -> None:
+        option_sets = (
+            routing.NO_OVERRIDES,
+            routing.RoutingOptions(cli_model="claude-sonnet-5", cli_effort="low"),
+            routing.RoutingOptions(cli_role_models={role: "m" for role in routing.ROLES},
+                                   cli_role_efforts={role: "max" for role in routing.ROLES}),
+        )
+        for options in option_sets:
+            for role in sorted(routing.ROLES):
+                with self.subTest(options=options, role=role):
+                    route = options.resolve(role)
+                    argv = self._argv(model=route.model, effort=route.effort,
+                                      disallowed_tools=route.disallowed_tools)
+                    self.assertFalse(self.SESSION_REUSE_FLAGS & set(argv), argv)
+                    self.assertEqual("--model" in argv, route.model is not None)
+                    self.assertEqual("--effort" in argv, route.effort is not None)
+                    if route.model is not None:
+                        self.assertEqual(argv[argv.index("--model") + 1], route.model)
+                    if route.effort is not None:
+                        self.assertEqual(argv[argv.index("--effort") + 1], route.effort)
+                    if route.single_agent:
+                        self.assertEqual(argv[-2:], ["--disallowedTools", ",".join(routing.SUBAGENT_TOOLS)])
+                    else:
+                        self.assertNotIn("--disallowedTools", argv)
+
+    def test_the_launch_source_passes_no_session_reuse_flag(self) -> None:
+        """No literal in ``worker.py`` names a session-reuse flag, so no code
+        path there can add one."""
+        literals = {
+            node.value for node in ast.walk(ast.parse(Path(worker.__file__).read_text()))
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertFalse(self.SESSION_REUSE_FLAGS & literals)
 
 
 class WorkerLaunchErrorTest(unittest.TestCase):

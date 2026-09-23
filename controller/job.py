@@ -44,7 +44,13 @@ still in scope, and takes the runtime root as an explicit ``runtime_root``
 parameter -- never named ``runtime`` -- so :func:`execute_step` calls them
 by passing its own (shadowed) local values in. This is also what keeps
 "spy on ``controller.job.runtime.write_json``" a valid test technique: the
-module-level import is the only thing ever called.
+module-level import is the only thing ever called. The same holds for
+:func:`execute_step`'s ``routing`` parameter (``workflow-controller-
+automatic-lifecycle-orchestration`` CP6), the resolved
+``controller.routing.RoutingOptions``, which shadows the ``controller.
+routing`` import inside :func:`execute_step` and
+:func:`_execute_step_locked`: the module-level :func:`_worker_route` is
+what calls into ``controller.routing``.
 
 **CP6B's own scope note on step 7's "fresh ``managed_repo.inspect``".**
 The plan's own step 7 text asks for both "a fresh ``managed_repo.inspect``
@@ -82,7 +88,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from controller import evidence, lock, runtime, target_state, worker
+from controller import evidence, lock, routing, runtime, target_state, worker
 from controller.decision import (
     NO_PHASE,
     NO_PHASE_WIRE,
@@ -3185,6 +3191,16 @@ def _no_launch_record(
     return _persist(runtime_root, job_id, record)
 
 
+def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOptions) -> routing.ResolvedRoute:
+    """The launched worker's route (automatic-lifecycle-orchestration CP6):
+    its role, from durable state only (the observed phase, the selected
+    command and the work item's ``registry_complete``; a ``NoWorkItemYet``
+    bootstrap has none), resolved against the operator's overrides."""
+    registry_complete = None if work_item is target_state.NoWorkItemYet else work_item.registry_complete
+    role = routing.role_for(decision.observed_phase, decision.action.command, registry_complete)
+    return options.resolve(role)
+
+
 # ---------------------------------------------------------------------------
 # execute_step -- CP6 owns steps 1-6, CP6B extends it with steps 7-9.
 # ---------------------------------------------------------------------------
@@ -3199,6 +3215,7 @@ def execute_step(
     permission_mode: str = DEFAULT_PERMISSION_MODE,
     timeout: float | None = None,
     claude_bin: str | None = None,
+    routing: routing.RoutingOptions = routing.NO_OVERRIDES,
 ) -> JobRecord | Decision:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -3213,13 +3230,19 @@ def execute_step(
     this target is pending (:func:`pending_reconciliation_jobs`). Only then
     does :func:`_execute_step_locked` run the nine job-execution steps;
     the worker inherits the lock's descriptor, so an orphaned worker keeps
-    the lock until it really exits."""
+    the lock until it really exits.
+
+    ``routing`` (automatic-lifecycle-orchestration CP6) is the operator's
+    routing overrides; the default is the built-in routing alone. The
+    launched worker's resolved route is recorded as ``worker_route`` from
+    the ``PLANNED`` flush on, and its model, effort and disallowed tools
+    reach the worker's command line."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
             managed_repo, work_item_id=work_item_id, identity=identity, runtime=runtime,
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
-            lifecycle_lock=lifecycle_lock,
+            lifecycle_lock=lifecycle_lock, routing=routing,
         )
 
 
@@ -3246,6 +3269,7 @@ def _execute_step_locked(
     timeout: float | None,
     claude_bin: str | None,
     lifecycle_lock: lock.LifecycleLock,
+    routing: routing.RoutingOptions,
 ) -> JobRecord | Decision:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -3337,6 +3361,10 @@ def _execute_step_locked(
             evidence={"observed_phase": decision.observed_phase},
         )
 
+    # CP6: the worker's route, resolved before anything is recorded, so an
+    # unroutable action leaves no record behind.
+    route = _worker_route(decision, work_item, routing)
+
     # Step 4: write the job record in two flushes, PLANNED then LAUNCHED,
     # both before the worker is spawned.
     job_id = _new_job_id()
@@ -3352,6 +3380,9 @@ def _execute_step_locked(
         # inherits its descriptor -- the lock then proves no process from
         # this job still holds it.
         "lifecycle_lock": {"path": str(lifecycle_lock.path)},
+        # CP6: the resolved route -- role, model, effort, single-agent, and
+        # where each field came from -- which the launch below applies.
+        "worker_route": route.to_record(),
         "created_at": now,
         "updated_at": now,
     }
@@ -3394,6 +3425,9 @@ def _execute_step_locked(
             claude_bin=claude_bin,
             pass_fds=(lifecycle_lock.fd,),
             on_spawn=on_spawn,
+            model=route.model,
+            effort=route.effort,
+            disallowed_tools=route.disallowed_tools,
         )
     except (UserOnlyCommandError, WorkerLaunchError) as exc:
         # CP5: a worker that never started is terminal at once -- the

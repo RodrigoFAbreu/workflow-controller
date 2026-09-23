@@ -697,4 +697,104 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
       - `stat` parsed at the first `)`;
       - a reused leader pid ignored;
       - a same-boot namespace mismatch ignored.
-- **CP6-CP9 -- pending**, in registry order.
+- **CP6 -- complete.** Role-based worker routing, in the new `controller/routing.py` and in
+  `controller/worker.py`, `controller/job.py`, `controller/cli.py` and `controller/errors.py`.
+  - `routing` sits between `evidence` and `worker` in `DEPENDENCY_ORDER` and `__all__`. It
+    imports only `errors` and `decision`.
+    - `ROLE_ROUTES` is the plan's table. `milestone-implement`, `apply-plan-review`,
+      `apply-implementation-review`, `review-plan`, `review-implementation` and
+      `milestone-implement-self-review` default to `claude-opus-5-5`/`xhigh`. The last three are
+      single-agent. `milestone-plan`, `record-manual-plan-review` and
+      `record-manual-implementation-review` inherit. `ROLES` is the closed role set.
+    - `role_for(phase, command, registry_complete)` reads durable state only.
+      `/milestone-implement` is the self-review role from `SELF_REVIEWING_IMPLEMENTATION`, and
+      from `IMPLEMENTING` when `registry_complete is True`. Every other stem maps to its own role
+      (`ROLE_BY_COMMAND_STEM`, held equal to `decision.SELECTED_COMMANDS` by a test).
+    - `resolve_route` applies the precedence per field: `role-cli`, `cli`, `config-role`,
+      `config-default`, `default`, `inherit`. `single_agent` is always the built-in value, and
+      no override surface names it.
+    - `ResolvedRoute.to_record()` is the job record's `worker_route`: `{role, model, effort,
+      single_agent, fresh_session: true, sources: {model, effort}}`. `disallowed_tools` is
+      `SUBAGENT_TOOLS` for a single-agent route, else empty.
+    - `RoutingOptions` holds the command-line overrides and the parsed config.
+      `NO_OVERRIDES` is the built-in table alone.
+    - `load_routing_config`/`parse_routing_config` refuse every malformed file with
+      `RoutingConfigError` (exit 20): unreadable, not JSON, not an object, a `schema_version`
+      other than the integer `1`, an unknown top-level key, role or field key, a duplicate key,
+      and a value that is not a non-empty string or that begins with `-`.
+  - `worker.launch(..., model=None, effort=None, disallowed_tools=None)` appends `--model M`,
+    `--effort E`, then `--disallowedTools A,B` as one comma-joined element, last. It never
+    passes a session-reuse flag.
+  - `job.execute_step(..., routing=routing.NO_OVERRIDES)` resolves the route
+    (`_worker_route`) after the launch guard and before the `PLANNED` flush. It records
+    `worker_route` from that flush on, and passes the route's model, effort and disallowed tools
+    to `worker.launch`. No-launch records carry no route.
+  - `cli`:
+    - new global options `--model`, `--effort`, `--role-model ROLE=MODEL` and
+      `--role-effort ROLE=EFFORT` (each repeatable, once per role), and `--routing-config PATH`;
+    - an unknown role, a missing `=`, a second assignment of one role, or an empty or
+      `-`-prefixed value is an argparse usage error (exit 2), before anything is written;
+    - `cmd_step`/`cmd_run` build `RoutingOptions` once, before inspecting the target
+      (`_routing_options`), and `_run_one_step` passes it to `execute_step`.
+  - `errors.RoutingConfigError` (exit 20 through the blanket clause).
+  - Judgment calls, where the plan text left a detail open:
+    - `RoutingConfigError` lives in `errors.py` with the rest of the refusal taxonomy, although
+      CP6's file list does not name `errors.py`.
+    - A model or effort value must be non-empty and must not begin with `-`, on the command line
+      and in the config file. Their vocabulary stays the `claude` CLI's, but no routed value can be
+      read as an option, so "no argv ever contains a session-reuse flag" holds for every route.
+    - Assigning one role twice is a usage error rather than last-wins, because it is ambiguous.
+    - The config's `default` and `roles` are optional. A `null` value is refused, so the config
+      cannot force `inherit` for a role that has a built-in model.
+    - `registry_complete is True` is taken literally. `None` at `IMPLEMENTING` routes the
+      checkpoint role. It cannot occur for a `"2.1"`/`"2.2"` item, which always declares a
+      registry.
+    - Only `step` and `run` read the routing options. `explain` and `inspect` accept them and
+      ignore them. `cli` reads them with `getattr` defaults, as `cmd_resume` reads `--abandon`,
+      so a hand-built namespace routes by the built-in table.
+    - `SUBAGENT_TOOLS` is `("Agent", "Workflow")`. That was checked statically against the
+      installed CLI (2.1.281): its bundle defines the `Agent` tool, with `Task` as an alias, and
+      a `Workflow` tool. The same bundle also supports forked skills (`context: "fork"`), so
+      CP9's live probe must settle whether `Skill` joins the set.
+    - An automatic command with no role raises `AssertionError`, like
+      `_expected_outcome_for`. It is raised before the `PLANNED` flush, so it leaves no record.
+  - Test whose assertion changes (intended): `LaunchPathTest.
+    test_completed_record_contains_every_schema_field_cp6_owns` gains `worker_route`.
+    `tests/test_package_structure.py`'s `DEPENDENCY_ORDER` gains `routing`.
+  - New tests:
+    - `tests/test_routing.py`: the role set and table; the five named roles and the self-review
+      pass at Opus 5.5 `xhigh`; single-agent roles and their disallow list; the inherit roles;
+      role derivation for every automatic triple and the final pass; each precedence level
+      beating every level below it, per field and independently; `single_agent` not
+      overridable; value and role-assignment checks; every malformed config.
+    - `tests/test_worker.py` `RouteArgvTest`: the unchanged argv without a route; the flag
+      order with the disallow list last; each flag alone; every role's route under three
+      override sets, with no session-reuse flag; no session-reuse literal in `worker.py`.
+    - `tests/test_job.py` `WorkerRouteTest`: the route on every write from `PLANNED` on; each of
+      the nine role cases reaching the record and the fake worker's argv; `sources` naming the
+      winning level; an unroutable action leaving no record and launching nothing.
+    - `tests/test_cli.py` `RoutingOptionsParserTest` and `RoutingOptionsPassThroughTest`: the
+      options parse; every malformed option exits 2 and writes nothing; `step` and `run` pass
+      the options and the parsed config; an invalid config exits 20 with no job record and no
+      worker; a valid config routes the real launch.
+  - Verified with `python3 -m unittest tests.test_routing tests.test_worker tests.test_cli
+    tests.test_job`: 223 tests OK. The full suite (`python3 -m unittest discover -s tests -t .`)
+    ran 932 tests: OK, 2 skipped. No `tests/fake_claude.py` process was left behind (0 before,
+    0 after). `python3 tests/golden/generate_external_implementation_review_decisions.py
+    --check` reports that golden as current, and the plan-stage golden test is green.
+  - Mutation checks were run in a scratch copy, against the four CP6 modules. All 33 mutants
+    were caught:
+    - precedence reordered (role-cli below cli, config default above config role), the config
+      ignored, or the job ignoring the routing options;
+    - no final-pass self-review from `IMPLEMENTING`, `None` read as registry-complete, or no
+      self-review from `SELF_REVIEWING_IMPLEMENTATION`;
+    - a review or self-review role made multi-agent, a named role inheriting, an inherit role
+      routed, `Workflow` dropped from `SUBAGENT_TOOLS`, or `single_agent` made routable;
+    - `-`-prefixed values, duplicate keys, a boolean `schema_version`, unknown roles or unknown
+      top-level keys accepted; `fresh_session` false;
+    - the disallow list placed first or space-split; `launch` or the job dropping the model,
+      effort or disallow list; the job not recording the route, resolving it after the
+      `PLANNED` flush, or ignoring `registry_complete`;
+    - `cli` not passing the options, never loading the config, dropping `--role-model`,
+      accepting a duplicate role, or not validating `--model`.
+- **CP7-CP9 -- pending**, in registry order.

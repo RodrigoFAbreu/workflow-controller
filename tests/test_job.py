@@ -34,7 +34,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, decision, evidence, job, lock, target_state, worker  # noqa: E402
+from controller import cli, decision, evidence, job, lock, routing, target_state, worker  # noqa: E402
 from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
     PendingJobReconciliationError,
@@ -600,6 +600,8 @@ class LaunchPathTest(unittest.TestCase):
             "handoff_pending", "created_at", "updated_at",
             # Automatic-lifecycle-orchestration CP5.
             "lifecycle_lock", "worker_process",
+            # Automatic-lifecycle-orchestration CP6.
+            "worker_route",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -876,6 +878,148 @@ class DefaultPermissionModeTest(unittest.TestCase):
     def test_worker_argv_carries_an_explicit_mode_unchanged(self) -> None:
         argv = self._observed_argv("explicit", permission_mode="acceptEdits")
         self.assertEqual(self._mode_in(argv), "acceptEdits")
+
+
+class WorkerRouteTest(unittest.TestCase):
+    """Automatic-lifecycle-orchestration CP6: ``execute_step`` derives the
+    worker's role from ``(phase, command, registry_complete)``, records the
+    resolved route as ``worker_route`` from the ``PLANNED`` flush on, and
+    hands its model, effort and disallowed tools to the worker, whose argv
+    ``tests/fake_claude.py``'s diagnostic file records."""
+
+    SESSION_REUSE_FLAGS = frozenset({"--resume", "-r", "--continue", "-c", "--fork-session", "--session-id"})
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self._runs = 0
+
+    def _execute(self, managed_repo, *, forced: tuple[str, str] | None = None,
+                 options: "routing.RoutingOptions | None" = None) -> tuple[dict, list[str], list[dict]]:
+        self._runs += 1
+        runtime_root = self.tmp_root / f"runtime-{self._runs}"
+        diag = self.tmp_root / f"diag-{self._runs}.json"
+        kwargs = {} if options is None else {"routing": options}
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_DIAG_FILE": str(diag)}))
+            if forced is not None:
+                stack.enter_context(fixtures.forced_automatic_action(*forced))
+            stack.enter_context(spy := _WriteSpy())
+            record = job.execute_step(
+                managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10, **kwargs,
+            )
+        writes = [obj for rel, obj in spy.calls if rel.startswith("jobs/")]
+        return record, json.loads(diag.read_text())["argv"], writes
+
+    def _implementation_target(self, name: str, phase: str, **kwargs):
+        return fixtures.build_implementation_target(self.tmp_root / name, phase=phase, **kwargs)
+
+    def _assert_argv_carries(self, argv: list[str], route: dict) -> None:
+        self.assertFalse(self.SESSION_REUSE_FLAGS & set(argv), argv)
+        for flag, value in (("--model", route["model"]), ("--effort", route["effort"])):
+            if value is None:
+                self.assertNotIn(flag, argv)
+            else:
+                self.assertEqual(argv[argv.index(flag) + 1], value)
+        if route["single_agent"]:
+            self.assertEqual(argv[-2:], ["--disallowedTools", ",".join(routing.SUBAGENT_TOOLS)])
+        else:
+            self.assertNotIn("--disallowedTools", argv)
+
+    def test_the_planned_flush_records_the_route_and_every_later_write_keeps_it(self) -> None:
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
+        record, argv, writes = self._execute(managed_repo)
+        expected = {
+            "role": "milestone-plan", "model": None, "effort": None, "single_agent": False,
+            "fresh_session": True, "sources": {"model": "inherit", "effort": "inherit"},
+        }
+        self.assertEqual(writes[0]["status"], job.STATUS_PLANNED)
+        for write in writes:
+            self.assertEqual(write["worker_route"], expected, write["status"])
+        self.assertEqual(record["worker_route"], expected)
+        # An inherit role passes neither flag, and no disallow list.
+        self.assertEqual(argv, ["-p", "/milestone-plan wi-1", "--output-format", "json",
+                                "--permission-mode", "auto"])
+
+    def test_each_role_reaches_the_record_and_the_worker_argv(self) -> None:
+        opus = ("claude-opus-5-5", "xhigh")
+        cases = (
+            # (name, phase, command, target overrides, role, (model, effort), single-agent)
+            ("review-plan", "AWAITING_LOCAL_PLAN_REVIEW", "/review-plan", {}, "review-plan", opus, True),
+            ("apply-plan-review", "REVISING_PLAN", "/apply-plan-review", {}, "apply-plan-review", opus, False),
+            ("record-plan", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "/record-manual-plan-review", {},
+             "record-manual-plan-review", (None, None), False),
+            ("checkpoint", "IMPLEMENTING", "/milestone-implement", {"checkpoints": {}},
+             "milestone-implement", opus, False),
+            ("final-pass", "IMPLEMENTING", "/milestone-implement", {}, "milestone-implement-self-review",
+             opus, True),
+            ("self-review", "SELF_REVIEWING_IMPLEMENTATION", "/milestone-implement", {},
+             "milestone-implement-self-review", opus, True),
+            ("review-impl", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "/review-implementation", {},
+             "review-implementation", opus, True),
+            ("apply-impl", "APPLYING_REVIEW_FEEDBACK", "/apply-implementation-review", {},
+             "apply-implementation-review", opus, False),
+            ("record-impl", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "/record-manual-implementation-review",
+             {}, "record-manual-implementation-review", (None, None), False),
+        )
+        for name, phase, command, overrides, role, (model, effort), single_agent in cases:
+            with self.subTest(case=name):
+                managed_repo = self._implementation_target(name, phase, **overrides)
+                record, argv, writes = self._execute(managed_repo, forced=(phase, command))
+                route = writes[0]["worker_route"]
+                self.assertEqual(writes[0]["status"], job.STATUS_PLANNED)
+                self.assertEqual(
+                    (route["role"], route["model"], route["effort"], route["single_agent"], route["fresh_session"]),
+                    (role, model, effort, single_agent, True),
+                )
+                source = "default" if model is not None else "inherit"
+                self.assertEqual(route["sources"], {"model": source, "effort": source})
+                self.assertEqual(record["worker_route"], route)
+                self.assertEqual(argv[1], f"{command} wi-1")
+                self._assert_argv_carries(argv, route)
+
+    def test_the_sources_name_the_winning_level(self) -> None:
+        config = routing.parse_routing_config(json.dumps({
+            "schema_version": 1, "default": {"effort": "e-config-default"},
+            "roles": {"review-plan": {"model": "m-config-role"}},
+        }), path="<test>")
+        cases = (
+            (routing.NO_OVERRIDES, ("claude-opus-5-5", "default"), ("xhigh", "default")),
+            (routing.RoutingOptions(cli_role_models={"review-plan": "m-role"}, cli_effort="e-cli"),
+             ("m-role", "role-cli"), ("e-cli", "cli")),
+            (routing.RoutingOptions(cli_model="m-cli", cli_role_efforts={"review-plan": "e-role"}),
+             ("m-cli", "cli"), ("e-role", "role-cli")),
+            (routing.RoutingOptions(config=config), ("m-config-role", "config-role"),
+             ("e-config-default", "config-default")),
+            (routing.RoutingOptions(cli_role_models={"apply-plan-review": "other"}, config=config),
+             ("m-config-role", "config-role"), ("e-config-default", "config-default")),
+        )
+        for index, (options, (model, model_source), (effort, effort_source)) in enumerate(cases):
+            with self.subTest(case=index):
+                managed_repo = self._implementation_target(f"sources-{index}", "AWAITING_LOCAL_PLAN_REVIEW")
+                record, argv, _writes = self._execute(
+                    managed_repo, forced=("AWAITING_LOCAL_PLAN_REVIEW", "/review-plan"), options=options,
+                )
+                route = record["worker_route"]
+                self.assertEqual((route["model"], route["effort"]), (model, effort))
+                self.assertEqual(route["sources"], {"model": model_source, "effort": effort_source})
+                self.assertTrue(route["single_agent"])
+                self._assert_argv_carries(argv, route)
+
+    def test_an_unroutable_action_writes_no_record_and_launches_nothing(self) -> None:
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
+        runtime_root = self.tmp_root / "runtime-unroutable"
+        invocations = self.tmp_root / "invocations"
+        env = {"FAKE_CLAUDE_INVOCATIONS_FILE": str(invocations)}
+        with unittest.mock.patch.dict("os.environ", env), \
+                fixtures.forced_automatic_action("PLANNING", "/prepare-review"), \
+                self.assertRaises(AssertionError):
+            job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                             claude_bin=str(FAKE_CLAUDE), timeout=10)
+        self.assertEqual(list((runtime_root / "jobs").glob("*.json")) if (runtime_root / "jobs").exists() else [], [])
+        self.assertFalse(invocations.exists())
 
 
 # ---------------------------------------------------------------------------

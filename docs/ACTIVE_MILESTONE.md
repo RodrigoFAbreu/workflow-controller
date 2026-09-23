@@ -134,3 +134,102 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`; plan:
        generator exit 0, manifest `plan_revision: 3`; `controller explain` ->
        `/review-plan hello-file`.
      Neither leg needed a step the gate did not name.
+
+## Functional review checklist
+
+Implementation revision 2, technical approval `920c8fd` (both implementation-review stages
+`APPROVE`, `review_content_id` `0aa60044...`). Automated state is current: 514 Controller
+tests OK (2 live skips) and the seven frozen Workflow suites green at `7904088`. Only
+`WORKFLOW_STATE.json` changed after that. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+### Setup
+
+1. In this checkout (`C=/home/rodrigo/Workspace/workflow-controller`), `git status --porcelain`
+   is empty. `workflow-manager` and `claude` are on `PATH`.
+2. Scratch paths: `W=$(mktemp -d); T=$W/target; RT=$W/rt; RTF=$W/rt-fake`.
+3. Build a disposable `"2.2"` target with the same fixture the live tests use:
+   `cd $C && python3 -c "from pathlib import Path; from tests.test_integration_disposable_repo import _seed_target_2_2; _seed_target_2_2(Path('$T'))"`.
+   Expected: `workflow-manager verify $T` exits 0 (Workflow 2.5.1). `$T` is clean.
+   `docs/ACTIVE_MILESTONE.md` there names the trivial `hello-file` milestone.
+4. `cd $C && python3 -P -m controller inspect $T` exits 0 and reports no work item yet.
+
+### Test data
+
+Only the `hello-file` milestone seeded in step 3. Flows 4-6 hand-edit bundle files, and only in
+the disposable `$T`, never in this repository. Let `B=$T/.ai-review/hello-file`.
+
+### Flows (no cost except flow 3)
+
+1. **Default worker permission mode is `auto`.** Use a fake worker, so this costs nothing:
+   `cd $C && FAKE_CLAUDE_DIAG_FILE=$W/argv-default.json python3 -P -m controller --runtime-dir $RTF --claude-binary $C/tests/fake_claude.py step $T; echo exit=$?`,
+   then `python3 -c "import json; print(json.load(open('$W/argv-default.json'))['argv'])"`.
+   Expected: the argv contains `/milestone-plan` and `--permission-mode`, `auto`. The exit is
+   non-zero, usually 30 (`FAILED`), because the fake worker changes nothing. That is expected.
+   `git -C $T status --porcelain` stays empty.
+2. **An explicit override passes through unchanged.** Run flow 1 again with
+   `--permission-mode acceptEdits` before `step` and `argv-override.json` as the diag file.
+   Expected: the argv contains `--permission-mode`, `acceptEdits`, and no `auto`.
+3. **A real default-`auto` worker can run Workflow operations.** This is live: one real
+   `claude` `/milestone-plan` session, about 2 minutes, and it costs money.
+   `cd $C && python3 -P -m controller --runtime-dir $RT step $T; echo exit=$?`
+   (no `--permission-mode`).
+   Expected:
+   - The exit is 0.
+   - The newest record in `$RT/jobs/` has `status: FINISHED`, `transition_verified: true`,
+     `worker.permission_denials: []` and `worker.is_error: false`.
+   - `$T`'s `hello-file` is at `AWAITING_LOCAL_PLAN_REVIEW`, `plan_revision` 1.
+   - `$B/current/MANIFEST.md` says `plan_revision: 1`.
+   - `python3 -P -m controller explain $T` reports `next automatic action: /review-plan hello-file`.
+4. **Zero-byte stubs select the "write" recovery (the round-1 manual `I1` fix).** Needs flow 3.
+   `mv $B/current $B/current.rejected-manualcheck && mkdir $B/current && : > $B/current/REVIEW_REQUEST.md && : > $B/current/TEST_RESULTS.md && : > $B/current/CONTEXT_FILES.txt`.
+   Then run `python3 -P -m controller explain $T`, and
+   `python3 -P -m controller --runtime-dir $RT step $T; echo exit=$?`.
+   Expected:
+   - `explain` shows a human gate naming `.../current/MANIFEST.md is missing or unreadable`.
+   - Its steps are: step 0 `write .../CONTEXT_FILES.txt, restoring the previous round's author
+     files from .../current.rejected-manualcheck/`; steps 1-2 `write ...` (naming the
+     "Review request format"); step 3 `scripts/prepare-ai-review.sh <base> plan hello-file`.
+   - No step says `refresh`.
+   - `step` exits 10 with a `GATE_BLOCKED` job record and no worker session.
+5. **The gate clears once the bundle is coherent (control).**
+   `rm -rf $B/current && mv $B/current.rejected-manualcheck $B/current`.
+   Expected: `explain` again reports `next automatic action: /review-plan hello-file`, with no gate.
+6. **A stale manifest revision selects the "refresh" recovery.** This is simulated.
+   `sed -i 's/^plan_revision: 1$/plan_revision: 0/' $B/current/MANIFEST.md`, then run `explain`.
+   Expected:
+   - A gate naming `manifest plan_revision 0 != state plan_revision 1`.
+   - Steps `1. refresh ...REVIEW_REQUEST.md`, `2. refresh ...TEST_RESULTS.md`
+     (`stage: plan (revision 1)`, `head:`), and `3.` the generator. There is no step 0.
+
+   Undo with `sed -i 's/^plan_revision: 0$/plan_revision: 1/' $B/current/MANIFEST.md`, and
+   `explain` is back to `/review-plan hello-file`.
+7. **The observed partial `/apply-plan-review` is caught (automated, needs a misbehaving
+   worker).** `cd $C && python3 -m unittest -v tests.test_job.PartialApplyPlanReviewExecuteTest tests.test_resume.PartialApplyPlanReviewResumeTest tests.test_cli.PartialApplyPlanReviewCliTest`.
+   Expected: all OK. They pin these results:
+   - `FAILED` / `postcondition_not_satisfied` naming revisions 10 and 11;
+   - then `GATE_BLOCKED` with no worker;
+   - `controller step` exit 30;
+   - the resume paths.
+8. Clean up with `rm -rf $W`.
+
+### Known limitations and out of scope
+
+- The stale/withdrawn-bundle gate fires only at `AWAITING_LOCAL_PLAN_REVIEW` and
+  `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`. It does not fire at `AWAITING_EXTERNAL_PLAN_REVIEW`
+  (`"1"`) or at any implementation-stage phase.
+- The Controller never repairs a bundle itself. The recovery steps are for a human.
+- Controller Generation 1 still does not orchestrate implementation review. Its
+  `APPLYING_REVIEW_FEEDBACK` gate text is stale for `"2.2"`. Both are known and outside this
+  milestone.
+- If `auto` is unavailable for an account, the worker fails visibly (`FAILED`). The remedy is an
+  explicit `--permission-mode`. `bypassPermissions` stays reserved for disposable repositories.
+- `REJECTED`-marker wording (round-1 manual `O1`) is covered by `tests.test_evidence` only.
+  There is no manual flow for it.
+- Deferred optional review findings:
+  - the "write" `TEST_RESULTS.md` step cites the "Review request format" section;
+  - a deliberately empty `CONTEXT_FILES.txt` is treated as absent (the conservative choice),
+    and this is not yet documented.
+- Out of scope for this milestone:
+  - Workflow Manager's classification of `.workflow-manager/installation.json`;
+  - `/apply-plan-review` publication ordering;
+  - multi-harness work.

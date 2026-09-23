@@ -593,7 +593,6 @@ class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):
         self.assertIn("manifest plan_revision 10 != state plan_revision 11", out)
 
 
-
 # ---------------------------------------------------------------------------
 # `resume`
 # ---------------------------------------------------------------------------

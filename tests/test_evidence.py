@@ -914,7 +914,6 @@ class AwaitingFunctionalReviewTest(unittest.TestCase):
         self.assertNotEqual(result.gate.safe_resume_command, "/accept-milestone wi-1")
 
 
-
 class StalePlanBundleGateTest(unittest.TestCase):
     """CP4 (worker-execution hardening): at the two phases whose automatic
     actions consume the current plan bundle, a bundle incoherent with the

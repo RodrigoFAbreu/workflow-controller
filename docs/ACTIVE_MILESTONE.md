@@ -156,4 +156,105 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
       clause, the manual `REVISE` unrecorded-stage clause, or the local `REVISE` work-item
       clause;
     - not capturing `bundle_manifest_bundle_id`.
-- **CP3-CP9 -- pending**, in registry order.
+- **CP3 -- complete.** The general automatic-dispatch rule, in `controller/decision.py` and
+  `controller/evidence.py`.
+  - `decision.AUTOMATIC_TRIPLES` is a literal copy of the 18 `EXPECTED_OUTCOMES` keys, held
+    equal in both directions by a test. `classify_selected_action(phase, version, command)`
+    compares `command_token(command)` (the slash-prefixed first word) and returns
+    `ActionClassification(automatic, decline_reason)`. `apply_dispatch_rule` turns a handler's
+    selection into the final decision. It runs at the end of `decision.decide`, of
+    `evidence.decide`'s evidence-handler branch, and of `decide_no_work_item`, whose
+    `(NO_PHASE, None, "/milestone-plan")` triple keeps it automatic. A declined selection keeps
+    its phase, action and evidence, and carries the uniform reason: "`<phase>` selects
+    `<command>`, which is model-invocable, but no verifiable ExpectedOutcome is declared for
+    (`<phase>`, `"<version>"`, `<token>`), so this Controller reports it instead of launching
+    it".
+  - `REPORT_ONLY_PHASES`, `DECLINED_PHASES`, `GATE_REPORT_PHASES` and
+    `_DECLINED_COMMAND_BY_PHASE` are deleted. Each phase now has its own handler in
+    `_DISPATCH`: the four static gates share `_decide_static_gate` over `_STATIC_GATES`, with
+    unchanged text, and `AMENDING_PLAN`/`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` select their
+    command.
+  - `IMPLEMENTING`/`SELF_REVIEWING_IMPLEMENTATION` select `/milestone-implement <id>`. At
+    `"2.1"`/`"2.2"` they gate first unless `plan_approval` is an object with `status ==
+    "CURRENT"`. The gate's `what_is_required` is the plan's text, and its `safe_resume_command`
+    is `workflow-controller explain --work-item <id>`.
+  - The interim `_PHASES_AWAITING_EVIDENCE_HANDLER` holds `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`,
+    `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` and `APPLYING_REVIEW_FEEDBACK`. Any action
+    selected there is declined with its own interim reason, because the uniform text ("no
+    ExpectedOutcome is declared") would be false there. CP4/CP4B remove it.
+  - `SELECTED_COMMANDS` gains the four implementation-stage files (8 in total).
+    `DELIBERATELY_NOT_SELECTED_COMMANDS` keeps the three functional-review commands,
+    `bootstrap-workflow-v2` and `prepare-review` (5), with their reasons rewritten to the rule.
+    The partition over the 17 installed files is 8/5/4.
+  - Effects:
+    - `/apply-functional-review` is declined where `execute_step` used to raise
+      `AssertionError`.
+    - `AMENDING_PLAN` reason text changes. It is the golden's one named exception.
+    - The ten unreachable combinations are declined:
+      - `REVISING_PLAN`, `AWAITING_LOCAL_PLAN_REVIEW` and
+        `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` at `"1"`;
+      - `AWAITING_EXTERNAL_PLAN_REVIEW` at `"2.1"`/`"2.2"`;
+      - the five automatic plan-stage phases at version `None`.
+
+      At base each raised `AssertionError` and left a `PLANNED` record, which was confirmed by
+      running base code in a scratch copy.
+  - Judgment calls, where the plan text left a detail open:
+    - The plan-approval gate applies only at `"2.1"`/`"2.2"`. Those are the branches whose
+      step 1a runs. `"1"` selects and is declined, as the plan's `"1"` `IMPLEMENTING` test
+      requires even with `plan_approval` absent.
+    - `apply_dispatch_rule` builds the declined `Decision` field by field, because the
+      package-wide write-containment scan flags any `.replace(` call.
+    - The golden test's exception, `_revert_permitted_difference`, accepts a case only if all
+      of these hold:
+      - the case is at `AMENDING_PLAN`;
+      - it is declined on both sides;
+      - it is equal apart from `reason`;
+      - the golden has the base wording and the re-derivation has the uniform reason.
+
+      A separate test requires the exception to cover exactly every `AMENDING_PLAN` case.
+      `tests/golden/plan_stage_decisions.json` and its generator are unchanged. The
+      generator's raw `--check` therefore now reports "differs": it has no exception, and the
+      test is the authority.
+  - Tests whose assertions change. Each is rewritten to the rule, and none is deleted without a
+    replacement:
+    - `test_decision`:
+      - `ScopeAssertionTest` and `TwoShapeAssertionTest` are re-keyed by `(phase, version)`
+        over `"1"`/`"2.1"`/`"2.2"`/`None`, with independent expectation tables;
+      - `ProtocolTwoTwoCompatibilityParityTest` now asserts that classification equals triple
+        membership, and that a triple never turns a gate into a launch;
+      - `CommandFilePartitionTest` uses 8/5/4;
+      - `Revision64PhaseWideningTest`'s report-only half is replaced.
+    - `test_job`/`test_cli`: `"2.1"` `IMPLEMENTING` without an approval is now the gate, and
+      a second test re-pins `DECLINED` at `"1"`.
+    - `test_evidence`: unconsumed functional findings are declined.
+    - `Protocol22ImplementationReviewGatesTest` now runs `tests/fake_claude.py` with a
+      never-existing `FAKE_CLAUDE_REQUIRE_FILE` (fail-if-invoked) and asserts that no worker
+      ran.
+  - New tests:
+    - `AutomaticTriplesTest`: equality in both directions, stems are a subset of
+      `SELECTED_COMMANDS`, no user-only token;
+    - `DispatchRuleTest`: a `mock.patch`-removed triple declines the same decision, and the
+      bootstrap too; the interim phases are declined despite their triples; the uniform
+      reason text is pinned;
+    - `ImplementingDispatchTest`;
+    - `PerPhaseSetRemovalTest`: the sets are gone, and no `controller/` module references
+      them;
+    - `test_job.DispatchRuleDeclineTest`: the functional-findings regression, and the ten
+      unreachable combinations through `evidence.decide` and `execute_step` (one `DECLINED`
+      record, no `PLANNED` flush). A positive control shows that the same fixtures launch
+      where a triple exists.
+  - Verified with `python3 -m unittest tests.test_decision tests.test_evidence tests.test_job
+    tests.test_cli tests.test_golden_plan_stage_decisions tests.test_integration_disposable_repo`:
+    301 tests OK, 2 skipped. The full suite (`python3 -m unittest discover -s tests -t .`) ran
+    674 tests: OK, 2 skipped.
+  - Mutation checks run in a scratch copy. Each of these fails at least one test:
+    - ignoring the interim set;
+    - classifying everything automatic;
+    - dropping the rule from `evidence.decide` or from `decision.decide`;
+    - dropping the plan-approval gate, applying it at `"1"`, or accepting any non-`None`
+      approval;
+    - adding a triple (`AMENDING_PLAN`) or removing one;
+    - defining `REPORT_ONLY_PHASES` in `job.py`;
+    - changing the uniform reason wording;
+    - letting `decide_no_work_item` bypass the rule.
+- **CP4-CP9 -- pending**, in registry order.

@@ -29,6 +29,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -434,6 +435,9 @@ class ControllerSourceTreeDigestVerificationTest(unittest.TestCase):
 #: ``controller_source_tree_digest`` with, and so ``resume``'s own case-1
 #: ``validate_record`` check (``record_generation > running_generation``)
 #: reads the same generation on both the write and the read side.
+#: The offline worker stand-in (``tests/fake_claude.py``).
+_FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
+
 _FAKE_2_2_IDENTITY = ControllerIdentity(
     generation=1,
     source_root=Path("/fake/source"),
@@ -462,7 +466,12 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
     ``job.execute_step`` never reaches its own worker-launch guard for any
     of them (``controller/job.py``'s own positive launch guard: a worker is
     launched only when ``decision.automatic`` is ``True``, which none of
-    these five ever is).
+    these five ever is). Since automatic-lifecycle-orchestration CP3 every
+    ``execute_step`` call here also names ``tests/fake_claude.py`` as the
+    worker, required to find a file that never exists (fail-if-invoked),
+    so no run of this test can reach the real ``claude`` binary; state 1
+    is still declined, through CP3's interim
+    ``_PHASES_AWAITING_EVIDENCE_HANDLER``.
 
     Calls ``controller.job.execute_step``/``controller.job.resume``
     directly against a real, disposable target repository -- the same
@@ -545,11 +554,21 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                     "work_items": {work_item_id: entry},
                 })
 
+            # Fail-if-invoked (automatic-lifecycle-orchestration CP3): the
+            # worker is the offline fake, and it refuses to run because
+            # the file it requires never exists -- so no ordinary unit run
+            # can ever reach the real `claude` binary through this test,
+            # whatever a later checkpoint makes automatic here.
+            never_created = tmp_root / "fail-if-invoked-never-created"
+
             def _run() -> dict:
-                result = job.execute_step(
-                    managed_repo, work_item_id=work_item_id, identity=_FAKE_2_2_IDENTITY,
-                    runtime=runtime_root,
-                )
+                with unittest.mock.patch.dict(
+                    os.environ, {"FAKE_CLAUDE_REQUIRE_FILE": str(never_created)},
+                ):
+                    result = job.execute_step(
+                        managed_repo, work_item_id=work_item_id, identity=_FAKE_2_2_IDENTITY,
+                        runtime=runtime_root, claude_bin=str(_FAKE_CLAUDE),
+                    )
                 self.assertIsInstance(
                     result, dict,
                     "every one of these five decisions is a report/decline, never the "
@@ -562,6 +581,7 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                 # automatic action, and never marks a decision automatic
                 # here at all.
                 self.assertFalse(result["selected_action"]["automatic"])
+                self.assertNotIn("worker", result)
                 command = result["selected_action"]["command"]
                 if command is not None:
                     self.assertNotIn("/approve-review", command)

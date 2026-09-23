@@ -1881,7 +1881,10 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     no ``.ai-review/`` read at all. At the two plan-bundle-consuming
     phases, a plan bundle incoherent with the state's ``plan_revision``
     (:func:`plan_bundle_coherence`) gates next -- still ahead of the
-    per-phase handlers, so ahead of the local-review BLOCK gate."""
+    per-phase handlers, so ahead of the local-review BLOCK gate. A
+    handler's selected action then goes through the same general
+    automatic-dispatch rule (``decision.apply_dispatch_rule``) as every
+    selection :func:`controller.decision.decide` makes."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     root = managed_repo.root
@@ -1898,6 +1901,12 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
 
     handler = _EVIDENCE_HANDLERS.get(phase)
     if handler is not None:
-        return handler(root, work_item_id, work_item)
+        # The general automatic-dispatch rule (automatic-lifecycle-
+        # orchestration CP3): a handler only selects; whether the selection
+        # launches is decided by the same rule `decision.decide` applies to
+        # its own handlers' output.
+        return _decision.apply_dispatch_rule(
+            handler(root, work_item_id, work_item), work_item.governing_workflow_version,
+        )
 
     return _decision.decide(managed_repo, snapshot, work_item)

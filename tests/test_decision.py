@@ -3,14 +3,19 @@
 Every test here is one the plan's own "Tests" list under "CP4 / CP4B --
 Next-action decision engine and human-gate classification" tags ``(CP4)``
 -- satisfiable without any of CP4B's evidence reads, per that section's own
-framing.
+framing -- or, since ``workflow-controller-automatic-lifecycle-orchestration``
+CP3, a test of the general automatic-dispatch rule (``AUTOMATIC_TRIPLES``,
+``classify_selected_action``, the per-``(phase, version)`` expectation
+tables that replaced the per-phase report-only/declined/gate sets).
 """
 
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -53,14 +58,64 @@ _EXPECTED_USER_ONLY = {
     "request-plan-amendment",
 }
 
-_EXPECTED_SELECTED = {"milestone-plan", "review-plan", "record-manual-plan-review",
-                       "apply-plan-review"}
+#: The command files a selected action may be launched for
+#: (automatic-lifecycle-orchestration CP3: the four plan-stage files plus the
+#: four implementation-stage files rows 12-18 declare).
+_EXPECTED_SELECTED = {
+    "milestone-plan", "review-plan", "record-manual-plan-review", "apply-plan-review",
+    "milestone-implement", "review-implementation", "apply-implementation-review",
+    "record-manual-implementation-review",
+}
 
 _EXPECTED_NOT_SELECTED = {
-    "review-implementation", "review-functional", "milestone-implement",
-    "apply-implementation-review", "apply-functional-review", "prepare-functional-review",
-    "record-manual-implementation-review", "bootstrap-workflow-v2", "prepare-review",
+    "review-functional", "apply-functional-review", "prepare-functional-review",
+    "bootstrap-workflow-v2", "prepare-review",
 }
+
+#: Every version a work item can carry, plus ``None`` (no version at all).
+_VERSIONS = ("1", "2.1", "2.2", None)
+
+#: A plan approval ``/milestone-implement``'s step 1a accepts.
+_CURRENT_PLAN_APPROVAL = {"status": "CURRENT"}
+
+#: The command token ``decision.decide``'s own handler selects at each phase
+#: that selects one (ordinary-case fixture, plan approval ``CURRENT``), stated
+#: independently of the handlers so the expectation tables below have
+#: something to check them against.
+_SELECTED_TOKEN_BY_PHASE = {
+    "PLANNING": "/milestone-plan",
+    "REVISING_PLAN": "/apply-plan-review",
+    "AWAITING_LOCAL_PLAN_REVIEW": "/review-plan",
+    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW": "/record-manual-plan-review",
+    "AWAITING_EXTERNAL_PLAN_REVIEW": "/apply-plan-review",
+    "AMENDING_PLAN": "/milestone-plan",
+    "IMPLEMENTING": "/milestone-implement",
+    "SELF_REVIEWING_IMPLEMENTATION": "/milestone-implement",
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW": "/review-implementation",
+}
+
+#: The phases ``decision.decide`` reports as a gate at every version.
+_GATE_PHASES = {
+    "AWAITING_PLAN_APPROVAL", "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "APPLYING_REVIEW_FEEDBACK", "AWAITING_FUNCTIONAL_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+}
+
+#: The phases with no action and no gate.
+_NO_ACTION_PHASES = {"LEGACY_READY", "MILESTONE_COMPLETE"}
+
+#: The interim set (CP3 item 5), restated independently.
+_INTERIM_PHASES = {
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "APPLYING_REVIEW_FEEDBACK",
+}
+
+
+def _expected_automatic(phase: str, version: str | None) -> bool:
+    """The rule, restated: a selected action launches iff its triple is
+    declared and its phase is not an interim one."""
+    token = _SELECTED_TOKEN_BY_PHASE[phase]
+    return (phase, version, token) in decision.AUTOMATIC_TRIPLES and phase not in _INTERIM_PHASES
 
 
 class KnownPhaseSetTest(unittest.TestCase):
@@ -142,21 +197,11 @@ class TableDrivenPhaseDecisionTest(unittest.TestCase):
 
 class ScopeAssertionTest(unittest.TestCase):
     """The scope assertion restated against a subject that can fail (round
-    12's B1): ``automatic=False`` at all eight report-only phases (revision
-    64 widens this from five to eight), ``automatic=True`` at the automatic
-    phases -- both directions."""
-
-    REPORT_ONLY_EIGHT = {
-        "IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION",
-        "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK",
-        "AWAITING_FUNCTIONAL_REVIEW", "AMENDING_PLAN",
-        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-    }
-
-    AUTOMATIC_PHASES = {
-        "PLANNING", "REVISING_PLAN", "AWAITING_LOCAL_PLAN_REVIEW",
-        "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_EXTERNAL_PLAN_REVIEW",
-    }
+    12's B1), re-keyed by ``(phase, version)`` for the general
+    automatic-dispatch rule (automatic-lifecycle-orchestration CP3): at
+    every known phase and every version (``"1"``, ``"2.1"``, ``"2.2"``,
+    ``None``), a selected action is automatic exactly when
+    :data:`decision.AUTOMATIC_TRIPLES` declares it -- both directions."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -165,32 +210,65 @@ class ScopeAssertionTest(unittest.TestCase):
         self.managed_repo = fixtures.build_target_managed_repository(root)
         fixtures.copy_real_commands_dir(root / ".claude" / "commands")
 
-    def _decide(self, phase: str):
-        work_item = fixtures.build_work_item_view(phase=phase)
+    def _decide(self, phase: str, version: str | None):
+        work_item = fixtures.build_work_item_view(
+            phase=phase, governing_workflow_version=version, plan_approval=_CURRENT_PLAN_APPROVAL,
+        )
         return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
 
-    def test_report_only_eight_are_all_non_automatic(self) -> None:
-        self.assertEqual(self.REPORT_ONLY_EIGHT, decision.REPORT_ONLY_PHASES)
-        for phase in sorted(self.REPORT_ONLY_EIGHT):
-            with self.subTest(phase=phase):
-                self.assertFalse(self._decide(phase).automatic)
+    def test_the_expectation_groups_partition_every_known_phase(self) -> None:
+        groups = (
+            set(_SELECTED_TOKEN_BY_PHASE), _GATE_PHASES, _NO_ACTION_PHASES,
+            set(decision.VOCABULARY_PHASES),
+        )
+        self.assertEqual(set().union(*groups), set(decision.KNOWN_PHASES))
+        self.assertEqual(sum(len(group) for group in groups), len(decision.KNOWN_PHASES))
 
-    def test_automatic_phases_are_all_automatic(self) -> None:
-        for phase in sorted(self.AUTOMATIC_PHASES):
-            with self.subTest(phase=phase):
-                self.assertTrue(self._decide(phase).automatic)
+    def test_every_phase_and_version_is_classified_by_automatic_triples_membership(self) -> None:
+        for phase in sorted(_SELECTED_TOKEN_BY_PHASE):
+            for version in _VERSIONS:
+                with self.subTest(phase=phase, governing_workflow_version=version):
+                    result = self._decide(phase, version)
+                    expected = _expected_automatic(phase, version)
+                    self.assertEqual(result.automatic, expected, result.reason)
+                    self.assertEqual(result.declined, not expected)
+                    self.assertIsNone(result.gate)
+                    self.assertEqual(result.action.command, f"{_SELECTED_TOKEN_BY_PHASE[phase]} wi-1")
 
-    def test_no_automatic_phase_is_also_report_only(self) -> None:
-        self.assertEqual(set(), self.AUTOMATIC_PHASES & self.REPORT_ONLY_EIGHT)
+    def test_gate_and_no_action_phases_are_never_automatic_at_any_version(self) -> None:
+        for phase in sorted(_GATE_PHASES | _NO_ACTION_PHASES):
+            for version in _VERSIONS:
+                with self.subTest(phase=phase, governing_workflow_version=version):
+                    result = self._decide(phase, version)
+                    self.assertFalse(result.automatic)
+                    self.assertFalse(result.declined)
+                    self.assertIsNone(result.action)
+                    self.assertEqual(result.gate is not None, phase in _GATE_PHASES)
+
+    def test_the_table_is_not_vacuous(self) -> None:
+        """Spot checks of the table's own content, each one a combination
+        the rule's effect table names."""
+        for phase, version in (
+            ("PLANNING", "1"), ("REVISING_PLAN", "2.2"), ("AWAITING_EXTERNAL_PLAN_REVIEW", "1"),
+            ("IMPLEMENTING", "2.1"), ("SELF_REVIEWING_IMPLEMENTATION", "2.2"),
+        ):
+            with self.subTest(phase=phase, governing_workflow_version=version):
+                self.assertTrue(self._decide(phase, version).automatic)
+        for phase, version in (
+            ("AWAITING_EXTERNAL_PLAN_REVIEW", "2.1"), ("REVISING_PLAN", "1"), ("PLANNING", None),
+            ("IMPLEMENTING", "1"), ("AMENDING_PLAN", "2.2"),
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2"),
+        ):
+            with self.subTest(phase=phase, governing_workflow_version=version):
+                self.assertTrue(self._decide(phase, version).declined)
 
 
 class TwoShapeAssertionTest(unittest.TestCase):
-    """Round 10's B1, widened by revision 64: the four gate-bearing
-    report-only phases yield ``gate=HumanGate(...)``, ``action=None``; the
-    four declined phases (``IMPLEMENTING``, ``SELF_REVIEWING_IMPLEMENTATION``,
-    ``AMENDING_PLAN``, ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``) yield
-    ``declined=True``, a populated ``action``, ``gate=None``. Neither shape
-    may be reported as the other."""
+    """Round 10's B1, re-keyed by ``(phase, version)`` (CP3): at every
+    combination a gate never carries an action and is never declined, a
+    decline always carries an action and never a gate, and an automatic
+    decision carries an action and no gate. Neither shape may be reported
+    as the other."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -199,52 +277,50 @@ class TwoShapeAssertionTest(unittest.TestCase):
         self.managed_repo = fixtures.build_target_managed_repository(root)
         fixtures.copy_real_commands_dir(root / ".claude" / "commands")
 
-    def _decide(self, phase: str):
-        work_item = fixtures.build_work_item_view(phase=phase)
-        return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+    def _decisions(self):
+        for phase in sorted(decision.KNOWN_PHASES - decision.VOCABULARY_PHASES):
+            for version in _VERSIONS:
+                for plan_approval in (None, _CURRENT_PLAN_APPROVAL):
+                    work_item = fixtures.build_work_item_view(
+                        phase=phase, governing_workflow_version=version, plan_approval=plan_approval,
+                    )
+                    yield (phase, version, plan_approval is not None), decision.decide(
+                        self.managed_repo, snapshot=None, work_item=work_item,
+                    )
 
-    def test_gate_bearing_phases_have_no_action_and_a_populated_gate(self) -> None:
-        for phase in sorted(decision.GATE_REPORT_PHASES):
-            with self.subTest(phase=phase):
-                result = self._decide(phase)
-                self.assertIsNone(result.action)
-                self.assertIsNotNone(result.gate)
-                self.assertFalse(result.automatic)
-                self.assertFalse(result.declined)
-                self.assertEqual(result.gate.phase, phase)
-
-    def test_declined_phases_have_a_populated_action_and_no_gate(self) -> None:
-        for phase in sorted(decision.DECLINED_PHASES):
-            with self.subTest(phase=phase):
-                result = self._decide(phase)
-                self.assertIsNotNone(result.action)
-                self.assertIsNone(result.gate)
-                self.assertFalse(result.automatic)
-                self.assertTrue(result.declined)
-
-    def test_a_declined_phase_is_never_reported_as_a_gate(self) -> None:
-        for phase in sorted(decision.DECLINED_PHASES):
-            self.assertNotIn(phase, decision.GATE_REPORT_PHASES)
-
-    def test_a_gate_phase_is_never_reported_as_declined(self) -> None:
-        for phase in sorted(decision.GATE_REPORT_PHASES):
-            self.assertNotIn(phase, decision.DECLINED_PHASES)
+    def test_the_shape_invariant_holds_at_every_phase_and_version(self) -> None:
+        declined, gated = set(), set()
+        for key, result in self._decisions():
+            with self.subTest(key=key):
+                if result.gate is not None:
+                    gated.add(key)
+                    self.assertIsNone(result.action)
+                    self.assertFalse(result.automatic)
+                    self.assertFalse(result.declined)
+                    self.assertEqual(result.gate.phase, key[0])
+                elif result.declined:
+                    declined.add(key)
+                    self.assertIsNotNone(result.action)
+                    self.assertFalse(result.automatic)
+                elif result.automatic:
+                    self.assertIsNotNone(result.action)
+                else:
+                    self.assertIsNone(result.action)
+                    self.assertIn(key[0], _NO_ACTION_PHASES)
+        self.assertTrue(declined)
+        self.assertTrue(gated)
+        self.assertEqual(declined & gated, set())
 
 
 class ProtocolTwoTwoCompatibilityParityTest(unittest.TestCase):
     """CP4's own "1"/"2.1" parity half (``workflow-controller-protocol-2-
-    2-compatibility``): this milestone's entire production surface is
-    job.py's ``EXPECTED_OUTCOMES`` table (CP1) and target_state.py's
-    read-only ``supported_versions`` field (CP3) -- ``decision.py`` itself
-    is untouched. ``decide()`` dispatches ``DECLINED_PHASES``/
-    ``GATE_REPORT_PHASES`` classification on ``work_item.phase`` alone
-    (see ``decide``'s own body: neither branch below ever inspects
-    ``governing_workflow_version``), so a "1"/"2.1"/"2.2" item must
-    classify identically at every phase in either set -- including the
-    two 2.2-only phases (revision 64) a "1"/"2.1" item never actually
-    reaches in practice. This is the regression guard that this
-    milestone's changes elsewhere never turn phase classification into a
-    version-conditioned branch."""
+    2-compatibility``), rewritten for the general automatic-dispatch rule
+    (automatic-lifecycle-orchestration CP3): version-independent
+    classification no longer holds, by design. What holds instead is that
+    each ``(phase, version)`` classification equals
+    :data:`decision.AUTOMATIC_TRIPLES` membership -- a version with no
+    declared row can never launch, and a declared row alone never turns a
+    gate into a launch."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -254,7 +330,9 @@ class ProtocolTwoTwoCompatibilityParityTest(unittest.TestCase):
         fixtures.copy_real_commands_dir(root / ".claude" / "commands")
 
     def _decide(self, phase: str, version: str):
-        work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version=version)
+        work_item = fixtures.build_work_item_view(
+            phase=phase, governing_workflow_version=version, plan_approval=_CURRENT_PLAN_APPROVAL,
+        )
         return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
 
     def test_known_phases_unaffected_still_twenty_including_both_2_2_phases(self) -> None:
@@ -262,29 +340,29 @@ class ProtocolTwoTwoCompatibilityParityTest(unittest.TestCase):
         self.assertIn("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", decision.KNOWN_PHASES)
         self.assertIn("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", decision.KNOWN_PHASES)
 
-    def test_declined_classification_is_identical_across_governing_versions(self) -> None:
-        for phase in sorted(decision.DECLINED_PHASES):
-            baseline = self._decide(phase, "1")
-            for version in ("2.1", "2.2"):
+    def test_selected_action_classification_equals_automatic_triples_membership(self) -> None:
+        for phase in sorted(_SELECTED_TOKEN_BY_PHASE):
+            for version in ("1", "2.1", "2.2"):
                 with self.subTest(phase=phase, governing_workflow_version=version):
                     result = self._decide(phase, version)
-                    self.assertEqual(result.declined, baseline.declined)
-                    self.assertEqual(result.automatic, baseline.automatic)
-                    self.assertEqual(result.action, baseline.action)
-                    self.assertIsNone(result.gate)
+                    classification = decision.classify_selected_action(
+                        phase, version, result.action.command,
+                    )
+                    self.assertEqual(result.automatic, classification.automatic)
+                    self.assertEqual(result.automatic, _expected_automatic(phase, version))
 
-    def test_gate_classification_is_identical_across_governing_versions(self) -> None:
-        for phase in sorted(decision.GATE_REPORT_PHASES):
-            baseline = self._decide(phase, "1")
-            for version in ("2.1", "2.2"):
+    def test_gate_classification_never_depends_on_triple_membership(self) -> None:
+        """``APPLYING_REVIEW_FEEDBACK`` and
+        ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` have ``"2.2"``
+        triples, yet gate at every version: a triple is necessary for a
+        launch, never sufficient."""
+        for phase in sorted(_GATE_PHASES):
+            for version in ("1", "2.1", "2.2"):
                 with self.subTest(phase=phase, governing_workflow_version=version):
                     result = self._decide(phase, version)
-                    self.assertEqual(result.declined, baseline.declined)
-                    self.assertEqual(result.automatic, baseline.automatic)
+                    self.assertIsNotNone(result.gate)
                     self.assertIsNone(result.action)
-                    self.assertEqual(result.gate.what_is_required, baseline.gate.what_is_required)
-                    self.assertEqual(result.gate.safe_resume_command,
-                                      baseline.gate.safe_resume_command)
+                    self.assertFalse(result.automatic)
 
 
 class UserOnlyDenylistTest(unittest.TestCase):
@@ -403,8 +481,8 @@ class CommandFilePartitionTest(unittest.TestCase):
         self.assertEqual(not_selected, _EXPECTED_NOT_SELECTED)
         self.assertEqual(user_only, _EXPECTED_USER_ONLY)
         self.assertEqual(len(selected) + len(not_selected) + len(user_only), 17)
-        self.assertEqual(len(selected), 4)
-        self.assertEqual(len(not_selected), 9)
+        self.assertEqual(len(selected), 8)
+        self.assertEqual(len(not_selected), 5)
         self.assertEqual(len(user_only), 4)
         # disjoint by construction: each stem appears in exactly one set
         self.assertEqual(selected & not_selected, set())
@@ -573,13 +651,242 @@ class Revision64PhaseWideningTest(unittest.TestCase):
         self.assertIsNone(result.action)
 
     def test_all_three_are_members_of_known_phases_and_report_only(self) -> None:
+        """The ``KNOWN_PHASES`` half is unchanged. The report-only half
+        under the general dispatch rule (CP3): ``AMENDING_PLAN`` is declined
+        by the rule, because no row declares it at any version, and the two
+        implementation-review phases are members of the interim
+        ``_PHASES_AWAITING_EVIDENCE_HANDLER`` (CP4 changes this clause
+        again)."""
         for phase in (
             "AMENDING_PLAN", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
             "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
         ):
             with self.subTest(phase=phase):
                 self.assertIn(phase, decision.KNOWN_PHASES)
-                self.assertIn(phase, decision.REPORT_ONLY_PHASES)
+        for version in ("1", "2.1", "2.2"):
+            with self.subTest(phase="AMENDING_PLAN", governing_workflow_version=version):
+                self.assertNotIn(("AMENDING_PLAN", version, "/milestone-plan"), decision.AUTOMATIC_TRIPLES)
+                result = self._decide("AMENDING_PLAN", governing_workflow_version=version)
+                self.assertTrue(result.declined)
+                self.assertEqual(
+                    result.reason,
+                    decision.uniform_decline_reason("AMENDING_PLAN", version, "/milestone-plan wi-1"),
+                )
+        for phase in ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"):
+            with self.subTest(phase=phase):
+                self.assertIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
+
+
+class AutomaticTriplesTest(unittest.TestCase):
+    """CP3 item 2: :data:`decision.AUTOMATIC_TRIPLES` is held equal to the
+    keys of ``controller.job.EXPECTED_OUTCOMES`` in both directions, so
+    "has a declared, verifiable expected outcome" and "is launched" cannot
+    drift apart, and every command it launches is a selected command
+    file."""
+
+    def test_equal_to_the_expected_outcome_keys_in_both_directions(self) -> None:
+        from controller import job
+
+        keys = {(eo.from_phase, eo.governing_version, eo.action) for eo in job.EXPECTED_OUTCOMES}
+        self.assertEqual(set(decision.AUTOMATIC_TRIPLES) - keys, set())
+        self.assertEqual(keys - set(decision.AUTOMATIC_TRIPLES), set())
+        self.assertEqual(len(decision.AUTOMATIC_TRIPLES), len(job.EXPECTED_OUTCOMES))
+
+    def test_command_stems_are_a_subset_of_selected_commands(self) -> None:
+        stems = {token[1:] for (_phase, _version, token) in decision.AUTOMATIC_TRIPLES}
+        self.assertLessEqual(stems, decision.SELECTED_COMMANDS)
+        # Every triple holds the slash-prefixed token form, never a stem.
+        for _phase, _version, token in decision.AUTOMATIC_TRIPLES:
+            self.assertTrue(token.startswith("/") and " " not in token, token)
+
+    def test_no_triple_names_a_user_only_command(self) -> None:
+        with TemporaryDirectory() as tmp:
+            user_only = decision.derive_user_only_commands(
+                fixtures.copy_real_commands_dir(Path(tmp) / "commands"),
+            )
+        for _phase, _version, token in decision.AUTOMATIC_TRIPLES:
+            self.assertNotIn(token[1:], user_only)
+
+    def test_command_token_is_the_first_word(self) -> None:
+        self.assertEqual(decision.command_token("/milestone-plan wi-1"), "/milestone-plan")
+        self.assertEqual(decision.command_token("/milestone-plan"), "/milestone-plan")
+
+
+class DispatchRuleTest(unittest.TestCase):
+    """CP3's own tests of the rule itself: it, not the handler, launches."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name) / "target"
+        self.managed_repo = fixtures.build_target_managed_repository(root)
+
+    def _decide(self, phase: str, version: str | None, **overrides):
+        work_item = fixtures.build_work_item_view(
+            phase=phase, governing_workflow_version=version, **overrides,
+        )
+        return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def test_removing_a_triple_turns_the_same_decision_into_a_decline(self) -> None:
+        before = self._decide("PLANNING", "2.1")
+        self.assertTrue(before.automatic)
+        reduced = decision.AUTOMATIC_TRIPLES - {("PLANNING", "2.1", "/milestone-plan")}
+        with mock.patch.object(decision, "AUTOMATIC_TRIPLES", reduced):
+            after = self._decide("PLANNING", "2.1")
+        self.assertFalse(after.automatic)
+        self.assertTrue(after.declined)
+        self.assertIsNone(after.gate)
+        self.assertEqual(after.action, before.action)
+        self.assertEqual(after.observed_phase, before.observed_phase)
+        self.assertEqual(
+            after.reason, decision.uniform_decline_reason("PLANNING", "2.1", "/milestone-plan wi-1"),
+        )
+
+    def test_removing_the_bootstrap_triple_declines_the_bootstrap_too(self) -> None:
+        self.assertTrue(decision.decide_no_work_item(self.managed_repo).automatic)
+        reduced = decision.AUTOMATIC_TRIPLES - {(decision.NO_PHASE, None, "/milestone-plan")}
+        with mock.patch.object(decision, "AUTOMATIC_TRIPLES", reduced):
+            result = decision.decide_no_work_item(self.managed_repo)
+        self.assertTrue(result.declined)
+        self.assertFalse(result.automatic)
+
+    def test_the_three_interim_phases_are_declined_even_though_their_triples_exist(self) -> None:
+        for phase, token in (
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "/review-implementation"),
+            ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "/record-manual-implementation-review"),
+            ("APPLYING_REVIEW_FEEDBACK", "/apply-implementation-review"),
+        ):
+            with self.subTest(phase=phase):
+                self.assertIn((phase, "2.2", token), decision.AUTOMATIC_TRIPLES)
+                self.assertIn(phase, decision._PHASES_AWAITING_EVIDENCE_HANDLER)
+                classification = decision.classify_selected_action(phase, "2.2", f"{token} wi-1")
+                self.assertFalse(classification.automatic)
+                self.assertEqual(
+                    classification.decline_reason,
+                    decision.interim_decline_reason(phase, "2.2", f"{token} wi-1"),
+                )
+        result = self._decide("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2")
+        self.assertTrue(result.declined)
+        self.assertEqual(result.action.command, "/review-implementation wi-1")
+        self.assertIn("evidence gates are not installed yet", result.reason)
+
+    def test_the_uniform_reason_names_the_phase_version_and_command(self) -> None:
+        reason = decision.uniform_decline_reason("AMENDING_PLAN", "2.2", "/milestone-plan wi-1")
+        self.assertEqual(
+            reason,
+            "AMENDING_PLAN selects /milestone-plan wi-1, which is model-invocable, but no "
+            'verifiable ExpectedOutcome is declared for (AMENDING_PLAN, "2.2", /milestone-plan), '
+            "so this Controller reports it instead of launching it",
+        )
+        self.assertIn("(PLANNING, None, /milestone-plan)",
+                      decision.uniform_decline_reason("PLANNING", None, "/milestone-plan wi-1"))
+
+    def test_a_gate_or_no_action_decision_passes_through_the_rule_unchanged(self) -> None:
+        for phase in ("AWAITING_PLAN_APPROVAL", "LEGACY_READY", "AMENDING_PLAN"):
+            with self.subTest(phase=phase):
+                result = self._decide(phase, "2.2")
+                self.assertIs(decision.apply_dispatch_rule(result, "2.2"), result)
+
+
+class ImplementingDispatchTest(unittest.TestCase):
+    """CP3 item 3: ``IMPLEMENTING``/``SELF_REVIEWING_IMPLEMENTATION`` select
+    ``/milestone-implement``, gating first on a plan approval step 1a
+    would refuse."""
+
+    PHASES = ("IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION")
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name) / "target"
+        self.managed_repo = fixtures.build_target_managed_repository(root)
+
+    def _decide(self, phase: str, version: str | None, plan_approval):
+        work_item = fixtures.build_work_item_view(
+            phase=phase, governing_workflow_version=version, plan_approval=plan_approval,
+        )
+        return decision.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def test_2_1_and_2_2_with_a_current_approval_are_automatic(self) -> None:
+        for phase in self.PHASES:
+            for version in ("2.1", "2.2"):
+                with self.subTest(phase=phase, governing_workflow_version=version):
+                    result = self._decide(
+                        phase, version, {"status": "CURRENT", "basis": "EXTERNAL_APPROVE"},
+                    )
+                    self.assertTrue(result.automatic, result.reason)
+                    self.assertFalse(result.declined)
+                    self.assertIsNone(result.gate)
+                    self.assertEqual(result.action.command, "/milestone-implement wi-1")
+
+    def test_version_1_is_declined_with_the_uniform_reason(self) -> None:
+        for phase in self.PHASES:
+            for plan_approval in (None, _CURRENT_PLAN_APPROVAL):
+                with self.subTest(phase=phase, plan_approval=plan_approval):
+                    result = self._decide(phase, "1", plan_approval)
+                    self.assertTrue(result.declined)
+                    self.assertFalse(result.automatic)
+                    self.assertIsNone(result.gate)
+                    self.assertEqual(result.action.command, "/milestone-implement wi-1")
+                    self.assertEqual(
+                        result.reason,
+                        decision.uniform_decline_reason(phase, "1", "/milestone-implement wi-1"),
+                    )
+
+    def test_a_stale_or_absent_plan_approval_gates(self) -> None:
+        for phase in self.PHASES:
+            for version in ("2.1", "2.2"):
+                for plan_approval in (
+                    None, {"status": "STALE"}, {}, {"status": "current"}, ["CURRENT"], "CURRENT",
+                ):
+                    with self.subTest(phase=phase, governing_workflow_version=version,
+                                      plan_approval=plan_approval):
+                        result = self._decide(phase, version, plan_approval)
+                        self.assertIsNone(result.action)
+                        self.assertFalse(result.automatic)
+                        self.assertFalse(result.declined)
+                        gate = result.gate
+                        self.assertIsNotNone(gate)
+                        self.assertEqual(gate.phase, phase)
+                        self.assertEqual(
+                            gate.what_is_required,
+                            "/milestone-implement's entry validation (step 1a) refuses on a "
+                            "missing or stale plan approval",
+                        )
+                        self.assertEqual(gate.safe_resume_command,
+                                         "workflow-controller explain --work-item wi-1")
+                        self.assertTrue(result.evidence[0].startswith("plan_approval: "))
+
+    def test_the_gate_never_names_a_user_only_command(self) -> None:
+        with TemporaryDirectory() as tmp:
+            user_only = decision.derive_user_only_commands(
+                fixtures.copy_real_commands_dir(Path(tmp) / "commands"),
+            )
+        result = self._decide("IMPLEMENTING", "2.2", None)
+        for stem in user_only:
+            self.assertNotIn(stem, result.gate.safe_resume_command)
+
+
+class PerPhaseSetRemovalTest(unittest.TestCase):
+    """CP3 item 5: Generation 1's per-phase sets are gone, and no module
+    references them, so no behaviour can depend on them."""
+
+    NAMES = ("REPORT_ONLY_PHASES", "DECLINED_PHASES", "GATE_REPORT_PHASES", "_DECLINED_COMMAND_BY_PHASE")
+
+    def test_decision_no_longer_defines_them(self) -> None:
+        for name in self.NAMES:
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(decision, name))
+
+    def test_no_module_outside_decision_references_them(self) -> None:
+        package = Path(decision.__file__).resolve().parent
+        pattern = re.compile(r"\b(" + "|".join(self.NAMES) + r")\b")
+        offenders = [
+            str(path.relative_to(package.parent))
+            for path in sorted(package.glob("*.py"))
+            if path.name != "decision.py" and pattern.search(path.read_text())
+        ]
+        self.assertEqual(offenders, [])
 
 
 class DecideNoWorkItemTest(unittest.TestCase):

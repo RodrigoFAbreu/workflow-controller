@@ -298,8 +298,29 @@ class ExplainCommandTest(unittest.TestCase):
         self.assertIn("human gate", out)
         self.assertIn("/approve-review plan wi-1", out)
 
+    def test_implementing_without_a_current_plan_approval_reports_the_gate(self) -> None:
+        """automatic-lifecycle-orchestration CP3: ``"2.1"`` ``IMPLEMENTING``
+        with ``plan_approval`` absent used to report a declined
+        ``/milestone-implement``; it is now the plan-approval gate."""
+        repo = _build_managed_target(self.tmp_root / "plan-approval-gate", phase="IMPLEMENTING")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_explain(self._args(repo), self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        out = buf.getvalue()
+        self.assertIn("human gate", out)
+        self.assertIn("entry validation (step 1a)", out)
+        self.assertIn("safe resume command: workflow-controller explain --work-item wi-1", out)
+        self.assertNotIn("declined", out)
+
     def test_declined_phase_reports_the_declined_action(self) -> None:
-        repo = _build_managed_target(self.tmp_root / "declined", phase="IMPLEMENTING")
+        """Re-pinned at ``"1"`` ``IMPLEMENTING``, which has no
+        ``ExpectedOutcome`` row: the general dispatch rule declines it."""
+        repo = _build_managed_target(
+            self.tmp_root / "declined", phase="IMPLEMENTING", governing_workflow_version="1",
+        )
         import contextlib
         import io
         buf = io.StringIO()
@@ -309,6 +330,8 @@ class ExplainCommandTest(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("declined", out)
         self.assertIn("/milestone-implement wi-1", out)
+        self.assertIn("no verifiable ExpectedOutcome is declared for (IMPLEMENTING, \"1\", "
+                      "/milestone-implement)", out)
 
     def test_json_report_carries_gate_and_reason(self) -> None:
         repo = _build_managed_target(self.tmp_root / "gate-json", phase="AWAITING_PLAN_APPROVAL")

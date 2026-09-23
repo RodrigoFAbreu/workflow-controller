@@ -27,7 +27,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job  # noqa: E402
+from controller import decision, evidence, job, target_state  # noqa: E402
 from controller.decision import Action, NO_PHASE, Decision, phase_from_wire  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT, SOURCE_KIND_WORKTREE  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -186,26 +186,40 @@ class NoLaunchRecordTest(unittest.TestCase):
         self.assertNotIn("worker", record)
         self._no_process_spawned()
 
-    def test_declined_phase_writes_declined_no_worker_spawned(self) -> None:
-        managed_repo = _build_target(self.tmp_root, phase="IMPLEMENTING")
-        import os
-        old = os.environ.get("FAKE_CLAUDE_DIAG_FILE")
-        os.environ["FAKE_CLAUDE_DIAG_FILE"] = str(self._diag_path())
-        try:
-            record = job.execute_step(
+    def _execute_with_diag(self, managed_repo):
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_DIAG_FILE": str(self._diag_path())}):
+            return job.execute_step(
                 managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
                 claude_bin=str(FAKE_CLAUDE),
             )
-        finally:
-            if old is None:
-                os.environ.pop("FAKE_CLAUDE_DIAG_FILE", None)
-            else:
-                os.environ["FAKE_CLAUDE_DIAG_FILE"] = old
+
+    def test_implementing_without_a_current_plan_approval_writes_gate_blocked(self) -> None:
+        """automatic-lifecycle-orchestration CP3: ``"2.1"`` ``IMPLEMENTING``
+        with ``plan_approval`` absent used to be ``DECLINED``; it is now the
+        plan-approval gate, because ``/milestone-implement``'s step 1a
+        would refuse."""
+        managed_repo = _build_target(self.tmp_root, phase="IMPLEMENTING", plan_approval=None)
+        record = self._execute_with_diag(managed_repo)
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        gate = record["human_gate_pending"]
+        self.assertEqual(gate["phase"], "IMPLEMENTING")
+        self.assertIn("step 1a", gate["what_is_required"])
+        self.assertEqual(gate["safe_resume_command"], "workflow-controller explain --work-item wi-1")
+        self.assertFalse(record["handoff_pending"])
+        self.assertIsNone(record["selected_action"]["command"])
+        self.assertNotIn("worker", record)
+        self._no_process_spawned()
+
+    def test_declined_phase_writes_declined_no_worker_spawned(self) -> None:
+        """Re-pinned at ``"1"`` ``IMPLEMENTING``, which has no
+        ``ExpectedOutcome`` row: the general dispatch rule declines it."""
+        managed_repo = _build_target(self.tmp_root, phase="IMPLEMENTING", governing_workflow_version="1")
+        record = self._execute_with_diag(managed_repo)
         self.assertEqual(record["status"], job.STATUS_DECLINED)
         self.assertIsNone(record["human_gate_pending"])
         self.assertFalse(record["handoff_pending"])
         self.assertTrue(record["selected_action"]["declined"])
-        self.assertIsNotNone(record["selected_action"]["command"])
+        self.assertEqual(record["selected_action"]["command"], "/milestone-implement wi-1")
         self.assertNotIn("worker", record)
         self._no_process_spawned()
 
@@ -234,6 +248,183 @@ class NoLaunchRecordTest(unittest.TestCase):
         self.assertIsNone(record["human_gate_pending"])
         self.assertTrue(record["selected_action"]["automatic"])
         self._no_process_spawned()
+
+
+def _only_job_record(runtime_root: Path) -> dict:
+    files = sorted((runtime_root / "jobs").glob("*.json"))
+    assert len(files) == 1, files
+    return json.loads(files[0].read_text())
+
+
+class DispatchRuleDeclineTest(unittest.TestCase):
+    """automatic-lifecycle-orchestration CP3: every selection the general
+    dispatch rule declines reaches ``execute_step`` as an ordinary
+    ``DECLINED`` record. At the base commit each case below raised a bare
+    ``AssertionError`` from ``_expected_outcome_for``, after flushing a
+    ``PLANNED`` record."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+
+    def _execute(self, managed_repo, runtime_root: Path):
+        never = self.tmp_root / "never-created"
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_REQUIRE_FILE": str(never)}):
+            return job.execute_step(
+                managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root, claude_bin=str(FAKE_CLAUDE),
+            )
+
+    def _assert_declined_record(self, record: dict, runtime_root: Path, *, phase: str,
+                                version: str | None, command: str) -> None:
+        self.assertEqual(record["status"], job.STATUS_DECLINED)
+        self.assertTrue(record["selected_action"]["declined"])
+        self.assertFalse(record["selected_action"]["automatic"])
+        self.assertEqual(record["selected_action"]["command"], command)
+        self.assertEqual(
+            record["selected_action"]["reason"], decision.uniform_decline_reason(phase, version, command),
+        )
+        self.assertNotIn("worker", record)
+        self.assertNotIn("expected_transition", record)
+        # The one record on disk is the terminal DECLINED one -- no
+        # PLANNED record was flushed first.
+        self.assertEqual(_only_job_record(runtime_root)["status"], job.STATUS_DECLINED)
+
+    def test_unconsumed_functional_review_findings_are_declined_not_a_crash(self) -> None:
+        """The regression: ``/apply-functional-review`` has no row."""
+        for version in ("1", "2.1", "2.2"):
+            with self.subTest(governing_workflow_version=version):
+                case_root = self.tmp_root / f"functional-{version}"
+                managed_repo = _build_target(
+                    case_root, phase="AWAITING_FUNCTIONAL_REVIEW", governing_workflow_version=version,
+                    implementation_revision=1,
+                )
+                root = managed_repo.root
+                (root / "docs" / "ACTIVE_MILESTONE.md").write_text("checklist content\n")
+                blob = fixtures.run(
+                    ["git", "hash-object", "--", "docs/ACTIVE_MILESTONE.md"], cwd=root,
+                ).stdout.strip()
+                fixtures.run(["git", "add", "docs/ACTIVE_MILESTONE.md"], cwd=root)
+                fixtures.run([
+                    "git", "commit", "-q", "-m",
+                    f"checklist\n\nWorkflow-Functional-Checklist: wi-1/1/{blob}\n"
+                    "Workflow-Work-Item: wi-1\n",
+                ], cwd=root)
+                findings = root / ".ai-review" / "feedback" / "FUNCTIONAL_REVIEW.md"
+                findings.parent.mkdir(parents=True, exist_ok=True)
+                findings.write_text("findings\n")
+
+                runtime_root = case_root / "runtime"
+                record = self._execute(managed_repo, runtime_root)
+                self._assert_declined_record(
+                    record, runtime_root, phase="AWAITING_FUNCTIONAL_REVIEW", version=version,
+                    command="/apply-functional-review wi-1",
+                )
+                self.assertEqual(record["selected_action"]["evidence"],
+                                 ["unconsumed FUNCTIONAL_REVIEW.md findings"])
+
+    # -- CP3 item 6: the combinations no Workflow writer reaches.
+
+    _LOCAL_APPROVE_LEDGER = {
+        "review_content_id": "c" * 64,
+        "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
+    }
+
+    def _no_evidence(self, root: Path) -> None:
+        pass
+
+    def _coherent_plan_manifest(self, root: Path) -> None:
+        fixtures.write_manifest(
+            root, ".ai-review/wi-1/current",
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(root)),
+        )
+
+    def _admissible_manual_approve(self, root: Path) -> None:
+        self._coherent_plan_manifest(root)
+        fixtures.write_review_feedback(root, ".ai-review/wi-1/feedback", fixtures.build_review_feedback_text(
+            status="APPROVE", reviewer_role="MANUAL_EXTERNAL_PLAN_REVIEW", reviewed_bundle_id="b" * 64,
+            reviewed_base_commit="0" * 40, reviewed_content_id="c" * 64,
+        ))
+
+    def _admissible_revise(self, root: Path) -> None:
+        self._coherent_plan_manifest(root)
+        fixtures.write_review_feedback(root, ".ai-review/wi-1/feedback", fixtures.build_review_feedback_text(
+            status="REVISE", reviewed_bundle_id="b" * 64, reviewed_base_commit="0" * 40,
+        ))
+
+    def _unreachable_cases(self):
+        """``(phase, version, command, evidence setup)`` for every
+        combination the plan's "Decisions that change at combinations no
+        Workflow writer reaches" names: each selects an action that was
+        automatic at base."""
+        by_phase = {
+            "PLANNING": ("/milestone-plan wi-1", self._no_evidence),
+            "REVISING_PLAN": ("/apply-plan-review wi-1", self._no_evidence),
+            "AWAITING_LOCAL_PLAN_REVIEW": ("/review-plan wi-1", self._coherent_plan_manifest),
+            "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW": ("/record-manual-plan-review wi-1",
+                                                     self._admissible_manual_approve),
+            "AWAITING_EXTERNAL_PLAN_REVIEW": ("/apply-plan-review wi-1", self._admissible_revise),
+        }
+        pairs = [
+            ("REVISING_PLAN", "1"), ("AWAITING_LOCAL_PLAN_REVIEW", "1"),
+            ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "1"),
+            ("AWAITING_EXTERNAL_PLAN_REVIEW", "2.1"), ("AWAITING_EXTERNAL_PLAN_REVIEW", "2.2"),
+        ] + [(phase, None) for phase in by_phase]
+        for phase, version in pairs:
+            command, setup = by_phase[phase]
+            yield phase, version, command, setup
+
+    def test_unreachable_combinations_are_declined_by_decide_and_by_execute_step(self) -> None:
+        cases = list(self._unreachable_cases())
+        self.assertEqual(len(cases), 10)
+        for index, (phase, version, command, setup) in enumerate(cases):
+            with self.subTest(phase=phase, governing_workflow_version=version):
+                case_root = self.tmp_root / f"unreachable-{index}"
+                managed_repo = _build_target(
+                    case_root, phase=phase, governing_workflow_version=version, base_commit="0" * 40,
+                    plan_review_stages=self._LOCAL_APPROVE_LEDGER,
+                )
+                setup(managed_repo.root)
+                self.assertNotIn((phase, version, command.split()[0]), decision.AUTOMATIC_TRIPLES)
+
+                snapshot = target_state.read(managed_repo)
+                work_item = target_state.select_work_item(snapshot, work_item_id="wi-1")
+                result = evidence.decide(managed_repo, snapshot, work_item)
+                self.assertTrue(result.declined, result.reason)
+                self.assertFalse(result.automatic)
+                self.assertEqual(result.action.command, command)
+                self.assertEqual(result.reason, decision.uniform_decline_reason(phase, version, command))
+
+                runtime_root = case_root / "runtime"
+                record = self._execute(managed_repo, runtime_root)
+                self._assert_declined_record(record, runtime_root, phase=phase, version=version,
+                                             command=command)
+
+    def test_each_case_selects_its_action_automatically_when_a_triple_is_declared(self) -> None:
+        """The same fixtures at a combination the rule does launch: the
+        declines above are the rule's, not a fixture that gates."""
+        reachable = {
+            "PLANNING": "2.1", "REVISING_PLAN": "2.2", "AWAITING_LOCAL_PLAN_REVIEW": "2.2",
+            "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW": "2.1", "AWAITING_EXTERNAL_PLAN_REVIEW": "1",
+        }
+        seen = set()
+        for index, (phase, _version, command, setup) in enumerate(self._unreachable_cases()):
+            if phase in seen:
+                continue
+            seen.add(phase)
+            with self.subTest(phase=phase):
+                case_root = self.tmp_root / f"reachable-{index}"
+                managed_repo = _build_target(
+                    case_root, phase=phase, governing_workflow_version=reachable[phase],
+                    base_commit="0" * 40, plan_review_stages=self._LOCAL_APPROVE_LEDGER,
+                )
+                setup(managed_repo.root)
+                snapshot = target_state.read(managed_repo)
+                work_item = target_state.select_work_item(snapshot, work_item_id="wi-1")
+                result = evidence.decide(managed_repo, snapshot, work_item)
+                self.assertTrue(result.automatic, result.reason)
+                self.assertEqual(result.action.command, command)
+        self.assertEqual(seen, set(reachable))
 
 
 class LaunchPathTest(unittest.TestCase):

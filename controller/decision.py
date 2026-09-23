@@ -20,7 +20,9 @@ would be the cycle ``tests/test_package_structure.py``'s
 pass real ``ManagedRepository``/``WorkflowSnapshot``/``WorkItemView``
 instances, and this module only ever reads the handful of attributes named
 in each function's own docstring (``managed_repo.root``, and off
-``work_item``: ``work_item_id``, ``phase``, ``governing_workflow_version``).
+``work_item``: ``work_item_id``, ``phase``, ``governing_workflow_version``,
+and -- for the ``IMPLEMENTING``/``SELF_REVIEWING_IMPLEMENTATION``
+plan-approval gate -- ``plan_approval``).
 **``NO_PHASE``/``NO_PHASE_WIRE`` are the one exception to "imports nothing
 from later modules", and it runs the other way**: this module *declares*
 them (revision 71 relocation, ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``'s
@@ -66,6 +68,16 @@ drive"): CP4 reports it with a fixed, evidence-independent text, exactly
 as it already does for the three pre-existing static gate phases
 (``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW``, ``APPLYING_REVIEW_FEEDBACK``,
 ``AWAITING_FUNCTIONAL_REVIEW``); CP4B sharpens all four alike.
+
+**The general automatic-dispatch rule** (``docs/ai-workflow/
+CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md``, CP3) replaced
+Generation 1's per-phase report-only/declined/gate sets. Every phase
+handler -- here and in ``controller.evidence`` -- either returns a gate or
+*selects* an action, and :func:`apply_dispatch_rule` then decides, in one
+place for every phase alike, whether the selection launches: automatic iff
+its ``(phase, governing_workflow_version, command token)`` is one of
+:data:`AUTOMATIC_TRIPLES` (the keys of ``controller.job.EXPECTED_OUTCOMES``),
+declined otherwise.
 """
 
 from __future__ import annotations
@@ -183,50 +195,121 @@ VOCABULARY_PHASES: frozenset[str] = frozenset({
     "AWAITING_USER_ACCEPTANCE",
 })
 
-#: The eight report-only phases (revision 10's narrowing, widened by
-#: revision 64's three-phase 2.5.1 baseline addition): ``decide()``
-#: returns ``automatic=False`` at every one of them, never launches a
-#: worker for any of them, and this set is what the two-shape assertion
-#: below is closed over.
-REPORT_ONLY_PHASES: frozenset[str] = frozenset({
-    "IMPLEMENTING",
-    "SELF_REVIEWING_IMPLEMENTATION",
-    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
-    "APPLYING_REVIEW_FEEDBACK",
-    "AWAITING_FUNCTIONAL_REVIEW",
-    "AMENDING_PLAN",
+# ---------------------------------------------------------------------------
+# The general automatic-dispatch rule (automatic-lifecycle-orchestration
+# CP3, ``docs/ai-workflow/CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md``,
+# "The general automatic-dispatch rule").
+# ---------------------------------------------------------------------------
+
+#: Every ``(phase, governing_workflow_version, command token)`` a selected
+#: action may be **launched** at -- a literal copy of
+#: ``{(eo.from_phase, eo.governing_version, eo.action) for eo in
+#: controller.job.EXPECTED_OUTCOMES}``. This module cannot import ``job``
+#: (it sits later in ``DEPENDENCY_ORDER``), so the copy is held equal to the
+#: table by a two-directional test, the same pattern the ``KNOWN_PHASES``
+#: copies use: "has a declared, verifiable expected outcome" and "is
+#: launched" can never drift apart. The command token is the
+#: slash-prefixed first word of ``Action.command``.
+AUTOMATIC_TRIPLES: frozenset[tuple["str | _NoPhaseType", str | None, str]] = frozenset({
+    # The plan stage (rows 1-7).
+    ("PLANNING", "1", "/milestone-plan"),
+    ("PLANNING", "2.1", "/milestone-plan"),
+    ("PLANNING", "2.2", "/milestone-plan"),
+    ("AWAITING_LOCAL_PLAN_REVIEW", "2.1", "/review-plan"),
+    ("AWAITING_LOCAL_PLAN_REVIEW", "2.2", "/review-plan"),
+    ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "2.1", "/record-manual-plan-review"),
+    ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "2.2", "/record-manual-plan-review"),
+    ("AWAITING_EXTERNAL_PLAN_REVIEW", "1", "/apply-plan-review"),
+    ("REVISING_PLAN", "2.1", "/apply-plan-review"),
+    ("REVISING_PLAN", "2.2", "/apply-plan-review"),
+    (NO_PHASE, None, "/milestone-plan"),
+    # The implementation stage (rows 12-18).
+    ("IMPLEMENTING", "2.1", "/milestone-implement"),
+    ("IMPLEMENTING", "2.2", "/milestone-implement"),
+    ("SELF_REVIEWING_IMPLEMENTATION", "2.1", "/milestone-implement"),
+    ("SELF_REVIEWING_IMPLEMENTATION", "2.2", "/milestone-implement"),
+    ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation"),
+    ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2", "/record-manual-implementation-review"),
+    ("APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review"),
+})
+
+#: **Interim, removed by CP4/CP4B.** The three phases whose
+#: ``ExpectedOutcome`` rows (16-18) exist but whose evidence gates
+#: (``REJECTED``/implementation-bundle coherence/``BLOCK``/admissibility)
+#: are installed only by a later checkpoint. :func:`classify_selected_action`
+#: declines any action selected at one of them, so each keeps its base,
+#: non-launching decision until then -- without this set, row 16 would make
+#: ``/review-implementation`` automatic with none of those gates in front of
+#: it. CP4 removes the first two phases, and CP4B removes the set.
+_PHASES_AWAITING_EVIDENCE_HANDLER: frozenset[str] = frozenset({
     "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
     "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "APPLYING_REVIEW_FEEDBACK",
 })
 
-#: The four of ``REPORT_ONLY_PHASES`` that are automation-safe -- the
-#: Controller knows the next action and it is model-invocable, this
-#: generation simply does not run it (``declined=True``, ``action``
-#: populated, ``gate=None``) -- as opposed to the four that are genuine
-#: human gates (``gate`` populated, ``action=None``). ``AMENDING_PLAN`` and
-#: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW`` join this set at revision 64,
-#: each assigned by the same automation-safe criterion the original two
-#: were ("Revision 64 assigns the three phases the 2.5.1 baseline adds").
-DECLINED_PHASES: frozenset[str] = frozenset({
-    "IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION", "AMENDING_PLAN",
-    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
-})
 
-#: The four of ``REPORT_ONLY_PHASES`` that are genuine human gates.
-GATE_REPORT_PHASES: frozenset[str] = REPORT_ONLY_PHASES - DECLINED_PHASES
+def command_token(command: str) -> str:
+    """The one action normalisation: the slash-prefixed command token
+    (``"/milestone-plan"``) of a full ``Action.command``
+    (``"/milestone-plan wi-1"``) -- the form ``AUTOMATIC_TRIPLES`` and
+    ``ExpectedOutcome.action`` both hold."""
+    return command.split()[0]
 
-#: Per-``DECLINED_PHASES``-member command, keyed by phase (revision 64:
-#: ``AMENDING_PLAN``'s next action is ``/milestone-plan``, the same command
-#: ``PLANNING`` drives automatically -- not ``/milestone-implement``, which
-#: only the two original declined phases select;
-#: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``'s is ``/review-implementation``,
-#: already ``DELIBERATELY_NOT_SELECTED_COMMANDS``'s own reason for it).
-_DECLINED_COMMAND_BY_PHASE: dict[str, str] = {
-    "IMPLEMENTING": "milestone-implement",
-    "SELF_REVIEWING_IMPLEMENTATION": "milestone-implement",
-    "AMENDING_PLAN": "milestone-plan",
-    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW": "review-implementation",
-}
+
+def _triple_text(phase: "str | _NoPhaseType", version: str | None, token: str) -> str:
+    version_text = "None" if version is None else f'"{version}"'
+    return f"({phase_to_wire(phase)}, {version_text}, {token})"
+
+
+def uniform_decline_reason(phase: "str | _NoPhaseType", version: str | None, command: str) -> str:
+    """The single reason every action the dispatch rule declines carries,
+    whatever phase selected it."""
+    return (
+        f"{phase_to_wire(phase)} selects {command}, which is model-invocable, but no verifiable "
+        f"ExpectedOutcome is declared for {_triple_text(phase, version, command_token(command))}, "
+        "so this Controller reports it instead of launching it"
+    )
+
+
+def interim_decline_reason(phase: str, version: str | None, command: str) -> str:
+    """The reason for an action selected at a
+    :data:`_PHASES_AWAITING_EVIDENCE_HANDLER` phase. Distinct from
+    :func:`uniform_decline_reason` because its ``ExpectedOutcome`` *is*
+    declared -- the uniform text would be false here."""
+    return (
+        f"{phase} selects {command}; an ExpectedOutcome is declared for "
+        f"{_triple_text(phase, version, command_token(command))}, but this phase's evidence "
+        "gates are not installed yet, so this Controller reports it instead of launching it"
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class ActionClassification:
+    """:func:`classify_selected_action`'s answer: ``automatic`` iff the
+    selected action may be launched; otherwise ``decline_reason`` says
+    why not."""
+
+    automatic: bool
+    decline_reason: str | None
+
+
+def classify_selected_action(
+    phase: "str | _NoPhaseType", version: str | None, command: str,
+) -> ActionClassification:
+    """The general automatic-dispatch rule, in one place for every phase
+    alike: a selected ``command`` is **automatic** iff ``(phase, version,
+    command_token(command))`` is a member of :data:`AUTOMATIC_TRIPLES` (and
+    ``phase`` is not an interim :data:`_PHASES_AWAITING_EVIDENCE_HANDLER`
+    phase), and **declined** otherwise. "Model-invocable and not
+    user-only" is already guaranteed by :func:`classify_command_files`'s
+    partition (test time) and ``worker.USER_ONLY_COMMANDS`` (launch time);
+    "not otherwise blocked" is the phase handler's own gate, which never
+    reaches this function."""
+    if phase in _PHASES_AWAITING_EVIDENCE_HANDLER:
+        return ActionClassification(False, interim_decline_reason(phase, version, command))
+    if (phase, version, command_token(command)) in AUTOMATIC_TRIPLES:
+        return ActionClassification(True, None)
+    return ActionClassification(False, uniform_decline_reason(phase, version, command))
 
 
 # ---------------------------------------------------------------------------
@@ -297,47 +380,43 @@ def carries_disable_model_invocation_flag(text: str) -> bool:
     return any(line.strip() == _DISABLE_MODEL_INVOCATION_LINE for line in block.splitlines())
 
 
-#: The four command files ``decide()`` may return as an :class:`Action`.
-#: Eleven is the *row* count of the automatic mapping this partition is
-#: drawn from -- the plan's own CP6B table, transcribed as
-#: ``controller/job.py``'s ``EXPECTED_OUTCOMES``; a documentation
-#: cross-reference only, since ``job`` imports this module and never the
-#: reverse. It was seven until the
-#: ``workflow-controller-protocol-2-2-compatibility`` milestone's CP1 added
-#: four ``"2.2"`` plan-review rows. ``milestone-plan.md`` is selected from
-#: four of those eleven rows, ``apply-plan-review.md`` from three, and
-#: ``review-plan.md``/``record-manual-plan-review.md`` from two each -- this
-#: partition is over *files*, not rows, so CP1's four extra rows left it
-#: unchanged.
+#: The eight command files a selected action may be **launched** for: the
+#: command stems of :data:`AUTOMATIC_TRIPLES`, i.e. of the eighteen rows of
+#: ``controller/job.py``'s ``EXPECTED_OUTCOMES`` (a documentation
+#: cross-reference only -- ``job`` imports this module, never the reverse;
+#: a test holds ``{token[1:] for (_, _, token) in AUTOMATIC_TRIPLES}``
+#: inside this set). This partition is over *files*, not rows.
 SELECTED_COMMANDS: frozenset[str] = frozenset({
     "milestone-plan",
     "review-plan",
     "record-manual-plan-review",
     "apply-plan-review",
+    "milestone-implement",
+    "review-implementation",
+    "apply-implementation-review",
+    "record-manual-implementation-review",
 })
 
-#: The nine command files ``decide()`` deliberately never selects, each
-#: with the one-line reason the plan gives for excluding it.
+#: The five model-invocable command files no ``ExpectedOutcome`` row
+#: declares, so the dispatch rule never launches any of them, each with the
+#: one-line reason.
 DELIBERATELY_NOT_SELECTED_COMMANDS: dict[str, str] = {
-    "review-implementation": (
-        "its own write would close a review loop with no external reviewer in it"
-    ),
     "review-functional": (
-        "its own write would close a review loop with no external reviewer in it"
+        "an advisory, report-only review that writes no Workflow state, so no ExpectedOutcome "
+        "row declares it and the dispatch rule never launches it"
     ),
-    "milestone-implement": "revision 10's report-only set",
-    "apply-implementation-review": "revision 10's report-only set",
-    "apply-functional-review": "revision 10's report-only set",
-    "prepare-functional-review": "revision 10's report-only set",
-    "record-manual-implementation-review": (
-        "revision 64: the implementation stage's own manual-verdict ingestion, "
-        "model-invocable and on neither recogniser, deliberately not selected for the "
-        "same reason the rest of the implementation stage is report-only -- it is the "
-        "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW gate's named next action, run "
-        "by a human"
+    "apply-functional-review": (
+        "AWAITING_FUNCTIONAL_REVIEW selects it when findings are unconsumed, but no "
+        "ExpectedOutcome row declares it, so the dispatch rule declines it"
     ),
-    "bootstrap-workflow-v2": "outside the milestone lifecycle entirely",
-    "prepare-review": "outside the milestone lifecycle entirely",
+    "prepare-functional-review": (
+        "named only as a functional-review gate's safe_resume_command; no ExpectedOutcome row "
+        "declares it, so the dispatch rule never launches it"
+    ),
+    "bootstrap-workflow-v2": (
+        "outside the milestone lifecycle entirely; no ExpectedOutcome row declares it"
+    ),
+    "prepare-review": "outside the milestone lifecycle entirely; no ExpectedOutcome row declares it",
 }
 
 #: Category labels :func:`classify_command_files` returns.
@@ -501,6 +580,38 @@ class Decision:
     reason: str
 
 
+def apply_dispatch_rule(selected: Decision, governing_workflow_version: str | None) -> Decision:
+    """Turn a phase handler's output into the final :class:`Decision`.
+
+    Handlers only *select*: a selected action arrives as
+    ``automatic=True`` with its ``action`` populated, and whether it is
+    launched is decided here, by :func:`classify_selected_action` keyed on
+    ``(selected.observed_phase, governing_workflow_version, command
+    token)`` -- the same key ``controller.job`` looks the ``ExpectedOutcome``
+    up by. A declined selection keeps its phase, action and evidence and
+    carries the classification's reason. Every other decision (a gate, a
+    no-action phase, an already-declined one) passes through unchanged, so
+    applying the rule twice is harmless."""
+    if not selected.automatic or selected.action is None:
+        return selected
+    classification = classify_selected_action(
+        selected.observed_phase, governing_workflow_version, selected.action.command,
+    )
+    if classification.automatic:
+        return selected
+    # Built field by field (not `dataclasses.replace`), so the package-wide
+    # write-containment scan never has a `.replace(` call to adjudicate.
+    return Decision(
+        observed_phase=selected.observed_phase,
+        evidence=selected.evidence,
+        action=selected.action,
+        automatic=False,
+        gate=None,
+        declined=True,
+        reason=classification.decline_reason,
+    )
+
+
 # ---------------------------------------------------------------------------
 # decide()
 # ---------------------------------------------------------------------------
@@ -611,18 +722,87 @@ def _decide_awaiting_plan_approval(managed_repo: Any, work_item: Any) -> Decisio
     )
 
 
-def _decide_declined(*, phase: str, command: str, managed_repo: Any, work_item: Any) -> Decision:
-    wid = _work_item_id(work_item)
+def _selected(*, phase: str, command: str, reason: str, evidence: tuple[str, ...] = ()) -> Decision:
+    """A phase handler's selection of ``command``, ahead of
+    :func:`apply_dispatch_rule`, which alone decides whether it launches."""
     return Decision(
         observed_phase=phase,
-        evidence=(),
+        evidence=evidence,
         action=Action(command=command),
-        automatic=False,
+        automatic=True,
         gate=None,
-        declined=True,
-        reason=f"{phase} is automation-safe -- {command} is model-invocable and on "
-               "neither denylist -- but Generation 1's own scope (revision 10) reports "
-               "it rather than launching it",
+        declined=False,
+        reason=reason,
+    )
+
+
+#: The governing versions whose ``/milestone-implement`` branch runs step
+#: 1a's entry validation (``implementing_entry_reachable``) on every
+#: invocation -- the ``"2.1"`` branch, which ``"2.2"`` takes identically.
+#: The ``"1"`` branch reads no plan approval, so it gets no gate here: it
+#: is selected and the dispatch rule declines it (no row).
+_PLAN_APPROVAL_GATED_VERSIONS: frozenset[str] = frozenset({"2.1", "2.2"})
+
+
+def _plan_approval_status(plan_approval: Any) -> str:
+    if plan_approval is None:
+        return "absent"
+    if not isinstance(plan_approval, dict):
+        return f"not an object ({type(plan_approval).__name__})"
+    return f"status {plan_approval.get('status')!r}"
+
+
+def _decide_implementing(managed_repo: Any, work_item: Any) -> Decision:
+    """``IMPLEMENTING``/``SELF_REVIEWING_IMPLEMENTATION``: select
+    ``/milestone-implement <id>``, after gating first when the plan
+    approval is not ``CURRENT`` -- launching a worker that the command's
+    own step 1a refuses would be wasted spend."""
+    phase = work_item.phase
+    wid = _work_item_id(work_item)
+    plan_approval = work_item.plan_approval
+    current = isinstance(plan_approval, dict) and plan_approval.get("status") == "CURRENT"
+    if work_item.governing_workflow_version in _PLAN_APPROVAL_GATED_VERSIONS and not current:
+        status = _plan_approval_status(plan_approval)
+        return Decision(
+            observed_phase=phase,
+            evidence=(f"plan_approval: {status}",),
+            action=None,
+            automatic=False,
+            gate=HumanGate(
+                repository=str(managed_repo.root),
+                work_item_id=wid,
+                phase=phase,
+                what_is_required=(
+                    "/milestone-implement's entry validation (step 1a) refuses on a missing "
+                    "or stale plan approval"
+                ),
+                artifact_path=None,
+                safe_resume_command=f"workflow-controller explain --work-item {wid}",
+            ),
+            declined=False,
+            reason=f"{phase}: plan_approval is {status}, not CURRENT -- /milestone-implement "
+                   "would refuse at its own step 1a, so nothing is launched",
+        )
+    return _selected(
+        phase=phase, command=f"/milestone-implement {wid}",
+        reason=f"{phase}: /milestone-implement is the phase's one legal next step (one "
+               "checkpoint per invocation, then the final self-review and bundle generation)",
+    )
+
+
+def _decide_amending_plan(managed_repo: Any, work_item: Any) -> Decision:
+    return _selected(
+        phase="AMENDING_PLAN", command=f"/milestone-plan {_work_item_id(work_item)}",
+        reason="AMENDING_PLAN's next step is /milestone-plan",
+    )
+
+
+def _decide_awaiting_local_implementation_review(managed_repo: Any, work_item: Any) -> Decision:
+    return _selected(
+        phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+        command=f"/review-implementation {_work_item_id(work_item)}",
+        reason="AWAITING_LOCAL_IMPLEMENTATION_REVIEW's next step is the local "
+               "/review-implementation stage",
     )
 
 
@@ -683,6 +863,51 @@ def _decide_vocabulary(phase: str, managed_repo: Any, work_item: Any) -> Decisio
     )
 
 
+#: The evidence-independent gate each of these phases reports from this
+#: module: ``(what_is_required, safe_resume_command template)``. Three of
+#: the four are refined by ``controller.evidence``'s own handlers, which
+#: run first; ``APPLYING_REVIEW_FEEDBACK`` is decided here (its corrected
+#: text is CP4's).
+_STATIC_GATES: dict[str, tuple[str, str]] = {
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW": (
+        "an external implementation review must be uploaded and its verdict "
+        "recorded (record it with /apply-implementation-review, or approve it "
+        "with the user-only /approve-review implementation)",
+        "/apply-implementation-review {wid}",
+    ),
+    "APPLYING_REVIEW_FEEDBACK": (
+        "an implementation-review apply was interrupted here; no Workflow "
+        "command can legally run from this phase -- a human must decide how "
+        "to recover",
+        "workflow-controller explain --work-item {wid}",
+    ),
+    "AWAITING_FUNCTIONAL_REVIEW": (
+        "manual functional testing findings must be prepared, placed and "
+        "consumed before this milestone can be accepted "
+        "(/prepare-functional-review, then /apply-functional-review, then the "
+        "user-only /accept-milestone)",
+        "/prepare-functional-review {wid}",
+    ),
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": (
+        "an implementation bundle is waiting on a manual external reviewer's "
+        "verdict -- upload the bundle and paste the verdict, or, once one is "
+        "on file, record it with /record-manual-implementation-review (a "
+        "Status: BLOCK verdict requires explicit user resolution first)",
+        "/record-manual-implementation-review {wid}",
+    ),
+}
+
+
+def _decide_static_gate(managed_repo: Any, work_item: Any) -> Decision:
+    phase = work_item.phase
+    what_is_required, resume_template = _STATIC_GATES[phase]
+    return _decide_gate_report(
+        phase=phase, what_is_required=what_is_required,
+        safe_resume_command=resume_template.format(wid=_work_item_id(work_item)),
+        managed_repo=managed_repo, work_item=work_item,
+    )
+
+
 _DISPATCH = {
     "PLANNING": _decide_planning,
     "REVISING_PLAN": _decide_revising_plan,
@@ -690,6 +915,11 @@ _DISPATCH = {
     "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW": _decide_awaiting_manual_external_plan_review,
     "AWAITING_EXTERNAL_PLAN_REVIEW": _decide_awaiting_external_plan_review,
     "AWAITING_PLAN_APPROVAL": _decide_awaiting_plan_approval,
+    "AMENDING_PLAN": _decide_amending_plan,
+    "IMPLEMENTING": _decide_implementing,
+    "SELF_REVIEWING_IMPLEMENTATION": _decide_implementing,
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW": _decide_awaiting_local_implementation_review,
+    **{phase: _decide_static_gate for phase in _STATIC_GATES},
     "LEGACY_READY": _decide_legacy_ready,
     "MILESTONE_COMPLETE": _decide_milestone_complete,
 }
@@ -715,6 +945,11 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     ``snapshot`` is accepted for CP4B's own future evidence reads (e.g.
     resolving sibling work items) and is not read by CP4's own mapping.
 
+    Each phase handler either gates or *selects* an action; whether a
+    selected action launches is decided afterwards, for every phase alike,
+    by :func:`apply_dispatch_rule` (the general automatic-dispatch rule,
+    automatic-lifecycle-orchestration CP3).
+
     Raises :class:`~controller.errors.NoSupportedActionError` for the four
     vocabulary phases, and for any phase string outside
     :data:`KNOWN_PHASES` -- unreachable in practice, since
@@ -731,48 +966,6 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     if phase in VOCABULARY_PHASES:
         return _decide_vocabulary(phase, managed_repo, work_item)
 
-    if phase in DECLINED_PHASES:
-        command = f"/{_DECLINED_COMMAND_BY_PHASE[phase]} {_work_item_id(work_item)}"
-        return _decide_declined(phase=phase, command=command, managed_repo=managed_repo,
-                                 work_item=work_item)
-
-    if phase in GATE_REPORT_PHASES:
-        wid = _work_item_id(work_item)
-        gate_specs = {
-            "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW": (
-                "an external implementation review must be uploaded and its verdict "
-                "recorded (record it with /apply-implementation-review, or approve it "
-                "with the user-only /approve-review implementation)",
-                f"/apply-implementation-review {wid}",
-            ),
-            "APPLYING_REVIEW_FEEDBACK": (
-                "an implementation-review apply was interrupted here; no Workflow "
-                "command can legally run from this phase -- a human must decide how "
-                "to recover",
-                f"workflow-controller explain --work-item {wid}",
-            ),
-            "AWAITING_FUNCTIONAL_REVIEW": (
-                "manual functional testing findings must be prepared, placed and "
-                "consumed before this milestone can be accepted "
-                "(/prepare-functional-review, then /apply-functional-review, then the "
-                "user-only /accept-milestone)",
-                f"/prepare-functional-review {wid}",
-            ),
-            "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": (
-                "an implementation bundle is waiting on a manual external reviewer's "
-                "verdict -- upload the bundle and paste the verdict, or, once one is "
-                "on file, record it with /record-manual-implementation-review (a "
-                "Status: BLOCK verdict requires explicit user resolution first)",
-                f"/record-manual-implementation-review {wid}",
-            ),
-        }
-        what_is_required, safe_resume_command = gate_specs[phase]
-        return _decide_gate_report(
-            phase=phase, what_is_required=what_is_required,
-            safe_resume_command=safe_resume_command, managed_repo=managed_repo,
-            work_item=work_item,
-        )
-
     handler = _DISPATCH.get(phase)
     if handler is None:
         raise NoSupportedActionError(
@@ -780,7 +973,7 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
             "generation",
             evidence={"phase": phase},
         )
-    return handler(managed_repo, work_item)
+    return apply_dispatch_rule(handler(managed_repo, work_item), work_item.governing_workflow_version)
 
 
 def decide_no_work_item(managed_repo: Any) -> Decision:
@@ -799,7 +992,7 @@ def decide_no_work_item(managed_repo: Any) -> Decision:
     ``docs/ACTIVE_MILESTONE.md`` (``D-Plan-Amendment`` constraint), so the
     Controller must never supply one here, mirroring exactly what a human
     operator would type for a brand-new milestone."""
-    return Decision(
+    selected = Decision(
         observed_phase=NO_PHASE,
         evidence=(),
         action=Action(command="/milestone-plan"),
@@ -810,3 +1003,7 @@ def decide_no_work_item(managed_repo: Any) -> Decision:
                "/milestone-plan derives and creates the first one from "
                "docs/ACTIVE_MILESTONE.md",
     )
+    # The bootstrap's own `(NO_PHASE, None, "/milestone-plan")` triple is
+    # in AUTOMATIC_TRIPLES, so this stays automatic -- through the same
+    # rule as every other selection, not around it.
+    return apply_dispatch_rule(selected, None)

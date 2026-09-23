@@ -10,6 +10,14 @@ every decision from the code as it stands, normalises it with the
 generator's own :func:`normalise`, and requires the result to be
 byte-equal to the checked-in file -- so no later change can move a
 plan-stage decision without this test failing.
+
+**The single permitted difference** (CP3 item 1) is ``reason`` on the
+declined ``AMENDING_PLAN`` decisions: the general automatic-dispatch rule's
+uniform decline wording replaces Generation 1's "revision 10's scope"
+wording there. :func:`_revert_permitted_difference` names that exception
+explicitly -- it accepts the difference only where the golden holds the
+base wording and the re-derivation holds exactly the uniform reason, with
+every other field unchanged -- and nothing else may differ.
 """
 
 from __future__ import annotations
@@ -23,7 +31,49 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from controller import decision  # noqa: E402
 from tests.golden import generate_plan_stage_decisions as golden  # noqa: E402
+
+#: The one phase whose golden decisions may differ, and only in ``reason``.
+_PERMITTED_DIFFERENCE_PHASE = "AMENDING_PLAN"
+
+#: The base commit's decline wording for that phase, as the golden holds it.
+_BASE_AMENDING_PLAN_REASON = (
+    "AMENDING_PLAN is automation-safe -- /milestone-plan wi-1 is model-invocable and on "
+    "neither denylist -- but Generation 1's own scope (revision 10) reports it rather than "
+    "launching it"
+)
+
+
+def _revert_permitted_difference(
+    expected: dict[str, dict], derived: dict[str, dict],
+) -> tuple[dict[str, dict], list[str]]:
+    """``derived`` with the permitted difference reverted to the golden's
+    own value, plus the keys it was reverted at. A case is reverted only
+    when it is at :data:`_PERMITTED_DIFFERENCE_PHASE`, declined on both
+    sides, identical except for ``reason``, and its two reasons are
+    exactly the base wording and the uniform decline reason for that
+    ``(phase, version)``; any other difference is left in place, so the
+    comparisons below fail on it."""
+    reverted = dict(derived)
+    keys: list[str] = []
+    for key, body in derived.items():
+        _scenario, phase, version = key.split(" | ")
+        golden_body = expected.get(key)
+        if phase != _PERMITTED_DIFFERENCE_PHASE or golden_body is None or golden_body == body:
+            continue
+        others_equal = {k: v for k, v in body.items() if k != "reason"} == {
+            k: v for k, v in golden_body.items() if k != "reason"
+        }
+        if (
+            others_equal and body["declined"] and golden_body["declined"]
+            and golden_body["reason"] == _BASE_AMENDING_PLAN_REASON
+            and body["reason"] == decision.uniform_decline_reason(phase, version, body["action_command"])
+        ):
+            reverted[key] = golden_body
+            keys.append(key)
+    return reverted, keys
+
 
 #: CP3 item 1's coverage list, restated independently of the generator so
 #: a narrowed ``PHASE_VERSIONS`` cannot silently shrink the golden.
@@ -44,8 +94,26 @@ class PlanStageDecisionGoldenTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.checked_in = golden.GOLDEN_PATH.read_text()
-        cls.derived_cases = golden.derive_cases()
+        cls.raw_derived_cases = golden.derive_cases()
+        cls.derived_cases, cls.permitted_keys = _revert_permitted_difference(
+            golden.load_cases(cls.checked_in), cls.raw_derived_cases,
+        )
         cls.derived_text = golden.render_document(cls.derived_cases)
+
+    def test_the_permitted_difference_is_exactly_every_amending_plan_case(self) -> None:
+        """The exception is neither vacuous nor wider than named: every
+        ``AMENDING_PLAN`` case now carries the uniform reason, and no other
+        case was reverted."""
+        expected = golden.load_cases(self.checked_in)
+        amending = sorted(key for key in expected if key.split(" | ")[1] == _PERMITTED_DIFFERENCE_PHASE)
+        self.assertTrue(amending)
+        self.assertEqual(sorted(self.permitted_keys), amending)
+        for key in amending:
+            _scenario, phase, version = key.split(" | ")
+            self.assertEqual(
+                self.raw_derived_cases[key]["reason"],
+                decision.uniform_decline_reason(phase, version, "/milestone-plan wi-1"),
+            )
 
     def test_every_case_reproduces_from_the_code_as_it_stands(self) -> None:
         """Per-case comparison first, so a failure names the decisions that

@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import evidence
+from controller import decision, evidence
 from tests import fixtures
 
 
@@ -879,15 +879,30 @@ class AwaitingFunctionalReviewTest(unittest.TestCase):
         self.assertEqual(result.gate.safe_resume_command, "/apply-functional-review wi-1")
         self.assertIn("manual functional", result.gate.what_is_required)
 
-    def test_unconsumed_findings_are_automatic(self) -> None:
+    def test_unconsumed_findings_are_declined(self) -> None:
+        """automatic-lifecycle-orchestration CP3: the handler still
+        *selects* ``/apply-functional-review``, but no ExpectedOutcome row
+        declares it, so the general dispatch rule declines it (it used to be
+        automatic, and ``execute_step`` then crashed on the missing row)."""
         self._commit_checklist_evidence("wi-1", 1)
         fixtures.write_review_feedback(  # reuse the writer; FUNCTIONAL_REVIEW.md has no fields
             self.root, ".ai-review/feedback", "some findings\n",
         )
         (self.root / ".ai-review" / "feedback" / "FUNCTIONAL_REVIEW.md").write_text("findings\n")
-        result = self._decide()
-        self.assertTrue(result.automatic)
-        self.assertEqual(result.action.command, "/apply-functional-review wi-1")
+        for version in ("1", "2.1", "2.2"):
+            with self.subTest(governing_workflow_version=version):
+                result = self._decide(governing_workflow_version=version)
+                self.assertFalse(result.automatic)
+                self.assertTrue(result.declined)
+                self.assertIsNone(result.gate)
+                self.assertEqual(result.action.command, "/apply-functional-review wi-1")
+                self.assertEqual(result.evidence, ("unconsumed FUNCTIONAL_REVIEW.md findings",))
+                self.assertEqual(
+                    result.reason,
+                    decision.uniform_decline_reason(
+                        "AWAITING_FUNCTIONAL_REVIEW", version, "/apply-functional-review wi-1",
+                    ),
+                )
 
     def test_consumed_findings_with_no_incomplete_children_names_accept_milestone(self) -> None:
         self._commit_checklist_evidence("wi-1", 1)

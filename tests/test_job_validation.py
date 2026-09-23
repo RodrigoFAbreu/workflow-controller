@@ -21,12 +21,14 @@ import json
 import os
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import evidence, job  # noqa: E402
+from controller.decision import Action, Decision  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -160,8 +162,10 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
     property, and each property's own negative instantiation fails
     construction (a property that cannot fail is not a property)."""
 
-    def test_eleven_rows(self) -> None:
-        self.assertEqual(len(job.EXPECTED_OUTCOMES), 11)
+    def test_eighteen_rows(self) -> None:
+        # Eleven until `workflow-controller-automatic-lifecycle-orchestration`
+        # CP2 added the seven implementation-stage rows (12-18).
+        self.assertEqual(len(job.EXPECTED_OUTCOMES), 18)
 
     def test_real_table_passes_coverage_and_predicate_validity(self) -> None:
         self.assertEqual(job.property_table_violations(), [])
@@ -251,54 +255,184 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
         for eo in job.EXPECTED_OUTCOMES:
             self.assertEqual(job._row_branch(eo), eo.writer_calls[0].branch)
 
-    def test_postcondition_without_postcondition_phases_fails(self) -> None:
-        """CP3's column shape: ``postcondition`` set with empty
-        ``postcondition_phases`` fails construction."""
+    def test_postconditions_entry_with_an_empty_phase_set_fails(self) -> None:
+        """CP2's per-phase shape (the successor of CP3's "non-empty iff
+        set" rule): an entry whose phase set is empty can never apply."""
         eo = job.EXPECTED_OUTCOMES[0]
-        broken = dataclasses.replace(eo, postcondition_phases=frozenset())
+        broken = dataclasses.replace(eo, postconditions=((frozenset(), job._postcondition_plan_bundle_coherent),))
         violations = job.property_table_violations((broken,))
-        self.assertTrue(any("non-empty iff postcondition is set" in v for v in violations), violations)
+        self.assertTrue(any("declares an empty phase set" in v for v in violations), violations)
 
-    def test_postcondition_phases_without_postcondition_fails(self) -> None:
+    def test_postconditions_entry_without_a_callable_fails(self) -> None:
         eo = job.EXPECTED_OUTCOMES[0]
-        broken = dataclasses.replace(eo, postcondition=None)
+        broken = dataclasses.replace(eo, postconditions=((frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}), None),))
         violations = job.property_table_violations((broken,))
-        self.assertTrue(any("non-empty iff postcondition is set" in v for v in violations), violations)
+        self.assertTrue(any("declares no callable postcondition" in v for v in violations), violations)
 
-    def test_postcondition_phases_outside_to_any_of_fails(self) -> None:
+    def test_postconditions_entry_that_is_not_a_pair_fails(self) -> None:
         eo = job.EXPECTED_OUTCOMES[0]
-        broken = dataclasses.replace(eo, postcondition_phases=frozenset({"REVISING_PLAN"}))
+        broken = dataclasses.replace(eo, postconditions=(job._postcondition_plan_bundle_coherent,))
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(any("is not a (frozenset of phases, postcondition) pair" in v for v in violations),
+                        violations)
+
+    def test_postconditions_stray_phase_outside_to_any_of_fails(self) -> None:
+        eo = job.EXPECTED_OUTCOMES[0]
+        broken = dataclasses.replace(
+            eo, postconditions=((frozenset({"REVISING_PLAN"}), job._postcondition_plan_bundle_coherent),),
+        )
         violations = job.property_table_violations((broken,))
         self.assertTrue(any("are not members of to_any_of" in v for v in violations), violations)
 
-    def test_postcondition_is_attached_to_exactly_the_plan_bundle_producing_rows(self) -> None:
-        """CP3's attachment list: every row whose action publishes a plan
-        revision and generates a plan bundle, on its plan-review-awaiting
-        destination -- and no `/review-plan`/`/record-manual-plan-review`
-        row (neither generates a bundle)."""
+    def test_postconditions_overlapping_phase_sets_fail(self) -> None:
+        row16 = job._EXPECTED_OUTCOMES_BY_KEY[
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation")
+        ]
+        (approve_phases, approve), (revise_phases, revise) = row16.postconditions
+        broken = dataclasses.replace(row16, postconditions=(
+            (approve_phases, approve), (revise_phases | approve_phases, revise),
+        ))
+        violations = job.property_table_violations((broken,))
+        self.assertTrue(
+            any("overlap on ['AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW']" in v for v in violations),
+            violations,
+        )
+        # The real row's two disjoint sets are clean.
+        self.assertEqual(job.property_table_violations((row16,)), [])
+
+    def test_a_row_may_declare_no_postconditions(self) -> None:
+        row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
+        self.assertEqual(row3.postconditions, ())
+        self.assertEqual(job.property_table_violations((row3,)), [])
+
+    def test_postconditions_are_attached_exactly_as_the_plan_declares(self) -> None:
+        """Every row's per-phase postconditions: the plan-bundle-producing
+        rows' single entry (CP3 of the previous milestone, migrated
+        unchanged), no `/review-plan`/`/record-manual-plan-review` entry
+        (neither generates a bundle), and CP2's implementation-stage rows
+        12-18."""
         attached = {
-            (eo.from_phase, eo.governing_version, eo.action): eo.postcondition_phases
-            for eo in job.EXPECTED_OUTCOMES if eo.postcondition is not None
+            (eo.from_phase, eo.governing_version, eo.action): dict(eo.postconditions)
+            for eo in job.EXPECTED_OUTCOMES if eo.postconditions
         }
+        plan = job._postcondition_plan_bundle_coherent
+        coherent = job._postcondition_implementation_bundle_coherent
+        self_review = job._postcondition_self_review_entered_durably
         self.assertEqual(attached, {
-            ("PLANNING", "2.1", "/milestone-plan"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
-            ("PLANNING", "2.2", "/milestone-plan"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
-            ("PLANNING", "1", "/milestone-plan"): frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
+            ("PLANNING", "2.1", "/milestone-plan"): {frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}): plan},
+            ("PLANNING", "2.2", "/milestone-plan"): {frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}): plan},
+            ("PLANNING", "1", "/milestone-plan"): {frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}): plan},
             ("AWAITING_EXTERNAL_PLAN_REVIEW", "1", "/apply-plan-review"):
-                frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
-            ("REVISING_PLAN", "2.1", "/apply-plan-review"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
-            ("REVISING_PLAN", "2.2", "/apply-plan-review"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
-            (job.NO_PHASE, None, "/milestone-plan"): frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+                {frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}): plan},
+            ("REVISING_PLAN", "2.1", "/apply-plan-review"): {frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}): plan},
+            ("REVISING_PLAN", "2.2", "/apply-plan-review"): {frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}): plan},
+            (job.NO_PHASE, None, "/milestone-plan"): {frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}): plan},
+            ("IMPLEMENTING", "2.1", "/milestone-implement"): {
+                frozenset({"SELF_REVIEWING_IMPLEMENTATION"}): self_review,
+                frozenset({"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}): coherent,
+            },
+            ("IMPLEMENTING", "2.2", "/milestone-implement"): {
+                frozenset({"SELF_REVIEWING_IMPLEMENTATION"}): self_review,
+                frozenset({"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}): coherent,
+            },
+            ("SELF_REVIEWING_IMPLEMENTATION", "2.1", "/milestone-implement"):
+                {frozenset({"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}): coherent},
+            ("SELF_REVIEWING_IMPLEMENTATION", "2.2", "/milestone-implement"):
+                {frozenset({"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}): coherent},
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation"): {
+                frozenset({"AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"}):
+                    job._postcondition_local_implementation_approve_recorded,
+                frozenset({"APPLYING_REVIEW_FEEDBACK"}): job._postcondition_local_implementation_revise_recorded,
+            },
+            ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2", "/record-manual-implementation-review"): {
+                frozenset({"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}):
+                    job._postcondition_manual_implementation_approve_recorded,
+                frozenset({"APPLYING_REVIEW_FEEDBACK"}): job._postcondition_manual_implementation_revise_recorded,
+            },
+            ("APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review"):
+                {frozenset({"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}): job._postcondition_implementation_bundle_regenerated},
         })
-        for eo in job.EXPECTED_OUTCOMES:
-            if eo.postcondition is not None:
-                self.assertIs(eo.postcondition, job._postcondition_plan_bundle_coherent)
+
+    def test_implementation_stage_rows_match_the_plan_table(self) -> None:
+        """Rows 12-18 (CP2): exact `to_any_of`, predicate, inputs and
+        writer call per row; no `"1"` implementation-stage row."""
+        rows = {
+            (eo.from_phase, eo.governing_version, eo.action): eo for eo in job.EXPECTED_OUTCOMES[11:]
+        }
+        self.assertEqual(len(rows), 7)
+        expected = {
+            ("IMPLEMENTING", "2.1", "/milestone-implement"): (
+                {"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION", "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"},
+                job._predicate_checkpoint_completed_durably, {"checkpoints", "target_head"},
+                ("complete_checkpoint", "milestone-implement.md", job.BranchSpec("step", "1f")),
+            ),
+            ("IMPLEMENTING", "2.2", "/milestone-implement"): (
+                {"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"},
+                job._predicate_checkpoint_completed_durably, {"checkpoints", "target_head"},
+                ("complete_checkpoint", "milestone-implement.md", job.BranchSpec("step", "1f")),
+            ),
+            ("SELF_REVIEWING_IMPLEMENTATION", "2.1", "/milestone-implement"): (
+                {"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}, None, set(),
+                ("record_bundle_generation", "milestone-implement.md", job.BranchSpec("step", "4")),
+            ),
+            ("SELF_REVIEWING_IMPLEMENTATION", "2.2", "/milestone-implement"): (
+                {"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}, None, set(),
+                ("record_bundle_generation", "milestone-implement.md", job.BranchSpec("step", "4")),
+            ),
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation"): (
+                {"AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK",
+                 "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"},
+                job._predicate_local_implementation_block_current, {"bundle_manifest_bundle_id"},
+                ("record_local_implementation_review", "review-implementation.md",
+                 job.BranchSpec("bullet", "BLOCK")),
+            ),
+            ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2", "/record-manual-implementation-review"): (
+                {"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK"}, None, set(),
+                ("record_manual_implementation_review", "record-manual-implementation-review.md",
+                 job.BranchSpec("step", "7")),
+            ),
+            ("APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review"): (
+                {"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}, None, set(),
+                ("record_bundle_generation", "apply-implementation-review.md", job.BranchSpec("step", "7")),
+            ),
+        }
+        self.assertEqual(set(rows), set(expected))
+        for key, (to_any_of, predicate, inputs, (function, file, branch)) in expected.items():
+            with self.subTest(key=key):
+                eo = rows[key]
+                self.assertEqual(eo.to_any_of, frozenset(to_any_of))
+                self.assertIs(eo.predicate, predicate)
+                self.assertEqual(eo.predicate_inputs, frozenset(inputs))
+                (wc,) = eo.writer_calls
+                self.assertEqual((wc.function, wc.file, wc.branch, wc.kind),
+                                 (function, file, branch, job.WRITER_KIND_COMPLETION))
+                expected_trailing = {"committed_checkpoint_status", "release_checkpoint"} \
+                    if function == "complete_checkpoint" else set()
+                self.assertEqual({fn for fn, _why in wc.trailing_calls}, expected_trailing)
+        self.assertFalse(any(eo.governing_version == "1" for eo in rows.values()))
+
+    def test_incomplete_effect_phases_stays_empty_with_the_implementation_rows(self) -> None:
+        self.assertEqual(job._INCOMPLETE_EFFECT_PHASES, {})
 
     def test_record_completeness_negative_input_outside_pre_state_fields_fails(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         broken = dataclasses.replace(row3, predicate_inputs=frozenset({"not_a_real_field"}))
         violations = job.property_record_completeness_violations((broken,))
         self.assertTrue(any("not_a_real_field" in v for v in violations), violations)
+
+    def test_record_completeness_is_clean_with_the_new_field_and_fails_without_it(self) -> None:
+        """CP2: rows 3/3' and 16 read ``bundle_manifest_bundle_id``, a
+        member of ``PRE_STATE_FIELDS``; without it the property fails."""
+        self.assertIn("bundle_manifest_bundle_id", job.PRE_STATE_FIELDS)
+        self.assertEqual(job.property_record_completeness_violations(), [])
+        without = job.PRE_STATE_FIELDS - {"bundle_manifest_bundle_id"}
+        violations = job.property_record_completeness_violations(job.EXPECTED_OUTCOMES, without)
+        self.assertEqual(violations, ["predicate_input 'bundle_manifest_bundle_id' is not a member of PRE_STATE_FIELDS"])
+
+    def test_row3_predicate_inputs_name_the_manifest_bundle_id_not_current_bundle_id(self) -> None:
+        for eo in job.EXPECTED_OUTCOMES:
+            if eo.action == "/review-plan":
+                self.assertEqual(eo.predicate_inputs, frozenset({"bundle_manifest_bundle_id"}))
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +497,109 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
         violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
         self.assertTrue(any("could not be read" in v for v in violations), violations)
+
+
+    # -- CP2 (`workflow-controller-automatic-lifecycle-orchestration`):
+    # the `trailing_calls` allowlist, and the new rows' located spans.
+
+    _ROW12_KEY = ("IMPLEMENTING", "2.2", "/milestone-implement")
+
+    def _row12_with_trailing(self, trailing_calls):
+        row12 = job._EXPECTED_OUTCOMES_BY_KEY[self._ROW12_KEY]
+        wc = dataclasses.replace(row12.writer_calls[0], trailing_calls=trailing_calls)
+        return dataclasses.replace(row12, writer_calls=(wc,))
+
+    def test_step_1f_trailing_calls_are_exactly_the_two_the_frozen_text_makes(self) -> None:
+        row12 = job._EXPECTED_OUTCOMES_BY_KEY[self._ROW12_KEY]
+        self.assertEqual(
+            [fn for fn, _why in row12.writer_calls[0].trailing_calls],
+            ["committed_checkpoint_status", "release_checkpoint"],
+        )
+        for _fn, why in row12.writer_calls[0].trailing_calls:
+            self.assertTrue(why.strip())
+        self.assertEqual(job.property_declaration_against_artifact_violations(REPO_ROOT, (row12,)), [])
+
+    def test_an_undeclared_trailing_write_still_fails(self) -> None:
+        """Without the allowlist, step 1f's two later calls are reported;
+        allowlisting one leaves the other reported -- the property is
+        never weakened to pass."""
+        violations = job.property_declaration_against_artifact_violations(
+            REPO_ROOT, (self._row12_with_trailing(()),),
+        )
+        self.assertEqual(len(violations), 2, violations)
+        self.assertTrue(any("'committed_checkpoint_status' occurs after it" in v for v in violations))
+        self.assertTrue(any("'release_checkpoint' occurs after it" in v for v in violations))
+
+        only_read = self._row12_with_trailing((("committed_checkpoint_status", "a read"),))
+        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (only_read,))
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("a further durable write to 'release_checkpoint'", violations[0])
+
+    def test_a_trailing_calls_entry_absent_from_the_span_is_a_violation(self) -> None:
+        stale = self._row12_with_trailing(
+            job._STEP_1F_TRAILING_CALLS + (("record_bundle_generation", "not in step 1f at all"),),
+        )
+        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (stale,))
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("trailing_calls names 'record_bundle_generation'", violations[0])
+        self.assertIn("stale allowlist entry", violations[0])
+
+    def test_a_trailing_calls_entry_only_before_the_declared_call_is_a_violation(self) -> None:
+        """`owner_mutation` occurs inside step 1f's span, but *before*
+        `complete_checkpoint`: the allowlist covers only calls after it."""
+        before = self._row12_with_trailing(
+            job._STEP_1F_TRAILING_CALLS + (("owner_mutation", "precedes the declared call"),),
+        )
+        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (before,))
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("trailing_calls names 'owner_mutation'", violations[0])
+
+    def test_trailing_calls_misuse_is_a_table_violation(self) -> None:
+        cases = {
+            "carries no justification": (("committed_checkpoint_status", "  "),),
+            "names the declared call itself": (("complete_checkpoint", "self"),),
+            "names 'release_checkpoint' twice": (
+                ("release_checkpoint", "one"), ("release_checkpoint", "two"),
+            ),
+            "is not a function identifier": (("release_checkpoint(", "bad name"),),
+            "is not a (function, justification) pair": (("release_checkpoint",),),
+        }
+        for needle, trailing in cases.items():
+            with self.subTest(needle=needle):
+                violations = job.property_table_violations((self._row12_with_trailing(trailing),))
+                self.assertTrue(any(needle in v for v in violations), violations)
+        self.assertEqual(
+            job.property_table_violations((self._row12_with_trailing(job._STEP_1F_TRAILING_CALLS),)), [],
+        )
+
+    def test_row16_block_bullet_is_located_inside_a6_not_the_advisory_branch(self) -> None:
+        """The first-match ``bullet`` locator lands in
+        `review-implementation.md`'s own A6 write set: no `BLOCK` bullet
+        precedes it in the advisory branch, so no ``within`` qualifier is
+        needed (and none is added speculatively)."""
+        row16 = job._EXPECTED_OUTCOMES_BY_KEY[
+            ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation")
+        ]
+        lines = (REPO_ROOT / ".claude" / "commands" / "review-implementation.md").read_text().splitlines()
+        start, _end = job._branch_span(lines, row16.writer_calls[0].branch)
+        a6 = next(i for i, line in enumerate(lines) if line.startswith("A6."))
+        a7 = next(i for i, line in enumerate(lines) if line.startswith("A7."))
+        self.assertTrue(a6 < start < a7, (a6, start, a7))
+        self.assertIn('verdict="BLOCK"', lines[start + 1])
+
+    def test_new_rows_locate_their_declared_step_spans(self) -> None:
+        for key, first_line in (
+            (("IMPLEMENTING", "2.1", "/milestone-implement"), "1f. "),
+            (("SELF_REVIEWING_IMPLEMENTATION", "2.2", "/milestone-implement"), "4. "),
+            (("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2", "/record-manual-implementation-review"),
+             "7. "),
+            (("APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review"), "7. "),
+        ):
+            with self.subTest(key=key):
+                wc = job._EXPECTED_OUTCOMES_BY_KEY[key].writer_calls[0]
+                lines = (REPO_ROOT / ".claude" / "commands" / wc.file).read_text().splitlines()
+                start, _end = job._branch_span(lines, wc.branch)
+                self.assertTrue(lines[start].startswith(first_line), lines[start])
 
 
 # ---------------------------------------------------------------------------
@@ -583,10 +820,12 @@ class TransitionVerificationTest(unittest.TestCase):
         """Row 3's own positive predicate case: a `/review-plan` worker
         that stays at the pre-phase but writes a current-round `Status:
         BLOCK` feedback verifies -- a BLOCK-shaped no-transition outcome
-        reported as success, never failure."""
+        reported as success, never failure. The feedback is bound to the
+        plan manifest's own ``bundle_id``; the state's
+        ``current_bundle_id`` stays ``null``, as no Workflow writer ever
+        sets it (CP2)."""
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.1",
-            current_bundle_id="b" * 64,
         )
         root = managed_repo.root
         fixtures.write_manifest(
@@ -610,7 +849,6 @@ class TransitionVerificationTest(unittest.TestCase):
         verify."""
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.1",
-            current_bundle_id="b" * 64,
         )
         root = managed_repo.root
         fixtures.write_manifest(
@@ -736,7 +974,6 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         `Status: BLOCK` feedback verifies."""
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.2",
-            current_bundle_id="b" * 64,
         )
         root = managed_repo.root
         fixtures.write_manifest(
@@ -757,7 +994,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
     def test_row4_awaiting_manual_external_plan_review_reaches_awaiting_plan_approval(self) -> None:
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_workflow_version="2.2",
-            base_commit="0" * 40, current_bundle_id="b" * 64,
+            base_commit="0" * 40,
             plan_review_stages={
                 "review_content_id": "c" * 64,
                 "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
@@ -790,7 +1027,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         covered by this class's other six tests, one-to-one."""
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", governing_workflow_version="2.2",
-            base_commit="0" * 40, current_bundle_id="b" * 64,
+            base_commit="0" * 40,
             plan_review_stages={
                 "review_content_id": "c" * 64,
                 "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
@@ -1137,6 +1374,643 @@ class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
         satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-missing", {})
         self.assertFalse(satisfied)
         self.assertIn("absent from the post-state", detail)
+
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-automatic-lifecycle-orchestration` CP2 -- the plan-
+# stage `BLOCK`-predicate bundle-id fix (rows 3/3').
+# ---------------------------------------------------------------------------
+
+
+class Row3BlockPredicateBundleIdRegressionTest(unittest.TestCase):
+    """The real Workflow shape -- ``current_bundle_id: null`` (no writer
+    ever sets it) and a genuine local ``BLOCK`` bound to the plan
+    manifest's own ``bundle_id`` -- verifies ``FINISHED``; at base the
+    predicate compared against ``current_bundle_id`` and recorded it
+    ``FAILED``. A feedback file missing its binding line no longer
+    satisfies it (``None == None`` at base)."""
+
+    MANIFEST_BUNDLE_ID = "d" * 64
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+
+    def _execute(self, name: str, version: str, *, reviewed_bundle_id, write_manifest: bool = True):
+        """``write_manifest=False`` would make the real ``decide`` gate on
+        the absent plan bundle, so that one case pins the ``/review-plan``
+        selection to reach the predicate at all."""
+        managed_repo = _build_target(
+            self.tmp_root / name, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version=version,
+            current_bundle_id=None,
+        )
+        root = managed_repo.root
+        if write_manifest:
+            fixtures.write_plan_manifest(
+                root, "wi-1", 1, bundle_id=self.MANIFEST_BUNDLE_ID, generation_head=fixtures.current_head(root),
+            )
+        feedback_path = root / ".ai-review" / "wi-1" / "feedback" / "REVIEW_FEEDBACK.md"
+        env = {
+            "FAKE_CLAUDE_WRITE_PATH": str(feedback_path),
+            "FAKE_CLAUDE_WRITE_TEXT": fixtures.build_review_feedback_text(
+                status="BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW", reviewed_bundle_id=reviewed_bundle_id,
+            ),
+        }
+        runtime_root = self.tmp_root / name / "runtime"
+        runtime_root.mkdir(parents=True)
+        if write_manifest:
+            return _run(managed_repo, runtime_root, env_overrides=env)
+        with fixtures.forced_automatic_action("AWAITING_LOCAL_PLAN_REVIEW", "/review-plan"):
+            return _run(managed_repo, runtime_root, env_overrides=env)
+
+    def test_real_shape_block_bound_to_the_manifest_bundle_finishes(self) -> None:
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                record = self._execute(f"real-{version}", version, reviewed_bundle_id=self.MANIFEST_BUNDLE_ID)
+                self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+                self.assertTrue(record["transition_verified"])
+                self.assertIsNone(record["pre_state"]["bundle_id"])
+                self.assertEqual(record["pre_state"]["bundle_manifest_bundle_id"], self.MANIFEST_BUNDLE_ID)
+
+    def test_block_feedback_missing_its_binding_line_is_not_satisfied(self) -> None:
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                record = self._execute(f"unbound-{version}", version, reviewed_bundle_id=None)
+                self.assertEqual(record["status"], job.STATUS_FAILED)
+                self.assertEqual(record["reconciliation_evidence"]["reason"], "predicate_not_satisfied")
+
+    def test_block_bound_to_another_bundle_is_not_satisfied(self) -> None:
+        record = self._execute("other", "2.2", reviewed_bundle_id="e" * 64)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["reason"], "predicate_not_satisfied")
+
+    def test_no_pre_state_manifest_is_not_satisfied_even_for_an_unbound_feedback(self) -> None:
+        record = self._execute("no-manifest", "2.2", reviewed_bundle_id=None, write_manifest=False)
+        self.assertIsNone(record["pre_state"]["bundle_manifest_bundle_id"])
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["reason"], "predicate_not_satisfied")
+
+    def test_predicate_reads_only_the_manifest_side_and_fails_closed_on_absence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures.write_review_feedback(
+                root, ".ai-review/feedback",
+                fixtures.build_review_feedback_text(
+                    status="BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW", reviewed_bundle_id="b" * 64,
+                ),
+            )
+            predicate = job._predicate_row3_block_feedback_current
+            self.assertTrue(predicate(root, "wi-1", {"bundle_manifest_bundle_id": "b" * 64}))
+            # The pre-CP2 input alone no longer satisfies it, and a record
+            # written before the field existed is "not satisfied".
+            self.assertFalse(predicate(root, "wi-1", {"bundle_id": "b" * 64, "bundle_manifest_readable": True}))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": None}))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": ""}))
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-automatic-lifecycle-orchestration` CP2 -- rows 12-18
+# through the real `execute_step`. `evidence.decide` does not select these
+# actions until CP3's dispatch rule, so each test pins the selected action
+# with a patched `decide`; the worker is `fake_claude.py`, preceded by a
+# scripted side effect that performs the Workflow writers' own state
+# writes, commits and bundle generation -- or deliberately fails to.
+# ---------------------------------------------------------------------------
+
+_B = "b" * 64  # the fixture manifest's bundle_id
+_C = "c" * 64  # the fixture manifest's review_content_id
+_REVIEWED_HEAD = "1" * 40  # the seeded reviewed_implementation_head
+_LOCAL = "LOCAL_MODEL_IMPLEMENTATION_REVIEW"
+_MANUAL = "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+_REVIEW_PHASE = {"2.1": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}
+
+
+def local_feedback(status: str, **kwargs) -> str:
+    kwargs.setdefault("reviewer_role", _LOCAL)
+    kwargs.setdefault("reviewed_bundle_id", _B)
+    return fixtures.build_review_feedback_text(status=status, **kwargs)
+
+
+class _ImplementationRowTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self._counter = 0
+
+    def target(self, phase: str, version: str = "2.2", **kwargs):
+        self._counter += 1
+        self._case_root = self.tmp_root / f"case-{self._counter}"
+        return fixtures.build_implementation_target(
+            self._case_root, phase=phase, governing_workflow_version=version, **kwargs,
+        )
+
+    def execute(self, managed_repo, phase: str, command: str, effect=None) -> dict:
+        runtime_root = self._case_root / "runtime"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        with fixtures.forced_automatic_action(phase, command), fixtures.scripted_worker(effect):
+            return _run(managed_repo, runtime_root)
+
+    def assert_finished(self, record: dict, observed_phase: str) -> None:
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["observed_phase_after"], observed_phase)
+
+    def assert_failed(self, record: dict, reason: str, *, detail: str | None = None) -> dict:
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        ev = record["reconciliation_evidence"]
+        self.assertEqual(ev["code"], "TransitionNotObservedError")
+        self.assertEqual(ev["reason"], reason, ev)
+        if reason == "postcondition_not_satisfied":
+            self.assertIn(detail, ev["postcondition_detail"])
+        else:
+            self.assertNotIn("postcondition_detail", ev)
+        return ev
+
+
+class CheckpointRowsExecuteTest(_ImplementationRowTestCase):
+    """Rows 12/13: ``/milestone-implement`` from ``IMPLEMENTING``."""
+
+    def _in_progress_target(self, version: str, *, done: tuple[str, ...] = ()):
+        checkpoints = {"CP1": {"status": "IN_PROGRESS"}, "CP2": {"status": "PENDING"}}
+        for checkpoint_id in done:
+            checkpoints[checkpoint_id] = {"status": "COMPLETE"}
+        if done:
+            checkpoints["CP2"] = {"status": "IN_PROGRESS"}
+        return self.target("IMPLEMENTING", version, checkpoints=checkpoints)
+
+    def test_a_committed_checkpoint_completion_self_loop_finishes(self) -> None:
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                managed_repo = self._in_progress_target(version)
+                record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                                      fixtures.complete_checkpoint_effect("CP1"))
+                self.assert_finished(record, "IMPLEMENTING")
+                self.assertEqual(record["pre_state"]["checkpoints"]["CP1"]["status"], "IN_PROGRESS")
+
+    def test_an_uncommitted_checkpoint_completion_fails_the_predicate(self) -> None:
+        for version, commit in (("2.1", "none"), ("2.2", "none"), ("2.2", "product")):
+            with self.subTest(version=version, commit=commit):
+                managed_repo = self._in_progress_target(version)
+                record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                                      fixtures.complete_checkpoint_effect("CP1", commit=commit))
+                self.assert_failed(record, "predicate_not_satisfied")
+
+    def test_a_worker_that_changes_nothing_fails_the_predicate(self) -> None:
+        managed_repo = self._in_progress_target("2.2")
+        record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement")
+        self.assert_failed(record, "predicate_not_satisfied")
+
+    def test_the_last_checkpoint_entering_self_review_durably_finishes(self) -> None:
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                managed_repo = self._in_progress_target(version, done=("CP1",))
+                record = self.execute(
+                    managed_repo, "IMPLEMENTING", "/milestone-implement",
+                    fixtures.complete_checkpoint_effect("CP2", phase="SELF_REVIEWING_IMPLEMENTATION"),
+                )
+                self.assert_finished(record, "SELF_REVIEWING_IMPLEMENTATION")
+
+    def test_an_uncommitted_last_checkpoint_completion_fails_the_postcondition(self) -> None:
+        managed_repo = self._in_progress_target("2.2", done=("CP1",))
+        record = self.execute(
+            managed_repo, "IMPLEMENTING", "/milestone-implement",
+            fixtures.complete_checkpoint_effect("CP2", phase="SELF_REVIEWING_IMPLEMENTATION", commit="product"),
+        )
+        self.assert_failed(
+            record, "postcondition_not_satisfied",
+            detail="not every registry checkpoint is COMPLETE in the state committed at HEAD",
+        )
+
+    def test_an_uncommitted_self_reviewing_implementation_fails_the_postcondition(self) -> None:
+        """The checkpoint completion is committed, but the phase change
+        only reached the working tree."""
+        managed_repo = self._in_progress_target("2.2", done=("CP1",))
+
+        def effect(root: Path) -> None:
+            fixtures.complete_checkpoint_effect("CP2")(root)
+            fixtures.update_workflow_state(root, "wi-1", phase="SELF_REVIEWING_IMPLEMENTATION")
+
+        record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement", effect)
+        self.assert_failed(
+            record, "postcondition_not_satisfied",
+            detail="the committed phase at HEAD is 'IMPLEMENTING', not 'SELF_REVIEWING_IMPLEMENTATION'",
+        )
+
+    def test_the_no_checkpoint_partial_run_stopping_after_step_2_finishes(self) -> None:
+        """Every checkpoint already ``COMPLETE`` (a plan re-approval): step
+        2 commits the transition alone, and the run stops there -- a legal
+        partial run, with no checkpoint newly completed."""
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                managed_repo = self.target("IMPLEMENTING", version)
+
+                def effect(root: Path) -> None:
+                    fixtures.update_workflow_state(root, "wi-1", phase="SELF_REVIEWING_IMPLEMENTATION")
+                    fixtures.commit_paths(root, "Enter SELF_REVIEWING_IMPLEMENTATION",
+                                          "docs/ai-workflow/WORKFLOW_STATE.json")
+
+                record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement", effect)
+                self.assert_finished(record, "SELF_REVIEWING_IMPLEMENTATION")
+
+    def test_the_no_checkpoint_path_through_generation_checks_the_bundle(self) -> None:
+        for version in ("2.1", "2.2"):
+            review_phase = _REVIEW_PHASE[version]
+            with self.subTest(version=version, bundle="coherent"):
+                managed_repo = self.target("IMPLEMENTING", version)
+                record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                                      fixtures.generation_effect(review_phase, enter_self_review=True))
+                self.assert_finished(record, review_phase)
+            with self.subTest(version=version, bundle="stale"):
+                managed_repo = self.target("IMPLEMENTING", version)
+                record = self.execute(
+                    managed_repo, "IMPLEMENTING", "/milestone-implement",
+                    fixtures.generation_effect(review_phase, enter_self_review=True, manifest_revision=0),
+                )
+                self.assert_failed(
+                    record, "postcondition_not_satisfied",
+                    detail="manifest implementation_revision 0 != state implementation_revision 1",
+                )
+
+
+class CheckpointPredicateUnitTest(_ImplementationRowTestCase):
+    """``_predicate_checkpoint_completed_durably`` clause by clause, against
+    a real repository: each clause is load-bearing on its own."""
+
+    def _repo(self):
+        managed_repo = self.target(
+            "IMPLEMENTING", checkpoints={"CP1": {"status": "COMPLETE"}, "CP2": {"status": "PENDING"}},
+        )
+        return managed_repo.root
+
+    def test_a_completion_already_committed_before_the_job_needs_head_to_move(self) -> None:
+        """``HEAD`` already records CP1 ``COMPLETE`` while the pre-state
+        (the working tree) did not: a worker that only rewrites the working
+        tree leaves ``HEAD`` where it was, and does not verify."""
+        root = self._repo()
+        head = fixtures.current_head(root)
+        pre_state = {"target_head": head, "checkpoints": {"CP1": {"status": "IN_PROGRESS"}}}
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        # Positive control: the same facts with HEAD having moved since.
+        moved = {**pre_state, "target_head": "0" * 40}
+        self.assertTrue(job._predicate_checkpoint_completed_durably(root, "wi-1", moved))
+
+    def test_a_checkpoint_already_complete_in_the_pre_state_does_not_count(self) -> None:
+        root = self._repo()
+        pre_state = {"target_head": "0" * 40, "checkpoints": {"CP1": {"status": "COMPLETE"}}}
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+
+    def test_absent_or_malformed_inputs_are_not_satisfied(self) -> None:
+        root = self._repo()
+        for pre_state in (
+            {"checkpoints": {}},
+            {"target_head": "0" * 40},
+            {"target_head": None, "checkpoints": {}},
+            {"target_head": "0" * 40, "checkpoints": ["CP1"]},
+        ):
+            with self.subTest(pre_state=pre_state):
+                self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+
+    def test_an_unreadable_post_state_is_not_satisfied(self) -> None:
+        root = self._repo()
+        (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
+        pre_state = {"target_head": "0" * 40, "checkpoints": {}}
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+
+    def test_the_self_review_postcondition_reads_an_unreadable_post_state_as_not_satisfied(self) -> None:
+        root = self._repo()
+        (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
+        satisfied, detail = job._postcondition_self_review_entered_durably(root, "wi-1", {})
+        self.assertFalse(satisfied)
+        self.assertIn("post-state could not be read", detail)
+
+
+class GenerationRowsExecuteTest(_ImplementationRowTestCase):
+    """Rows 14/15: ``/milestone-implement`` from
+    ``SELF_REVIEWING_IMPLEMENTATION`` (step 4)."""
+
+    def _execute(self, version: str, effect) -> dict:
+        managed_repo = self.target("SELF_REVIEWING_IMPLEMENTATION", version)
+        return self.execute(managed_repo, "SELF_REVIEWING_IMPLEMENTATION", "/milestone-implement", effect)
+
+    def test_a_coherent_bundle_finishes(self) -> None:
+        for version, review_phase in _REVIEW_PHASE.items():
+            with self.subTest(version=version):
+                record = self._execute(version, fixtures.generation_effect(review_phase))
+                self.assert_finished(record, review_phase)
+
+    def test_each_bundle_clause_fails_the_postcondition(self) -> None:
+        cases = {
+            "stale revision": (
+                dict(manifest_revision=0),
+                "manifest implementation_revision 0 != state implementation_revision 1",
+            ),
+            "wrong reviewed_implementation_head": (
+                dict(manifest_reviewed_head="2" * 40),
+                f"manifest reviewed_implementation_head {'2' * 40!r} != state reviewed_implementation_head",
+            ),
+            "generation_head behind HEAD": (
+                dict(manifest_generation_head=lambda reviewed_head, record: reviewed_head),
+                "!= target HEAD",
+            ),
+            "missing manifest": (dict(manifest=False), "is absent (withdrawn or never generated)"),
+            "REJECTED marker": (dict(rejected=True), "REJECTED marker at .ai-review/wi-1/REJECTED is present"),
+        }
+        for version, review_phase in _REVIEW_PHASE.items():
+            for name, (kwargs, detail) in cases.items():
+                with self.subTest(version=version, clause=name):
+                    record = self._execute(version, fixtures.generation_effect(review_phase, **kwargs))
+                    self.assertEqual(record["observed_phase_after"], review_phase)
+                    self.assert_failed(record, "postcondition_not_satisfied", detail=detail)
+
+    def test_a_worker_that_stops_before_generation_fails_the_phase_clause(self) -> None:
+        record = self._execute("2.2", None)
+        self.assert_failed(record, "phase_not_in_to_any_of")
+
+
+class _ReviewStageTarget:
+    """A `"2.2"` item at an implementation-review phase: revision 1, a
+    committed state, and a coherent implementation manifest
+    (``bundle_id`` ``_B``, ``review_content_id`` ``_C``) generated at the
+    seeded ``HEAD``."""
+
+    @staticmethod
+    def build(case: _ImplementationRowTestCase, phase: str, *, feedback: str | None = None, **overrides):
+        managed_repo = case.target(
+            phase, "2.2", implementation_revision=1, reviewed_implementation_head=_REVIEWED_HEAD, **overrides,
+        )
+        root = managed_repo.root
+        fixtures.write_implementation_manifest(root, "wi-1", 1, reviewed_implementation_head=_REVIEWED_HEAD)
+        if feedback is not None:
+            fixtures.write_review_feedback(root, ".ai-review/wi-1/feedback", feedback)
+        return managed_repo
+
+
+class LocalImplementationReviewRowExecuteTest(_ImplementationRowTestCase):
+    """Row 16: `"2.2"` ``/review-implementation`` from
+    ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``."""
+
+    PHASE = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+
+    def _execute(self, effect) -> dict:
+        managed_repo = _ReviewStageTarget.build(self, self.PHASE)
+        return self.execute(managed_repo, self.PHASE, "/review-implementation", effect)
+
+    def _approve(self, *, ledger=None, **feedback_kwargs):
+        return fixtures.review_writes_effect(
+            feedback=local_feedback("APPROVE", **feedback_kwargs),
+            phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            implementation_review_stages=ledger or fixtures.implementation_review_ledger(_C, local_bundle_id=_B),
+        )
+
+    def test_local_approve_recorded_finishes(self) -> None:
+        record = self._execute(self._approve())
+        self.assert_finished(record, "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(record["pre_state"]["bundle_manifest_bundle_id"], _B)
+
+    def test_local_approve_with_the_content_id_under_another_label_finishes(self) -> None:
+        record = self._execute(self._approve(
+            reviewed_content_id=None, extra_lines=(f"Review content ID: {_C}",),
+        ))
+        self.assert_finished(record, "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+
+    def test_each_local_approve_clause_fails_the_postcondition(self) -> None:
+        cases = {
+            "ledger bound to other content": (
+                self._approve(ledger=fixtures.implementation_review_ledger("d" * 64, local_bundle_id=_B)),
+                f"ledger review_content_id {'d' * 64!r} != manifest review_content_id {_C!r}",
+            ),
+            "ledger bound to another bundle": (
+                self._approve(ledger=fixtures.implementation_review_ledger(_C, local_bundle_id="e" * 64)),
+                f"ledger LOCAL_MODEL_IMPLEMENTATION_REVIEW bundle_id {'e' * 64!r} != manifest bundle_id",
+            ),
+            "no ledger stage": (
+                self._approve(ledger={"review_content_id": _C}),
+                "the ledger records no LOCAL_MODEL_IMPLEMENTATION_REVIEW stage",
+            ),
+            "manual stage already recorded": (
+                self._approve(ledger=fixtures.implementation_review_ledger(
+                    _C, local_bundle_id=_B, manual_bundle_id=_B,
+                )),
+                "the ledger already records MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            ),
+            "feedback bound to another bundle": (
+                self._approve(reviewed_bundle_id="e" * 64),
+                f"feedback Reviewed bundle ID {'e' * 64!r} != manifest bundle_id {_B!r}",
+            ),
+            "wrong role": (
+                self._approve(reviewer_role=_MANUAL),
+                f"feedback Reviewer role {_MANUAL!r} != {_LOCAL!r}",
+            ),
+            "wrong status": (
+                fixtures.review_writes_effect(
+                    feedback=local_feedback("REVISE"), phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+                    implementation_review_stages=fixtures.implementation_review_ledger(_C, local_bundle_id=_B),
+                ),
+                "feedback Status 'REVISE' != 'APPROVE'",
+            ),
+        }
+        for name, (effect, detail) in cases.items():
+            with self.subTest(clause=name):
+                record = self._execute(effect)
+                self.assert_failed(record, "postcondition_not_satisfied", detail=detail)
+
+    def test_local_revise_recorded_finishes(self) -> None:
+        record = self._execute(fixtures.review_writes_effect(feedback=local_feedback("REVISE"), phase="APPLYING_REVIEW_FEEDBACK"))
+        self.assert_finished(record, "APPLYING_REVIEW_FEEDBACK")
+
+    def test_each_local_revise_clause_fails_the_postcondition(self) -> None:
+        cases = {
+            "feedback bound to another bundle": (
+                local_feedback("REVISE", reviewed_bundle_id="e" * 64),
+                f"feedback Reviewed bundle ID {'e' * 64!r} != the pre-state manifest bundle_id {_B!r}",
+            ),
+            "wrong role": (
+                local_feedback("REVISE", reviewer_role=_MANUAL), f"feedback Reviewer role {_MANUAL!r}",
+            ),
+            "wrong work item": (local_feedback("REVISE", work_item="wi-other"), "feedback Work item 'wi-other'"),
+            "no feedback": (None, "no REVIEW_FEEDBACK.md is on file"),
+        }
+        for name, (feedback, detail) in cases.items():
+            with self.subTest(clause=name):
+                record = self._execute(fixtures.review_writes_effect(feedback=feedback, phase="APPLYING_REVIEW_FEEDBACK"))
+                self.assert_failed(record, "postcondition_not_satisfied", detail=detail)
+
+    def test_local_block_bound_to_the_pre_state_bundle_finishes(self) -> None:
+        record = self._execute(fixtures.review_writes_effect(feedback=local_feedback("BLOCK")))
+        self.assert_finished(record, self.PHASE)
+
+    def test_block_self_loop_without_current_block_evidence_fails_the_predicate(self) -> None:
+        cases = {
+            "no feedback": None,
+            "another bundle": local_feedback("BLOCK", reviewed_bundle_id="e" * 64),
+            "no binding line": local_feedback("BLOCK", reviewed_bundle_id=None),
+            "plan-stage role": local_feedback("BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW"),
+            "not BLOCK": local_feedback("REVISE"),
+        }
+        for name, feedback in cases.items():
+            with self.subTest(case=name):
+                record = self._execute(fixtures.review_writes_effect(feedback=feedback))
+                self.assert_failed(record, "predicate_not_satisfied")
+
+
+class ManualImplementationReviewRowExecuteTest(_ImplementationRowTestCase):
+    """Row 17: `"2.2"` ``/record-manual-implementation-review`` from
+    ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``, with the human's
+    pasted verdict already on file."""
+
+    PHASE = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+    def _execute(self, pasted: str, effect) -> dict:
+        managed_repo = _ReviewStageTarget.build(
+            self, self.PHASE, feedback=pasted,
+            implementation_review_stages=fixtures.implementation_review_ledger(_C, local_bundle_id=_B),
+        )
+        return self.execute(managed_repo, self.PHASE, "/record-manual-implementation-review", effect)
+
+    @staticmethod
+    def _manual(status: str, **kwargs) -> str:
+        kwargs.setdefault("reviewer_role", _MANUAL)
+        kwargs.setdefault("reviewed_bundle_id", _B)
+        return fixtures.build_review_feedback_text(status=status, **kwargs)
+
+    @staticmethod
+    def _approve_write(manual_bundle_id=_B, content_id=_C):
+        return fixtures.review_writes_effect(
+            phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+            implementation_review_stages=fixtures.implementation_review_ledger(
+                content_id, local_bundle_id=_B, manual_bundle_id=manual_bundle_id,
+            ),
+        )
+
+    def test_manual_approve_recorded_finishes(self) -> None:
+        record = self._execute(self._manual("APPROVE"), self._approve_write())
+        self.assert_finished(record, "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW")
+
+    def test_manual_approve_recorded_verbatim_for_an_advisory_bundle_mismatch_finishes(self) -> None:
+        record = self._execute(
+            self._manual("APPROVE", reviewed_bundle_id="e" * 64), self._approve_write(manual_bundle_id="e" * 64),
+        )
+        self.assert_finished(record, "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW")
+
+    def test_each_manual_approve_clause_fails_the_postcondition(self) -> None:
+        cases = {
+            "ledger not written": (
+                fixtures.review_writes_effect(phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"),
+                "the ledger does not record MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            ),
+            "ledger bound to other content": (
+                self._approve_write(content_id="d" * 64),
+                f"ledger review_content_id {'d' * 64!r} != manifest review_content_id {_C!r}",
+            ),
+            "manual bundle id is not the feedback's": (
+                self._approve_write(manual_bundle_id="e" * 64),
+                f"ledger MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW bundle_id {'e' * 64!r} != feedback "
+                f"Reviewed bundle ID {_B!r}",
+            ),
+        }
+        for name, (effect, detail) in cases.items():
+            with self.subTest(clause=name):
+                record = self._execute(self._manual("APPROVE"), effect)
+                self.assert_failed(record, "postcondition_not_satisfied", detail=detail)
+
+    def test_manual_revise_recorded_finishes(self) -> None:
+        record = self._execute(self._manual("REVISE"), fixtures.review_writes_effect(phase="APPLYING_REVIEW_FEEDBACK"))
+        self.assert_finished(record, "APPLYING_REVIEW_FEEDBACK")
+
+    def test_each_manual_revise_clause_fails_the_postcondition(self) -> None:
+        cases = {
+            "ledger written on REVISE": (
+                self._manual("REVISE"),
+                fixtures.review_writes_effect(
+                    phase="APPLYING_REVIEW_FEEDBACK",
+                    implementation_review_stages=fixtures.implementation_review_ledger(
+                        _C, local_bundle_id=_B, manual_bundle_id=_B,
+                    ),
+                ),
+                "which a REVISE never writes",
+            ),
+            "wrong role": (
+                self._manual("REVISE", reviewer_role=_LOCAL),
+                fixtures.review_writes_effect(phase="APPLYING_REVIEW_FEEDBACK"),
+                f"feedback Reviewer role {_LOCAL!r} != {_MANUAL!r}",
+            ),
+            "wrong status": (
+                self._manual("APPROVE"),
+                fixtures.review_writes_effect(phase="APPLYING_REVIEW_FEEDBACK"),
+                "feedback Status 'APPROVE' != 'REVISE'",
+            ),
+        }
+        for name, (pasted, effect, detail) in cases.items():
+            with self.subTest(clause=name):
+                record = self._execute(pasted, effect)
+                self.assert_failed(record, "postcondition_not_satisfied", detail=detail)
+
+    def test_a_block_left_in_place_fails_the_phase_clause(self) -> None:
+        """A manual ``BLOCK`` is a no-op the Controller never ingests; a
+        job that ends where it started does not verify."""
+        record = self._execute(self._manual("BLOCK"), None)
+        self.assert_failed(record, "phase_not_in_to_any_of")
+
+
+class ApplyImplementationReviewRowExecuteTest(_ImplementationRowTestCase):
+    """Row 18: `"2.2"` ``/apply-implementation-review`` from
+    ``APPLYING_REVIEW_FEEDBACK`` (step 7's post-fix regeneration)."""
+
+    PHASE = "APPLYING_REVIEW_FEEDBACK"
+
+    def _execute(self, effect) -> dict:
+        managed_repo = _ReviewStageTarget.build(self, self.PHASE, feedback=local_feedback("REVISE"))
+        return self.execute(managed_repo, self.PHASE, "/apply-implementation-review", effect)
+
+    def test_an_ordinary_post_fix_generation_finishes(self) -> None:
+        record = self._execute(fixtures.generation_effect(
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", revision=2, fix_commit=True,
+        ))
+        self.assert_finished(record, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+
+    def test_a_same_content_generation_whose_revision_does_not_move_finishes(self) -> None:
+        record = self._execute(fixtures.generation_effect("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", same_content=True))
+        self.assert_finished(record, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(fixtures.state_entry(self._case_root / "target")["implementation_revision"], 1)
+
+    def test_a_phase_flip_with_no_generation_fails_the_postcondition(self) -> None:
+        """The same_content-shaped case the revision clauses cannot see:
+        revision, reviewed head and ``HEAD`` all unchanged, so the old
+        bundle still reads coherent -- only the ``generation_head`` clause
+        catches it."""
+        record = self._execute(fixtures.review_writes_effect(phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW"))
+        self.assert_failed(record, "postcondition_not_satisfied", detail="no bundle generation ran in this job")
+
+    def test_a_published_revision_without_a_regenerated_bundle_fails_the_postcondition(self) -> None:
+        record = self._execute(fixtures.generation_effect(
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", revision=2, fix_commit=True, manifest=False,
+        ))
+        self.assert_failed(
+            record, "postcondition_not_satisfied",
+            detail="manifest implementation_revision 1 != state implementation_revision 2",
+        )
+
+    def test_a_rejected_regeneration_fails_the_postcondition(self) -> None:
+        record = self._execute(fixtures.generation_effect(
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", revision=2, fix_commit=True, rejected=True,
+        ))
+        self.assert_failed(record, "postcondition_not_satisfied", detail="REJECTED marker")
+
+    def test_a_worker_that_stays_at_applying_review_feedback_fails_the_phase_clause(self) -> None:
+        record = self._execute(None)
+        self.assert_failed(record, "phase_not_in_to_any_of")
+
+    def test_the_pre_state_records_the_bundle_the_attempt_started_from(self) -> None:
+        record = self._execute(None)
+        self.assertEqual(record["pre_state"]["bundle_manifest_bundle_id"], _B)
+        self.assertEqual(
+            record["pre_state"]["bundle_manifest_generation_head"],
+            record["pre_state"]["target_head"],
+        )
 
 
 if __name__ == "__main__":

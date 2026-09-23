@@ -71,6 +71,7 @@ import json
 import re
 import secrets
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -110,12 +111,23 @@ STATUS_HANDOFF_PENDING = "HANDOFF_PENDING"
 #: `PRE_STATE_FIELDS` -- the single declaration both `_capture_pre_state`
 #: and (in CP6B) the record-completeness property read, so the two cannot
 #: drift (the plan's own stated defect history: a field declared in the
-#: schema and never captured, round 8's B3). Only four of these seventeen
-#: are ever a predicate *input* (`bundle_id`, `bundle_manifest_readable`,
-#: `bundle_generated_digest` and, since revision 63's B2, `pre_work_item_keys`
-#: -- CP6B's own concern); the other thirteen are report data for
-#: `inspect`/`explain`/`status` and for a later
-#: generation's own use.
+#: schema and never captured, round 8's B3). Five of these eighteen are a
+#: predicate *input* (`bundle_manifest_bundle_id`, `bundle_generated_digest`,
+#: `pre_work_item_keys`, `checkpoints` and `target_head` -- CP6B's own
+#: concern, widened by `workflow-controller-automatic-lifecycle-
+#: orchestration`'s CP2); the postconditions also read
+#: `bundle_manifest_bundle_id`, `bundle_manifest_generation_head` and
+#: `pre_work_item_keys`. The rest are report data for
+#: `inspect`/`explain`/`status` and for a later generation's own use --
+#: including `bundle_id`, which is `work_item.current_bundle_id`, a field
+#: no Workflow writer ever sets, and so never a predicate input again (CP2's
+#: plan-stage `BLOCK`-predicate fix).
+#:
+#: `bundle_manifest_bundle_id` (CP2) is the pre-state bundle
+#: ``MANIFEST.md``'s own ``bundle_id:`` line -- the bundle a review job
+#: started from. A record written before it existed lacks the key, and
+#: every predicate/postcondition reading it treats that absence as "not
+#: satisfied" (fail closed).
 PRE_STATE_FIELDS: frozenset[str] = frozenset({
     "phase",
     "governing_workflow_version",
@@ -127,6 +139,7 @@ PRE_STATE_FIELDS: frozenset[str] = frozenset({
     "checkpoints",
     "bundle_id",
     "bundle_manifest_readable",
+    "bundle_manifest_bundle_id",
     "bundle_manifest_generation_head",
     "bundle_generated_digest",
     "rejected_marker_present",
@@ -203,7 +216,7 @@ def _bundle_generated_digest(root: Path, bundle_dir: Path) -> str | None:
 def _functional_review_consumed_blob(root: Path, work_item_id: str) -> str | None:
     """The current Git blob hash of ``FUNCTIONAL_REVIEW.md`` -- report
     data only (not a predicate input; see :data:`PRE_STATE_FIELDS`'s own
-    four-of-seventeen note), ``None`` when the file does not exist."""
+    note on which fields are), ``None`` when the file does not exist."""
     findings_path = root / evidence.functional_review_findings_path(root, work_item_id)
     if not findings_path.is_file():
         return None
@@ -260,6 +273,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
             "checkpoints": {},
             "bundle_id": None,
             "bundle_manifest_readable": False,
+            "bundle_manifest_bundle_id": None,
             "bundle_manifest_generation_head": None,
             "bundle_generated_digest": None,
             "rejected_marker_present": False,
@@ -291,6 +305,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
         "checkpoints": work_item.checkpoints,
         "bundle_id": work_item.current_bundle_id,
         "bundle_manifest_readable": manifest["_exists"],
+        "bundle_manifest_bundle_id": manifest["bundle_id"],
         "bundle_manifest_generation_head": manifest["generation_head"],
         "bundle_generated_digest": _bundle_generated_digest(root, bundle_dir),
         "rejected_marker_present": rejected_present,
@@ -306,17 +321,19 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
 # ---------------------------------------------------------------------------
 # CP6B -- the `ExpectedOutcome` table (plan section "CP6B -- Job execution,
 # part 2", the table transcribed under "An `ExpectedOutcome` is data, not
-# prose"). Eleven rows: one per automatic `(from_phase,
-# governing_workflow_version, action)` triple the combined CP4/CP4B
-# decision engine can ever produce -- CP6B's own six, revision 63's B2
-# `NoWorkItemYet` bootstrap row (whose `from_phase` is `NO_PHASE`, never a
-# phase CP4's dispatch table is keyed on), and the four `"2.2"` plan-review
-# rows the `workflow-controller-protocol-2-2-compatibility` milestone's CP1
-# added. `to_any_of` alone drives step 4's `expected_transition`; the
-# `predicate`/`predicate_inputs`/`writer_calls` columns -- and the
-# `postcondition`/`postcondition_phases` pair
-# `workflow-controller-worker-execution-hardening`'s CP3 added -- are step
-# 8's own verification concern.
+# prose"). Eighteen rows: one per automatic `(from_phase,
+# governing_workflow_version, action)` triple -- CP6B's own six, revision
+# 63's B2 `NoWorkItemYet` bootstrap row (whose `from_phase` is `NO_PHASE`,
+# never a phase CP4's dispatch table is keyed on), the four `"2.2"`
+# plan-review rows the `workflow-controller-protocol-2-2-compatibility`
+# milestone's CP1 added, and the seven implementation-stage rows (12-18)
+# `workflow-controller-automatic-lifecycle-orchestration`'s CP2 added.
+# `to_any_of` alone drives step 4's `expected_transition`; the
+# `predicate`/`predicate_inputs`/`writer_calls` columns -- and the per-phase
+# `postconditions` (`workflow-controller-worker-execution-hardening`'s CP3
+# added a single `postcondition`/`postcondition_phases` pair; this
+# milestone's CP2 generalised it to one postcondition per phase set) -- are
+# step 8's own verification concern.
 # ---------------------------------------------------------------------------
 
 WRITER_KIND_COMPLETION = "COMPLETION"
@@ -365,7 +382,20 @@ class WriterCall:
     literal search for the function's own identifier followed by ``(``
     (or, for row 5's shell-script call, the script's own basename) finds
     it under either form without needing to discriminate which form
-    matched."""
+    matched.
+
+    ``trailing_calls`` (`workflow-controller-automatic-lifecycle-
+    orchestration` CP2) is an explicit, per-call allowlist of
+    ``(function, justification)`` pairs: ``workflow_state.<function>(``
+    calls the frozen text legitimately makes *after* the declared call
+    inside the declared span, which property 5 would otherwise report as a
+    further durable write (`milestone-implement.md` step 1f's post-guard
+    ``committed_checkpoint_status`` read and ``release_checkpoint``
+    claim-record release). Property 5 skips only those named functions,
+    and only after the declared call; an entry naming a function that does
+    not occur there is itself a violation, so the allowlist cannot go
+    stale silently. Empty for every call that needs none -- none is added
+    speculatively."""
 
     function: str
     file: str
@@ -373,6 +403,7 @@ class WriterCall:
     kind: str
     branch: BranchSpec | None = None
     match_text: str | None = None
+    trailing_calls: tuple[tuple[str, str], ...] = ()
 
     def match(self) -> str:
         return self.match_text if self.match_text is not None else f"{self.function}("
@@ -387,6 +418,10 @@ PredicateFn = Callable[[Path, str, dict], bool]
 #: postcondition asserts that the durable artifact a completion phase
 #: promises is actually coherent, whichever way the phase was reached.
 PostconditionFn = Callable[[Path, "str | None", dict], tuple[bool, str]]
+
+#: One ``ExpectedOutcome.postconditions`` entry: the observed post-phases
+#: it applies to, and the postcondition evaluated there.
+PostconditionEntry = tuple[frozenset[str], PostconditionFn]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -407,12 +442,15 @@ class ExpectedOutcome:
     predicate: PredicateFn | None
     predicate_inputs: frozenset[str]
     writer_calls: tuple[WriterCall, ...]
-    #: Evaluated only when the observed post-phase is a member of
-    #: ``postcondition_phases`` (non-empty iff ``postcondition`` is set,
-    #: and a subset of ``to_any_of`` -- :func:`property_table_violations`).
-    #: Not subject to the predicate's own "iff self-loop" rule.
-    postcondition: PostconditionFn | None = None
-    postcondition_phases: frozenset[str] = frozenset()
+    #: Per-phase artifact postconditions (`workflow-controller-automatic-
+    #: lifecycle-orchestration` CP2, generalising the single
+    #: ``postcondition``/``postcondition_phases`` pair): the entry whose
+    #: phase set contains the observed post-phase is evaluated, and no
+    #: other. The phase sets are non-empty, pairwise disjoint and each a
+    #: subset of ``to_any_of`` (:func:`property_table_violations`); a row
+    #: may declare none. Not subject to the predicate's own "iff
+    #: self-loop" rule.
+    postconditions: tuple[PostconditionEntry, ...] = ()
 
 
 def _row_branch(outcome: ExpectedOutcome) -> BranchSpec | None:
@@ -443,23 +481,75 @@ def _row_branch(outcome: ExpectedOutcome) -> BranchSpec | None:
     return next(iter(branches))
 
 
-def _predicate_row3_block_feedback_current(root: Path, work_item_id: str, pre_state: dict) -> bool:
-    """Row 3's predicate: a current-round ``REVIEW_FEEDBACK.md`` now
-    exists whose ``Reviewed bundle ID:`` matches the bundle the pre-state
-    captured, whose ``Reviewer role:`` is ``LOCAL_MODEL_PLAN_REVIEW``, and
-    whose ``Status:`` is ``BLOCK`` -- read fresh from disk, never from
-    `pre_state` itself (the file did not exist, or held a different
-    round's content, before the worker ran)."""
-    if not pre_state.get("bundle_manifest_readable"):
+def _postcondition_for_phase(outcome: ExpectedOutcome, phase: Any) -> PostconditionFn | None:
+    """The postcondition of ``outcome``'s entry whose phase set contains
+    ``phase``, or ``None`` when no entry does. The phase sets are pairwise
+    disjoint (:func:`property_table_violations`), so at most one entry
+    can match."""
+    for phases, postcondition in outcome.postconditions:
+        if phase in phases:
+            return postcondition
+    return None
+
+
+def _block_feedback_bound_to_pre_state_bundle(
+    root: Path, work_item_id: str, pre_state: dict, *, role_matches: Callable[[str | None], bool],
+) -> bool:
+    """The one ``BLOCK``-self-loop evidence rule both review rows share
+    (row 3's plan-stage ``/review-plan`` and row 16's ``"2.2"``
+    ``/review-implementation``): a ``REVIEW_FEEDBACK.md`` read fresh from
+    disk now declares ``Status: BLOCK``, a reviewer role ``role_matches``
+    accepts, and a ``Reviewed bundle ID:`` equal to the bundle the job
+    started from -- the pre-state ``MANIFEST.md``'s own ``bundle_id``
+    (``pre_state["bundle_manifest_bundle_id"]``). Both sides must be
+    non-null: a feedback file missing its binding line, a pre-state with no
+    readable manifest, or a record written before the field existed is
+    "not satisfied", never ``None == None`` (fail closed)."""
+    expected_bundle_id = pre_state.get("bundle_manifest_bundle_id")
+    if not isinstance(expected_bundle_id, str) or not expected_bundle_id:
         return False
     feedback_dir = evidence.resolve_feedback_dir(root, work_item_id)
     feedback = evidence.read_feedback_fields(root, feedback_dir)
     if feedback is None:
         return False
+    # `expected_bundle_id` is a non-empty string here, so equality alone
+    # already refuses a feedback file whose binding line is missing.
     return (
         feedback.get("status") == "BLOCK"
-        and evidence._normalize_role(feedback.get("reviewer_role")) == "LOCAL_MODEL_PLAN_REVIEW"
-        and feedback.get("reviewed_bundle_id") == pre_state.get("bundle_id")
+        and role_matches(feedback.get("reviewer_role"))
+        and feedback.get("reviewed_bundle_id") == expected_bundle_id
+    )
+
+
+def _predicate_row3_block_feedback_current(root: Path, work_item_id: str, pre_state: dict) -> bool:
+    """Row 3's predicate: a current-round ``REVIEW_FEEDBACK.md`` now
+    exists whose ``Reviewed bundle ID:`` matches the bundle the pre-state
+    plan ``MANIFEST.md`` carried, whose ``Reviewer role:`` is
+    ``LOCAL_MODEL_PLAN_REVIEW`` (legacy spellings normalised exactly as
+    ``evidence._normalize_role`` does), and whose ``Status:`` is ``BLOCK``
+    -- read fresh from disk, never from `pre_state` itself (the file did
+    not exist, or held a different round's content, before the worker
+    ran).
+
+    CP2's fix: the binding side used to be ``pre_state["bundle_id"]``
+    (``work_item.current_bundle_id``), which no Workflow writer ever sets,
+    so a genuine ``BLOCK`` never verified while a feedback file *missing*
+    its binding line did (``None == None``)."""
+    return _block_feedback_bound_to_pre_state_bundle(
+        root, work_item_id, pre_state,
+        role_matches=lambda role: evidence._normalize_role(role) == "LOCAL_MODEL_PLAN_REVIEW",
+    )
+
+
+def _predicate_local_implementation_block_current(root: Path, work_item_id: str, pre_state: dict) -> bool:
+    """Row 16's predicate (the ``"2.2"`` ``/review-implementation``
+    ``BLOCK`` no-op): a fresh ``REVIEW_FEEDBACK.md`` whose role is exactly
+    ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` (no alias -- the implementation
+    ledger was introduced fresh at ``"2.2"``), ``Status: BLOCK``, bound to
+    the pre-state manifest's non-null ``bundle_id``."""
+    return _block_feedback_bound_to_pre_state_bundle(
+        root, work_item_id, pre_state,
+        role_matches=lambda role: role == evidence.LOCAL_IMPLEMENTATION_ROLE,
     )
 
 
@@ -527,14 +617,415 @@ def _postcondition_plan_bundle_coherent(
     return evidence.plan_bundle_coherence(root, work_item_id, post_work_item.plan_revision)
 
 
-#: The eleven rows, transcribed verbatim from the plan's own table (CP6B,
+# ---------------------------------------------------------------------------
+# `workflow-controller-automatic-lifecycle-orchestration` CP2 -- the
+# implementation-stage predicates and postconditions (rows 12-18). Each is
+# read fresh from disk and the target's own Git history, never from process
+# memory, and every read failure is "not satisfied" (fail closed). Like the
+# plan-stage postcondition they compare revisions, bindings and committed
+# facts only; nothing here recomputes `bundle_id`/`review_content_id`.
+# ---------------------------------------------------------------------------
+
+_SELF_REVIEWING_IMPLEMENTATION = "SELF_REVIEWING_IMPLEMENTATION"
+
+
+def _fresh_work_item(root: Path, work_item_id: str | None) -> tuple[Any, str | None]:
+    """``(work_item_view, None)`` for ``work_item_id`` in a fresh
+    post-state read, or ``(None, detail)`` when the state cannot be read or
+    carries no such work item."""
+    try:
+        post_snapshot = target_state.read(SimpleNamespace(root=root))
+    except ControllerError as exc:
+        return None, f"post-state could not be read: {exc}"
+    post_work_item = post_snapshot.work_items.get(work_item_id)
+    if post_work_item is None:
+        return None, f"work item {work_item_id!r} is absent from the post-state"
+    return post_work_item, None
+
+
+def _checkpoint_status(checkpoint: Any) -> Any:
+    return checkpoint.get("status") if isinstance(checkpoint, Mapping) else None
+
+
+def _predicate_checkpoint_completed_durably(root: Path, work_item_id: str, pre_state: dict) -> bool:
+    """Rows 12/13's self-loop predicate (``/milestone-implement`` from
+    ``IMPLEMENTING`` back to ``IMPLEMENTING``): ``HEAD`` moved off
+    ``pre_state["target_head"]``, and at least one checkpoint is
+    ``COMPLETE`` in the fresh state, was not ``COMPLETE`` in
+    ``pre_state["checkpoints"]``, and is ``COMPLETE`` in the state
+    committed at ``HEAD`` (``evidence.committed_checkpoint_statuses``, the
+    fact ``workflow_state.committed_checkpoint_status`` reads) -- step 1f
+    persists the completion and commits it in one guard window. A
+    completion left only in the working tree is not durable, so it does
+    not verify. A pre-state lacking either input is "not satisfied"."""
+    pre_checkpoints = pre_state.get("checkpoints")
+    pre_head = pre_state.get("target_head")
+    if not isinstance(pre_checkpoints, Mapping) or not isinstance(pre_head, str):
+        return False
+    head = _current_head(root)
+    if head is None or head == pre_head:
+        return False
+    post_work_item, _detail = _fresh_work_item(root, work_item_id)
+    if post_work_item is None:
+        return False
+    committed = evidence.committed_checkpoint_statuses(root, "HEAD")
+    if committed is None or not isinstance(post_work_item.checkpoints, Mapping):
+        return False
+    return any(
+        _checkpoint_status(checkpoint) == "COMPLETE"
+        and _checkpoint_status(pre_checkpoints.get(checkpoint_id)) != "COMPLETE"
+        and committed.get((work_item_id, checkpoint_id)) == "COMPLETE"
+        for checkpoint_id, checkpoint in post_work_item.checkpoints.items()
+    )
+
+
+def _postcondition_self_review_entered_durably(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """Rows 12/13's ``SELF_REVIEWING_IMPLEMENTATION`` postcondition: the
+    fresh ``registry_complete`` is ``True``, every registry checkpoint is
+    ``COMPLETE`` in the state committed at ``HEAD``, and the work item's
+    committed phase at ``HEAD`` is ``SELF_REVIEWING_IMPLEMENTATION``.
+
+    It deliberately does not require a checkpoint to have *newly*
+    completed: from ``IMPLEMENTING`` with every checkpoint already
+    ``COMPLETE`` (the ``NO_CHECKPOINT`` path after a plan re-approval),
+    ``/milestone-implement`` step 2 commits the transition alone, and a
+    run that stops right after that commit is a legal partial run. On the
+    ordinary path step 1f's own checkpoint commit makes every clause hold.
+
+    Registry completion at ``HEAD`` is derived by
+    ``target_state._resolve_registry_complete`` -- the one reader of the
+    registry's declared checkpoint ids -- over the committed statuses."""
+    post_work_item, detail = _fresh_work_item(root, work_item_id)
+    if post_work_item is None:
+        return False, detail
+    if post_work_item.registry_complete is not True:
+        return False, (
+            f"the post-state registry_complete is {post_work_item.registry_complete!r}, not True "
+            f"(a registry checkpoint is not COMPLETE)"
+        )
+    committed_entry = evidence.committed_work_item(root, work_item_id, "HEAD")
+    committed_statuses = evidence.committed_checkpoint_statuses(root, "HEAD")
+    if committed_entry is None or committed_statuses is None:
+        return False, f"{work_item_id!r}'s WORKFLOW_STATE.json entry could not be read at HEAD"
+    own_committed = {
+        checkpoint_id: {"status": status}
+        for (owner, checkpoint_id), status in committed_statuses.items() if owner == work_item_id
+    }
+    try:
+        committed_complete = target_state._resolve_registry_complete(
+            root, work_item_id,
+            {"registry_path": committed_entry.get("registry_path"), "checkpoints": own_committed},
+        )
+    except ControllerError as exc:
+        return False, f"registry completion at HEAD could not be derived: {exc}"
+    if committed_complete is None:
+        return False, f"{work_item_id!r}'s entry committed at HEAD declares no registry_path"
+    if committed_complete is not True:
+        statuses = {checkpoint_id: entry["status"] for checkpoint_id, entry in sorted(own_committed.items())}
+        return False, (
+            f"not every registry checkpoint is COMPLETE in the state committed at HEAD "
+            f"(committed statuses {statuses!r}): the checkpoint completion is uncommitted"
+        )
+    committed_phase = committed_entry.get("phase")
+    if committed_phase != _SELF_REVIEWING_IMPLEMENTATION:
+        return False, (
+            f"the committed phase at HEAD is {committed_phase!r}, not "
+            f"{_SELF_REVIEWING_IMPLEMENTATION!r}: the transition is uncommitted"
+        )
+    return True, (
+        f"every registry checkpoint is COMPLETE and the phase is "
+        f"{_SELF_REVIEWING_IMPLEMENTATION!r} in the state committed at HEAD"
+    )
+
+
+def _postcondition_implementation_bundle_coherent(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """The implementation-bundle-producing phases' postcondition (rows
+    12-15, and the coherence half of row 18's): no ``REJECTED`` marker
+    (``evidence.rejected_marker_detail``), and the current implementation
+    bundle belongs to the fresh post-state's round at the live ``HEAD``
+    (``evidence.implementation_bundle_coherence`` with
+    ``require_current_generation_head=True``: every generation-record
+    commit lands immediately before its generation, so a completed round
+    leaves ``generation_head == HEAD``)."""
+    post_work_item, detail = _fresh_work_item(root, work_item_id)
+    if post_work_item is None:
+        return False, detail
+    rejected, marker_detail = evidence.rejected_marker_detail(root, work_item_id)
+    if rejected:
+        marker_path = evidence.resolve_rejected_marker_path(root, work_item_id)
+        return False, (
+            f"the REJECTED marker at {marker_path} is present ({marker_detail}): the "
+            f"implementation bundle was withdrawn"
+        )
+    coherent, _clause, coherence_detail = evidence.implementation_bundle_coherence(
+        root, post_work_item, _current_head(root), require_current_generation_head=True,
+    )
+    return coherent, coherence_detail
+
+
+def _postcondition_implementation_bundle_regenerated(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """Row 18's postcondition (``"2.2"`` ``/apply-implementation-review``):
+    the coherent clause, plus a manifest ``generation_head`` different from
+    ``pre_state["bundle_manifest_generation_head"]`` -- a new generation
+    must have run in this job. The revision-level clauses alone cannot see
+    a ``same_content`` post-fix, whose ``implementation_revision`` and
+    ``reviewed_implementation_head`` deliberately do not move."""
+    if "bundle_manifest_generation_head" not in pre_state:
+        return False, "the pre-state carries no bundle_manifest_generation_head to compare against"
+    coherent, detail = _postcondition_implementation_bundle_coherent(root, work_item_id, pre_state)
+    if not coherent:
+        return False, detail
+    manifest = evidence.read_manifest_fields(root, evidence.implementation_bundle_dir(root, work_item_id))
+    pre_generation_head = pre_state["bundle_manifest_generation_head"]
+    if manifest["generation_head"] == pre_generation_head:
+        return False, (
+            f"manifest generation_head {pre_generation_head!r} is the pre-state's own: no bundle "
+            f"generation ran in this job"
+        )
+    return True, f"{detail}; regenerated since generation_head {pre_generation_head!r}"
+
+
+def _implementation_manifest(root: Path, work_item_id: str) -> dict[str, Any]:
+    return evidence.read_manifest_fields(root, evidence.implementation_bundle_dir(root, work_item_id))
+
+
+def _feedback_verdict_failure(
+    root: Path, work_item_id: str, *, role: str, status: str,
+    bundle_id: str | None, bundle_source: str,
+) -> tuple[dict | None, str | None]:
+    """``(feedback, None)`` when ``REVIEW_FEEDBACK.md`` (read fresh) is on
+    file with reviewer role exactly ``role``, ``Status`` exactly ``status``
+    and ``Reviewed bundle ID`` equal to a non-null ``bundle_id``;
+    otherwise ``(feedback_or_None, detail)`` naming the first failing
+    clause. ``bundle_source`` names where ``bundle_id`` came from."""
+    feedback_dir = evidence.resolve_feedback_dir(root, work_item_id)
+    feedback = evidence.read_feedback_fields(root, feedback_dir)
+    if feedback is None:
+        return None, f"no REVIEW_FEEDBACK.md is on file at {feedback_dir}"
+    if feedback.get("reviewer_role") != role:
+        return feedback, f"feedback Reviewer role {feedback.get('reviewer_role')!r} != {role!r}"
+    if feedback.get("status") != status:
+        return feedback, f"feedback Status {feedback.get('status')!r} != {status!r}"
+    if not bundle_id:
+        return feedback, f"{bundle_source} is {bundle_id!r}, so the feedback's binding cannot be checked"
+    if feedback.get("reviewed_bundle_id") != bundle_id:
+        return feedback, (
+            f"feedback Reviewed bundle ID {feedback.get('reviewed_bundle_id')!r} != "
+            f"{bundle_source} {bundle_id!r}"
+        )
+    return feedback, None
+
+
+def _postcondition_local_implementation_approve_recorded(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """Row 16's ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``
+    postcondition (a local ``APPROVE``): the fresh ledger records
+    ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` against the current manifest's
+    ``bundle_id`` and ``review_content_id``, no manual stage yet, and the
+    feedback on file is that role's ``APPROVE`` bound to the manifest's
+    ``bundle_id``. There is deliberately no clause on the feedback's own
+    content-id line: ``review-implementation.md`` A5 requires the value
+    "as its own labelled line" without naming the label, and the ledger
+    clause already binds the content."""
+    post_work_item, detail = _fresh_work_item(root, work_item_id)
+    if post_work_item is None:
+        return False, detail
+    ledger = evidence.read_implementation_review_ledger(post_work_item)
+    if ledger.malformed is not None:
+        return False, f"implementation_review_stages is malformed: {ledger.malformed}"
+    manifest = _implementation_manifest(root, work_item_id)
+    if not manifest["_exists"]:
+        return False, "the implementation bundle MANIFEST.md is missing or unreadable"
+    manifest_bundle_id = manifest["bundle_id"]
+    manifest_content_id = manifest["review_content_id"]
+    if ledger.local is None:
+        return False, f"the ledger records no {evidence.LOCAL_IMPLEMENTATION_ROLE} stage"
+    if not manifest_bundle_id or ledger.local["bundle_id"] != manifest_bundle_id:
+        return False, (
+            f"ledger {evidence.LOCAL_IMPLEMENTATION_ROLE} bundle_id {ledger.local['bundle_id']!r} != "
+            f"manifest bundle_id {manifest_bundle_id!r}"
+        )
+    if not manifest_content_id or ledger.review_content_id != manifest_content_id:
+        return False, (
+            f"ledger review_content_id {ledger.review_content_id!r} != manifest review_content_id "
+            f"{manifest_content_id!r}"
+        )
+    if ledger.manual is not None:
+        return False, f"the ledger already records {evidence.MANUAL_IMPLEMENTATION_ROLE}"
+    _feedback, failure = _feedback_verdict_failure(
+        root, work_item_id, role=evidence.LOCAL_IMPLEMENTATION_ROLE, status="APPROVE",
+        bundle_id=manifest_bundle_id, bundle_source="manifest bundle_id",
+    )
+    if failure is not None:
+        return False, failure
+    return True, (
+        f"{evidence.LOCAL_IMPLEMENTATION_ROLE} APPROVE recorded for bundle {manifest_bundle_id} and "
+        f"review_content_id {manifest_content_id}"
+    )
+
+
+def _postcondition_local_implementation_revise_recorded(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """Row 16's ``APPLYING_REVIEW_FEEDBACK`` postcondition (a local
+    ``REVISE``): the feedback on file is role exactly
+    ``LOCAL_MODEL_IMPLEMENTATION_REVIEW``, ``Status: REVISE``, bound to the
+    bundle the job started from (a non-null
+    ``pre_state["bundle_manifest_bundle_id"]``), for this work item."""
+    feedback, failure = _feedback_verdict_failure(
+        root, work_item_id, role=evidence.LOCAL_IMPLEMENTATION_ROLE, status="REVISE",
+        bundle_id=pre_state.get("bundle_manifest_bundle_id"),
+        bundle_source="the pre-state manifest bundle_id",
+    )
+    if failure is not None:
+        return False, failure
+    if feedback.get("work_item") != work_item_id:
+        return False, f"feedback Work item {feedback.get('work_item')!r} != {work_item_id!r}"
+    return True, f"{evidence.LOCAL_IMPLEMENTATION_ROLE} REVISE on file for bundle {feedback['reviewed_bundle_id']}"
+
+
+def _postcondition_manual_implementation_approve_recorded(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """Row 17's ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` postcondition
+    (a manual ``APPROVE``): the fresh ledger records both stages against
+    the manifest's ``review_content_id``, and the manual stage's
+    ``bundle_id`` equals the feedback's ``Reviewed bundle ID`` -- recorded
+    verbatim by contract (``record-manual-implementation-review.md`` step
+    7), even when it differs from the current bundle."""
+    post_work_item, detail = _fresh_work_item(root, work_item_id)
+    if post_work_item is None:
+        return False, detail
+    ledger = evidence.read_implementation_review_ledger(post_work_item)
+    if ledger.malformed is not None:
+        return False, f"implementation_review_stages is malformed: {ledger.malformed}"
+    if ledger.local is None or ledger.manual is None:
+        missing = [
+            role for role, stage in (
+                (evidence.LOCAL_IMPLEMENTATION_ROLE, ledger.local),
+                (evidence.MANUAL_IMPLEMENTATION_ROLE, ledger.manual),
+            ) if stage is None
+        ]
+        return False, f"the ledger does not record {' or '.join(missing)}"
+    manifest = _implementation_manifest(root, work_item_id)
+    if not manifest["_exists"]:
+        return False, "the implementation bundle MANIFEST.md is missing or unreadable"
+    manifest_content_id = manifest["review_content_id"]
+    if not manifest_content_id or ledger.review_content_id != manifest_content_id:
+        return False, (
+            f"ledger review_content_id {ledger.review_content_id!r} != manifest review_content_id "
+            f"{manifest_content_id!r}"
+        )
+    feedback = evidence.read_feedback_fields(root, evidence.resolve_feedback_dir(root, work_item_id))
+    if feedback is None:
+        return False, "no REVIEW_FEEDBACK.md is on file to bind the manual stage to"
+    reviewed_bundle_id = feedback.get("reviewed_bundle_id")
+    if not reviewed_bundle_id or ledger.manual["bundle_id"] != reviewed_bundle_id:
+        return False, (
+            f"ledger {evidence.MANUAL_IMPLEMENTATION_ROLE} bundle_id {ledger.manual['bundle_id']!r} != "
+            f"feedback Reviewed bundle ID {reviewed_bundle_id!r}"
+        )
+    return True, (
+        f"both implementation-review stages APPROVE recorded for review_content_id {manifest_content_id}"
+    )
+
+
+def _postcondition_manual_implementation_revise_recorded(
+    root: Path, work_item_id: "str | None", pre_state: dict,
+) -> tuple[bool, str]:
+    """Row 17's ``APPLYING_REVIEW_FEEDBACK`` postcondition (a manual
+    ``REVISE``): the feedback on file is role exactly
+    ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` with ``Status: REVISE``, and
+    the ledger's manual stage is still unrecorded -- the ``REVISE`` branch
+    writes no ledger entry. A malformed ledger is "not satisfied"."""
+    feedback = evidence.read_feedback_fields(root, evidence.resolve_feedback_dir(root, work_item_id))
+    if feedback is None:
+        return False, "no REVIEW_FEEDBACK.md is on file"
+    if feedback.get("reviewer_role") != evidence.MANUAL_IMPLEMENTATION_ROLE:
+        return False, (
+            f"feedback Reviewer role {feedback.get('reviewer_role')!r} != "
+            f"{evidence.MANUAL_IMPLEMENTATION_ROLE!r}"
+        )
+    if feedback.get("status") != "REVISE":
+        return False, f"feedback Status {feedback.get('status')!r} != 'REVISE'"
+    post_work_item, detail = _fresh_work_item(root, work_item_id)
+    if post_work_item is None:
+        return False, detail
+    ledger = evidence.read_implementation_review_ledger(post_work_item)
+    if ledger.malformed is not None:
+        return False, f"implementation_review_stages is malformed: {ledger.malformed}"
+    if ledger.manual is not None:
+        return False, f"the ledger records {evidence.MANUAL_IMPLEMENTATION_ROLE}, which a REVISE never writes"
+    return True, f"{evidence.MANUAL_IMPLEMENTATION_ROLE} REVISE on file; the manual stage is unrecorded"
+
+
+#: The `milestone-implement.md` step 1f calls that follow `complete_checkpoint`
+#: inside its own declared span (property 5's `trailing_calls` allowlist).
+_STEP_1F_TRAILING_CALLS: tuple[tuple[str, str], ...] = (
+    ("committed_checkpoint_status",
+     "a read: once the guard is released, step 1f verifies the completion is committed before "
+     "releasing the claim; it writes nothing"),
+    ("release_checkpoint",
+     "the checkpoint claim-record release under .ai-review/runtime, made only after the "
+     "completion is durable; it never writes WORKFLOW_STATE.json"),
+)
+
+
+def _milestone_implement_rows(version: str, review_phase: str) -> tuple[ExpectedOutcome, ...]:
+    """Rows 12/13 and 14/15 for one governing version: ``/milestone-implement``
+    from ``IMPLEMENTING`` (one checkpoint per invocation, or -- when every
+    checkpoint is already ``COMPLETE`` -- steps 2 and 4) and from
+    ``SELF_REVIEWING_IMPLEMENTATION`` (step 4), where ``review_phase`` is
+    ``bundle_generation_target_phase("implementation", version)``."""
+    return (
+        ExpectedOutcome(
+            from_phase="IMPLEMENTING", governing_version=version, action="/milestone-implement",
+            to_any_of=frozenset({"IMPLEMENTING", _SELF_REVIEWING_IMPLEMENTATION, review_phase}),
+            predicate=_predicate_checkpoint_completed_durably,
+            predicate_inputs=frozenset({"checkpoints", "target_head"}),
+            writer_calls=(
+                WriterCall("complete_checkpoint", "milestone-implement.md", "milestone-implement.md:183",
+                           WRITER_KIND_COMPLETION, branch=BranchSpec(kind="step", label="1f"),
+                           trailing_calls=_STEP_1F_TRAILING_CALLS),
+            ),
+            postconditions=(
+                (frozenset({_SELF_REVIEWING_IMPLEMENTATION}), _postcondition_self_review_entered_durably),
+                (frozenset({review_phase}), _postcondition_implementation_bundle_coherent),
+            ),
+        ),
+        ExpectedOutcome(
+            from_phase=_SELF_REVIEWING_IMPLEMENTATION, governing_version=version,
+            action="/milestone-implement",
+            to_any_of=frozenset({review_phase}),
+            predicate=None, predicate_inputs=frozenset(),
+            writer_calls=(
+                WriterCall("record_bundle_generation", "milestone-implement.md",
+                           "milestone-implement.md:309", WRITER_KIND_COMPLETION,
+                           branch=BranchSpec(kind="step", label="4")),
+            ),
+            postconditions=((frozenset({review_phase}), _postcondition_implementation_bundle_coherent),),
+        ),
+    )
+
+
+#: The eighteen rows, transcribed verbatim from the plan's own table (CP6B,
 #: "An `ExpectedOutcome` is data, not prose"; row 7 added by revision 63's
 #: B2, the `NoWorkItemYet` bootstrap; the four `"2.2"` plan-review rows
 #: added by the `workflow-controller-protocol-2-2-compatibility` milestone's
 #: CP1 -- each byte-identical to its `"2.1"` counterpart except for
 #: `governing_version`, since `docs/ai-workflow/MILESTONE_WORKFLOW.md`'s own
 #: two-stage plan-review protocol does not branch on `"2.1"` vs. `"2.2"` at
-#: all).
+#: all; rows 12-18, the implementation stage, added by
+#: `workflow-controller-automatic-lifecycle-orchestration`'s CP2 -- no `"1"`
+#: row, since the `"1"` branch of `/milestone-implement` writes no state, so
+#: a job could not be verified).
 EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="2.1", action="/milestone-plan",
@@ -544,8 +1035,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
                        WRITER_KIND_COMPLETION),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
     ),
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="2.2", action="/milestone-plan",
@@ -555,8 +1045,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
                        WRITER_KIND_COMPLETION),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
     ),
     ExpectedOutcome(
         from_phase="PLANNING", governing_version="1", action="/milestone-plan",
@@ -566,8 +1055,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:202",
                        WRITER_KIND_COMPLETION),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
     ),
     ExpectedOutcome(
         from_phase="AWAITING_LOCAL_PLAN_REVIEW", governing_version="2.1", action="/review-plan",
@@ -575,7 +1063,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "REVISING_PLAN", "AWAITING_LOCAL_PLAN_REVIEW",
         }),
         predicate=_predicate_row3_block_feedback_current,
-        predicate_inputs=frozenset({"bundle_id", "bundle_manifest_readable"}),
+        predicate_inputs=frozenset({"bundle_manifest_bundle_id"}),
         writer_calls=(
             WriterCall("record_local_plan_review", "review-plan.md", "review-plan.md:107",
                        WRITER_KIND_COMPLETION, branch=BranchSpec(kind="bullet", label="BLOCK")),
@@ -587,7 +1075,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "REVISING_PLAN", "AWAITING_LOCAL_PLAN_REVIEW",
         }),
         predicate=_predicate_row3_block_feedback_current,
-        predicate_inputs=frozenset({"bundle_id", "bundle_manifest_readable"}),
+        predicate_inputs=frozenset({"bundle_manifest_bundle_id"}),
         writer_calls=(
             WriterCall("record_local_plan_review", "review-plan.md", "review-plan.md:107",
                        WRITER_KIND_COMPLETION, branch=BranchSpec(kind="bullet", label="BLOCK")),
@@ -623,8 +1111,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
                        WRITER_KIND_COMPLETION, branch=BranchSpec(kind="step", label="5"),
                        match_text="prepare-ai-review.sh"),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_EXTERNAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
     ),
     ExpectedOutcome(
         from_phase="REVISING_PLAN", governing_version="2.1", action="/apply-plan-review",
@@ -634,8 +1121,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("transition_to_awaiting_local_plan_review", "apply-plan-review.md",
                        "apply-plan-review.md:145", WRITER_KIND_COMPLETION),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
     ),
     ExpectedOutcome(
         from_phase="REVISING_PLAN", governing_version="2.2", action="/apply-plan-review",
@@ -645,8 +1131,7 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("transition_to_awaiting_local_plan_review", "apply-plan-review.md",
                        "apply-plan-review.md:145", WRITER_KIND_COMPLETION),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
     ),
     ExpectedOutcome(
         from_phase=NO_PHASE, governing_version=None, action="/milestone-plan",
@@ -657,8 +1142,63 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
             WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:208",
                        WRITER_KIND_COMPLETION),
         ),
-        postcondition=_postcondition_plan_bundle_coherent,
-        postcondition_phases=frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}),
+        postconditions=((frozenset({"AWAITING_LOCAL_PLAN_REVIEW"}), _postcondition_plan_bundle_coherent),),
+    ),
+    # Rows 12 and 14 ("2.1"), 13 and 15 ("2.2").
+    *_milestone_implement_rows("2.1", "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"),
+    *_milestone_implement_rows("2.2", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"),
+    # Row 16: the "2.2" authoritative `/review-implementation` branch (A6).
+    ExpectedOutcome(
+        from_phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW", governing_version="2.2",
+        action="/review-implementation",
+        to_any_of=frozenset({
+            "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK",
+            "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+        }),
+        predicate=_predicate_local_implementation_block_current,
+        predicate_inputs=frozenset({"bundle_manifest_bundle_id"}),
+        writer_calls=(
+            WriterCall("record_local_implementation_review", "review-implementation.md",
+                       "review-implementation.md:459", WRITER_KIND_COMPLETION,
+                       branch=BranchSpec(kind="bullet", label="BLOCK")),
+        ),
+        postconditions=(
+            (frozenset({"AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"}),
+             _postcondition_local_implementation_approve_recorded),
+            (frozenset({"APPLYING_REVIEW_FEEDBACK"}), _postcondition_local_implementation_revise_recorded),
+        ),
+    ),
+    # Row 17: manual-verdict ingestion (step 7).
+    ExpectedOutcome(
+        from_phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", governing_version="2.2",
+        action="/record-manual-implementation-review",
+        to_any_of=frozenset({"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "APPLYING_REVIEW_FEEDBACK"}),
+        predicate=None, predicate_inputs=frozenset(),
+        writer_calls=(
+            WriterCall("record_manual_implementation_review", "record-manual-implementation-review.md",
+                       "record-manual-implementation-review.md:108", WRITER_KIND_COMPLETION,
+                       branch=BranchSpec(kind="step", label="7")),
+        ),
+        postconditions=(
+            (frozenset({"AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"}),
+             _postcondition_manual_implementation_approve_recorded),
+            (frozenset({"APPLYING_REVIEW_FEEDBACK"}), _postcondition_manual_implementation_revise_recorded),
+        ),
+    ),
+    # Row 18: the "2.2" post-fix regeneration (step 7).
+    ExpectedOutcome(
+        from_phase="APPLYING_REVIEW_FEEDBACK", governing_version="2.2",
+        action="/apply-implementation-review",
+        to_any_of=frozenset({"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}),
+        predicate=None, predicate_inputs=frozenset(),
+        writer_calls=(
+            WriterCall("record_bundle_generation", "apply-implementation-review.md",
+                       "apply-implementation-review.md:147", WRITER_KIND_COMPLETION,
+                       branch=BranchSpec(kind="step", label="7")),
+        ),
+        postconditions=(
+            (frozenset({"AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}), _postcondition_implementation_bundle_regenerated),
+        ),
     ),
 )
 
@@ -706,10 +1246,16 @@ def property_table_violations(
       raises for both shapes alike -- so both must be reported as data
       here rather than one of them reaching execution unvalidated).
     - **Postcondition shape** (`workflow-controller-worker-execution-
-      hardening` CP3): ``postcondition_phases`` is non-empty iff
-      ``postcondition`` is set, and is a subset of ``to_any_of``. A
-      postcondition is not subject to the predicate's "iff self-loop"
-      rule.
+      hardening` CP3, made per-phase by `workflow-controller-automatic-
+      lifecycle-orchestration` CP2): every ``postconditions`` entry pairs
+      a non-empty phase set with a callable; each phase set is a subset of
+      ``to_any_of``; the phase sets are pairwise disjoint; a row may
+      declare none. A postcondition is not subject to the predicate's
+      "iff self-loop" rule.
+    - **``trailing_calls`` shape** (CP2): each entry is a
+      ``(function identifier, non-empty justification)`` pair naming a
+      function other than the declared call, at most once. Property 5
+      checks the rest (that each one really occurs after the call).
     - **Completion** (property 6): asserted narratively against the
       plan's own per-row analysis and exercised by
       ``tests/test_job_validation.py``'s reachability cases (calling
@@ -778,17 +1324,86 @@ def property_table_violations(
                 f"{key!r}: writer_calls disagree on branch: {sorted(row_branches, key=repr)!r}"
             )
 
-        if (eo.postcondition is None) != (not eo.postcondition_phases):
+        violations.extend(_postconditions_violations(key, eo))
+        for wc in eo.writer_calls:
+            violations.extend(_trailing_calls_shape_violations(key, wc))
+    return violations
+
+
+_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _postconditions_violations(key: tuple, eo: ExpectedOutcome) -> list[str]:
+    """The per-phase postcondition shape (CP2): every entry is a
+    ``(non-empty phase set, callable)`` pair, each phase set is a subset of
+    ``to_any_of``, and the phase sets are pairwise disjoint -- so at most
+    one postcondition ever applies to an observed phase. A row may declare
+    none."""
+    violations: list[str] = []
+    claimed: set[str] = set()
+    for index, entry in enumerate(eo.postconditions):
+        if not (isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[0], frozenset)):
             violations.append(
-                f"{key!r}: postcondition_phases must be non-empty iff postcondition is set "
-                f"(postcondition={eo.postcondition!r}, postcondition_phases="
-                f"{sorted(eo.postcondition_phases)!r})"
+                f"{key!r}: postconditions entry {index} is not a (frozenset of phases, "
+                f"postcondition) pair: {entry!r}"
             )
-        stray_phases = eo.postcondition_phases - eo.to_any_of
+            continue
+        phases, postcondition = entry
+        if not phases:
+            violations.append(f"{key!r}: postconditions entry {index} declares an empty phase set")
+        if not callable(postcondition):
+            violations.append(
+                f"{key!r}: postconditions entry {index} ({sorted(phases)!r}) declares no callable "
+                f"postcondition: {postcondition!r}"
+            )
+        stray_phases = phases - eo.to_any_of
         if stray_phases:
             violations.append(
-                f"{key!r}: postcondition_phases {sorted(stray_phases)!r} are not members of to_any_of"
+                f"{key!r}: postconditions phases {sorted(stray_phases)!r} are not members of to_any_of"
             )
+        overlap = phases & claimed
+        if overlap:
+            violations.append(
+                f"{key!r}: postconditions phase sets overlap on {sorted(overlap)!r}"
+            )
+        claimed |= phases
+    return violations
+
+
+def _trailing_calls_shape_violations(key: tuple, wc: WriterCall) -> list[str]:
+    """``trailing_calls`` misuse visible without reading the frozen text:
+    every entry is a ``(function identifier, non-empty justification)``
+    pair, names a function other than the declared call itself, and
+    appears once. Whether each named function actually occurs after the
+    declared call is property 5's check."""
+    violations: list[str] = []
+    seen: set[str] = set()
+    for entry in wc.trailing_calls:
+        if not (isinstance(entry, tuple) and len(entry) == 2):
+            violations.append(
+                f"{key!r} ({wc.function!r}): trailing_calls entry {entry!r} is not a "
+                f"(function, justification) pair"
+            )
+            continue
+        function, justification = entry
+        if not isinstance(function, str) or not _IDENTIFIER_RE.fullmatch(function):
+            violations.append(
+                f"{key!r} ({wc.function!r}): trailing_calls entry names {function!r}, which is "
+                f"not a function identifier"
+            )
+            continue
+        if not isinstance(justification, str) or not justification.strip():
+            violations.append(
+                f"{key!r} ({wc.function!r}): trailing_calls entry {function!r} carries no justification"
+            )
+        if function == wc.function:
+            violations.append(
+                f"{key!r} ({wc.function!r}): trailing_calls names the declared call itself, "
+                f"which property 5 already admits"
+            )
+        if function in seen:
+            violations.append(f"{key!r} ({wc.function!r}): trailing_calls names {function!r} twice")
+        seen.add(function)
     return violations
 
 
@@ -863,8 +1478,11 @@ def property_declaration_against_artifact_violations(
     declared branch is locatable in the frozen ``.claude/commands/
     <file>.md``, the declared call is found within that branch's own
     span, and no *different* durable write (``workflow_state.<writer>(``,
-    other than a repeated call to the same declared function) occurs
-    later in plain file order within that same span. ``repo_root`` is the
+    other than a repeated call to the same declared function, or a
+    function the call's own ``trailing_calls`` allowlist names) occurs
+    later in plain file order within that same span. Every
+    ``trailing_calls`` entry must itself occur there, after the declared
+    call, or it is reported as a stale entry (CP2). ``repo_root`` is the
     Controller's own checkout (this repository is itself a frozen
     Workflow installation -- 2.5.1 since revision 64's baseline update --
     and its seventeen command files are the same external artifact a
@@ -899,14 +1517,30 @@ def property_declaration_against_artifact_violations(
                     f"(lines {start + 1}-{end})"
                 )
                 continue
+            allowed = {
+                entry[0] for entry in wc.trailing_calls
+                if isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[0], str)
+            }
+            trailing_seen: set[str] = set()
             for i in range(located + 1, end):
                 for m in _FURTHER_WRITE_RE.finditer(lines[i]):
-                    if m.group(1) != wc.function:
-                        violations.append(
-                            f"{key!r} ({wc.function!r}): a further durable write to "
-                            f"{m.group(1)!r} occurs after it at {wc.file}:{i + 1}, within the "
-                            f"same declared branch"
-                        )
+                    name = m.group(1)
+                    if name == wc.function:
+                        continue
+                    if name in allowed:
+                        trailing_seen.add(name)
+                        continue
+                    violations.append(
+                        f"{key!r} ({wc.function!r}): a further durable write to "
+                        f"{name!r} occurs after it at {wc.file}:{i + 1}, within the "
+                        f"same declared branch"
+                    )
+            for name in sorted(allowed - trailing_seen):
+                violations.append(
+                    f"{key!r} ({wc.function!r}): trailing_calls names {name!r}, which does not "
+                    f"occur after the declared call in {wc.file}'s declared branch (lines "
+                    f"{located + 1}-{end}) -- a stale allowlist entry"
+                )
     return violations
 
 
@@ -919,7 +1553,7 @@ def _expected_outcome_for(phase: Any, governing_workflow_version: str | None, de
     """The single :data:`EXPECTED_OUTCOMES` row an automatic ``decision``
     about to be launched corresponds to. The combined CP4/CP4B decision
     engine can only ever produce an automatic ``Decision`` for one of
-    these eleven triples (row 7's own `from_phase` is
+    these eighteen triples (row 7's own `from_phase` is
     :data:`~controller.decision.NO_PHASE`, the `NoWorkItemYet` bootstrap),
     so a miss here is an invariant violation, never an ordinary
     control-flow path (the same shape as ``cli._reexec``'s own
@@ -999,9 +1633,14 @@ _VERIFYING_WORKER_OUTCOMES = frozenset({"SUCCESS", "INTERRUPTED"})
 #: *completion* of it -- checked before step 8's own "otherwise" clause,
 #: which it takes precedence over. Empty after revision 10's narrowing
 #: (plan section "CP6B -- Job execution, part 2": "no Generation 1 action
-#: can produce it" -- `/apply-implementation-review` reaching
-#: `APPLYING_REVIEW_FEEDBACK` was its only producer, and that action is
-#: not one of :data:`EXPECTED_OUTCOMES`' own eleven rows). Kept as a per-row
+#: can produce it"), and still empty now that rows 12-18 automate the
+#: implementation stage (`workflow-controller-automatic-lifecycle-
+#: orchestration` CP2): every "worker stopped early" case either leaves the
+#: phase unchanged (`FAILED` on execute; `INTERRUPTED` on a `LAUNCHED`
+#: resume when `HEAD` is also unchanged) or moves `HEAD`/state without
+#: verifying (`FAILED`/`UnreconcilableJobError`), exactly as at the plan
+#: stage -- row 18's `/apply-implementation-review` never lists
+#: `APPLYING_REVIEW_FEEDBACK` in its `to_any_of`. Kept as a per-row
 #: mapping, not deleted, because a record written by a *future* generation
 #: that does drive such a landing must still be classifiable by `resume`
 #: (CP7)'s own closed status table.
@@ -1031,18 +1670,20 @@ def _row_clauses_failure(
     unconditional writer -- its ``from_phase`` is
     :data:`~controller.decision.NO_PHASE`, which can never equal a real
     observed phase), exactly when ``observed_phase_after`` equals
-    ``outcome.from_phase`` otherwise (rows 3 and 5, whose writer runs on
-    one named branch only). The postcondition clause (CP3) is evaluated
-    after both, exactly when ``observed_phase_after`` is in
-    ``outcome.postcondition_phases``."""
+    ``outcome.from_phase`` otherwise (rows 3, 5, 12/13 and 16, whose
+    writer runs on one named branch only). The postcondition clause (CP3)
+    is evaluated after both: the one ``outcome.postconditions`` entry
+    whose phase set contains ``observed_phase_after``, if any
+    (:func:`_postcondition_for_phase`; per-phase since CP2)."""
     if observed_phase_after not in outcome.to_any_of:
         return "phase_not_in_to_any_of", None
     branch = _row_branch(outcome)
     if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
         if not outcome.predicate(root, work_item_id, pre_state):
             return "predicate_not_satisfied", None
-    if outcome.postcondition is not None and observed_phase_after in outcome.postcondition_phases:
-        satisfied, detail = outcome.postcondition(root, work_item_id, pre_state)
+    postcondition = _postcondition_for_phase(outcome, observed_phase_after)
+    if postcondition is not None:
+        satisfied, detail = postcondition(root, work_item_id, pre_state)
         if not satisfied:
             return "postcondition_not_satisfied", detail
     return None, None
@@ -1057,7 +1698,7 @@ def _verify_transition(
     **and** every clause of :func:`_row_clauses_failure` holds --
     ``observed_phase_after`` is in ``outcome.to_any_of``, the row's
     evidence predicate (if any, on its own trigger) holds, and the row's
-    postcondition (if any, on ``postcondition_phases``) is satisfied --
+    postcondition (if any, for the observed phase) is satisfied --
     each evaluated fresh, against disk, never against process memory,
     since `resume` has none. Returns ``(verified, evidence)`` --
     ``evidence`` is a ``TransitionNotObservedError``-shaped dict naming the
@@ -1844,7 +2485,7 @@ def execute_step(
     verification rule held), ``FAILED`` (it did not, carrying
     ``reconciliation_evidence``), or ``INCOMPLETE`` (step 9: a legal
     effect of the action that is never its completion -- unreachable for
-    every one of Generation 1's own eleven automatic actions, see
+    every one of Generation 1's own eighteen automatic actions, see
     :data:`_INCOMPLETE_EFFECT_PHASES`). ``COMPLETED`` is never this
     function's own return value; it is an intermediate, durable flush
     step 6 always makes before steps 7-9 run.
@@ -1979,7 +2620,7 @@ def execute_step(
 
     # Step 9: INCOMPLETE takes precedence over step 8's own "otherwise" --
     # a phase that is a legal *effect* of the action but never a
-    # *completion* of it. Empty for every one of Generation 1's eleven rows
+    # *completion* of it. Empty for every one of Generation 1's eighteen rows
     # (see `_INCOMPLETE_EFFECT_PHASES`'s own docstring); checked first so
     # a future generation's row can populate it without this call site
     # changing.

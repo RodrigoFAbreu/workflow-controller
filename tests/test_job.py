@@ -434,11 +434,18 @@ class BootstrapRowSevenTest(unittest.TestCase):
         self.assertEqual(record["worker_outcome"], "SUCCESS")
         self.assertEqual(record["selected_action"]["command"], "/milestone-plan")
 
-    def test_pre_work_item_keys_is_the_seventeenth_pre_state_field(self) -> None:
+    def test_pre_work_item_keys_is_a_pre_state_field_of_the_eighteen(self) -> None:
+        # Seventeen until `workflow-controller-automatic-lifecycle-
+        # orchestration` CP2 added `bundle_manifest_bundle_id`.
         record = self._run_far_enough_and_read_back()
-        self.assertEqual(len(job.PRE_STATE_FIELDS), 17)
+        self.assertEqual(len(job.PRE_STATE_FIELDS), 18)
         self.assertEqual(set(record["pre_state"]), job.PRE_STATE_FIELDS)
         self.assertEqual(record["pre_state"]["pre_work_item_keys"], [])
+
+    def test_bootstrap_bundle_manifest_bundle_id_is_none(self) -> None:
+        record = self._run_far_enough_and_read_back()
+        self.assertIn("bundle_manifest_bundle_id", record["pre_state"])
+        self.assertIsNone(record["pre_state"]["bundle_manifest_bundle_id"])
 
     def test_no_phase_round_trips_identically_across_all_three_fields(self) -> None:
         record = self._run_far_enough_and_read_back()
@@ -489,10 +496,58 @@ class PredicateRow3RoleNormalizationTest(unittest.TestCase):
                 "Reviewer role: local_model_plan_review\n"
                 f"Reviewed bundle ID: {bundle_id}\n"
             )
-            pre_state = {"bundle_manifest_readable": True, "bundle_id": bundle_id}
+            pre_state = {"bundle_manifest_readable": True, "bundle_manifest_bundle_id": bundle_id}
             self.assertTrue(
                 job._predicate_row3_block_feedback_current(root, "wi-1", pre_state)
             )
+
+
+class BundleManifestBundleIdCaptureTest(unittest.TestCase):
+    """CP2 (`workflow-controller-automatic-lifecycle-orchestration`): the
+    pre-state records the phase-resolved bundle ``MANIFEST.md``'s own
+    ``bundle_id`` as ``bundle_manifest_bundle_id`` -- never
+    ``current_bundle_id``, which stays report-only ``bundle_id`` -- and
+    ``None`` when no manifest is readable."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir(parents=True)
+
+    def _pre_state(self, managed_repo) -> dict:
+        with _WriteSpy() as spy:
+            job.execute_step(
+                managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        return spy.calls[0][1]["pre_state"]
+
+    def test_plan_stage_manifest_bundle_id_is_captured(self) -> None:
+        managed_repo = _build_target(
+            self.tmp_root / "plan", phase="AWAITING_LOCAL_PLAN_REVIEW", current_bundle_id=None,
+        )
+        fixtures.write_plan_manifest(managed_repo.root, "wi-1", 1, bundle_id="d" * 64)
+        pre_state = self._pre_state(managed_repo)
+        self.assertEqual(pre_state["bundle_manifest_bundle_id"], "d" * 64)
+        self.assertIsNone(pre_state["bundle_id"])
+
+    def test_implementation_stage_manifest_bundle_id_is_captured(self) -> None:
+        managed_repo = _build_target(
+            self.tmp_root / "impl", phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            governing_workflow_version="2.2",
+        )
+        fixtures.write_implementation_manifest(managed_repo.root, "wi-1", 1, bundle_id="e" * 64)
+        pre_state = self._pre_state(managed_repo)
+        self.assertEqual(pre_state["bundle_manifest_bundle_id"], "e" * 64)
+
+    def test_no_readable_manifest_captures_none(self) -> None:
+        managed_repo = _build_target(self.tmp_root / "none", phase="PLANNING")
+        pre_state = self._pre_state(managed_repo)
+        self.assertIn("bundle_manifest_bundle_id", pre_state)
+        self.assertIsNone(pre_state["bundle_manifest_bundle_id"])
+        self.assertFalse(pre_state["bundle_manifest_readable"])
 
 
 class MissingGoverningVersionRowRegressionTest(unittest.TestCase):
@@ -501,18 +556,24 @@ class MissingGoverningVersionRowRegressionTest(unittest.TestCase):
     from data, not from reverting a commit, so it keeps proving the fix
     is load-bearing even as :data:`job.EXPECTED_OUTCOMES` grows further.
     Shrinks ``_EXPECTED_OUTCOMES_BY_KEY`` down to exactly the seven
-    entries that existed before CP1 (every entry whose own
-    ``governing_version`` is not ``"2.2"``) and asserts that
+    entries that existed before CP1 (every plan-stage entry whose own
+    ``governing_version`` is not ``"2.2"`` -- the implementation-stage rows
+    `workflow-controller-automatic-lifecycle-orchestration`'s CP2 added,
+    `"2.1"` ones included, postdate CP1 too) and asserts that
     ``_expected_outcome_for`` raises ``AssertionError`` for a `"2.2"`
     `PLANNING` `/milestone-plan` decision against that patched table --
     the exact crash shape Controller hit before CP1 added the `"2.2"`
     plan-review rows."""
 
     def test_pre_cp1_table_raises_on_a_2_2_planning_decision(self) -> None:
+        implementation_stage_actions = {
+            "/milestone-implement", "/review-implementation", "/record-manual-implementation-review",
+            "/apply-implementation-review",
+        }
         pre_cp1_outcomes = {
             key: outcome
             for key, outcome in job._EXPECTED_OUTCOMES_BY_KEY.items()
-            if outcome.governing_version != "2.2"
+            if outcome.governing_version != "2.2" and outcome.action not in implementation_stage_actions
         }
         self.assertEqual(len(pre_cp1_outcomes), 7)
         decision = Decision(
@@ -691,8 +752,8 @@ class PartialApplyPlanReviewExecuteTest(unittest.TestCase):
         postcondition is what makes the scenario above fail closed."""
         key = ("REVISING_PLAN", "2.2", "/apply-plan-review")
         row = job._EXPECTED_OUTCOMES_BY_KEY[key]
-        self.assertIsNotNone(row.postcondition)
-        pre_fix = dataclasses.replace(row, postcondition=None, postcondition_phases=frozenset())
+        self.assertTrue(row.postconditions)
+        pre_fix = dataclasses.replace(row, postconditions=())
         with unittest.mock.patch.dict(job._EXPECTED_OUTCOMES_BY_KEY, {key: pre_fix}):
             record = self._execute(partial_apply_plan_review_worker_env(self.root))
         self.assertEqual(record["status"], job.STATUS_FINISHED)

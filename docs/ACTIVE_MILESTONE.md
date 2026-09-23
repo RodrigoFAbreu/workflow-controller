@@ -81,4 +81,79 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
     text fails the golden, and removing the work-item check from the record role, the
     worktree-root clause, the hard `REVISE` bundle-id clause, the ledger's `APPROVE`-only rule
     or the committed read each fail the new tests.
-- **CP2-CP9 -- pending**, in registry order.
+- **CP2 -- complete.** Expected outcomes for the implementation stage, in `controller/job.py`
+  only. No decision changes yet: `evidence.decide` still declines or gates every
+  implementation-stage phase until CP3's dispatch rule, and the plan-stage golden is unchanged.
+  - `ExpectedOutcome.postcondition`/`postcondition_phases` became
+    `postconditions: tuple[(frozenset[phase], PostconditionFn), ...]`. The seven plan-stage rows
+    moved to single-entry tuples with unchanged behaviour. `_row_clauses_failure` evaluates the
+    one entry whose phase set holds the observed phase (`_postcondition_for_phase`), so
+    `execute_step`, `_reconcile_completed` and `_reconcile_launched` still share one helper.
+    `property_table_violations` requires each entry to be a non-empty phase set paired with a
+    callable. The phase sets must be pairwise disjoint and each a subset of `to_any_of`. A row
+    may declare none.
+  - `PRE_STATE_FIELDS` gains `bundle_manifest_bundle_id`, the pre-state manifest's `bundle_id`
+    (`None` for the bootstrap). The field count goes from 17 to 18. A record without the field
+    reads as "not satisfied".
+  - Plan-stage `BLOCK`-predicate fix. Rows 3/3' and row 16 share
+    `_block_feedback_bound_to_pre_state_bundle`. It compares the feedback's
+    `Reviewed bundle ID` with a non-null `bundle_manifest_bundle_id`, never `current_bundle_id`.
+    The plan-stage role is normalised as before, and the implementation role must match
+    exactly. Rows 3/3' `predicate_inputs` are now `{bundle_manifest_bundle_id}`.
+  - Seven rows, 12-18. `EXPECTED_OUTCOMES` goes from 11 to 18 rows, as in the plan table, with
+    no `"1"` row:
+    - `_predicate_checkpoint_completed_durably`;
+    - `_postcondition_self_review_entered_durably`;
+    - `_postcondition_implementation_bundle_coherent` (the `REJECTED` marker first, then
+      `implementation_bundle_coherence` at the live `HEAD`);
+    - `_postcondition_implementation_bundle_regenerated`;
+    - `_predicate_local_implementation_block_current`;
+    - the local and manual `APPROVE`/`REVISE` postconditions.
+
+    `_INCOMPLETE_EFFECT_PHASES` stays empty.
+  - `WriterCall.trailing_calls` is an explicit `(function, justification)` allowlist. Step 1f
+    lists `committed_checkpoint_status` and `release_checkpoint`. Property 5 skips only those
+    names, and only after the declared call. An entry that does not occur there is reported
+    as stale. The table property also rejects an entry with no justification, a duplicate, a
+    non-identifier, or the declared call itself.
+  - `tests/fixtures.py` adds:
+    - `write_registry`, `update_workflow_state`, `implementation_review_ledger`, `commit_paths`;
+    - `build_implementation_target`, which builds a committed seed with `.ai-review/` ignored;
+    - the scripted-worker helpers `forced_automatic_action`, `scripted_worker`,
+      `complete_checkpoint_effect`, `generation_effect` and `review_writes_effect`, plus
+      `state_entry`.
+  - Judgment calls, where the plan text left a detail open:
+    - The row tests drive the real `execute_step` with `evidence.decide` patched to the
+      row's automatic action, because selection is CP3's. The worker is `fake_claude.py`,
+      preceded by a scripted side effect. The resume tests capture the pre-state for real with
+      `_capture_pre_state`, then apply the same effect.
+    - Registry completion at `HEAD` reuses `target_state._resolve_registry_complete` over the
+      committed statuses. That function is the one reader of the registry's checkpoint ids.
+    - No `BranchSpec.within` was added. The first `BLOCK` bullet in `review-implementation.md`
+      is A6's own, and a test pins that.
+  - Changed test assertions. Each is an intended change:
+    - the row count (11 -> 18);
+    - the pre-state field count (17 -> 18);
+    - the pre-CP1 table filter in `MissingGoverningVersionRowRegressionTest` now also excludes
+      the new implementation-stage rows;
+    - the postcondition-shape tests were rewritten for the per-phase form;
+    - plan-stage `BLOCK` fixtures no longer seed `current_bundle_id="b" * 64`, which no real
+      Workflow state has.
+  - Verified with `python3 -m unittest tests.test_job tests.test_job_validation tests.test_resume`:
+    209 tests OK. The full suite (`python3 -m unittest discover -s tests -t .`) ran 655 tests:
+    OK, 2 skipped. `python3 tests/golden/generate_plan_stage_decisions.py --check` reports the
+    golden as current.
+  - Mutation checks run in a scratch copy. Each of these fails at least one test:
+    - dropping the predicate's committed clause, its `HEAD`-moved clause or its
+      already-complete exclusion;
+    - dropping either committed clause of the self-review postcondition;
+    - dropping the regeneration `generation_head` clause, or the `REJECTED` clause;
+    - reverting row 3 to `bundle_id`, or dropping its null guard;
+    - accepting any role at row 16;
+    - evaluating a postcondition at any phase;
+    - dropping the stale-`trailing_calls` check or the overlap check;
+    - dropping the local `APPROVE` content clause, the manual `APPROVE` feedback-binding
+      clause, the manual `REVISE` unrecorded-stage clause, or the local `REVISE` work-item
+      clause;
+    - not capturing `bundle_manifest_bundle_id`.
+- **CP3-CP9 -- pending**, in registry order.

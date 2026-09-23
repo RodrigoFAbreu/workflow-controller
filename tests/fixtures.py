@@ -10,10 +10,12 @@ console script).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 import subprocess
 import sys
+import unittest.mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -509,6 +511,119 @@ def fake_worker_plan_manifest_env(root: Path, work_item_id: str, plan_revision: 
     ])}
 
 
+def registry_rel_path(work_item_id: str) -> str:
+    """The conventional ``registry_path`` a fixture work item declares."""
+    return f"docs/ai-workflow/registry/{work_item_id}-registry.json"
+
+
+def write_registry(root: Path, work_item_id: str, checkpoint_ids: tuple[str, ...] | list[str]) -> str:
+    """Write a minimal, well-formed checkpoint registry declaring
+    ``checkpoint_ids`` for ``work_item_id`` at :func:`registry_rel_path`,
+    and return that relative path (a work item entry's ``registry_path``)."""
+    rel_path = registry_rel_path(work_item_id)
+    write_target_registry(root, rel_path, {
+        "schema_version": 1,
+        "work_item_id": work_item_id,
+        "plan_revision": 1,
+        "checkpoints": [
+            {"id": checkpoint_id, "name": checkpoint_id, "depends_on": [], "complexity": 1,
+             "session_target": 1}
+            for checkpoint_id in checkpoint_ids
+        ],
+    })
+    return rel_path
+
+
+def update_workflow_state(root: Path, work_item_id: str, **fields) -> dict:
+    """Read ``WORKFLOW_STATE.json`` under ``root``, update ``work_item_id``'s
+    entry with ``fields`` and write it back -- a fake worker's state write
+    (the Workflow writers' own effects, simulated), returning the new
+    state."""
+    state_path = root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+    state = json.loads(state_path.read_text())
+    state["work_items"][work_item_id].update(fields)
+    write_workflow_state(root, state)
+    return state
+
+
+def implementation_review_ledger(
+    review_content_id: str = "c" * 64, *, local_bundle_id: str | None = None,
+    manual_bundle_id: str | None = None,
+) -> dict:
+    """An ``implementation_review_stages`` ledger in the shape
+    ``record_local_implementation_review``/
+    ``record_manual_implementation_review`` write: the content id plus one
+    completed ``APPROVE`` stage entry per bundle id given."""
+    ledger: dict = {"review_content_id": review_content_id}
+    for role, bundle_id in (
+        ("LOCAL_MODEL_IMPLEMENTATION_REVIEW", local_bundle_id),
+        ("MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", manual_bundle_id),
+    ):
+        if bundle_id is not None:
+            ledger[role] = {
+                "verdict": "APPROVE", "bundle_id": bundle_id, "round": 1,
+                "completed_at": "2026-01-01T00:00:00Z",
+            }
+    return ledger
+
+
+def commit_paths(root: Path, message: str, *paths: str) -> str:
+    """Stage exactly ``paths`` (relative to ``root``) and commit them,
+    returning the new commit's full SHA -- a commit that deliberately leaves
+    every other working-tree change (e.g. a pending ``WORKFLOW_STATE.json``
+    write) uncommitted."""
+    run(["git", "add", "--", *paths], cwd=root)
+    run(["git", "commit", "-q", "-m", message], cwd=root)
+    return current_head(root)
+
+
+def build_implementation_target(
+    tmp_root: Path, *, phase: str, governing_workflow_version: str | None = "2.2",
+    work_item_id: str = "wi-1", checkpoint_ids: tuple[str, ...] = ("CP1", "CP2"),
+    checkpoints: dict | None = None, **overrides,
+):
+    """A real target repository for the implementation-stage
+    ``ExpectedOutcome`` rows (`workflow-controller-automatic-lifecycle-
+    orchestration` CP2): a registry declaring ``checkpoint_ids``, a work
+    item entry at ``phase`` whose ``checkpoints`` default to every one
+    ``COMPLETE``, a current plan approval, and ``.ai-review/`` ignored the
+    way a real installation ignores it -- all **committed**, so ``HEAD``
+    records the seeded state and a later worker commit is observable.
+    ``overrides`` update the entry before the commit."""
+    root = tmp_root / "target"
+    build_target_git_repo(root)
+    (root / "README.md").write_text("target fixture\n")
+    (root / ".gitignore").write_text(".ai-review/\n")
+    base_commit = commit_all(root, "initial")
+    entry = {
+        "work_item_type": "product",
+        "work_item_kind": "product",
+        "work_item_id": work_item_id,
+        "governing_workflow_version": governing_workflow_version,
+        "phase": phase,
+        "plan_revision": 1,
+        "implementation_revision": None,
+        "reviewed_implementation_head": None,
+        "state_revision": 1,
+        "checkpoints": (
+            checkpoints if checkpoints is not None
+            else {cid: {"status": "COMPLETE", "start_commit": base_commit} for cid in checkpoint_ids}
+        ),
+        "current_bundle_id": None,
+        "last_completed_checkpoint_id": None,
+        "base_commit": base_commit,
+        "parent_work_item_id": None,
+        "registry_path": write_registry(root, work_item_id, checkpoint_ids),
+        "plan_approval": {"status": "CURRENT"},
+    }
+    entry.update(overrides)
+    write_workflow_state(root, {
+        "schema_version": 1, "active_work_item_id": work_item_id, "work_items": {work_item_id: entry},
+    })
+    commit_all(root, "seed workflow state")
+    return build_target_managed_repository(root)
+
+
 def write_rejected_marker(root: Path, work_item_id: str, *, scoped: bool, detail: str = "withdrawn") -> Path:
     """Write the ``REJECTED`` marker at its scoped or flat path."""
     base = (root / ".ai-review" / work_item_id) if scoped else (root / ".ai-review")
@@ -516,6 +631,134 @@ def write_rejected_marker(root: Path, work_item_id: str, *, scoped: bool, detail
     path = base / "REJECTED"
     path.write_text(detail + "\n")
     return path
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-automatic-lifecycle-orchestration` CP2 -- scripted
+# worker effects for the implementation-stage `ExpectedOutcome` rows: each
+# performs a Workflow writer's own state write, commit and bundle
+# generation (or deliberately omits one), after pre-state capture and
+# before verification.
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def forced_automatic_action(phase: str, command: str, work_item_id: str = "wi-1"):
+    """``evidence.decide`` returning the automatic ``command`` at ``phase``
+    -- the selection CP3's general dispatch rule makes; CP2 owns only what
+    happens once it is launched."""
+    from controller import job
+    from controller.decision import Action, Decision
+
+    decision = Decision(
+        observed_phase=phase, evidence=(), action=Action(command=f"{command} {work_item_id}"),
+        automatic=True, gate=None, declined=False, reason="CP2 test fixture: selection is CP3's",
+    )
+    with unittest.mock.patch.object(job.evidence, "decide", return_value=decision):
+        yield
+
+
+@contextlib.contextmanager
+def scripted_worker(side_effect):
+    """Run ``side_effect(target_root)`` as the worker's own work, then the
+    real ``worker.launch`` of ``fake_claude.py`` (a ``SUCCESS`` result) --
+    so everything after pre-state capture sees exactly what a worker left
+    behind."""
+    from controller import job
+
+    real_launch = job.worker.launch
+
+    def launch(task, *, cwd, **kwargs):
+        if side_effect is not None:
+            side_effect(Path(cwd))
+        return real_launch(task, cwd=cwd, **kwargs)
+
+    with unittest.mock.patch.object(job.worker, "launch", launch):
+        yield
+
+
+def state_entry(root: Path, work_item_id: str = "wi-1") -> dict:
+    """The work item's ``WORKFLOW_STATE.json`` entry, read from the working tree."""
+    state = json.loads((root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_text())
+    return state["work_items"][work_item_id]
+
+
+def complete_checkpoint_effect(checkpoint_id: str, *, phase: str = "IMPLEMENTING", commit: str = "all"):
+    """``/milestone-implement`` step 1f: the checkpoint's own change plus
+    ``complete_checkpoint``'s state write (``phase`` becomes
+    ``SELF_REVIEWING_IMPLEMENTATION`` on the last one), committed together
+    (``commit="all"``), with only the product change committed
+    (``"product"``, the state write left pending), or not at all
+    (``"none"``)."""
+    def effect(root: Path) -> None:
+        checkpoints = dict(state_entry(root)["checkpoints"])
+        checkpoints[checkpoint_id] = {**checkpoints.get(checkpoint_id, {}), "status": "COMPLETE"}
+        (root / f"{checkpoint_id}.txt").write_text(f"{checkpoint_id} implemented\n")
+        update_workflow_state(
+            root, "wi-1", checkpoints=checkpoints, phase=phase, last_completed_checkpoint_id=checkpoint_id,
+        )
+        if commit == "all":
+            commit_all(root, f"Implement {checkpoint_id}")
+        elif commit == "product":
+            commit_paths(root, f"Implement {checkpoint_id}", f"{checkpoint_id}.txt")
+    return effect
+
+
+def generation_effect(
+    review_phase: str, *, revision: int = 1, enter_self_review: bool = False, fix_commit: bool = False,
+    same_content: bool = False, manifest: bool = True, manifest_revision=None,
+    manifest_reviewed_head=None, manifest_generation_head=None, rejected: bool = False,
+    bundle_id: str = "f" * 64,
+):
+    """A bundle generation (`/milestone-implement` step 4, or
+    `/apply-implementation-review` step 7): optionally step 2's committed
+    ``SELF_REVIEWING_IMPLEMENTATION`` transition and/or a fix commit
+    first, then ``record_bundle_generation``'s state write committed alone
+    (the generation-record commit T), then the generator's manifest at
+    ``generation_head = T``. Each ``manifest_*`` override injects one
+    stale/wrong clause; ``manifest=False`` skips generation; ``rejected``
+    leaves a ``REJECTED`` marker beside it."""
+    def effect(root: Path) -> None:
+        if enter_self_review:
+            update_workflow_state(root, "wi-1", phase="SELF_REVIEWING_IMPLEMENTATION")
+            commit_all(root, "Enter SELF_REVIEWING_IMPLEMENTATION")
+        if fix_commit:
+            (root / "fix.txt").write_text("review fix\n")
+            commit_paths(root, "Apply a review fix", "fix.txt")
+        entry = state_entry(root)
+        if same_content:
+            reviewed_head = entry["reviewed_implementation_head"]
+            update_workflow_state(root, "wi-1", phase=review_phase)
+        else:
+            reviewed_head = current_head(root)
+            update_workflow_state(
+                root, "wi-1", phase=review_phase, implementation_revision=revision,
+                reviewed_implementation_head=reviewed_head,
+            )
+        record = commit_all(root, "Record implementation bundle generation")
+        if manifest:
+            write_implementation_manifest(
+                root, "wi-1",
+                manifest_revision if manifest_revision is not None else state_entry(root)["implementation_revision"],
+                reviewed_implementation_head=manifest_reviewed_head or reviewed_head,
+                generation_head=manifest_generation_head(reviewed_head, record) if manifest_generation_head else record,
+                bundle_id=bundle_id,
+            )
+        if rejected:
+            write_rejected_marker(root, "wi-1", scoped=True, detail="finalize failed")
+    return effect
+
+
+def review_writes_effect(*, feedback: str | None = None, **state_fields):
+    """A review-stage writer's effect: ``REVIEW_FEEDBACK.md`` (when given)
+    plus a state write -- left **uncommitted**, as every `"2.2"`
+    review-stage writer leaves it."""
+    def effect(root: Path) -> None:
+        if feedback is not None:
+            write_review_feedback(root, ".ai-review/wi-1/feedback", feedback)
+        if state_fields:
+            update_workflow_state(root, "wi-1", **state_fields)
+    return effect
 
 
 def build_target_managed_repository(root: Path):

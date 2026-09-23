@@ -119,7 +119,8 @@ def _pre_state(*, phase: str, governing_workflow_version: str | None, target_hea
         "phase": phase, "governing_workflow_version": governing_workflow_version,
         "target_head": target_head, "state_revision": 1, "plan_revision": 1,
         "implementation_revision": None, "last_completed_checkpoint_id": None, "checkpoints": {},
-        "bundle_id": None, "bundle_manifest_readable": False, "bundle_manifest_generation_head": None,
+        "bundle_id": None, "bundle_manifest_readable": False, "bundle_manifest_bundle_id": None,
+        "bundle_manifest_generation_head": None,
         "bundle_generated_digest": None, "rejected_marker_present": False, "child_work_item_ids": [],
         "functional_review_consumed_blob": None, "functional_checklist_evidence": None,
     }
@@ -832,21 +833,69 @@ class ReconcileCompletedTest(_ResumeTestCase):
         self.assertEqual(ev["reason"], "worker_outcome")
         self.assertEqual(ev["worker_outcome"], "AMBIGUOUS")
 
-    def test_completed_with_predicate_row_unsatisfied_reconciles_to_failed(self) -> None:
+    def _row3_block_target(self, *, feedback: bool):
+        """A `"2.1"` item at ``AWAITING_LOCAL_PLAN_REVIEW`` in Workflow's real
+        shape (``current_bundle_id: null``), whose plan manifest carries the
+        bundle id -- plus, with ``feedback``, a genuine local ``BLOCK``
+        bound to it."""
         managed_repo = _build_target(
             self.tmp_root, phase="AWAITING_LOCAL_PLAN_REVIEW", governing_workflow_version="2.1",
-            current_bundle_id="b" * 64,
         )
         root = managed_repo.root
         fixtures.write_manifest(
             root, ".ai-review/wi-1/current",
             fixtures.build_manifest_text(bundle_id="b" * 64, generation_head=fixtures.current_head(root)),
         )
-        record = _record(
+        if feedback:
+            fixtures.write_review_feedback(
+                root, ".ai-review/wi-1/feedback",
+                fixtures.build_review_feedback_text(
+                    status="BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW", reviewed_bundle_id="b" * 64,
+                ),
+            )
+        return managed_repo
+
+    def _row3_block_record(self, root: Path, *, pre_state_overrides: dict) -> dict:
+        return _record(
             job_id="j1", target_repo=str(root), status=job.STATUS_COMPLETED,
             phase="AWAITING_LOCAL_PLAN_REVIEW", command="/review-plan", worker_outcome="SUCCESS",
+            pre_state_overrides=pre_state_overrides,
+        )
+
+    def test_completed_with_predicate_row_unsatisfied_reconciles_to_failed(self) -> None:
+        managed_repo = self._row3_block_target(feedback=False)
+        record = self._row3_block_record(
+            managed_repo.root,
+            pre_state_overrides={"bundle_manifest_bundle_id": "b" * 64, "bundle_manifest_readable": True},
+        )
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FAILED)
+        self.assertEqual(results[0]["reconciliation_evidence"]["reason"], "predicate_not_satisfied")
+
+    def test_completed_genuine_block_bound_to_the_manifest_bundle_reconciles_to_finished(self) -> None:
+        """CP2's row-3 fix on the resume path: ``FAILED`` at base, where the
+        predicate compared against ``current_bundle_id``."""
+        managed_repo = self._row3_block_target(feedback=True)
+        record = self._row3_block_record(
+            managed_repo.root,
+            pre_state_overrides={"bundle_manifest_bundle_id": "b" * 64, "bundle_manifest_readable": True},
+        )
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+        self.assertTrue(results[0]["transition_verified"])
+
+    def test_completed_record_written_before_the_field_existed_is_not_satisfied(self) -> None:
+        """A pre-milestone record lacks ``bundle_manifest_bundle_id``: the
+        predicate treats the absence as "not satisfied" (fail closed), even
+        with a genuine ``BLOCK`` on file and the old ``bundle_id`` set."""
+        managed_repo = self._row3_block_target(feedback=True)
+        record = self._row3_block_record(
+            managed_repo.root,
             pre_state_overrides={"bundle_id": "b" * 64, "bundle_manifest_readable": True},
         )
+        del record["pre_state"]["bundle_manifest_bundle_id"]
         _write_record(self.runtime_root, record)
         results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         self.assertEqual(results[0]["status"], job.STATUS_FAILED)
@@ -1323,6 +1372,248 @@ class PartialApplyPlanReviewResumeTest(_ResumeTestCase):
         self.assertIsNone(decision.gate)
         self.assertTrue(decision.automatic)
         self.assertEqual(decision.action.command, "/apply-plan-review wi-1")
+
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-automatic-lifecycle-orchestration` CP2 -- rows 12-18
+# on both resume paths. The pre-state is captured for real from the seeded
+# target (`job._capture_pre_state`), then the scripted worker effect is
+# applied -- exactly what a worker would have left behind -- and the record
+# is reconciled: the same verification `execute_step` applies.
+# ---------------------------------------------------------------------------
+
+_IMPL_B = "b" * 64
+_IMPL_C = "c" * 64
+_IMPL_REVIEWED_HEAD = "1" * 40
+_LOCAL_ROLE = "LOCAL_MODEL_IMPLEMENTATION_REVIEW"
+_MANUAL_ROLE = "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+
+def _feedback(status: str, role: str, **kwargs) -> str:
+    kwargs.setdefault("reviewed_bundle_id", _IMPL_B)
+    return fixtures.build_review_feedback_text(status=status, reviewer_role=role, **kwargs)
+
+
+#: ``name -> (phase, version, command, seed kwargs, review_stage, pasted
+#: feedback, effect, expected COMPLETED outcome)``, where the expected
+#: outcome is ``("FINISHED", None)`` or ``(reason, postcondition detail
+#: fragment or None)``.
+_IMPL_CASES = {
+    "row 13 committed checkpoint": (
+        "IMPLEMENTING", "2.2", "/milestone-implement",
+        dict(checkpoints={"CP1": {"status": "IN_PROGRESS"}, "CP2": {"status": "PENDING"}}), False, None,
+        fixtures.complete_checkpoint_effect("CP1"), ("FINISHED", None),
+    ),
+    "row 12 uncommitted checkpoint, HEAD moved": (
+        "IMPLEMENTING", "2.1", "/milestone-implement",
+        dict(checkpoints={"CP1": {"status": "IN_PROGRESS"}, "CP2": {"status": "PENDING"}}), False, None,
+        fixtures.complete_checkpoint_effect("CP1", commit="product"), ("predicate_not_satisfied", None),
+    ),
+    "row 13 nothing done": (
+        "IMPLEMENTING", "2.2", "/milestone-implement",
+        dict(checkpoints={"CP1": {"status": "IN_PROGRESS"}, "CP2": {"status": "PENDING"}}), False, None,
+        None, ("predicate_not_satisfied", None),
+    ),
+    "row 13 uncommitted self-review entry": (
+        "IMPLEMENTING", "2.2", "/milestone-implement",
+        dict(checkpoints={"CP1": {"status": "COMPLETE"}, "CP2": {"status": "IN_PROGRESS"}}), False, None,
+        fixtures.complete_checkpoint_effect("CP2", phase="SELF_REVIEWING_IMPLEMENTATION", commit="product"),
+        ("postcondition_not_satisfied", "the checkpoint completion is uncommitted"),
+    ),
+    "row 15 coherent generation": (
+        "SELF_REVIEWING_IMPLEMENTATION", "2.2", "/milestone-implement", {}, False, None,
+        fixtures.generation_effect("AWAITING_LOCAL_IMPLEMENTATION_REVIEW"), ("FINISHED", None),
+    ),
+    "row 14 stale generation": (
+        "SELF_REVIEWING_IMPLEMENTATION", "2.1", "/milestone-implement", {}, False, None,
+        fixtures.generation_effect("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", manifest_revision=0),
+        ("postcondition_not_satisfied", "manifest implementation_revision 0 != state implementation_revision 1"),
+    ),
+    "row 16 local approve": (
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation", {}, True, None,
+        fixtures.review_writes_effect(
+            feedback=_feedback("APPROVE", _LOCAL_ROLE), phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            implementation_review_stages=fixtures.implementation_review_ledger(_IMPL_C, local_bundle_id=_IMPL_B),
+        ),
+        ("FINISHED", None),
+    ),
+    "row 16 local approve on other content": (
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation", {}, True, None,
+        fixtures.review_writes_effect(
+            feedback=_feedback("APPROVE", _LOCAL_ROLE), phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            implementation_review_stages=fixtures.implementation_review_ledger("d" * 64, local_bundle_id=_IMPL_B),
+        ),
+        ("postcondition_not_satisfied", "ledger review_content_id"),
+    ),
+    "row 16 local block": (
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation", {}, True, None,
+        fixtures.review_writes_effect(feedback=_feedback("BLOCK", _LOCAL_ROLE)), ("FINISHED", None),
+    ),
+    "row 16 no verdict": (
+        "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation", {}, True, None,
+        None, ("predicate_not_satisfied", None),
+    ),
+    "row 17 manual approve": (
+        "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2", "/record-manual-implementation-review",
+        dict(implementation_review_stages=fixtures.implementation_review_ledger(_IMPL_C, local_bundle_id=_IMPL_B)),
+        True, _feedback("APPROVE", _MANUAL_ROLE),
+        fixtures.review_writes_effect(
+            phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+            implementation_review_stages=fixtures.implementation_review_ledger(
+                _IMPL_C, local_bundle_id=_IMPL_B, manual_bundle_id=_IMPL_B,
+            ),
+        ),
+        ("FINISHED", None),
+    ),
+    "row 17 manual approve without the ledger write": (
+        "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "2.2", "/record-manual-implementation-review",
+        dict(implementation_review_stages=fixtures.implementation_review_ledger(_IMPL_C, local_bundle_id=_IMPL_B)),
+        True, _feedback("APPROVE", _MANUAL_ROLE),
+        fixtures.review_writes_effect(phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"),
+        ("postcondition_not_satisfied", "the ledger does not record MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"),
+    ),
+    "row 18 ordinary post-fix": (
+        "APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review", {}, True,
+        _feedback("REVISE", _LOCAL_ROLE),
+        fixtures.generation_effect("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", revision=2, fix_commit=True),
+        ("FINISHED", None),
+    ),
+    "row 18 no generation": (
+        "APPLYING_REVIEW_FEEDBACK", "2.2", "/apply-implementation-review", {}, True,
+        _feedback("REVISE", _LOCAL_ROLE),
+        fixtures.review_writes_effect(phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW"),
+        ("postcondition_not_satisfied", "no bundle generation ran in this job"),
+    ),
+}
+
+
+class ImplementationStageResumeTest(_ResumeTestCase):
+    """CP2's execute/resume parity: every row-12-18 case reconciles on
+    ``COMPLETED`` exactly as ``execute_step`` verifies it, and on
+    ``LAUNCHED`` to ``FINISHED`` when verified, ``INTERRUPTED`` when phase
+    and ``HEAD`` are both unchanged, and ``UnreconcilableJobError`` --
+    carrying ``postcondition_detail`` when the postcondition is the failing
+    clause -- when state moved without verifying."""
+
+    def _seed(self, name: str, case: str, *, status: str, drop_manifest_bundle_id: bool = False):
+        from controller import target_state
+
+        phase, version, command, seed_kwargs, review_stage, pasted, effect, _expected = _IMPL_CASES[case]
+        case_root = self.tmp_root / name
+        overrides = dict(seed_kwargs)
+        if review_stage:
+            overrides.setdefault("implementation_revision", 1)
+            overrides.setdefault("reviewed_implementation_head", _IMPL_REVIEWED_HEAD)
+        managed_repo = fixtures.build_implementation_target(
+            case_root, phase=phase, governing_workflow_version=version, **overrides,
+        )
+        root = managed_repo.root
+        if review_stage:
+            fixtures.write_implementation_manifest(root, "wi-1", 1, reviewed_implementation_head=_IMPL_REVIEWED_HEAD)
+        if pasted is not None:
+            fixtures.write_review_feedback(root, ".ai-review/wi-1/feedback", pasted)
+        snapshot = target_state.read(managed_repo)
+        work_item = target_state.select_work_item(snapshot, work_item_id="wi-1")
+        pre_state = job._durable_pre_state(job._capture_pre_state(managed_repo, snapshot, work_item))
+        if effect is not None:
+            effect(root)
+        runtime_root = case_root / "runtime"
+        runtime_root.mkdir(parents=True)
+        extra = {"worker_outcome": "SUCCESS"} if status == job.STATUS_COMPLETED else {}
+        overrides = {k: v for k, v in pre_state.items() if k not in ("phase", "governing_workflow_version")}
+        record = _record(
+            job_id="j1", target_repo=str(root), status=status, phase=phase,
+            governing_workflow_version=version, command=f"{command} wi-1", pre_state_overrides=overrides,
+            **extra,
+        )
+        if drop_manifest_bundle_id:
+            del record["pre_state"]["bundle_manifest_bundle_id"]
+        _write_record(runtime_root, record)
+        return managed_repo, runtime_root
+
+    def test_completed_records_reconcile_exactly_as_execute_step_verifies(self) -> None:
+        for i, (case, spec) in enumerate(_IMPL_CASES.items()):
+            reason, detail = spec[-1]
+            with self.subTest(case=case):
+                managed_repo, runtime_root = self._seed(f"c-{i}", case, status=job.STATUS_COMPLETED)
+                with _NeverLaunches():
+                    results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                result = results[0]
+                self.assertTrue(result["reconciled_this_call"])
+                if reason == "FINISHED":
+                    self.assertEqual(result["status"], job.STATUS_FINISHED, result.get("reconciliation_evidence"))
+                    self.assertTrue(result["transition_verified"])
+                    continue
+                self.assertEqual(result["status"], job.STATUS_FAILED)
+                ev = result["reconciliation_evidence"]
+                self.assertEqual(ev["reason"], reason, ev)
+                if detail is None:
+                    self.assertNotIn("postcondition_detail", ev)
+                else:
+                    self.assertIn(detail, ev["postcondition_detail"])
+                self.assertEqual(_read_record(runtime_root, "j1")["status"], job.STATUS_FAILED)
+
+    def test_launched_records_reconcile_to_finished_interrupted_or_unreconcilable(self) -> None:
+        for i, (case, spec) in enumerate(_IMPL_CASES.items()):
+            phase = spec[0]
+            reason, detail = spec[-1]
+            with self.subTest(case=case):
+                managed_repo, runtime_root = self._seed(f"l-{i}", case, status=job.STATUS_LAUNCHED)
+                root = managed_repo.root
+                record = _read_record(runtime_root, "j1")
+                observed_phase = fixtures.state_entry(root)["phase"]
+                phase_unchanged = observed_phase == phase
+                head_unchanged = fixtures.current_head(root) == record["pre_state"]["target_head"]
+                if reason == "FINISHED":
+                    with _NeverLaunches():
+                        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                    self.assertEqual(results[0]["status"], job.STATUS_FINISHED)
+                    continue
+                if phase_unchanged and head_unchanged:
+                    with _NeverLaunches():
+                        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                    self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)
+                    continue
+                with self.assertRaises(UnreconcilableJobError) as ctx:
+                    job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                ev = ctx.exception.evidence
+                self.assertEqual(ev["pre_phase"], phase)
+                self.assertEqual(ev["observed_phase_after"], observed_phase)
+                if detail is None:
+                    self.assertNotIn("postcondition_detail", ev)
+                else:
+                    self.assertIn(detail, ev["postcondition_detail"])
+                    self.assertIn("postcondition not satisfied", str(ctx.exception))
+                self.assertEqual(_read_record(runtime_root, "j1")["status"], job.STATUS_LAUNCHED)
+
+    def test_the_launched_cases_cover_every_reconciliation_outcome(self) -> None:
+        """The table above exercises all three ``LAUNCHED`` outcomes,
+        including the moved-state postcondition failure carrying its
+        detail."""
+        outcomes = set()
+        for i, (case, spec) in enumerate(_IMPL_CASES.items()):
+            managed_repo, runtime_root = self._seed(f"cover-{i}", case, status=job.STATUS_LAUNCHED)
+            try:
+                results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+            except UnreconcilableJobError as exc:
+                outcomes.add("unreconcilable+detail" if "postcondition_detail" in exc.evidence else "unreconcilable")
+            else:
+                outcomes.add(results[0]["status"])
+        self.assertEqual(
+            outcomes,
+            {job.STATUS_FINISHED, job.STATUS_INTERRUPTED, "unreconcilable", "unreconcilable+detail"},
+        )
+
+    def test_a_pre_milestone_row_16_block_record_is_not_satisfied(self) -> None:
+        """A record lacking ``bundle_manifest_bundle_id`` (written before
+        CP2) fails closed even with a genuine current ``BLOCK`` on file."""
+        managed_repo, runtime_root = self._seed(
+            "pre-milestone", "row 16 local block", status=job.STATUS_COMPLETED, drop_manifest_bundle_id=True,
+        )
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FAILED)
+        self.assertEqual(results[0]["reconciliation_evidence"]["reason"], "predicate_not_satisfied")
 
 
 if __name__ == "__main__":

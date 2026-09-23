@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-worker-execution-hardening",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -821,7 +821,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-execution-hardening-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -990,8 +990,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 31,
-      "last_transition": "2026-09-23T08:29:25Z",
+      "state_revision": 32,
+      "last_transition": "2026-09-23T09:18:24Z",
       "implementation_review_stages": {
         "review_content_id": "0aa600449b0f2910ae976ec33c9fabfc94a08964b766ff2c386d5548b234a1a7",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {

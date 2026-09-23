@@ -22,19 +22,33 @@ called directly with a hand-built ``args`` namespace and a real or fake
 
 from __future__ import annotations
 
+import ast
+import contextlib
+import errno
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, evidence, job, managed_repo, runtime  # noqa: E402
+from controller import cli, evidence, job, lock, managed_repo, runtime, worker  # noqa: E402
 from controller.decision import Action, Decision  # noqa: E402
-from controller.errors import UnmanagedRepositoryError  # noqa: E402
+from controller.errors import (  # noqa: E402
+    GitDirectoryUnresolvableError,
+    JobAbandonRefusedError,
+    LifecycleLockError,
+    LifecycleWorkerActiveError,
+    LifecycleWorkerUnverifiableError,
+    PendingJobReconciliationError,
+    UnmanagedRepositoryError,
+)
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
-from tests import fixtures  # noqa: E402
+from tests import fixtures, process_fixtures  # noqa: E402
 
 FAKE_IDENTITY = ControllerIdentity(
     generation=7,
@@ -616,14 +630,10 @@ class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):
         self.assertIn("manifest plan_revision 10 != state plan_revision 11", out)
 
 
-class ApplyingReviewFeedbackCliTest(_StepFixture, unittest.TestCase):
-    """Automatic-lifecycle-orchestration CP4B through the CLI: a ``"2.2"``
-    work item at ``APPLYING_REVIEW_FEEDBACK`` with an admissible local
-    ``REVISE`` and the review-stage write still uncommitted. ``explain``
-    reports the launch with its task addendum; with an unverified earlier
-    apply job against the same bundle, ``explain`` and ``step`` report the
-    same relaunch-bound gate; and ``explain`` reads the job history
-    tolerantly (round 3's O5)."""
+class _ApplyingReviewFeedbackFixture(_StepFixture):
+    """A ``"2.2"`` work item at ``APPLYING_REVIEW_FEEDBACK`` with an
+    admissible local ``REVISE`` and the review-stage write still
+    uncommitted (shared by the CP4B and CP5 CLI tests below)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -681,6 +691,17 @@ class ApplyingReviewFeedbackCliTest(_StepFixture, unittest.TestCase):
             "updated_at": "2026-01-01T00:00:00Z",
         })
 
+    def _step_with(self, args: _Args) -> int:
+        return cli.cmd_step(args, self.runtime_root, self.ident)
+
+
+class ApplyingReviewFeedbackCliTest(_ApplyingReviewFeedbackFixture, unittest.TestCase):
+    """Automatic-lifecycle-orchestration CP4B through the CLI: ``explain``
+    reports the launch with its task addendum; with an unverified earlier
+    apply job against the same bundle, ``explain`` and ``step`` report the
+    same relaunch-bound gate; and ``explain`` reads the job history
+    tolerantly (round 3's O5)."""
+
     def test_explain_reports_the_launch_and_its_task_addendum(self) -> None:
         out = self._explain()
         self.assertIn("next automatic action: /apply-implementation-review wi-1", out)
@@ -708,9 +729,6 @@ class ApplyingReviewFeedbackCliTest(_StepFixture, unittest.TestCase):
         gated = [r for r in records if r["status"] == job.STATUS_GATE_BLOCKED]
         self.assertEqual(len(gated), 1)
         self.assertEqual(gated[0]["human_gate_pending"], payload["gate"])
-
-    def _step_with(self, args: _Args) -> int:
-        return cli.cmd_step(args, self.runtime_root, self.ident)
 
     def test_explain_reads_the_job_history_tolerantly(self) -> None:
         jobs_dir = self.runtime_root / "jobs"
@@ -937,6 +955,300 @@ class ResumeCommandTest(unittest.TestCase):
         runtime.write_json(self.runtime_root, "jobs/j4.json", record)
 
         cli.cmd_resume(self._args(), self.runtime_root, FAKE_IDENTITY)  # must not raise/launch
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-automatic-lifecycle-orchestration CP5 -- exit 45, the
+# lock errors, `resume --abandon`, and explain's pending and lock reports.
+# ---------------------------------------------------------------------------
+
+
+class ExitCodeTableTest(unittest.TestCase):
+    def test_exit_worker_active_is_45_and_distinct(self) -> None:
+        codes = {name: value for name, value in vars(cli).items() if name.startswith("EXIT_")}
+        self.assertEqual(cli.EXIT_WORKER_ACTIVE, 45)
+        self.assertEqual(len(set(codes.values())), len(codes), codes)
+
+    def test_the_worker_active_clause_precedes_the_blanket_clause_in_main(self) -> None:
+        tree = ast.parse(Path(cli.__file__).read_text())
+        main = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main")
+        handlers = [
+            handler.type.id for node in ast.walk(main) if isinstance(node, ast.Try)
+            for handler in node.handlers if isinstance(handler.type, ast.Name)
+        ]
+        self.assertIn("LifecycleWorkerActiveError", handlers)
+        self.assertIn("ControllerError", handlers)
+        self.assertLess(handlers.index("LifecycleWorkerActiveError"), handlers.index("ControllerError"))
+
+    def test_main_maps_each_lifecycle_error(self) -> None:
+        for error, expected in (
+            (LifecycleWorkerActiveError("held"), cli.EXIT_WORKER_ACTIVE),
+            (LifecycleWorkerUnverifiableError("unverifiable"), cli.EXIT_WORKER_ACTIVE),
+            (LifecycleLockError("flock failed with ENOLCK"), cli.EXIT_FAIL_CLOSED),
+            (PendingJobReconciliationError("pending"), cli.EXIT_FAIL_CLOSED),
+            (JobAbandonRefusedError("refused"), cli.EXIT_FAIL_CLOSED),
+            (GitDirectoryUnresolvableError("no git dir"), cli.EXIT_FAIL_CLOSED),
+        ):
+            with self.subTest(error=type(error).__name__):
+                def raise_it(args, argv, error=error):
+                    raise error
+
+                stderr = io.StringIO()
+                with unittest.mock.patch.object(cli, "_dispatch", raise_it), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli.main(["step", "/target"]), expected)
+                self.assertIn(f"error: {error.message}", stderr.getvalue())
+
+    def test_lifecycle_lock_error_is_a_sibling_never_a_subclass(self) -> None:
+        self.assertFalse(issubclass(LifecycleLockError, LifecycleWorkerActiveError))
+        self.assertTrue(issubclass(LifecycleWorkerUnverifiableError, LifecycleWorkerActiveError))
+
+    def test_acknowledge_without_abandon_is_a_usage_error(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:
+            cli.main(["resume", "--acknowledge-unverifiable-worker", "/target"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
+        self.assertIn("--acknowledge-unverifiable-worker is accepted only with --abandon", stderr.getvalue())
+
+    def test_resume_parses_abandon_and_the_acknowledgement(self) -> None:
+        args = cli.build_parser().parse_args(
+            ["resume", "--abandon", "20260101T000000Z-abcd", "--acknowledge-unverifiable-worker", "/target"])
+        self.assertEqual(args.abandon, "20260101T000000Z-abcd")
+        self.assertTrue(args.acknowledge_unverifiable_worker)
+        self.assertEqual(args.repo, "/target")
+        plain = cli.build_parser().parse_args(["resume", "/target"])
+        self.assertIsNone(plain.abandon)
+        self.assertFalse(plain.acknowledge_unverifiable_worker)
+
+
+class LockErrorCliTest(_StepFixture, unittest.TestCase):
+    """Lock errors other than contention (round 4, O4): ``step``, ``resume``
+    and ``--abandon`` each exit 20 with ``LifecycleLockError`` naming the
+    errno, never exit 45's "worker active" text, and no ``OSError``
+    escapes ``cli.main``."""
+
+    def _run_main(self, command) -> tuple[int, str]:
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: command()), \
+                contextlib.redirect_stderr(stderr):
+            code = cli.main(["step", str(self.repo)])
+        return code, stderr.getvalue()
+
+    def test_every_non_contention_failure_is_exit_20(self) -> None:
+        runtime.write_json(self.runtime_root, "jobs/j-launched.json", {
+            **_job_record(job_id="j-launched", target_repo=str(self.repo.resolve()), status=job.STATUS_LAUNCHED),
+        })
+        abandon_args = _Args(str(self.repo), workflow_manager=str(self.stub_manager))
+        abandon_args.abandon = "j-launched"
+        abandon_args.acknowledge_unverifiable_worker = False
+        commands = {
+            "step": lambda: cli.cmd_step(self._args(), self.runtime_root, self.ident),
+            "resume": lambda: cli.cmd_resume(self._args(), self.runtime_root, self.ident),
+            "--abandon": lambda: cli.cmd_resume(abandon_args, self.runtime_root, self.ident),
+        }
+        failures = {
+            "flock ENOLCK": ("flock", OSError(errno.ENOLCK, "No locks available"), "ENOLCK"),
+            "flock EBADF": ("flock", OSError(errno.EBADF, "Bad file descriptor"), "EBADF"),
+            "open EACCES": ("open", PermissionError(errno.EACCES, "Permission denied"), "EACCES"),
+        }
+        real_open = os.open
+
+        def open_refusing_directories(error):
+            def fake_open(path, flags, *args, **kwargs):
+                if flags & os.O_DIRECTORY:
+                    raise error
+                return real_open(path, flags, *args, **kwargs)
+            return fake_open
+
+        for command_name, command in commands.items():
+            for failure_name, (target, error, errno_name) in failures.items():
+                with self.subTest(command=command_name, failure=failure_name):
+                    patcher = (
+                        unittest.mock.patch.object(lock.fcntl, "flock", side_effect=error) if target == "flock"
+                        else unittest.mock.patch.object(lock.os, "open", open_refusing_directories(error))
+                    )
+                    with patcher:
+                        code, stderr = self._run_main(command)
+                    self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
+                    self.assertIn(f"error: the lifecycle lock on {lock.resolve_git_dir(self.repo)} could not be "
+                                  f"taken: {target} failed with {errno_name}", stderr)
+                    self.assertNotIn("holds the lifecycle lock", stderr)
+        on_disk = runtime.read_json(self.runtime_root / "jobs" / "j-launched.json")
+        self.assertEqual(on_disk["status"], job.STATUS_LAUNCHED)
+
+
+class ResumeWorkerHoldExitTest(unittest.TestCase):
+    """``cmd_resume`` exits 45 when ``resume`` left a record alone because
+    its recorded worker is ``active`` or ``unverifiable``; ``--abandon``
+    reports the terminal record it wrote and exits 0."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.repo = _build_managed_target(self.tmp_root, phase="PLANNING")
+        fixtures.commit_all(self.repo, "seed workflow state")
+        self.stub_manager = fixtures.write_stub_workflow_manager(self.tmp_root / "workflow-manager")
+        self.runtime_root = self.tmp_root / "runtime"
+        import controller.identity as identity_module
+        for name in ("pin", "current"):
+            patcher = unittest.mock.patch.object(identity_module, name, lambda: FAKE_IDENTITY)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _seed_launched(self, job_id: str, worker_process: dict) -> None:
+        record = _job_record(job_id=job_id, target_repo=str(self.repo.resolve()), status=job.STATUS_LAUNCHED)
+        for key in ("worker_outcome", "observed_phase_after", "transition_verified"):
+            record.pop(key)
+        record["pre_state"]["target_head"] = fixtures.current_head(self.repo)
+        record["expected_transition"] = {"from": "PLANNING", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]}
+        record["lifecycle_lock"] = {"path": str(lock.resolve_git_dir(self.repo))}
+        record["worker_process"] = worker_process
+        runtime.write_json(self.runtime_root, f"jobs/{job_id}.json", record)
+
+    def _resume(self, **kwargs) -> tuple[int, str]:
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager))
+        args.abandon = kwargs.get("abandon")
+        args.acknowledge_unverifiable_worker = kwargs.get("acknowledge", False)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = cli.cmd_resume(args, self.runtime_root, FAKE_IDENTITY)
+        return code, out.getvalue()
+
+    def test_an_active_worker_exits_45_naming_its_group(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self._seed_launched("j-active", process_fixtures.worker_process_dict(sleeper.pid))
+        code, out = self._resume()
+        self.assertEqual(code, cli.EXIT_WORKER_ACTIVE)
+        self.assertIn("j-active: LAUNCHED (resume_marked=worker_active:", out)
+        self.assertIn(f"process group {sleeper.pid}", out)
+
+    def test_an_unverifiable_worker_exits_45_naming_no_group_and_abandon_clears_it(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        context = {**worker.read_process_context(), "boot_id": "boot-elsewhere", "hostname": "elsewhere",
+                   "machine_id": "m-elsewhere"}
+        self._seed_launched("j-far", process_fixtures.worker_process_dict(sleeper.pid, context=context))
+        code, out = self._resume()
+        self.assertEqual(code, cli.EXIT_WORKER_ACTIVE)
+        self.assertIn("resume_marked=worker_unverifiable", out)
+        self.assertIn("--acknowledge-unverifiable-worker", out)
+        self.assertNotIn(str(sleeper.pid), out)
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(
+                cli, "_dispatch", lambda args, argv: self._resume(abandon="j-far")[0]), \
+                contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", str(self.repo)]), cli.EXIT_WORKER_ACTIVE)
+        self.assertIn("--acknowledge-unverifiable-worker", stderr.getvalue())
+
+        code, out = self._resume(abandon="j-far", acknowledge=True)
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("j-far: FAILED (OperatorAbandoned; was LAUNCHED", out)
+        self.assertIn("recorded worker liveness: unverifiable (acknowledged)", out)
+        code, out = self._resume()
+        self.assertEqual(code, cli.EXIT_OK)
+
+
+class ExplainPendingJobsTest(_ApplyingReviewFeedbackFixture, unittest.TestCase):
+    """Round 4, O3: ``explain`` while a job is pending. A ``"2.2"`` item at
+    ``APPLYING_REVIEW_FEEDBACK`` with an admissible ``REVISE``, and a
+    ``LAUNCHED`` apply record J whose ``bundle_manifest_bundle_id`` equals
+    the manifest's."""
+
+    def _seed_launched_apply(self, job_id: str) -> None:
+        runtime.write_json(self.runtime_root, f"jobs/{job_id}.json", {
+            "schema_version": job.SCHEMA_VERSION, "job_id": job_id, "controller_generation": self.ident.generation,
+            "target_repo": self.target_repo, "target_workflow_version": "2.5.1", "work_item_id": "wi-1",
+            "observed_phase_before": "APPLYING_REVIEW_FEEDBACK",
+            "pre_state": {"phase": "APPLYING_REVIEW_FEEDBACK", "governing_workflow_version": "2.2",
+                          "target_head": fixtures.current_head(self.repo), "bundle_manifest_bundle_id": "b" * 64},
+            "selected_action": {"kind": "slash_command", "command": "/apply-implementation-review wi-1",
+                                "task_addendum": None, "automatic": True, "declined": False,
+                                "reason": "seeded", "evidence": []},
+            "expected_transition": {"from": "APPLYING_REVIEW_FEEDBACK",
+                                    "to_any_of": ["AWAITING_LOCAL_IMPLEMENTATION_REVIEW"]},
+            "status": job.STATUS_LAUNCHED, "human_gate_pending": None, "handoff_pending": False,
+            "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+        })
+
+    def test_explain_reports_the_pending_job_ahead_of_its_decision_until_resume_clears_it(self) -> None:
+        self._seed_launched_apply("j-apply")
+        clearing = f"workflow-controller resume {self.target_repo}"
+        out = self._explain()
+        self.assertIn("pending job: j-apply (LAUNCHED)", out)
+        self.assertIn(clearing, out)
+        self.assertIn("`step`/`run` refuse until each is cleared", out)
+        self.assertLess(out.index("pending job: j-apply"), out.index("phase: APPLYING_REVIEW_FEEDBACK"))
+        self.assertNotIn("human gate", out)  # a LAUNCHED record is never J
+        self.assertIn("next automatic action: /apply-implementation-review wi-1", out)
+        payload = json.loads(self._explain(json_out=True))
+        self.assertEqual(payload["pending_jobs"],
+                         [{"job_id": "j-apply", "status": "LAUNCHED", "clearing_command": clearing}])
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: self._step_with(self._args())), \
+                contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", str(self.repo)]), cli.EXIT_FAIL_CLOSED)
+        self.assertIn("job j-apply (LAUNCHED", stderr.getvalue())
+        self.assertIn(clearing, stderr.getvalue())
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.cmd_resume(self._args(), self.runtime_root, self.ident), cli.EXIT_INTERRUPTED)
+        self.assertIn("j-apply: INTERRUPTED", out.getvalue())
+
+        payload = json.loads(self._explain(json_out=True))
+        self.assertEqual(payload["pending_jobs"], [])
+        self.assertIn("job j-apply, ended INTERRUPTED", payload["gate"]["what_is_required"])
+        self.assertNotIn("pending job", self._explain())
+        env = {"FAKE_CLAUDE_REQUIRE_FILE": str(self.tmp_root / "never-created")}
+        with unittest.mock.patch.dict("os.environ", env):
+            self.assertEqual(self._step_with(self._args()), cli.EXIT_GATE)
+
+    def test_explain_reports_pending_jobs_for_the_no_work_item_bootstrap_too(self) -> None:
+        """Round 1's O4 of the manual external plan review: the pending
+        report precedes both of ``explain``'s branches."""
+        fixtures.write_workflow_state(self.repo, {"schema_version": 1, "active_work_item_id": None, "work_items": {}})
+        (self.runtime_root / "jobs").mkdir(parents=True, exist_ok=True)
+        (self.runtime_root / "jobs" / "garbage.json").write_text("{not json")
+        out = self._explain()
+        self.assertIn("pending job: garbage (unreadable)", out)
+        self.assertIn(f"workflow-controller resume --abandon garbage {self.target_repo}", out)
+        self.assertIn("phase: NO_PHASE", out)
+        payload = json.loads(self._explain(json_out=True))
+        self.assertEqual([entry["job_id"] for entry in payload["pending_jobs"]], ["garbage"])
+
+
+class LifecycleLockReportTest(unittest.TestCase):
+    """``explain``/``inspect`` report "lifecycle lock: held/free/unknown"
+    through the non-acquiring probe."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.repo = _build_managed_target(self.tmp_root, phase="PLANNING")
+        self.stub_manager = fixtures.write_stub_workflow_manager(self.tmp_root / "workflow-manager")
+        self.runtime_root = self.tmp_root / "runtime"
+        self.free = "free" if lock.read_pid_namespace() == lock.INIT_PID_NAMESPACE else "unknown"
+
+    def _run(self, command, json_out: bool = False) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(command(_Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                                           json_out=json_out), self.runtime_root, FAKE_IDENTITY), cli.EXIT_OK)
+        return out.getvalue()
+
+    def test_explain_and_inspect_report_the_probe(self) -> None:
+        for command in (cli.cmd_explain, cli.cmd_inspect):
+            with self.subTest(command=command.__name__):
+                self.assertIn(f"lifecycle lock: {self.free}", self._run(command))
+                self.assertEqual(json.loads(self._run(command, json_out=True))["lifecycle_lock"], self.free)
+                held = lock.acquire_lifecycle_lock(self.repo)
+                try:
+                    self.assertIn("lifecycle lock: held", self._run(command))
+                    self.assertEqual(json.loads(self._run(command, json_out=True))["lifecycle_lock"], "held")
+                finally:
+                    held.release()
 
 
 if __name__ == "__main__":

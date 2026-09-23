@@ -16,10 +16,17 @@ of this checkpoint's scope and is not asserted here.
 
 from __future__ import annotations
 
+import ast
+import contextlib
 import copy
 import dataclasses
+import errno
+import io
 import json
+import os
+import signal
 import sys
+import threading
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -27,12 +34,19 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import decision, evidence, job, target_state  # noqa: E402
+from controller import cli, decision, evidence, job, lock, target_state, worker  # noqa: E402
+from controller.errors import (  # noqa: E402
+    LifecycleWorkerActiveError,
+    PendingJobReconciliationError,
+    UserOnlyCommandError,
+    WorkerLaunchError,
+)
 from controller.decision import Action, NO_PHASE, Decision, phase_from_wire  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT, SOURCE_KIND_WORKTREE  # noqa: E402
-from tests import fixtures  # noqa: E402
+from tests import fixtures, process_fixtures  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 FAKE_IDENTITY = ControllerIdentity(
     generation=7,
@@ -493,7 +507,36 @@ class LaunchPathTest(unittest.TestCase):
                 claude_bin=str(FAKE_CLAUDE), timeout=10,
             )
         statuses = spy.statuses()
-        self.assertEqual(statuses[:3], ["PLANNED", "LAUNCHED", "COMPLETED"])
+        # Automatic-lifecycle-orchestration CP5: the `on_spawn` flush of
+        # `worker_process` is a second LAUNCHED write -- after `Popen`, and
+        # after the first LAUNCHED write, so a crash between the two leaves
+        # a LAUNCHED record carrying `lifecycle_lock`.
+        self.assertEqual(statuses[:4], ["PLANNED", "LAUNCHED", "LAUNCHED", "COMPLETED"])
+
+    def test_the_second_launched_write_adds_only_the_worker_process(self) -> None:
+        """CP5: the two LAUNCHED writes differ only by ``worker_process``
+        (the spawn-time process identity) and ``updated_at``."""
+        with _WriteSpy() as spy:
+            job.execute_step(
+                self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                claude_bin=str(FAKE_CLAUDE), timeout=10,
+            )
+        launched = [obj for _rel, obj in spy.calls if obj.get("status") == "LAUNCHED"]
+        self.assertEqual(len(launched), 2)
+        first, second = launched
+        self.assertNotIn("worker_process", first)
+        self.assertEqual(
+            {key for key in set(first) | set(second) if first.get(key) != second.get(key)} - {"updated_at"},
+            {"worker_process"},
+        )
+        worker_process = second["worker_process"]
+        self.assertEqual(
+            set(worker_process),
+            {"pid", "pgid", "start_ticks", "boot_id", "pid_namespace", "hostname", "machine_id"},
+        )
+        self.assertEqual(worker_process["pgid"], worker_process["pid"])
+        self.assertIsInstance(worker_process["start_ticks"], int)
+        self.assertEqual(first["lifecycle_lock"], second["lifecycle_lock"])
 
     def test_planned_flush_carries_and_omits_the_right_fields(self) -> None:
         with _WriteSpy() as spy:
@@ -513,9 +556,11 @@ class LaunchPathTest(unittest.TestCase):
 
         for absent_field in (
             "worker_outcome", "worker", "observed_phase_after", "transition_verified",
-            "expected_transition",
+            "expected_transition", "worker_process",
         ):
             self.assertNotIn(absent_field, planned, f"{absent_field!r} must be absent at PLANNED")
+        # CP5: written under the lock, naming the target's own git directory.
+        self.assertEqual(planned["lifecycle_lock"], {"path": str((self.managed_repo.root / ".git").resolve())})
 
     def test_launched_flush_adds_only_expected_transition(self) -> None:
         with _WriteSpy() as spy:
@@ -553,6 +598,8 @@ class LaunchPathTest(unittest.TestCase):
             "work_item_id", "observed_phase_before", "pre_state", "selected_action",
             "expected_transition", "worker", "worker_outcome", "status", "human_gate_pending",
             "handoff_pending", "created_at", "updated_at",
+            # Automatic-lifecycle-orchestration CP5.
+            "lifecycle_lock", "worker_process",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -1236,14 +1283,36 @@ class ApplyingReviewFeedbackExecuteTest(unittest.TestCase):
             self.assertIn("job real-attempt, ended FAILED", record["human_gate_pending"]["what_is_required"])
 
     def test_a_non_terminal_record_is_never_j(self) -> None:
+        """CP4B: J is a terminal record only. Automatic-lifecycle-
+        orchestration CP5 changes what ``execute_step`` does beside such a
+        record: it is pending reconciliation, so ``step`` refuses before
+        deciding and launches nothing (it used to decide around it). The
+        job history the decision reads still never takes it as J."""
         pending = self._record("still-launched", job.STATUS_LAUNCHED, created_at="2026-01-09T00:00:00Z")
-        with self.subTest(case="alone"):
-            self._execute(seeded=(pending,), launches=True)
-        with self.subTest(case="in front of an earlier terminal attempt"):
-            record, _diag, _runtime = self._execute(
-                seeded=(pending, self._record("earlier-apply", job.STATUS_FAILED)), launches=False,
-            )
-            self.assertIn("job earlier-apply, ended FAILED", record["human_gate_pending"]["what_is_required"])
+        earlier = self._record("earlier-apply", job.STATUS_FAILED)
+        for case, seeded, expected_j in (
+            ("alone", (pending,), None),
+            ("in front of an earlier terminal attempt", (pending, earlier), "earlier-apply"),
+        ):
+            with self.subTest(case=case):
+                self._runs += 1
+                runtime_root = self.tmp_root / f"runtime-{self._runs}"
+                for record in seeded:
+                    _seed_job(runtime_root, record)
+                view = job.last_launched_apply_job_view(runtime_root, self.root, "wi-1")
+                self.assertEqual(None if view is None else view.job_id, expected_j)
+                diag = self.tmp_root / f"diag-{self._runs}.json"
+                env = {"FAKE_CLAUDE_DIAG_FILE": str(diag),
+                       "FAKE_CLAUDE_REQUIRE_FILE": str(self.tmp_root / "never-created")}
+                with unittest.mock.patch.dict("os.environ", env):
+                    with self.assertRaises(PendingJobReconciliationError) as ctx:
+                        job.execute_step(
+                            self.managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                            claude_bin=str(FAKE_CLAUDE), timeout=10,
+                        )
+                self.assertIn("job still-launched (LAUNCHED", ctx.exception.message)
+                self.assertIn(f"workflow-controller resume {self.root}", ctx.exception.message)
+                self.assertFalse(diag.exists(), "no worker may start beside a pending job")
 
     def test_the_unverified_job_this_step_leaves_is_the_next_steps_bound(self) -> None:
         """State 7's shape at the unit level: the first ``step`` launches
@@ -1273,6 +1342,477 @@ class WorkerTaskTest(unittest.TestCase):
             job.worker_task(Action(command="/apply-implementation-review wi-1", task_addendum="note")),
             "/apply-implementation-review wi-1\n\nnote",
         )
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-automatic-lifecycle-orchestration CP5 -- worker
+# lifecycle and concurrency, at the `execute_step` level.
+# ---------------------------------------------------------------------------
+
+
+def _read_lines(path: Path) -> list[str]:
+    return path.read_text().splitlines() if path.exists() else []
+
+
+class _LifecycleCase(unittest.TestCase):
+    """A ``"2.1"`` ``PLANNING`` target (the minimal automatic launch), a
+    runtime root, and cleanup that ends every worker group a record names."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir(parents=True)
+        self.managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
+        self.root = self.managed_repo.root
+        self.release = self.tmp_root / "release"
+        self.invocations = self.tmp_root / "invocations"
+        # Every fake this case starts appends its pid here, so the cleanup
+        # can end it whatever the test did.
+        env = unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(self._end_recorded_workers)
+
+    def _end_recorded_workers(self) -> None:
+        """Releases every fake, then kills each worker group a record names
+        and each one the invocation counter saw (its pid is its pgid), so
+        none outlives even a failure before the ``worker_process`` flush."""
+        self.release.touch()
+        for path in (self.runtime_root / "jobs").glob("*.json"):
+            try:
+                worker_process = json.loads(path.read_text()).get("worker_process") or {}
+            except (OSError, ValueError, AttributeError):
+                continue
+            process_fixtures.kill_group(worker_process.get("pgid"))
+        for line in _read_lines(self.invocations):
+            process_fixtures.kill_group(int(line))
+
+    def _step(self, **kwargs):
+        return job.execute_step(
+            self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+            claude_bin=kwargs.pop("claude_bin", str(FAKE_CLAUDE)), **kwargs,
+        )
+
+    def _records(self) -> list[dict]:
+        return [json.loads(p.read_text()) for p in sorted((self.runtime_root / "jobs").glob("*.json"))]
+
+
+class InProcessConcurrencyTest(_LifecycleCase):
+    """While one ``execute_step`` runs a hanging worker, a second one raises
+    ``LifecycleWorkerActiveError``, ``cli.main`` maps it to 45 (not 20), and
+    only one worker ever ran."""
+
+    def _start_first_step(self) -> tuple[threading.Thread, dict]:
+        outcome: dict = {}
+
+        def run() -> None:
+            try:
+                outcome["record"] = self._step()
+            except BaseException as exc:  # noqa: BLE001 -- surfaced by the test
+                outcome["error"] = exc
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 30)
+        self.assertTrue(process_fixtures.wait_until(lambda: len(_read_lines(self.invocations)) == 1),
+                        "the first worker never started")
+        return thread, outcome
+
+    def test_a_second_step_refuses_with_exit_45_and_launches_nothing(self) -> None:
+        env = {"FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
+               "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)}
+        with unittest.mock.patch.dict("os.environ", env):
+            thread, outcome = self._start_first_step()
+            with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+                self._step()
+            message = ctx.exception.message
+            self.assertIn(str(lock.resolve_git_dir(self.root)), message)
+            self.assertIn("fuser -v", message)
+            self.assertIn("lsof +d", message)
+            # The first job's worker is recorded and running: named, as the
+            # group to wait for or end.
+            worker_process = self._records()[0]["worker_process"]
+            self.assertIn(f"process group {worker_process['pgid']}", message)
+            self.assertIn("is a process that inherited the descriptor", message)
+
+            def second_step_via_cli(args, argv):
+                return self._step()
+
+            stderr = io.StringIO()
+            with unittest.mock.patch.object(cli, "_dispatch", second_step_via_cli), \
+                    contextlib.redirect_stderr(stderr):
+                self.assertEqual(cli.main(["step", str(self.root)]), cli.EXIT_WORKER_ACTIVE)
+            self.assertIn("holds the lifecycle lock", stderr.getvalue())
+            self.assertEqual(len(_read_lines(self.invocations)), 1)
+            self.release.touch()
+            thread.join(30)
+        self.assertNotIn("error", outcome)
+        self.assertEqual(len(_read_lines(self.invocations)), 1)
+        self.assertEqual(len(self._records()), 1, "the refused steps wrote no job record")
+
+    def test_a_sigstopped_worker_counts_as_active_and_its_exit_releases_the_lock(self) -> None:
+        env = {"FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
+               "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)}
+        with unittest.mock.patch.dict("os.environ", env):
+            thread, outcome = self._start_first_step()
+            self.assertTrue(process_fixtures.wait_until(lambda: "worker_process" in self._records()[0]))
+            worker_process = self._records()[0]["worker_process"]
+            os.killpg(worker_process["pgid"], signal.SIGSTOP)
+            try:
+                self.assertTrue(process_fixtures.wait_until(
+                    lambda: (process_fixtures.read_stat(worker_process["pid"]) or ("?",))[0] == "T"))
+                self.assertEqual(worker.classify_worker_liveness(worker_process), worker.ACTIVE)
+                with self.assertRaises(LifecycleWorkerActiveError):
+                    self._step()
+            finally:
+                os.killpg(worker_process["pgid"], signal.SIGCONT)
+            self.release.touch()
+            thread.join(30)
+        self.assertFalse(thread.is_alive())
+        self.assertNotIn("error", outcome)
+        lock.acquire_lifecycle_lock(self.root).release()  # free once the worker exited
+
+
+class WorkerNotStartedTest(_LifecycleCase):
+    """A worker that never started is terminal at once (round 3, O3): the
+    record is ``FAILED`` (``WorkerNotStarted``), the error re-raises with
+    today's exit code, and the next ``step`` proceeds with no ``resume``."""
+
+    def _assert_not_started(self, error_class: str) -> None:
+        records = self._records()
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        self.assertEqual(record["reconciliation_evidence"]["code"], job.WORKER_NOT_STARTED_CODE)
+        self.assertEqual(record["reconciliation_evidence"]["error"], error_class)
+        self.assertNotIn("worker_process", record)
+        self.assertIn("lifecycle_lock", record)
+
+    def _assert_next_step_launches_exactly_one(self) -> None:
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)}):
+            record = self._step(timeout=10)
+        self.assertEqual(len(_read_lines(self.invocations)), 1)
+        self.assertIn("worker", record)
+
+    def test_a_nonexistent_claude_bin_is_worker_launch_error_and_a_failed_record(self) -> None:
+        with self.assertRaises(WorkerLaunchError):
+            self._step(claude_bin=str(self.tmp_root / "no-such-claude"))
+        self._assert_not_started("WorkerLaunchError")
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: self._step(
+                claude_bin=str(self.tmp_root / "no-such-claude"))), contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", str(self.root)]), cli.EXIT_FAIL_CLOSED)
+        self._assert_next_step_launches_exactly_one()
+
+    def test_a_user_only_task_is_user_only_command_error_and_a_failed_record(self) -> None:
+        decision_ = Decision(
+            observed_phase="PLANNING", evidence=(),
+            action=Action(command="/milestone-plan wi-1", task_addendum="then run /approve-review plan"),
+            automatic=True, gate=None, declined=False, reason="a patched decision with a user-only task",
+        )
+        with unittest.mock.patch.object(job.evidence, "decide", return_value=decision_):
+            with self.assertRaises(UserOnlyCommandError):
+                self._step()
+        self._assert_not_started("UserOnlyCommandError")
+        self._assert_next_step_launches_exactly_one()
+
+
+class PendingJobReconciliationRefusalTest(_LifecycleCase):
+    """No launch over an unreconciled job: under the lock, before deciding."""
+
+    def _seed(self, name: str, record) -> Path:
+        jobs_dir = self.runtime_root / "jobs"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        path = jobs_dir / f"{name}.json"
+        path.write_text(record if isinstance(record, str) else json.dumps(record))
+        return path
+
+    def _launched(self, job_id: str, **overrides) -> dict:
+        record = {
+            "schema_version": job.SCHEMA_VERSION, "job_id": job_id, "controller_generation": 7,
+            "target_repo": str(self.root), "work_item_id": "wi-1", "observed_phase_before": "PLANNING",
+            "pre_state": {"phase": "PLANNING", "governing_workflow_version": "2.1"},
+            "selected_action": {"kind": "slash_command", "command": "/milestone-plan wi-1",
+                                "automatic": True, "declined": False, "reason": "seeded", "evidence": []},
+            "expected_transition": {"from": "PLANNING", "to_any_of": ["AWAITING_LOCAL_PLAN_REVIEW"]},
+            "status": job.STATUS_LAUNCHED, "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        record.update(overrides)
+        return record
+
+    def _assert_refused(self, *fragments: str) -> PendingJobReconciliationError:
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)}):
+            with self.assertRaises(PendingJobReconciliationError) as ctx:
+                self._step(timeout=10)
+        self.assertEqual(_read_lines(self.invocations), [], "nothing may launch")
+        for fragment in fragments:
+            self.assertIn(fragment, ctx.exception.message)
+        return ctx.exception
+
+    def test_a_non_terminal_record_with_a_free_lock_refuses_naming_resume(self) -> None:
+        self._seed("j-launched", self._launched("j-launched"))
+        error = self._assert_refused("job j-launched (LAUNCHED", f"workflow-controller resume {self.root}")
+        self.assertEqual(error.evidence["pending_jobs"], [{
+            "job_id": "j-launched", "status": "LAUNCHED",
+            "clearing_command": f"workflow-controller resume {self.root}",
+        }])
+        self.assertEqual(len(self._records()), 1, "the refusal writes no job record")
+
+    def test_every_non_terminal_status_and_an_unknown_one_refuse(self) -> None:
+        for status, command in (
+            (job.STATUS_PLANNED, f"workflow-controller resume {self.root}"),
+            (job.STATUS_COMPLETED, f"workflow-controller resume --abandon j-{job.STATUS_COMPLETED} {self.root}"),
+            ("WEIRD", f"workflow-controller resume --abandon j-WEIRD {self.root}"),
+        ):
+            with self.subTest(status=status):
+                for path in (self.runtime_root / "jobs").glob("*.json"):
+                    path.unlink()
+                record = self._launched(f"j-{status}", status=status)
+                if status == job.STATUS_PLANNED:
+                    del record["expected_transition"]
+                self._seed(f"j-{status}", record)
+                # A COMPLETED record without a worker_outcome fails
+                # validate_record case 3, so `resume` cannot reconcile it.
+                self._assert_refused(f"job j-{status}", command)
+
+    def test_an_unparseable_file_or_a_parseable_non_object_refuses_naming_abandon(self) -> None:
+        for name, text in (("garbage", "{not json"), ("a-list", "[1, 2, 3]")):
+            with self.subTest(name=name):
+                for path in (self.runtime_root / "jobs").glob("*.json"):
+                    path.unlink()
+                self._seed(name, text)
+                self._assert_refused(f"job {name} (unreadable", f"resume --abandon {name} {self.root}")
+
+    def test_a_non_regular_entry_refuses_naming_its_manual_removal(self) -> None:
+        """Round 1's O2 of the manual external plan review: never opened
+        (a FIFO would block), and named for removal by hand, because
+        ``--abandon`` replaces only regular files."""
+        jobs_dir = self.runtime_root / "jobs"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        for name, make in (
+            ("a-directory", lambda p: p.mkdir()),
+            ("a-fifo", lambda p: os.mkfifo(p)),
+            ("a-dangling-link", lambda p: p.symlink_to(self.tmp_root / "nowhere")),
+        ):
+            with self.subTest(name=name):
+                for entry in jobs_dir.iterdir():
+                    if entry.is_dir() and not entry.is_symlink():
+                        entry.rmdir()
+                    else:
+                        entry.unlink()
+                make(jobs_dir / f"{name}.json")
+                self._assert_refused(f"job {name} (unreadable", f"remove {jobs_dir / (name + '.json')} by hand")
+                pending = job.pending_reconciliation_jobs(self.runtime_root, self.managed_repo, FAKE_IDENTITY)
+                self.assertEqual([entry.job_id for entry in pending], [name])
+
+    def test_a_newer_generation_record_names_that_generation_not_abandon(self) -> None:
+        self._seed("j-newer", self._launched("j-newer", controller_generation=99))
+        error = self._assert_refused("Controller generation 99")
+        self.assertNotIn("--abandon", error.message)
+
+    def test_a_record_failing_validate_record_names_abandon(self) -> None:
+        self._seed("j-vanished", self._launched("j-vanished", work_item_id="gone"))
+        self._assert_refused("work_item_absent", f"resume --abandon j-vanished {self.root}")
+
+    def test_terminal_records_other_targets_and_jobs_abandoned_are_not_pending(self) -> None:
+        self._seed("j-finished", self._launched("j-finished", status=job.STATUS_FAILED))
+        self._seed("j-other", self._launched("j-other", target_repo="/somewhere/else"))
+        abandoned = self.runtime_root / "jobs" / "abandoned"
+        abandoned.mkdir(parents=True)
+        (abandoned / "old.json").write_text("{not json")
+        self.assertEqual(job.pending_reconciliation_jobs(self.runtime_root, self.managed_repo, FAKE_IDENTITY), [])
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)}):
+            self._step(timeout=10)
+        self.assertEqual(len(_read_lines(self.invocations)), 1)
+
+
+class BaseVersionPlannedRecordTest(unittest.TestCase):
+    """The ``PLANNED`` record the base version's ``/apply-functional-review``
+    crash left behind (Migration): ``step`` refuses on it, ``resume``
+    reconciles it ``INTERRUPTED`` (row 1), and the next ``step`` declines
+    (CP3)."""
+
+    def test_step_refuses_then_resume_reconciles_then_step_declines(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            managed_repo = _build_target(
+                tmp_root, phase="AWAITING_FUNCTIONAL_REVIEW", governing_workflow_version="2.2",
+                implementation_revision=1,
+            )
+            root = managed_repo.root
+            (root / "docs" / "ACTIVE_MILESTONE.md").write_text("checklist content\n")
+            blob = fixtures.run(["git", "hash-object", "--", "docs/ACTIVE_MILESTONE.md"], cwd=root).stdout.strip()
+            fixtures.run(["git", "add", "docs/ACTIVE_MILESTONE.md"], cwd=root)
+            fixtures.run(["git", "commit", "-q", "-m",
+                          f"checklist\n\nWorkflow-Functional-Checklist: wi-1/1/{blob}\nWorkflow-Work-Item: wi-1\n"],
+                         cwd=root)
+            findings = root / ".ai-review" / "feedback" / "FUNCTIONAL_REVIEW.md"
+            findings.parent.mkdir(parents=True, exist_ok=True)
+            findings.write_text("findings\n")
+            runtime_root = tmp_root / "runtime"
+            _seed_job(runtime_root, {
+                "schema_version": job.SCHEMA_VERSION, "job_id": "base-crash", "controller_generation": 7,
+                "target_repo": str(root), "work_item_id": "wi-1",
+                "observed_phase_before": "AWAITING_FUNCTIONAL_REVIEW",
+                "pre_state": {"phase": "AWAITING_FUNCTIONAL_REVIEW", "governing_workflow_version": "2.2"},
+                "selected_action": {"kind": "slash_command", "command": "/apply-functional-review wi-1",
+                                    "automatic": True, "declined": False, "reason": "base", "evidence": []},
+                "status": job.STATUS_PLANNED, "human_gate_pending": None, "handoff_pending": False,
+                "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+            })
+            never = tmp_root / "never-created"
+            with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_REQUIRE_FILE": str(never)}):
+                with self.assertRaises(PendingJobReconciliationError) as ctx:
+                    job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                                     claude_bin=str(FAKE_CLAUDE))
+                self.assertIn("job base-crash (PLANNED", ctx.exception.message)
+                results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+                self.assertEqual([r["status"] for r in results], [job.STATUS_INTERRUPTED])
+                record = job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                                          claude_bin=str(FAKE_CLAUDE))
+            self.assertEqual(record["status"], job.STATUS_DECLINED)
+            self.assertEqual(record["selected_action"]["command"], "/apply-functional-review wi-1")
+
+
+class SpawnFlushFailureTest(_LifecycleCase):
+    """The ``on_spawn`` failure path (round 4, O4): a process exists, so the
+    failure is never ``WorkerLaunchError``/``WorkerNotStarted``. The group
+    is killed and reaped, the original error propagates unchanged, and the
+    record stays ``LAUNCHED`` with ``lifecycle_lock`` and no
+    ``worker_process`` -- so the next ``step`` refuses and ``resume``
+    reconciles it."""
+
+    def test_the_flush_error_propagates_the_worker_is_ended_and_the_record_stays_launched(self) -> None:
+        real_write_json = job.runtime.write_json
+        failure = OSError(errno.EIO, "injected flush failure")
+        captured: dict = {}
+
+        def failing_write_json(runtime_root, rel_path, obj):
+            if obj.get("status") == job.STATUS_LAUNCHED and "worker_process" in obj:
+                captured["worker_process"] = obj["worker_process"]
+                raise failure
+            return real_write_json(runtime_root, rel_path, obj)
+
+        env = {"FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release)}
+        with unittest.mock.patch.dict("os.environ", env), \
+                unittest.mock.patch.object(job.runtime, "write_json", failing_write_json):
+            with self.assertRaises(OSError) as ctx:
+                self._step()
+        self.assertIs(ctx.exception, failure)
+        self.assertNotIsInstance(ctx.exception, WorkerLaunchError)
+        pid = captured["worker_process"]["pid"]
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)  # killed *and* reaped before the error propagated
+        [record] = self._records()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertIn("lifecycle_lock", record)
+        self.assertNotIn("worker_process", record)
+        self.assertNotIn("reconciliation_evidence", record)
+
+        with self.assertRaises(PendingJobReconciliationError):
+            self._step(timeout=10)
+        results = job.resume(self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual([r["status"] for r in results], [job.STATUS_INTERRUPTED])
+
+
+class CtrlCTest(_LifecycleCase):
+    """Ctrl-C ends only the Controller: after the ``worker_process`` flush,
+    a ``KeyboardInterrupt`` writes one stderr line naming the worker's pid
+    and pgid and ``workflow-controller resume``, then propagates unchanged;
+    the record stays ``LAUNCHED`` and the worker keeps running."""
+
+    def test_the_interrupt_names_the_worker_and_propagates(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        interrupt = KeyboardInterrupt()
+
+        def launch(task, *, on_spawn, **kwargs):
+            on_spawn(worker.capture_worker_process(sleeper.pid))
+            raise interrupt
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(job.worker, "launch", launch), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(KeyboardInterrupt) as ctx:
+                self._step()
+        self.assertIs(ctx.exception, interrupt)
+        lines = stderr.getvalue().splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn(f"pid {sleeper.pid}", lines[0])
+        self.assertIn(f"process group {sleeper.pid}", lines[0])
+        self.assertIn(f"workflow-controller resume {self.root}", lines[0])
+        [record] = self._records()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertEqual(record["worker_process"]["pid"], sleeper.pid)
+        self.assertIsNone(sleeper.poll(), "the Controller must not end the worker")
+
+    def test_an_interrupt_before_the_flush_prints_nothing(self) -> None:
+        def launch(task, **kwargs):
+            raise KeyboardInterrupt()
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(job.worker, "launch", launch), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(KeyboardInterrupt):
+                self._step()
+        self.assertEqual(stderr.getvalue(), "")
+
+
+class UnboundedDefaultTimeoutTest(_LifecycleCase):
+    """Time is not termination: ``DEFAULT_WORKER_TIMEOUT`` is ``None``, and a
+    worker silent for longer than a (patched) former default is still
+    waited for, with no kill path run."""
+
+    def test_the_default_is_no_limit_and_a_long_silent_worker_is_waited_for(self) -> None:
+        self.assertIsNone(job.DEFAULT_WORKER_TIMEOUT)
+        seen: dict = {}
+        real_launch = job.worker.launch
+
+        def spy_launch(task, **kwargs):
+            seen["timeout"] = kwargs["timeout"]
+            return real_launch(task, **kwargs)
+
+        timer = threading.Timer(1.0, self.release.touch)
+        self.addCleanup(timer.cancel)
+        env = {"FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release)}
+        with unittest.mock.patch.dict("os.environ", env), \
+                unittest.mock.patch.object(job.worker, "launch", spy_launch), \
+                unittest.mock.patch.object(job.worker, "_kill_process_group",
+                                           side_effect=AssertionError("no kill path may run")):
+            timer.start()
+            record = self._step()  # no timeout: the former default no longer applies
+        self.assertIsNone(seen["timeout"])
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+
+
+class ProseOverStateTest(_LifecycleCase):
+    """Durable state over prose: a ``SUCCESS`` worker whose ``result``
+    claims the transition over an unchanged state is ``FAILED``, and no
+    code reads ``WorkerResult.result``/``raw_json`` except ``_worker_dict``."""
+
+    def test_a_success_claim_over_an_unchanged_state_fails(self) -> None:
+        body = json.dumps({
+            "session_id": "s", "is_error": False, "subtype": "success",
+            "result": "Done: the work item is now at AWAITING_LOCAL_PLAN_REVIEW and the bundle is generated.",
+        })
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_STDOUT": body}):
+            record = self._step(timeout=10)
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["observed_phase_after"], "PLANNING")
+
+    def test_worker_result_prose_feeds_only_the_report(self) -> None:
+        readers = []
+        for path in sorted((REPO_ROOT / "controller").glob("*.py")):
+            tree = ast.parse(path.read_text())
+            for func in ast.walk(tree):
+                if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for node in ast.walk(func):
+                    if isinstance(node, ast.Attribute) and node.attr in ("result", "raw_json"):
+                        readers.append((path.name, func.name, node.attr))
+        self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result")])
 
 
 if __name__ == "__main__":

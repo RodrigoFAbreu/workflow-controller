@@ -24,9 +24,9 @@ import sys
 import time
 from pathlib import Path
 
-from controller import evidence, handoff, identity, job, managed_repo, runtime, target_state
+from controller import evidence, handoff, identity, job, lock, managed_repo, runtime, target_state
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
-from controller.errors import ControllerError, SourceSnapshotError
+from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
 
 #: The three read-only commands. Positive guard: everything not in this set
 #: requires a pinned identity (`source_kind != "unpinned"`), by construction
@@ -47,6 +47,11 @@ EXIT_FAIL_CLOSED = 20
 EXIT_WORKER_FAILED = 30
 EXIT_INCOMPLETE = 35
 EXIT_INTERRUPTED = 40
+#: `workflow-controller-automatic-lifecycle-orchestration` CP5: another
+#: Controller or a previous worker holds the target worktree (its lifecycle
+#: lock is held), or `resume` left a record alone because its recorded
+#: worker may still run. Nothing was launched or reconciled.
+EXIT_WORKER_ACTIVE = 45
 EXIT_HANDOFF_PENDING = 50
 
 #: Test-support surface (CP8): `--pause-file` is inert unless this
@@ -169,6 +174,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
+    resume_p.add_argument(
+        "--abandon", metavar="JOB_ID", default=None,
+        help="mark the pending job file JOB_ID terminal instead of reconciling (the operator "
+             "disposition for a job file `resume` cannot reconcile)",
+    )
+    resume_p.add_argument(
+        "--acknowledge-unverifiable-worker", action="store_true", default=False,
+        help="with --abandon only: state that a worker whose liveness cannot be verified here is gone",
+    )
     resume_p.add_argument("repo")
 
     subparsers.add_parser("status")
@@ -242,6 +256,10 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
 
+    # CP5: the non-acquiring lifecycle-lock probe -- `unknown` never means
+    # `free`, and `step` decides by acquiring, never by this report.
+    lock_state = lock.probe_lifecycle_lock(target.root)
+
     if work_item is target_state.NoWorkItemYet:
         # revision 63/64's B2 bootstrap sentinel (CONTROLLER_GEN1_PLAN.md's
         # "NoWorkItemYet CLI dispatch"): there is no WorkItemView to build a
@@ -254,9 +272,11 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                     "profile": target.profile,
                 },
                 "work_item": None,
+                "lifecycle_lock": lock_state,
             }))
             return EXIT_OK
         print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+        print(f"lifecycle lock: {lock_state}")
         print("work item: none -- no non-terminal work item exists and none was explicitly named")
         return EXIT_OK
 
@@ -268,10 +288,12 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 "profile": target.profile,
             },
             "work_item": _work_item_payload(work_item),
+            "lifecycle_lock": lock_state,
         }))
         return EXIT_OK
 
     print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+    print(f"lifecycle lock: {lock_state}")
     print(f"work item: {work_item.work_item_id} "
           f"(type={work_item.work_item_type} kind={work_item.work_item_kind} "
           f"governing_workflow_version={work_item.governing_workflow_version})")
@@ -294,6 +316,15 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     :func:`controller.job.execute_step`, so no job record is written and
     no worker is launched."""
     target = _inspect_target(args)
+    # CP5: the job files `step`/`run` would refuse on, and the lifecycle
+    # lock, are reported ahead of the decision -- for a work item and for
+    # the no-work-item bootstrap alike -- through the same read-only scan
+    # the refusal uses. Neither changes the exit code.
+    pending = job.pending_reconciliation_jobs(runtime_root, target, ident)
+    lock_state = lock.probe_lifecycle_lock(target.root)
+    if not args.json:
+        _print_pending_jobs(pending)
+        print(f"lifecycle lock: {lock_state}")
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
     # The same job-history read `job.execute_step` makes (automatic-
@@ -326,6 +357,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 "artifact_path": gate.artifact_path,
                 "safe_resume_command": gate.safe_resume_command,
             },
+            "pending_jobs": [entry.to_dict() for entry in pending],
+            "lifecycle_lock": lock_state,
         }))
         return EXIT_OK
 
@@ -349,6 +382,17 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     else:
         print("no action at this phase (e.g. LEGACY_READY or MILESTONE_COMPLETE)")
     return EXIT_OK
+
+
+def _print_pending_jobs(pending: list) -> None:
+    """``explain``'s pending report (CP5): each job file ``step``/``run``
+    refuse on, with the command that clears it."""
+    if not pending:
+        return
+    print(f"pending job files: {len(pending)} -- `step`/`run` refuse until each is cleared")
+    for entry in pending:
+        print(f"  pending job: {entry.job_id} ({entry.status or 'unreadable'}) -- {entry.reason}; "
+              f"clear it with: {entry.clearing_command}")
 
 
 def _run_one_step(
@@ -501,12 +545,50 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
     return EXIT_MAX_STEPS
 
 
+def _abandon_summary(record: dict, runtime_root: Path) -> str:
+    evidence_block = record.get("reconciliation_evidence") or {}
+    job_id = record.get("job_id", "<unknown>")
+    if "original" in evidence_block:
+        return (
+            f"{job_id}: {record.get('status')} ({evidence_block.get('code')}) -- the file was not a job "
+            f"record this Controller can read, so its target could not be read and it was abandoned for "
+            f"every target; its original bytes are at {runtime_root / evidence_block['original']}"
+        )
+    line = (
+        f"{job_id}: {record.get('status')} ({evidence_block.get('code')}; was "
+        f"{evidence_block.get('abandoned_status')}; validity={evidence_block.get('validity')})"
+    )
+    liveness = record.get("worker_liveness")
+    if isinstance(liveness, dict):
+        acknowledged = " (acknowledged)" if liveness.get("acknowledged") else ""
+        line += f"; recorded worker liveness: {liveness.get('verdict')}{acknowledged}"
+    return line
+
+
 def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
     """``resume``: reconcile non-terminal job records, then report
     (capability 7). Never launches a worker -- ``controller.job.resume``
-    contains no call to ``controller.worker.launch`` at all."""
+    contains no call to ``controller.worker.launch`` at all.
+
+    ``resume --abandon JOB_ID [--acknowledge-unverifiable-worker]`` (CP5)
+    instead marks that one pending job file terminal
+    (:func:`controller.job.abandon`) and reconciles nothing else. Exit 45
+    when ``resume`` left a record alone because its recorded worker is
+    ``active`` or ``unverifiable``."""
     require_pinned_execution()
     target = _inspect_target(args)
+    abandon_job_id = getattr(args, "abandon", None)
+    if abandon_job_id is not None:
+        abandoned = job.abandon(
+            target, identity=ident, runtime=runtime_root, job_id=abandon_job_id,
+            acknowledge_unverifiable_worker=getattr(args, "acknowledge_unverifiable_worker", False),
+        )
+        if args.json:
+            print(json.dumps(abandoned))
+        else:
+            print(_abandon_summary(abandoned, runtime_root))
+        return EXIT_OK
+
     records = job.resume(target, identity=ident, runtime=runtime_root)
 
     if args.json:
@@ -554,6 +636,16 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         record.get("status") == job.STATUS_INTERRUPTED and record.get("reconciled_this_call")
         for record in records
     )
+    # CP5: a record left `LAUNCHED` because its recorded worker is `active`
+    # or `unverifiable` -- nothing about it was reconciled, and a worker may
+    # still hold the worktree -- takes precedence over exit 40.
+    any_worker_held = any(
+        (record.get("resume_marked") or {}).get("outcome")
+        in (job.RESUME_WORKER_ACTIVE, job.RESUME_WORKER_UNVERIFIABLE)
+        for record in records
+    )
+    if any_worker_held:
+        return EXIT_WORKER_ACTIVE
     return EXIT_INTERRUPTED if any_interrupted else EXIT_OK
 
 
@@ -639,8 +731,16 @@ def main(argv: list[str] | None = None) -> int:
     raw_argv = sys.argv[1:] if argv is None else argv
     parser = build_parser()
     args = parser.parse_args(raw_argv)
+    if args.command == "resume" and args.acknowledge_unverifiable_worker and args.abandon is None:
+        parser.error("--acknowledge-unverifiable-worker is accepted only with --abandon JOB_ID")
     try:
         return _dispatch(args, raw_argv)
+    except LifecycleWorkerActiveError as exc:
+        # CP5: its own clause, *before* the blanket handler below, so a
+        # held worktree exits 45, never 20. `LifecycleLockError` is a
+        # sibling, not a subclass, and reaches the blanket clause.
+        print(f"error: {exc.message}", file=sys.stderr)
+        return EXIT_WORKER_ACTIVE
     except ControllerError as exc:
         print(f"error: {exc.message}", file=sys.stderr)
         return EXIT_FAIL_CLOSED

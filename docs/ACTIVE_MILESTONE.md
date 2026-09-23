@@ -511,4 +511,190 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
       ignoring the target or recency;
     - launching the bare command, not recording the addendum, or `execute_step`/`explain` not
       passing the job history.
-- **CP5-CP9 -- pending**, in registry order.
+- **CP5 -- complete.** Worker lifecycle and concurrency safety, in the new `controller/lock.py`
+  and in `controller/worker.py`, `controller/job.py`, `controller/cli.py` and
+  `controller/errors.py`. The manual external plan review's Optional findings O1-O4 are folded
+  in where they fit this checkpoint, as the user decided. O4's last item, the small wording and
+  citation drifts, concerns the documentation, so it is left to CP8.
+  - `lock` sits after `runtime` in `DEPENDENCY_ORDER` and `__all__`.
+    - `acquire_lifecycle_lock(target_root)` takes `flock(LOCK_EX | LOCK_NB)` on an `O_RDONLY`
+      descriptor of `git rev-parse --absolute-git-dir`. Only `BlockingIOError` is
+      `LifecycleWorkerActiveError` (exit 45). Any other `OSError` from `os.open` or `flock` is
+      `LifecycleLockError` (exit 20), a sibling class, naming the path, the operation and the
+      errno.
+    - `probe_lifecycle_lock` never acquires. It reads `/proc/locks` by the `fdinfo` `mnt_id` ->
+      `mountinfo` `MAJ:MIN` device and the `fdinfo` `ino:`, and answers `free` only from the
+      init pid namespace. Every unreadable or unparseable read is `unknown`.
+    - `read_pid_namespace()` is the one patchable reader of `/proc/self/ns/pid`.
+    - O4: an unresolvable git directory is its own class, `GitDirectoryUnresolvableError`
+      (exit 20).
+  - `worker`:
+    - `launch(..., timeout=None, pass_fds=(), on_spawn=None)`. `on_spawn` runs after `Popen`,
+      outside the `OSError` -> `WorkerLaunchError` conversion. O4: on *any* `BaseException`
+      from it, `KeyboardInterrupt` included, the group is killed and reaped and the original
+      exception propagates.
+    - `WorkerProcess` (`pid`, `pgid`, `start_ticks`, `boot_id`, `pid_namespace`, `hostname`,
+      `machine_id`), `capture_worker_process`, `read_process_context`.
+    - `assess_worker_liveness` -> `LivenessAssessment`, and `classify_worker_liveness`, its
+      verdict. Keyed on `boot_id` first; a host is hostname *and* machine id. The process test
+      is zombie-aware. Its `/proc` form is used only where `/proc/self` names the Controller's
+      pid, and its `killpg` form answers at most `possibly live`.
+    - O1: a process whose process-level state is `Z`/`X` still counts as running when a thread
+      under `/proc/<pid>/task/` is running. A read error other than a vanished entry leaves
+      the `/proc` form with no answer (fail closed to `killpg`). A member-scan `not live` is
+      confirmed by one rescan.
+    - O4: in the no-boot-identity row, a `pid_namespace` read on one side only is
+      `unverifiable`.
+    - O3: the assessment records which case produced `active` (`leader_running` or
+      `member_scan`, with the members found).
+  - `job`:
+    - `execute_step` takes the lock first and holds it for the whole call. It refuses with
+      `PendingJobReconciliationError` before deciding, then runs the unchanged nine steps in
+      `_execute_step_locked`.
+    - The `PLANNED` flush records `lifecycle_lock: {path}`. The worker inherits the descriptor
+      (`pass_fds`), and the `on_spawn` flush of `worker_process` is a second `LAUNCHED` write.
+    - `UserOnlyCommandError`/`WorkerLaunchError` from `launch` persist `FAILED`
+      (`WorkerNotStarted`) before re-raising.
+    - After the flush, a `KeyboardInterrupt` prints one stderr line (pid, pgid, `resume`) and
+      propagates unchanged.
+    - `DEFAULT_WORKER_TIMEOUT = None`.
+    - `pending_reconciliation_jobs` is the one read-only scan behind the refusal and `explain`.
+      Each entry names its clearing command: `resume`; `resume --abandon JOB_ID`; for a newer
+      generation, that generation's `resume`; or, O2, removal by hand for an entry that is not
+      a regular file.
+    - `resume` takes the lock, except on a root that no longer resolves, and applies the
+      liveness hold (`resume_marked.outcome` `worker_active`/`worker_unverifiable`).
+      `_reconcile_launched` persists `FAILED` (`UnreconcilableJobError`) before raising for a
+      record carrying `lifecycle_lock`. The three messages name `--abandon`, except for a newer
+      generation's record.
+    - `abandon` implements `resume --abandon`: the `JOB_ID` constraint, marking in place,
+      replacing an unparseable or unknown-schema file (its bytes kept under `jobs/abandoned/`),
+      and the liveness refusals.
+    - The exit-45 lock message names the recorded worker only for an `active` verdict. O3:
+      kill guidance for a matched leader; for a member-scan-only `active`, the members, to be
+      verified before ending the group. It also carries the "inherited the descriptor"
+      sentence.
+    - O2: every job-file reader `lstat`s first (the pending scan, `resume`, the relaunch-bound
+      history reader, and the exit-45 record read), so a FIFO, directory or symlink is never
+      opened.
+  - `cli`:
+    - `EXIT_WORKER_ACTIVE = 45`, caught in its own clause before the blanket
+      `ControllerError` -> 20.
+    - `resume --abandon JOB_ID [--acknowledge-unverifiable-worker]`; the flag without
+      `--abandon` is a usage error (exit 2). `cmd_resume` exits 45 for a held record.
+    - `explain` prints the pending job files and `lifecycle lock: ...` ahead of its decision.
+      O4: this precedes both the work-item and the no-work-item branch. `explain --json` gains
+      `pending_jobs` and `lifecycle_lock`.
+    - `inspect` reports `lifecycle lock: ...`, and `inspect --json` gains a top-level
+      `lifecycle_lock`.
+  - `tests/test_write_containment.py` gains the one read-only `os.open` acceptance
+    (`os.O_RDONLY`, alone or `|`-combined with only `O_DIRECTORY`/`O_CLOEXEC`), with negative
+    instantiations.
+  - `tests/fake_claude.py` gains three modes: `FAKE_CLAUDE_HANG_UNTIL_FILE` (checked before
+    the writes), `FAKE_CLAUDE_INVOCATIONS_FILE` and `FAKE_CLAUDE_GIT_COMMIT`. Its diagnostics
+    gain `pid`, `pgid` and `fds`.
+  - `tests/process_fixtures.py` (new) holds the process helpers:
+    - the test-owned sleeper;
+    - the subreaper `ZombieGroup` (a zombie leader, or a zombie-only group);
+    - the `unshare -Urpf --mount-proc` probe runner;
+    - scratch git repositories under the gitignored `build/`.
+  - Judgment calls, where the plan text left a detail open:
+    - `--abandon`'s liveness refusals exit 45. An `active` worker is `LifecycleWorkerActiveError`.
+      An `unverifiable` one without the flag is `LifecycleWorkerUnverifiableError`, a subclass,
+      mirroring `resume`'s 45 for `worker_unverifiable`. Its other refusals are
+      `JobAbandonRefusedError` (exit 20).
+    - `worker_liveness` is a top-level field of an abandoned record: the assessment plus
+      `acknowledged`.
+    - A marked record also gets `transition_verified: false` and `reconciled_at`.
+    - The minimal replacement record also carries `schema_version: 1`. An existing
+      `jobs/abandoned/<name>` is never overwritten; the copy gets a suffix instead.
+    - `cmd_resume` gives a held record's exit 45 precedence over exit 40.
+    - O2 takes the reviewer's alternative. An entry that is not a regular file is never opened,
+      and it is named for removal by hand. Moving it into `jobs/abandoned/` would need a new
+      write form outside `runtime`'s checked API. Behavior change: a symlinked job file that
+      `resume` used to follow is now refused. CP8 documents the narrowed guarantee.
+    - The Ctrl-C line is printed only when the interrupt reaches `execute_step` from inside
+      `worker.launch`, after the flush. After `launch` returns, the worker has already
+      exited.
+  - Tests whose assertions change. Each is intended, and none is deleted without a
+    replacement:
+    - the status-sequence prefix and the two exact sequences gain the second `LAUNCHED`;
+    - the `COMPLETED` key set gains `lifecycle_lock` and `worker_process`;
+    - the `PLANNED` absent-field list gains `worker_process`, and the test now also asserts
+      `lifecycle_lock`;
+    - both end-to-end interruption tests take the orphan case's shape. The kill fires once
+      `worker_process` is on disk; `resume` refuses until the orphan is released and gone; a
+      cleanup registered before the child starts kills every recorded group; and the final
+      `killpg` asserts that no fake outlived the test. They no longer leak sleepers;
+    - CP4B's `test_a_non_terminal_record_is_never_j`: `step` now refuses with
+      `PendingJobReconciliationError` beside a pending `LAUNCHED` record (it used to decide
+      around it). J is still asserted never to be that record;
+    - `ApplyingReviewFeedbackCliTest`'s setup moved into a shared fixture base, with no
+      assertion change.
+  - New tests:
+    - `tests/test_lock.py`: contention in-process and cross-process; inherited descriptors,
+      including a background grandchild, with the exit-45 message naming the recorded member
+      and the other-holder sentence; `LifecycleLockError` for `ENOLCK`, `EBADF` and `EACCES`;
+      the real-filesystem probe on btrfs `build/`, where `st_dev` `0:52` differs from the
+      mount device `0:29` and the matched entry carries the mount device; the probe never
+      taking the lock; every patched-`/proc` row; and the real `unshare` child pid namespace
+      (`held`, then `unknown`, and the acquire refused). The `unshare` test ran here; it was
+      not skipped.
+    - `tests/test_worker.py`: `on_spawn`, `pass_fds`, and O4's `BaseException` kill-and-reap;
+      `timeout=None`; the process test with real processes and with patched `/proc`; real
+      subreaper zombies; O1's thread, fail-closed and rescan cases; every boot-keyed row,
+      including O4's one-sided namespace.
+    - `tests/test_job.py`: in-process concurrency (exit 45 through `cli.main`, one worker); a
+      `SIGSTOP`ped worker counting as active; `WorkerNotStarted` for both errors; every
+      pending-refusal case, including non-regular entries; the base-version `PLANNED` record;
+      the `on_spawn` flush failure; Ctrl-C; the unbounded default; prose over state and its
+      AST pin; the second `LAUNCHED` write.
+    - `tests/test_resume.py`: the orphan and unreconcilable-orphan cases; a pre-milestone
+      record cleared by `--abandon`; `--abandon` for a vanished work item, an unknown status,
+      an unparseable file from another target, an unknown schema, and a newer generation; the
+      `JOB_ID` constraint with the runtime byte-identical afterwards; zombie groups; every
+      boot-keyed `resume`/`--abandon` case; no kill advice across boots from `step`, `resume`
+      and `--abandon`; a root that is no longer a git repository.
+    - `tests/test_cli.py`: the exit-code table and clause-order AST pin; the lock errors
+      through `cli.main` for `step`, `resume` and `--abandon`; `cmd_resume` 45 for both holds;
+      `explain` while a job is pending (round 4's O3), in both branches; the lock report.
+  - Verified with `python3 -m unittest tests.test_lock tests.test_worker tests.test_job
+    tests.test_job_validation tests.test_resume tests.test_cli tests.test_package_structure
+    tests.test_write_containment`: 432 tests OK. The full suite (`python3 -m unittest discover -s
+    tests -t .`) ran 890 tests: OK, 2 skipped. It leaves no `tests/fake_claude.py` process
+    behind (0 before, 0 after), and no scratch directory under `build/` or `/tmp`.
+    `python3 tests/golden/generate_external_implementation_review_decisions.py --check` reports
+    that golden as current, and the plan-stage golden test is green.
+  - Mutation checks were run in a scratch copy. 43 of 44 mutants fail at least one test.
+    - Against `tests.test_job tests.test_resume tests.test_cli`, 29 of 30 are caught:
+      - no lock in `execute_step` or `resume`; no pending refusal;
+      - the pending scan opening non-regular entries (the FIFO hangs until the timeout),
+        skipping unparseable files, or ignoring the target;
+      - no `WorkerNotStarted` record, no `on_spawn` flush, no inherited descriptor;
+      - no liveness hold, no terminal disposition;
+      - `--abandon` accepting `unverifiable` without the flag, `active` with it, a terminal
+        record or a newer generation, dropping the `JOB_ID` syntax check, or writing no copy;
+      - no Ctrl-C line; the 3600 s default restored;
+      - an unenriched exit-45 message, or the recorded group always named;
+      - `--abandon` in a newer generation's clearing text, or missing from `resume`'s;
+      - the blanket clause before the exit-45 clause; no exit 45 for a held record; no pending
+        report in `explain` text or JSON; the flag accepted without `--abandon`;
+      - every `OSError` treated as contention.
+
+      The one survivor removes the `JOB_ID` scan-membership check. It is an equivalent
+      mutant: a regular file `jobs/<stem>.json` is always in pathlib's `*.json` scan, dotfiles
+      included, and the lstat and resolved-parent checks already refuse everything else. The
+      check stays as the plan words the constraint.
+    - Against `tests.test_worker tests.test_lock tests.test_resume`, 14 of 14 are caught:
+      - zombies counted as running;
+      - a host identified by hostname alone;
+      - `killpg` success read as live;
+      - the probe answering `free` from any namespace, or counting waiters;
+      - no O1 thread check, no confirmation rescan, or an unreadable stat skipped;
+      - O4's one-sided namespace accepted;
+      - an `on_spawn` failure leaving the worker running;
+      - the `/proc` form used from another namespace;
+      - `stat` parsed at the first `)`;
+      - a reused leader pid ignored;
+      - a same-boot namespace mismatch ignored.
+- **CP6-CP9 -- pending**, in registry order.

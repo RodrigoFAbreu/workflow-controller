@@ -12,7 +12,10 @@ generation handoff; write the job record in two flushes, ``PLANNED`` then
 result as ``COMPLETED``). **CP6B extends this same function** with steps
 7-9 (a fresh post-state re-read, ``expected_transition`` verification, and
 ``FINISHED``/``FAILED``/``INCOMPLETE``) -- it does not add a second
-function.
+function. (``workflow-controller-automatic-lifecycle-orchestration`` CP5
+moved the nine steps, unchanged in order, into ``_execute_step_locked``,
+which :func:`execute_step` runs under the target worktree's lifecycle
+lock, after refusing on any job still pending reconciliation.)
 
 Dependency graph (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
 "Dependency direction"): ``job -> {managed_repo, target_state, evidence,
@@ -68,15 +71,18 @@ import dataclasses
 import datetime
 import hashlib
 import json
+import os
 import re
 import secrets
+import stat
 import subprocess
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from controller import evidence, runtime, target_state, worker
+from controller import evidence, lock, runtime, target_state, worker
 from controller.decision import (
     NO_PHASE,
     NO_PHASE_WIRE,
@@ -85,7 +91,18 @@ from controller.decision import (
     phase_from_wire,
     phase_to_wire,
 )
-from controller.errors import ControllerError, HumanGateError, StaleJobRecordError, UnreconcilableJobError
+from controller.errors import (
+    ControllerError,
+    HumanGateError,
+    JobAbandonRefusedError,
+    LifecycleWorkerActiveError,
+    LifecycleWorkerUnverifiableError,
+    PendingJobReconciliationError,
+    StaleJobRecordError,
+    UnreconcilableJobError,
+    UserOnlyCommandError,
+    WorkerLaunchError,
+)
 
 JobRecord = dict[str, Any]
 
@@ -158,10 +175,13 @@ PRE_STATE_FIELDS: frozenset[str] = frozenset({
 #: the `claude` CLI, not Controller, is the authority over which modes exist.
 DEFAULT_PERMISSION_MODE = "auto"
 
-#: Generous enough for a full Workflow command turn (`/milestone-plan`,
-#: `/apply-plan-review`, ...); overridable per call (and, from a later
-#: checkpoint's CLI wiring, via `--timeout`).
-DEFAULT_WORKER_TIMEOUT = 3600.0
+#: No limit (`workflow-controller-automatic-lifecycle-orchestration` CP5,
+#: "Time is not termination"): `communicate()` waits until the worker
+#: returns control, however long or silent it is. `--timeout` stays the
+#: operator's explicit opt-in; when set, it kills and reaps the whole
+#: process group before classifying. The Controller has no other path that
+#: concludes a worker has ended.
+DEFAULT_WORKER_TIMEOUT = None
 
 #: The generator-written subset of `<bundle_dir>` that `_bundle_generated_
 #: digest` covers -- exactly what `prepare-ai-review.sh` writes on every
@@ -2158,6 +2178,34 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     if reason == "postcondition_not_satisfied":
         unreconcilable_evidence["postcondition_detail"] = postcondition_detail
         message += f"; postcondition not satisfied: {postcondition_detail}"
+    if "lifecycle_lock" in record:
+        # Automatic-lifecycle-orchestration CP5: the terminal disposition.
+        # This record was written under the lifecycle lock, so its worker
+        # inherited the descriptor; `resume` holds the lock now, and the
+        # liveness verdict was `inactive` (or no worker process was ever
+        # recorded) -- the worker has definitively ended, so "cannot be
+        # reconciled" is a verdict about a finished job. Persist it FAILED
+        # first, so the next `step` decides from evidence instead of
+        # refusing on this record forever; then raise as before, so this
+        # `resume` still exits 20 and a human sees it once.
+        failed = {
+            **record, "status": STATUS_FAILED, "transition_verified": False,
+            "observed_phase_after": observed_phase_after_wire,
+            "reconciliation_evidence": {"code": "UnreconcilableJobError", **unreconcilable_evidence},
+            "reconciled_at": now, "updated_at": now,
+        }
+        _persist(runtime_root, record["job_id"], failed)
+        message += (
+            " -- the worker has ended (the lifecycle lock is free and no running member of its "
+            "process group is observed), so the record is now FAILED; the next `step` decides "
+            "from the target's evidence"
+        )
+    else:
+        message += (
+            f" -- this record was written before the lifecycle lock existed, so nothing proves its "
+            f"worker gone; once you have confirmed it has ended, "
+            f"`{_abandon_command(record['job_id'], root)}` marks it FAILED"
+        )
     raise UnreconcilableJobError(message, evidence=unreconcilable_evidence)
 
 
@@ -2247,20 +2295,57 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
     `I2`, MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 1: exit 40 must mean
     "the Controller itself was interrupted, or `resume` reconciled a
     record to `INTERRUPTED`" -- a historical terminal record satisfies
-    neither clause)."""
+    neither clause).
+
+    **Worker lifecycle** (automatic-lifecycle-orchestration CP5). ``resume``
+    takes the target's lifecycle lock first (held ->
+    :class:`~controller.errors.LifecycleWorkerActiveError`, exit 45,
+    nothing reconciled). The one exception is a target root that no longer
+    resolves to a directory: there is no worktree to protect and no git
+    directory to lock, so no lock is taken and ``validate_record`` case 2
+    decides exactly as before. A root that exists but whose git directory
+    cannot be resolved is :class:`~controller.errors.GitDirectoryUnresolvableError`
+    (exit 20), never a skipped lock. A ``LAUNCHED`` record carrying
+    ``worker_process`` is reconciled only when its liveness verdict
+    (``worker.assess_worker_liveness``) is ``inactive``; ``active`` and
+    ``unverifiable`` leave it ``LAUNCHED`` and return it with
+    ``resume_marked.outcome`` ``"worker_active"``/``"worker_unverifiable"``
+    (``cli.cmd_resume`` exits 45). A job file that is not a regular file
+    is never opened (round 1's O2 of the manual external plan review): it is
+    :class:`~controller.errors.StaleJobRecordError`, naming its manual
+    removal."""
+    if not managed_repo.root.is_dir():
+        return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
+    with _acquire_lifecycle_lock(runtime, managed_repo):
+        return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
+
+
+def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> list[JobRecord]:
+    """:func:`resume`'s body, run under the lifecycle lock (or with none,
+    for a target root that no longer resolves)."""
+    runtime = runtime_root
     root = managed_repo.root
     target_repo_str = str(root)
-    jobs_dir = runtime / "jobs"
-    paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+    paths = _job_file_paths(runtime)
 
     results: list[JobRecord] = []
     for path in paths:
+        if not _is_regular_job_file(path):
+            raise StaleJobRecordError(
+                f"job file {path} is not a regular file (a symlink, directory, FIFO or other special "
+                f"file); it is never opened, and `resume --abandon` handles only regular files -- "
+                f"remove it by hand",
+                evidence={"path": str(path), "job_id": path.stem, "clearing_command": _manual_removal(path)},
+            )
         try:
             record = json.loads(path.read_text())
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise StaleJobRecordError(
-                f"job record at {path} could not be read or parsed as JSON: {exc}",
-                evidence={"path": str(path), "error": str(exc)},
+                f"job record at {path} could not be read or parsed as JSON: {exc} -- "
+                f"`{_abandon_command(path.stem, root)}` sets its bytes aside under jobs/abandoned/ "
+                f"and replaces it with a terminal record",
+                evidence={"path": str(path), "error": str(exc),
+                          "clearing_command": _abandon_command(path.stem, root)},
             ) from exc
         if not isinstance(record, dict) or record.get("target_repo") != target_repo_str:
             continue  # not "for this target repository" -- left untouched.
@@ -2277,7 +2362,11 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
                     },
                 })
                 continue
-            raise StaleJobRecordError(validity.message, evidence=validity.evidence)
+            clearing = _invalid_record_clearing_command(record, validity, path.stem, root)
+            raise StaleJobRecordError(
+                f"{validity.message} -- {clearing}",
+                evidence={**validity.evidence, "clearing_command": clearing},
+            )
 
         status = record.get("status")
         if status in TERMINAL_STATUSES:
@@ -2285,6 +2374,10 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
         elif status == STATUS_PLANNED:
             results.append({**_reconcile_planned(record, runtime_root=runtime), "reconciled_this_call": True})
         elif status == STATUS_LAUNCHED:
+            marked = _worker_liveness_hold(record, root)
+            if marked is not None:
+                results.append(marked)  # left LAUNCHED on disk; nothing reconciled.
+                continue
             results.append({
                 **_reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime),
                 "reconciled_this_call": True,
@@ -2301,8 +2394,10 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
             # its terminality either, so this is what judges it.
             raise StaleJobRecordError(
                 f"job {record.get('job_id')!r} has status {status!r}, which is outside the "
-                f"closed job-status enumeration this generation recognises",
-                evidence={"job_id": record.get("job_id"), "status": status},
+                f"closed job-status enumeration this generation recognises -- "
+                f"`{_abandon_command(path.stem, root)}` marks it FAILED",
+                evidence={"job_id": record.get("job_id"), "status": status,
+                          "clearing_command": _abandon_command(path.stem, root)},
             )
     return results
 
@@ -2389,6 +2484,8 @@ def last_launched_apply_job_view(
     target_repo = str(target_root)
     best: tuple[tuple[str, str], evidence.LaunchedJobView] | None = None
     for path in paths:
+        if not _is_regular_job_file(path):
+            continue  # never opened: a FIFO would block (CP5)
         try:
             record = json.loads(path.read_text())
         except (OSError, UnicodeDecodeError, ValueError, RecursionError):
@@ -2397,6 +2494,538 @@ def last_launched_apply_job_view(
         if candidate is not None and (best is None or candidate[0] > best[0]):
             best = candidate
     return best[1] if best is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Worker lifecycle and concurrency (automatic-lifecycle-orchestration CP5,
+# "Concurrency and worker lifecycle"): the lifecycle lock's refusal text,
+# the pending-reconciliation scan, the liveness hold `resume` applies, and
+# `resume --abandon`.
+# ---------------------------------------------------------------------------
+
+#: `reconciliation_evidence.code` of a record `resume --abandon` disposed of.
+OPERATOR_ABANDONED_CODE = "OperatorAbandoned"
+
+#: `reconciliation_evidence.code` of a record `resume` persisted `FAILED`
+#: because it could not be reconciled after its worker definitively ended.
+UNRECONCILABLE_JOB_CODE = "UnreconcilableJobError"
+
+#: `resume_marked.outcome` for a `LAUNCHED` record `resume` left alone
+#: because its recorded worker may still run (`cli.cmd_resume` exits 45).
+RESUME_WORKER_ACTIVE = "worker_active"
+RESUME_WORKER_UNVERIFIABLE = "worker_unverifiable"
+
+_JOB_ENTRY_REGULAR = "regular"
+_JOB_ENTRY_VANISHED = "vanished"
+_JOB_ENTRY_OTHER = "other"
+
+
+def _job_file_paths(runtime_root: Path) -> list[Path]:
+    """The one scan every job-file reader makes: ``sorted(<runtime>/jobs/
+    .glob("*.json"))``. It is not recursive, so ``jobs/abandoned/`` (whose
+    copies are unparseable by construction) is outside it."""
+    jobs_dir = Path(runtime_root) / "jobs"
+    return sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+
+
+def _job_entry_kind(path: Path) -> str:
+    """``lstat`` before anything opens a job entry (round 1's O2 of the
+    manual external plan review): a regular file, an entry that vanished,
+    or anything else -- a symlink, directory, FIFO or other special file,
+    which is never opened (a FIFO would block the reader) and which
+    ``--abandon`` never replaces."""
+    try:
+        mode = os.lstat(path).st_mode
+    except FileNotFoundError:
+        return _JOB_ENTRY_VANISHED
+    except OSError:
+        return _JOB_ENTRY_OTHER
+    return _JOB_ENTRY_REGULAR if stat.S_ISREG(mode) else _JOB_ENTRY_OTHER
+
+
+def _is_regular_job_file(path: Path) -> bool:
+    return _job_entry_kind(path) == _JOB_ENTRY_REGULAR
+
+
+def _resume_command(root: Path) -> str:
+    return f"workflow-controller resume {root}"
+
+
+def _abandon_command(job_id: str, root: Path, *, acknowledge: bool = False) -> str:
+    flag = " --acknowledge-unverifiable-worker" if acknowledge else ""
+    return f"workflow-controller resume --abandon {job_id}{flag} {root}"
+
+
+def _manual_removal(path: Path) -> str:
+    return f"remove {path} by hand"
+
+
+def _newer_generation(record: Mapping, identity: Any) -> int | None:
+    """The record's ``controller_generation`` when it is an integer newer
+    than the running Controller's (``validate_record`` case 1,
+    ``newer_controller_generation``), else ``None``."""
+    recorded, running = record.get("controller_generation"), identity.generation
+    if (isinstance(recorded, int) and not isinstance(recorded, bool) and isinstance(running, int)
+            and recorded > running):
+        return recorded
+    return None
+
+
+def _newer_generation_clearing(generation: int, root: Path) -> str:
+    return f"{_resume_command(root)}, run by Controller generation {generation}"
+
+
+def _invalid_record_clearing_command(record: Mapping, validity: Validity, stem: str, root: Path) -> str:
+    """The sentence ``resume``'s ``StaleJobRecordError`` for a non-terminal
+    record ends with: ``--abandon``, except for a newer generation's record,
+    which that generation's own ``resume`` clears."""
+    if validity.reason == "newer_controller_generation":
+        generation = record.get("controller_generation")
+        return (f"it belongs to Controller generation {generation}, newer than this one, and is left "
+                f"untouched: `{_newer_generation_clearing(generation, root)}` clears it")
+    return f"`{_abandon_command(stem, root)}` marks it FAILED"
+
+
+@dataclasses.dataclass(frozen=True)
+class PendingJob:
+    """One job file pending reconciliation for a target: its ``job_id``
+    (the file stem), its ``status`` (``None`` for a file that is unreadable
+    or not a JSON object, or whose status is not a string), the command
+    that clears it, and why it is pending."""
+
+    job_id: str
+    status: str | None
+    clearing_command: str
+    reason: str
+
+    def to_dict(self) -> dict:
+        return {"job_id": self.job_id, "status": self.status, "clearing_command": self.clearing_command}
+
+
+def _validity_or_none(record: Mapping, managed_repo: Any, identity: Any) -> Validity | None:
+    """``validate_record`` for a report, never raising on a job file's own
+    content (``None`` when a malformed field made it raise)."""
+    try:
+        return validate_record(record, managed_repo=managed_repo, identity=identity)
+    except (AttributeError, TypeError, ValueError, KeyError, OSError):
+        return None
+
+
+def _pending_record(record: dict, stem: str, managed_repo: Any, identity: Any) -> PendingJob:
+    root = managed_repo.root
+    status = record.get("status")
+    status_str = status if isinstance(status, str) else None
+    generation = _newer_generation(record, identity)
+    if generation is not None:
+        return PendingJob(stem, status_str, _newer_generation_clearing(generation, root),
+                          f"written by Controller generation {generation}, newer than this one; that "
+                          f"generation's own `resume` clears it")
+    validity = _validity_or_none(record, managed_repo, identity)
+    if validity is None or not validity.valid:
+        why = "its fields could not be read" if validity is None else validity.reason
+        return PendingJob(stem, status_str, _abandon_command(stem, root),
+                          f"`resume` cannot reconcile it ({why})")
+    if status_str not in NON_TERMINAL_STATUSES:
+        return PendingJob(stem, status_str, _abandon_command(stem, root),
+                          f"its status {status!r} is outside the job-status enumeration")
+    return PendingJob(stem, status_str, _resume_command(root), "not yet reconciled")
+
+
+def pending_reconciliation_jobs(runtime_root: Path, managed_repo: Any, identity: Any) -> list[PendingJob]:
+    """Every job file ``resume`` would reconcile or raise on for
+    ``managed_repo`` -- the one read-only scan behind ``execute_step``'s
+    :class:`~controller.errors.PendingJobReconciliationError` refusal and
+    behind ``explain``'s pending report. Never raises on a job file, and
+    writes nothing.
+
+    Pending, over the non-recursive ``jobs/*.json`` scan ``resume`` makes:
+
+    - a record whose ``target_repo`` is this target and whose status is not
+      terminal: ``PLANNED``, ``LAUNCHED``, ``COMPLETED``, or a status
+      outside the enumeration (which ``resume`` raises on);
+    - any entry that does not parse as a JSON object: its target cannot be
+      read, and it could be this target's ``LAUNCHED`` record (fail
+      closed);
+    - any entry that is not a regular file (never opened; cleared by hand,
+      because ``--abandon`` replaces only regular files).
+
+    Each carries its clearing command: ``resume`` for a record ``resume``
+    can reconcile; ``resume --abandon JOB_ID`` for one it cannot (an
+    unparseable file, a record failing ``validate_record``, an unknown
+    status); for a newer generation's record, that generation's own
+    ``resume``."""
+    root = managed_repo.root
+    target_repo = str(root)
+    pending: list[PendingJob] = []
+    for path in _job_file_paths(runtime_root):
+        kind = _job_entry_kind(path)
+        if kind == _JOB_ENTRY_VANISHED:
+            continue
+        if kind != _JOB_ENTRY_REGULAR:
+            pending.append(PendingJob(path.stem, None, _manual_removal(path),
+                                      "not a regular file: it is never opened, and `resume --abandon` "
+                                      "replaces only regular files"))
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            record = None
+            parsed = False
+        else:
+            parsed = isinstance(record, dict)
+        if not parsed:
+            pending.append(PendingJob(path.stem, None, _abandon_command(path.stem, root),
+                                      "it does not parse as a JSON object, so its target cannot be read "
+                                      "(it could be this target's record)"))
+            continue
+        if record.get("target_repo") != target_repo:
+            continue
+        status = record.get("status")
+        if isinstance(status, str) and status in TERMINAL_STATUSES:
+            continue
+        pending.append(_pending_record(record, path.stem, managed_repo, identity))
+    return pending
+
+
+def _refuse_pending_reconciliation(runtime_root: Path, managed_repo: Any, identity: Any) -> None:
+    """``execute_step``'s refusal, under the lock and before deciding: no
+    launch over an unreconciled job, so a ``LAUNCHED`` record left by a
+    Controller that died can never be silently replaced by a second
+    worker."""
+    pending = pending_reconciliation_jobs(runtime_root, managed_repo, identity)
+    if not pending:
+        return
+    listed = "; ".join(
+        f"job {entry.job_id} ({entry.status or 'unreadable'}: {entry.reason}) -- clear it with "
+        f"`{entry.clearing_command}`"
+        for entry in pending
+    )
+    raise PendingJobReconciliationError(
+        f"refusing to decide or launch for {managed_repo.root}: {len(pending)} earlier job file(s) "
+        f"are pending reconciliation, and `step`/`run` refuse until each is cleared -- {listed}",
+        evidence={"pending_jobs": [entry.to_dict() for entry in pending]},
+    )
+
+
+_OTHER_HOLDER_SENTENCE = (
+    "Any holder those commands name that is not a recorded worker is a process that inherited the "
+    "descriptor from an earlier worker (for example a stray background descendant); it keeps the lock "
+    "until it exits, which is correct: the lock is released only when nothing from that worker's "
+    "process tree still holds it."
+)
+
+
+def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: Path) -> str:
+    """What to do about an ``active`` recorded worker (round 1's O3 of the
+    manual external plan review): the process group to end when the
+    recorded leader itself was matched; the discovered members, to verify
+    first, when only a member scan found the group running."""
+    pid, pgid = assessment.recorded.get("pid"), assessment.recorded.get("pgid")
+    process = assessment.process
+    if process is not None and process.basis == "member_scan":
+        members = ", ".join(str(member) for member in process.members)
+        return (
+            f"Job {job_id}'s recorded worker leader (pid {pid}) is not running, but running "
+            f"process(es) {members} are in its recorded process group {pgid}. That group number may "
+            f"have been reused since the job started: verify those processes "
+            f"(`ps -o pid,pgid,lstart,args -g {pgid}`) before ending the group "
+            f"(`kill -TERM -- -{pgid}`), or wait for them; then run `{_resume_command(root)}`."
+        )
+    return (
+        f"Job {job_id}'s recorded worker is running: pid {pid}, process group {pgid}. Wait for it, or "
+        f"end that group (`kill -TERM -- -{pgid}`); then run `{_resume_command(root)}`."
+    )
+
+
+def _context_text(context: Mapping) -> str:
+    return ", ".join(
+        f"{field}={context.get(field)!r}" for field in ("hostname", "machine_id", "boot_id", "pid_namespace")
+    )
+
+
+def _unverifiable_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: Path) -> str:
+    """What to do about an ``unverifiable`` recorded worker. It names **no**
+    process group: nothing observable here ties the recorded one to a
+    running process."""
+    text = (
+        f"Job {job_id}'s recorded worker cannot be verified from here: {assessment.reason}. "
+        f"Recorded context: {_context_text(assessment.recorded)}; current context: "
+        f"{_context_text(assessment.current)}. "
+    )
+    if assessment.process is not None and assessment.process.answer == worker.POSSIBLY_LIVE:
+        text += "killpg cannot tell a running member of the recorded process group from a zombie. "
+    return text + (
+        "No process group is named, because the recorded one cannot be tied to anything running here. "
+        f"If that worker is gone, state so with `{_abandon_command(job_id, root, acknowledge=True)}`."
+    )
+
+
+def _launched_worker_records(runtime_root: Path, root: Path) -> list[dict]:
+    """This target's ``LAUNCHED`` records carrying a ``worker_process``,
+    read tolerantly (for the exit-45 message only)."""
+    records = []
+    for path in _job_file_paths(runtime_root):
+        if not _is_regular_job_file(path):
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        if (isinstance(record, dict) and record.get("target_repo") == str(root)
+                and record.get("status") == STATUS_LAUNCHED and isinstance(record.get("worker_process"), dict)):
+            records.append(record)
+    return records
+
+
+def _recorded_worker_detail(runtime_root: Path, root: Path) -> tuple[str, list[dict]]:
+    """The exit-45 lock-refusal's recorded-worker half: the recorded worker
+    pid/pgid only for a ``LAUNCHED`` record whose liveness verdict is
+    ``active``; for any other verdict, why the recorded group is not named
+    (after a reboot its number may name an unrelated live group)."""
+    parts: list[str] = []
+    recorded: list[dict] = []
+    records = _launched_worker_records(runtime_root, root)
+    if not records:
+        parts.append("No recorded worker process group is named: no LAUNCHED job record for this "
+                     "target carries a worker process.")
+    for record in records:
+        assessment = worker.assess_worker_liveness(record["worker_process"])
+        recorded.append({"job_id": record.get("job_id"), "verdict": assessment.verdict})
+        if assessment.verdict == worker.ACTIVE:
+            parts.append(_active_guidance(record.get("job_id"), assessment, root))
+        else:
+            parts.append(
+                f"Job {record.get('job_id')}'s recorded worker process group is not named: its "
+                f"liveness verdict is {assessment.verdict} ({assessment.reason}), so its number may "
+                f"name an unrelated process group here (for example after a reboot)."
+            )
+    parts.append(_OTHER_HOLDER_SENTENCE)
+    return " ".join(parts), recorded
+
+
+def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.LifecycleLock:
+    """``lock.acquire_lifecycle_lock`` for ``managed_repo``, with the exit-45
+    refusal's message completed from this Controller's own job records:
+    the lock path and how to find every holder (``lock``'s own text), the
+    recorded worker's pid/pgid only when its verdict is ``active``, and
+    the "any other holder inherited the descriptor" sentence."""
+    try:
+        return lock.acquire_lifecycle_lock(managed_repo.root)
+    except LifecycleWorkerActiveError as exc:
+        detail, recorded = _recorded_worker_detail(runtime_root, managed_repo.root)
+        raise LifecycleWorkerActiveError(
+            f"{exc.message}. {detail}", evidence={**exc.evidence, "recorded_workers": recorded},
+        ) from exc
+
+
+def _worker_liveness_hold(record: JobRecord, root: Path) -> JobRecord | None:
+    """``resume``'s second, independent check for a ``LAUNCHED`` record
+    carrying ``worker_process`` (the lock is the first): ``None`` when its
+    verdict is ``inactive`` (reconcile it), else the record, unchanged on
+    disk, with ``resume_marked`` naming the ``worker_active`` or
+    ``worker_unverifiable`` outcome. A record without ``worker_process``
+    reconciles exactly as before."""
+    worker_process = record.get("worker_process")
+    if worker_process is None:
+        return None
+    assessment = worker.assess_worker_liveness(worker_process if isinstance(worker_process, Mapping) else {})
+    if assessment.verdict == worker.INACTIVE:
+        return None
+    job_id = record.get("job_id")
+    if assessment.verdict == worker.ACTIVE:
+        outcome, reason = RESUME_WORKER_ACTIVE, _active_guidance(job_id, assessment, root)
+    else:
+        outcome, reason = RESUME_WORKER_UNVERIFIABLE, _unverifiable_guidance(job_id, assessment, root)
+    return {**record, "resume_marked": {"outcome": outcome, "reason": reason, "liveness": assessment.to_dict()}}
+
+
+_JOB_ID_CONSTRAINT = (
+    "JOB_ID must name a pending job file directly: the non-empty, bare stem (no '/', no NUL, not '.' "
+    "or '..') of a regular file <runtime>/jobs/<JOB_ID>.json -- not a symlink, and not under "
+    "jobs/abandoned/"
+)
+
+
+def _abandon_path(runtime_root: Path, managed_repo: Any, identity: Any, job_id: str) -> Path:
+    """The ``JOB_ID`` constraint, checked before the file is read or anything
+    is written: ``jobs/<JOB_ID>.json`` must be one of the entries the
+    ``jobs/*.json`` scan yields, a regular file (not a symlink) whose
+    resolved parent is ``jobs/`` itself. ``runtime.write_json`` contains
+    writes to the runtime *root*, not to ``jobs/``, so without this a
+    ``JOB_ID`` of ``../identity`` would replace the runtime's own
+    ``identity.json``."""
+    jobs_dir = Path(runtime_root) / "jobs"
+
+    def refuse(detail: str) -> JobAbandonRefusedError:
+        stems = sorted(entry.job_id for entry in pending_reconciliation_jobs(runtime_root, managed_repo, identity))
+        return JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: {detail}. {_JOB_ID_CONSTRAINT}. Pending job files "
+            f"for {managed_repo.root}: {', '.join(stems) if stems else 'none'}",
+            evidence={"job_id": job_id, "pending_job_ids": stems},
+        )
+
+    if not job_id or "/" in job_id or "\0" in job_id or job_id in (".", ".."):
+        raise refuse("it is not a bare job-file stem")
+    path = jobs_dir / f"{job_id}.json"
+    if path not in _job_file_paths(runtime_root):
+        raise refuse(f"there is no job file {path}")
+    if _job_entry_kind(path) != _JOB_ENTRY_REGULAR:
+        raise refuse(f"{path} is not a regular file (a symlink, directory, FIFO or other special file is "
+                     f"never read or replaced -- remove it by hand)")
+    if path.resolve().parent != jobs_dir.resolve():
+        raise refuse(f"{path} does not resolve directly under {jobs_dir}")
+    return path
+
+
+def abandon(
+    managed_repo: Any, *, identity: Any, runtime: Path, job_id: str,
+    acknowledge_unverifiable_worker: bool = False,
+) -> JobRecord:
+    """``workflow-controller resume --abandon JOB_ID
+    [--acknowledge-unverifiable-worker]``: the operator disposition for
+    every pending job file ``resume`` cannot reconcile, and for a record
+    whose worker is ``unverifiable``. Runs under the lifecycle lock (none
+    for a target root that no longer resolves) and launches nothing. Writes
+    only the Controller's own runtime, through ``runtime.write_json``/
+    ``runtime.write_bytes``. Returns the terminal record it wrote.
+
+    - **Marked ``FAILED`` in place**: a parseable record with a known
+      ``schema_version``, for this target, whose status is not terminal --
+      ``reconciliation_evidence: {"code": "OperatorAbandoned",
+      "abandoned_status", "validity"}`` (``validate_record``'s failure
+      reason, recorded as evidence only, never to decide), plus
+      ``worker_liveness`` for a record carrying ``worker_process``.
+    - **Replaced**: a file that does not parse as a JSON object, or a
+      record with an unknown ``schema_version`` (no field can be trusted):
+      its bytes are copied unchanged to ``jobs/abandoned/<file name>``,
+      then it is replaced by a minimal terminal record with a ``null``
+      ``target_repo`` -- from any target, since its target cannot be read.
+    - **Refused**: a ``JOB_ID`` breaking the constraint, a terminal record,
+      another target's record, or a newer generation's record
+      (:class:`~controller.errors.JobAbandonRefusedError`, exit 20); a
+      recorded worker that is ``active``
+      (:class:`~controller.errors.LifecycleWorkerActiveError`, exit 45 --
+      no flag overrides it); or one that is ``unverifiable`` without
+      ``acknowledge_unverifiable_worker``
+      (:class:`~controller.errors.LifecycleWorkerUnverifiableError`, exit
+      45)."""
+    path = _abandon_path(runtime, managed_repo, identity, job_id)
+    if not managed_repo.root.is_dir():
+        return _abandon_locked(managed_repo, identity=identity, runtime_root=runtime, path=path,
+                               acknowledge=acknowledge_unverifiable_worker)
+    with _acquire_lifecycle_lock(runtime, managed_repo):
+        return _abandon_locked(managed_repo, identity=identity, runtime_root=runtime, path=path,
+                               acknowledge=acknowledge_unverifiable_worker)
+
+
+def _abandon_locked(managed_repo: Any, *, identity: Any, runtime_root: Path, path: Path,
+                    acknowledge: bool) -> JobRecord:
+    root = managed_repo.root
+    job_id = path.stem
+    if not _is_regular_job_file(path):
+        raise JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: {path} is no longer a regular file",
+            evidence={"job_id": job_id},
+        )
+    raw = path.read_bytes()
+    try:
+        record = json.loads(raw)
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        record = None
+    if isinstance(record, dict):
+        generation = _newer_generation(record, identity)
+        if generation is not None:
+            raise JobAbandonRefusedError(
+                f"`resume --abandon {job_id!r}` refused: job {job_id} was written by Controller "
+                f"generation {generation}, newer than this one ({identity.generation}); it is left "
+                f"untouched, and `{_newer_generation_clearing(generation, root)}` clears it",
+                evidence={"job_id": job_id, "record_generation": generation,
+                          "running_generation": identity.generation},
+            )
+        if record.get("schema_version") == SCHEMA_VERSION:
+            return _abandon_mark_failed(managed_repo, identity=identity, runtime_root=runtime_root,
+                                        job_id=job_id, record=record, acknowledge=acknowledge)
+    return _abandon_replace(runtime_root, path, raw)
+
+
+def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path, job_id: str,
+                         record: dict, acknowledge: bool) -> JobRecord:
+    root = managed_repo.root
+    if record.get("target_repo") != str(root):
+        raise JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: job {job_id} belongs to target "
+            f"{record.get('target_repo')!r}, not {root}",
+            evidence={"job_id": job_id, "target_repo": record.get("target_repo")},
+        )
+    status = record.get("status")
+    if isinstance(status, str) and status in TERMINAL_STATUSES:
+        raise JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: job {job_id} is already terminal ({status}) -- "
+            f"it is history, not a pending job",
+            evidence={"job_id": job_id, "status": status},
+        )
+    worker_liveness = None
+    worker_process = record.get("worker_process")
+    if worker_process is not None:
+        assessment = worker.assess_worker_liveness(
+            worker_process if isinstance(worker_process, Mapping) else {},
+        )
+        if assessment.verdict == worker.ACTIVE:
+            raise LifecycleWorkerActiveError(
+                f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
+                f"{_active_guidance(job_id, assessment, root)}",
+                evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
+            )
+        if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
+            raise LifecycleWorkerUnverifiableError(
+                f"`resume --abandon {job_id!r}` refused without --acknowledge-unverifiable-worker: "
+                f"{_unverifiable_guidance(job_id, assessment, root)}",
+                evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
+            )
+        worker_liveness = {**assessment.to_dict(), "acknowledged": assessment.verdict == worker.UNVERIFIABLE}
+    validity = _validity_or_none(record, managed_repo, identity)
+    now = _now()
+    abandoned: JobRecord = {
+        **record,
+        "status": STATUS_FAILED,
+        "transition_verified": False,
+        "reconciliation_evidence": {
+            "code": OPERATOR_ABANDONED_CODE,
+            "abandoned_status": status,
+            "validity": (
+                "validate_record could not read the record's fields" if validity is None
+                else (None if validity.valid else validity.reason)
+            ),
+        },
+        "reconciled_at": now,
+        "updated_at": now,
+    }
+    if worker_liveness is not None:
+        abandoned["worker_liveness"] = worker_liveness
+    return _persist(runtime_root, job_id, abandoned)
+
+
+def _abandon_replace(runtime_root: Path, path: Path, raw: bytes) -> JobRecord:
+    """Copy the file's original bytes unchanged to ``jobs/abandoned/``
+    (outside the ``jobs/*.json`` scan), then replace it with a minimal
+    terminal record. An existing copy of the same name is never
+    overwritten."""
+    copy_name = path.name
+    if (Path(runtime_root) / "jobs" / "abandoned" / copy_name).exists():
+        copy_name = f"{path.name}.{_new_job_id()}"
+    original = f"jobs/abandoned/{copy_name}"
+    runtime.write_bytes(runtime_root, original, raw)
+    now = _now()
+    minimal: JobRecord = {
+        "schema_version": SCHEMA_VERSION,
+        "job_id": path.stem,
+        "target_repo": None,
+        "status": STATUS_FAILED,
+        "reconciliation_evidence": {"code": OPERATOR_ABANDONED_CODE, "original": original},
+        "reconciled_at": now,
+        "updated_at": now,
+    }
+    return _persist(runtime_root, path.stem, minimal)
 
 
 # ---------------------------------------------------------------------------
@@ -2571,7 +3200,54 @@ def execute_step(
     timeout: float | None = None,
     claude_bin: str | None = None,
 ) -> JobRecord | Decision:
-    """Execute (at most) one Controller job against ``managed_repo``.
+    """Execute (at most) one Controller job against ``managed_repo``, under
+    the target worktree's lifecycle lock (automatic-lifecycle-orchestration
+    CP5), which covers the whole call.
+
+    The lock is taken first: held ->
+    :class:`~controller.errors.LifecycleWorkerActiveError` (exit 45),
+    naming the lock and how to find its holders, and nothing is decided,
+    recorded or launched. Then, before deciding,
+    :class:`~controller.errors.PendingJobReconciliationError` (exit 20)
+    refuses while any job file ``resume`` would reconcile or raise on for
+    this target is pending (:func:`pending_reconciliation_jobs`). Only then
+    does :func:`_execute_step_locked` run the nine job-execution steps;
+    the worker inherits the lock's descriptor, so an orphaned worker keeps
+    the lock until it really exits."""
+    with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
+        _refuse_pending_reconciliation(runtime, managed_repo, identity)
+        return _execute_step_locked(
+            managed_repo, work_item_id=work_item_id, identity=identity, runtime=runtime,
+            permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
+            lifecycle_lock=lifecycle_lock,
+        )
+
+
+def _announce_orphaned_worker(worker_process: worker.WorkerProcess, root: Path) -> None:
+    """The Ctrl-C line: the Controller does not forward the interrupt to the
+    worker, which runs in its own session and keeps running headless,
+    holding the worktree. Ending it is the operator's decision."""
+    print(
+        f"workflow-controller: interrupted -- the worker (pid {worker_process.pid}, process group "
+        f"{worker_process.pgid}) keeps running in its own session and holds the worktree {root}; wait "
+        f"for it, or end the group (`kill -TERM -- -{worker_process.pgid}`), then run "
+        f"`{_resume_command(root)}`",
+        file=sys.stderr,
+    )
+
+
+def _execute_step_locked(
+    managed_repo: Any,
+    *,
+    work_item_id: str | None,
+    identity: Any,
+    runtime: Path,
+    permission_mode: str,
+    timeout: float | None,
+    claude_bin: str | None,
+    lifecycle_lock: lock.LifecycleLock,
+) -> JobRecord | Decision:
+    """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
     ``identity`` is an already-resolved
     ``controller.identity.ControllerIdentity`` (typically
@@ -2672,6 +3348,10 @@ def execute_step(
         "status": STATUS_PLANNED,
         "human_gate_pending": None,
         "handoff_pending": False,
+        # CP5: written under the lock, so any worker this record spawns
+        # inherits its descriptor -- the lock then proves no process from
+        # this job still holds it.
+        "lifecycle_lock": {"path": str(lifecycle_lock.path)},
         "created_at": now,
         "updated_at": now,
     }
@@ -2686,17 +3366,59 @@ def execute_step(
     }
     _persist(runtime, job_id, record)
 
-    # Step 5: launch the worker and wait synchronously. The task is the
-    # selected command, plus its `task_addendum` when the decision carries
-    # one (CP4B; recorded above as `selected_action.task_addendum`).
+    # Step 5: launch the worker and wait synchronously -- with no limit
+    # unless the operator set one (CP5, "Time is not termination"). The
+    # task is the selected command, plus its `task_addendum` when the
+    # decision carries one (CP4B; recorded above as
+    # `selected_action.task_addendum`). The worker inherits the lifecycle
+    # lock's descriptor (CP5), and `on_spawn` flushes its process identity
+    # into the still-LAUNCHED record -- a second LAUNCHED write, after
+    # `Popen` and before the wait -- so a Controller that dies mid-job
+    # leaves the group to wait on or end on disk.
     resolved_timeout = DEFAULT_WORKER_TIMEOUT if timeout is None else timeout
-    result = worker.launch(
-        worker_task(decision.action),
-        cwd=managed_repo.root,
-        permission_mode=permission_mode,
-        timeout=resolved_timeout,
-        claude_bin=claude_bin,
-    )
+    spawned: dict[str, Any] = {}
+
+    def on_spawn(worker_process: worker.WorkerProcess) -> None:
+        nonlocal record
+        spawned["worker_process"] = worker_process
+        record = {**record, "worker_process": worker_process.to_dict(), "updated_at": _now()}
+        _persist(runtime, job_id, record)
+        spawned["flushed"] = True
+
+    try:
+        result = worker.launch(
+            worker_task(decision.action),
+            cwd=managed_repo.root,
+            permission_mode=permission_mode,
+            timeout=resolved_timeout,
+            claude_bin=claude_bin,
+            pass_fds=(lifecycle_lock.fd,),
+            on_spawn=on_spawn,
+        )
+    except (UserOnlyCommandError, WorkerLaunchError) as exc:
+        # CP5: a worker that never started is terminal at once -- the
+        # Controller knows for certain no worker exists, so the record is
+        # FAILED (`WorkerNotStarted`, which the apply relaunch bound never
+        # counts) and needs no `resume`. The exit code is today's.
+        if "worker_process" not in spawned:
+            _persist(runtime, job_id, {
+                **record,
+                "status": STATUS_FAILED,
+                "transition_verified": False,
+                "reconciliation_evidence": {
+                    "code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
+                    "message": exc.message, "evidence": exc.evidence,
+                },
+                "updated_at": _now(),
+            })
+        raise
+    except KeyboardInterrupt:
+        # CP5: Ctrl-C ends only the Controller. After the worker_process
+        # flush the record stays LAUNCHED with it, so `resume` applies the
+        # liveness verdict later; the interrupt propagates unchanged.
+        if spawned.get("flushed"):
+            _announce_orphaned_worker(spawned["worker_process"], managed_repo.root)
+        raise
 
     # Step 6: record the worker result.
     stdout_path, stderr_path = _write_worker_streams(runtime, job_id, result)

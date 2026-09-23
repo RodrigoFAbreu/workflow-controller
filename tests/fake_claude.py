@@ -15,14 +15,33 @@ Recognised environment variables (all optional):
 ``FAKE_CLAUDE_DIAG_FILE``
     If set, a JSON diagnostic record -- ``argv`` (everything after the
     script path), ``cwd``, ``stdin_at_eof`` (whether the first byte read
-    from stdin was immediate EOF) and ``pythonpath`` (``os.environ``'s
-    ``PYTHONPATH``, or ``None``) -- is written to this path before
-    anything else runs. This is how the launch-mechanics tests (cwd,
+    from stdin was immediate EOF), ``pythonpath`` (``os.environ``'s
+    ``PYTHONPATH``, or ``None``), ``pid``, ``pgid`` and ``fds`` (the open
+    descriptor numbers, so a test can see an inherited lifecycle-lock
+    descriptor) -- is written to this path before anything else runs
+    (after the invocation counter). This is how the launch-mechanics tests (cwd,
     closed stdin, no inherited ``PYTHONPATH``) observe the child's own
     view of the world without needing it to also be the case under test.
 ``FAKE_CLAUDE_HANG``
     If set, sleep forever (a real ``SIGKILL`` is required to end it) --
     used by the timeout/interruption tests.
+``FAKE_CLAUDE_HANG_UNTIL_FILE``
+    If set, poll until the file at this path exists, then carry on exactly
+    as without it (the ``FAKE_CLAUDE_WRITE*`` writes, the optional commit,
+    then the ordinary output). Checked after the diagnostics, the
+    invocation counter and the required-file check, and *before* the
+    writes -- so a test ends a hanging worker deterministically, and a
+    released worker's writes land only after its release
+    (`workflow-controller-automatic-lifecycle-orchestration` CP5's orphan
+    tests).
+``FAKE_CLAUDE_INVOCATIONS_FILE``
+    If set, one line (this process's pid) is appended to this file on
+    every invocation, first of all -- a counter a test reads to prove how
+    many workers ran.
+``FAKE_CLAUDE_GIT_COMMIT``
+    If set, after the writes, ``git add -A`` and ``git commit -q -m
+    <value>`` run in the current directory -- a worker whose effect is a
+    commit.
 ``FAKE_CLAUDE_HANG_CHILD_PID_FILE``
     Only consulted when ``FAKE_CLAUDE_HANG`` is also set: spawn one
     grandchild (itself a hanging ``sleep``) sharing this process's
@@ -84,11 +103,18 @@ def _write_diagnostics() -> None:
     if not diag_file:
         return
     stdin_at_eof = sys.stdin.read(1) == ""
+    try:
+        fds = sorted(int(name) for name in os.listdir("/proc/self/fd"))
+    except OSError:
+        fds = None
     diag = {
         "argv": sys.argv[1:],
         "cwd": os.getcwd(),
         "stdin_at_eof": stdin_at_eof,
         "pythonpath": os.environ.get("PYTHONPATH"),
+        "pid": os.getpid(),
+        "pgid": os.getpgid(0),
+        "fds": fds,
     }
     with open(diag_file, "w") as fh:
         json.dump(diag, fh)
@@ -136,11 +162,37 @@ def _write_requested_files() -> None:
             fh.write(entry["text"])
 
 
+def _count_invocation() -> None:
+    path = os.environ.get("FAKE_CLAUDE_INVOCATIONS_FILE")
+    if path:
+        with open(path, "a") as fh:
+            fh.write(f"{os.getpid()}\n")
+
+
+def _hang_until_file() -> None:
+    path = os.environ.get("FAKE_CLAUDE_HANG_UNTIL_FILE")
+    if not path:
+        return
+    while not os.path.exists(path):
+        time.sleep(0.05)
+
+
+def _git_commit() -> None:
+    message = os.environ.get("FAKE_CLAUDE_GIT_COMMIT")
+    if not message:
+        return
+    subprocess.run(["git", "add", "-A"], check=True)
+    subprocess.run(["git", "commit", "-q", "-m", message], check=True)
+
+
 def main() -> None:
+    _count_invocation()
     _write_diagnostics()
     _check_required_file()
+    _hang_until_file()
     _write_requested_file()
     _write_requested_files()
+    _git_commit()
 
     if os.environ.get("FAKE_CLAUDE_SELF_TERM"):
         os.kill(os.getpid(), signal.SIGTERM)

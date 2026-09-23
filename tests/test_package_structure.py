@@ -27,7 +27,7 @@ CONTROLLER_DIR = REPO_ROOT / "controller"
 #: `controller/__init__.py`'s own eager-import literal follows. A module at
 #: index *i* may import (from `controller`) only a module at an index < i.
 DEPENDENCY_ORDER = [
-    "errors", "runtime", "identity", "decision", "managed_repo",
+    "errors", "runtime", "lock", "identity", "decision", "managed_repo",
     "target_state", "evidence", "worker", "handoff", "job", "cli",
 ]
 

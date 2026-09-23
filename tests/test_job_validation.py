@@ -771,8 +771,10 @@ class TransitionVerificationTest(unittest.TestCase):
         self.assertNotIn("reconciliation_evidence", record)
         # CP6 asserts the first three as a prefix; CP6B owns this
         # extension to the fourth (the same `runtime.write_json` path
-        # step 9 appends through).
-        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "COMPLETED", "FINISHED"])
+        # step 9 appends through). Automatic-lifecycle-orchestration CP5:
+        # the `on_spawn` flush of `worker_process` is a second LAUNCHED
+        # write, after `Popen` and before the wait.
+        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "LAUNCHED", "COMPLETED", "FINISHED"])
 
     def test_worker_that_changes_nothing_fails_with_transition_not_observed(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
@@ -941,7 +943,8 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         self.assertEqual(record["status"], job.STATUS_FINISHED)
         self.assertTrue(record["transition_verified"])
         self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
-        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "COMPLETED", "FINISHED"])
+        # CP5: the second LAUNCHED write is the `worker_process` flush.
+        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "LAUNCHED", "COMPLETED", "FINISHED"])
 
     def test_row3_ordinary_reaches_awaiting_manual_external_plan_review(self) -> None:
         managed_repo = _build_target(

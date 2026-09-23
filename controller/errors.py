@@ -455,3 +455,92 @@ class UserOnlyCommandError(ControllerError):
     """
 
     code = "USER_ONLY_COMMAND"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-automatic-lifecycle-orchestration CP5 -- worker
+# lifecycle and concurrency (``controller.lock``, ``controller.job``).
+# ---------------------------------------------------------------------------
+
+
+class LifecycleWorkerActiveError(ControllerError):
+    """The target worktree's lifecycle lock is held, or a recorded worker
+    may still be running there -- exit ``45``, never the blanket ``20``.
+
+    Raised by ``controller.lock.acquire_lifecycle_lock`` when ``flock``
+    raises ``BlockingIOError`` (contention, and only contention), and by
+    ``controller.job.abandon`` when a record's liveness verdict refuses it.
+    ``controller.cli.main`` catches this class in its own ``except`` clause
+    *before* the blanket ``ControllerError`` handler. It launches nothing
+    and reconciles nothing. ``evidence['lock_path']`` names the lock when
+    the lock was the refusal.
+    """
+
+    code = "LIFECYCLE_WORKER_ACTIVE"
+
+
+class LifecycleWorkerUnverifiableError(LifecycleWorkerActiveError):
+    """``resume --abandon`` refused a record whose recorded worker is
+    ``unverifiable`` here (another or unidentifiable host, another pid
+    namespace, no boot identity with a possibly live group, or a
+    ``killpg``-only answer) without ``--acknowledge-unverifiable-worker``.
+
+    A subclass of :class:`LifecycleWorkerActiveError`, so it exits ``45``
+    exactly as ``resume``'s own ``worker_unverifiable`` outcome does. It
+    never names a process group to end: nothing observable here ties the
+    recorded one to a running process.
+    """
+
+    code = "LIFECYCLE_WORKER_UNVERIFIABLE"
+
+
+class LifecycleLockError(ControllerError):
+    """The lifecycle lock could not be taken for any reason other than
+    contention: an ``OSError`` from opening the git directory, or from
+    ``flock`` with any errno other than ``EWOULDBLOCK``/``EAGAIN``
+    (``ENOLCK``, ``EBADF``, ``EINVAL``, ...).
+
+    A **sibling** of :class:`LifecycleWorkerActiveError`, never a subclass,
+    so the exit-45 clause can never catch it: it exits ``20`` through the
+    blanket handler. ``evidence`` names the path, the operation (``open``
+    or ``flock``) and the errno's name.
+    """
+
+    code = "LIFECYCLE_LOCK_ERROR"
+
+
+class GitDirectoryUnresolvableError(ControllerError):
+    """A target root that still exists, but whose own git directory
+    (``git rev-parse --absolute-git-dir``) cannot be resolved -- so there
+    is no lifecycle lock to take. Never a silently skipped lock: exit
+    ``20``. ``evidence`` names the root and Git's own stderr.
+    """
+
+    code = "GIT_DIRECTORY_UNRESOLVABLE"
+
+
+class PendingJobReconciliationError(ControllerError):
+    """``step``/``run`` refused to decide or launch because an earlier job
+    file for this target is still pending reconciliation: a non-terminal
+    record (``PLANNED``, ``LAUNCHED``, ``COMPLETED``, or a status outside
+    the enumeration), or a file under ``jobs/`` that does not parse as a
+    JSON object (its target cannot be read, so it counts, fail closed).
+
+    Deliberately distinct from :class:`UnreconcilableJobError`, which
+    means something else. ``evidence['pending_jobs']`` lists each pending
+    job id with the command that clears it.
+    """
+
+    code = "PENDING_JOB_RECONCILIATION"
+
+
+class JobAbandonRefusedError(ControllerError):
+    """``resume --abandon JOB_ID`` refused: ``JOB_ID`` does not name a
+    pending job file directly under ``jobs/``, or the record is terminal,
+    belongs to another target, or was written by a newer Controller
+    generation. Exit ``20``. A refusal on the recorded worker's liveness is
+    :class:`LifecycleWorkerActiveError`/:class:`LifecycleWorkerUnverifiableError`
+    instead (exit ``45``).
+    """
+
+    code = "JOB_ABANDON_REFUSED"

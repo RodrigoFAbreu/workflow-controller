@@ -87,6 +87,31 @@ def _direct_calls(func_node: ast.AST) -> list[ast.Call]:
     return calls
 
 
+#: The only flag names a read-only ``os.open`` may combine
+#: (`workflow-controller-automatic-lifecycle-orchestration` CP5): ``lock.py``
+#: opens the target's git directory with ``os.O_RDONLY | os.O_DIRECTORY |
+#: os.O_CLOEXEC``, because Python's ``open()`` cannot open a directory.
+_READ_ONLY_OS_OPEN_FLAGS = {"os.O_RDONLY", "os.O_DIRECTORY", "os.O_CLOEXEC"}
+
+
+def _or_operands(node: ast.AST) -> list[ast.AST]:
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _or_operands(node.left) + _or_operands(node.right)
+    return [node]
+
+
+def _is_read_only_os_open(callee: str, node: ast.Call) -> bool:
+    """The scan's one ``os.open`` acceptance: a flags argument that is
+    ``os.O_RDONLY`` alone, or a ``|``-combination of ``os.O_RDONLY`` with
+    only ``os.O_DIRECTORY`` and ``os.O_CLOEXEC``. ``O_WRONLY``, ``O_RDWR``,
+    ``O_CREAT``, ``O_TRUNC``, ``O_APPEND`` or a non-literal flags name is
+    still flagged."""
+    if callee != "os.open" or len(node.args) < 2:
+        return False
+    names = [_dotted_name(operand) for operand in _or_operands(node.args[1])]
+    return "os.O_RDONLY" in names and all(name in _READ_ONLY_OS_OPEN_FLAGS for name in names)
+
+
 def _write_call_description(node: ast.Call):
     """``(callee, description)`` if ``node`` is a recognized write-call
     form, else ``None``."""
@@ -94,6 +119,9 @@ def _write_call_description(node: ast.Call):
     if callee is None:
         return None
     attr = callee.rsplit(".", 1)[-1]
+
+    if _is_read_only_os_open(callee, node):
+        return None
 
     if attr == "open" or callee == "open":
         args = list(node.args)
@@ -201,6 +229,29 @@ class SyntheticInstantiationTest(unittest.TestCase):
 
     def test_a_bare_runtime_write_api_call_is_not_flagged(self) -> None:
         source = "def f():\n    runtime.write_bytes(root, 'rel', b'data')\n"
+        self.assertEqual(scan_module(source, exempt=False), [])
+
+    def test_a_read_only_os_open_is_a_read(self) -> None:
+        """Automatic-lifecycle-orchestration CP5: ``lock.py``'s own form,
+        and a lone ``os.O_RDONLY``, are accepted."""
+        for flags in ("os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC", "os.O_RDONLY",
+                      "os.O_RDONLY | os.O_CLOEXEC", "os.O_DIRECTORY | os.O_RDONLY"):
+            with self.subTest(flags=flags):
+                source = f"def f(path):\n    return os.open(path, {flags})\n"
+                self.assertEqual(scan_module(source, exempt=False), [])
+
+    def test_a_writing_or_non_literal_os_open_is_still_flagged(self) -> None:
+        for flags in ("os.O_WRONLY", "os.O_RDWR", "os.O_RDONLY | os.O_CREAT", "os.O_CREAT",
+                      "os.O_RDONLY | os.O_TRUNC", "os.O_RDONLY | os.O_APPEND", "flags",
+                      "os.O_DIRECTORY | os.O_CLOEXEC"):
+            with self.subTest(flags=flags):
+                source = f"def f(path, flags):\n    return os.open(path, {flags})\n"
+                self.assertEqual(len(scan_module(source, exempt=False)), 1, flags)
+
+    def test_lock_py_opens_the_git_directory_read_only(self) -> None:
+        """The live ``lock.py`` carries the accepted form, and it is clean."""
+        source = (CONTROLLER_DIR / "lock.py").read_text()
+        self.assertIn("os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)", source)
         self.assertEqual(scan_module(source, exempt=False), [])
 
     def test_a_runtime_call_outside_the_checked_api_is_still_flagged(self) -> None:

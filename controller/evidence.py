@@ -36,7 +36,9 @@ does not: both sit later in the dependency order. ``managed_repo``,
 this module only ever reads ``managed_repo.root`` and, off ``work_item``:
 ``work_item_id``, ``phase``, ``base_commit``, ``plan_revision``,
 ``implementation_revision``, ``plan_review_stages``, ``incomplete_children``,
-``registry_complete``.
+``registry_complete``, and -- for the implementation-stage readers
+(automatic-lifecycle-orchestration CP1) -- ``reviewed_implementation_head``
+and ``implementation_review_stages``.
 
 **What this module does not do.** It never recomputes ``review_content_id``
 or ``bundle_id`` -- ``controller.target_state`` already declares that
@@ -51,6 +53,7 @@ command it selects would refuse on the evidence this model can see.
 from __future__ import annotations
 
 import dataclasses
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -214,6 +217,8 @@ def rejected_marker_detail(root: Path, work_item_id: str) -> tuple[bool, str | N
 
 _MANIFEST_LABELS: tuple[str, ...] = (
     "bundle_id", "generation_head", "stage", "work_item_id", "plan_revision",
+    "review_content_id", "implementation_revision", "reviewed_implementation_head",
+    "worktree_root",
 )
 
 
@@ -222,9 +227,14 @@ def read_manifest_fields(root: Path, bundle_dir: Path) -> dict[str, Any]:
     ``generation_head:``/``stage:``/``work_item_id:``/``plan_revision:``
     labelled lines (the last three are the generator's own
     ``render_manifest_md`` identity lines, read by
-    :func:`plan_bundle_coherence`). ``_exists`` is ``False`` when the
-    file itself cannot be read -- distinct from the file existing but
-    lacking one of the lines, which each read as ``None``."""
+    :func:`plan_bundle_coherence`), plus the implementation-stage
+    ``render_manifest_md_implementation_stage`` lines
+    ``review_content_id:``/``implementation_revision:``/
+    ``reviewed_implementation_head:``/``worktree_root:`` (read by
+    :func:`implementation_bundle_coherence` and the implementation-stage
+    admissibility evaluators). ``_exists`` is ``False`` when the file
+    itself cannot be read -- distinct from the file existing but lacking
+    one of the lines, which each read as ``None``."""
     path = root / bundle_dir / "MANIFEST.md"
     try:
         text = path.read_text()
@@ -562,6 +572,685 @@ def functional_review_findings_consumed(root: Path, work_item_id: str) -> bool |
     if result.returncode != 0:
         return False
     return bool(recorded) and recorded == result.stdout.strip()
+
+
+# ---------------------------------------------------------------------------
+# Implementation-stage evidence readers (automatic-lifecycle-orchestration
+# CP1). Pure, read-only, fail closed, and not yet wired into any decision:
+# CP2's postconditions and CP4/CP4B's gates consume them.
+# ---------------------------------------------------------------------------
+
+#: The two ``"2.2"`` implementation-review stage roles, spelled exactly as
+#: ``workflow_state.LOCAL_MODEL_IMPLEMENTATION_REVIEW``/
+#: ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` spell them. The ledger was
+#: introduced fresh at ``"2.2"``, so no legacy-cased alias exists for either
+#: (``_normalize_implementation_review_stage_key`` is the identity).
+LOCAL_IMPLEMENTATION_ROLE = "LOCAL_MODEL_IMPLEMENTATION_REVIEW"
+MANUAL_IMPLEMENTATION_ROLE = "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+#: Any implementation-stage phase resolves ``<bundle_dir>`` by the same
+#: scoped-else-flat rule (``resolve_bundle_dir``); this one is used as the
+#: representative, so the resolution never depends on the caller's phase.
+_IMPLEMENTATION_STAGE_BUNDLE_PHASE = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+
+#: The ``clause`` codes :func:`implementation_bundle_coherence` returns, in
+#: evaluation order -- a caller chooses recovery text from the code, never
+#: by parsing ``detail``.
+IMPLEMENTATION_BUNDLE_CLAUSES: tuple[str, ...] = (
+    "absent", "stage", "work_item_id", "bundle_id", "worktree_root",
+    "implementation_revision", "reviewed_implementation_head", "generation_head",
+)
+
+_STATE_REL_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
+
+
+def implementation_bundle_dir(root: Path, work_item_id: str) -> Path:
+    """The implementation-stage ``<bundle_dir>``, scoped-else-flat."""
+    return resolve_bundle_dir(root, work_item_id, phase=_IMPLEMENTATION_STAGE_BUNDLE_PHASE)
+
+
+def target_worktree_root(root: Path) -> str | None:
+    """``git rev-parse --show-toplevel`` for the target -- the exact value
+    ``workflow_fingerprint.current_worktree_root_and_head`` records as a
+    manifest's ``worktree_root`` and ``assert_local_generation_matches``
+    compares. ``None`` when it cannot be read."""
+    result = _run_git(root, ["rev-parse", "--show-toplevel"])
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def _is_plain_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def implementation_bundle_coherence(
+    root: Path, work_item: Any, current_head: str | None, *,
+    require_current_generation_head: bool,
+) -> tuple[bool, str | None, str]:
+    """``(coherent, clause, detail)``: the single definition of "the
+    current implementation bundle belongs to this work item's current
+    implementation round".
+
+    Coherent iff the implementation-stage ``<bundle_dir>``
+    (:func:`implementation_bundle_dir`) has a readable ``MANIFEST.md``
+    whose ``stage`` is ``implementation``; whose ``work_item_id`` matches;
+    which carries a ``bundle_id``; whose ``worktree_root`` equals the
+    target's :func:`target_worktree_root`; whose ``implementation_revision``
+    is a plain decimal equal to the state's; whose
+    ``reviewed_implementation_head`` equals the state's; and -- only when
+    ``require_current_generation_head`` -- whose ``generation_head`` equals
+    ``current_head``. The flag is ``False`` at ``APPLYING_REVIEW_FEEDBACK``
+    alone, where ``HEAD`` is legitimately ahead of ``generation_head``.
+
+    Revision- and binding-level only: nothing here recomputes
+    ``review_content_id``/``bundle_id``. A ``None`` on any state side
+    (``implementation_revision``, ``reviewed_implementation_head``, the
+    worktree root, or ``current_head`` when it is required) is incoherent.
+    ``clause`` is ``None`` when coherent, otherwise the first failing
+    member of :data:`IMPLEMENTATION_BUNDLE_CLAUSES`; ``detail`` names that
+    clause's observed value."""
+    work_item_id = work_item.work_item_id
+    bundle_dir = implementation_bundle_dir(root, work_item_id)
+    manifest_path = bundle_dir / "MANIFEST.md"
+    if not (root / bundle_dir).is_dir():
+        return False, "absent", (
+            f"implementation bundle directory {bundle_dir} is absent (withdrawn or never generated)"
+        )
+    manifest = read_manifest_fields(root, bundle_dir)
+    if not manifest["_exists"]:
+        return False, "absent", f"{manifest_path} is missing or unreadable"
+    if manifest["stage"] != "implementation":
+        return False, "stage", f"manifest stage {manifest['stage']!r} != 'implementation'"
+    if manifest["work_item_id"] != work_item_id:
+        return False, "work_item_id", (
+            f"manifest work_item_id {manifest['work_item_id']!r} != {work_item_id!r}"
+        )
+    if not manifest["bundle_id"]:
+        return False, "bundle_id", "manifest bundle_id is missing"
+
+    worktree_root = target_worktree_root(root)
+    if worktree_root is None:
+        return False, "worktree_root", (
+            "the target's worktree root (git rev-parse --show-toplevel) could not be read"
+        )
+    if manifest["worktree_root"] != worktree_root:
+        return False, "worktree_root", (
+            f"manifest worktree_root {manifest['worktree_root']!r} != target worktree root "
+            f"{worktree_root!r}"
+        )
+
+    state_revision = getattr(work_item, "implementation_revision", None)
+    if not _is_plain_int(state_revision):
+        return False, "implementation_revision", (
+            f"state implementation_revision is {state_revision!r}, not an integer"
+        )
+    observed_revision = manifest["implementation_revision"]
+    if observed_revision is None:
+        return False, "implementation_revision", "manifest implementation_revision is missing"
+    if not _DECIMAL_RE.fullmatch(observed_revision):
+        return False, "implementation_revision", (
+            f"manifest implementation_revision {observed_revision!r} is not an integer"
+        )
+    if int(observed_revision) != state_revision:
+        return False, "implementation_revision", (
+            f"manifest implementation_revision {int(observed_revision)} != state "
+            f"implementation_revision {state_revision}"
+        )
+
+    state_head = getattr(work_item, "reviewed_implementation_head", None)
+    if state_head is None:
+        return False, "reviewed_implementation_head", "state reviewed_implementation_head is None"
+    if manifest["reviewed_implementation_head"] != state_head:
+        return False, "reviewed_implementation_head", (
+            f"manifest reviewed_implementation_head {manifest['reviewed_implementation_head']!r} "
+            f"!= state reviewed_implementation_head {state_head!r}"
+        )
+
+    if require_current_generation_head:
+        manifest_head = manifest["generation_head"]
+        if current_head is None:
+            return False, "generation_head", "the target's HEAD could not be read"
+        if manifest_head != current_head:
+            return False, "generation_head", (
+                f"manifest generation_head {manifest_head!r} != target HEAD {current_head!r}"
+            )
+
+    return True, None, (
+        f"manifest at {manifest_path} matches work_item_id {work_item_id!r}, "
+        f"implementation_revision {state_revision}, reviewed_implementation_head {state_head}"
+        + (f", generation_head {current_head}" if require_current_generation_head else "")
+    )
+
+
+_REVIEW_REQUEST_CONTENT_ID_RE = re.compile(r"^review_content_id: ([0-9a-f]{64})$", re.MULTILINE)
+
+
+def read_review_request_fields(root: Path, bundle_dir: Path) -> dict[str, Any]:
+    """``<bundle_dir>/REVIEW_REQUEST.md``'s ``review_content_id: <hex>``
+    statements, read with the exact whole-file pattern
+    ``workflow_fingerprint.assert_review_request_states_review_content_id``
+    uses (the generator asserted at generation time that they state the
+    manifest's value). ``review_content_ids`` holds every distinct stated
+    value in file order -- empty when none is stated, more than one when
+    the file disagrees with itself -- and ``_exists`` is ``False`` when the
+    file cannot be read."""
+    path = root / bundle_dir / "REVIEW_REQUEST.md"
+    try:
+        text = path.read_text()
+    except OSError:
+        return {"_exists": False, "review_content_ids": ()}
+    values = tuple(dict.fromkeys(_REVIEW_REQUEST_CONTENT_ID_RE.findall(text)))
+    return {"_exists": True, "review_content_ids": values}
+
+
+@dataclasses.dataclass(frozen=True)
+class LedgerView:
+    """The ``"2.2"`` ``implementation_review_stages`` ledger, as read by
+    :func:`read_implementation_review_ledger`. ``local``/``manual`` are
+    each ``{"verdict", "bundle_id", "round"}`` or ``None``. ``malformed``
+    names the shape defect when the ledger was present but unreadable, in
+    which case every other field is ``None`` ("no stage recorded")."""
+
+    review_content_id: str | None
+    local: dict | None
+    manual: dict | None
+    malformed: str | None = None
+
+
+def _read_ledger_stage(name: str, value: Any) -> tuple[dict | None, str | None]:
+    """``(stage, problem)`` for one ledger stage entry. Workflow records a
+    stage only as a completed ``APPROVE`` carrying ``bundle_id``, ``round``
+    and ``completed_at`` (``record_local_implementation_review``/
+    ``record_manual_implementation_review``; ``_validate_implementation_
+    review_stages`` refuses any other verdict), so anything else is a
+    problem, never a partial read."""
+    if value is None:
+        return None, None
+    if not isinstance(value, dict):
+        return None, f"{name} is {type(value).__name__}, not a JSON object"
+    verdict = value.get("verdict")
+    if verdict != "APPROVE":
+        return None, f"{name}.verdict is {verdict!r}, not 'APPROVE' (the only verdict Workflow records)"
+    bundle_id = value.get("bundle_id")
+    if not isinstance(bundle_id, str) or not bundle_id:
+        return None, f"{name}.bundle_id is {bundle_id!r}, not a non-empty string"
+    round_number = value.get("round")
+    if not _is_plain_int(round_number):
+        return None, f"{name}.round is {round_number!r}, not an integer"
+    return {"verdict": verdict, "bundle_id": bundle_id, "round": round_number}, None
+
+
+def read_implementation_review_ledger(work_item: Any) -> LedgerView:
+    """Read ``work_item.implementation_review_stages`` into a
+    :class:`LedgerView`. Shape-tolerant (it never raises, and extra keys
+    are ignored) and fail closed: a ledger that is not a JSON object, has
+    no string ``review_content_id``, carries a malformed stage entry, or
+    records the manual stage without the local one (Workflow's own
+    ``ManualImplementationStageWithoutLocalStageError`` invariant) reads as
+    "no stage recorded", with ``malformed`` naming why. An absent/``null``
+    ledger is simply empty, not malformed."""
+    stages = getattr(work_item, "implementation_review_stages", None)
+    if stages is None:
+        return LedgerView(review_content_id=None, local=None, manual=None)
+
+    def _malformed(problem: str) -> LedgerView:
+        return LedgerView(review_content_id=None, local=None, manual=None, malformed=problem)
+
+    if not isinstance(stages, dict):
+        return _malformed(f"implementation_review_stages is {type(stages).__name__}, not a JSON object")
+    review_content_id = stages.get("review_content_id")
+    if not isinstance(review_content_id, str) or not review_content_id:
+        return _malformed(f"review_content_id is {review_content_id!r}, not a non-empty string")
+    local, problem = _read_ledger_stage(LOCAL_IMPLEMENTATION_ROLE, stages.get(LOCAL_IMPLEMENTATION_ROLE))
+    if problem is not None:
+        return _malformed(problem)
+    manual, problem = _read_ledger_stage(MANUAL_IMPLEMENTATION_ROLE, stages.get(MANUAL_IMPLEMENTATION_ROLE))
+    if problem is not None:
+        return _malformed(problem)
+    if manual is not None and local is None:
+        return _malformed(f"{MANUAL_IMPLEMENTATION_ROLE} is recorded without {LOCAL_IMPLEMENTATION_ROLE}")
+    return LedgerView(review_content_id=review_content_id, local=local, manual=manual)
+
+
+# --- committed (``HEAD``-side) Workflow state -------------------------------
+
+
+def _committed_state(root: Path, rev: str) -> dict | None:
+    """``git show <rev>:docs/ai-workflow/WORKFLOW_STATE.json``, parsed.
+    ``None`` when the revision or the file cannot be read, or the content
+    is not a JSON object whose ``work_items`` is an object."""
+    result = _run_git(root, ["show", f"{rev}:{_STATE_REL_PATH}"])
+    if result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("work_items"), dict):
+        return None
+    return data
+
+
+def committed_work_item(root: Path, work_item_id: str, rev: str = "HEAD") -> dict | None:
+    """The work item's entry in ``WORKFLOW_STATE.json`` as committed at
+    ``rev`` -- never the working tree's. ``None`` when that file is
+    unreadable at ``rev`` or carries no object entry for the work item."""
+    state = _committed_state(root, rev)
+    if state is None:
+        return None
+    entry = state["work_items"].get(work_item_id)
+    return entry if isinstance(entry, dict) else None
+
+
+def _committed_phase(root: Path, work_item_id: str, rev: str) -> str | None:
+    entry = committed_work_item(root, work_item_id, rev)
+    if entry is None:
+        return None
+    phase = entry.get("phase")
+    return phase if isinstance(phase, str) else None
+
+
+def committed_checkpoint_statuses(root: Path, rev: str = "HEAD") -> dict[tuple[str, str], str] | None:
+    """Every checkpoint status in ``WORKFLOW_STATE.json`` as committed at
+    ``rev``, keyed ``(work_item_id, checkpoint_id)`` -- the same committed
+    fact ``workflow_state.committed_checkpoint_status`` reads. ``None``
+    when the file is unreadable at ``rev``. An entry whose ``checkpoints``
+    is not an object, or a checkpoint without a string ``status``, is
+    simply absent from the result (so it never reads as ``COMPLETE``)."""
+    state = _committed_state(root, rev)
+    if state is None:
+        return None
+    statuses: dict[tuple[str, str], str] = {}
+    for work_item_id, entry in state["work_items"].items():
+        checkpoints = entry.get("checkpoints") if isinstance(entry, dict) else None
+        if not isinstance(checkpoints, dict):
+            continue
+        for checkpoint_id, checkpoint in checkpoints.items():
+            status = checkpoint.get("status") if isinstance(checkpoint, dict) else None
+            if isinstance(status, str):
+                statuses[(work_item_id, checkpoint_id)] = status
+    return statuses
+
+
+# --- bundle-generation-record commits ---------------------------------------
+
+_GENERATION_RECORD_TRAILER = "Workflow-Bundle-Generation-Record"
+_WORK_ITEM_TRAILER = "Workflow-Work-Item"
+_SUPERSEDES_TRAILER = "Workflow-Supersedes"
+
+
+def commit_trailers(root: Path, commit: str) -> dict[str, str] | None:
+    """A commit's trailers, parsed exactly as
+    ``workflow_state._commit_trailers`` parses them: the full message piped
+    through ``git interpret-trailers --parse``, one ``key: value`` per
+    line, a later duplicate key overwriting an earlier one. ``None`` when
+    the commit or the parse cannot be read."""
+    body = _run_git(root, ["log", "-1", "--format=%B", commit])
+    if body.returncode != 0:
+        return None
+    parsed = subprocess.run(
+        ["git", "-C", str(root), "interpret-trailers", "--parse"],
+        input=body.stdout, capture_output=True, text=True, check=False,
+    )
+    if parsed.returncode != 0:
+        return None
+    trailers: dict[str, str] = {}
+    for line in parsed.stdout.splitlines():
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        trailers[key.strip()] = value.strip()
+    return trailers
+
+
+def _names_work_item_generation_record(trailers: dict[str, str] | None, work_item_id: str) -> bool:
+    """Whether ``trailers`` carry this work item's generation-record
+    trailer: ``Workflow-Work-Item`` is the work item (the pairing
+    ``_discover_trailer_commits`` requires) and the
+    ``Workflow-Bundle-Generation-Record`` value is
+    ``<work_item_id>/<implementation_revision>`` for it."""
+    if not trailers or trailers.get(_WORK_ITEM_TRAILER) != work_item_id:
+        return False
+    value = trailers.get(_GENERATION_RECORD_TRAILER)
+    if not value:
+        return False
+    named, separator, _revision = value.rpartition("/")
+    return bool(separator) and named == work_item_id
+
+
+def bundle_generation_record_role(trailers: dict[str, str] | None, work_item_id: str) -> str | None:
+    """``"ordinary"``, ``"recovered"`` or ``None``, classified exactly as
+    ``workflow_state._bundle_generation_record_role`` does -- the exact
+    two-trailer set, or that set plus ``Workflow-Supersedes``; any other
+    set is never coerced into a role -- and only for a trailer set that
+    names this work item (:func:`_names_work_item_generation_record`)."""
+    if not _names_work_item_generation_record(trailers, work_item_id):
+        return None
+    keys = set(trailers)
+    if keys == {_GENERATION_RECORD_TRAILER, _WORK_ITEM_TRAILER}:
+        return "ordinary"
+    if keys == {_GENERATION_RECORD_TRAILER, _WORK_ITEM_TRAILER, _SUPERSEDES_TRAILER}:
+        return "recovered"
+    return None
+
+
+@dataclasses.dataclass(frozen=True)
+class GenerationRecordView:
+    """What plain ``git log``/``git show`` say about this work item's
+    bundle-generation-record commits (:func:`generation_record_view`).
+
+    - ``head``: ``HEAD``'s SHA, or ``None`` if unreadable.
+    - ``head_role``: ``HEAD``'s own role (:func:`bundle_generation_record_role`).
+    - ``head_phase``/``parent_phase``: the work item's committed phase at
+      ``HEAD``/``HEAD^``.
+    - ``newer_records``: the first-parent commits in
+      ``manifest_generation_head..HEAD`` carrying this work item's
+      generation-record trailer (whatever their trailer set's role), newest
+      first; ``None`` when ``manifest_generation_head`` is absent, is not a
+      full object name, or is not an ancestor of ``HEAD``.
+    - ``latest_record_parent_phase``: the committed phase at the parent of
+      ``newer_records[0]``, or ``None``."""
+
+    head: str | None
+    head_role: str | None
+    head_phase: str | None
+    parent_phase: str | None
+    newer_records: tuple[str, ...] | None
+    latest_record_parent_phase: str | None
+
+
+#: A full object name, the only shape a manifest's ``generation_head`` line
+#: carries (``git rev-parse HEAD``). Anything else is never handed to
+#: ``git`` as a revision -- a value read from a file must not be able to
+#: become a command-line option.
+_FULL_OBJECT_NAME_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+
+
+def _newer_generation_records(
+    root: Path, work_item_id: str, manifest_generation_head: str | None,
+) -> tuple[str, ...] | None:
+    if not manifest_generation_head or not _FULL_OBJECT_NAME_RE.fullmatch(manifest_generation_head):
+        return None
+    if _run_git(root, ["merge-base", "--is-ancestor", manifest_generation_head, "HEAD"]).returncode != 0:
+        return None
+    log = _run_git(root, ["log", "--first-parent", "--format=%H", f"{manifest_generation_head}..HEAD"])
+    if log.returncode != 0:
+        return None
+    return tuple(
+        commit for commit in log.stdout.split()
+        if _names_work_item_generation_record(commit_trailers(root, commit), work_item_id)
+    )
+
+
+def generation_record_view(
+    root: Path, work_item_id: str, manifest_generation_head: str | None,
+) -> GenerationRecordView:
+    """The read-only generation-record facts CP4B's recovery gate chooses
+    its text from (see :class:`GenerationRecordView`). Read with plain
+    ``git``; nothing from ``scripts/`` is imported."""
+    head = _current_head(root)
+    head_role = (
+        bundle_generation_record_role(commit_trailers(root, head), work_item_id)
+        if head is not None else None
+    )
+    newer_records = _newer_generation_records(root, work_item_id, manifest_generation_head)
+    latest_record_parent_phase = (
+        _committed_phase(root, work_item_id, f"{newer_records[0]}^") if newer_records else None
+    )
+    return GenerationRecordView(
+        head=head,
+        head_role=head_role,
+        head_phase=_committed_phase(root, work_item_id, "HEAD") if head is not None else None,
+        parent_phase=_committed_phase(root, work_item_id, "HEAD^") if head is not None else None,
+        newer_records=newer_records,
+        latest_record_parent_phase=latest_record_parent_phase,
+    )
+
+
+# --- admissibility at the implementation stage ------------------------------
+
+
+def evaluate_manual_implementation_stage_admissibility(
+    *, feedback: dict[str, str | None], manifest: dict[str, Any], review_request: dict[str, Any],
+    work_item: Any, current_head: str | None, current_worktree_root: str | None,
+) -> AdmissibilityResult:
+    """The ``"2.2"`` ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` ->
+    ``/record-manual-implementation-review`` filter. It mirrors
+    ``validate_manual_implementation_review_preconditions`` plus that
+    command's steps 4-6, so that a verdict admitted here is never one the
+    command -- or the ``/apply-implementation-review`` its ``REVISE`` leads
+    to -- refuses on evidence the Controller can see:
+
+    - ``Reviewer role`` exactly ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``
+      (no alias, unlike the plan stage);
+    - ``Status`` one of ``APPROVE``/``REVISE``/``BLOCK``;
+    - the three ``WFR-03`` binding lines present, with ``Work item`` and
+      ``Reviewed base commit`` equal to the work item's;
+    - ``Reviewed review content ID`` equal to the ledger's
+      ``review_content_id`` (hard), and the ledger's equal to the
+      manifest's;
+    - ``REVIEW_REQUEST.md`` stating exactly the manifest's
+      ``review_content_id`` (the command reads that file at its step 4, and
+      the generator asserted the equality, so a difference means a
+      post-generation edit);
+    - a ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` ``APPROVE`` recorded and no
+      manual stage recorded yet;
+    - ``generation_head`` equal to ``current_head`` and ``worktree_root``
+      equal to ``current_worktree_root`` (:func:`target_worktree_root`) --
+      the coherence clauses the command's own recomputation enforces.
+
+    A ``Reviewed bundle ID`` mismatch is **advisory** for ``APPROVE``/
+    ``BLOCK`` (the command's own ``check_manual_stage_bundle_id_advisory``)
+    and **hard** for ``REVISE``: an ingested mismatched ``REVISE`` moves the
+    item to ``APPLYING_REVIEW_FEEDBACK``, where
+    ``/apply-implementation-review`` step 1's
+    ``assert_feedback_matches_bundle`` refuses on the same mismatch."""
+    failures: list[ClauseFailure] = []
+    advisories: list[str] = []
+
+    role = feedback.get("reviewer_role")
+    if role != MANUAL_IMPLEMENTATION_ROLE:
+        failures.append(ClauseFailure(
+            "Reviewer role",
+            f"declares {role!r}, expected exactly {MANUAL_IMPLEMENTATION_ROLE} (no alias at the "
+            "implementation stage)",
+        ))
+
+    status = feedback.get("status")
+    if status not in _VALID_STATUSES:
+        failures.append(ClauseFailure(
+            "Status", f"parses as {status!r}, expected one of {_VALID_STATUSES}",
+        ))
+
+    for label, key in (
+        ("Reviewed bundle ID", "reviewed_bundle_id"),
+        ("Reviewed base commit", "reviewed_base_commit"),
+        ("Work item", "work_item"),
+    ):
+        if feedback.get(key) is None:
+            failures.append(ClauseFailure(label, "absent"))
+
+    work_item_id = work_item.work_item_id
+    if feedback.get("work_item") is not None and feedback["work_item"] != work_item_id:
+        failures.append(ClauseFailure(
+            "Work item", f"names {feedback['work_item']!r}, expected {work_item_id!r}",
+        ))
+
+    base_commit = getattr(work_item, "base_commit", None)
+    if feedback.get("reviewed_base_commit") is not None and feedback["reviewed_base_commit"] != base_commit:
+        failures.append(ClauseFailure(
+            "Reviewed base commit",
+            f"names {feedback['reviewed_base_commit']!r}, expected {base_commit!r}",
+        ))
+
+    ledger = read_implementation_review_ledger(work_item)
+    feedback_content_id = feedback.get("reviewed_content_id")
+    if feedback_content_id is None or feedback_content_id != ledger.review_content_id:
+        failures.append(ClauseFailure(
+            "review_content_id",
+            f"feedback declares {feedback_content_id!r}, the ledger's review_content_id is "
+            f"{ledger.review_content_id!r}"
+            + (f" (ledger malformed: {ledger.malformed})" if ledger.malformed else ""),
+        ))
+
+    manifest_content_id = manifest.get("review_content_id")
+    if ledger.review_content_id is None or ledger.review_content_id != manifest_content_id:
+        failures.append(ClauseFailure(
+            "ledger review_content_id",
+            f"the ledger records {ledger.review_content_id!r}, MANIFEST.md states "
+            f"{manifest_content_id!r}",
+        ))
+
+    stated = tuple(review_request.get("review_content_ids") or ())
+    if manifest_content_id is None or stated != (manifest_content_id,):
+        failures.append(ClauseFailure(
+            "REVIEW_REQUEST.md review_content_id",
+            (f"REVIEW_REQUEST.md states {list(stated)!r}" if review_request.get("_exists")
+             else "REVIEW_REQUEST.md is missing or unreadable")
+            + f", MANIFEST.md states {manifest_content_id!r}",
+        ))
+
+    if ledger.local is None:
+        failures.append(ClauseFailure(
+            "local approval",
+            f"no {LOCAL_IMPLEMENTATION_ROLE} APPROVE is recorded in the ledger"
+            + (f" (ledger malformed: {ledger.malformed})" if ledger.malformed else ""),
+        ))
+    if ledger.manual is not None:
+        failures.append(ClauseFailure(
+            "manual stage",
+            f"{MANUAL_IMPLEMENTATION_ROLE} is already recorded against review_content_id "
+            f"{ledger.review_content_id!r}",
+        ))
+
+    manifest_head = manifest.get("generation_head")
+    if manifest_head is None or current_head is None or manifest_head != current_head:
+        failures.append(ClauseFailure(
+            "generation_head",
+            f"MANIFEST.md's generation_head is {manifest_head!r}, target HEAD is {current_head!r}",
+        ))
+
+    manifest_root = manifest.get("worktree_root")
+    if manifest_root is None or current_worktree_root is None or manifest_root != current_worktree_root:
+        failures.append(ClauseFailure(
+            "worktree_root",
+            f"MANIFEST.md's worktree_root is {manifest_root!r}, the target's worktree root is "
+            f"{current_worktree_root!r}",
+        ))
+
+    feedback_bundle_id = feedback.get("reviewed_bundle_id")
+    manifest_bundle_id = manifest.get("bundle_id")
+    if status == "REVISE":
+        if feedback_bundle_id is not None and feedback_bundle_id != manifest_bundle_id:
+            failures.append(ClauseFailure(
+                "Reviewed bundle ID",
+                f"names {feedback_bundle_id!r}, current bundle_id is {manifest_bundle_id!r} -- hard "
+                "for a REVISE: once ingested, /apply-implementation-review step 1 "
+                "(assert_feedback_matches_bundle) refuses on the same mismatch",
+            ))
+    elif (
+        feedback_bundle_id is not None and manifest_bundle_id is not None
+        and feedback_bundle_id != manifest_bundle_id
+    ):
+        advisories.append(
+            f"bundle_id mismatch (advisory only, does not block ingestion): "
+            f"feedback={feedback_bundle_id!r}, current={manifest_bundle_id!r}"
+        )
+
+    return AdmissibilityResult(
+        admissible=not failures, failures=tuple(failures), advisories=tuple(advisories),
+    )
+
+
+def evaluate_apply_implementation_review_admissibility(
+    *, feedback: dict[str, str | None], manifest: dict[str, Any], work_item: Any,
+    current_head: str | None,
+) -> AdmissibilityResult:
+    """The ``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` ->
+    ``/apply-implementation-review`` filter.
+
+    The command's own step-1 clauses: the three ``WFR-03`` binding lines
+    present, ``Reviewed bundle ID`` equal to the manifest's ``bundle_id``
+    (hard -- ``assert_feedback_matches_bundle``), and ``Work item``/
+    ``Reviewed base commit`` equal to the work item's.
+
+    Two further clauses are **not** the command's own -- its step 1 checks
+    neither role nor ``Status``, and it pins and then applies a ``BLOCK``.
+    They are this Controller's deliberately narrower automation scope, fail
+    closed: ``Reviewer role`` exactly ``LOCAL_MODEL_IMPLEMENTATION_REVIEW``
+    or ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``, and ``Status`` exactly
+    ``REVISE``. The automated ``"2.2"`` loop reaches this phase only
+    through a two-stage writer's ``REVISE`` branch; a ``BLOCK`` from either
+    writer never leaves its review phase. So any other verdict on file here
+    is human territory.
+
+    There is deliberately **no** ``generation_head`` clause: ``HEAD`` is
+    legitimately ahead of ``generation_head`` at this phase (the pending
+    review-stage state commit and any fix commits land before the next
+    generation record), and the command's own step 7 handles those
+    commits. ``current_head`` is accepted for signature symmetry with the
+    other evaluators and is not consulted."""
+    failures: list[ClauseFailure] = []
+
+    for label, key in (
+        ("Reviewed bundle ID", "reviewed_bundle_id"),
+        ("Reviewed base commit", "reviewed_base_commit"),
+        ("Work item", "work_item"),
+    ):
+        if feedback.get(key) is None:
+            failures.append(ClauseFailure(label, "absent"))
+
+    manifest_bundle_id = manifest.get("bundle_id")
+    if feedback.get("reviewed_bundle_id") is not None and feedback["reviewed_bundle_id"] != manifest_bundle_id:
+        failures.append(ClauseFailure(
+            "Reviewed bundle ID",
+            f"names {feedback['reviewed_bundle_id']!r}, current bundle_id is {manifest_bundle_id!r} "
+            "-- /apply-implementation-review step 1 (assert_feedback_matches_bundle) refuses on it",
+        ))
+
+    work_item_id = work_item.work_item_id
+    if feedback.get("work_item") is not None and feedback["work_item"] != work_item_id:
+        failures.append(ClauseFailure(
+            "Work item", f"names {feedback['work_item']!r}, expected {work_item_id!r}",
+        ))
+
+    base_commit = getattr(work_item, "base_commit", None)
+    if feedback.get("reviewed_base_commit") is not None and feedback["reviewed_base_commit"] != base_commit:
+        failures.append(ClauseFailure(
+            "Reviewed base commit",
+            f"names {feedback['reviewed_base_commit']!r}, expected {base_commit!r}",
+        ))
+
+    role = feedback.get("reviewer_role")
+    if role not in (LOCAL_IMPLEMENTATION_ROLE, MANUAL_IMPLEMENTATION_ROLE):
+        failures.append(ClauseFailure(
+            "Reviewer role",
+            f"declares {role!r}; this Controller automates only a verdict from one of the two "
+            f"\"2.2\" implementation-review stages ({LOCAL_IMPLEMENTATION_ROLE} or "
+            f"{MANUAL_IMPLEMENTATION_ROLE}) -- a narrower scope than the command's own step 1",
+        ))
+
+    status = feedback.get("status")
+    if status == "APPROVE":
+        failures.append(ClauseFailure(
+            "Status",
+            "APPROVE is on file: legal here only for a late fix entered from "
+            "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW over the manual APPROVE "
+            "(enter_applying_review_feedback) and then interrupted, which is human territory -- "
+            "this Controller automates only a two-stage writer's REVISE",
+        ))
+    elif status == "BLOCK":
+        failures.append(ClauseFailure(
+            "Status",
+            "BLOCK is on file: a two-stage writer's BLOCK never leaves its review phase, so the "
+            "file changed after the transition, and review-implementation.md A7 reserves a BLOCK "
+            "for explicit user resolution",
+        ))
+    elif status != "REVISE":
+        failures.append(ClauseFailure("Status", f"parses as {status!r}, expected REVISE"))
+
+    return AdmissibilityResult(admissible=not failures, failures=tuple(failures))
 
 
 # ---------------------------------------------------------------------------

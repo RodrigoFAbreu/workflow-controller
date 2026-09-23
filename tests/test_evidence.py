@@ -199,9 +199,13 @@ class ReadManifestFieldsTest(unittest.TestCase):
             bundle_id="b" * 64, generation_head="0" * 40,
             stage="plan", work_item_id="wi-1", plan_revision=3,
         ))
+        # The implementation-stage labels (automatic-lifecycle-orchestration
+        # CP1) are absent from a plan-stage manifest, so each reads None.
         self.assertEqual(evidence.read_manifest_fields(self.root, Path("b")), {
             "bundle_id": "b" * 64, "generation_head": "0" * 40,
             "stage": "plan", "work_item_id": "wi-1", "plan_revision": "3", "_exists": True,
+            "review_content_id": None, "implementation_revision": None,
+            "reviewed_implementation_head": None, "worktree_root": None,
         })
 
     def test_absent_lines_and_absent_file_read_as_none(self) -> None:
@@ -1179,6 +1183,842 @@ class StalePlanBundleGateTest(unittest.TestCase):
                 self.assertNotIn("before any plan review runs", result.reason)
                 if result.gate is not None:
                     self.assertNotIn("before any plan review runs", result.gate.what_is_required)
+
+
+# ---------------------------------------------------------------------------
+# Automatic-lifecycle-orchestration CP1: implementation-stage evidence
+# readers. None of these is wired into a decision yet.
+# ---------------------------------------------------------------------------
+
+_WI = "wi-1"
+_STATE_REL = Path("docs/ai-workflow/WORKFLOW_STATE.json")
+
+
+def _write_state(root: Path, work_items: dict) -> None:
+    fixtures.write_workflow_state(root, {"schema_version": 1, "active_work_item_id": None,
+                                         "work_items": work_items})
+
+
+def _commit(root: Path, subject: str, *, trailers: tuple[str, ...] = ()) -> str:
+    fixtures.run(["git", "add", "-A"], cwd=root)
+    args = ["git", "commit", "-q", "--allow-empty", "-m", subject]
+    if trailers:
+        args += ["-m", "\n".join(trailers)]
+    fixtures.run(args, cwd=root)
+    return fixtures.current_head(root)
+
+
+def _record_trailers(work_item_id: str = _WI, revision: int = 2, *, supersedes: str | None = None,
+                     extra: tuple[str, ...] = ()) -> tuple[str, ...]:
+    lines = (f"Workflow-Bundle-Generation-Record: {work_item_id}/{revision}",
+             f"Workflow-Work-Item: {work_item_id}")
+    if supersedes is not None:
+        lines += (f"Workflow-Supersedes: {supersedes}",)
+    return lines + extra
+
+
+class ImplementationStageManifestLabelsTest(unittest.TestCase):
+    """The four implementation-stage labels read from a manifest in the
+    shape ``workflow_fingerprint.render_manifest_md_implementation_stage``
+    writes -- a literal copy of that shape, never built through
+    ``fixtures`` (which would confirm the reader against itself)."""
+
+    _REAL_SHAPE = (
+        "# Bundle Manifest\n"
+        "\n"
+        "stage: implementation\n"
+        "bundle_id: " + "b" * 64 + "\n"
+        "review_content_id: " + "c" * 64 + "\n"
+        "work_item_id: wi-1\n"
+        "work_item_type: product\n"
+        "base_commit: " + "0" * 40 + "\n"
+        "reviewed_implementation_head: " + "1" * 40 + "\n"
+        "implementation_revision: 3\n"
+        "worktree_root: /srv/target\n"
+        "generation_head: " + "2" * 40 + "\n"
+        "\n"
+        "## Protected paths\n"
+        "- `controller/job.py` — protected\n"
+    )
+
+    def test_implementation_stage_lines_are_read(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures.write_manifest(root, "b", self._REAL_SHAPE)
+            self.assertEqual(evidence.read_manifest_fields(root, Path("b")), {
+                "stage": "implementation", "bundle_id": "b" * 64, "review_content_id": "c" * 64,
+                "work_item_id": "wi-1", "plan_revision": None,
+                "reviewed_implementation_head": "1" * 40, "implementation_revision": "3",
+                "worktree_root": "/srv/target", "generation_head": "2" * 40, "_exists": True,
+            })
+
+    def test_fixture_builder_is_byte_identical_without_the_new_labels(self) -> None:
+        self.assertEqual(
+            fixtures.build_manifest_text(bundle_id="c" * 64, generation_head="1" * 40, stage="plan",
+                                         work_item_id="wi-1", plan_revision=2),
+            "# Bundle manifest\n\nstage: plan\nbundle_id: " + "c" * 64 + "\nwork_item_id: wi-1\n"
+            "plan_revision: 2\ngeneration_head: " + "1" * 40 + "\n\n## Protected paths\n\n",
+        )
+
+
+class ImplementationBundleCoherenceTest(unittest.TestCase):
+    """One failing case per clause, each against an otherwise coherent
+    scoped implementation bundle, plus the positive case."""
+
+    BUNDLE = Path(".ai-review/wi-1/current")
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        self.head = fixtures.current_head(self.root)
+
+    def _write(self, **overrides) -> None:
+        fields = dict(reviewed_implementation_head="1" * 40)
+        fields.update(overrides)
+        revision = fields.pop("implementation_revision", 3)
+        fixtures.write_implementation_manifest(self.root, _WI, revision, **fields)
+
+    def _work_item(self, **overrides):
+        fields = dict(phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW", governing_workflow_version="2.2",
+                      implementation_revision=3, reviewed_implementation_head="1" * 40)
+        fields.update(overrides)
+        return fixtures.build_work_item_view(**fields)
+
+    def _check(self, *, require: bool = True, head: str | None = "live", **overrides):
+        current_head = self.head if head == "live" else head
+        return evidence.implementation_bundle_coherence(
+            self.root, self._work_item(**overrides), current_head,
+            require_current_generation_head=require,
+        )
+
+    def _assert_incoherent(self, clause: str, *fragments: str, **kwargs) -> None:
+        coherent, observed_clause, detail = self._check(**kwargs)
+        self.assertFalse(coherent)
+        self.assertEqual(observed_clause, clause, detail)
+        self.assertIn(clause, evidence.IMPLEMENTATION_BUNDLE_CLAUSES)
+        for fragment in fragments:
+            self.assertIn(fragment, detail)
+
+    def test_coherent_bundle(self) -> None:
+        self._write()
+        coherent, clause, detail = self._check()
+        self.assertTrue(coherent, detail)
+        self.assertIsNone(clause)
+        self.assertIn("implementation_revision 3", detail)
+        self.assertIn(self.head, detail)
+
+    def test_absent_current_directory(self) -> None:
+        (self.root / ".ai-review" / _WI).mkdir(parents=True)
+        self._assert_incoherent("absent", str(self.BUNDLE), "absent")
+
+    def test_current_directory_without_a_manifest(self) -> None:
+        (self.root / self.BUNDLE).mkdir(parents=True)
+        self._assert_incoherent("absent", "MANIFEST.md", "missing or unreadable")
+
+    def test_flat_layout_bundle_is_not_read_once_the_work_item_is_on_the_scoped_layout(self) -> None:
+        """Scoped-else-flat is decided by the work item's own root
+        directory: once ``.ai-review/wi-1/`` exists (every ``"2.2"`` item
+        has it from its plan stage), an otherwise coherent flat bundle is
+        not this work item's bundle."""
+        (self.root / ".ai-review" / _WI).mkdir(parents=True)
+        fixtures.write_implementation_manifest(
+            self.root, _WI, 3, scoped=False, reviewed_implementation_head="1" * 40,
+        )
+        self._assert_incoherent("absent", str(self.BUNDLE))
+
+    def test_flat_layout_bundle_is_read_when_no_scoped_root_exists(self) -> None:
+        fixtures.write_implementation_manifest(
+            self.root, _WI, 3, scoped=False, reviewed_implementation_head="1" * 40,
+        )
+        coherent, clause, detail = self._check()
+        self.assertTrue(coherent, detail)
+        self.assertIn(".ai-review/current/MANIFEST.md", detail)
+
+    def test_plan_stage_manifest(self) -> None:
+        self._write(stage="plan")
+        self._assert_incoherent("stage", "manifest stage 'plan'")
+
+    def test_wrong_work_item(self) -> None:
+        fixtures.write_manifest(self.root, self.BUNDLE, fixtures.build_implementation_manifest_text(
+            "wi-2", 3, worktree_root=fixtures.target_worktree_root(self.root),
+            generation_head=self.head,
+        ))
+        self._assert_incoherent("work_item_id", "manifest work_item_id 'wi-2'")
+
+    def test_missing_bundle_id(self) -> None:
+        self._write(bundle_id=None)
+        self._assert_incoherent("bundle_id", "bundle_id is missing")
+
+    def test_different_worktree_root(self) -> None:
+        self._write(worktree_root="/elsewhere/target")
+        self._assert_incoherent("worktree_root", "'/elsewhere/target'",
+                                fixtures.target_worktree_root(self.root))
+
+    def test_missing_worktree_root_line(self) -> None:
+        self._write(worktree_root=None)
+        self._assert_incoherent("worktree_root", "manifest worktree_root None")
+
+    def test_stale_implementation_revision(self) -> None:
+        self._write(implementation_revision=2)
+        self._assert_incoherent(
+            "implementation_revision", "manifest implementation_revision 2 != state implementation_revision 3",
+        )
+
+    def test_non_decimal_implementation_revision(self) -> None:
+        for bad in ("abc", "+3", "3.0", "0x3"):
+            with self.subTest(value=bad):
+                self._write(implementation_revision=bad)
+                self._assert_incoherent("implementation_revision", repr(bad), "not an integer")
+
+    def test_missing_implementation_revision_line(self) -> None:
+        self._write(implementation_revision=None)
+        self._assert_incoherent("implementation_revision", "manifest implementation_revision is missing")
+
+    def test_wrong_reviewed_implementation_head(self) -> None:
+        self._write(reviewed_implementation_head="9" * 40)
+        self._assert_incoherent("reviewed_implementation_head", "9" * 40, "1" * 40)
+
+    def test_generation_head_behind_head(self) -> None:
+        self._write()
+        (self.root / "later.txt").write_text("a commit after generation\n")
+        new_head = fixtures.commit_all(self.root, "later")
+        self.head = new_head
+        self._assert_incoherent("generation_head", new_head)
+
+    def test_generation_head_is_not_required_at_applying_review_feedback(self) -> None:
+        """The flag ``APPLYING_REVIEW_FEEDBACK`` passes: ``HEAD`` legitimately
+        runs ahead of ``generation_head`` there."""
+        self._write(generation_head="9" * 40)
+        coherent, clause, detail = self._check(require=False)
+        self.assertTrue(coherent, detail)
+        self.assertIsNone(clause)
+        self.assertNotIn("generation_head", detail)
+
+    def test_state_side_none_is_incoherent(self) -> None:
+        self._write()
+        cases = (
+            ("implementation_revision", {"implementation_revision": None},
+             "state implementation_revision is None"),
+            ("implementation_revision", {"implementation_revision": True},
+             "state implementation_revision is True"),
+            ("reviewed_implementation_head", {"reviewed_implementation_head": None},
+             "state reviewed_implementation_head is None"),
+            ("generation_head", {"head": None}, "HEAD could not be read"),
+        )
+        for clause, overrides, fragment in cases:
+            with self.subTest(clause=clause, overrides=overrides):
+                self._assert_incoherent(clause, fragment, **overrides)
+
+    def test_unreadable_worktree_root_is_incoherent(self) -> None:
+        self._write()
+        from unittest import mock
+
+        with mock.patch.object(evidence, "target_worktree_root", return_value=None):
+            self._assert_incoherent("worktree_root", "could not be read")
+
+    def test_clause_codes_are_the_documented_set(self) -> None:
+        self.assertEqual(evidence.IMPLEMENTATION_BUNDLE_CLAUSES, (
+            "absent", "stage", "work_item_id", "bundle_id", "worktree_root",
+            "implementation_revision", "reviewed_implementation_head", "generation_head",
+        ))
+
+
+class ReadReviewRequestFieldsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        (self.root / "b").mkdir()
+
+    def _read(self, text: str | None):
+        if text is not None:
+            (self.root / "b" / "REVIEW_REQUEST.md").write_text(text)
+        return evidence.read_review_request_fields(self.root, Path("b"))
+
+    def test_absent_file(self) -> None:
+        self.assertEqual(self._read(None), {"_exists": False, "review_content_ids": ()})
+
+    def test_statement_anywhere_in_the_file_is_read(self) -> None:
+        text = "# Review request\n\n## Scope\n\nreview_content_id: " + "c" * 64 + "\n"
+        self.assertEqual(self._read(text)["review_content_ids"], ("c" * 64,))
+
+    def test_repeated_equal_statements_collapse_and_disagreeing_ones_do_not(self) -> None:
+        same = "review_content_id: " + "c" * 64 + "\nreview_content_id: " + "c" * 64 + "\n"
+        self.assertEqual(self._read(same)["review_content_ids"], ("c" * 64,))
+        differ = "review_content_id: " + "c" * 64 + "\nreview_content_id: " + "d" * 64 + "\n"
+        self.assertEqual(self._read(differ)["review_content_ids"], ("c" * 64, "d" * 64))
+
+    def test_only_the_generator_pattern_counts(self) -> None:
+        for text in ("  review_content_id: " + "c" * 64 + "\n",        # indented
+                     "review_content_id: " + "C" * 64 + "\n",          # upper-case hex
+                     "review_content_id: " + "c" * 63 + "\n",          # short
+                     "review_content_id: `" + "c" * 64 + "`\n"):       # decorated
+            with self.subTest(text=text):
+                result = self._read(text)
+                self.assertTrue(result["_exists"])
+                self.assertEqual(result["review_content_ids"], ())
+
+
+class ReadImplementationReviewLedgerTest(unittest.TestCase):
+    def _read(self, stages):
+        return evidence.read_implementation_review_ledger(
+            fixtures.build_work_item_view(implementation_review_stages=stages),
+        )
+
+    @staticmethod
+    def _stage(**overrides):
+        stage = {"bundle_id": "b" * 64, "verdict": "APPROVE", "round": 1,
+                 "completed_at": "2026-09-23T00:00:00Z"}
+        stage.update(overrides)
+        return stage
+
+    def test_absent_ledger_is_empty_not_malformed(self) -> None:
+        self.assertEqual(self._read(None), evidence.LedgerView(None, None, None, None))
+
+    def test_local_approve_only(self) -> None:
+        view = self._read({"review_content_id": "c" * 64,
+                           "LOCAL_MODEL_IMPLEMENTATION_REVIEW": self._stage(),
+                           "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": None})
+        self.assertEqual(view, evidence.LedgerView(
+            "c" * 64, {"verdict": "APPROVE", "bundle_id": "b" * 64, "round": 1}, None, None,
+        ))
+
+    def test_both_stages(self) -> None:
+        view = self._read({"review_content_id": "c" * 64,
+                           "LOCAL_MODEL_IMPLEMENTATION_REVIEW": self._stage(),
+                           "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": self._stage(bundle_id="a" * 64, round=2),
+                           "SOME_FUTURE_KEY": {"ignored": True}})
+        self.assertEqual(view.manual, {"verdict": "APPROVE", "bundle_id": "a" * 64, "round": 2})
+        self.assertIsNone(view.malformed)
+
+    def test_malformed_ledger_reads_as_no_stage_recorded_per_shape(self) -> None:
+        good_local = self._stage()
+        cases = {
+            "ledger is a list": [good_local],
+            "ledger is a string": "APPROVE",
+            "no review_content_id": {"LOCAL_MODEL_IMPLEMENTATION_REVIEW": good_local},
+            "non-string review_content_id": {"review_content_id": 7,
+                                             "LOCAL_MODEL_IMPLEMENTATION_REVIEW": good_local},
+            "empty review_content_id": {"review_content_id": "",
+                                        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": good_local},
+            "stage is not an object": {"review_content_id": "c" * 64,
+                                       "LOCAL_MODEL_IMPLEMENTATION_REVIEW": "APPROVE"},
+            "stage verdict is not APPROVE": {"review_content_id": "c" * 64,
+                                             "LOCAL_MODEL_IMPLEMENTATION_REVIEW": self._stage(verdict="REVISE")},
+            "stage has no bundle_id": {"review_content_id": "c" * 64,
+                                       "LOCAL_MODEL_IMPLEMENTATION_REVIEW": self._stage(bundle_id=None)},
+            "stage round is a bool": {"review_content_id": "c" * 64,
+                                      "LOCAL_MODEL_IMPLEMENTATION_REVIEW": self._stage(round=True)},
+            "stage round is a string": {"review_content_id": "c" * 64,
+                                        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": self._stage(round="1")},
+            "manual stage malformed": {"review_content_id": "c" * 64,
+                                       "LOCAL_MODEL_IMPLEMENTATION_REVIEW": good_local,
+                                       "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": ["APPROVE"]},
+            "manual without local": {"review_content_id": "c" * 64,
+                                     "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": good_local},
+        }
+        for name, stages in cases.items():
+            with self.subTest(shape=name):
+                view = self._read(stages)
+                self.assertIsNone(view.review_content_id)
+                self.assertIsNone(view.local)
+                self.assertIsNone(view.manual)
+                self.assertTrue(view.malformed)
+
+
+class CommittedStateReadTest(unittest.TestCase):
+    """``committed_work_item``/``committed_checkpoint_statuses`` against a
+    real repository whose committed values differ from the working tree's."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+
+    def _entry(self, phase: str, checkpoints: dict) -> dict:
+        return {"work_item_id": _WI, "phase": phase, "checkpoints": checkpoints}
+
+    def test_committed_values_win_over_uncommitted_working_tree_values(self) -> None:
+        _write_state(self.root, {_WI: self._entry(
+            "IMPLEMENTING", {"CP1": {"status": "COMPLETE"}, "CP2": {"status": "IN_PROGRESS"}},
+        )})
+        _commit(self.root, "checkpoint CP1")
+        # Uncommitted: CP2 completes and the phase moves, in the working tree only.
+        _write_state(self.root, {_WI: self._entry(
+            "SELF_REVIEWING_IMPLEMENTATION", {"CP1": {"status": "COMPLETE"}, "CP2": {"status": "COMPLETE"}},
+        )})
+        self.assertEqual(evidence.committed_work_item(self.root, _WI)["phase"], "IMPLEMENTING")
+        self.assertEqual(evidence.committed_checkpoint_statuses(self.root), {
+            (_WI, "CP1"): "COMPLETE", (_WI, "CP2"): "IN_PROGRESS",
+        })
+        _commit(self.root, "checkpoint CP2")
+        self.assertEqual(evidence.committed_work_item(self.root, _WI)["phase"],
+                         "SELF_REVIEWING_IMPLEMENTATION")
+        self.assertEqual(evidence.committed_checkpoint_statuses(self.root)[(_WI, "CP2")], "COMPLETE")
+        self.assertEqual(evidence.committed_work_item(self.root, _WI, rev="HEAD^")["phase"],
+                         "IMPLEMENTING")
+        self.assertEqual(evidence.committed_checkpoint_statuses(self.root, rev="HEAD^")[(_WI, "CP2")],
+                         "IN_PROGRESS")
+
+    def test_statuses_are_keyed_by_work_item_and_checkpoint(self) -> None:
+        _write_state(self.root, {
+            _WI: self._entry("IMPLEMENTING", {"CP1": {"status": "COMPLETE"}}),
+            "wi-2": {"work_item_id": "wi-2", "phase": "IMPLEMENTING",
+                     "checkpoints": {"CP1": {"status": "IN_PROGRESS"}}},
+        })
+        _commit(self.root, "two items")
+        self.assertEqual(evidence.committed_checkpoint_statuses(self.root), {
+            (_WI, "CP1"): "COMPLETE", ("wi-2", "CP1"): "IN_PROGRESS",
+        })
+
+    def test_malformed_entries_are_skipped_never_read_as_complete(self) -> None:
+        _write_state(self.root, {
+            _WI: {"work_item_id": _WI, "phase": "IMPLEMENTING",
+                  "checkpoints": {"CP1": "COMPLETE", "CP2": {"status": 1}, "CP3": {"status": "COMPLETE"}}},
+            "wi-2": {"work_item_id": "wi-2", "checkpoints": ["CP1"]},
+            "wi-3": "not an object",
+        })
+        _commit(self.root, "malformed entries")
+        self.assertEqual(evidence.committed_checkpoint_statuses(self.root), {(_WI, "CP3"): "COMPLETE"})
+        self.assertIsNone(evidence.committed_work_item(self.root, "wi-3"))
+
+    def test_unreadable_committed_state_is_none(self) -> None:
+        # Never committed at HEAD: present only in the working tree.
+        _write_state(self.root, {_WI: self._entry("IMPLEMENTING", {})})
+        self.assertIsNone(evidence.committed_work_item(self.root, _WI))
+        self.assertIsNone(evidence.committed_checkpoint_statuses(self.root))
+        # Committed but not JSON / not the expected shape.
+        for text in ("{not json", "[1, 2]", '{"work_items": []}'):
+            with self.subTest(text=text):
+                fixtures.write_workflow_state_raw(self.root, text)
+                _commit(self.root, "unreadable state")
+                self.assertIsNone(evidence.committed_work_item(self.root, _WI))
+                self.assertIsNone(evidence.committed_checkpoint_statuses(self.root))
+
+    def test_absent_work_item_and_unknown_revision_are_none(self) -> None:
+        _write_state(self.root, {_WI: self._entry("IMPLEMENTING", {})})
+        _commit(self.root, "state")
+        self.assertIsNone(evidence.committed_work_item(self.root, "wi-9"))
+        self.assertIsNone(evidence.committed_work_item(self.root, _WI, rev="no-such-rev"))
+        self.assertIsNone(evidence.committed_checkpoint_statuses(self.root, rev="no-such-rev"))
+
+    def test_repository_without_commits_is_none(self) -> None:
+        empty = Path(self._tmp.name) / "empty"
+        fixtures.build_target_git_repo(empty)
+        self.assertIsNone(evidence.committed_work_item(empty, _WI))
+        self.assertIsNone(evidence.committed_checkpoint_statuses(empty))
+
+
+class BundleGenerationRecordRoleTest(unittest.TestCase):
+    ORDINARY = {"Workflow-Bundle-Generation-Record": "wi-1/2", "Workflow-Work-Item": "wi-1"}
+
+    def test_ordinary_and_recovered_roles(self) -> None:
+        self.assertEqual(evidence.bundle_generation_record_role(self.ORDINARY, _WI), "ordinary")
+        recovered = dict(self.ORDINARY, **{"Workflow-Supersedes": "a" * 40})
+        self.assertEqual(evidence.bundle_generation_record_role(recovered, _WI), "recovered")
+
+    def test_any_other_trailer_set_has_no_role(self) -> None:
+        for trailers in (
+            {},
+            None,
+            {"Workflow-Work-Item": "wi-1"},
+            {"Workflow-Bundle-Generation-Record": "wi-1/2"},
+            dict(self.ORDINARY, **{"Co-Authored-By": "someone"}),
+            dict(self.ORDINARY, **{"Workflow-Checkpoint": "CP1"}),
+        ):
+            with self.subTest(trailers=trailers):
+                self.assertIsNone(evidence.bundle_generation_record_role(trailers, _WI))
+
+    def test_a_record_naming_another_work_item_has_no_role_here(self) -> None:
+        for trailers in (
+            {"Workflow-Bundle-Generation-Record": "wi-2/2", "Workflow-Work-Item": "wi-2"},
+            {"Workflow-Bundle-Generation-Record": "wi-2/2", "Workflow-Work-Item": "wi-1"},
+            {"Workflow-Bundle-Generation-Record": "wi-1/2", "Workflow-Work-Item": "wi-2"},
+            {"Workflow-Bundle-Generation-Record": "wi-1", "Workflow-Work-Item": "wi-1"},
+            {"Workflow-Bundle-Generation-Record": "wi-10/2", "Workflow-Work-Item": "wi-1"},
+        ):
+            with self.subTest(trailers=trailers):
+                self.assertIsNone(evidence.bundle_generation_record_role(trailers, _WI))
+
+
+class GenerationRecordViewTest(unittest.TestCase):
+    """``generation_record_view`` against a real repository whose commits
+    carry this work item's committed phase and real trailers."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+
+    def _state_commit(self, phase: str, subject: str, *, trailers: tuple[str, ...] = (),
+                      work_item_id: str = _WI) -> str:
+        _write_state(self.root, {work_item_id: {"work_item_id": work_item_id, "phase": phase}})
+        return _commit(self.root, subject, trailers=trailers)
+
+    def _view(self, manifest_generation_head: str | None):
+        return evidence.generation_record_view(self.root, _WI, manifest_generation_head)
+
+    def test_ordinary_record_whose_parent_records_applying_review_feedback(self) -> None:
+        previous = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T0",
+                                      trailers=_record_trailers(revision=1))
+        self._state_commit("APPLYING_REVIEW_FEEDBACK", "pending review-stage write",
+                           trailers=("Workflow-Work-Item: wi-1",))
+        record = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T",
+                                    trailers=_record_trailers(revision=2))
+        view = self._view(previous)
+        self.assertEqual(view.head, record)
+        self.assertEqual(view.head_role, "ordinary")
+        self.assertEqual(view.head_phase, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(view.parent_phase, "APPLYING_REVIEW_FEEDBACK")
+        self.assertEqual(view.newer_records, (record,))
+        self.assertEqual(view.latest_record_parent_phase, "APPLYING_REVIEW_FEEDBACK")
+
+    def test_malformed_ordinary_record_parent_records_the_same_phase(self) -> None:
+        previous = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T0",
+                                      trailers=_record_trailers(revision=1))
+        # The literal worker: no separate pending-write commit before T.
+        self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T",
+                           trailers=_record_trailers(revision=2))
+        view = self._view(previous)
+        self.assertEqual(view.head_role, "ordinary")
+        self.assertEqual(view.head_phase, view.parent_phase)
+        self.assertEqual(view.head_phase, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+
+    def test_recovered_role_record(self) -> None:
+        previous = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T0",
+                                      trailers=_record_trailers(revision=2))
+        self._state_commit("APPLYING_REVIEW_FEEDBACK", "pending write",
+                           trailers=("Workflow-Work-Item: wi-1",))
+        record = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "same_content T",
+                                    trailers=_record_trailers(revision=2, supersedes=previous))
+        view = self._view(previous)
+        self.assertEqual(view.head_role, "recovered")
+        self.assertEqual(view.newer_records, (record,))
+
+    def test_excluded_only_commit_after_the_record(self) -> None:
+        previous = self._state_commit("SELF_REVIEWING_IMPLEMENTATION", "checkpoint")
+        record = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T",
+                                    trailers=_record_trailers(revision=1))
+        (self.root / "docs" / "notes.md").write_text("an excluded-only edit\n")
+        excluded = _commit(self.root, "excluded-only")
+        view = self._view(previous)
+        self.assertEqual(view.head, excluded)
+        self.assertIsNone(view.head_role)
+        self.assertEqual(view.head_phase, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(view.parent_phase, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(view.newer_records, (record,))
+        self.assertEqual(view.latest_record_parent_phase, "SELF_REVIEWING_IMPLEMENTATION")
+
+    def test_newer_records_are_newest_first_and_exclude_the_generation_head_itself(self) -> None:
+        first = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T1",
+                                   trailers=_record_trailers(revision=1))
+        self._state_commit("APPLYING_REVIEW_FEEDBACK", "pending write",
+                           trailers=("Workflow-Work-Item: wi-1",))
+        second = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T2",
+                                    trailers=_record_trailers(revision=2))
+        self._state_commit("APPLYING_REVIEW_FEEDBACK", "pending write 2",
+                           trailers=("Workflow-Work-Item: wi-1",))
+        third = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T3",
+                                   trailers=_record_trailers(revision=3))
+        self.assertEqual(self._view(first).newer_records, (third, second))
+        self.assertEqual(self._view(third).newer_records, ())
+        self.assertIsNone(self._view(third).latest_record_parent_phase)
+
+    def test_non_ancestor_or_absent_generation_head_has_no_newer_records(self) -> None:
+        base = self._state_commit("SELF_REVIEWING_IMPLEMENTATION", "checkpoint")
+        fixtures.run(["git", "checkout", "-q", "-b", "side"], cwd=self.root)
+        side = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "side T",
+                                  trailers=_record_trailers(revision=1))
+        fixtures.run(["git", "checkout", "-q", "-"], cwd=self.root)
+        self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T",
+                           trailers=_record_trailers(revision=1))
+        for generation_head in (side, "9" * 40, None, "", "HEAD~1", "--output=x", base[:12]):
+            with self.subTest(generation_head=generation_head):
+                view = self._view(generation_head)
+                self.assertIsNone(view.newer_records)
+                self.assertIsNone(view.latest_record_parent_phase)
+                self.assertEqual(view.head_role, "ordinary")
+        self.assertIsNotNone(self._view(base).newer_records)
+
+    def test_a_record_naming_another_work_item_is_ignored(self) -> None:
+        previous = self._state_commit("SELF_REVIEWING_IMPLEMENTATION", "checkpoint")
+        _write_state(self.root, {
+            _WI: {"work_item_id": _WI, "phase": "SELF_REVIEWING_IMPLEMENTATION"},
+            "wi-2": {"work_item_id": "wi-2", "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"},
+        })
+        _commit(self.root, "other item's T", trailers=_record_trailers("wi-2", 1))
+        view = self._view(previous)
+        self.assertIsNone(view.head_role)
+        self.assertEqual(view.newer_records, ())
+
+    def test_a_record_with_an_extra_trailer_has_no_role_but_is_still_a_record(self) -> None:
+        """Workflow's own discovery pairs only ``Workflow-Work-Item`` with a
+        generation-record value, whatever else the trailer set holds; the
+        role is a separate, stricter classification."""
+        previous = self._state_commit("SELF_REVIEWING_IMPLEMENTATION", "checkpoint")
+        record = self._state_commit("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "T",
+                                    trailers=_record_trailers(revision=1, extra=("Co-Authored-By: x",)))
+        view = self._view(previous)
+        self.assertIsNone(view.head_role)
+        self.assertEqual(view.newer_records, (record,))
+
+    def test_first_commit_has_no_parent_phase(self) -> None:
+        empty = Path(self._tmp.name) / "fresh"
+        fixtures.build_target_git_repo(empty)
+        _write_state(empty, {_WI: {"work_item_id": _WI, "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}})
+        _commit(empty, "T", trailers=_record_trailers(revision=1))
+        view = evidence.generation_record_view(empty, _WI, None)
+        self.assertEqual(view.head_role, "ordinary")
+        self.assertEqual(view.head_phase, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertIsNone(view.parent_phase)
+
+    def test_repository_without_commits(self) -> None:
+        empty = Path(self._tmp.name) / "empty"
+        fixtures.build_target_git_repo(empty)
+        self.assertEqual(evidence.generation_record_view(empty, _WI, None),
+                         evidence.GenerationRecordView(None, None, None, None, None, None))
+
+
+class ManualImplementationStageAdmissibilityTest(unittest.TestCase):
+    """``evaluate_manual_implementation_stage_admissibility``: each clause
+    failing independently against an otherwise admissible verdict."""
+
+    HEAD = "2" * 40
+    ROOT = "/srv/target"
+
+    def _inputs(self, *, status: str = "APPROVE"):
+        feedback = {
+            "status": status, "reviewer_role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "reviewed_bundle_id": "b" * 64, "reviewed_base_commit": "0" * 40,
+            "work_item": _WI, "reviewed_content_id": "c" * 64,
+        }
+        manifest = {
+            "bundle_id": "b" * 64, "review_content_id": "c" * 64, "generation_head": self.HEAD,
+            "worktree_root": self.ROOT, "stage": "implementation", "work_item_id": _WI,
+            "_exists": True,
+        }
+        review_request = {"_exists": True, "review_content_ids": ("c" * 64,)}
+        ledger = {
+            "review_content_id": "c" * 64,
+            "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {"bundle_id": "b" * 64, "verdict": "APPROVE",
+                                                  "round": 1, "completed_at": "t"},
+            "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": None,
+        }
+        return feedback, manifest, review_request, ledger
+
+    def _evaluate(self, feedback, manifest, review_request, ledger, *, head: str | None = HEAD,
+                  root: str | None = ROOT):
+        work_item = fixtures.build_work_item_view(
+            phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", governing_workflow_version="2.2",
+            base_commit="0" * 40, implementation_review_stages=ledger,
+        )
+        return evidence.evaluate_manual_implementation_stage_admissibility(
+            feedback=feedback, manifest=manifest, review_request=review_request,
+            work_item=work_item, current_head=head, current_worktree_root=root,
+        )
+
+    def test_admissible_for_each_status(self) -> None:
+        for status in ("APPROVE", "REVISE", "BLOCK"):
+            with self.subTest(status=status):
+                result = self._evaluate(*self._inputs(status=status))
+                self.assertTrue(result.admissible, result.failure_summary())
+                self.assertEqual(result.advisories, ())
+
+    def test_each_clause_fails_independently(self) -> None:
+        def feedback(**changes):
+            def mutate(f, m, r, l):
+                f.update(changes)
+            return mutate
+
+        def manifest(**changes):
+            def mutate(f, m, r, l):
+                m.update(changes)
+            return mutate
+
+        def ledger_local(value):
+            def mutate(f, m, r, l):
+                l["LOCAL_MODEL_IMPLEMENTATION_REVIEW"] = value
+            return mutate
+
+        def ledger_manual(value):
+            def mutate(f, m, r, l):
+                l["MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"] = value
+            return mutate
+
+        def request(values, exists=True):
+            def mutate(f, m, r, l):
+                r.update({"_exists": exists, "review_content_ids": values})
+            return mutate
+
+        cases = (
+            ("local role", feedback(reviewer_role="LOCAL_MODEL_IMPLEMENTATION_REVIEW"), "Reviewer role"),
+            ("lower-case role", feedback(reviewer_role="manual_external_implementation_review"),
+             "Reviewer role"),
+            ("no role", feedback(reviewer_role=None), "Reviewer role"),
+            ("unparseable status", feedback(status="MAYBE"), "Status"),
+            ("no bundle id line", feedback(reviewed_bundle_id=None), "Reviewed bundle ID"),
+            ("no base commit line", feedback(reviewed_base_commit=None), "Reviewed base commit"),
+            ("no work item line", feedback(work_item=None), "Work item"),
+            ("other work item", feedback(work_item="wi-2"), "Work item"),
+            ("other base commit", feedback(reviewed_base_commit="9" * 40), "Reviewed base commit"),
+            ("feedback content id stale", feedback(reviewed_content_id="d" * 64), "review_content_id"),
+            ("feedback content id absent", feedback(reviewed_content_id=None), "review_content_id"),
+            ("manifest content id differs", manifest(review_content_id="d" * 64), None),
+            ("no local approval", ledger_local(None), "local approval"),
+            ("manual already recorded", ledger_manual(
+                {"bundle_id": "b" * 64, "verdict": "APPROVE", "round": 1, "completed_at": "t"}),
+             "manual stage"),
+            ("stale generation_head", manifest(generation_head="9" * 40), "generation_head"),
+            ("no generation_head", manifest(generation_head=None), "generation_head"),
+            ("other worktree_root", manifest(worktree_root="/elsewhere"), "worktree_root"),
+            ("no worktree_root", manifest(worktree_root=None), "worktree_root"),
+            ("REVIEW_REQUEST.md states another id", request(("d" * 64,)),
+             "REVIEW_REQUEST.md review_content_id"),
+            ("REVIEW_REQUEST.md states two ids", request(("c" * 64, "d" * 64)),
+             "REVIEW_REQUEST.md review_content_id"),
+            ("REVIEW_REQUEST.md states none", request(()), "REVIEW_REQUEST.md review_content_id"),
+            ("REVIEW_REQUEST.md missing", request((), exists=False), "REVIEW_REQUEST.md review_content_id"),
+        )
+        for name, mutate, clause in cases:
+            with self.subTest(case=name):
+                inputs = self._inputs()
+                mutate(*inputs)
+                result = self._evaluate(*inputs)
+                self.assertFalse(result.admissible)
+                failing = {failure.clause for failure in result.failures}
+                if clause is None:
+                    # A manifest whose content id moved disagrees with both
+                    # the ledger and REVIEW_REQUEST.md, so two clauses fail.
+                    self.assertEqual(failing, {"ledger review_content_id",
+                                               "REVIEW_REQUEST.md review_content_id"})
+                else:
+                    self.assertEqual(failing, {clause}, result.failure_summary())
+
+    def test_live_head_and_worktree_root_are_required(self) -> None:
+        for kwargs, clause in (({"head": None}, "generation_head"), ({"root": None}, "worktree_root")):
+            with self.subTest(clause=clause):
+                result = self._evaluate(*self._inputs(), **kwargs)
+                self.assertEqual({f.clause for f in result.failures}, {clause})
+
+    def test_malformed_ledger_fails_closed(self) -> None:
+        feedback, manifest, review_request, ledger = self._inputs()
+        ledger["LOCAL_MODEL_IMPLEMENTATION_REVIEW"]["verdict"] = "REVISE"
+        result = self._evaluate(feedback, manifest, review_request, ledger)
+        self.assertFalse(result.admissible)
+        self.assertIn("local approval", {f.clause for f in result.failures})
+        self.assertIn("ledger malformed", result.failure_summary())
+
+    def test_approve_bundle_id_mismatch_is_advisory(self) -> None:
+        feedback, manifest, review_request, ledger = self._inputs(status="APPROVE")
+        feedback["reviewed_bundle_id"] = "a" * 64
+        result = self._evaluate(feedback, manifest, review_request, ledger)
+        self.assertTrue(result.admissible, result.failure_summary())
+        self.assertEqual(len(result.advisories), 1)
+        self.assertIn("advisory only", result.advisories[0])
+
+    def test_block_bundle_id_mismatch_is_advisory(self) -> None:
+        feedback, manifest, review_request, ledger = self._inputs(status="BLOCK")
+        feedback["reviewed_bundle_id"] = "a" * 64
+        result = self._evaluate(feedback, manifest, review_request, ledger)
+        self.assertTrue(result.admissible, result.failure_summary())
+        self.assertEqual(len(result.advisories), 1)
+
+    def test_revise_bundle_id_mismatch_is_hard(self) -> None:
+        feedback, manifest, review_request, ledger = self._inputs(status="REVISE")
+        feedback["reviewed_bundle_id"] = "a" * 64
+        result = self._evaluate(feedback, manifest, review_request, ledger)
+        self.assertFalse(result.admissible)
+        self.assertEqual({f.clause for f in result.failures}, {"Reviewed bundle ID"})
+        self.assertIn("/apply-implementation-review step 1", result.failure_summary())
+        self.assertEqual(result.advisories, ())
+
+    def test_revise_against_a_manifest_without_bundle_id_is_hard(self) -> None:
+        feedback, manifest, review_request, ledger = self._inputs(status="REVISE")
+        manifest["bundle_id"] = None
+        result = self._evaluate(feedback, manifest, review_request, ledger)
+        self.assertEqual({f.clause for f in result.failures}, {"Reviewed bundle ID"})
+
+
+class ApplyImplementationReviewAdmissibilityTest(unittest.TestCase):
+    """``evaluate_apply_implementation_review_admissibility``: the command's
+    own step-1 clauses plus the Controller's narrower role/``Status`` scope."""
+
+    def _feedback(self, **overrides):
+        feedback = {
+            "status": "REVISE", "reviewer_role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+            "reviewed_bundle_id": "b" * 64, "reviewed_base_commit": "0" * 40,
+            "work_item": _WI, "reviewed_content_id": "c" * 64,
+        }
+        feedback.update(overrides)
+        return feedback
+
+    def _evaluate(self, feedback, *, manifest_bundle_id: str | None = "b" * 64,
+                  generation_head: str = "2" * 40, current_head: str | None = "2" * 40):
+        work_item = fixtures.build_work_item_view(
+            phase="APPLYING_REVIEW_FEEDBACK", governing_workflow_version="2.2", base_commit="0" * 40,
+        )
+        manifest = {"bundle_id": manifest_bundle_id, "generation_head": generation_head,
+                    "stage": "implementation", "work_item_id": _WI, "_exists": True}
+        return evidence.evaluate_apply_implementation_review_admissibility(
+            feedback=feedback, manifest=manifest, work_item=work_item, current_head=current_head,
+        )
+
+    def test_revise_from_either_two_stage_role_is_admissible(self) -> None:
+        for role in ("LOCAL_MODEL_IMPLEMENTATION_REVIEW", "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"):
+            with self.subTest(role=role):
+                result = self._evaluate(self._feedback(reviewer_role=role))
+                self.assertTrue(result.admissible, result.failure_summary())
+
+    def test_there_is_no_generation_head_clause(self) -> None:
+        """``HEAD`` is legitimately ahead of ``generation_head`` here."""
+        result = self._evaluate(self._feedback(), generation_head="9" * 40, current_head="2" * 40)
+        self.assertTrue(result.admissible, result.failure_summary())
+        result = self._evaluate(self._feedback(), current_head=None)
+        self.assertTrue(result.admissible, result.failure_summary())
+
+    def test_each_clause_fails_independently(self) -> None:
+        cases = (
+            ("no bundle id line", self._feedback(reviewed_bundle_id=None), {}, "Reviewed bundle ID"),
+            ("no base commit line", self._feedback(reviewed_base_commit=None), {}, "Reviewed base commit"),
+            ("no work item line", self._feedback(work_item=None), {}, "Work item"),
+            ("bundle mismatch", self._feedback(reviewed_bundle_id="a" * 64), {}, "Reviewed bundle ID"),
+            ("manifest without bundle id", self._feedback(), {"manifest_bundle_id": None},
+             "Reviewed bundle ID"),
+            ("other work item", self._feedback(work_item="wi-2"), {}, "Work item"),
+            ("other base commit", self._feedback(reviewed_base_commit="9" * 40), {}, "Reviewed base commit"),
+            ("plan-stage role", self._feedback(reviewer_role="LOCAL_MODEL_PLAN_REVIEW"), {}, "Reviewer role"),
+            ("lower-case role", self._feedback(reviewer_role="local_model_implementation_review"), {},
+             "Reviewer role"),
+            ("no role (a \"2.1\"-shaped verdict)", self._feedback(reviewer_role=None), {}, "Reviewer role"),
+            ("unparseable status", self._feedback(status="MAYBE"), {}, "Status"),
+            ("no status", self._feedback(status=None), {}, "Status"),
+        )
+        for name, feedback, kwargs, clause in cases:
+            with self.subTest(case=name):
+                result = self._evaluate(feedback, **kwargs)
+                self.assertFalse(result.admissible)
+                self.assertEqual({f.clause for f in result.failures}, {clause}, result.failure_summary())
+
+    def test_approve_is_refused_as_human_territory_not_as_incoherent(self) -> None:
+        result = self._evaluate(self._feedback(status="APPROVE",
+                                               reviewer_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"))
+        self.assertFalse(result.admissible)
+        self.assertEqual({f.clause for f in result.failures}, {"Status"})
+        summary = result.failure_summary()
+        self.assertIn("late fix", summary)
+        self.assertIn("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", summary)
+        self.assertIn("human territory", summary)
+        self.assertNotIn("incoherent", summary)
+
+    def test_block_is_refused_for_explicit_user_resolution(self) -> None:
+        result = self._evaluate(self._feedback(status="BLOCK"))
+        self.assertFalse(result.admissible)
+        self.assertEqual({f.clause for f in result.failures}, {"Status"})
+        summary = result.failure_summary()
+        self.assertIn("changed after the transition", summary)
+        self.assertIn("A7", summary)
+        self.assertIn("explicit user resolution", summary)
 
 
 if __name__ == "__main__":

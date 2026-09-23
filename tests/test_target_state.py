@@ -516,6 +516,63 @@ class RegistryCompleteTest(unittest.TestCase):
         self.assertIsInstance(active.registry_complete, bool)
 
 
+class ImplementationReviewFieldsTest(unittest.TestCase):
+    """Automatic-lifecycle-orchestration CP1: ``WorkItemView`` exposes the
+    ``"2.2"`` implementation-review ledger and D2a's block pins, read
+    verbatim from the entry. Interpreting the ledger is
+    ``evidence.read_implementation_review_ledger``'s job, not this
+    reader's; a malformed pin list is refused, never read as "no pins"."""
+
+    _LEDGER = {
+        "review_content_id": "c" * 64,
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+            "bundle_id": "b" * 64, "verdict": "APPROVE", "round": 1,
+            "completed_at": "2026-09-23T00:00:00Z",
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": None,
+    }
+    _PINS = [{"bundle_id": "d" * 64, "review_content_id": "c" * 64,
+              "recorded_at": "2026-09-23T00:00:00Z"}]
+
+    def _read(self, **overrides):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wi = _minimal_work_item(governing_workflow_version="2.2", **overrides)
+            fixtures.write_workflow_state(root, _state({"wi-1": wi}, active_work_item_id="wi-1"))
+            return target_state.read(fixtures.build_target_managed_repository(root))
+
+    def test_fields_are_read_verbatim(self) -> None:
+        view = self._read(implementation_review_stages=self._LEDGER,
+                          technical_review_block_pins=self._PINS).work_items["wi-1"]
+        self.assertEqual(view.implementation_review_stages, self._LEDGER)
+        self.assertEqual(view.technical_review_block_pins, tuple(self._PINS))
+
+    def test_absent_fields_read_as_none_and_empty(self) -> None:
+        view = self._read().work_items["wi-1"]
+        self.assertIsNone(view.implementation_review_stages)
+        self.assertEqual(view.technical_review_block_pins, ())
+        view = self._read(implementation_review_stages=None,
+                          technical_review_block_pins=None).work_items["wi-1"]
+        self.assertIsNone(view.implementation_review_stages)
+        self.assertEqual(view.technical_review_block_pins, ())
+
+    def test_a_malformed_ledger_is_carried_verbatim_for_the_fail_closed_reader(self) -> None:
+        view = self._read(implementation_review_stages=["not", "an", "object"]).work_items["wi-1"]
+        self.assertEqual(view.implementation_review_stages, ["not", "an", "object"])
+
+    def test_malformed_pins_refuse_rather_than_read_as_no_pins(self) -> None:
+        for pins in ({"bundle_id": "d" * 64}, "d" * 64, [["d" * 64]], [self._PINS[0], 7]):
+            with self.subTest(pins=pins):
+                with self.assertRaises(MalformedWorkflowStateError) as ctx:
+                    self._read(technical_review_block_pins=pins)
+                self.assertIn("technical_review_block_pins", str(ctx.exception))
+
+    def test_fixture_defaults(self) -> None:
+        view = fixtures.build_work_item_view()
+        self.assertIsNone(view.implementation_review_stages)
+        self.assertEqual(view.technical_review_block_pins, ())
+
+
 class ReadOnlySourceScanTest(unittest.TestCase):
     """The structural proof CP3's plan section requires: `target_state.py`
     can never write. AST-walks the *live* module source -- a later edit

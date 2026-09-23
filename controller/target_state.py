@@ -154,6 +154,18 @@ class WorkItemView:
     incomplete_children: tuple[str, ...]
     registry_complete: bool | None
     state_revision: int | None
+    #: The ``"2.2"`` two-stage implementation-review ledger
+    #: (``workflow_state.record_local_implementation_review``/
+    #: ``record_manual_implementation_review``), read verbatim -- ``None``
+    #: when the entry carries none. Its shape is interpreted, fail closed,
+    #: only by ``evidence.read_implementation_review_ledger``.
+    implementation_review_stages: dict | None
+    #: D2a's durable ``BLOCK``-verdict pins
+    #: (``workflow_state.record_technical_review_block_pin``), read
+    #: verbatim as a tuple -- ``()`` when the entry carries none. A present
+    #: value that is not a list of objects is refused at read time
+    #: (:func:`_read_technical_review_block_pins`), never read as "no pins".
+    technical_review_block_pins: tuple[dict, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -317,6 +329,29 @@ def _resolve_registry_complete(root: Path, work_item_id: str, entry: dict) -> bo
     )
 
 
+def _read_technical_review_block_pins(
+    state_path: Path, work_item_id: str, entry: dict,
+) -> tuple[dict, ...]:
+    """``technical_review_block_pins`` verbatim, as a tuple -- ``()`` when
+    the field is absent or ``null``. A pin is a refusal wherever it is
+    read (``workflow_state.is_technical_review_block_pinned``), so reading
+    a malformed value as "no pins" would be the fail-open direction: a
+    value that is not a list of JSON objects -- which no Workflow writer
+    produces, and which ``_validate_technical_review_block_pins`` refuses
+    -- is :class:`~controller.errors.MalformedWorkflowStateError` instead."""
+    pins = entry.get("technical_review_block_pins")
+    if pins is None:
+        return ()
+    if not isinstance(pins, list) or not all(isinstance(pin, dict) for pin in pins):
+        raise MalformedWorkflowStateError(
+            f"{state_path}'s work_items[{work_item_id!r}].technical_review_block_pins is "
+            f"not a list of JSON objects",
+            evidence={"state_path": str(state_path), "work_item_id": work_item_id,
+                      "technical_review_block_pins": pins},
+        )
+    return tuple(pins)
+
+
 def _build_work_item_view(
     root: Path, work_item_id: str, entry: dict, raw_work_items: dict,
 ) -> WorkItemView:
@@ -349,6 +384,10 @@ def _build_work_item_view(
         incomplete_children=incomplete_children,
         registry_complete=registry_complete,
         state_revision=entry.get("state_revision"),
+        implementation_review_stages=entry.get("implementation_review_stages"),
+        technical_review_block_pins=_read_technical_review_block_pins(
+            root / _STATE_REL_PATH, work_item_id, entry,
+        ),
     )
 
 
@@ -369,7 +408,10 @@ def read(managed_repo: ManagedRepository) -> WorkflowSnapshot:
        :class:`~controller.errors.UnknownPhaseError`;
     5. any work item's own declared, unresolvable/unreadable/unparseable/
        cross-linked registry ->
-       :class:`~controller.errors.MalformedTargetRegistryError`.
+       :class:`~controller.errors.MalformedTargetRegistryError`;
+    6. any work item's ``technical_review_block_pins`` that is present but
+       not a list of JSON objects ->
+       :class:`~controller.errors.MalformedWorkflowStateError`.
 
     Deliberately does **not** resolve ambiguity between multiple
     candidate work items -- that needs a caller-supplied ``--work-item``

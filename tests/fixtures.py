@@ -279,6 +279,8 @@ def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
         incomplete_children=(),
         registry_complete=None,
         state_revision=1,
+        implementation_review_stages=None,
+        technical_review_block_pins=(),
     )
     defaults.update(overrides)
     return WorkItemView(**defaults)
@@ -397,19 +399,32 @@ def write_manifest(root: Path, bundle_dir_rel: Path | str, text: str) -> Path:
 def build_manifest_text(
     *, bundle_id: str | None = "b" * 64, generation_head: str | None = "0" * 40,
     stage: str | None = None, work_item_id: str | None = None, plan_revision: int | str | None = None,
+    review_content_id: str | None = None, reviewed_implementation_head: str | None = None,
+    implementation_revision: int | str | None = None, worktree_root: str | None = None,
 ) -> str:
     """A ``MANIFEST.md`` in the generator's own line order. ``stage``/
-    ``work_item_id``/``plan_revision`` default to ``None`` (line omitted),
-    so every caller that does not pass them gets byte-identical output."""
+    ``work_item_id``/``plan_revision`` and the implementation-stage
+    ``review_content_id``/``reviewed_implementation_head``/
+    ``implementation_revision``/``worktree_root`` default to ``None`` (line
+    omitted), so every caller that does not pass them gets byte-identical
+    output."""
     lines = ["# Bundle manifest", ""]
     if stage is not None:
         lines.append(f"stage: {stage}")
     if bundle_id is not None:
         lines.append(f"bundle_id: {bundle_id}")
+    if review_content_id is not None:
+        lines.append(f"review_content_id: {review_content_id}")
     if work_item_id is not None:
         lines.append(f"work_item_id: {work_item_id}")
     if plan_revision is not None:
         lines.append(f"plan_revision: {plan_revision}")
+    if reviewed_implementation_head is not None:
+        lines.append(f"reviewed_implementation_head: {reviewed_implementation_head}")
+    if implementation_revision is not None:
+        lines.append(f"implementation_revision: {implementation_revision}")
+    if worktree_root is not None:
+        lines.append(f"worktree_root: {worktree_root}")
     if generation_head is not None:
         lines.append(f"generation_head: {generation_head}")
     lines.append("")
@@ -436,6 +451,50 @@ def write_plan_manifest(root: Path, work_item_id: str, plan_revision: int | str,
     return write_manifest(
         root, f".ai-review/{work_item_id}/current",
         build_plan_manifest_text(work_item_id, plan_revision, **kwargs),
+    )
+
+
+def target_worktree_root(root: Path) -> str:
+    """``git rev-parse --show-toplevel`` for a fixture repository -- the
+    value the real generator records as a manifest's ``worktree_root``."""
+    return run(["git", "rev-parse", "--show-toplevel"], cwd=root).stdout.strip()
+
+
+def build_implementation_manifest_text(
+    work_item_id: str, implementation_revision: int | str, *, worktree_root: str | None,
+    reviewed_implementation_head: str | None = "1" * 40, generation_head: str | None = "0" * 40,
+    bundle_id: str | None = "b" * 64, review_content_id: str | None = "c" * 64,
+    stage: str | None = "implementation",
+) -> str:
+    """An implementation-stage ``MANIFEST.md`` (the counterpart of
+    :func:`build_plan_manifest_text`), coherent with a work item at
+    ``implementation_revision`` whose ``reviewed_implementation_head`` is the
+    one given, generated in ``worktree_root`` at ``generation_head``
+    (``evidence.implementation_bundle_coherence``). Any field passed as
+    ``None`` is omitted."""
+    return build_manifest_text(
+        bundle_id=bundle_id, generation_head=generation_head, stage=stage,
+        work_item_id=work_item_id, review_content_id=review_content_id,
+        reviewed_implementation_head=reviewed_implementation_head,
+        implementation_revision=implementation_revision, worktree_root=worktree_root,
+    )
+
+
+def write_implementation_manifest(
+    root: Path, work_item_id: str, implementation_revision: int | str, *, scoped: bool = True,
+    **kwargs,
+) -> Path:
+    """Write an implementation-stage ``MANIFEST.md`` at the scoped
+    (``.ai-review/<id>/current/``) or flat (``.ai-review/current/``) bundle
+    dir. ``worktree_root`` defaults to the fixture repository's own
+    ``git rev-parse --show-toplevel`` and ``generation_head`` to its
+    current ``HEAD``, so the default output is coherent."""
+    kwargs.setdefault("worktree_root", target_worktree_root(root))
+    kwargs.setdefault("generation_head", current_head(root))
+    bundle_dir = f".ai-review/{work_item_id}/current" if scoped else ".ai-review/current"
+    return write_manifest(
+        root, bundle_dir,
+        build_implementation_manifest_text(work_item_id, implementation_revision, **kwargs),
     )
 
 

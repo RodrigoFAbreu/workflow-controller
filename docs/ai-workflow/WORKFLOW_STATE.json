@@ -821,7 +821,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-execution-hardening-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -887,7 +887,91 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-22T22:31:01Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "5434351cc15fe8afb4b44ff32016c7f9aa7e8ec4b0755d650f690eb21ff440de",
+        "approved_review_content_id": "0aa600449b0f2910ae976ec33c9fabfc94a08964b766ff2c386d5548b234a1a7",
+        "review_content_manifest": [
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2195311d5fb7a1c20712b31eacda0dee9d54e8bf"
+          },
+          {
+            "path": "controller/evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2f27948cac4ea294d63ad215cd6157f9f7443611"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cbe4800672f41e91619cc7a17f993e34e6f63cdf"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b3b7b55e78a040c0eb7611ff56e8574e7e07f70"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-worker-execution-hardening-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "72e51d76618d6eeca9addfee2a3bf4001a5b664e"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "919f2966be1ef0c9be96fa774bade03df78d4006"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8beed85e0e2e44e1c47ab3ec464dcfe0437eb45c"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "45165c2af09d95715a26ba7929759b609da8f0e1"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7fa757859e1744632a6c1fd263db791e0e332ff"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "64748f87ea87c44cf040352f15e4edba911004ba"
+          },
+          {
+            "path": "tests/test_job_validation.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a954d62c8c66ff17db5c86463784fe256e745adc"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dc229e778468031e404f86760c418438e90ccb95"
+          }
+        ],
+        "reviewed_content_commit": "613b95055267f4e5c3c13e6197a2105edacfd2c9",
+        "legacy_evidence": null,
+        "user_confirmation": "I approve workflow-controller-worker-execution-hardening at stage implementation",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-23T08:29:25Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "792dd7ee11fd93f6d9141da83451057c8bda5d0aa58682afcc6b433a783de1eb",
@@ -906,17 +990,22 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 28,
-      "last_transition": "2026-09-23T08:10:49Z",
+      "state_revision": 31,
+      "last_transition": "2026-09-23T08:29:25Z",
       "implementation_review_stages": {
-        "review_content_id": "cda5ff4e3f410ae13af7c03052fe930fda741d5b01caa49f5f254d191844ed40",
+        "review_content_id": "0aa600449b0f2910ae976ec33c9fabfc94a08964b766ff2c386d5548b234a1a7",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "f9ad74ecf8f5dd8c082800fc537c69ab1834a99cde403ca47ba5c8054d6ff294",
+          "bundle_id": "5434351cc15fe8afb4b44ff32016c7f9aa7e8ec4b0755d650f690eb21ff440de",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-09-23T00:00:45Z"
+          "round": 2,
+          "completed_at": "2026-09-23T08:17:23Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5434351cc15fe8afb4b44ff32016c7f9aa7e8ec4b0755d650f690eb21ff440de",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-23T08:26:09Z"
+        }
       }
     }
   }

@@ -1147,12 +1147,15 @@ def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Dec
         # A marker survives only an in-progress or partially failed
         # withdrawal, after which the author files may be stale or gone
         # exactly as in the stale-bundle gate -- so the bare generator is
-        # never the advertised recovery here either.
+        # never the advertised recovery here either. The marker's
+        # "surviving" path can be ``current/`` itself (a failed quarantine
+        # rename), whose author files the steps below then refresh, so the
+        # text never tells the operator to delete surviving paths.
         steps = _plan_bundle_recovery_steps(root, work_item)
         clear = (
-            f"resolve the withdrawal the REJECTED marker at {marker_path} records ({detail}) "
-            "-- its named failed step and surviving paths are cleared first; a successful "
-            "generation then clears the marker itself"
+            f"resolve the failure the REJECTED marker at {marker_path} records ({detail}); "
+            "do not delete surviving author files unless that specific failure requires it "
+            "-- a successful generation then clears the marker itself"
         )
         what_is_required = (
             f"the current bundle was withdrawn ({detail}); {clear}; then, before any plan "

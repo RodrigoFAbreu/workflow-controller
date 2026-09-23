@@ -1014,6 +1014,13 @@ class StalePlanBundleGateTest(unittest.TestCase):
                 self.assertIn("step rename failed", gate.safe_resume_command)
                 self.assertIn("step rename failed", gate.what_is_required)
                 self._assert_executable_recovery(gate, phase)
+                # Manual-external implementation review round 1, O1: the
+                # marker's surviving path can be current/ itself, so the
+                # text must never read as an instruction to delete it.
+                for text in (gate.safe_resume_command, gate.what_is_required):
+                    self.assertNotIn("cleared first", text)
+                    self.assertIn("do not delete surviving author files", text)
+                    self.assertIn("a successful generation then clears the marker itself", text)
 
     def test_rejected_marker_gate_elsewhere_is_unchanged(self) -> None:
         fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="step rename failed")

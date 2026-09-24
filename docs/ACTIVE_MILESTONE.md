@@ -94,4 +94,35 @@ The previous milestone's narrative is archived at
     isolation. It checks the killed grandchild's liveness right after the timeout, without
     waiting for the orphan to be reaped. CP2 does not touch `worker.py` or that test.
 
-**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for CP3.
+- **CP3 -- packaged-runtime regression suite: complete.**
+  - New `tests/test_packaged_runtime.py`. Each class builds one wheel from a committed
+    generation-1 `build_checkout` clone, installs it non-editably into a fresh venv
+    (`fixtures.wheel_install`, `pip install --no-deps --no-index`), and runs the installed
+    console script as a subprocess. It uses the stub Workflow Manager and `tests/fake_claude.py`,
+    which performs `/milestone-plan`'s transition on a `"2.1"` `PLANNING` target. The module
+    skips on a missing build prerequisite, or fails with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`.
+  - Cases:
+    1. the reproduced defect: `step` exits `0` with a `FINISHED` job and no `git archive` in its
+       output;
+    2. and 3. the checkout deleted, then renamed: `--version`, `inspect`, `status` and `step` all
+       work, with the build's identity;
+    4. the checkout moved to `9.9.9` and generation 2 after install: the install keeps its
+       identity, with no handoff and an XDG runtime root;
+    5. a venv inside the checkout: `status`, `inspect` and `step` record the build's commit, not
+       the clone's new `HEAD`, and no `.controller` appears under the venv or the clone;
+    6. `--version`, `METADATA` and `BUILD_INFO` agree;
+    7. an edited installed byte: exit `20`, naming the package digest, with no worker and no job;
+    8. a generation-2 wheel reinstalled under a paused `run`: exit `50`, and `handoff.json`
+       names both versions;
+    9. an editable install is still `source`/`commit` with row 3, and a dirty edit still needs
+       `--allow-dirty-source`.
+  - Read-only commands run unpinned, so their `controller_runtime` has `source_kind: unpinned`
+    and `generation: null`, the same as a source runtime's. The suite asserts that as the
+    behaviour, not a defect.
+  - `tests/fixtures.py` gains `wheel_install`. `build_checkout` already copied `setup.py` (CP1).
+  - Verified: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime
+    -v` passed (9 tests). `tests.test_buildinfo tests.test_package_structure
+    tests.test_plan_document_consistency tests.test_handoff tests.test_identity` passed (152
+    tests). No product code changed.
+
+**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for CP4.

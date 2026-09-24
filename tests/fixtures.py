@@ -141,6 +141,21 @@ def build_wheel(source: Path, out_dir: Path, *, env: dict | None = None,
     )
 
 
+def wheel_install(wheel: Path, venv_dir: Path, *, reinstall: bool = False) -> Path:
+    """A non-editable ``pip install --no-deps --no-index`` of ``wheel`` into
+    ``venv_dir`` (created first unless ``reinstall``, which instead forces a
+    reinstall into the existing venv), returning the installed
+    ``workflow-controller`` console script."""
+    if not reinstall:
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, capture_output=True)
+    env = dict(os.environ, PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_NO_INPUT="1")
+    args = [str(venv_dir / "bin" / "pip"), "install", "--quiet", "--no-deps", "--no-index"]
+    if reinstall:
+        args.append("--force-reinstall")
+    run([*args, str(wheel)], env=env)
+    return venv_dir / "bin" / "workflow-controller"
+
+
 def build_package_tree(dest: Path, *, generation: int = 1, source_commit: str | None = "a" * 40,
                        source_dirty: bool | None = False, build_origin: str = "local",
                        release_tag: str | None = None, version: str | None = None) -> Path:

@@ -414,5 +414,37 @@ The previous milestone's narrative is archived at
     `python3 tools/ci_workflows.py --check`. `tests.test_plan_document_consistency
     tests.test_package_structure tests.test_checklist_corrections` passed (55).
 
+- **CP10 -- operator documentation: complete.** Documentation and one test module only; no product
+  code changed.
+  - `README.md`:
+    - "Installation" is rewritten: pipx install of the release wheel, verification with
+      `SHA256SUMS`/`sha256sum -c` and `--version`, upgrade (check `active: none` first; same
+      generation continues, a new generation stops `run` with exit `50`, and the two fail-closed
+      `SourceSnapshotError` cases, venv recreation and a Python minor-version change), rollback
+      (newer-generation records and `GenerationHandoffPendingError`) and the editable development
+      install. The old "Only a Controller installed from its own checkout ..." paragraph is gone.
+    - New sections: "Runtime identity" (the three kinds, `BUILD_INFO.json`, `--version`/`status`
+      text, `controller_runtime`, what `build_origin: "release"` does not prove, version versus
+      generation), "Observing workers" (the log files and their `0o600` mode, `step/run --follow`,
+      `follow`, `status` `active:`, no thinking blocks, presentation-only), "Continuous
+      integration" (the `controller`/`conformance`/`package` jobs, `ci.yml`, the generated files,
+      the branch-protection note for the removed `controller-tests` check) and "Releasing" (the
+      five steps, the moved-tag rule and its seconds-long window, concurrency).
+    - "Controller-owned runtime state" now lists the four ladder rows, row 3 source-only, and the
+      old `site-packages/.controller` path that can be deleted. The CLI table gains `follow`,
+      `--follow` and `--version`.
+  - New `docs/adr/0002-release-runtime-identity-and-observability.md`: every scope judgment with
+    its rejected alternative, and `follow`'s `0`/`2`/`20` table. ADR 0001 is unchanged.
+    **For the reviewer:** ADR 0002 records CP7's open item as open: a `follow` whose stdout reader
+    is gone dies with a `BrokenPipeError` traceback (exit `120`), outside those three codes. CP10
+    changes no code, so it states the behaviour rather than hiding it.
+  - `tests/test_plan_document_consistency.py`: `follow` is now a recognised command name, so
+    README `follow` lines are parsed by the live parser (the Gen-1 plan's recognised-line count is
+    still 7). ADR 0002's invocation lines are checked. A new `ReadmeValidateJobTest` reads the job
+    ids from `tools/ci_workflows.py`'s `validate_workflow()` and requires each to appear in the
+    README as a code span, with a negative case.
+  - Verified: `tests.test_plan_document_consistency tests.test_checklist_corrections` passed (47
+    tests).
+
 **Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP10).
+next ready checkpoint (CP11).

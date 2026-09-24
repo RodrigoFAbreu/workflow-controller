@@ -55,14 +55,19 @@ must currently be green against its own claims), then each half's own
 negative/positive instantiation pins the polarity a property that "cannot
 fail" would hide.
 
-The fourth half's recogniser is also run over the two operator documents,
-``README.md`` and the ADR (automatic-lifecycle-orchestration CP8): every
-Controller invocation line they state must parse under the live parser.
+The fourth half's recogniser is also run over the operator documents,
+``README.md`` and the ADRs (automatic-lifecycle-orchestration CP8; ADR 0002
+added by release-runtime-observability CP10): every Controller invocation
+line they state must parse under the live parser. The README must also
+name every job of ``.github/workflows/validate.yml`` (release-runtime-
+observability CP10), read from the ``tools/ci_workflows.py`` model the
+committed file is rendered from.
 """
 
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
 import json
 import re
@@ -83,7 +88,9 @@ REGISTRY_PATH = (
     / "workflow-controller-generation-1-registry.json"
 )
 ADR_PATH = REPO_ROOT / "docs" / "adr" / "0001-controller-generation-1-architecture.md"
+ADR_0002_PATH = REPO_ROOT / "docs" / "adr" / "0002-release-runtime-identity-and-observability.md"
 README_PATH = REPO_ROOT / "README.md"
+CI_WORKFLOWS_PY = REPO_ROOT / "tools" / "ci_workflows.py"
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +380,7 @@ def round_count_violations(plan_text: str, expected: int) -> list[str]:
 # parser.
 # ---------------------------------------------------------------------------
 
-_COMMAND_NAMES = frozenset({"inspect", "explain", "step", "run", "resume", "status"})
+_COMMAND_NAMES = frozenset({"inspect", "explain", "step", "run", "resume", "status", "follow"})
 _INVOCATION_PREFIX_RE = re.compile(r"^(workflow-controller |python(?:\s+\S+)*?\s+-m\s+controller\s)")
 
 
@@ -385,7 +392,7 @@ def extract_invocation_lines(text: str) -> list[str]:
     """Every code span whose text is a **Controller invocation line**:
     it begins ``workflow-controller `` or ``python <flags> -m
     controller ``; its tokens after that prefix contain, as a whole
-    token, one of the six command names; and it contains neither ``[``
+    token, one of the seven command names; and it contains neither ``[``
     nor ``]``. Backtick pairing is scoped to the paragraph (a blank-line
     -delimited span of the raw text), never to the whole document, so an
     unmatched backtick elsewhere cannot pair across a blank line and
@@ -432,6 +439,25 @@ def command_line_violations(text: str, parser) -> list[str]:
                 f"controller.cli.build_parser() -- exit {exc.code}: {buf.getvalue().strip()}"
             )
     return violations
+
+
+def validate_job_ids() -> list[str]:
+    """The job ids of ``validate.yml``, from the model it is rendered
+    from (``tools/ci_workflows.py``, whose ``--check`` and
+    ``tests.test_ci_workflows`` pin the committed file to it)."""
+    spec = importlib.util.spec_from_file_location("ci_workflows", CI_WORKFLOWS_PY)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return list(module.validate_workflow()["jobs"])
+
+
+def readme_validate_job_violations(readme_text: str, job_ids: list[str]) -> list[str]:
+    """Every ``validate.yml`` job id must appear in the README as a code
+    span of its own (`` `controller` ``), so a job added to the required
+    validation cannot go undocumented."""
+    spans = set(re.findall(r"`([^`\n]+)`", readme_text))
+    return [f"README does not name validate.yml job {job!r} as a code span"
+            for job in job_ids if job not in spans]
 
 
 # ---------------------------------------------------------------------------
@@ -511,6 +537,32 @@ class OperatorDocumentCommandLineTest(unittest.TestCase):
 
     def test_every_adr_invocation_line_parses_under_the_live_parser(self) -> None:
         self.assertEqual(command_line_violations(ADR_PATH.read_text(), self.parser), [])
+
+    def test_every_adr_0002_invocation_line_parses_under_the_live_parser(self) -> None:
+        self.assertEqual(command_line_violations(ADR_0002_PATH.read_text(), self.parser), [])
+
+    def test_follow_invocation_lines_are_recognised_and_checked(self) -> None:
+        # Not vacuous: `follow` is a recognised command name, and the
+        # README states at least one `follow` line.
+        lines = extract_invocation_lines(README_PATH.read_text())
+        self.assertTrue(any("follow" in line.split() for line in lines))
+        violations = command_line_violations("`workflow-controller follow --bogus <repo>`", self.parser)
+        self.assertEqual(len(violations), 1)
+
+
+class ReadmeValidateJobTest(unittest.TestCase):
+    """The README names every job of the required validation."""
+
+    def test_the_readme_names_every_validate_job(self) -> None:
+        jobs = validate_job_ids()
+        self.assertEqual(jobs, ["controller", "conformance", "package"])
+        self.assertEqual(readme_validate_job_violations(README_PATH.read_text(), jobs), [])
+
+    def test_a_job_the_readme_does_not_name_fails(self) -> None:
+        text = "The jobs are `controller` and `package`; conformance is mentioned bare."
+        violations = readme_validate_job_violations(text, ["controller", "conformance", "package"])
+        self.assertEqual(len(violations), 1)
+        self.assertIn("'conformance'", violations[0])
 
 
 # ---------------------------------------------------------------------------

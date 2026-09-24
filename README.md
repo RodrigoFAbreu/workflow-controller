@@ -49,19 +49,90 @@ none of which is ever selected or executed).
 
 ## Installation
 
+The Controller is released as a wheel attached to a GitHub Release
+(`https://github.com/RodrigoFAbreu/workflow-controller/releases`). Each
+release carries the wheel, `workflow_controller-<version>-py3-none-any.whl`,
+and a `SHA256SUMS` file. Install it with pipx, so the Controller runs in
+its own venv and never from a checkout:
+
+```bash
+BASE=https://github.com/RodrigoFAbreu/workflow-controller/releases/download/v1.1.0
+pipx install "$BASE/workflow_controller-1.1.0-py3-none-any.whl"
+```
+
+**Verify** a release before you install it. Download both assets, check
+the wheel against `SHA256SUMS`, install the verified file, then check
+what is running:
+
+```bash
+curl -fLO "$BASE/workflow_controller-1.1.0-py3-none-any.whl"
+curl -fLO "$BASE/SHA256SUMS"
+sha256sum -c SHA256SUMS
+pipx install ./workflow_controller-1.1.0-py3-none-any.whl
+workflow-controller --version
+```
+
+`--version` prints `workflow-controller 1.1.0` on its first line and the
+runtime on its second, for a release
+`runtime: package (release v1.1.0; built from <commit>; package <digest>)`
+(see "Runtime identity").
+
+**Upgrade.** First check that nothing is running: `workflow-controller status`
+must show `active: none`. Then install the new wheel over the old one:
+
+```bash
+pipx install --force "$BASE/workflow_controller-<new version>-py3-none-any.whl"
+```
+
+What an upgrade does to a Controller that is already running:
+
+- A running `step` or `run` executes from its own snapshot of the
+  installed package, so the new bytes never reach it.
+- A new release with the same generation (`controller/GENERATION.json`)
+  is ignored by a running `run`, which finishes on the old version.
+- A new generation stops a running `run` at its next orchestration
+  boundary with exit `50` and a handoff record, the same as a newer
+  committed generation does for a source checkout. Rerun `run` with the
+  new version.
+- Two cases fail closed instead. Both surface as `SourceSnapshotError`
+  (exit `20`, `raised_by: "detect"`), not `50`, and in both you simply
+  rerun `run`:
+  - `pipx install --force` deletes and recreates the venv, so a `run`
+    whose boundary check lands in that window finds no installed package;
+  - an upgrade that changes Python's minor version moves the
+    `site-packages` path the snapshot recorded as `origin_source_root`,
+    so the installed package is no longer where the run looks for it.
+
+**Rollback** is the same command with an older wheel:
+`pipx install --force <older wheel URL>`. Going back across a
+generation has two consequences:
+
+- a job record written by the newer generation is refused as
+  `StaleJobRecordError` by the older one, and `resume --abandon` refuses
+  it too. Reinstall the newer version and let its own `resume` clear the
+  record, then roll back. Running `resume` before the rollback avoids
+  this;
+- a `run` still executing the newer generation raises
+  `GenerationHandoffPendingError` (exit `20`) at its next boundary, since
+  the installed generation is now older than the running one.
+
+**Development install.** From a checkout:
+
 ```bash
 pip install -e .
 ```
 
-**Only a Controller installed from its own checkout can run `step`,
-`run` or `resume`.** Those three commands materialise an immutable
-snapshot of the Controller's own source before executing, and an
-unpinned process resolves that source from wherever its own `controller`
-package was imported -- for `pip install .` into `site-packages`, that is
-not a Git repository, so all three refuse with `SourceSnapshotError`. A
-`pip install .`/`pip install -e .` install of this checkout still serves
-the three read-only commands (`inspect`, `explain`, `status`) from
-anywhere.
+An editable install runs the checkout itself, so it is a **source**
+runtime. `step`, `run` and `resume` snapshot the checkout's committed
+`HEAD` with `git archive`. With uncommitted changes to the Controller's
+own files they refuse (`DirtyControllerSourceError`) unless you pass
+`--allow-dirty-source`, which snapshots the working tree instead. Its
+runtime root is `<checkout>/.controller/` (ladder row 3).
+
+A plain `pip install .` of a checkout builds a local wheel and installs
+it as a **package** runtime, like a release. The earlier limitation, that
+only a Controller installed from its own checkout could run `step`, `run`
+or `resume`, is gone.
 
 ## CLI surface
 
@@ -69,11 +140,13 @@ anywhere.
 |---|---|
 | `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only |
 | `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; read-only, always exits 0 |
-| `workflow-controller step <repo>` | execute exactly one automatic action, validate the transition, stop |
-| `workflow-controller run <repo> [--max-steps N]` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
+| `workflow-controller step [--follow] <repo>` | execute exactly one automatic action, validate the transition, stop |
+| `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
 | `workflow-controller resume <repo>` | reconcile this target's non-terminal job records, then report |
 | `workflow-controller resume --abandon JOB_ID [--acknowledge-unverifiable-worker] <repo>` | mark one pending job file terminal instead of reconciling it (see "Job dispositions") |
-| `workflow-controller status` | Controller-owned view: pinned identity, job records, pending handoff |
+| `workflow-controller status` | Controller-owned view: the running Controller, pinned identity, job records, pending handoff, active runs and jobs; read-only |
+| `workflow-controller follow [--job JOB_ID \| --run RUN_ID] [--from-start] [<repo>]` | render a run's or job's events and worker output (see "Observing workers"); writes nothing |
+| `workflow-controller --version` | the version, then the running runtime (see "Runtime identity") |
 
 Global options -- declared on the top-level parser, so they are accepted
 only *before* the subcommand: `--runtime-dir`, `--work-item`,
@@ -100,7 +173,10 @@ is two jobs, so the default allows about ten rounds before exit 16.
 Exit codes are part of the CLI's contract and are normative in
 [`docs/adr/0001-controller-generation-1-architecture.md`](docs/adr/0001-controller-generation-1-architecture.md)
 -- read that table to write an outer supervisor's `case` statement. Exit
-45 (the target worktree is held) is new with this version.
+45 (the target worktree is held) came with the automatic lifecycle
+orchestration work. Version 1.1 adds no exit code: `follow` uses only
+`0`, `2` and `20`
+([`docs/adr/0002-release-runtime-identity-and-observability.md`](docs/adr/0002-release-runtime-identity-and-observability.md)).
 
 ## Automatic dispatch
 
@@ -415,16 +491,161 @@ name that manual step.
 
 ## Controller-owned runtime state
 
-The Controller keeps its own durable state -- pinned source identity, job
-records (`jobs/`, with abandoned originals under `jobs/abandoned/`),
-pending handoff -- under a runtime root resolved by a small
-ladder (`--runtime-dir`, then `WORKFLOW_CONTROLLER_HOME`, then
-`<origin checkout>/.controller/`). This tree is gitignored and disposable
-by design; it is never part of any managed target repository's own state,
-and the Controller never writes into a target repository's
-`WORKFLOW_STATE.json` -- only a worker running a real Workflow command
-does that. The lifecycle lock is an `flock` on the target's existing git
-directory and creates nothing there.
+The Controller keeps its own durable state under a runtime root: pinned
+source identity, job records (`jobs/`, with abandoned originals under
+`jobs/abandoned/`), per-job logs (`jobs/<job_id>/`), run records
+(`runs/`) and the pending handoff. The root is resolved by a ladder, and
+the first row that applies wins:
+
+1. `--runtime-dir`;
+2. `WORKFLOW_CONTROLLER_HOME`;
+3. `<origin checkout>/.controller/`, only for a **source** runtime;
+4. `$XDG_STATE_HOME/workflow-controller`, or
+   `~/.local/state/workflow-controller` when `XDG_STATE_HOME` is unset.
+
+A package runtime (a pipx or other wheel install) never uses row 3, even
+when its venv sits inside a Git checkout, so without the first two rows
+it uses row 4. Before 1.1 a wheel installed into a venv inside a
+checkout resolved to `<site-packages>/.controller`. Every acting command
+from such an install failed, so that directory holds no job history, and
+it can be deleted. `status` prints the resolved root and its ladder row.
+
+This tree is disposable by design. It is never part of any managed
+target repository's own state, and the Controller never writes into a
+target repository's `WORKFLOW_STATE.json` -- only a worker running a
+real Workflow command does that. The lifecycle lock is an `flock` on the
+target's existing git directory and creates nothing there. Deleting
+`runs/` or `jobs/<job_id>/` loses presentation history only: no
+lifecycle decision reads them.
+
+## Runtime identity
+
+Every Controller process knows what code it is running, and records it.
+There are three runtime kinds:
+
+- **`package`**: an installed wheel. The wheel carries
+  `controller/BUILD_INFO.json`, written by the build (`setup.py`'s
+  `build_py` hook), which records the version, the source commit, whether
+  the build's inputs had uncommitted changes, a digest of the package's
+  files, the build origin (`release` or `local`) and the release tag.
+  A package runtime never runs Git and never consults the checkout it was
+  built from. `step`, `run` and `resume` copy the installed package into
+  a snapshot and check the copy against the recorded package digest; an
+  installation edited after it was built is refused (exit `20`). A wheel
+  built from uncommitted changes, or with no verifiable provenance (for
+  example from an sdist), needs `--allow-dirty-source`, like a dirty
+  checkout.
+- **`source`**: a Git checkout whose top level holds the running
+  `controller/` package, tracked. This is what `pip install -e .` gives
+  you.
+- **`unidentified`**: anything else, for example a wheel built without the
+  hook, or a checkout that contains a stray `controller/BUILD_INFO.json`
+  (delete it to run from source). Read-only commands still work and print
+  the reason. `step`, `run` and `resume` refuse with exit `20`.
+
+The Controller never reads installer metadata such as `direct_url.json`.
+
+`workflow-controller --version` prints two lines and writes nothing:
+
+```
+workflow-controller 1.1.0
+runtime: package (release v1.1.0; built from 0123456789ab; package 3f2a1c9d0b7e)
+```
+
+Line 1 is always `workflow-controller <version>`. Line 2 is one of
+`package (release ...)`, `package (local build from <commit>)` with
+`, uncommitted changes` when that applies, `package (local build, unknown
+provenance)`, `source (<checkout> @ <commit>)` with the same suffix, or
+`unidentified (<reason>)`. `status` opens with the same text:
+`controller: workflow-controller 1.1.0 -- package (...)`.
+
+Every job record carries a `controller_runtime` block (`runtime_kind`,
+`version`, `source_kind`, `source_commit`, `tree_digest`,
+`package_digest`, `build_origin`, `release_tag`, `generation`), and so do
+`identity.json` and `SOURCE_PIN.json`. `inspect --json` and
+`explain --json` carry it as `controller`. The older
+`controller_generation`/`controller_source_commit`/`controller_source_tree_digest`
+fields stay.
+
+What `build_origin: "release"` proves is limited. The build sets it from
+an environment variable, so any local build can claim it. The proof that
+a wheel is a release is its checksum in the GitHub Release's
+`SHA256SUMS`, not `--version`. Build-provenance attestation may come
+later.
+
+The version (`controller/version.py`, `MAJOR.MINOR.PATCH`) and the
+generation (`controller/GENERATION.json`) are separate. The generation is
+the compatibility axis that handoff and job-record validation compare.
+Version 1.1.0 is still generation 1.
+
+## Observing workers
+
+Workers run `claude -p ... --output-format stream-json --verbose`, and
+write their stdout and stderr straight into files under the runtime
+root. The Controller also appends a lifecycle event log per job and per
+`step`/`run`:
+
+| File | Contents |
+|---|---|
+| `jobs/<job_id>/worker.stdout` | the worker's stream, one JSON event per line, verbatim |
+| `jobs/<job_id>/worker.stderr` | the worker's stderr, verbatim |
+| `jobs/<job_id>/events.jsonl` | the job's lifecycle events (`planned`, `launched`, `worker_spawned`, `completed`, `finished`, ...) |
+| `runs/<run_id>.json` | one record per `step`/`run`: its Controller process, state, exit code and jobs |
+| `runs/<run_id>/events.jsonl` | the run's events (`run_started`, `step_started`, `job_started`, `job_ended`, `run_ended`, ...) |
+
+The log files are created with mode `0o600`, since tool output can
+contain secrets. These files are written the same way whether or not
+anyone is watching, and a failed event write is a warning, never a
+change of outcome. There is no retention or pruning.
+
+Three ways to watch:
+
+- **`workflow-controller step --follow <repo>`** and
+  **`workflow-controller run --follow <repo>`** render the run on stderr
+  while it runs, so `--json` stdout stays machine-readable.
+- **`workflow-controller follow <repo>`**, from any terminal, attaches to
+  what is running for `<repo>` (default `.`): the newest running run,
+  else a job whose worker is still active (for example one left running
+  after Ctrl-C). With nothing active it names the last run and the
+  command that replays it, and exits `0`. `--run RUN_ID` or `--job
+  JOB_ID` follows that run or job, live or finished. It replays the last
+  20 events before going live; `--from-start` replays everything. With
+  the global `--json` it prints normalised events, one JSON object per
+  line. It ends with exit `0` when the followed run or job ends, printing
+  the run's own exit code rather than returning it. Ctrl-C ends it with
+  exit `0`, and the run is unaffected. An unknown id, another target's
+  record or an unreadable record is exit `20`.
+- **`workflow-controller status`** lists what is active across the
+  runtime root under `active:` (or `active: none`): each running run with
+  its Controller's liveness, each non-terminal job with its worker's
+  liveness, and the exact `follow` command for each. When `resume`, a
+  held lock (exit `45`) or a Ctrl-C reports a running worker, it prints
+  the `follow` command too.
+
+`follow` must find the runtime root `step` used. It resolves it the same
+way, so from the same install with the same `--runtime-dir` or
+`WORKFLOW_CONTROLLER_HOME` it finds it without options; `status` prints
+the full command.
+
+The rendering shows the worker's session, its text, each tool call
+(`tool Bash: <command>`), each tool result (the first 20 lines), its
+stderr, and the final result with turns, cost and duration, interleaved
+with the Controller's job and run events. After 30 s with no new event
+it prints a heartbeat naming the worker's pid and elapsed time. Thinking
+blocks are never rendered, not even as a marker. The Controller requests
+no thinking output, and the raw `worker.stdout` keeps whatever the CLI
+emitted, as evidence.
+
+**Observation is presentation-only.** No lifecycle decision reads the
+logs or run records; `--follow` is read in exactly one function, which
+starts the renderer; whether anyone followed is recorded nowhere; and
+`follow` writes nothing, takes no lock and sends no signal. The
+in-process renderer writes to its own duplicate of fd 2 without Python's
+stream locks, and it disables itself rather than let a stalled stderr
+reader block the Controller. Killing a follower, or closing the pipe it
+writes to, changes neither the worker nor the exit code. A test runs the
+same lifecycle unfollowed, with `--follow` and with a `follow` attached
+and killed mid-job, and requires identical durable results.
 
 ## Safety model
 
@@ -454,15 +675,103 @@ directory and creates nothing there.
   intentional stop (a durable handoff record, exit 50), never an
   in-process update.
 
+## Continuous integration
+
+`.github/workflows/validate.yml` is the single definition of required
+validation. It is called, never triggered directly, and has three jobs,
+each on `ubuntu-latest` with Python 3.12, read-only permissions and
+`fail-fast: false` for its matrix:
+
+- `controller`: the Controller suite in seven named shards (`identity`,
+  `job`, `resume`, `decision`, `cli`, `worker`, `docs`). A test requires
+  every `tests/test_*.py` module to be in exactly one shard, in
+  `package`, or in the one named exclusion,
+  `tests.test_integration_disposable_repo`, which needs the live
+  `claude` binary and real spend;
+- `conformance`: the seven frozen Workflow conformance suites, one per
+  matrix entry;
+- `package`: builds the wheel, verifies it with
+  `tools/release.py verify-wheel --local`, runs
+  `tests.test_packaged_runtime`, then installs the wheel with pipx and
+  checks `--version`'s first line.
+
+`ci.yml` runs it on every push to `main` and every pull request. A newer
+push to the same ref cancels the run in progress. Pushes to other
+branches are validated through their pull request.
+`workflow-conformance.yml` is managed by the Workflow Manager and is
+untouched.
+
+The three workflow files are generated. Edit the model in
+`tools/ci_workflows.py`, then run `python3 tools/ci_workflows.py --write`;
+`python3 tools/ci_workflows.py --check` (and a test) fails when a
+committed file differs from the model.
+
+`ci.yml` and `validate.yml` replace `controller-tests.yml`. A
+branch-protection rule that required the old `controller-tests` check
+must now require the `validate / controller (...)` checks (and, if you
+want them, `validate / conformance (...)` and `validate / package`).
+
+## Releasing
+
+For maintainers:
+
+1. Bump `__version__` in `controller/version.py` (plain
+   `MAJOR.MINOR.PATCH`, no pre-releases) in a pull request to `main`.
+2. After it merges, tag that `main` commit `v<version>` and push the tag:
+   `git tag v1.2.0 <commit>` then `git push origin v1.2.0`.
+3. `release.yml` runs on the tag. Its `validate` job is the same
+   `validate.yml` as CI. `build` then checks the tag against the version
+   (`tools/release.py verify-tag`), requires the tagged commit to be on
+   `origin/main`, builds the wheel with
+   `WORKFLOW_CONTROLLER_RELEASE_TAG` set, verifies it
+   (`verify-wheel --tag`), smoke-tests it with pipx and writes
+   `SHA256SUMS`. `publish` refuses a tag that already has a release
+   (`check-unpublished`), re-verifies the wheel, checks that the tag
+   still names the commit that was built (`verify-tag-commit`) and runs
+   `gh release create` with the wheel and `SHA256SUMS`.
+4. Once, enable the repository's **immutable releases** setting. It makes
+   a published release's assets and tag unchangeable, even by an admin,
+   and a workflow cannot turn it on for itself.
+5. A failed or bad release is fixed with a new PATCH version, never by
+   moving or re-pushing a tag. `publish` refuses a tag that already has a
+   release, so a re-pushed tag publishes nothing.
+
+A tag moved while its release is running is refused by
+`verify-tag-commit`, and the run queued for the moved tag then releases
+the new commit. The one gap is the few seconds between that check and
+`gh release create`; once the release is published, immutable releases
+close it.
+
+`build_origin: "release"` in a wheel's `BUILD_INFO.json` is not proof of
+origin (see "Runtime identity"): check the wheel against the release's
+`SHA256SUMS`.
+
+Release runs never cancel each other: a second run for the same tag
+queues behind the first, and runs for different tags are independent.
+Only `publish` has write permission, and every action in `release.yml`
+is pinned to a commit SHA.
+
 ## Development
 
 ```bash
+pip install -e .
 python3 -m unittest discover -s tests -t .          # the Controller's own suite
+CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v  # wheel build + venv install
 CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_repo -v  # opt-in: live claude, real spend
+python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```
+
+The packaging tests skip when a build prerequisite is missing, unless
+`CONTROLLER_REQUIRE_PACKAGING_TESTS=1` makes that a failure. A local wheel
+build refuses a stale `build/` directory left by an earlier build that
+held files this one does not; delete `build/` and rebuild.
 
 See `docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` for the full design record,
 `docs/ai-workflow/CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md`
 for the implementation-stage automation, routing and concurrency design,
-and `docs/adr/0001-controller-generation-1-architecture.md` for the
-decisions most likely to matter to a later generation.
+`docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md` for
+the release, runtime-identity and observation design,
+`docs/adr/0001-controller-generation-1-architecture.md` for the
+decisions most likely to matter to a later generation, and
+`docs/adr/0002-release-runtime-identity-and-observability.md` for this
+release's.

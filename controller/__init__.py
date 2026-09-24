@@ -11,11 +11,11 @@ this literal always names exactly the modules that exist under
 """
 
 from . import (
-    buildinfo, version, errors, repo_policy, runtime, lock, identity, decision, managed_repo, target_state, evidence, routing,
-    worker, handoff, job, observe, cli,
+    buildinfo, version, errors, repo_policy, gitrepo, forge, runtime, lock, identity, decision, managed_repo,
+    target_state, evidence, routing, worker, handoff, job, observe, cli,
 )
 
 __all__ = [
-    "buildinfo", "version", "errors", "repo_policy", "runtime", "lock", "identity", "decision", "managed_repo", "target_state",
-    "evidence", "routing", "worker", "handoff", "job", "observe", "cli",
+    "buildinfo", "version", "errors", "repo_policy", "gitrepo", "forge", "runtime", "lock", "identity", "decision",
+    "managed_repo", "target_state", "evidence", "routing", "worker", "handoff", "job", "observe", "cli",
 ]

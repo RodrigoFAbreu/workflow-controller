@@ -592,3 +592,44 @@ class InvalidRepositoryPolicyError(ControllerError):
     """
 
     code = "INVALID_REPOSITORY_POLICY"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-trunk-branch-pr-release-orchestration CP3 -- the
+# target-repository Git boundary (``controller.gitrepo``) and the GitHub
+# boundary (``controller.forge``).
+# ---------------------------------------------------------------------------
+
+
+class GitOperationError(ControllerError):
+    """A Git call against the target repository failed, or its result could
+    not be classified, or a precondition the Git boundary checks itself
+    refused the operation (a push that is not a fast-forward, a tag that
+    already exists, a merge that conflicted, a dirty tracked tree).
+
+    ``evidence`` carries ``argv``, ``exit_code`` and ``stderr`` for a failed
+    call, and the refusal's own facts otherwise (for example
+    ``remote_commit`` for a tag that already exists on the remote, or
+    ``conflicts`` for an aborted merge). A rejected mutation is never
+    retried with force.
+    """
+
+    code = "GIT_OPERATION_FAILED"
+
+
+class ForgeError(ControllerError):
+    """The forge answered, and the answer refuses the operation: the
+    repository ``gh`` resolves is not the policy's, a created pull request's
+    URL names another repository, or an asset upload targets a release that
+    is not a draft."""
+
+    code = "FORGE_ERROR"
+
+
+class ForgeUndecidableError(ForgeError):
+    """A ``gh`` call's outcome cannot be classified: authentication or
+    network failure, a server error, a missing ``gh`` executable, a timeout,
+    or output that does not parse as the documented shape (I9). Never read
+    as "absent": the caller refuses, and re-reads on a later attempt."""
+
+    code = "FORGE_UNDECIDABLE"

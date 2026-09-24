@@ -1033,3 +1033,57 @@ def build_target_managed_repository(root: Path):
         verify={"returncode": 0, "stdout": "", "stderr": ""},
         status={"returncode": 0, "stdout": "", "stderr": ""},
     )
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-trunk-branch-pr-release-orchestration CP3 -- a bare
+# origin with a clone, and the fake ``gh``.
+# ---------------------------------------------------------------------------
+
+FAKE_GH = Path(__file__).resolve().parent / "fake_gh.py"
+FAKE_GH_REPOSITORY = "example-owner/example-repo"
+
+
+def build_origin_pair(tmp: Path, *, trunk: str = "main") -> tuple[Path, Path]:
+    """``(origin, clone)``: a bare ``origin.git`` under ``tmp`` whose
+    ``trunk`` holds one commit, and a clone of it (``clone``, on ``trunk``,
+    with an ``origin`` remote and a committer identity)."""
+    origin, clone = tmp / "origin.git", tmp / "clone"
+    run(["git", "init", "-q", "--bare", f"--initial-branch={trunk}", str(origin)])
+    run(["git", "init", "-q", f"--initial-branch={trunk}", str(clone)])
+    run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=clone)
+    run(["git", "config", "user.name", "Controller Tests"], cwd=clone)
+    (clone / "README.md").write_text("fixture\n")
+    commit_all(clone, "Initial commit")
+    run(["git", "remote", "add", "origin", str(origin)], cwd=clone)
+    run(["git", "push", "-q", "origin", f"refs/heads/{trunk}:refs/heads/{trunk}"], cwd=clone)
+    run(["git", "fetch", "-q", "origin"], cwd=clone)
+    return origin, clone
+
+
+def fake_gh_env(tmp: Path, *, origin: Path, repository: str = FAKE_GH_REPOSITORY,
+                failures: dict[str, str] | None = None) -> dict[str, str]:
+    """An environment whose ``PATH`` resolves ``gh`` to ``tests/fake_gh.py``,
+    over a fresh state file for ``repository`` under ``tmp/fake-gh``, reading
+    branches and tags from ``origin``. ``FAKE_GH_STATE`` and ``FAKE_GH_LOG``
+    name the state file and the invocation log."""
+    from tests import fake_gh
+
+    home = tmp / "fake-gh"
+    bin_dir = home / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "gh"
+    if not shim.exists():
+        shim.symlink_to(FAKE_GH)
+    state = home / "state.json"
+    if not state.exists():
+        fake_gh.write_state(state, fake_gh.initial_state(repository))
+    env = dict(os.environ)
+    env.update({
+        "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}",
+        "FAKE_GH_STATE": str(state),
+        "FAKE_GH_ORIGIN": str(origin),
+        "FAKE_GH_LOG": str(home / "invocations.jsonl"),
+        "FAKE_GH_FAIL": json.dumps(failures or {}),
+    })
+    return env

@@ -182,3 +182,85 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
       ran 1335 tests, OK (6 skipped), in 101 s;
     - `python3 tools/ci_workflows.py --check`: passes.
+- **CP3 -- Git and GitHub boundaries: complete.**
+  - New `controller/gitrepo.py` and `controller/forge.py`, after `repo_policy` in the dependency
+    order. Both import only `errors`, and `forge` imports `gitrepo`'s runner. New errors:
+    `GitOperationError` (`GIT_OPERATION_FAILED`), `ForgeError` (`FORGE_ERROR`) and its subclass
+    `ForgeUndecidableError` (`FORGE_UNDECIDABLE`).
+  - `gitrepo`: module functions taking the repository root and an injectable `runner`
+    (`argv -> CompletedProcess`, bytes). The default, `subprocess_runner(env)`, closes stdin and
+    sets `LC_ALL=C`, `GIT_TERMINAL_PROMPT=0` and a 600 s timeout. A failed call raises
+    `GitOperationError` with argv, exit code and stderr. A missing `git` and a timeout raise it
+    too.
+    - Reads: `head_state` (branch or detached, `None` commit when unborn), `ref_commit`,
+      `tag_commit`, `is_ancestor`, `ahead_behind`, `merge_base`, `first_parent_log` (oldest
+      first), `tracked_changes`, `common_dir`, `remote_url`, `ls_remote` (peels annotated tags:
+      it asks for each ref's `^{}` line explicitly, because a pattern does not match it, and
+      keeps exact names only), `show` (absent path is `None`, unknown revision refuses),
+      `commit_trailers` (`%(trailers:only,unfold)`, the last-paragraph rule), and
+      `worktree_branches` (`git worktree list --porcelain -z`, detached is `None`; TBR-R4-002).
+      An "absent" answer needs the expected exit code, empty stdout and the expected stderr (empty,
+      or `No such remote`). Any other outcome refuses (I9).
+    - `fetch` accepts only non-forced refspecs into `refs/remotes/<remote>/`, or exactly
+      `refs/tags/*:refs/tags/*`, which fails rather than overwrites a differing local tag. It
+      checks them before running anything. It passes `--no-tags` and never `--prune`.
+      `fetch_branch` is the one-branch form.
+    - `create_and_switch` (refuses an existing branch), `switch` (clean tracked tree only),
+      `fast_forward` (`merge --ff-only`, with `HEAD` on the branch).
+    - `push_branch`: `ls-remote`, then, if the remote has the branch, fetch it and require it to be
+      an ancestor of the local tip. Otherwise it refuses (`reason: not_fast_forward`) without
+      contacting the remote again. The push is `refs/heads/B:refs/heads/B`, no `+`.
+    - `create_annotated_tag` refuses an existing local tag. `push_tag` refuses when the remote
+      already has the tag at any commit, the same one included (`reason: exists`,
+      `remote_commit`). A rejected push is re-read and reported, never retried.
+    - `merge_trunk`: clean tracked tree, `git merge --no-ff --no-edit refs/remotes/<remote>/<trunk>`.
+      On conflict it lists the unmerged paths, runs `git merge --abort` and refuses. Nothing in
+      the lifecycle calls it.
+  - `forge`: the `Forge` protocol and `GhForge(repository, runner, gh="gh")`. Every call passes
+    `--repo OWNER/NAME`, except `gh repo view`, which has no such flag and takes the repository
+    as its positional argument. Typed results: `RepositoryIdentity`, `PullRequest`, `Checks`
+    (`checks` or `no_checks`), `Release` and `ReleaseAsset`.
+    - `repository_identity`, `verify_repository` (a mismatch is `ForgeError`), `list_prs(head)`,
+      `view_pr`, `create_draft_pr` (parses the URL, refuses another repository's URL, then
+      re-reads with `view_pr`), `mark_ready`, `pr_checks`, `view_release` (`None` only for exit
+      1 with `release not found`), `create_release` (`--verify-tag`, never a draft), `upload_assets`
+      (draft only; `ForgeError` otherwise), `publish_draft`, and `download_assets`.
+    - `list_prs(head)` takes no base. `gh pr list --head` filters by name, and I6 needs to see a
+      PR with the right head and the wrong base, so the base check belongs to CP7's identity
+      verification, not to a filter. A full page (`--limit 200`) is undecidable, since it may
+      be truncated.
+    - `pr_checks` follows the plan's exit-code table: JSON with exit 0, 8 or 1 means checks; exit
+      1 with `no checks reported` and no JSON means `no_checks`; anything else is undecidable.
+      `bucket` must be one of `pass`, `fail`, `pending`, `skipping` or `cancel`.
+    - Records are type-checked field by field (`bool` is never accepted as `int`, and OIDs must
+      be hex). Anything malformed is `ForgeUndecidableError`, and so is every failed `gh` call
+      and every failed mutation. There is no merge, close, delete, edit-body, comment or `api`
+      operation.
+  - `tests/fake_gh.py` (executable): PRs and releases live in a JSON state file, and branches
+    and tags are read from the bare origin through Git. Every argv is logged first. Failure
+    injection per `"<group> <sub>"` or `"*"`: `auth` (exit 4), `network`, `server_error`,
+    `malformed` and `malformed:<exit>`. It requires `--repo` on every call except `repo view`.
+    It models: `pr create` failing with no commit beyond the base and with a duplicate open
+    head/base (TBR-R5-001, TBR-R6-002); `pr list --head` by name over closed and merged PRs
+    (TBR-R5-002); an open PR's `headRefOid` following the origin; `pr checks` exit codes 0, 8
+    and 1, and `no checks reported`; `release create --verify-tag`; and `upload`/`download`
+    that never overwrite. It has no `pr merge`. A fixture seeds the state file directly
+    (TBR-R6-003).
+  - `tests/fixtures.py`: `build_origin_pair(tmp)` (a bare origin plus a clone on `main`) and
+    `fake_gh_env(tmp, origin=..., failures=...)` (`PATH` shim and state file).
+  - Tests: `tests/test_gitrepo.py` (24), `tests/test_forge.py` (21) and
+    `tests/test_no_rewrite_invariants.py` (5), all in the `trunk` CI shard, with `validate.yml`
+    regenerated. The static scans read list and tuple argv literals in `controller/*.py`. The Git
+    scan checks the plan's rewrite spellings, plus any mutating Git subcommand outside
+    `gitrepo.py`. The forge scan checks `pr merge`, `pr close`, `release delete`, `--clobber`
+    and `gh api`. A planted module shows that identifiers and prose are not flagged. A
+    self-check keeps the scan from passing vacuously. For now, `test_forge` asserts at module
+    teardown that no fake `gh` log contains `pr merge`/`pr close`. The suite-level e2e assertion
+    comes with CP9.
+  - Verified:
+    - narrow: `tests.test_gitrepo`, `tests.test_forge`, `tests.test_no_rewrite_invariants`,
+      `tests.test_package_structure`, `tests.test_write_containment`, `tests.test_ci_workflows`
+      (116 tests), OK;
+    - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
+      ran 1385 tests, OK (6 skipped), in 104 s;
+    - `python3 tools/ci_workflows.py --check`: passes.

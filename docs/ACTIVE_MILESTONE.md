@@ -535,6 +535,42 @@ The previous milestone's narrative is archived at
     line. No change was made in CP11: this is a verification checkpoint, and the plan does not
     list the event kind.
 
-**Next action:** `/milestone-implement workflow-controller-release-runtime-observability`. Every
-checkpoint is complete, so the next invocation enters self-review (step 2) and then generates the
-implementation bundle.
+## Self-review (`SELF_REVIEWING_IMPLEMENTATION`)
+
+The phase was already `SELF_REVIEWING_IMPLEMENTATION` (written by CP11's `complete_checkpoint`), so
+`enter_self_reviewing_implementation` was a no-op (`state_revision` stayed at 42) and there was no
+state commit. The review covered the full diff from `16c3fb4` to `be6a934`: every product module
+(`buildinfo`, `version`, `identity`, `runtime`, `handoff`, `worker`, `job`, `observe`, `cli`),
+`setup.py` and `tools/release.py`/`tools/ci_workflows.py`. No Blocking findings. One Important
+finding was fixed with a regression test, and one Minor finding was fixed. One Minor finding was
+left as it is.
+
+- **I1 (Important, fixed):** `follow` with a stdout whose reader is gone (`follow | head`) died with
+  a `BrokenPipeError` traceback and exit `120`, outside the plan's `0`/`2`/`20` contract. This was
+  CP7's open item, which ADR 0002 recorded. `cmd_follow` now treats it like Ctrl-C: the operator
+  stopped reading, so it exits `0`. It drops `sys.stdout` so the interpreter's final flush of the
+  unwritable buffer cannot raise again. It does not `dup2` `/dev/null` over the descriptor, which
+  the write-containment scan would flag. The "nothing active" line now goes through the same
+  flushing sink, so a broken pipe there is caught too. `tests.test_cli` gains
+  `test_a_stdout_whose_reader_is_gone_exits_0_without_a_traceback`, a real subprocess, since only
+  the interpreter's exit shows it. It covers both `--run --from-start` and a bare `follow`. A
+  negative control (the fix stashed) failed both subtests with exit `120`. CP7's detach test now
+  asserts exit `0` and no traceback, where it used to assert only "not `0`". ADR 0002 and the
+  README state the behaviour.
+- **M1 (Minor, fixed):** `FdSink` decoded the `FIONREAD` count as little-endian. It now uses
+  `sys.byteorder`, the kernel's native `int`.
+- **M2 (Minor, left):** `rate_limit_event` renders as `worker unknown event rate_limit_event`
+  (CP11's observation). The plan's presentation table maps any unlisted type to `unknown`, so
+  suppressing or naming it would be a presentation change the plan does not make. It is left for
+  the reviewer.
+
+Verified after the fixes:
+- `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .` (no
+  `PYTHONPATH`): **Ran 1275 tests in 97.1 s, OK (skipped=6)**. That is CP11's 1274 plus the new
+  test.
+- The seven conformance suites, from `scripts/`: 218, 853, 19, 260 (skipped 1), 146 (skipped 18),
+  106 and 79 tests, all OK.
+- `python3 tools/ci_workflows.py --check`: exit `0`.
+
+**Next action:** the implementation bundle (`/milestone-implement` step 4), then the
+`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` gate.

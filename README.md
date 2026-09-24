@@ -612,8 +612,9 @@ Three ways to watch:
   20 events before going live; `--from-start` replays everything. With
   the global `--json` it prints normalised events, one JSON object per
   line. It ends with exit `0` when the followed run or job ends, printing
-  the run's own exit code rather than returning it. Ctrl-C ends it with
-  exit `0`, and the run is unaffected. An unknown id, another target's
+  the run's own exit code rather than returning it. Ctrl-C, or a stdout
+  whose reader has gone (`follow | head`), ends it with exit `0`, and the
+  run is unaffected. An unknown id, another target's
   record or an unreadable record is exit `20`.
 - **`workflow-controller status`** lists what is active across the
   runtime root under `active:` (or `active: none`): each running run with

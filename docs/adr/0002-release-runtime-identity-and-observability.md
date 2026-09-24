@@ -198,18 +198,19 @@ A missing runtime root means there is nothing to follow.
 
 | Code | When |
 |---|---|
-| `0` | the followed run or job ended, there was nothing to follow, or Ctrl-C |
+| `0` | the followed run or job ended, there was nothing to follow, Ctrl-C, or its stdout reader went away |
 | `2` | usage error |
 | `20` | an unknown id, another target's record, or an unreadable record |
 
 It does not mirror the followed run's exit code, so its own code means
 one thing; it prints the run's code in its final line.
 
-Open item, recorded rather than decided: a `follow` whose stdout reader
-has gone away currently dies of an unhandled `BrokenPipeError` (Python's
-exit `120` with a traceback). The followed worker and run are
-unaffected, which the isolation tests assert, but the code is outside
-the three above.
+A `follow` whose stdout reader has gone away (`follow | head`) ends like
+Ctrl-C: the operator stopped reading, so it exits `0` with no traceback.
+It drops its `sys.stdout` so the interpreter's final flush of the
+unwritable buffer cannot raise again (Python's exit `120`). The followed
+worker and run are unaffected either way, which the isolation tests
+assert.
 
 ### Presentation-only enforcement
 

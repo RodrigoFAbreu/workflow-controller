@@ -30,6 +30,7 @@ import json
 import os
 import select
 import stat
+import sys
 import termios
 import textwrap
 import time
@@ -851,7 +852,7 @@ class FdSink:
             capacity = fcntl.fcntl(self.fd, fcntl.F_GETPIPE_SZ)
             unread = bytearray(4)
             fcntl.ioctl(self.fd, termios.FIONREAD, unread)
-            if capacity - int.from_bytes(unread, "little") - size < PIPE_RESERVE_BYTES:
+            if capacity - int.from_bytes(unread, sys.byteorder) - size < PIPE_RESERVE_BYTES:
                 return False
         return True
 

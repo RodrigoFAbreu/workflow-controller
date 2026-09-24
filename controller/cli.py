@@ -399,7 +399,22 @@ def cmd_follow(args: argparse.Namespace) -> int:
     finished, refusing (exit 20) an unknown id or a record for another
     target. Otherwise it follows the newest running run for ``<repo>``, or
     an orphaned job whose worker is still active, or says there is nothing
-    to follow (exit 0). It never mirrors the followed run's exit code."""
+    to follow (exit 0). It never mirrors the followed run's exit code.
+
+    A stdout whose reader has gone (``follow | head``) ends the follow
+    like Ctrl-C does, with exit 0 and no traceback: the operator stopped
+    reading, and nothing else is affected."""
+    try:
+        return _follow(args)
+    except BrokenPipeError:
+        # Nothing more can reach the reader. Dropping `sys.stdout` stops the
+        # interpreter's final flush of the unwritten buffer from raising
+        # again at exit (Python's exit 120).
+        sys.stdout = None
+        return EXIT_OK
+
+
+def _follow(args: argparse.Namespace) -> int:
     runtime_root = _follow_runtime_root(args)
     target_repo = str(managed_repo._resolve_repository_root(Path(args.repo)))
     kind, record_id = ("run", args.run) if args.run else ("job", args.job) if args.job else (None, None)
@@ -408,11 +423,11 @@ def cmd_follow(args: argparse.Namespace) -> int:
         if selected is None:
             last = observe.last_run(runtime_root, target_repo)
             if last is None:
-                print(f"nothing active for {target_repo}; no runs recorded")
+                _stdout_sink(f"nothing active for {target_repo}; no runs recorded")
             else:
-                print(f"nothing active for {target_repo}; last run {last['run_id']} "
-                      f"{_run_outcome(last)}; replay: workflow-controller --runtime-dir {runtime_root} "
-                      f"follow --run {last['run_id']} --from-start {target_repo}")
+                _stdout_sink(f"nothing active for {target_repo}; last run {last['run_id']} "
+                             f"{_run_outcome(last)}; replay: workflow-controller --runtime-dir {runtime_root} "
+                             f"follow --run {last['run_id']} --from-start {target_repo}")
             return EXIT_OK
         kind, record_id = selected
     record = (observe.read_run if kind == "run" else observe.read_job)(runtime_root, record_id)

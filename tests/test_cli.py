@@ -2081,6 +2081,32 @@ class FollowCommandTest(_FollowCliCase):
                 self.assertEqual(code, cli.EXIT_OK)
                 self.assertEqual(_tree_listing(self.runtime_root), before)
 
+    def test_a_stdout_whose_reader_is_gone_exits_0_without_a_traceback(self) -> None:
+        # A real interpreter exit: the final flush of an unwritable stdout is
+        # what turns an unhandled `BrokenPipeError` into exit 120.
+        import subprocess
+        self._run("r-1", exit_code=10)
+        for n in range(1, 200):
+            self._run_event("r-1", n, "step_started", n=n)
+        self._run_event("r-1", 200, "run_ended", exit_code=10)
+        code_root = Path(cli.__file__).resolve().parent.parent
+        env = {**os.environ, "PYTHONPATH": str(code_root)}
+        for argv in (["follow", "--run", "r-1", "--from-start"], ["follow"]):
+            with self.subTest(argv=argv):
+                read_end, write_end = os.pipe()
+                os.close(read_end)
+                try:
+                    proc = subprocess.run(
+                        [sys.executable, "-P", "-m", "controller", "--runtime-dir", str(self.runtime_root),
+                         *argv, str(self.repo)],
+                        stdin=subprocess.DEVNULL, stdout=write_end, stderr=subprocess.PIPE, text=True,
+                        env=env, timeout=60, check=False,
+                    )
+                finally:
+                    os.close(write_end)
+                self.assertEqual(proc.returncode, cli.EXIT_OK, proc.stderr)
+                self.assertEqual(proc.stderr, "")
+
     def test_a_nonexistent_runtime_dir_is_not_created(self) -> None:
         missing = self.tmp_root / "no-runtime"
         out = io.StringIO()

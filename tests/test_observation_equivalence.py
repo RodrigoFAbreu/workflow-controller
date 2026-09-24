@@ -439,8 +439,10 @@ class AttachDetachTest(_ObservationCase):
             broken = self.follower(fx, stdout=write_end)
         finally:
             os.close(write_end)
-        broken.wait(WAIT_SECONDS)
-        self.assertNotEqual(broken.returncode, cli.EXIT_OK, "a follower whose stdout is gone kept going")
+        # A follower whose stdout is gone stops, like Ctrl-C: exit 0, no
+        # traceback (ADR 0002's `0`/`2`/`20`).
+        self.assertEqual(broken.wait(WAIT_SECONDS), cli.EXIT_OK)
+        self.assertNotIn("Traceback", broken.stderr.read())
 
         killed.kill()
         self.assertEqual(killed.wait(WAIT_SECONDS), -signal.SIGKILL)

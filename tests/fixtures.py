@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTROLLER_PKG = REPO_ROOT / "controller"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+SETUP_PY = REPO_ROOT / "setup.py"
+
+#: Set to ``"1"`` to make a missing wheel-build prerequisite a test failure
+#: instead of a skip.
+REQUIRE_PACKAGING_TESTS_ENV = "CONTROLLER_REQUIRE_PACKAGING_TESTS"
 
 
 def run(args: list[str], *, cwd: Path | None = None, env: dict | None = None,
@@ -31,17 +37,19 @@ def run(args: list[str], *, cwd: Path | None = None, env: dict | None = None,
 
 
 def build_checkout(dest: Path, *, generation: int | None = 1, committed: bool = True) -> Path:
-    """Copy this repository's real ``controller/`` package and
-    ``pyproject.toml`` into a fresh directory, and -- unless the caller
-    wants a dirty fixture -- ``git init`` and commit it. A minimal, real
+    """Copy this repository's real ``controller/`` package,
+    ``pyproject.toml`` and ``setup.py`` (the build hook) into a fresh
+    directory, and -- unless the caller wants a dirty fixture -- ``git
+    init`` and commit it. A minimal, real
     checkout the mechanism can be run against without ever touching this
     repository's own working tree."""
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copytree(
         CONTROLLER_PKG, dest / "controller",
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "SOURCE_PIN.json"),
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "SOURCE_PIN.json", "BUILD_INFO.json"),
     )
     shutil.copy2(PYPROJECT, dest / "pyproject.toml")
+    shutil.copy2(SETUP_PY, dest / "setup.py")
     # Without this, the *parent* process's own unpinned import of
     # `controller/` (before it ever reaches materialise()'s dirty check)
     # writes `controller/__pycache__/*.pyc` into the fixture checkout, which
@@ -77,6 +85,60 @@ def editable_install(checkout: Path, venv_dir: Path) -> Path:
     pip = venv_dir / "bin" / "pip"
     run([str(pip), "install", "--quiet", "-e", str(checkout)])
     return venv_dir / "bin" / "workflow-controller"
+
+
+def wheel_build_prerequisite() -> str | None:
+    """``None`` when ``sys.executable -m pip wheel --no-deps
+    --no-build-isolation`` can build this project, otherwise the missing
+    piece. A ``--no-build-isolation`` build needs setuptools >= 70.1, or an
+    older setuptools plus the ``wheel`` package; setuptools merely being
+    importable is not enough."""
+    probe = subprocess.run(
+        [sys.executable, "-c",
+         "import importlib.util, setuptools; "
+         "print(setuptools.__version__); "
+         "print(importlib.util.find_spec('wheel') is not None)"],
+        capture_output=True, text=True, check=False,
+    )
+    if probe.returncode != 0:
+        return f"setuptools is not importable by {sys.executable}"
+    version_text, has_wheel = probe.stdout.split()
+    try:
+        version = tuple(int(part) for part in version_text.split(".")[:2])
+    except ValueError:
+        return f"unparseable setuptools version {version_text!r}"
+    if version < (70, 1) and has_wheel != "True":
+        return f"setuptools {version_text} < 70.1 and the wheel package is not installed"
+    pip = subprocess.run([sys.executable, "-m", "pip", "--version"],
+                         capture_output=True, text=True, check=False)
+    if pip.returncode != 0:
+        return f"pip is not available to {sys.executable}"
+    return None
+
+
+def require_wheel_build(test: unittest.TestCase) -> None:
+    """Skip ``test`` naming the missing prerequisite, or fail it when
+    ``CONTROLLER_REQUIRE_PACKAGING_TESTS=1``."""
+    missing = wheel_build_prerequisite()
+    if missing is None:
+        return
+    if os.environ.get(REQUIRE_PACKAGING_TESTS_ENV) == "1":
+        test.fail(f"wheel-build prerequisite missing: {missing}")
+    raise unittest.SkipTest(f"wheel-build prerequisite missing: {missing}")
+
+
+def build_wheel(source: Path, out_dir: Path, *, env: dict | None = None,
+                check: bool = True) -> subprocess.CompletedProcess:
+    """``pip wheel --no-deps --no-build-isolation`` of ``source`` into
+    ``out_dir`` -- in-tree, through ``source/build``."""
+    full_env = dict(os.environ if env is None else env)
+    full_env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+    full_env.setdefault("PIP_NO_INPUT", "1")
+    return run(
+        [sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation",
+         "--wheel-dir", str(out_dir), str(source)],
+        env=full_env, check=check,
+    )
 
 
 def run_controller_module(args: list[str], *, cwd: Path, env: dict, check: bool = False) -> subprocess.CompletedProcess:

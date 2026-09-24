@@ -1,6 +1,6 @@
 [project]
 name = "workflow-controller"
-version = "1.0.1"
+dynamic = ["version"]
 description = "Workflow Controller -- Generation 1: automates operation of the Workflow state machine over managed repositories."
 requires-python = ">=3.12"
 dependencies = []
@@ -14,3 +14,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["controller"]
+
+[tool.setuptools.dynamic]
+version = {attr = "controller.version.__version__"}
+
+[tool.setuptools.package-data]
+controller = ["GENERATION.json"]

@@ -15,4 +15,6 @@ __pycache__/
 # --- Workflow Controller-owned runtime state (never tracked) ---
 .controller/
 build/
+dist/
 *.egg-info/
+controller/BUILD_INFO.json

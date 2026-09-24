@@ -2,35 +2,63 @@
 
 ## Status
 
-**Complete.** `workflow-controller-automatic-lifecycle-orchestration` reached
-`MILESTONE_COMPLETE` on 2026-09-24. Functional review passed in round 1 with no findings, against
-checklist evidence commit `06d2a0fe61285b45e7c71fb5700b07544b1db61d`. The optional live flow 9 was
-waived: flows 1-8 gave complete no-cost evidence, and the final self-review pass had already run
-the same live lifecycle test.
+**Implementing.** `workflow-controller-release-runtime-observability`, governing workflow version
+`2.2`, base commit `16c3fb4670bfeb9c7ce82aaff13f5a643a3f2400` (the acceptance commit of
+`workflow-controller-automatic-lifecycle-orchestration`). Plan revision 6 was approved by both
+plan-review stages (approval commit `3397e39`). `docs/ai-workflow/WORKFLOW_STATE.json` is the
+ground truth for the phase and for each checkpoint's status.
 
-All ten registry checkpoints (`CP1`-`CP4`, `CP4B`, `CP5`-`CP9`) are `COMPLETE`. Implementation
-revision 1 was approved by both implementation-review stages (technical approval `da42359`), and
-the user accepted the milestone through `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json`
-is the ground-truth record of this transition, and `active_work_item_id` is now `null`. No
-`docs/ROADMAP.md` exists in this repository to update. The full milestone narrative is archived
-verbatim at
-`docs/milestones/completed/workflow-controller-automatic-lifecycle-orchestration.md`. It covers
-the goal, scope, checkpoint progress, self-review and functional-review checklist.
+## Goal
 
-This milestone's own deliverables remain live in the tree, unmoved (see the archive file's own
-preface for why): `docs/ai-workflow/CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md` and its
-registry/mapping files, still at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry
-declares. The previously completed work items and their archived narratives in
-`docs/milestones/completed/` are unaffected.
+Turn the Workflow Controller into an isolated, versioned, releasable runtime, and add live
+observation of the workers it launches, without changing lifecycle semantics:
 
-Deferred follow-ups, not conditions of acceptance:
+- a single semantic version source, `workflow-controller --version`, and a build identity
+  (`controller/BUILD_INFO.json`) embedded in every wheel;
+- a packaged (non-editable wheel/pipx) runtime that launches workers without Git or a source
+  checkout. This fixes the reproduced `git archive failed` defect and the missing
+  `GENERATION.json` in the wheel;
+- durable Controller runtime/release identity in job records, `identity.json` and `status`;
+- GitHub Actions: parallel `fail-fast: false` matrix validation with same-ref cancellation, and a
+  tag-triggered release gated on validation that verifies the tag, version and wheel, refuses
+  duplicates, and publishes an immutable GitHub Release;
+- `stream-json` worker output teed to durable per-job logs, Controller lifecycle event logs,
+  `step/run --follow` and a zero-write `follow` attach command. Observation is presentation-only.
+
+## Plan
+
+- Plan: `docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md`
+- Registry: `docs/ai-workflow/registry/workflow-controller-release-runtime-observability-registry.json`
+  (checkpoints `CP1`-`CP11`)
+- Requirement map: `docs/ai-workflow/requirements/workflow-controller-release-runtime-observability-mapping.json`
+  (`R1`-`R13`)
+
+## Carried-over follow-ups (not in this milestone's scope)
+
+These are from `workflow-controller-automatic-lifecycle-orchestration` and remain deferred:
 - the manual-external gate can name a stale ledger `review_content_id` after a failed local-review
-  job (manual implementation review O1);
-- gates' `explain --work-item <id>` resume hint does not parse as written; the working form is
-  `workflow-controller --work-item <id> explain <repo>` (O2, self-review M1);
+  job (O1);
+- gates' `explain --work-item <id>` resume hint does not parse as written (O2);
 - no explicit test pins `OperatorAbandoned`/`UnreconcilableJobError` records in the apply
   relaunch bound (O3).
 
-**Next action:** none queued. There is no roadmap-defined next milestone in this repository.
-When new work is scoped, run `/milestone-plan` for it. That creates a fresh `work_items` entry
-and claims `active_work_item_id`, ready for `PLANNING`.
+The previous milestone's narrative is archived at
+`docs/milestones/completed/workflow-controller-automatic-lifecycle-orchestration.md`.
+
+## Checkpoint progress
+
+- **CP1 -- version source, build identity, `--version`: complete.**
+  - `controller/version.py` (`__version__ = "1.1.0"`) is the single version source. `pyproject.toml`
+    reads it as the dynamic version and now ships `controller/GENERATION.json` as package data.
+  - `controller/buildinfo.py` (dependency-free, first in the import order) holds
+    `compute_package_digest`, `validate_build_info`, `SEMVER_RE` and the tag helpers.
+  - New `setup.py`: a `build_py` hook that writes `build_lib/controller/BUILD_INFO.json`. It
+    returns early for editable installs, forces re-copies, and refuses a stale `build/`. A release
+    build needs `WORKFLOW_CONTROLLER_RELEASE_TAG`.
+  - `workflow-controller --version` prints `workflow-controller 1.1.0`. The runtime line lands in
+    CP2.
+  - Verified: the baseline suite passed before the first edit (982 tests, 6 skipped). Then
+    `tests.test_buildinfo tests.test_package_structure tests.test_cli` passed (109 tests), and the
+    full suite passed with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` (1016 tests, 6 skipped).
+
+**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for CP2.

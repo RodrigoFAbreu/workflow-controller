@@ -27,7 +27,7 @@ CONTROLLER_DIR = REPO_ROOT / "controller"
 #: `controller/__init__.py`'s own eager-import literal follows. A module at
 #: index *i* may import (from `controller`) only a module at an index < i.
 DEPENDENCY_ORDER = [
-    "errors", "runtime", "lock", "identity", "decision", "managed_repo",
+    "buildinfo", "version", "errors", "runtime", "lock", "identity", "decision", "managed_repo",
     "target_state", "evidence", "routing", "worker", "handoff", "job", "cli",
 ]
 
@@ -88,15 +88,18 @@ class DependencyGraphTest(unittest.TestCase):
                         f"({DEPENDENCY_ORDER}) -- {stem} may only import earlier modules",
                     )
 
-    def test_errors_module_imports_nothing_from_the_package(self) -> None:
-        tree = _parse(CONTROLLER_DIR / "errors.py")
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                self.assertNotEqual(node.module, "controller")
-                self.assertFalse(node.module is None and node.level >= 1)
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    self.assertFalse(alias.name.startswith("controller"))
+    def test_leaf_modules_import_nothing_from_the_package(self) -> None:
+        # `buildinfo` and `version` are also loaded by file path from
+        # `setup.py`, where the package itself is not importable.
+        for leaf in ("buildinfo", "version", "errors"):
+            tree = _parse(CONTROLLER_DIR / f"{leaf}.py")
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    self.assertNotEqual(node.module, "controller", leaf)
+                    self.assertFalse(node.module is None and node.level >= 1, leaf)
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        self.assertFalse(alias.name.startswith("controller"), leaf)
 
 
 class EagerLoadTest(unittest.TestCase):

@@ -24,7 +24,7 @@ import sys
 import time
 from pathlib import Path
 
-from controller import evidence, handoff, identity, job, lock, managed_repo, routing, runtime, target_state
+from controller import evidence, handoff, identity, job, lock, managed_repo, routing, runtime, target_state, version
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
 
@@ -180,8 +180,29 @@ class _RoleAssignmentAction(argparse.Action):
         setattr(namespace, self.dest, assignments)
 
 
+def version_text() -> str:
+    """``--version``'s output. Line 1 is exactly ``workflow-controller
+    <__version__>``, the contract tests and the release pipeline assert."""
+    return f"workflow-controller {version.__version__}"
+
+
+class _VersionAction(argparse.Action):
+    """``--version``: computes its text only when the flag is used, so
+    ``build_parser()`` stays side-effect free. Resolves no runtime root,
+    writes nothing and needs no subcommand."""
+
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest, default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(version_text())
+        parser.exit(EXIT_OK)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="workflow-controller")
+    parser.add_argument("--version", action=_VersionAction,
+                        help="print the Controller version and exit")
     parser.add_argument("--runtime-dir", default=None)
     parser.add_argument("--work-item", default=None)
     parser.add_argument("--workflow-manager", default=None)

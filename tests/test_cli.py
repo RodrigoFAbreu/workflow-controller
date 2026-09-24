@@ -151,6 +151,65 @@ class ParserTest(unittest.TestCase):
         self.assertFalse(hasattr(args, "repo"))
 
 
+class VersionFlagTest(unittest.TestCase):
+    """`--version` (release-runtime-observability CP1): exactly one line,
+    `workflow-controller <__version__>`, exit 0, no subcommand needed,
+    nothing written. CP2 adds the runtime line."""
+
+    def _expected(self) -> str:
+        from controller import version
+        return f"workflow-controller {version.__version__}\n"
+
+    def _assert_version_run(self, result, *, checkout: Path, runtime_dir: Path) -> None:
+        self.assertEqual(result.returncode, cli.EXIT_OK, result.stderr)
+        self.assertEqual(result.stdout, self._expected())
+        self.assertEqual(result.stderr, "")
+        self.assertFalse(runtime_dir.exists())
+        self.assertFalse((checkout / ".controller").exists())
+        status = fixtures.run(["git", "status", "--porcelain", "--ignored"], cwd=checkout)
+        self.assertEqual(status.stdout, "")
+
+    def test_source_checkout_prints_one_line_and_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            checkout = fixtures.build_checkout(tmp_path / "checkout")
+            runtime_dir = tmp_path / "does-not-exist"
+            env = {**os.environ, "PYTHONPATH": str(checkout), "XDG_STATE_HOME": str(tmp_path / "xdg")}
+            result = fixtures.run(
+                [sys.executable, "-P", "-B", "-m", "controller", "--runtime-dir", str(runtime_dir),
+                 "--version"],
+                cwd=tmp_path, env=env, check=False,
+            )
+            self._assert_version_run(result, checkout=checkout, runtime_dir=runtime_dir)
+            self.assertFalse((tmp_path / "xdg").exists())
+
+    def test_editable_install_prints_one_line_and_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            checkout = fixtures.build_checkout(tmp_path / "checkout")
+            console_script = fixtures.editable_install(checkout, tmp_path / "venv")
+            # the editable install itself leaves an ignored *.egg-info behind
+            fixtures.run(["git", "clean", "-fdqX"], cwd=checkout)
+            runtime_dir = tmp_path / "does-not-exist"
+            env = {**os.environ, "XDG_STATE_HOME": str(tmp_path / "xdg"), "PYTHONDONTWRITEBYTECODE": "1"}
+            result = fixtures.run([str(console_script), "--runtime-dir", str(runtime_dir), "--version"],
+                                  cwd=tmp_path, env=env, check=False)
+            self._assert_version_run(result, checkout=checkout, runtime_dir=runtime_dir)
+            self.assertFalse((tmp_path / "xdg").exists())
+
+    def test_needs_no_subcommand_and_runs_no_subprocess(self) -> None:
+        with unittest.mock.patch("subprocess.run", side_effect=AssertionError("subprocess.run")) as run, \
+                unittest.mock.patch("subprocess.Popen", side_effect=AssertionError("Popen")) as popen:
+            parser = cli.build_parser()
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as ctx:
+                parser.parse_args(["--version"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_OK)
+        self.assertEqual(stdout.getvalue(), self._expected())
+        run.assert_not_called()
+        popen.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # A real managed target: `.workflow-manager/installation.json` + a stub
 # `workflow-manager` + a real `WORKFLOW_STATE.json` -- exercises

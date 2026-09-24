@@ -361,5 +361,58 @@ The previous milestone's narrative is archived at
     `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, no skips). `tests.test_identity tests.test_runtime
     tests.test_package_structure` passed, and so did `tests.test_packaged_runtime` (9).
 
+- **CP9 -- GitHub Actions: complete.**
+  - New stdlib-only `tools/ci_workflows.py` holds the three workflows as Python data plus a
+    deterministic emitter. Mappings keep insertion order, lists become block sequences and
+    multi-line strings become `|` blocks. A string is bare only when `SAFE_SCALAR_RE` (a leading
+    letter or `_`, then `[A-Za-z0-9_./@-]`) accepts it and it is not a YAML 1.1 reserved word;
+    anything else is JSON-quoted. So `on` renders as the key `"on":`. `--write` renders
+    `.github/workflows/{validate,ci,release}.yml`. `--check` exits `1` naming each file that
+    differs.
+  - `validate.yml` (`workflow_call` only) has three jobs: `controller`, a 7-shard matrix;
+    `conformance`, the 7 frozen suites; and `package`. `package` pins `setuptools>=70.1`, builds
+    the wheel, runs `verify-wheel --local` with a peeled `$GITHUB_SHA` and
+    `tests.test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, and ends with a
+    pipx smoke test that checks `--version` line 1. Every job is `ubuntu-latest` and
+    `contents: read`, and every matrix sets `fail-fast: false`.
+    `tests.test_integration_disposable_repo` is excluded by name, with the reason recorded in the
+    model.
+  - `ci.yml` runs on `push: main` and on `pull_request`. Its concurrency group is
+    `${{ github.workflow }}-${{ github.ref }}` with cancel-in-progress, and it calls
+    `validate.yml`. `release.yml` follows the plan's steps: `v*` trigger, non-cancelling
+    per-ref concurrency, then `validate`, `build` and `publish`. `publish` is the only job with
+    `contents: write`, and its job-level `env` sets `GH_TOKEN` and `RELEASE_COMMIT`. Every action
+    in `release.yml` is pinned to a 40-hex commit, with its tag in a trailing comment. The
+    commits were read with `git ls-remote` on 2026-09-24: checkout v4, setup-python v5 and
+    upload/download-artifact v4, all lightweight tags. `publish` also runs `setup-python 3.12`
+    after checkout (`tools/release.py` needs `tomllib`). This is an addition to the plan's step
+    list; the ordering the plan requires is unchanged.
+  - **Recorded sources:**
+    - `$GITHUB_SHA`: GitHub's "Events that trigger workflows" page gives it for `push` as the
+      "Tip commit pushed to the ref", so an annotated tag push should carry the commit. The peel
+      is kept regardless.
+    - `gh release create`: with asset arguments it creates a draft, uploads the assets and then
+      publishes. The gh manual says so, and so does `draftWhileUploading` in
+      `cli/cli` `pkg/cmd/release/create/create.go`. That was confirmed, so `publish` uses the
+      single-command form and there is no `gh release edit`.
+
+    Both notes are in the model (`GITHUB_SHA_NOTE`, `GH_RELEASE_CREATE_NOTE`) and in
+    `release.yml`'s header.
+  - Deleted `.github/workflows/controller-tests.yml`. `workflow-conformance.yml` is untouched: a
+    test checks that it still matches its managed digest.
+  - New `tests/test_ci_workflows.py` (44 tests) covers every plan case: `--check` passes and a
+    flipped byte fails it; the emitter golden strings, quoting and the `on` key; the PyYAML
+    round-trip (it runs here because PyYAML is importable); shard coverage; the conformance
+    matrix; the triggers, concurrency, gating, permissions and pinning; the build and publish
+    step order; the peel and its job output; each step's effective `GH_TOKEN`/`RELEASE_COMMIT`;
+    no bare `"$GITHUB_SHA"` passed to `--commit`; no forbidden `gh release` forms; and the
+    artifact contract.
+  - Mutation checks, each reverted afterwards, were all caught: a cancelling release
+    concurrency, `GH_TOKEN` dropped from `publish`, a shard dropped, and a mismatched upload
+    `path`.
+  - Verified: `tests.test_ci_workflows` passed (44), and so did
+    `python3 tools/ci_workflows.py --check`. `tests.test_plan_document_consistency
+    tests.test_package_structure tests.test_checklist_corrections` passed (55).
+
 **Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP9).
+next ready checkpoint (CP10).

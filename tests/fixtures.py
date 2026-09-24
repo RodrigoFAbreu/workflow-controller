@@ -24,6 +24,17 @@ CONTROLLER_PKG = REPO_ROOT / "controller"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 SETUP_PY = REPO_ROOT / "setup.py"
 
+
+def _controller_version() -> str:
+    sys.path.insert(0, str(REPO_ROOT))
+    from controller import version
+
+    return version.source_version(REPO_ROOT)
+
+
+#: This checkout's Controller version: its own ``pyproject.toml``'s.
+CONTROLLER_VERSION = _controller_version()
+
 #: Set to ``"1"`` to make a missing wheel-build prerequisite a test failure
 #: instead of a skip.
 REQUIRE_PACKAGING_TESTS_ENV = "CONTROLLER_REQUIRE_PACKAGING_TESTS"
@@ -158,13 +169,16 @@ def wheel_install(wheel: Path, venv_dir: Path, *, reinstall: bool = False) -> Pa
 
 def build_package_tree(dest: Path, *, generation: int = 1, source_commit: str | None = "a" * 40,
                        source_dirty: bool | None = False, build_origin: str = "local",
-                       release_tag: str | None = None, version: str | None = None) -> Path:
+                       release_tag: str | None = None, version: str | None = None,
+                       metadata_version: str | None = None, dist_info: bool = True) -> Path:
     """An installed-package layout without Git or a wheel build: ``dest``
     plays ``site-packages`` and holds this repository's real ``controller/``
     plus a ``BUILD_INFO.json`` whose ``package_digest`` is computed over the
-    copy. Returns ``dest`` -- the code root a package runtime resolves."""
+    copy, and (``dist_info``) the ``workflow_controller-<v>.dist-info``
+    whose ``RECORD`` lists ``controller/__init__.py`` and whose ``Version``
+    is ``metadata_version`` (default: the build info's version). Returns
+    ``dest`` -- the code root a package runtime resolves."""
     from controller import buildinfo
-    from controller import version as version_module
 
     package = dest / "controller"
     dest.mkdir(parents=True, exist_ok=True)
@@ -178,7 +192,7 @@ def build_package_tree(dest: Path, *, generation: int = 1, source_commit: str | 
     build = {
         "schema_version": buildinfo.BUILD_INFO_SCHEMA_VERSION,
         "name": buildinfo.PACKAGE_NAME,
-        "version": version or version_module.__version__,
+        "version": version or CONTROLLER_VERSION,
         "source_commit": source_commit,
         "source_dirty": source_dirty,
         "package_digest": buildinfo.compute_package_digest(package),
@@ -186,7 +200,22 @@ def build_package_tree(dest: Path, *, generation: int = 1, source_commit: str | 
         "release_tag": release_tag,
     }
     (package / buildinfo.BUILD_INFO_NAME).write_text(json.dumps(build, indent=2) + "\n")
+    if dist_info:
+        write_dist_info(dest, metadata_version or build["version"])
     return dest
+
+
+def write_dist_info(site: Path, version: str, *, name: str = "workflow-controller",
+                    record: tuple[str, ...] = ("controller/__init__.py",)) -> Path:
+    """A minimal installed distribution's ``*.dist-info`` in ``site``:
+    ``METADATA`` (``Name``, ``Version``) and a ``RECORD`` listing
+    ``record``."""
+    dist = site / f"{name.replace('-', '_')}-{version}.dist-info"
+    dist.mkdir(parents=True, exist_ok=True)
+    (dist / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n\n")
+    lines = [f"{path},," for path in record] + [f"{dist.name}/METADATA,,", f"{dist.name}/RECORD,,"]
+    (dist / "RECORD").write_text("\n".join(lines) + "\n")
+    return dist
 
 
 @contextlib.contextmanager

@@ -40,7 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, evidence, identity, job, lock, managed_repo, observe, routing, runtime, version, worker,
+    cli, evidence, identity, job, lock, managed_repo, observe, routing, runtime, worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
@@ -67,7 +67,7 @@ FAKE_IDENTITY = ControllerIdentity(
     source_commit="a" * 40,
     tree_digest="b" * 64,
     generation_source="head",
-    pinned_at="2024-01-01T00:00:00Z",
+    pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
 )
 
 #: A valid release ``BUILD_INFO.json`` for the running version.
@@ -195,12 +195,11 @@ class ParserTest(unittest.TestCase):
 
 class VersionFlagTest(unittest.TestCase):
     """`--version` (release-runtime-observability CP1/CP2): line 1 is
-    exactly `workflow-controller <__version__>`, line 2 describes the
+    exactly `workflow-controller <version>`, line 2 describes the
     running runtime; exit 0, no subcommand needed, nothing written."""
 
     def _line1(self) -> str:
-        from controller import version
-        return f"workflow-controller {version.__version__}"
+        return f"workflow-controller {fixtures.CONTROLLER_VERSION}"
 
     def _assert_version_run(self, result, *, checkout: Path, runtime_dir: Path) -> None:
         self.assertEqual(result.returncode, cli.EXIT_OK, result.stderr)
@@ -307,7 +306,7 @@ class StatusFirstLineTest(unittest.TestCase):
             env = {**os.environ, "PYTHONPATH": str(checkout)}
             env.pop(identity.EXEC_HANDOFF_ENV, None)
             argv = [sys.executable, "-P", "-B", "-m", "controller", "--runtime-dir", str(runtime_root), "status"]
-            expected_first = (f"controller: workflow-controller {version.__version__} -- "
+            expected_first = (f"controller: workflow-controller {fixtures.CONTROLLER_VERSION} -- "
                               f"source ({checkout.resolve()} @ {head[:12]})")
 
             first = fixtures.run(argv, cwd=tmp_path, env=env, check=False)
@@ -624,7 +623,7 @@ class _StepFixture:
         self.ident = ControllerIdentity(
             generation=1, source_root=self.origin, origin_source_root=self.origin,
             source_kind=SOURCE_KIND_COMMIT, source_commit=head, tree_digest="d" * 64,
-            generation_source="head", pinned_at="2024-01-01T00:00:00Z",
+            generation_source="head", pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
         )
 
         self._orig_execute_step = job.execute_step
@@ -1825,7 +1824,7 @@ _CHILD_RUN = (
     "ident = identity.ControllerIdentity(generation=1, source_root=Path(sys.argv[2]), "
     "origin_source_root=Path(sys.argv[2]), source_kind=identity.SOURCE_KIND_COMMIT, "
     "source_commit=sys.argv[3], tree_digest='d'*64, generation_source='head', "
-    "pinned_at='2024-01-01T00:00:00Z'); "
+    "pinned_at='2024-01-01T00:00:00Z', version='1.1.1'); "
     "identity.pin = lambda: ident; identity.current = lambda: ident; "
     "sys.exit(cli.main(sys.argv[4:]))"
 )

@@ -412,7 +412,7 @@ class _LifecycleTestCase(unittest.TestCase):
         cls.ident = ControllerIdentity(
             generation=1, source_root=origin, origin_source_root=origin, source_kind=SOURCE_KIND_COMMIT,
             source_commit=fixtures.current_head(origin), tree_digest="d" * 64, generation_source="head",
-            pinned_at=COMPLETED_AT,
+            pinned_at=COMPLETED_AT, version=fixtures.CONTROLLER_VERSION,
         )
         cls.stub_manager = fixtures.write_stub_workflow_manager(Path(cls._class_tmp.name) / "workflow-manager")
 
@@ -1181,7 +1181,7 @@ _CHILD_STEP = (
     "ident = ControllerIdentity(generation=1, source_root=Path('/fake'), "
     "origin_source_root=Path('/fake'), source_kind=SOURCE_KIND_COMMIT, "
     "source_commit='a'*40, tree_digest='d'*64, generation_source='head', "
-    "pinned_at='2026-01-01T00:00:00Z'); "
+    "pinned_at='2026-01-01T00:00:00Z', version='1.1.1'); "
     "from controller.managed_repo import ManagedRepository; "
     "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
     "workflow_version='2.5.1', profile='full', "

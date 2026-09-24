@@ -3,9 +3,9 @@
 The ``build_py`` subclass below writes ``controller/BUILD_INFO.json`` into
 ``build_lib`` after the standard copy. It never writes into the source tree
 and does nothing at all for an editable install, so an editable install stays
-a source runtime by construction. ``controller/buildinfo.py`` and
-``controller/version.py`` are loaded by file path; ``controller/__init__.py``
-is never imported.
+a source runtime by construction. ``controller/buildinfo.py`` is loaded by
+file path; ``controller/__init__.py`` is never imported. The version is
+setuptools' own static read of ``pyproject.toml``'s ``[project].version``.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ class build_py(_build_py):
 
     def _write_build_info(self) -> None:
         buildinfo = _load_module("buildinfo")
-        version = _load_module("version").__version__
+        version = self.distribution.get_version()
         package_dir = Path(self.build_lib) / PACKAGE
 
         source_commit, source_dirty = _source_provenance()

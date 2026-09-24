@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, handoff, identity, job, runtime, version  # noqa: E402
+from controller import cli, handoff, identity, job, runtime  # noqa: E402
 from controller.decision import Decision  # noqa: E402
 from controller.errors import GenerationHandoffPendingError, SourceSnapshotError  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -55,7 +55,7 @@ def _pinned_identity(
         source_commit=source_commit,
         tree_digest="d" * 64,
         generation_source="head",
-        pinned_at="2024-01-01T00:00:00Z",
+        pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
     )
 
 
@@ -151,7 +151,7 @@ class DetectTest(unittest.TestCase):
             ident = identity.ControllerIdentity(
                 generation=None, source_root=origin, origin_source_root=origin,
                 source_kind=identity.SOURCE_KIND_UNPINNED, source_commit=None, tree_digest=None,
-                generation_source=None, pinned_at="now",
+                generation_source=None, pinned_at="now", version=fixtures.CONTROLLER_VERSION,
             )
             with self.assertRaises(SourceSnapshotError) as ctx:
                 handoff.detect(ident, origin)
@@ -192,7 +192,7 @@ class PackageHandoffTest(unittest.TestCase):
         return identity.ControllerIdentity(
             generation=generation, source_root=Path("/snapshot"), origin_source_root=tree,
             source_kind=identity.SOURCE_KIND_PACKAGE, source_commit="a" * 40, tree_digest="d" * 64,
-            generation_source="package", pinned_at="2024-01-01T00:00:00Z",
+            generation_source="package", pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
             runtime_kind=identity.RUNTIME_KIND_PACKAGE,
         )
 
@@ -214,7 +214,7 @@ class PackageHandoffTest(unittest.TestCase):
             self.assertEqual((pending.from_generation, pending.to_generation), (1, 2))
             self.assertEqual((pending.from_commit, pending.to_commit), ("a" * 40, "b" * 40))
             self.assertEqual((pending.from_version, pending.to_version),
-                             (version.__version__, version.__version__))
+                             (fixtures.CONTROLLER_VERSION, fixtures.CONTROLLER_VERSION))
 
             shutil.rmtree(tree / "controller")
             with self.assertRaises(SourceSnapshotError) as ctx:
@@ -605,9 +605,9 @@ class EndToEndHandoffSubprocessTest(unittest.TestCase):
             handoff_record = runtime.read_json(runtime_root / "handoff.json")
             self.assertIsNotNone(handoff_record)
             self.assertEqual(handoff_record["running"],
-                             {"generation": 1, "commit": head_a, "version": version.__version__})
+                             {"generation": 1, "commit": head_a, "version": fixtures.CONTROLLER_VERSION})
             self.assertEqual(handoff_record["approved"],
-                             {"generation": 2, "commit": head_b, "version": version.__version__})
+                             {"generation": 2, "commit": head_b, "version": fixtures.CONTROLLER_VERSION})
             self.assertEqual(handoff_record["source_root"], str(checkout.resolve()))
 
             # The process's own reported identity is still (1, A) -- never

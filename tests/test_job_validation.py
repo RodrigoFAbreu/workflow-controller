@@ -42,7 +42,7 @@ FAKE_IDENTITY = ControllerIdentity(
     source_commit="a" * 40,
     tree_digest="b" * 64,
     generation_source="head",
-    pinned_at="2024-01-01T00:00:00Z",
+    pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
 )
 
 #: This repository's own checkout -- itself a frozen Workflow

@@ -57,7 +57,7 @@ FAKE_IDENTITY = ControllerIdentity(
     source_commit="a" * 40,
     tree_digest="b" * 64,
     generation_source="head",
-    pinned_at="2024-01-01T00:00:00Z",
+    pinned_at="2024-01-01T00:00:00Z", version="1.1.1",
 )
 
 _OMIT = object()
@@ -1043,7 +1043,7 @@ _CHILD_STEP = (
     "ident = ControllerIdentity(generation=7, source_root=Path('/fake'), "
     "origin_source_root=Path('/fake'), source_kind=SOURCE_KIND_COMMIT, "
     "source_commit='a'*40, tree_digest='b'*64, generation_source='head', "
-    "pinned_at='2024-01-01T00:00:00Z'); "
+    "pinned_at='2024-01-01T00:00:00Z', version='1.1.1'); "
     "from controller.managed_repo import ManagedRepository; "
     "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
     "workflow_version='2.3.1', profile='full', "
@@ -2335,7 +2335,7 @@ _CHILD_ABANDON = (
     "ident = ControllerIdentity(generation=7, source_root=Path('/fake'), "
     "origin_source_root=Path('/fake'), source_kind=SOURCE_KIND_COMMIT, "
     "source_commit='a'*40, tree_digest='b'*64, generation_source='head', "
-    "pinned_at='2024-01-01T00:00:00Z'); "
+    "pinned_at='2024-01-01T00:00:00Z', version='1.1.1'); "
     "from controller.managed_repo import ManagedRepository; "
     "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
     "workflow_version='2.3.1', profile='full', "

@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import buildinfo, identity, runtime, version  # noqa: E402
+from controller import buildinfo, identity, runtime  # noqa: E402
 from controller.errors import DirtyControllerSourceError, SourceSnapshotError  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -72,7 +72,8 @@ class MaterialiseCleanTreeTest(unittest.TestCase):
     def test_modification_inside_pathspec_requires_the_flag(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             checkout = fixtures.build_checkout(Path(td) / "origin")
-            (checkout / "pyproject.toml").write_text("# edited\n")
+            with (checkout / "pyproject.toml").open("a") as fh:
+                fh.write("# edited\n")
             with self.assertRaises(DirtyControllerSourceError):
                 identity.materialise(checkout, Path(td) / "runtime", allow_dirty=False)
 
@@ -278,7 +279,7 @@ class GuardTest(unittest.TestCase):
                 identity.pin = lambda: identity.ControllerIdentity(
                     generation=None, source_root=fake_source_root, origin_source_root=fake_source_root,
                     source_kind=identity.SOURCE_KIND_UNPINNED, source_commit=None, tree_digest=None,
-                    generation_source=None, pinned_at="now",
+                    generation_source=None, pinned_at="now", version=fixtures.CONTROLLER_VERSION,
                 )
                 identity.current = identity.pin
                 try:
@@ -556,7 +557,7 @@ def _plant_build_info(checkout: Path) -> None:
     """A valid build info for the checkout's own tree, planted in it."""
     package = checkout / "controller"
     build = {
-        "schema_version": 1, "name": "workflow-controller", "version": version.__version__,
+        "schema_version": 1, "name": "workflow-controller", "version": fixtures.CONTROLLER_VERSION,
         "source_commit": "a" * 40, "source_dirty": False,
         "package_digest": buildinfo.compute_package_digest(package),
         "build_origin": "local", "release_tag": None,
@@ -589,10 +590,13 @@ class ResolveRuntimeTest(unittest.TestCase):
             self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
             self.assertIn("not valid build info", resolved.reason)
 
-            other = fixtures.build_package_tree(Path(td) / "mismatch", version="9.9.9")
+            # The distribution metadata says one version, BUILD_INFO another:
+            # a partial upgrade.
+            other = fixtures.build_package_tree(Path(td) / "mismatch", metadata_version="9.9.9")
             resolved = identity.resolve_runtime(other)
             self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
             self.assertIn("does not match", resolved.reason)
+            self.assertIn("partially upgraded", resolved.reason)
 
     def test_a_committed_checkout_is_source(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -661,7 +665,7 @@ class ResolveRuntimeTest(unittest.TestCase):
                                  code_root=checkout, cwd=Path(td))
             self.assertEqual(status.returncode, 0, status.stderr)
             first = status.stdout.splitlines()[0]
-            self.assertTrue(first.startswith(f"controller: workflow-controller {version.__version__} -- "
+            self.assertTrue(first.startswith(f"controller: workflow-controller {fixtures.CONTROLLER_VERSION} -- "
                                              f"unidentified (source checkout"), first)
             self.assertIn(_DELETE_IT, first)
 
@@ -695,7 +699,7 @@ class UnpinnedIdentityByKindTest(unittest.TestCase):
             self.assertEqual(ident.runtime_kind, identity.RUNTIME_KIND_PACKAGE)
             self.assertEqual(ident.source_kind, identity.SOURCE_KIND_UNPINNED)
             self.assertEqual(ident.source_commit, "c" * 40)
-            self.assertEqual(ident.version, version.__version__)
+            self.assertEqual(ident.version, fixtures.CONTROLLER_VERSION)
             self.assertEqual(calls, [])
 
             with _running_from(site_packages), fixtures.empty_path(Path(td)):
@@ -743,7 +747,7 @@ class MaterialisePackageTest(unittest.TestCase):
             self.assertEqual(pin_data["source_commit"], "c" * 40)
             self.assertEqual(pin_data["generation"], 3)
             self.assertEqual(pin_data["generation_source"], "package")
-            self.assertEqual(pin_data["version"], version.__version__)
+            self.assertEqual(pin_data["version"], fixtures.CONTROLLER_VERSION)
             self.assertEqual(pin_data["build"]["package_digest"],
                              buildinfo.compute_package_digest(tree / "controller"))
             self.assertEqual(pin_data["controller_runtime"]["tree_digest"], dest.name)
@@ -833,7 +837,8 @@ class MaterialisePackageTest(unittest.TestCase):
             checkout = fixtures.build_checkout(Path(td) / "checkout")
             dest = identity.materialise(checkout, Path(td) / "runtime")
             pin_data = runtime.read_json(dest / "SOURCE_PIN.json")
-            for field in ("runtime_kind", "version", "build", "controller_runtime"):
+            # Every pin carries `version`, so only the observability fields go.
+            for field in ("runtime_kind", "build", "controller_runtime"):
                 pin_data.pop(field)
             (dest / "SOURCE_PIN.json").write_text(json.dumps(pin_data))
             with _running_from(dest):
@@ -844,18 +849,19 @@ class MaterialisePackageTest(unittest.TestCase):
 
 class RuntimeRecordTest(unittest.TestCase):
     def test_every_field_for_a_release_package(self) -> None:
-        build = {"schema_version": 1, "name": "workflow-controller", "version": version.__version__,
+        build = {"schema_version": 1, "name": "workflow-controller", "version": fixtures.CONTROLLER_VERSION,
                  "source_commit": "c" * 40, "source_dirty": False, "package_digest": "e" * 64,
-                 "build_origin": "release", "release_tag": f"v{version.__version__}"}
+                 "build_origin": "release", "release_tag": f"v{fixtures.CONTROLLER_VERSION}"}
         ident = identity.ControllerIdentity(
             generation=1, source_root=Path("/s"), origin_source_root=Path("/o"),
             source_kind=identity.SOURCE_KIND_PACKAGE, source_commit="c" * 40, tree_digest="d" * 64,
-            generation_source="package", pinned_at="now", runtime_kind="package", build=build,
+            generation_source="package", pinned_at="now", version=fixtures.CONTROLLER_VERSION,
+            runtime_kind="package", build=build,
         )
         self.assertEqual(identity.runtime_record(ident), {
-            "runtime_kind": "package", "version": version.__version__, "source_kind": "package",
+            "runtime_kind": "package", "version": fixtures.CONTROLLER_VERSION, "source_kind": "package",
             "source_commit": "c" * 40, "tree_digest": "d" * 64, "package_digest": "e" * 64,
-            "build_origin": "release", "release_tag": f"v{version.__version__}", "generation": 1,
+            "build_origin": "release", "release_tag": f"v{fixtures.CONTROLLER_VERSION}", "generation": 1,
         })
 
 

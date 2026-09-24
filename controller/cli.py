@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, observe, routing, runtime, target_state, version,
+    evidence, handoff, identity, job, lock, managed_repo, observe, routing, runtime, target_state,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -198,10 +198,18 @@ class _RoleAssignmentAction(argparse.Action):
         setattr(namespace, self.dest, assignments)
 
 
-def version_text() -> str:
-    """``--version``'s line 1: exactly ``workflow-controller
-    <__version__>``, the contract tests and the release pipeline assert."""
-    return f"workflow-controller {version.__version__}"
+def version_text(ident: identity.ControllerIdentity | None = None) -> str:
+    """``--version``'s line 1: exactly ``workflow-controller <version>``,
+    the contract tests and the release pipeline assert. The version is the
+    resolved runtime's -- ``ident``'s, else this process's pin's -- and
+    ``unknown`` when this process's identity cannot be resolved (``--version``
+    reports, it never fails on this)."""
+    if ident is None:
+        try:
+            ident = identity.pin()
+        except ControllerError:
+            return f"workflow-controller {identity.UNKNOWN_VERSION}"
+    return f"workflow-controller {ident.version}"
 
 
 def _describe_running_runtime() -> str:
@@ -312,7 +320,7 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
 
     The first line always describes the *running* process, the same text
     as ``--version``'s line 2."""
-    print(f"controller: {version_text()} -- {identity.describe_runtime(ident)}")
+    print(f"controller: {version_text(ident)} -- {identity.describe_runtime(ident)}")
     if not pre_existing["had_any_state"]:
         print(f"no Controller runtime state at {runtime_root} (ladder row {pre_existing['ladder_row']})")
         return EXIT_OK

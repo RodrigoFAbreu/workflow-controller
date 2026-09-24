@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import buildinfo, version  # noqa: E402
+from controller import buildinfo  # noqa: E402
 from tests import fixtures  # noqa: E402
 
 RELEASE_PY = fixtures.REPO_ROOT / "tools" / "release.py"
@@ -35,7 +35,7 @@ release = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = release
 _spec.loader.exec_module(release)
 
-VERSION = version.__version__
+VERSION = fixtures.CONTROLLER_VERSION
 TAG = f"v{VERSION}"
 WHEEL_NAME = f"workflow_controller-{VERSION}-py3-none-any.whl"
 DIST_INFO = f"workflow_controller-{VERSION}.dist-info"
@@ -97,24 +97,26 @@ class VerifyTagTest(RefusalAssertions):
             with self.subTest(tag=tag):
                 self.assertRefused("tag format", self._verify, tag)
 
-    def test_a_static_version_is_refused(self) -> None:
+    def test_the_static_form_is_required(self) -> None:
         text = self.pyproject.read_text()
-        self.pyproject.write_text(text.replace('dynamic = ["version"]',
-                                               f'version = "{VERSION}"\ndynamic = ["version"]'))
-        self.assertRefused("pyproject version source", self._verify, TAG)
-        self.pyproject.write_text(text.replace('dynamic = ["version"]', f'version = "{VERSION}"'))
-        self.assertRefused("pyproject version source", self._verify, TAG)
+        static = f'version = "{VERSION}"\n'
+        self.assertIn(static, text)
+        for label, rewritten in (
+            ("no static version", text.replace(static, "")),
+            ("a dynamic version", text.replace(static, 'dynamic = ["version"]\n')),
+            ("static and dynamic", text.replace(static, static + 'dynamic = ["version"]\n')),
+            ("a setuptools version attr", text + '\n[tool.setuptools.dynamic]\n'
+                                                 'version = {attr = "controller.version.__version__"}\n'),
+        ):
+            with self.subTest(label):
+                self.pyproject.write_text(rewritten)
+                self.assertRefused("pyproject version source", self._verify, TAG)
 
-    def test_an_attr_pointing_elsewhere_is_refused(self) -> None:
+    def test_a_static_version_other_than_the_given_one_is_refused(self) -> None:
         text = self.pyproject.read_text()
-        self.pyproject.write_text(text.replace('"controller.version.__version__"',
-                                               '"controller.__version__"'))
-        self.assertRefused("pyproject version source", self._verify, TAG)
-
-    def test_version_not_dynamic_is_refused(self) -> None:
-        self.pyproject.write_text(self.pyproject.read_text().replace('dynamic = ["version"]',
-                                                                     'dynamic = []'))
-        self.assertRefused("pyproject version source", self._verify, TAG)
+        self.pyproject.write_text(text.replace(f'version = "{VERSION}"', 'version = "9.9.9"'))
+        refusal = self.assertRefused("pyproject version source", self._verify, TAG)
+        self.assertIn("9.9.9", refusal.detail)
 
 
 def _rewrite_wheel(source: Path, dest: Path, *, drop: tuple[str, ...] = (),
@@ -421,6 +423,78 @@ class VersionCommandTest(unittest.TestCase):
     def test_version_prints_the_controller_version(self) -> None:
         result = fixtures.run([sys.executable, str(RELEASE_PY), "version"], check=False)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, f"{VERSION}\n", ""))
+
+    def test_an_unreadable_version_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "pyproject.toml").write_text('[project]\nname = "x"\n')
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = release.main(["version"], repo_root=Path(td))
+            self.assertEqual(code, 1)
+            self.assertIn("refused: version source:", stderr.getvalue())
+
+
+class CheckedOutVersionTest(unittest.TestCase):
+    """``version``, ``verify-tag`` and ``verify-wheel`` all take the version
+    from the checked-out ``pyproject.toml``: rewriting it in a disposable
+    checkout moves all three."""
+
+    MOVED = "7.8.9"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        missing = fixtures.wheel_build_prerequisite()
+        if missing is not None:
+            if os.environ.get(fixtures.REQUIRE_PACKAGING_TESTS_ENV) == "1":
+                raise AssertionError(f"wheel-build prerequisite missing: {missing}")
+            raise unittest.SkipTest(f"wheel-build prerequisite missing: {missing}")
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.tmp = Path(cls._tmp.name)
+        try:
+            cls.clone = fixtures.build_checkout(cls.tmp / "clone")
+            shutil.copytree(fixtures.REPO_ROOT / "tools", cls.clone / "tools",
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            pyproject = cls.clone / "pyproject.toml"
+            text = pyproject.read_text()
+            assert f'version = "{VERSION}"' in text
+            pyproject.write_text(text.replace(f'version = "{VERSION}"', f'version = "{cls.MOVED}"'))
+            fixtures.run(["git", "add", "-A"], cwd=cls.clone)
+            fixtures.run(["git", "commit", "-q", "-m", "move the version"], cwd=cls.clone)
+            cls.commit = fixtures.current_head(cls.clone)
+            env = {k: v for k, v in os.environ.items()
+                   if not k.startswith("GIT_") and k != "WORKFLOW_CONTROLLER_RELEASE_TAG"}
+            fixtures.build_wheel(cls.clone, cls.tmp / "wheels", env=env)
+        except BaseException:
+            cls._tmp.cleanup()
+            raise
+        cls.wheel = cls.tmp / "wheels" / f"workflow_controller-{cls.MOVED}-py3-none-any.whl"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def _release(self, *args: str) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        return fixtures.run([sys.executable, "-B", str(self.clone / "tools" / "release.py"), *args],
+                            cwd=self.tmp, env=env, check=False)
+
+    def test_all_three_subcommands_follow_the_checked_out_pyproject(self) -> None:
+        result = self._release("version")
+        self.assertEqual((result.returncode, result.stdout), (0, f"{self.MOVED}\n"), result.stderr)
+
+        result = self._release("verify-tag", f"v{self.MOVED}")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self._release("verify-tag", TAG)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"expected 'v{self.MOVED}'", result.stderr)
+
+        result = self._release("verify-wheel", str(self.wheel), "--local", "--commit", self.commit)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # This repository's own release.py, reading its own pyproject.toml,
+        # refuses the same wheel.
+        with self.assertRaises(release.Refusal):
+            release.verify_wheel(self.wheel, version=release.checked_out_version(),
+                                 commit=self.commit, tag=None)
 
 
 if __name__ == "__main__":

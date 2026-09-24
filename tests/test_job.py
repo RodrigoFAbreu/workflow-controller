@@ -58,7 +58,7 @@ FAKE_IDENTITY = ControllerIdentity(
     source_commit="a" * 40,
     tree_digest="b" * 64,
     generation_source="head",
-    pinned_at="2024-01-01T00:00:00Z",
+    pinned_at="2024-01-01T00:00:00Z", version="1.1.1",
 )
 
 FAKE_WORKTREE_IDENTITY = ControllerIdentity(
@@ -69,7 +69,7 @@ FAKE_WORKTREE_IDENTITY = ControllerIdentity(
     source_commit=None,
     tree_digest="c" * 64,
     generation_source="worktree",
-    pinned_at="2024-01-01T00:00:00Z",
+    pinned_at="2024-01-01T00:00:00Z", version="1.1.1",
 )
 
 

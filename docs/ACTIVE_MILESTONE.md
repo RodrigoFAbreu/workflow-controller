@@ -2,51 +2,124 @@
 
 ## Status
 
-**Complete.** `workflow-controller-release-runtime-observability` reached `MILESTONE_COMPLETE` on
-2026-09-24. Functional review passed in round 1, against checklist evidence commit
-`c1272630517120cc1a94793f0c6d1ff76b14ec9b`. Flows 1-8 passed on a fresh, isolated pipx install.
-The two extra checks also passed: waiting for the worker's process group, under both the `/proc`
-scan and the `killpg` fallback, and the `Follow it:` hint on a lock refusal and on `resume`. The
-optional live flow 9 was waived: the no-cost flows covered the packaged runtime and the whole
-`follow` surface, and CP11 step 6 had already run the live stream.
+**Implementing.** `workflow-controller-trunk-branch-pr-release-orchestration`, governing workflow
+version `2.2`, base commit `00c3b7136dae2ca1993af91c999df48ad376f433` ("Prepare the 1.1.1 patch
+release"). Plan revision 10 was approved by both plan-review stages (approval commit `bb7839a`).
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for the phase and for each checkpoint's
+status. The installed release Controller 1.1.1 orchestrates this milestone, under the installed
+Workflow 2.5.1.
 
-All eleven registry checkpoints (`CP1`-`CP11`) are `COMPLETE`. Implementation revision 1 was
-approved by both implementation-review stages (technical approval `0e8cecb`), and the user
-accepted the milestone through `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, and `active_work_item_id` is now `null`.
-`docs/ROADMAP.md` marks sections 1.1-1.3 complete; this acceptance commit is the first to track
-it. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-release-runtime-observability.md`. It covers the
-goal, checkpoint progress, self-review and functional-review checklist.
+## Goal
 
-This milestone's own deliverables remain live in the tree, unmoved (see the archive file's own
-preface for why): `docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md` and its
-registry/mapping files, still at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry
-declares. The previously completed work items and their archived narratives in
-`docs/milestones/completed/` are unaffected.
+Establish a reusable, lightweight trunk-based development and release model, with
+`workflow-controller` as its first adopter:
 
-Deferred follow-ups, not conditions of acceptance:
-- manual external implementation review, optional O1: where the drain cannot count the process
-  group's members, `status`, the follower heartbeat and the rendered `worker_exited` line say
-  `0 process(es) at drain start ()`. The stderr drain line correctly says `an unknown number of
-  processes`. Reproduced in the functional review under the `killpg` fallback;
-- `rate_limit_event` renders as `worker unknown event rate_limit_event` (self-review M2);
-- replayed worker-stream lines carry the time of the replay, not of the event, since `stream-json`
-  events have no timestamp. A `--from-start` replay prints all of a job's lifecycle lines before
-  its worker lines (functional review P1, C3);
-- checklist wording: flow 8 omits the `python3 tools/release.py` prefix on one `verify-wheel`
-  line, and the checklist has no cleanup step (functional review C1, C2);
-- the README's upgrade command, `pipx install --force`, fails on a pipx with the `uv` backend
-  (`A virtual environment already exists`). `pipx uninstall` and then `pipx install` works
-  (functional review E1);
-- carried over from `workflow-controller-automatic-lifecycle-orchestration`: the manual-external
-  gate can name a stale ledger `review_content_id` after a failed local-review job; gates'
-  `explain --work-item <id>` resume hint does not parse as written; no explicit test pins
-  `OperatorAbandoned`/`UnreconcilableJobError` records in the apply relaunch bound.
+- **generic capability** that any Workflow-managed repository can reuse: milestone branch binding,
+  a Controller-owned GitHub boundary, the Draft PR lifecycle, trunk-drift detection, a repository
+  release policy, and a crash-safe release transaction with explicit collision and recovery
+  states;
+- **reference configuration** for this repository only: trunk `main`, branches
+  `milestone/<work-item-id>`, version source `pyproject.toml`, tag `v{version}`, a wheel plus
+  `SHA256SUMS` published as a GitHub Release;
+- **one version authority**, `pyproject.toml`'s static `[project].version`;
+- **release on version change**: a push to `main` releases exactly when the version is new. The
+  tag is created only after validation, at the validated commit, and is never moved;
+- **Workflow stays authoritative**: under Workflow 2.5.1 the Controller detects trunk drift and
+  fails closed at readiness. Binding to Workflow 2.6.x is a separate follow-up milestone.
 
-**Next action:** `docs/ROADMAP.md` section 1.4, "Follow-up patches to fold in where appropriate":
-the misordered `--work-item` resume hints, the manual-external gate's behaviour when the local
-review ledger is incoherent, the abandoned/unreconcilable apply-review relaunch-bound tests, and
-active-job/status presentation (O1 above fits here). Run `/milestone-plan` for it. That creates a
-fresh `work_items` entry and claims `active_work_item_id`, ready for `PLANNING`. Section 2,
-"Workflow / Workflow Manager Migration Hardening", follows.
+## Plan
+
+- Plan: `docs/ai-workflow/CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md`
+- Registry: `docs/ai-workflow/registry/workflow-controller-trunk-branch-pr-release-orchestration-registry.json`
+  (checkpoints `CP1`-`CP10`; `CP10` is terminal)
+- Requirement map: `docs/ai-workflow/requirements/workflow-controller-trunk-branch-pr-release-orchestration-mapping.json`
+
+The previous milestone's narrative is archived at
+`docs/milestones/completed/workflow-controller-release-runtime-observability.md`. Its deferred
+follow-ups are listed there and in `docs/ROADMAP.md` section 1.4. None of them is in this
+milestone's scope.
+
+## Baseline
+
+Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a`:
+- `python3 -m unittest discover -s tests -t .` (no `PYTHONPATH=.`): 1275 tests, OK (6 skipped),
+  98 s;
+- the seven conformance suites, from `scripts/`: all OK. `workflow_fingerprint_test.py` 218,
+  `workflow_integration_test.py` 260 (1 skipped), `workflow_acceptance_matrix_test.py` 146
+  (18 skipped), `workflow_state_completion_obligations_test.py` 106,
+  `workflow_fingerprint_generalization_test.py` 79, `workflow_test_harness_test.py` 19.
+  `workflow_state_test.py`'s summary line was not captured in the baseline run: its captured
+  output tail shows its regression checks passing, and the whole run exited 0;
+- `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime`: 9 tests,
+  OK.
+
+## Checkpoint progress
+
+- **CP1 -- single version authority: complete.**
+  - `pyproject.toml` declares `version = "1.1.1"` statically. `dynamic` and
+    `[tool.setuptools.dynamic]` are gone.
+  - `controller/version.py` holds no value. It is a stdlib-only resolver that imports nothing from
+    `controller`:
+    - `source_version(code_root)` reads `<code_root>/pyproject.toml`'s `[project].version`;
+    - `package_version(code_root)` reads the one `workflow-controller` distribution installed in
+      `code_root` itself whose `RECORD` lists `controller/__init__.py`;
+    - `parse_pyproject_version` is shared with `handoff`.
+    All three raise `ValueError` naming the failure. `version.SEMVER_RE` duplicates
+    `buildinfo.SEMVER_RE`, since neither leaf may import the other; a test pins them equal.
+  - `identity.resolve_runtime` carries a `version` on `RuntimeResolution`:
+    - `package`: the distribution metadata version. It must equal `BUILD_INFO.json`'s version,
+      and a disagreement is `unidentified` ("partially upgraded"). Missing metadata is
+      `unidentified` too;
+    - `source`: `pyproject.toml`'s version. An unreadable version is `unidentified`;
+    - `unidentified`: whichever reader succeeds, else `unknown`.
+  - `ControllerIdentity.version` is a required keyword field with no import-time default.
+    `materialise` records the snapshot's own version in `SOURCE_PIN.json` and in the
+    `controller_runtime` block: a source snapshot's own `pyproject.toml`, or a package snapshot's
+    own `controller/BUILD_INFO.json`. `pin()` reads a pinned child's version only from
+    `SOURCE_PIN.json`. A missing or non-semver value raises `SourceSnapshotError`
+    (`raised_by: pin`), with no fallback.
+  - `cli.version_text` prints the resolved runtime's version (`unknown` if the identity cannot be
+    resolved). `--version` line 1 is unchanged in form.
+  - `handoff` reads the approved version from `HEAD:pyproject.toml` with `tomllib`.
+  - `setup.py`'s build hook takes the version from `self.distribution.get_version()`.
+  - `tools/release.py`: `version`, `verify-tag` and `verify-wheel` read
+    `version.source_version(<repository root>)`. `main()` takes a `repo_root` keyword.
+    `verify-tag` now requires the static form, and refuses a dynamic version or a
+    `[tool.setuptools.dynamic]` version.
+  - Tests:
+    - new `tests/test_version_authority.py` (19 tests) covers the single authority, the readers,
+      a stale `egg-info` and another distribution on `sys.path` being ignored by a source runtime,
+      the package metadata version, metadata/BUILD_INFO disagreement, missing metadata, pinned
+      source and package children, pin-version refusal, a dirty snapshot's own version, and
+      handoff's committed read. It runs in a new `trunk` CI shard; `.github/workflows/validate.yml`
+      was regenerated;
+    - `test_release_tools.CheckedOutVersionTest` rewrites the version in a disposable checkout and
+      sees `version`, `verify-tag` and `verify-wheel` all follow it. `verify-tag`'s refusals are
+      rewritten for the static form;
+    - `test_packaged_runtime` case 6 now also compares `tools/release.py version`.
+      `_write_version` rewrites `pyproject.toml`;
+    - `fixtures.CONTROLLER_VERSION` replaces every test's `version.__version__`.
+      `fixtures.build_package_tree` writes a `*.dist-info` by default (`metadata_version`,
+      `dist_info`). Every test `ControllerIdentity` passes `version=`.
+  - README: the two pointers to `controller/version.py` now name `pyproject.toml`. The full
+    releasing rewrite is CP10's.
+  - Two existing tests were adjusted, not weakened. The pathspec-dirty test appends to
+    `pyproject.toml` rather than replacing it, since a checkout with no version is now
+    `unidentified`. The "pin without `runtime_kind`" test keeps `version`, since every pin carries
+    it and there is no fallback.
+  - Verified:
+    - narrow: `tests.test_version_authority`, `tests.test_identity`, `tests.test_release_tools`,
+      `tests.test_buildinfo`, `tests.test_packaged_runtime` (packaging required), `tests.test_cli`,
+      `tests.test_handoff`, `tests.test_job`, `tests.test_job_validation`,
+      `tests.test_package_structure`, `tests.test_ci_workflows`,
+      `tests.test_plan_document_consistency`, all OK;
+    - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
+      ran 1295 tests, OK (6 skipped), in 99 s. An earlier full run caught one real failure:
+      `test_write_containment`'s package-wide scan flags any `.replace(...)` call, and
+      `package_version` normalised paths with `str.replace`. It now uses `PackagePath.as_posix()`;
+    - the seven conformance suites, all OK: `workflow_fingerprint_test.py` 218,
+      `workflow_state_test.py` 853, `workflow_test_harness_test.py` 19,
+      `workflow_integration_test.py` 260 (1 skipped), `workflow_acceptance_matrix_test.py` 146
+      (18 skipped), `workflow_state_completion_obligations_test.py` 106,
+      `workflow_fingerprint_generalization_test.py` 79;
+    - `python3 tools/ci_workflows.py --check`: passes.

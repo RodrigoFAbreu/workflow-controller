@@ -1,5 +1,5 @@
 """Tests for the release identity CP1 adds: the single version source
-(``controller/version.py``), ``controller/buildinfo.py``'s digest and schema
+(``pyproject.toml``'s static ``[project].version``), ``controller/buildinfo.py``'s digest and schema
 rules, and ``setup.py``'s ``build_py`` hook that writes
 ``controller/BUILD_INFO.json`` into every built wheel.
 
@@ -25,10 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import buildinfo, version  # noqa: E402
+from controller import buildinfo  # noqa: E402
 from tests import fixtures  # noqa: E402
 
-VERSION = version.__version__
+VERSION = fixtures.CONTROLLER_VERSION
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 DIGEST = "f" * 64
 
@@ -52,12 +52,11 @@ class VersionSourceTest(unittest.TestCase):
     def test_version_is_plain_semver(self) -> None:
         self.assertRegex(VERSION, buildinfo.SEMVER_RE)
 
-    def test_pyproject_reads_the_version_dynamically(self) -> None:
+    def test_pyproject_declares_the_version_statically(self) -> None:
         pyproject = tomllib.loads(fixtures.PYPROJECT.read_text())
-        self.assertNotIn("version", pyproject["project"])
-        self.assertIn("version", pyproject["project"]["dynamic"])
-        self.assertEqual(pyproject["tool"]["setuptools"]["dynamic"]["version"],
-                         {"attr": "controller.version.__version__"})
+        self.assertEqual(pyproject["project"]["version"], VERSION)
+        self.assertNotIn("version", pyproject["project"].get("dynamic", []))
+        self.assertNotIn("dynamic", pyproject.get("tool", {}).get("setuptools", {}))
 
     def test_generation_file_is_declared_package_data(self) -> None:
         pyproject = tomllib.loads(fixtures.PYPROJECT.read_text())

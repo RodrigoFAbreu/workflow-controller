@@ -573,7 +573,7 @@ a wheel is a release is its checksum in the GitHub Release's
 `SHA256SUMS`, not `--version`. Build-provenance attestation may come
 later.
 
-The version (`controller/version.py`, `MAJOR.MINOR.PATCH`) and the
+The version (`pyproject.toml`'s static `[project].version`, `MAJOR.MINOR.PATCH`) and the
 generation (`controller/GENERATION.json`) are separate. The generation is
 the compatibility axis that handoff and job-record validation compare.
 Version 1.1.1 is still generation 1.
@@ -716,7 +716,7 @@ want them, `validate / conformance (...)` and `validate / package`).
 
 For maintainers:
 
-1. Bump `__version__` in `controller/version.py` (plain
+1. Bump the static `[project].version` in `pyproject.toml` (plain
    `MAJOR.MINOR.PATCH`, no pre-releases) in a pull request to `main`.
 2. After it merges, tag that `main` commit `v<version>` and push the tag:
    `git tag v1.2.0 <commit>` then `git push origin v1.2.0`.

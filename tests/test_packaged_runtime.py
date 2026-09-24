@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import buildinfo, identity, runtime, version  # noqa: E402
+from controller import buildinfo, identity, runtime  # noqa: E402
 from controller.cli import EXIT_FAIL_CLOSED, EXIT_HANDOFF_PENDING, EXIT_OK  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -51,10 +51,12 @@ def _write_generation(checkout: Path, generation: int) -> None:
 
 
 def _write_version(checkout: Path, value: str) -> None:
-    path = checkout / "controller" / "version.py"
+    """Move ``checkout``'s static ``[project].version``, the single version
+    authority, to ``value``."""
+    path = checkout / "pyproject.toml"
     text = path.read_text()
-    replaced = text.replace(f'"{version.__version__}"', f'"{value}"')
-    assert replaced != text, "controller/version.py does not spell __version__ as expected"
+    replaced = text.replace(f'version = "{fixtures.CONTROLLER_VERSION}"', f'version = "{value}"', 1)
+    assert replaced != text, "pyproject.toml does not declare the static version as expected"
     path.write_text(replaced)
 
 
@@ -236,7 +238,7 @@ class _PackagedRuntimeCase(unittest.TestCase):
         self.assertEqual(block["runtime_kind"], identity.RUNTIME_KIND_PACKAGE)
         self.assertEqual(block["source_kind"],
                          identity.SOURCE_KIND_PACKAGE if pinned else identity.SOURCE_KIND_UNPINNED)
-        self.assertEqual(block["version"], version.__version__)
+        self.assertEqual(block["version"], fixtures.CONTROLLER_VERSION)
         self.assertEqual(block["source_commit"], self.clone_head)
         self.assertEqual(block["package_digest"], self.wheel_build_info["package_digest"])
         self.assertEqual(block["build_origin"], buildinfo.BUILD_ORIGIN_LOCAL)
@@ -258,7 +260,7 @@ class _PackagedRuntimeCase(unittest.TestCase):
         self.assertEqual(result.returncode, EXIT_OK, result.stderr)
         lines = result.stdout.splitlines()
         self.assertEqual(len(lines), 2, result.stdout)
-        self.assertEqual(lines[0], f"workflow-controller {version.__version__}")
+        self.assertEqual(lines[0], f"workflow-controller {fixtures.CONTROLLER_VERSION}")
         self.assertEqual(lines[1], f"runtime: package (local build from {self.clone_head[:12]})")
 
 
@@ -276,8 +278,8 @@ class ReproducedDefectTest(_PackagedRuntimeCase):
 
 
 class VersionEqualsArtifactTest(_PackagedRuntimeCase):
-    """Case 6: ``--version`` line 1, ``METADATA``'s ``Version:`` and
-    ``BUILD_INFO.version`` agree."""
+    """Case 6: ``--version`` line 1, ``METADATA``'s ``Version:``,
+    ``BUILD_INFO.version`` and ``tools/release.py version`` agree."""
 
     def test_version_metadata_and_build_info_agree(self) -> None:
         script = self.install()
@@ -289,9 +291,16 @@ class VersionEqualsArtifactTest(_PackagedRuntimeCase):
                              for line in metadata_paths[0].read_text().splitlines()
                              if line.startswith("Version:")]
         installed_build = json.loads((site / "controller" / buildinfo.BUILD_INFO_NAME).read_text())
-        self.assertEqual(metadata_versions, [version.__version__])
-        self.assertEqual(installed_build["version"], version.__version__)
+        self.assertEqual(metadata_versions, [fixtures.CONTROLLER_VERSION])
+        self.assertEqual(installed_build["version"], fixtures.CONTROLLER_VERSION)
         self.assertEqual(installed_build, self.wheel_build_info)
+        # The wheel was built from a checkout carrying this repository's own
+        # pyproject.toml, which is what tools/release.py reads.
+        self.assertEqual((self.clone / "pyproject.toml").read_bytes(), fixtures.PYPROJECT.read_bytes())
+        released = fixtures.run([sys.executable, str(fixtures.REPO_ROOT / "tools" / "release.py"), "version"],
+                                env=_base_env(), check=False)
+        self.assertEqual((released.returncode, released.stdout), (0, f"{fixtures.CONTROLLER_VERSION}\n"),
+                         released.stderr)
 
 
 class TamperedInstallTest(_PackagedRuntimeCase):
@@ -336,7 +345,7 @@ class _CheckoutGoneCase(_PackagedRuntimeCase):
         self.assertEqual(status.returncode, EXIT_OK, status.stderr)
         self.assertEqual(
             status.stdout.splitlines()[0],
-            f"controller: workflow-controller {version.__version__} -- "
+            f"controller: workflow-controller {fixtures.CONTROLLER_VERSION} -- "
             f"package (local build from {self.clone_head[:12]})",
         )
 
@@ -483,7 +492,7 @@ class UpgradeHandoffTest(_PackagedRuntimeCase):
         self.assertEqual(proc.returncode, EXIT_HANDOFF_PENDING, f"stdout={stdout!r} stderr={stderr!r}")
         handoff_record = runtime.read_json(runtime_root / "handoff.json")
         self.assertEqual(handoff_record["running"],
-                         {"generation": 1, "commit": self.clone_head, "version": version.__version__})
+                         {"generation": 1, "commit": self.clone_head, "version": fixtures.CONTROLLER_VERSION})
         self.assertEqual(handoff_record["approved"],
                          {"generation": 2, "commit": self.upgrade_head, "version": UPGRADE_VERSION})
         self.assertEqual(self.worker_count(invocations), 0)

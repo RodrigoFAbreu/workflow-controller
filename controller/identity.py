@@ -62,6 +62,10 @@ RUNTIME_KIND_UNIDENTIFIED = "unidentified"
 
 _GENERATION_SOURCE_PACKAGE = "package"
 
+#: The version an ``unidentified`` runtime reports when neither version
+#: reader succeeds for its code root.
+UNKNOWN_VERSION = "unknown"
+
 
 @dataclasses.dataclass(frozen=True)
 class ControllerIdentity:
@@ -87,7 +91,9 @@ class ControllerIdentity:
     #: Additive (release-runtime-observability CP2). A pin written before
     #: these fields existed can only be a source snapshot, hence the default.
     runtime_kind: str = RUNTIME_KIND_SOURCE
-    version: str = version.__version__
+    #: The resolved runtime version -- the caller resolves it; there is no
+    #: import-time default (trunk-branch-pr-release CP1).
+    version: str = dataclasses.field(kw_only=True)
     #: The validated ``BUILD_INFO.json`` dict for a ``package`` runtime.
     build: dict | None = None
     #: Why an ``unidentified`` runtime is not ``source`` or ``package``.
@@ -96,19 +102,22 @@ class ControllerIdentity:
     def resolution(self) -> RuntimeResolution:
         return RuntimeResolution(
             runtime_kind=self.runtime_kind, code_root=self.source_root, build=self.build,
-            reason=self.runtime_reason,
+            reason=self.runtime_reason, version=self.version,
         )
 
 
 @dataclasses.dataclass(frozen=True)
 class RuntimeResolution:
     """``resolve_runtime``'s answer: the kind, the validated build info
-    (``package`` only) and, for ``unidentified``, the reason."""
+    (``package`` only), for ``unidentified`` the reason, and the version
+    (``UNKNOWN_VERSION`` only for an ``unidentified`` runtime no reader
+    could read)."""
 
     runtime_kind: str
     code_root: Path
     build: dict | None
     reason: str | None
+    version: str
 
 
 _cached_identity: ControllerIdentity | None = None
@@ -266,6 +275,18 @@ def _source_probe_failure(code_root: Path) -> str | None:
     return None
 
 
+def _best_effort_version(code_root: Path) -> str:
+    """An ``unidentified`` runtime's version: whichever of the two readers
+    succeeds for ``code_root``, else ``UNKNOWN_VERSION``. Reported only --
+    an unidentified runtime cannot launch workers."""
+    for reader in (version.source_version, version.package_version):
+        try:
+            return reader(code_root)
+        except ValueError:
+            continue
+    return UNKNOWN_VERSION
+
+
 def resolve_runtime(code_root: Path) -> RuntimeResolution:
     """Classify the code at ``code_root`` (``Path(__file__).parent.parent``
     of the running package) as ``package``, ``source`` or ``unidentified``.
@@ -273,16 +294,23 @@ def resolve_runtime(code_root: Path) -> RuntimeResolution:
     A ``controller/BUILD_INFO.json`` next to a ``.git`` is ambiguous and
     fail-closed: ``unidentified``, decided before any validation and
     without Git. Otherwise build info means ``package`` (if it validates
-    against this version), a ``.git`` means ``source`` (if both probes
-    agree), and anything else is ``unidentified``. The ``SOURCE_PIN.json``
-    branch (a pinned snapshot) is ``pin()``'s own, checked before this."""
+    against the installed distribution's metadata), a ``.git`` means
+    ``source`` (if both probes agree and ``pyproject.toml`` declares a
+    version), and anything else is ``unidentified``. The ``SOURCE_PIN.json``
+    branch (a pinned snapshot) is ``pin()``'s own, checked before this.
+
+    The version comes from where the code lives: a ``package`` runtime's is
+    the metadata of the distribution installed in ``code_root`` and must
+    equal ``BUILD_INFO.json``'s; a ``source`` runtime's is
+    ``<code_root>/pyproject.toml``'s, and never distribution metadata."""
     code_root = Path(code_root)
     build_path = _build_info_path(code_root)
     has_build_info = os.path.lexists(build_path)
     has_git = os.path.lexists(code_root / ".git")
 
     def unidentified(reason: str) -> RuntimeResolution:
-        return RuntimeResolution(RUNTIME_KIND_UNIDENTIFIED, code_root, None, reason)
+        return RuntimeResolution(RUNTIME_KIND_UNIDENTIFIED, code_root, None, reason,
+                                 _best_effort_version(code_root))
 
     if has_build_info and has_git:
         return unidentified(
@@ -291,16 +319,35 @@ def resolve_runtime(code_root: Path) -> RuntimeResolution:
         )
     if has_build_info:
         try:
+            package_version = version.package_version(code_root)
+        except ValueError as exc:
+            return unidentified(f"the installed package at {code_root} has no readable "
+                                f"distribution metadata: {exc}")
+        try:
             raw = json.loads(build_path.read_bytes())
-            build = buildinfo.validate_build_info(raw, expected_version=version.__version__)
         except (OSError, ValueError) as exc:
             return unidentified(f"{build_path} is not valid build info: {exc}")
-        return RuntimeResolution(RUNTIME_KIND_PACKAGE, code_root, build.to_dict(), None)
+        recorded = raw.get("version") if isinstance(raw, dict) else None
+        if isinstance(recorded, str) and recorded != package_version:
+            return unidentified(
+                f"the installed package at {code_root} is partially upgraded: its distribution "
+                f"metadata says {package_version} but {build_path} says {recorded} (does not match)"
+            )
+        try:
+            build = buildinfo.validate_build_info(raw, expected_version=package_version)
+        except ValueError as exc:
+            return unidentified(f"{build_path} is not valid build info: {exc}")
+        return RuntimeResolution(RUNTIME_KIND_PACKAGE, code_root, build.to_dict(), None,
+                                 package_version)
     if has_git:
         failure = _source_probe_failure(code_root)
-        if failure is None:
-            return RuntimeResolution(RUNTIME_KIND_SOURCE, code_root, None, None)
-        return unidentified(failure)
+        if failure is not None:
+            return unidentified(failure)
+        try:
+            source_version = version.source_version(code_root)
+        except ValueError as exc:
+            return unidentified(f"the source checkout at {code_root} has no readable version: {exc}")
+        return RuntimeResolution(RUNTIME_KIND_SOURCE, code_root, None, None, source_version)
     return unidentified(
         f"{code_root} is neither an installed workflow-controller package (no "
         f"controller/{buildinfo.BUILD_INFO_NAME}) nor a Git checkout"
@@ -527,6 +574,45 @@ def _read_package_generation(snapshot: Path) -> int:
     return _parse_generation(raw, source_desc=f"the installed package's {_GENERATION_REL_PATH}")
 
 
+def _snapshot_version(snapshot: Path, runtime_kind: str) -> str:
+    """The version ``SOURCE_PIN.json`` records, read from the snapshot
+    itself, never from this process: a source snapshot's own
+    ``pyproject.toml`` (so a dirty snapshot reports what it holds), or a
+    package snapshot's own ``controller/BUILD_INFO.json`` (a package
+    snapshot has no ``*.dist-info``; ``resolve_runtime`` already checked
+    that file against the distribution metadata)."""
+    try:
+        if runtime_kind == RUNTIME_KIND_PACKAGE:
+            path = _build_info_path(snapshot)
+            try:
+                raw = json.loads(path.read_bytes())
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"cannot read {path}: {exc}") from None
+            value = raw.get("version") if isinstance(raw, dict) else None
+            if not isinstance(value, str) or not version.SEMVER_RE.fullmatch(value):
+                raise ValueError(f"{path} version is {value!r}, not MAJOR.MINOR.PATCH")
+            return value
+        return version.source_version(snapshot)
+    except ValueError as exc:
+        raise SourceSnapshotError(
+            f"cannot resolve the snapshot's version: {exc}",
+            evidence={"raised_by": "materialise", "snapshot": str(snapshot), "error": str(exc)},
+        ) from exc
+
+
+def _pinned_version(data: dict, source_root: Path) -> str:
+    """A pinned child's version: ``SOURCE_PIN.json``'s ``version``, with no
+    fallback. Every pin ``materialise`` writes carries it."""
+    value = data.get("version")
+    if not isinstance(value, str) or not version.SEMVER_RE.fullmatch(value):
+        raise SourceSnapshotError(
+            f"the snapshot at {source_root} records no valid version in {_SOURCE_PIN_NAME} "
+            f"({value!r}) -- re-run from the origin to re-materialise it",
+            evidence={"raised_by": "pin", "source_root": str(source_root), "version": value},
+        )
+    return value
+
+
 def _refuse_unverifiable_package(origin: Path, build: dict, *, allow_dirty: bool) -> None:
     """A package built from uncommitted changes, or without provenance, is
     not identified by a commit -- the same rule a dirty checkout follows."""
@@ -616,13 +702,14 @@ def materialise(
         tree_digest = compute_tree_digest(tmp_dir)
         if runtime_kind == RUNTIME_KIND_SOURCE:
             generation, generation_source = _read_generation(origin_source_root)
+        pin_version = _snapshot_version(tmp_dir, runtime_kind)
 
         dest = source_dir / tree_digest
         runtime.assert_contained(source_dir, dest)
         pin_body = {
             "schema_version": 1,
             "runtime_kind": runtime_kind,
-            "version": version.__version__,
+            "version": pin_version,
             "build": build,
             "source_kind": source_kind,
             "source_commit": source_commit,
@@ -632,7 +719,7 @@ def materialise(
             "tree_digest": tree_digest,
             "materialised_at": _now(),
             "controller_runtime": _runtime_block(
-                runtime_kind=runtime_kind, runtime_version=version.__version__,
+                runtime_kind=runtime_kind, runtime_version=pin_version,
                 source_kind=source_kind, source_commit=source_commit, tree_digest=tree_digest,
                 build=build, generation=generation,
             ),
@@ -707,6 +794,7 @@ def pin() -> ControllerIdentity:
             # A pin without `runtime_kind` was written by an earlier
             # Controller for its own (source) snapshot.
             runtime_kind=data.get("runtime_kind", RUNTIME_KIND_SOURCE),
+            version=_pinned_version(data, source_root),
             build=data.get("build"),
         )
     else:
@@ -731,6 +819,7 @@ def pin() -> ControllerIdentity:
             generation_source=None,
             pinned_at=_now(),
             runtime_kind=resolution.runtime_kind,
+            version=resolution.version,
             build=resolution.build,
             runtime_reason=resolution.reason,
         )

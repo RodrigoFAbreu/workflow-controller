@@ -4,10 +4,11 @@
 The CI and release workflows call these subcommands; each one either succeeds
 or exits ``1`` with a single line naming the check that failed:
 
-- ``version`` prints ``controller.version.__version__``;
+- ``version`` prints the checked-out ``pyproject.toml``'s static
+  ``[project].version``, the version every subcommand below uses;
 - ``verify-tag TAG`` checks ``TAG`` is ``v<version>`` and that
-  ``pyproject.toml`` still reads the version dynamically from
-  ``controller/version.py``;
+  ``pyproject.toml`` declares the version statically, with no dynamic
+  version source;
 - ``verify-wheel WHEEL (--tag TAG | --local) --commit SHA`` checks a built
   wheel's name, metadata, entry point, required and forbidden files, its
   ``BUILD_INFO.json`` and the package digest recomputed from the wheel's own
@@ -45,7 +46,6 @@ from controller import buildinfo  # noqa: E402
 from controller import version as version_module  # noqa: E402
 
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-VERSION_ATTR = "controller.version.__version__"
 ENTRY_POINT_NAME = "workflow-controller"
 ENTRY_POINT_TARGET = "controller.cli:main"
 PACKAGE_DIR = "controller"
@@ -100,16 +100,15 @@ def verify_tag(tag: str, *, version: str, pyproject: Path = PYPROJECT) -> None:
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise Refusal("pyproject version source", f"cannot read {pyproject}: {exc}") from None
     project = project_file.get("project", {})
-    if "version" in project:
+    if project.get("version") != version:
         raise Refusal("pyproject version source",
-                      f"[project] declares a static version {project['version']!r}")
-    if "version" not in project.get("dynamic", []):
-        raise Refusal("pyproject version source", "[project] dynamic does not include 'version'")
+                      f"[project] version is {project.get('version')!r}, not the static {version!r}")
+    if "version" in project.get("dynamic", []):
+        raise Refusal("pyproject version source", "[project] dynamic includes 'version'")
     dynamic = project_file.get("tool", {}).get("setuptools", {}).get("dynamic", {})
-    if dynamic.get("version") != {"attr": VERSION_ATTR}:
+    if "version" in dynamic:
         raise Refusal("pyproject version source",
-                      f"[tool.setuptools.dynamic] version is {dynamic.get('version')!r}, "
-                      f"not {{attr = {VERSION_ATTR!r}}}")
+                      f"[tool.setuptools.dynamic] declares a version source {dynamic['version']!r}")
 
 
 # --- verify-wheel ----------------------------------------------------------
@@ -319,16 +318,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, *, run_gh: Runner = _run, run_git: Runner = _run) -> int:
+def checked_out_version(repo_root: Path = REPO_ROOT) -> str:
+    """The checked-out ``<repo_root>/pyproject.toml``'s static version."""
+    try:
+        return version_module.source_version(repo_root)
+    except ValueError as exc:
+        raise Refusal("version source", str(exc)) from None
+
+
+def main(argv: list[str] | None = None, *, run_gh: Runner = _run, run_git: Runner = _run,
+         repo_root: Path = REPO_ROOT) -> int:
     args = build_parser().parse_args(argv)
-    version = version_module.__version__
     try:
         if args.command == "version":
-            print(version)
+            print(checked_out_version(repo_root))
         elif args.command == "verify-tag":
-            verify_tag(args.tag, version=version)
+            version = checked_out_version(repo_root)
+            verify_tag(args.tag, version=version, pyproject=repo_root / "pyproject.toml")
             print(f"ok: {args.tag} matches version {version}")
         elif args.command == "verify-wheel":
+            version = checked_out_version(repo_root)
             verify_wheel(args.wheel, version=version, commit=args.commit, tag=args.tag)
             print(f"ok: {args.wheel.name} verified")
         elif args.command == "check-unpublished":

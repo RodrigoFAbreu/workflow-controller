@@ -23,12 +23,11 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import re
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from controller import buildinfo, runtime
+from controller import buildinfo, runtime, version
 from controller.errors import GenerationHandoffPendingError, SourceSnapshotError
 
 #: The single file whose committed content at the origin's `HEAD` this
@@ -37,8 +36,7 @@ from controller.errors import GenerationHandoffPendingError, SourceSnapshotError
 #: halves of the comparison this module exists to make are read from the
 #: same coordinate system.
 _GENERATION_REL_PATH = "controller/GENERATION.json"
-_VERSION_REL_PATH = "controller/version.py"
-_VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]*)"\s*$', re.MULTILINE)
+_VERSION_REL_PATH = "pyproject.toml"
 
 #: ``identity.RUNTIME_KIND_PACKAGE``, spelled here so this module keeps
 #: reading only the identity's attributes (see :func:`detect`).
@@ -117,13 +115,15 @@ def _read_approved_generation(source_root: Path) -> tuple[int, str]:
 
 
 def _read_committed_version(source_root: Path) -> str | None:
-    """The version ``HEAD:controller/version.py`` declares, or ``None``.
-    Reported in the handoff record only -- never a refusal."""
+    """The static ``[project].version`` ``HEAD:pyproject.toml`` declares,
+    or ``None``. Reported in the handoff record only -- never a refusal."""
     result = _run_git(["show", f"HEAD:{_VERSION_REL_PATH}"], cwd=source_root)
     if result.returncode != 0:
         return None
-    match = _VERSION_RE.search(result.stdout)
-    return match.group(1) if match else None
+    try:
+        return version.parse_pyproject_version(result.stdout, where=f"HEAD:{_VERSION_REL_PATH}")
+    except ValueError:
+        return None
 
 
 def _read_installed_generation(package_root: Path) -> tuple[int, str | None, str]:

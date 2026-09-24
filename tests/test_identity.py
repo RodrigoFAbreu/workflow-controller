@@ -15,17 +15,19 @@ covers the source-scan properties this file does not.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import identity, runtime  # noqa: E402
+from controller import buildinfo, identity, runtime, version  # noqa: E402
 from controller.errors import DirtyControllerSourceError, SourceSnapshotError  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -518,6 +520,343 @@ class PinCachingTest(unittest.TestCase):
             self.assertLessEqual(len(rev_parse_calls), 2)  # one is-git-repo check + one HEAD read, at most
         finally:
             identity._reset_for_tests()
+
+
+
+# ---------------------------------------------------------------------------
+# Release-runtime-observability CP2: packaged runtime identity.
+# ---------------------------------------------------------------------------
+
+_DELETE_IT = "delete it to run from source"
+
+
+@contextlib.contextmanager
+def _running_from(code_root: Path):
+    """``pin()`` as if the running package were ``code_root/controller``."""
+    identity._reset_for_tests()
+    env = {k: v for k, v in os.environ.items() if k != identity.EXEC_HANDOFF_ENV}
+    try:
+        with unittest.mock.patch.object(identity, "__file__", str(code_root / "controller" / "identity.py")), \
+                unittest.mock.patch.dict(os.environ, env, clear=True):
+            yield
+    finally:
+        identity._reset_for_tests()
+
+
+def _package_inside_checkout(td: Path, **build) -> tuple[Path, Path]:
+    """A committed checkout with a package tree under ``.venv/.../site-packages``
+    -- the venv-inside-checkout layout."""
+    checkout = fixtures.build_checkout(td / "checkout")
+    site_packages = fixtures.build_package_tree(
+        checkout / ".venv" / "lib" / "python3.12" / "site-packages", **build)
+    return checkout, site_packages
+
+
+def _plant_build_info(checkout: Path) -> None:
+    """A valid build info for the checkout's own tree, planted in it."""
+    package = checkout / "controller"
+    build = {
+        "schema_version": 1, "name": "workflow-controller", "version": version.__version__,
+        "source_commit": "a" * 40, "source_dirty": False,
+        "package_digest": buildinfo.compute_package_digest(package),
+        "build_origin": "local", "release_tag": None,
+    }
+    (package / "BUILD_INFO.json").write_text(json.dumps(build))
+
+
+def _controller(args: list[str], *, code_root: Path, cwd: Path, path: str | None = None):
+    env = {k: v for k, v in os.environ.items() if k != identity.EXEC_HANDOFF_ENV}
+    env["PYTHONPATH"] = str(code_root)
+    if path is not None:
+        env["PATH"] = path
+    return fixtures.run([sys.executable, "-P", "-B", "-m", "controller", *args], cwd=cwd, env=env, check=False)
+
+
+class ResolveRuntimeTest(unittest.TestCase):
+    def test_valid_build_info_is_a_package(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages")
+            resolved = identity.resolve_runtime(tree)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_PACKAGE)
+            self.assertEqual(resolved.build["source_commit"], "a" * 40)
+            self.assertIsNone(resolved.reason)
+
+    def test_malformed_build_info_or_a_version_mismatch_is_unidentified(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "malformed")
+            (tree / "controller" / "BUILD_INFO.json").write_text("{not json")
+            resolved = identity.resolve_runtime(tree)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn("not valid build info", resolved.reason)
+
+            other = fixtures.build_package_tree(Path(td) / "mismatch", version="9.9.9")
+            resolved = identity.resolve_runtime(other)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn("does not match", resolved.reason)
+
+    def test_a_committed_checkout_is_source(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            self.assertEqual(identity.resolve_runtime(checkout).runtime_kind, identity.RUNTIME_KIND_SOURCE)
+
+    def test_a_non_git_copy_without_build_info_is_unidentified(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            copy = Path(td) / "copy"
+            shutil.copytree(fixtures.CONTROLLER_PKG, copy / "controller",
+                            ignore=shutil.ignore_patterns("__pycache__", "BUILD_INFO.json"))
+            resolved = identity.resolve_runtime(copy)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn("neither an installed", resolved.reason)
+
+    def test_site_packages_inside_a_checkout_without_build_info_is_unidentified(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            _checkout, site_packages = _package_inside_checkout(Path(td))
+            (site_packages / "controller" / "BUILD_INFO.json").unlink()
+            with fixtures.git_call_spy() as calls:
+                resolved = identity.resolve_runtime(site_packages)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertEqual(calls, [])
+
+    def test_a_package_inside_a_git_work_tree_makes_no_git_call(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            _checkout, site_packages = _package_inside_checkout(Path(td))
+            with fixtures.git_call_spy() as calls:
+                resolved = identity.resolve_runtime(site_packages)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_PACKAGE)
+            self.assertEqual(calls, [])
+
+    def test_empty_path_package_still_resolves_and_a_checkout_names_the_missing_git(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout, site_packages = _package_inside_checkout(Path(td))
+            with fixtures.empty_path(Path(td)):
+                package = identity.resolve_runtime(site_packages)
+                source = identity.resolve_runtime(checkout)
+            self.assertEqual(package.runtime_kind, identity.RUNTIME_KIND_PACKAGE)
+            self.assertEqual(source.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn("git could not be run", source.reason)
+
+    def test_a_checkout_with_planted_valid_build_info_is_unidentified(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            _plant_build_info(checkout)
+            with fixtures.git_call_spy() as calls:
+                resolved = identity.resolve_runtime(checkout)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn(_DELETE_IT, resolved.reason)
+            self.assertEqual(calls, [])
+
+    def test_planted_build_info_step_exits_20_and_status_prints_the_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            _plant_build_info(checkout)
+            runtime_root = Path(td) / "runtime"
+            step = _controller(["--runtime-dir", str(runtime_root), "step", str(checkout)],
+                               code_root=checkout, cwd=Path(td))
+            self.assertEqual(step.returncode, 20, step.stderr)
+            self.assertIn(_DELETE_IT, step.stderr)
+            self.assertFalse((runtime_root / "source").exists())
+            self.assertFalse((runtime_root / "jobs").exists())
+
+            status = _controller(["--runtime-dir", str(runtime_root), "status"],
+                                 code_root=checkout, cwd=Path(td))
+            self.assertEqual(status.returncode, 0, status.stderr)
+            first = status.stdout.splitlines()[0]
+            self.assertTrue(first.startswith(f"controller: workflow-controller {version.__version__} -- "
+                                             f"unidentified (source checkout"), first)
+            self.assertIn(_DELETE_IT, first)
+
+    def test_planted_build_info_without_git_or_untracked_is_still_unidentified(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            _plant_build_info(checkout)
+            with fixtures.empty_path(Path(td)) as empty, fixtures.git_call_spy() as calls:
+                resolved = identity.resolve_runtime(checkout)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn(_DELETE_IT, resolved.reason)
+            self.assertEqual(calls, [])
+            step = _controller(["--runtime-dir", str(Path(td) / "runtime"), "step", str(checkout)],
+                               code_root=checkout, cwd=Path(td), path=str(empty))
+            self.assertEqual(step.returncode, 20, step.stderr)
+            self.assertIn(_DELETE_IT, step.stderr)
+
+            untracked = fixtures.build_checkout(Path(td) / "untracked", committed=False)
+            _plant_build_info(untracked)
+            resolved = identity.resolve_runtime(untracked)
+            self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIn(_DELETE_IT, resolved.reason)
+
+
+class UnpinnedIdentityByKindTest(unittest.TestCase):
+    def test_package_inside_a_work_tree_takes_the_build_commit_without_git(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            _checkout, site_packages = _package_inside_checkout(Path(td), source_commit="c" * 40)
+            with _running_from(site_packages), fixtures.git_call_spy() as calls:
+                ident = identity.pin()
+            self.assertEqual(ident.runtime_kind, identity.RUNTIME_KIND_PACKAGE)
+            self.assertEqual(ident.source_kind, identity.SOURCE_KIND_UNPINNED)
+            self.assertEqual(ident.source_commit, "c" * 40)
+            self.assertEqual(ident.version, version.__version__)
+            self.assertEqual(calls, [])
+
+            with _running_from(site_packages), fixtures.empty_path(Path(td)):
+                self.assertEqual(identity.pin().source_commit, "c" * 40)
+
+    def test_dirty_or_unknown_provenance_builds_have_no_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            dirty = fixtures.build_package_tree(Path(td) / "dirty", source_dirty=True)
+            unknown = fixtures.build_package_tree(Path(td) / "unknown", source_commit=None, source_dirty=None)
+            for tree in (dirty, unknown):
+                with _running_from(tree):
+                    self.assertIsNone(identity.pin().source_commit, tree)
+
+    def test_unidentified_has_no_commit_and_runs_no_git(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            copy = Path(td) / "copy"
+            shutil.copytree(fixtures.CONTROLLER_PKG, copy / "controller",
+                            ignore=shutil.ignore_patterns("__pycache__", "BUILD_INFO.json"))
+            with _running_from(copy), fixtures.git_call_spy() as calls:
+                ident = identity.pin()
+            self.assertEqual(ident.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
+            self.assertIsNone(ident.source_commit)
+            self.assertEqual(calls, [])
+
+    def test_source_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            head = fixtures.run(["git", "rev-parse", "HEAD"], cwd=checkout).stdout.strip()
+            with _running_from(checkout):
+                ident = identity.pin()
+            self.assertEqual(ident.runtime_kind, identity.RUNTIME_KIND_SOURCE)
+            self.assertEqual(ident.source_commit, head)
+            self.assertIsNone(ident.build)
+
+
+class MaterialisePackageTest(unittest.TestCase):
+    def test_package_snapshot_pin_records_the_package_identity_without_git(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages", generation=3, source_commit="c" * 40)
+            with fixtures.empty_path(Path(td)):
+                dest = identity.materialise(tree, Path(td) / "runtime")
+            pin_data = runtime.read_json(dest / "SOURCE_PIN.json")
+            self.assertEqual(pin_data["runtime_kind"], "package")
+            self.assertEqual(pin_data["source_kind"], "package")
+            self.assertEqual(pin_data["source_commit"], "c" * 40)
+            self.assertEqual(pin_data["generation"], 3)
+            self.assertEqual(pin_data["generation_source"], "package")
+            self.assertEqual(pin_data["version"], version.__version__)
+            self.assertEqual(pin_data["build"]["package_digest"],
+                             buildinfo.compute_package_digest(tree / "controller"))
+            self.assertEqual(pin_data["controller_runtime"]["tree_digest"], dest.name)
+            self.assertEqual(identity.compute_tree_digest(dest), dest.name)
+            self.assertTrue((dest / "controller" / "BUILD_INFO.json").is_file())
+
+    def test_an_edited_installed_byte_is_refused_naming_both_digests(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages")
+            recorded = runtime.read_json(tree / "controller" / "BUILD_INFO.json")["package_digest"]
+            (tree / "controller" / "cli.py").write_text("# edited after install\n")
+            with self.assertRaises(SourceSnapshotError) as ctx:
+                identity.materialise(tree, Path(td) / "runtime")
+            self.assertEqual(ctx.exception.evidence["raised_by"], "materialise")
+            self.assertEqual(ctx.exception.evidence["recorded"], recorded)
+            self.assertIn(recorded, ctx.exception.message)
+            self.assertIn(ctx.exception.evidence["recomputed"], ctx.exception.message)
+            self.assertEqual(list((Path(td) / "runtime" / "source").iterdir()), [])
+
+    def test_a_symlink_in_the_installed_tree_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages")
+            (tree / "controller" / "extra.py").symlink_to(tree / "controller" / "cli.py")
+            with self.assertRaises(SourceSnapshotError) as ctx:
+                identity.materialise(tree, Path(td) / "runtime")
+            self.assertEqual(ctx.exception.evidence["raised_by"], "materialise")
+            self.assertIn("extra.py", ctx.exception.message)
+
+    def test_dirty_or_unknown_provenance_needs_the_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            for name, build, cause in (
+                ("dirty", {"source_dirty": True}, "built from uncommitted changes"),
+                ("unknown", {"source_commit": None, "source_dirty": None},
+                 "built without verifiable source provenance"),
+            ):
+                tree = fixtures.build_package_tree(Path(td) / name, **build)
+                runtime_root = Path(td) / f"runtime-{name}"
+                with self.assertRaises(DirtyControllerSourceError) as ctx:
+                    identity.materialise(tree, runtime_root)
+                self.assertIn(cause, ctx.exception.message)
+                self.assertFalse((runtime_root / "source").exists())
+                dest = identity.materialise(tree, runtime_root, allow_dirty=True)
+                self.assertIsNone(runtime.read_json(dest / "SOURCE_PIN.json")["source_commit"])
+
+    def test_a_second_materialisation_reuses_the_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages")
+            runtime_root = Path(td) / "runtime"
+            first = identity.materialise(tree, runtime_root)
+            second = identity.materialise(tree, runtime_root)
+            self.assertEqual(first, second)
+            self.assertEqual([p.name for p in (runtime_root / "source").iterdir()], [first.name])
+
+    def test_unidentified_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            _plant_build_info(checkout)
+            with self.assertRaises(SourceSnapshotError) as ctx:
+                identity.materialise(checkout, Path(td) / "runtime")
+            self.assertEqual(ctx.exception.evidence["raised_by"], "materialise")
+            self.assertIn(_DELETE_IT, ctx.exception.message)
+            self.assertIn("install a wheel built by this project", ctx.exception.message)
+
+    def test_pin_in_a_package_snapshot_cross_checks_the_exec_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages", source_commit="c" * 40)
+            dest = identity.materialise(tree, Path(td) / "runtime")
+            carried = {"exec_depth": 1, "source_kind": "package", "source_commit": "c" * 40}
+            with _running_from(dest), unittest.mock.patch.dict(
+                    os.environ, {identity.EXEC_HANDOFF_ENV: json.dumps(carried)}):
+                ident = identity.pin()
+            self.assertEqual(ident.runtime_kind, identity.RUNTIME_KIND_PACKAGE)
+            self.assertEqual(ident.source_kind, identity.SOURCE_KIND_PACKAGE)
+            self.assertEqual(ident.origin_source_root, tree.resolve())
+            self.assertEqual(ident.build["source_commit"], "c" * 40)
+            self.assertEqual(identity.runtime_record(ident)["package_digest"], ident.build["package_digest"])
+
+            wrong = {**carried, "source_kind": "commit"}
+            with _running_from(dest), unittest.mock.patch.dict(
+                    os.environ, {identity.EXEC_HANDOFF_ENV: json.dumps(wrong)}):
+                with self.assertRaises(SourceSnapshotError) as ctx:
+                    identity.pin()
+            self.assertEqual(ctx.exception.evidence["raised_by"], "pin")
+
+    def test_a_pin_without_runtime_kind_reads_as_source(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            dest = identity.materialise(checkout, Path(td) / "runtime")
+            pin_data = runtime.read_json(dest / "SOURCE_PIN.json")
+            for field in ("runtime_kind", "version", "build", "controller_runtime"):
+                pin_data.pop(field)
+            (dest / "SOURCE_PIN.json").write_text(json.dumps(pin_data))
+            with _running_from(dest):
+                ident = identity.pin()
+            self.assertEqual(ident.runtime_kind, identity.RUNTIME_KIND_SOURCE)
+            self.assertIsNone(ident.build)
+
+
+class RuntimeRecordTest(unittest.TestCase):
+    def test_every_field_for_a_release_package(self) -> None:
+        build = {"schema_version": 1, "name": "workflow-controller", "version": version.__version__,
+                 "source_commit": "c" * 40, "source_dirty": False, "package_digest": "e" * 64,
+                 "build_origin": "release", "release_tag": f"v{version.__version__}"}
+        ident = identity.ControllerIdentity(
+            generation=1, source_root=Path("/s"), origin_source_root=Path("/o"),
+            source_kind=identity.SOURCE_KIND_PACKAGE, source_commit="c" * 40, tree_digest="d" * 64,
+            generation_source="package", pinned_at="now", runtime_kind="package", build=build,
+        )
+        self.assertEqual(identity.runtime_record(ident), {
+            "runtime_kind": "package", "version": version.__version__, "source_kind": "package",
+            "source_commit": "c" * 40, "tree_digest": "d" * 64, "package_digest": "e" * 64,
+            "build_origin": "release", "release_tag": f"v{version.__version__}", "generation": 1,
+        })
 
 
 if __name__ == "__main__":

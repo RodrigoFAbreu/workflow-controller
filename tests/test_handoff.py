@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -32,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, handoff, identity, job, runtime  # noqa: E402
+from controller import cli, handoff, identity, job, runtime, version  # noqa: E402
 from controller.decision import Decision  # noqa: E402
 from controller.errors import GenerationHandoffPendingError, SourceSnapshotError  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -183,6 +184,50 @@ class DetectTest(unittest.TestCase):
             self.assertEqual(ctx.exception.evidence["commit"], head_a)
 
 
+class PackageHandoffTest(unittest.TestCase):
+    """Release-runtime-observability CP2: a package runtime's approved
+    generation is the installed package's own."""
+
+    def _pinned(self, tree: Path, generation: int) -> identity.ControllerIdentity:
+        return identity.ControllerIdentity(
+            generation=generation, source_root=Path("/snapshot"), origin_source_root=tree,
+            source_kind=identity.SOURCE_KIND_PACKAGE, source_commit="a" * 40, tree_digest="d" * 64,
+            generation_source="package", pinned_at="2024-01-01T00:00:00Z",
+            runtime_kind=identity.RUNTIME_KIND_PACKAGE,
+        )
+
+    def test_equal_newer_older_and_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            # The recorded origin sits in a Git work tree but has no `.git`:
+            # the source checkout is never read.
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            tree = fixtures.build_package_tree(
+                checkout / ".venv" / "lib" / "python3.12" / "site-packages", generation=2,
+                source_commit="b" * 40,
+            )
+            with fixtures.git_call_spy() as calls:
+                self.assertIsNone(handoff.detect(self._pinned(tree, 2), tree))
+                pending = handoff.detect(self._pinned(tree, 1), tree)
+                with self.assertRaises(GenerationHandoffPendingError):
+                    handoff.detect(self._pinned(tree, 3), tree)
+            self.assertEqual(calls, [])
+            self.assertEqual((pending.from_generation, pending.to_generation), (1, 2))
+            self.assertEqual((pending.from_commit, pending.to_commit), ("a" * 40, "b" * 40))
+            self.assertEqual((pending.from_version, pending.to_version),
+                             (version.__version__, version.__version__))
+
+            shutil.rmtree(tree / "controller")
+            with self.assertRaises(SourceSnapshotError) as ctx:
+                handoff.detect(self._pinned(tree, 2), tree)
+            self.assertEqual(ctx.exception.evidence["raised_by"], "detect")
+
+    def test_an_installed_dirty_build_hands_off_with_no_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tree = fixtures.build_package_tree(Path(td) / "site-packages", generation=2, source_dirty=True)
+            pending = handoff.detect(self._pinned(tree, 1), tree)
+            self.assertIsNone(pending.to_commit)
+
+
 class WriteHandoffRecordTest(unittest.TestCase):
     def test_writes_the_full_declared_schema(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -198,8 +243,8 @@ class WriteHandoffRecordTest(unittest.TestCase):
             )
             on_disk = runtime.read_json(runtime_root / "handoff.json")
             self.assertEqual(on_disk, record)
-            self.assertEqual(record["running"], {"generation": 1, "commit": "a" * 40})
-            self.assertEqual(record["approved"], {"generation": 2, "commit": "b" * 40})
+            self.assertEqual(record["running"], {"generation": 1, "commit": "a" * 40, "version": None})
+            self.assertEqual(record["approved"], {"generation": 2, "commit": "b" * 40, "version": None})
             self.assertEqual(record["source_root"], "/origin")
             self.assertEqual(record["detected_at"], "2024-01-01T00:00:00Z")
             self.assertEqual(record["jobs_complete"], ["j1", "j2"])  # sorted
@@ -559,8 +604,10 @@ class EndToEndHandoffSubprocessTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 50, f"stdout={stdout!r} stderr={stderr!r}")
             handoff_record = runtime.read_json(runtime_root / "handoff.json")
             self.assertIsNotNone(handoff_record)
-            self.assertEqual(handoff_record["running"], {"generation": 1, "commit": head_a})
-            self.assertEqual(handoff_record["approved"], {"generation": 2, "commit": head_b})
+            self.assertEqual(handoff_record["running"],
+                             {"generation": 1, "commit": head_a, "version": version.__version__})
+            self.assertEqual(handoff_record["approved"],
+                             {"generation": 2, "commit": head_b, "version": version.__version__})
             self.assertEqual(handoff_record["source_root"], str(checkout.resolve()))
 
             # The process's own reported identity is still (1, A) -- never

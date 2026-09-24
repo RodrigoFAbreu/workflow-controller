@@ -6,10 +6,19 @@ or resource read cannot reach the mutable origin worktree at all. See
 ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``, CP1's identity block, for the
 full design this module implements.
 
-Only two late resource reads are allowlisted anywhere in ``controller/*.py``,
-both here, both performed before any orchestration: ``pin()``'s read of
-``<source_root>/SOURCE_PIN.json``, and the ``generation_source: "worktree"``
-fallback read of the *origin* tree's ``controller/GENERATION.json``.
+The late resource reads allowlisted anywhere in ``controller/*.py`` are all
+here, all performed before any orchestration: ``pin()``'s read of
+``<source_root>/SOURCE_PIN.json``, the ``generation_source: "worktree"``
+fallback read of the *origin* tree's ``controller/GENERATION.json``,
+``resolve_runtime()``'s read of the running package's own
+``controller/BUILD_INFO.json``, and ``_extract_package()``'s copy of the
+installed package.
+
+Which runtime kind is running -- ``source``, ``package`` or
+``unidentified`` -- is decided only by the running package's own files and,
+for ``source``, Git itself. Installer metadata (``direct_url.json``) is
+never read. See ``docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md``,
+"Runtime identity".
 """
 
 from __future__ import annotations
@@ -25,7 +34,7 @@ import stat
 import subprocess
 from pathlib import Path
 
-from controller import runtime
+from controller import buildinfo, runtime, version
 from controller.errors import DirtyControllerSourceError, SourceSnapshotError
 
 #: The pathspec every snapshot is scoped to -- fixed on both the clean and
@@ -39,10 +48,19 @@ _GENERATION_REL_PATH = "controller/GENERATION.json"
 #: parent. Internal to the re-exec -- never an operator input.
 EXEC_HANDOFF_ENV = "WORKFLOW_CONTROLLER_EXEC_HANDOFF"
 
-#: The closed three-member `source_kind` enumeration.
+#: The closed `source_kind` enumeration. `package` is a snapshot extracted
+#: from an installed package rather than from a Git checkout.
 SOURCE_KIND_COMMIT = "commit"
 SOURCE_KIND_WORKTREE = "worktree"
 SOURCE_KIND_UNPINNED = "unpinned"
+SOURCE_KIND_PACKAGE = "package"
+
+#: The closed `runtime_kind` enumeration: what kind of code is running.
+RUNTIME_KIND_SOURCE = "source"
+RUNTIME_KIND_PACKAGE = "package"
+RUNTIME_KIND_UNIDENTIFIED = "unidentified"
+
+_GENERATION_SOURCE_PACKAGE = "package"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -66,6 +84,31 @@ class ControllerIdentity:
     tree_digest: str | None
     generation_source: str | None
     pinned_at: str
+    #: Additive (release-runtime-observability CP2). A pin written before
+    #: these fields existed can only be a source snapshot, hence the default.
+    runtime_kind: str = RUNTIME_KIND_SOURCE
+    version: str = version.__version__
+    #: The validated ``BUILD_INFO.json`` dict for a ``package`` runtime.
+    build: dict | None = None
+    #: Why an ``unidentified`` runtime is not ``source`` or ``package``.
+    runtime_reason: str | None = None
+
+    def resolution(self) -> RuntimeResolution:
+        return RuntimeResolution(
+            runtime_kind=self.runtime_kind, code_root=self.source_root, build=self.build,
+            reason=self.runtime_reason,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class RuntimeResolution:
+    """``resolve_runtime``'s answer: the kind, the validated build info
+    (``package`` only) and, for ``unidentified``, the reason."""
+
+    runtime_kind: str
+    code_root: Path
+    build: dict | None
+    reason: str | None
 
 
 _cached_identity: ControllerIdentity | None = None
@@ -92,11 +135,6 @@ def _run_git_binary(args: list[str], *, cwd: Path) -> subprocess.CompletedProces
     return subprocess.run(
         ["git", "-C", str(cwd), *args], capture_output=True, text=False, check=False
     )
-
-
-def _is_git_repository(path: Path) -> bool:
-    result = _run_git(["rev-parse", "--git-dir"], cwd=path)
-    return result.returncode == 0
 
 
 def _now() -> str:
@@ -149,9 +187,12 @@ def compute_tree_digest(directory: Path) -> str:
 def _is_dirty(origin: Path) -> bool:
     """Dirty iff ``git status --porcelain -- controller pyproject.toml``
     produces any output -- scoped to the snapshot's own pathspec, never the
-    whole worktree."""
+    whole worktree. ``--no-optional-locks`` keeps the probe from refreshing
+    the index, so read-only callers (``--version``, ``status``) write
+    nothing into the checkout."""
     result = _run_git(
-        ["status", "--porcelain", "--", *_SNAPSHOT_DIRS, *_SNAPSHOT_FILES], cwd=origin
+        ["--no-optional-locks", "status", "--porcelain", "--", *_SNAPSHOT_DIRS, *_SNAPSHOT_FILES],
+        cwd=origin,
     )
     return bool(result.stdout.strip())
 
@@ -193,6 +234,148 @@ def _read_generation(origin: Path) -> tuple[int, str]:
         )
     raw = worktree_path.read_text()
     return _parse_generation(raw, source_desc=str(worktree_path)), "worktree"
+
+
+# ---------------------------------------------------------------------------
+# resolve_runtime(): which kind of code is running.
+# ---------------------------------------------------------------------------
+
+
+def _build_info_path(code_root: Path) -> Path:
+    return code_root / "controller" / buildinfo.BUILD_INFO_NAME
+
+
+def _source_probe_failure(code_root: Path) -> str | None:
+    """``None`` iff ``code_root`` is the top level of a Git work tree that
+    tracks ``controller/__init__.py``; otherwise why not. The two probes are
+    the only Git calls runtime resolution makes. An ``OSError`` from
+    launching ``git`` (no ``git`` on ``PATH`` included) is an answer, never
+    propagated: ``_run_git`` does not catch it."""
+    try:
+        toplevel = _run_git(["rev-parse", "--show-toplevel"], cwd=code_root)
+        if toplevel.returncode != 0:
+            return f"{code_root} is not a Git work tree: {toplevel.stderr.strip()}"
+        top = Path(toplevel.stdout.strip())
+        if top.resolve() != code_root.resolve():
+            return f"the Git work tree containing {code_root} has its top level at {top}, not {code_root}"
+        tracked = _run_git(["ls-files", "--error-unmatch", "controller/__init__.py"], cwd=code_root)
+        if tracked.returncode != 0:
+            return f"controller/__init__.py is not tracked in the Git checkout at {code_root}"
+    except OSError as exc:
+        return f"git could not be run to confirm {code_root} is a source checkout ({exc})"
+    return None
+
+
+def resolve_runtime(code_root: Path) -> RuntimeResolution:
+    """Classify the code at ``code_root`` (``Path(__file__).parent.parent``
+    of the running package) as ``package``, ``source`` or ``unidentified``.
+
+    A ``controller/BUILD_INFO.json`` next to a ``.git`` is ambiguous and
+    fail-closed: ``unidentified``, decided before any validation and
+    without Git. Otherwise build info means ``package`` (if it validates
+    against this version), a ``.git`` means ``source`` (if both probes
+    agree), and anything else is ``unidentified``. The ``SOURCE_PIN.json``
+    branch (a pinned snapshot) is ``pin()``'s own, checked before this."""
+    code_root = Path(code_root)
+    build_path = _build_info_path(code_root)
+    has_build_info = os.path.lexists(build_path)
+    has_git = os.path.lexists(code_root / ".git")
+
+    def unidentified(reason: str) -> RuntimeResolution:
+        return RuntimeResolution(RUNTIME_KIND_UNIDENTIFIED, code_root, None, reason)
+
+    if has_build_info and has_git:
+        return unidentified(
+            f"source checkout {code_root} contains controller/{buildinfo.BUILD_INFO_NAME}; "
+            f"delete it to run from source"
+        )
+    if has_build_info:
+        try:
+            raw = json.loads(build_path.read_bytes())
+            build = buildinfo.validate_build_info(raw, expected_version=version.__version__)
+        except (OSError, ValueError) as exc:
+            return unidentified(f"{build_path} is not valid build info: {exc}")
+        return RuntimeResolution(RUNTIME_KIND_PACKAGE, code_root, build.to_dict(), None)
+    if has_git:
+        failure = _source_probe_failure(code_root)
+        if failure is None:
+            return RuntimeResolution(RUNTIME_KIND_SOURCE, code_root, None, None)
+        return unidentified(failure)
+    return unidentified(
+        f"{code_root} is neither an installed workflow-controller package (no "
+        f"controller/{buildinfo.BUILD_INFO_NAME}) nor a Git checkout"
+    )
+
+
+def _package_commit(build: dict) -> str | None:
+    """A package's commit identifies it only when it was built clean."""
+    return build["source_commit"] if build["source_dirty"] is False else None
+
+
+# ---------------------------------------------------------------------------
+# The recorded runtime block and its one-line description.
+# ---------------------------------------------------------------------------
+
+
+def _runtime_block(*, runtime_kind: str, runtime_version: str, source_kind: str,
+                   source_commit: str | None, tree_digest: str | None, build: dict | None,
+                   generation: int | None) -> dict:
+    build = build or {}
+    return {
+        "runtime_kind": runtime_kind,
+        "version": runtime_version,
+        "source_kind": source_kind,
+        "source_commit": source_commit,
+        "tree_digest": tree_digest,
+        "package_digest": build.get("package_digest"),
+        "build_origin": build.get("build_origin"),
+        "release_tag": build.get("release_tag"),
+        "generation": generation,
+    }
+
+
+def runtime_record(ident: ControllerIdentity) -> dict:
+    """The ``controller_runtime`` block written into ``SOURCE_PIN.json``,
+    ``identity.json`` and every job record. Nothing validates against it:
+    a record without it stays valid."""
+    return _runtime_block(
+        runtime_kind=ident.runtime_kind, runtime_version=ident.version,
+        source_kind=ident.source_kind, source_commit=ident.source_commit,
+        tree_digest=ident.tree_digest, build=ident.build, generation=ident.generation,
+    )
+
+
+def _short(commit: str | None) -> str | None:
+    return commit[:12] if commit else None
+
+
+def describe_runtime(ident: ControllerIdentity) -> str:
+    """One line naming what is running, shared by ``--version`` (line 2)
+    and ``status`` (its first line). For an unpinned source checkout this
+    asks Git whether the snapshot pathspec is dirty."""
+    if ident.runtime_kind == RUNTIME_KIND_PACKAGE and ident.build is not None:
+        build = ident.build
+        commit = _short(build["source_commit"])
+        if build["build_origin"] == buildinfo.BUILD_ORIGIN_RELEASE:
+            return (f"package (release {build['release_tag']}; built from {commit}; "
+                    f"package {build['package_digest'][:12]})")
+        if build["source_dirty"] is None:
+            return "package (local build, unknown provenance)"
+        suffix = ", uncommitted changes" if build["source_dirty"] else ""
+        return f"package (local build from {commit}{suffix})"
+    if ident.runtime_kind == RUNTIME_KIND_SOURCE:
+        checkout = ident.origin_source_root or ident.source_root
+        if ident.source_kind == SOURCE_KIND_UNPINNED:
+            try:
+                dirty = _is_dirty(checkout)
+            except OSError:
+                dirty = False
+        else:
+            dirty = ident.source_kind == SOURCE_KIND_WORKTREE
+        at = f" @ {_short(ident.source_commit)}" if ident.source_commit else ""
+        suffix = ", uncommitted changes" if dirty else ""
+        return f"source ({checkout}{at}{suffix})"
+    return f"unidentified ({ident.runtime_reason or 'no runtime identity could be established'})"
 
 
 # ---------------------------------------------------------------------------
@@ -275,21 +458,127 @@ def _publish_source_pin(source_dir: Path, dest: Path, pin_body: dict) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def _extract_package(origin: Path, dest: Path) -> None:
+    """Copy the installed ``<origin>/controller/`` into ``dest/controller/``
+    without Git: regular files only, skipping ``__pycache__/`` and
+    ``*.pyc``. A symlink or special file anywhere under it is a refusal --
+    the snapshot must hold exactly the bytes the package digest covers."""
+    package_dir = origin / "controller"
+    try:
+        _copy_package_tree(package_dir, dest)
+    except OSError as exc:
+        raise SourceSnapshotError(
+            f"copying the installed package at {package_dir} failed: {exc}",
+            evidence={"raised_by": "materialise", "path": str(package_dir), "os_error": str(exc)},
+        ) from exc
+
+
+def _copy_package_tree(package_dir: Path, dest: Path) -> None:
+    if not stat.S_ISDIR(os.lstat(package_dir).st_mode):
+        raise SourceSnapshotError(
+            f"{package_dir} is not a directory -- cannot snapshot the installed package",
+            evidence={"raised_by": "materialise", "path": str(package_dir)},
+        )
+    target_root = dest / "controller"
+    def fail(exc: OSError) -> None:
+        raise exc
+
+    for dirpath, dirnames, filenames in os.walk(package_dir, onerror=fail):
+        current = Path(dirpath)
+        kept: list[str] = []
+        for name in sorted(dirnames):
+            if name == "__pycache__":
+                continue
+            if not stat.S_ISDIR(os.lstat(current / name).st_mode):
+                raise SourceSnapshotError(
+                    f"{current / name} in the installed package is a symlink -- refusing to "
+                    f"snapshot it",
+                    evidence={"raised_by": "materialise", "path": str(current / name)},
+                )
+            kept.append(name)
+        dirnames[:] = kept
+        for name in sorted(filenames):
+            if name.endswith(".pyc"):
+                continue
+            src = current / name
+            if not stat.S_ISREG(os.lstat(src).st_mode):
+                raise SourceSnapshotError(
+                    f"{src} in the installed package is not a regular file (a symlink or "
+                    f"special file) -- refusing to snapshot it",
+                    evidence={"raised_by": "materialise", "path": str(src)},
+                )
+            target = target_root / src.relative_to(package_dir)
+            runtime.assert_contained(dest, target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, target)
+            target.chmod(0o644)
+
+
+def _read_package_generation(snapshot: Path) -> int:
+    path = snapshot / _GENERATION_REL_PATH
+    try:
+        raw = path.read_text()
+    except OSError as exc:
+        raise SourceSnapshotError(
+            f"the installed package has no readable {_GENERATION_REL_PATH} -- cannot resolve "
+            f"a generation number",
+            evidence={"raised_by": "materialise", "path": str(path), "error": str(exc)},
+        ) from exc
+    return _parse_generation(raw, source_desc=f"the installed package's {_GENERATION_REL_PATH}")
+
+
+def _refuse_unverifiable_package(origin: Path, build: dict, *, allow_dirty: bool) -> None:
+    """A package built from uncommitted changes, or without provenance, is
+    not identified by a commit -- the same rule a dirty checkout follows."""
+    if build["source_dirty"] is False or allow_dirty:
+        return
+    cause = ("built from uncommitted changes" if build["source_dirty"] is True
+             else "built without verifiable source provenance")
+    raise DirtyControllerSourceError(
+        f"the installed package at {origin} was {cause} -- pass --allow-dirty-source to run it",
+        evidence={"origin_source_root": str(origin), "runtime_kind": RUNTIME_KIND_PACKAGE,
+                  "source_dirty": build["source_dirty"]},
+    )
+
+
 def materialise(
     origin_source_root: Path, runtime_root: Path, *, allow_dirty: bool = False,
+    resolution: RuntimeResolution | None = None,
 ) -> Path:
     """Build (or reuse) the immutable, content-addressed snapshot a pinned
-    run executes from. Returns the published snapshot directory. Raises
-    ``DirtyControllerSourceError`` for a dirty tree with no
-    ``--allow-dirty-source``, and ``SourceSnapshotError`` (``raised_by:
-    "materialise"``) for every other refusal this function can reach."""
+    run executes from. Returns the published snapshot directory.
+
+    Dispatches on the runtime kind -- ``resolution``, or
+    ``resolve_runtime(origin_source_root)`` when the caller has none:
+    ``source`` archives or copies the checkout, ``package`` copies the
+    installed package and verifies its digest, ``unidentified`` refuses.
+    Raises ``DirtyControllerSourceError`` for a dirty tree or unverifiable
+    package with no ``--allow-dirty-source``, and ``SourceSnapshotError``
+    (``raised_by: "materialise"``) for every other refusal this function
+    can reach."""
     origin_source_root = origin_source_root.resolve()
-    dirty = _is_dirty(origin_source_root)
-    if dirty and not allow_dirty:
-        raise DirtyControllerSourceError(
-            f"{origin_source_root} has uncommitted changes under controller/ or "
-            f"pyproject.toml -- pass --allow-dirty-source to run from the working tree",
-            evidence={"origin_source_root": str(origin_source_root)},
+    if resolution is None:
+        resolution = resolve_runtime(origin_source_root)
+    runtime_kind = resolution.runtime_kind
+    build = resolution.build
+
+    if runtime_kind == RUNTIME_KIND_PACKAGE:
+        _refuse_unverifiable_package(origin_source_root, build, allow_dirty=allow_dirty)
+        dirty = False
+    elif runtime_kind == RUNTIME_KIND_SOURCE:
+        dirty = _is_dirty(origin_source_root)
+        if dirty and not allow_dirty:
+            raise DirtyControllerSourceError(
+                f"{origin_source_root} has uncommitted changes under controller/ or "
+                f"pyproject.toml -- pass --allow-dirty-source to run from the working tree",
+                evidence={"origin_source_root": str(origin_source_root)},
+            )
+    else:
+        raise SourceSnapshotError(
+            f"cannot run from {origin_source_root}: {resolution.reason} -- install a wheel "
+            f"built by this project, or run from a checkout",
+            evidence={"raised_by": "materialise", "runtime_kind": runtime_kind,
+                      "origin_source_root": str(origin_source_root), "reason": resolution.reason},
         )
 
     source_dir = runtime_root / "source"
@@ -298,7 +587,24 @@ def materialise(
     tmp_dir = source_dir / f".materialise-{secrets.token_hex(8)}.tmp"
     runtime.assert_contained(source_dir, tmp_dir)
     try:
-        if dirty:
+        if runtime_kind == RUNTIME_KIND_PACKAGE:
+            _extract_package(origin_source_root, tmp_dir)
+            # The copy is checked, not the installed tree, so a concurrent
+            # reinstall cannot change the bytes after the check.
+            copied_digest = buildinfo.compute_package_digest(tmp_dir / "controller")
+            if copied_digest != build["package_digest"]:
+                raise SourceSnapshotError(
+                    f"the installed package at {origin_source_root} does not match its own build "
+                    f"info: package digest {copied_digest} != recorded {build['package_digest']} "
+                    f"-- it was modified after it was built, or partially upgraded",
+                    evidence={"raised_by": "materialise", "origin_source_root": str(origin_source_root),
+                              "recomputed": copied_digest, "recorded": build["package_digest"]},
+                )
+            generation = _read_package_generation(tmp_dir)
+            generation_source = _GENERATION_SOURCE_PACKAGE
+            source_kind = SOURCE_KIND_PACKAGE
+            source_commit = _package_commit(build)
+        elif dirty:
             _extract_dirty(origin_source_root, tmp_dir)
             source_kind = SOURCE_KIND_WORKTREE
             source_commit = None
@@ -308,12 +614,16 @@ def materialise(
             source_commit = _run_git(["rev-parse", "HEAD"], cwd=origin_source_root).stdout.strip()
 
         tree_digest = compute_tree_digest(tmp_dir)
-        generation, generation_source = _read_generation(origin_source_root)
+        if runtime_kind == RUNTIME_KIND_SOURCE:
+            generation, generation_source = _read_generation(origin_source_root)
 
         dest = source_dir / tree_digest
         runtime.assert_contained(source_dir, dest)
         pin_body = {
             "schema_version": 1,
+            "runtime_kind": runtime_kind,
+            "version": version.__version__,
+            "build": build,
             "source_kind": source_kind,
             "source_commit": source_commit,
             "origin_source_root": str(origin_source_root),
@@ -321,6 +631,11 @@ def materialise(
             "generation_source": generation_source,
             "tree_digest": tree_digest,
             "materialised_at": _now(),
+            "controller_runtime": _runtime_block(
+                runtime_kind=runtime_kind, runtime_version=version.__version__,
+                source_kind=source_kind, source_commit=source_commit, tree_digest=tree_digest,
+                build=build, generation=generation,
+            ),
         }
 
         if dest.exists():
@@ -389,13 +704,23 @@ def pin() -> ControllerIdentity:
             tree_digest=recomputed,
             generation_source=data.get("generation_source"),
             pinned_at=_now(),
+            # A pin without `runtime_kind` was written by an earlier
+            # Controller for its own (source) snapshot.
+            runtime_kind=data.get("runtime_kind", RUNTIME_KIND_SOURCE),
+            build=data.get("build"),
         )
     else:
+        # Git runs against `source_root` only for a `source` runtime: a
+        # package's commit comes from its build info, and an unidentified
+        # runtime has none.
+        resolution = resolve_runtime(source_root)
         commit = None
-        if _is_git_repository(source_root):
+        if resolution.runtime_kind == RUNTIME_KIND_SOURCE:
             result = _run_git(["rev-parse", "HEAD"], cwd=source_root)
             if result.returncode == 0:
                 commit = result.stdout.strip()
+        elif resolution.runtime_kind == RUNTIME_KIND_PACKAGE:
+            commit = _package_commit(resolution.build)
         identity = ControllerIdentity(
             generation=None,
             source_root=source_root,
@@ -405,6 +730,9 @@ def pin() -> ControllerIdentity:
             tree_digest=None,
             generation_source=None,
             pinned_at=_now(),
+            runtime_kind=resolution.runtime_kind,
+            build=resolution.build,
+            runtime_reason=resolution.reason,
         )
 
     _cached_identity = identity

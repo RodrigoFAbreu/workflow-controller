@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from controller import runtime
+from controller import buildinfo, runtime
 from controller.errors import GenerationHandoffPendingError, SourceSnapshotError
 
 #: The single file whose committed content at the origin's `HEAD` this
@@ -36,6 +37,12 @@ from controller.errors import GenerationHandoffPendingError, SourceSnapshotError
 #: halves of the comparison this module exists to make are read from the
 #: same coordinate system.
 _GENERATION_REL_PATH = "controller/GENERATION.json"
+_VERSION_REL_PATH = "controller/version.py"
+_VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]*)"\s*$', re.MULTILINE)
+
+#: ``identity.RUNTIME_KIND_PACKAGE``, spelled here so this module keeps
+#: reading only the identity's attributes (see :func:`detect`).
+_RUNTIME_KIND_PACKAGE = "package"
 
 
 def _run_git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
@@ -52,15 +59,20 @@ class Handoff:
 
     ``from_commit`` is ``None`` exactly when the running identity's own
     ``source_commit`` is (a ``"worktree"``-kind pin, materialised from a
-    dirty source under ``--allow-dirty-source``) -- carried through
-    unchanged, never invented.
+    dirty source under ``--allow-dirty-source``, or a package built without
+    a clean commit) -- carried through unchanged, never invented.
+    ``to_commit`` is ``None`` only for an installed package that was not
+    built from a clean commit. The two versions are additive and ``None``
+    where they cannot be read.
     """
 
     from_generation: int
     from_commit: str | None
     to_generation: int
-    to_commit: str
+    to_commit: str | None
     source_root: Path
+    from_version: str | None = None
+    to_version: str | None = None
 
 
 def _read_approved_generation(source_root: Path) -> tuple[int, str]:
@@ -104,6 +116,44 @@ def _read_approved_generation(source_root: Path) -> tuple[int, str]:
     return generation, commit
 
 
+def _read_committed_version(source_root: Path) -> str | None:
+    """The version ``HEAD:controller/version.py`` declares, or ``None``.
+    Reported in the handoff record only -- never a refusal."""
+    result = _run_git(["show", f"HEAD:{_VERSION_REL_PATH}"], cwd=source_root)
+    if result.returncode != 0:
+        return None
+    match = _VERSION_RE.search(result.stdout)
+    return match.group(1) if match else None
+
+
+def _read_installed_generation(package_root: Path) -> tuple[int, str | None, str]:
+    """A package runtime's approved generation: the *currently installed*
+    package's own ``controller/GENERATION.json`` under ``package_root`` (the
+    site-packages directory the running snapshot was extracted from).
+    Installing a package is that runtime's approval act. Returns
+    ``(generation, commit, version)`` -- the commit is the build's
+    ``source_commit`` when it was built clean, else ``None``. A missing or
+    unreadable installation fails closed. No Git runs here."""
+    generation_path = package_root / _GENERATION_REL_PATH
+    build_path = package_root / "controller" / buildinfo.BUILD_INFO_NAME
+    try:
+        generation_data = json.loads(generation_path.read_bytes())
+        generation = generation_data["generation"]
+        if not isinstance(generation, int):
+            raise ValueError("generation is not an integer")
+        raw_build = json.loads(build_path.read_bytes())
+        installed_version = raw_build.get("version") if isinstance(raw_build, dict) else None
+        build = buildinfo.validate_build_info(raw_build, expected_version=installed_version)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise SourceSnapshotError(
+            f"the installed package at {package_root} cannot be read -- cannot resolve the "
+            f"approved generation number ({exc})",
+            evidence={"raised_by": "detect", "source_root": str(package_root), "error": str(exc)},
+        ) from exc
+    commit = build.source_commit if build.source_dirty is False else None
+    return generation, commit, build.version
+
+
 def detect(identity: Any, source_root: Path) -> Handoff | None:
     """Compare the running (pinned) generation against the *approved*
     generation the origin source repository's committed ``HEAD`` now
@@ -121,6 +171,11 @@ def detect(identity: Any, source_root: Path) -> Handoff | None:
     requires a pinned snapshot for -- but an unpinned identity (a
     ``None`` ``generation``) still fails closed here rather than being
     compared against ``None``.
+
+    For a ``"package"`` runtime the approved generation is the installed
+    package's under ``source_root`` (:func:`_read_installed_generation`) and
+    the source checkout is never consulted; for a ``"source"`` runtime it is
+    the origin checkout's committed ``HEAD``.
 
     Three outcomes:
 
@@ -140,16 +195,24 @@ def detect(identity: Any, source_root: Path) -> Handoff | None:
             evidence={"raised_by": "detect", "source_kind": identity.source_kind},
         )
 
-    approved_generation, approved_commit = _read_approved_generation(source_root)
+    if getattr(identity, "runtime_kind", None) == _RUNTIME_KIND_PACKAGE:
+        approved_generation, approved_commit, approved_version = _read_installed_generation(source_root)
+    else:
+        approved_generation, approved_commit = _read_approved_generation(source_root)
+        approved_version = None
     pinned_generation = identity.generation
 
     if approved_generation > pinned_generation:
+        if getattr(identity, "runtime_kind", None) != _RUNTIME_KIND_PACKAGE:
+            approved_version = _read_committed_version(source_root)
         return Handoff(
             from_generation=pinned_generation,
             from_commit=identity.source_commit,
             to_generation=approved_generation,
             to_commit=approved_commit,
             source_root=source_root,
+            from_version=getattr(identity, "version", None),
+            to_version=approved_version,
         )
     if approved_generation == pinned_generation:
         return None
@@ -191,8 +254,10 @@ def write_handoff_record(
     """
     record = {
         "schema_version": 1,
-        "running": {"generation": handoff.from_generation, "commit": handoff.from_commit},
-        "approved": {"generation": handoff.to_generation, "commit": handoff.to_commit},
+        "running": {"generation": handoff.from_generation, "commit": handoff.from_commit,
+                    "version": handoff.from_version},
+        "approved": {"generation": handoff.to_generation, "commit": handoff.to_commit,
+                     "version": handoff.to_version},
         "source_root": str(handoff.source_root),
         "detected_at": now,
         "jobs_complete": sorted(jobs_complete),

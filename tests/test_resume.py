@@ -480,6 +480,25 @@ class Case4DerivedFieldDisagreementTest(_ResumeTestCase):
 # ---------------------------------------------------------------------------
 
 
+class BaseVersionRecordShapeTest(_ResumeTestCase):
+    """Release-runtime-observability CP2: `controller_runtime` is additive.
+    `_record` builds the base version's shape, which never carried it."""
+
+    def test_a_record_without_controller_runtime_validates_and_resumes(self) -> None:
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING")
+        record = _record(
+            job_id="j1", target_repo=str(managed_repo.root), status=job.STATUS_PLANNED,
+            phase="PLANNING",
+        )
+        self.assertNotIn("controller_runtime", record)
+        validity = job.validate_record(record, managed_repo=managed_repo, identity=FAKE_IDENTITY)
+        self.assertTrue(validity.valid, validity)
+        _write_record(self.runtime_root, record)
+        results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual([r["job_id"] for r in results], ["j1"])
+        self.assertNotIn("controller_runtime", _read_record(self.runtime_root, "j1"))
+
+
 class UnknownStatusRowTest(_ResumeTestCase):
     def test_first_flush_record_missing_status_raises_from_unknown_status_row(self) -> None:
         """A well-formed first-flush record whose only defect is an absent

@@ -141,6 +141,74 @@ def build_wheel(source: Path, out_dir: Path, *, env: dict | None = None,
     )
 
 
+def build_package_tree(dest: Path, *, generation: int = 1, source_commit: str | None = "a" * 40,
+                       source_dirty: bool | None = False, build_origin: str = "local",
+                       release_tag: str | None = None, version: str | None = None) -> Path:
+    """An installed-package layout without Git or a wheel build: ``dest``
+    plays ``site-packages`` and holds this repository's real ``controller/``
+    plus a ``BUILD_INFO.json`` whose ``package_digest`` is computed over the
+    copy. Returns ``dest`` -- the code root a package runtime resolves."""
+    from controller import buildinfo
+    from controller import version as version_module
+
+    package = dest / "controller"
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(
+        CONTROLLER_PKG, package,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "SOURCE_PIN.json", "BUILD_INFO.json"),
+    )
+    (package / "GENERATION.json").write_text(
+        json.dumps({"schema_version": 1, "generation": generation}) + "\n"
+    )
+    build = {
+        "schema_version": buildinfo.BUILD_INFO_SCHEMA_VERSION,
+        "name": buildinfo.PACKAGE_NAME,
+        "version": version or version_module.__version__,
+        "source_commit": source_commit,
+        "source_dirty": source_dirty,
+        "package_digest": buildinfo.compute_package_digest(package),
+        "build_origin": build_origin,
+        "release_tag": release_tag,
+    }
+    (package / buildinfo.BUILD_INFO_NAME).write_text(json.dumps(build, indent=2) + "\n")
+    return dest
+
+
+@contextlib.contextmanager
+def git_call_spy():
+    """Record every ``subprocess.run``/``Popen`` whose program is ``git``
+    (the list yielded), letting each call through unchanged."""
+    calls: list[list[str]] = []
+    real_run, real_popen = subprocess.run, subprocess.Popen
+
+    def _record(args) -> None:
+        argv = [args] if isinstance(args, str) else list(args)
+        if argv and os.path.basename(str(argv[0])) == "git":
+            calls.append([str(a) for a in argv])
+
+    def spy_run(args, *a, **kw):
+        _record(args)
+        return real_run(args, *a, **kw)
+
+    class SpyPopen(real_popen):
+        def __init__(self, args, *a, **kw):
+            _record(args)
+            super().__init__(args, *a, **kw)
+
+    with unittest.mock.patch("subprocess.run", spy_run), \
+            unittest.mock.patch("subprocess.Popen", SpyPopen):
+        yield calls
+
+
+@contextlib.contextmanager
+def empty_path(tmp: Path):
+    """``PATH`` set to an empty directory, so no ``git`` can be found."""
+    empty = tmp / "empty-path"
+    empty.mkdir(exist_ok=True)
+    with unittest.mock.patch.dict(os.environ, {"PATH": str(empty)}):
+        yield empty
+
+
 def run_controller_module(args: list[str], *, cwd: Path, env: dict, check: bool = False) -> subprocess.CompletedProcess:
     """Run this repository's real ``controller`` package as
     ``python -m controller`` with an explicit ``PYTHONPATH``, for tests

@@ -17,7 +17,7 @@ class ResolveRuntimeRootTest(unittest.TestCase):
             explicit = Path(td) / "explicit"
             root, row = runtime.resolve_runtime_root(
                 runtime_dir=str(explicit),
-                origin_source_root=Path(td),
+                origin_source_root=Path(td), runtime_kind="source",
                 env={"WORKFLOW_CONTROLLER_HOME": str(Path(td) / "env-home")},
             )
             self.assertEqual(root, explicit.resolve())
@@ -27,7 +27,7 @@ class ResolveRuntimeRootTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             env_home = Path(td) / "env-home"
             root, row = runtime.resolve_runtime_root(
-                runtime_dir=None, origin_source_root=Path(td),
+                runtime_dir=None, origin_source_root=Path(td), runtime_kind="source",
                 env={"WORKFLOW_CONTROLLER_HOME": str(env_home)},
             )
             self.assertEqual(root, env_home.resolve())
@@ -38,9 +38,31 @@ class ResolveRuntimeRootTest(unittest.TestCase):
             origin = Path(td)
             os.system(f"git init -q {origin}")
             root, row = runtime.resolve_runtime_root(
-                runtime_dir=None, origin_source_root=origin, env={},
+                runtime_dir=None, origin_source_root=origin, runtime_kind="source", env={},
             )
             self.assertEqual(root, (origin / ".controller").resolve())
+            self.assertEqual(row, runtime.LADDER_ORIGIN_CHECKOUT)
+
+    def test_row3_is_source_only_a_package_or_unidentified_runtime_falls_to_row4(self) -> None:
+        # The venv-inside-checkout case: the origin (site-packages) is
+        # inside a Git work tree, but only a source runtime selects row 3.
+        with tempfile.TemporaryDirectory() as td:
+            checkout = Path(td) / "checkout"
+            site_packages = checkout / ".venv" / "lib" / "python3.12" / "site-packages"
+            site_packages.mkdir(parents=True)
+            os.system(f"git init -q {checkout}")
+            xdg = Path(td) / "xdg-state"
+            for kind in ("package", "unidentified"):
+                root, row = runtime.resolve_runtime_root(
+                    runtime_dir=None, origin_source_root=site_packages, runtime_kind=kind,
+                    env={"XDG_STATE_HOME": str(xdg)},
+                )
+                self.assertEqual(root, (xdg / "workflow-controller").resolve(), kind)
+                self.assertEqual(row, runtime.LADDER_XDG_STATE, kind)
+            root, row = runtime.resolve_runtime_root(
+                runtime_dir=None, origin_source_root=checkout, runtime_kind="source",
+                env={"XDG_STATE_HOME": str(xdg)},
+            )
             self.assertEqual(row, runtime.LADDER_ORIGIN_CHECKOUT)
 
     def test_row4_xdg_state_home_when_origin_not_a_repo(self) -> None:
@@ -49,7 +71,7 @@ class ResolveRuntimeRootTest(unittest.TestCase):
             origin.mkdir()
             xdg = Path(td) / "xdg-state"
             root, row = runtime.resolve_runtime_root(
-                runtime_dir=None, origin_source_root=origin, env={"XDG_STATE_HOME": str(xdg)},
+                runtime_dir=None, origin_source_root=origin, runtime_kind="source", env={"XDG_STATE_HOME": str(xdg)},
             )
             self.assertEqual(root, (xdg / "workflow-controller").resolve())
             self.assertEqual(row, runtime.LADDER_XDG_STATE)
@@ -59,7 +81,7 @@ class ResolveRuntimeRootTest(unittest.TestCase):
             origin = Path(td) / "not-a-repo"
             origin.mkdir()
             root, row = runtime.resolve_runtime_root(
-                runtime_dir=None, origin_source_root=origin, env={},
+                runtime_dir=None, origin_source_root=origin, runtime_kind="source", env={},
             )
             self.assertEqual(root, (Path.home() / ".local" / "state" / "workflow-controller"))
             self.assertEqual(row, runtime.LADDER_XDG_STATE)

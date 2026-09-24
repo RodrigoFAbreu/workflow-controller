@@ -61,4 +61,37 @@ The previous milestone's narrative is archived at
     `tests.test_buildinfo tests.test_package_structure tests.test_cli` passed (109 tests), and the
     full suite passed with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` (1016 tests, 6 skipped).
 
-**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for CP2.
+- **CP2 -- packaged runtime identity: complete.**
+  - `identity.resolve_runtime(code_root)` classifies the running code as `package` (a valid
+    `controller/BUILD_INFO.json` and no `.git`), `source` (a `.git` whose top level is `code_root`
+    and which tracks `controller/__init__.py`) or `unidentified`. It never reads
+    `direct_url.json`. A `BUILD_INFO.json` inside a checkout is `unidentified` ("delete it to run
+    from source"), decided without Git. A package or unidentified runtime whose root has no
+    `.git` makes no Git call at all.
+  - `ControllerIdentity` gains `runtime_kind`, `version`, `build` and `runtime_reason`.
+    `source_kind` gains `package`. `pin()`'s unpinned identity takes a package's commit from its
+    build info, and only when the build was clean.
+  - `materialise` dispatches on the kind. A package is copied without Git (regular files only; a
+    symlink is refused), its `package_digest` is re-checked on the copy, and the generation is
+    read from the copy. A dirty or unknown-provenance build needs `--allow-dirty-source`. An
+    unidentified runtime refuses (exit 20). `SOURCE_PIN.json` gains `runtime_kind`, `version`,
+    `build` and `controller_runtime`. A pin without `runtime_kind` reads as `source`.
+  - Ladder row 3 applies only to `source` runtimes, which fixes the venv-inside-checkout
+    misfire.
+  - `handoff.detect` for a package compares against the installed package's
+    `GENERATION.json`, with no Git. `handoff.json`'s `running`/`approved` blocks gain `version`.
+  - `identity.runtime_record` is the `controller_runtime` block, written into `identity.json` and
+    every job record. `inspect`/`explain --json` carry it as `controller`. `status` opens with a
+    `controller:` line, and `--version` prints `describe_runtime` as line 2. The source dirty
+    probe now runs with `git --no-optional-locks`, so `--version`/`status` never refresh the
+    index.
+  - Verified: the narrow set `tests.test_identity tests.test_runtime tests.test_handoff
+    tests.test_cli tests.test_job tests.test_job_validation tests.test_resume
+    tests.test_package_structure` passed (441 tests). The full suite with
+    `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` passed (1047 tests, 6 skipped).
+  - Known flake, not caused by CP2: `test_worker.InterruptedTest.test_hanging_worker_with_short_timeout_classifies_interrupted_and_reaps_group`
+    failed in 3 of 13 full-suite runs, back to back, and passed in every other run and in
+    isolation. It checks the killed grandchild's liveness right after the timeout, without
+    waiting for the orphan to be reaped. CP2 does not touch `worker.py` or that test.
+
+**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for CP3.

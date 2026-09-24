@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import dataclasses
 import errno
 import io
 import json
@@ -36,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, evidence, job, lock, managed_repo, routing, runtime, worker  # noqa: E402
+from controller import cli, evidence, identity, job, lock, managed_repo, routing, runtime, version, worker  # noqa: E402
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
     GitDirectoryUnresolvableError,
@@ -45,6 +46,7 @@ from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
     LifecycleWorkerUnverifiableError,
     PendingJobReconciliationError,
+    SourceSnapshotError,
     UnmanagedRepositoryError,
 )
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
@@ -62,6 +64,20 @@ FAKE_IDENTITY = ControllerIdentity(
     generation_source="head",
     pinned_at="2024-01-01T00:00:00Z",
 )
+
+#: A valid release ``BUILD_INFO.json`` for the running version.
+RELEASE_BUILD = {
+    "schema_version": 1, "name": "workflow-controller", "version": "1.1.0",
+    "source_commit": "0123456789ab" + "c" * 28, "source_dirty": False,
+    "package_digest": "3f2a1c9d0b7e" + "d" * 52, "build_origin": "release", "release_tag": "v1.1.0",
+}
+
+
+def _package_identity(build: dict) -> ControllerIdentity:
+    return dataclasses.replace(
+        FAKE_IDENTITY, runtime_kind="package", source_kind="package", build=build,
+        source_commit=build["source_commit"] if build["source_dirty"] is False else None,
+    )
 
 
 class _Args:
@@ -152,24 +168,28 @@ class ParserTest(unittest.TestCase):
 
 
 class VersionFlagTest(unittest.TestCase):
-    """`--version` (release-runtime-observability CP1): exactly one line,
-    `workflow-controller <__version__>`, exit 0, no subcommand needed,
-    nothing written. CP2 adds the runtime line."""
+    """`--version` (release-runtime-observability CP1/CP2): line 1 is
+    exactly `workflow-controller <__version__>`, line 2 describes the
+    running runtime; exit 0, no subcommand needed, nothing written."""
 
-    def _expected(self) -> str:
+    def _line1(self) -> str:
         from controller import version
-        return f"workflow-controller {version.__version__}\n"
+        return f"workflow-controller {version.__version__}"
 
     def _assert_version_run(self, result, *, checkout: Path, runtime_dir: Path) -> None:
         self.assertEqual(result.returncode, cli.EXIT_OK, result.stderr)
-        self.assertEqual(result.stdout, self._expected())
+        head = fixtures.run(["git", "rev-parse", "HEAD"], cwd=checkout).stdout.strip()
+        self.assertEqual(
+            result.stdout,
+            f"{self._line1()}\nruntime: source ({checkout.resolve()} @ {head[:12]})\n",
+        )
         self.assertEqual(result.stderr, "")
         self.assertFalse(runtime_dir.exists())
         self.assertFalse((checkout / ".controller").exists())
         status = fixtures.run(["git", "status", "--porcelain", "--ignored"], cwd=checkout)
         self.assertEqual(status.stdout, "")
 
-    def test_source_checkout_prints_one_line_and_writes_nothing(self) -> None:
+    def test_source_checkout_prints_two_lines_and_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             checkout = fixtures.build_checkout(tmp_path / "checkout")
@@ -183,7 +203,7 @@ class VersionFlagTest(unittest.TestCase):
             self._assert_version_run(result, checkout=checkout, runtime_dir=runtime_dir)
             self.assertFalse((tmp_path / "xdg").exists())
 
-    def test_editable_install_prints_one_line_and_writes_nothing(self) -> None:
+    def test_editable_install_prints_two_lines_and_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             checkout = fixtures.build_checkout(tmp_path / "checkout")
@@ -197,17 +217,90 @@ class VersionFlagTest(unittest.TestCase):
             self._assert_version_run(result, checkout=checkout, runtime_dir=runtime_dir)
             self.assertFalse((tmp_path / "xdg").exists())
 
-    def test_needs_no_subcommand_and_runs_no_subprocess(self) -> None:
+    def test_build_parser_runs_no_subprocess_and_version_needs_no_subcommand(self) -> None:
         with unittest.mock.patch("subprocess.run", side_effect=AssertionError("subprocess.run")) as run, \
                 unittest.mock.patch("subprocess.Popen", side_effect=AssertionError("Popen")) as popen:
             parser = cli.build_parser()
-            stdout = io.StringIO()
-            with contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as ctx:
-                parser.parse_args(["--version"])
-        self.assertEqual(ctx.exception.code, cli.EXIT_OK)
-        self.assertEqual(stdout.getvalue(), self._expected())
         run.assert_not_called()
         popen.assert_not_called()
+        stdout = io.StringIO()
+        with unittest.mock.patch.object(cli.identity, "pin", return_value=_package_identity(RELEASE_BUILD)), \
+                contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as ctx:
+            parser.parse_args(["--version"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_OK)
+        self.assertEqual(stdout.getvalue().splitlines()[0], self._line1())
+
+    def test_line2_describes_each_runtime_kind(self) -> None:
+        commit = RELEASE_BUILD["source_commit"]
+        digest = RELEASE_BUILD["package_digest"]
+        local = {**RELEASE_BUILD, "build_origin": "local", "release_tag": None}
+        cases = [
+            (_package_identity(RELEASE_BUILD),
+             f"package (release v1.1.0; built from {commit[:12]}; package {digest[:12]})"),
+            (_package_identity(local), f"package (local build from {commit[:12]})"),
+            (_package_identity({**local, "source_dirty": True}),
+             f"package (local build from {commit[:12]}, uncommitted changes)"),
+            (_package_identity({**local, "source_commit": None, "source_dirty": None}),
+             "package (local build, unknown provenance)"),
+            (dataclasses.replace(FAKE_IDENTITY, origin_source_root=Path("/checkout"),
+                                 source_commit=commit),
+             f"source (/checkout @ {commit[:12]})"),
+            (dataclasses.replace(FAKE_IDENTITY, origin_source_root=Path("/checkout"),
+                                 source_kind="worktree", source_commit=None),
+             "source (/checkout, uncommitted changes)"),
+            (dataclasses.replace(FAKE_IDENTITY, runtime_kind="unidentified", runtime_reason="no build info"),
+             "unidentified (no build info)"),
+        ]
+        for ident, expected in cases:
+            stdout = io.StringIO()
+            with unittest.mock.patch.object(cli.identity, "pin", return_value=ident), \
+                    contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(["--version"])
+            self.assertEqual(stdout.getvalue(), f"{self._line1()}\nruntime: {expected}\n")
+
+    def test_an_unresolvable_identity_is_reported_not_raised(self) -> None:
+        stdout = io.StringIO()
+        error = SourceSnapshotError("snapshot tampered", evidence={"raised_by": "pin"})
+        with unittest.mock.patch.object(cli.identity, "pin", side_effect=error), \
+                contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as ctx:
+            cli.build_parser().parse_args(["--version"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_OK)
+        self.assertEqual(stdout.getvalue().splitlines()[1], "runtime: unidentified (snapshot tampered)")
+
+
+class StatusFirstLineTest(unittest.TestCase):
+    """CP2: `status` opens with the running process's `controller:` line;
+    every other line is unchanged."""
+
+    def test_controller_line_comes_first_and_the_rest_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            checkout = fixtures.build_checkout(tmp_path / "checkout")
+            head = fixtures.run(["git", "rev-parse", "HEAD"], cwd=checkout).stdout.strip()
+            runtime_root = tmp_path / "runtime"
+            env = {**os.environ, "PYTHONPATH": str(checkout)}
+            env.pop(identity.EXEC_HANDOFF_ENV, None)
+            argv = [sys.executable, "-P", "-B", "-m", "controller", "--runtime-dir", str(runtime_root), "status"]
+            expected_first = (f"controller: workflow-controller {version.__version__} -- "
+                              f"source ({checkout.resolve()} @ {head[:12]})")
+
+            first = fixtures.run(argv, cwd=tmp_path, env=env, check=False)
+            self.assertEqual(first.returncode, cli.EXIT_OK, first.stderr)
+            self.assertEqual(first.stdout.splitlines(), [
+                expected_first,
+                f"no Controller runtime state at {runtime_root.resolve()} (ladder row 1)",
+            ])
+
+            second = fixtures.run(argv, cwd=tmp_path, env=env, check=False)
+            lines = second.stdout.splitlines()
+            self.assertEqual(lines[0], expected_first)
+            self.assertTrue(lines[1].startswith("pinned identity: source_kind=unpinned "), lines)
+            self.assertEqual(lines[2:], [
+                "jobs: none", "handoff: none", f"runtime root: {runtime_root.resolve()} (ladder row 1)",
+            ])
+            record = runtime.read_json(runtime_root / "identity.json")
+            self.assertEqual(record["controller_runtime"]["runtime_kind"], "source")
+            self.assertEqual(record["controller_runtime"]["source_commit"], head)
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +392,7 @@ class InspectCommandTest(unittest.TestCase):
         self.assertEqual(payload["work_item"]["work_item_id"], "wi-1")
         self.assertEqual(payload["work_item"]["phase"], "PLANNING")
         self.assertEqual(payload["work_item"]["last_completed_checkpoint_id"], "CP1")
+        self.assertEqual(payload["controller"], identity.runtime_record(FAKE_IDENTITY))
 
     def test_unmanaged_repository_refuses(self) -> None:
         bare = fixtures.build_bare_git_repo(self.tmp_root / "bare")
@@ -336,6 +430,7 @@ class InspectCommandTest(unittest.TestCase):
         payload = json.loads(buf.getvalue())
         self.assertEqual(payload["repository"]["workflow_version"], "2.5.1")
         self.assertIsNone(payload["work_item"])
+        self.assertEqual(payload["controller"], identity.runtime_record(FAKE_IDENTITY))
 
 
 class ExplainCommandTest(unittest.TestCase):
@@ -421,6 +516,7 @@ class ExplainCommandTest(unittest.TestCase):
         self.assertFalse(payload["automatic"])
         self.assertIsNotNone(payload["gate"])
         self.assertEqual(payload["gate"]["safe_resume_command"], "/approve-review plan wi-1")
+        self.assertEqual(payload["controller"], identity.runtime_record(FAKE_IDENTITY))
 
     def test_never_writes_a_job_record(self) -> None:
         """`explain` only ever calls `evidence.decide`, never

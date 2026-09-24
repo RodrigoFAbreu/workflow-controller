@@ -34,6 +34,13 @@ DEPENDENCY_ORDER = [
 _ALLOWLISTED_RESOURCE_READ_SITES = {
     ("identity.py", "pin"),
     ("identity.py", "_read_generation"),
+    # Release-runtime-observability CP2. Both run before any orchestration:
+    # `resolve_runtime` reads the running package's own BUILD_INFO.json
+    # while `pin()` resolves the unpinned identity, and `_extract_package`
+    # copies the installed package into the snapshot inside `materialise`,
+    # before the re-exec.
+    ("identity.py", "resolve_runtime"),
+    ("identity.py", "_extract_package"),
 }
 
 _RELOAD_LITERALS = {"importlib.reload", "imp.reload"}

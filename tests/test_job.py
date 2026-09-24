@@ -34,7 +34,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, decision, evidence, job, lock, routing, target_state, worker  # noqa: E402
+from controller import cli, decision, evidence, identity, job, lock, routing, target_state, worker  # noqa: E402
 from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
     PendingJobReconciliationError,
@@ -602,6 +602,8 @@ class LaunchPathTest(unittest.TestCase):
             "lifecycle_lock", "worker_process",
             # Automatic-lifecycle-orchestration CP6.
             "worker_route",
+            # Release-runtime-observability CP2.
+            "controller_runtime",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -611,6 +613,19 @@ class LaunchPathTest(unittest.TestCase):
         self.assertTrue(record["worker"]["stderr_path"])
         self.assertTrue(Path(record["worker"]["stdout_path"]).is_file())
         self.assertTrue(Path(record["worker"]["stderr_path"]).is_file())
+
+    def test_controller_runtime_block_carries_every_field(self) -> None:
+        record = job.execute_step(
+            self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+            claude_bin=str(FAKE_CLAUDE), timeout=10,
+        )
+        block = record["controller_runtime"]
+        self.assertEqual(set(block), {
+            "runtime_kind", "version", "source_kind", "source_commit", "tree_digest",
+            "package_digest", "build_origin", "release_tag", "generation",
+        })
+        self.assertEqual(block, identity.runtime_record(FAKE_IDENTITY))
+        self.assertEqual(block["tree_digest"], record["controller_source_tree_digest"])
 
     def test_controller_source_identity_recorded_from_identity_including_worktree_none_commit(self) -> None:
         record = job.execute_step(

@@ -138,6 +138,7 @@ def _write_identity_record(runtime_root: Path, ident: identity.ControllerIdentit
         "tree_digest": ident.tree_digest,
         "generation_source": ident.generation_source,
         "pinned_at": ident.pinned_at,
+        "controller_runtime": identity.runtime_record(ident),
         "interpreter_executable": sys.executable,
         "interpreter_safe_path": bool(sys.flags.safe_path),
         "interpreter_sys_path": list(sys.path),
@@ -181,9 +182,19 @@ class _RoleAssignmentAction(argparse.Action):
 
 
 def version_text() -> str:
-    """``--version``'s output. Line 1 is exactly ``workflow-controller
+    """``--version``'s line 1: exactly ``workflow-controller
     <__version__>``, the contract tests and the release pipeline assert."""
     return f"workflow-controller {version.__version__}"
+
+
+def _describe_running_runtime() -> str:
+    """``describe_runtime`` for this process, or ``unidentified`` naming
+    why its identity could not be resolved (a tampered snapshot, say) --
+    ``--version`` and ``status`` report, they never fail on this."""
+    try:
+        return identity.describe_runtime(identity.pin())
+    except ControllerError as exc:
+        return f"unidentified ({exc.message})"
 
 
 class _VersionAction(argparse.Action):
@@ -196,6 +207,7 @@ class _VersionAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print(version_text())
+        print(f"runtime: {_describe_running_runtime()}")
         parser.exit(EXIT_OK)
 
 
@@ -266,7 +278,11 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     handoff -- reported from what was durably present when this process
     *started*, since this same process writes a fresh ``identity.json``
     immediately before this body runs and that record must not be mistaken
-    for evidence of prior work."""
+    for evidence of prior work.
+
+    The first line always describes the *running* process, the same text
+    as ``--version``'s line 2."""
+    print(f"controller: {version_text()} -- {identity.describe_runtime(ident)}")
     if not pre_existing["had_any_state"]:
         print(f"no Controller runtime state at {runtime_root} (ladder row {pre_existing['ladder_row']})")
         return EXIT_OK
@@ -343,6 +359,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 },
                 "work_item": None,
                 "lifecycle_lock": lock_state,
+                "controller": identity.runtime_record(ident),
             }))
             return EXIT_OK
         print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
@@ -359,6 +376,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             },
             "work_item": _work_item_payload(work_item),
             "lifecycle_lock": lock_state,
+            "controller": identity.runtime_record(ident),
         }))
         return EXIT_OK
 
@@ -429,6 +447,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             },
             "pending_jobs": [entry.to_dict() for entry in pending],
             "lifecycle_lock": lock_state,
+            "controller": identity.runtime_record(ident),
         }))
         return EXIT_OK
 
@@ -774,7 +793,7 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
 
     origin = ident.origin_source_root or ident.source_root
     runtime_root, ladder_row = runtime.resolve_runtime_root(
-        runtime_dir=args.runtime_dir, origin_source_root=origin,
+        runtime_dir=args.runtime_dir, origin_source_root=origin, runtime_kind=ident.runtime_kind,
     )
 
     read_only = command in READ_ONLY_COMMANDS
@@ -787,8 +806,11 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
                 "branch again -- refusing a second exec rather than looping",
                 evidence={"raised_by": "cli.main", "exec_depth": exec_depth},
             )
+        # An `unidentified` runtime refuses here (exit 20): `materialise`
+        # dispatches on the kind this process resolved.
         snapshot_dir = identity.materialise(
             ident.source_root, runtime_root, allow_dirty=args.allow_dirty_source,
+            resolution=ident.resolution(),
         )
         # The handoff must carry the *snapshot's own* source_kind/source_commit
         # (as materialise() actually determined and published), never the

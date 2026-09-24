@@ -88,7 +88,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from controller import evidence, lock, routing, runtime, target_state, worker
+from controller import evidence, identity, lock, routing, runtime, target_state, worker
 from controller.decision import (
     NO_PHASE,
     NO_PHASE_WIRE,
@@ -3130,6 +3130,9 @@ def _identity_block(
         "controller_generation": ident.generation,
         "controller_source_commit": ident.source_commit,
         "controller_source_tree_digest": ident.tree_digest,
+        # Additive (release-runtime-observability CP2): `validate_record`
+        # reads none of it, so a record without it stays valid.
+        "controller_runtime": identity.runtime_record(ident),
         "target_repo": str(managed_repo.root),
         "target_workflow_version": managed_repo.workflow_version,
         "work_item_id": work_item_id,

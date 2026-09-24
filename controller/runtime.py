@@ -24,6 +24,10 @@ LADDER_XDG_STATE = 4
 
 _ENV_HOME = "WORKFLOW_CONTROLLER_HOME"
 
+#: ``identity.RUNTIME_KIND_SOURCE``, spelled here because ``identity`` is
+#: later in the dependency order.
+_RUNTIME_KIND_SOURCE = "source"
+
 
 def _is_git_repository(path: Path) -> bool:
     """Whether ``path`` is (inside) a Git working tree, checked by asking
@@ -46,11 +50,17 @@ def resolve_runtime_root(
     *,
     runtime_dir: str | os.PathLike | None,
     origin_source_root: Path,
+    runtime_kind: str,
     env: dict | None = None,
 ) -> tuple[Path, int]:
     """Resolve the runtime root per the stated precedence ladder. Returns
     ``(resolved_path, ladder_row)`` -- both are reported by ``status`` and
     carried in refusal evidence, never silently discarded.
+
+    Row 3 (``<origin checkout>/.controller``) applies only to a ``"source"``
+    runtime. A ``"package"`` or ``"unidentified"`` one falls through to row
+    4 even when its origin sits inside a Git work tree -- a venv inside a
+    checkout would otherwise resolve to ``site-packages/.controller``.
 
     ``env`` defaults to ``os.environ`` and is overridable only for tests
     (row 4's own ``XDG_STATE_HOME`` case, and row 2's env-var case, both
@@ -65,7 +75,7 @@ def resolve_runtime_root(
     if home:
         return Path(home).expanduser().resolve(), LADDER_ENV_HOME
 
-    if _is_git_repository(origin_source_root):
+    if runtime_kind == _RUNTIME_KIND_SOURCE and _is_git_repository(origin_source_root):
         return (origin_source_root / ".controller").resolve(), LADDER_ORIGIN_CHECKOUT
 
     xdg_state = env.get("XDG_STATE_HOME")

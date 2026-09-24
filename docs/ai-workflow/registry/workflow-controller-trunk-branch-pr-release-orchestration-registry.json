@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-trunk-branch-pr-release-orchestration",
+  "plan_revision": 10,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Single Controller version authority: static [project].version in pyproject.toml, controller/version.py reduced to a stdlib-only resolver (source runtime reads its own code root's pyproject.toml, package runtime reads the owning distribution's metadata cross-checked against BUILD_INFO.json, never importlib.metadata for a source runtime), setup.py/identity/handoff/cli/tools rewired, version agreement tests",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Generic repository policy: controller/repo_policy.py (schema v1, strict validation, closed adapter registries for version source/version scheme/tag format/build+verify command/artifacts/publication, milestone-branch section), read from a committed tree never the working tree, explicit activation, and this repository's reference .workflow-controller/policy.json",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Target-repository Git and GitHub boundaries: controller/gitrepo.py (fetch, ancestry, no-force branch create/switch, fast-forward-only push, no-force annotated tag create/push, ls-remote peel, the history-preserving trunk-integration merge primitive) and controller/forge.py (the gh adapter: repository identity, PR list/view/create-draft/ready, release view/create/upload/publish-draft/download, no merge operation, undecidable reads refuse), plus the executable fake gh and bare-origin fixtures",
+      "depends_on": [],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Generic release transaction: controller/release_txn.py classification (NO_CHANGE, RELEASE_DUE, RESUME, ALREADY_RELEASED, and the fail-closed collision/invalid-transition states), tag-after-validation, publish and draft-resume without ever moving a tag, post-publication asset verification; tools/release.py rewritten as the reference adopter's thin CLI",
+      "depends_on": [
+        "CP2",
+        "CP3"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "CI/CD: tools/ci_workflows.py renders main.yml (push to main and workflow_dispatch: validate, release-plan, build, publish as one transaction; no cancellation; write permission only in publish), ci.yml (pull requests, same-ref cancellation), validate.yml unchanged in jobs, release.yml removed; test_ci_workflows rewritten",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Milestone branch binding: controller/milestone_branch.py durable binding records under the runtime root keyed by the target's Git common directory, persist-before-act creation of milestone/<work-item-id> from the trunk tip, the adopt/collision decision table, crash reconciliation at every persist boundary, policy snapshot at bind time, trunk-start preflight and fast-forward-only branch sync",
+      "depends_on": [
+        "CP2",
+        "CP3"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Draft PR lifecycle and completion: PR discovery/creation/reuse with identity verification, trunk-drift detection, the Workflow 2.5.1 integration-required gate, readiness preconditions and gh pr ready at MILESTONE_COMPLETE, the human-only merge gate, merged/closed-PR handling, the refusal-state exits (reopen, new PR, abandon), and fast-forward close-out to trunk",
+      "depends_on": [
+        "CP6"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP8",
+      "name": "Lifecycle wiring: the repository preflight under the lifecycle lock in job._execute_step_locked, worker tool restrictions and post-step branch verification when the policy is active, branch/PR/drift/release-policy blocks in inspect/explain/status, the milestone-binding acknowledgement subcommand, byte-identical behaviour with no policy, follow unchanged",
+      "depends_on": [
+        "CP7"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP9",
+      "name": "End-to-end disposable scenarios: policy-enabled lifecycle from trunk to a ready Draft PR and human merge with fake claude, fake gh and a bare origin; interruption and restart at every persist boundary; trunk drift; no-policy regression; release classification over a disposable trunk history",
+      "depends_on": [
+        "CP4",
+        "CP8"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP10",
+      "name": "Operator documentation and full verification under Workflow 2.5.1 (terminal checkpoint): README (milestone branches, pull requests, releasing rewritten), ADR 0003, ROADMAP entry including the follow-up Workflow 2.6.x integration milestone, the first-automatic-release runbook, full suite, packaged runtime, ci_workflows --check",
+      "depends_on": [
+        "CP5",
+        "CP9"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

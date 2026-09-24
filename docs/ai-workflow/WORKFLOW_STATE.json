@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-trunk-branch-pr-release-orchestration",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -1771,6 +1771,78 @@
           "completed_at": "2026-09-24T11:40:00Z"
         }
       }
+    },
+    "workflow-controller-trunk-branch-pr-release-orchestration": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-trunk-branch-pr-release-orchestration",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-trunk-branch-pr-release-orchestration-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-trunk-branch-pr-release-orchestration-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 10,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "00c3b7136dae2ca1993af91c999df48ad376f433",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "9bad3e3e2849a6dbe77cb4c700cc985f2ad0fb6bd7137a2671022cbacdac4f54",
+        "approved_review_content_id": "8585e1d03cec71d09ca10bd13d06df5cd4b123026566090d288d5eaec4a8fee8",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "89b68df24c281961892bbf5c727d239edb7093cb"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-trunk-branch-pr-release-orchestration-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "529eb1e42eaf2f547e557d17ab761c2e6f699d02"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-trunk-branch-pr-release-orchestration-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0e76cb75213ecb8d9772929e140df53a127cf94e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve workflow-controller-trunk-branch-pr-release-orchestration plan",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-24T23:01:36Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "8585e1d03cec71d09ca10bd13d06df5cd4b123026566090d288d5eaec4a8fee8",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "9bad3e3e2849a6dbe77cb4c700cc985f2ad0fb6bd7137a2671022cbacdac4f54",
+          "verdict": "APPROVE",
+          "round": 10,
+          "completed_at": "2026-09-24T22:51:59Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "9bad3e3e2849a6dbe77cb4c700cc985f2ad0fb6bd7137a2671022cbacdac4f54",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-24T22:57:10Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 33,
+      "last_transition": "2026-09-24T23:01:36Z"
     }
   }
 }

@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-trunk-branch-pr-release-orchestration",
+  "requirements": {
+    "R1": {
+      "description": "Deterministic milestone/<work-item-id> branch naming and creation from the configured trunk",
+      "checkpoint_ids": [
+        "CP2",
+        "CP6"
+      ]
+    },
+    "R2": {
+      "description": "Durable Controller-side branch evidence; restart never duplicates a branch, switches to an unrelated branch, force-resets or rewrites a milestone branch",
+      "checkpoint_ids": [
+        "CP3",
+        "CP6",
+        "CP9"
+      ]
+    },
+    "R3": {
+      "description": "A Controller-owned GitHub boundary (gh) instead of shell commands scattered through lifecycle logic",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Draft PR from the milestone branch to trunk, identity persisted and recovered, matching PRs reused, ambiguous or mismatched identity refused",
+      "checkpoint_ids": [
+        "CP7",
+        "CP9"
+      ]
+    },
+    "R5": {
+      "description": "Human-only merge; the PR is marked ready only after every precondition is verified",
+      "checkpoint_ids": [
+        "CP3",
+        "CP7",
+        "CP8"
+      ]
+    },
+    "R6": {
+      "description": "Lightweight trunk semantics: no develop branch, concurrent milestone branches possible, not every trunk merge releases",
+      "checkpoint_ids": [
+        "CP4",
+        "CP6"
+      ]
+    },
+    "R7": {
+      "description": "Trunk drift is detected and never treated as equivalent to the integrated result; the history-preserving integration primitive exists; Workflow 2.5.1 behaviour is a fail-closed gate",
+      "checkpoint_ids": [
+        "CP3",
+        "CP7"
+      ]
+    },
+    "R9": {
+      "description": "A generic repository release policy separated from the Controller's reference configuration",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R10": {
+      "description": "pyproject.toml is the single Controller version authority; package metadata, --version, wheel and release validation agree; source runtime never reports an installed version",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R11": {
+      "description": "A push to trunk releases exactly when the authoritative version changed, after validating the transition",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R12": {
+      "description": "The tag is derived from the version and created only after validation, at the exact validated commit, and never moved",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R13": {
+      "description": "An immutable GitHub Release with the verified wheel and checksums, published by one deterministic main-branch transaction",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R14": {
+      "description": "Explicit release collision and recovery states; a correct tag with an incomplete release resumes; a wrong-commit tag fails closed",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R15": {
+      "description": "CI keeps fail-fast false, same-ref cancellation for pull requests, narrow write permissions and SHA-pinned write-path actions",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R16": {
+      "description": "Controller 1.1.x compatibility: no behaviour change without an admissible policy; packaged-runtime isolation preserved",
+      "checkpoint_ids": [
+        "CP2",
+        "CP8",
+        "CP10"
+      ]
+    },
+    "R17": {
+      "description": "inspect/explain/status surface branch, PR, drift and release-policy state derived from durable records; follow unchanged",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    },
+    "R18": {
+      "description": "Disposable-repository and fake-forge coverage of every listed scenario, and operator documentation",
+      "checkpoint_ids": [
+        "CP9",
+        "CP10"
+      ]
+    }
+  }
+}

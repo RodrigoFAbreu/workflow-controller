@@ -1276,3 +1276,181 @@ Both Important findings are fixed in production code, and each has regression te
     never fired on the committed path. $5.14 was reported.
   - The single-agent probe and the concurrency drill were not rerun. Neither fix touches routing
     or the lock, and the drill's decision path is the one the lifecycle rerun covers.
+
+## Functional review checklist
+
+Implementation revision 1, technical approval `da42359`. Both implementation-review stages are
+`APPROVE` against bundle `04eb37d7...` and `review_content_id` `dac3aaaa...`, reviewed at
+`411dcb1`. The automated state is current: at `411dcb1`, 982 Controller tests passed (the 6
+opt-in live tests skip) and the seven frozen Workflow suites passed. Only `WORKFLOW_STATE.json`
+and this file changed after that. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+Every flow below was dry-run before this checklist was committed. Flows 1-8 cost nothing: they
+use `tests/fake_claude.py` as the worker. Flow 9 is optional and live.
+
+### Setup
+
+1. In this checkout (`C=/home/rodrigo/Workspace/workflow-controller`), `git status --porcelain`
+   is empty. `workflow-manager` is on `PATH`, and so is `claude` if you run flow 9.
+2. In one shell (zsh or bash), used for every later step:
+   `C=/home/rodrigo/Workspace/workflow-controller; export PYTHONPATH=$C; W=$(mktemp -d); T=$W/target; RT=$W/rt; RTF=$W/rt-fake; touch $W/.start; cd $C`.
+   Here the Controller is installed only through pipx, so `PYTHONPATH=$C` is what lets
+   `python3 -P -m controller` import this checkout. Every Controller command below passes
+   `--runtime-dir`, so none of them writes `$C/.controller/`.
+3. Build a disposable `"2.2"` target at `IMPLEMENTING`, with the same fixture the live tests use:
+   `python3 -c "from pathlib import Path; from tests.test_integration_disposable_repo import _seed_implementing_target as s; print(s(Path('$T')))"`.
+   Expected:
+   - it prints a dict naming work item `live-greeting` and `basis: 'EXTERNAL_APPROVE'`;
+   - `workflow-manager verify $T` exits 0 (Workflow 2.5.1);
+   - `git -C $T status --porcelain` is empty.
+4. `python3 -P -m controller --runtime-dir $RT inspect $T` exits 0. It reports
+   `lifecycle lock: free`, work item `live-greeting` with `governing_workflow_version=2.2`,
+   `phase: IMPLEMENTING` and `registry_complete=False`.
+
+Below, `explain` means `python3 -P -m controller --runtime-dir $RTF explain $T`, and
+`fakestep` means
+`python3 -P -m controller --runtime-dir $RTF --claude-binary $C/tests/fake_claude.py`, followed
+by any extra global options and then `step $T`. The fake worker changes nothing in the target, so
+each `fakestep` that launches it ends `FAILED`, exit 30. That is expected: the Controller checks
+durable state, not what the worker says.
+
+### Test data
+
+Only the one-checkpoint `live-greeting` milestone seeded in setup step 3. Flows 6 and 7 hand-edit
+`WORKFLOW_STATE.json`, only in the disposable `$T`, never in this repository.
+
+### Flows
+
+1. **`/milestone-implement` is now automatic.** Run `explain`.
+   Expected: `lifecycle lock: free`, `phase: IMPLEMENTING`, and
+   `next automatic action: /milestone-implement live-greeting`, with no gate and no decline.
+2. **Default route.** Run
+   `FAKE_CLAUDE_DIAG_FILE=$W/argv-default.json python3 -P -m controller --runtime-dir $RTF --claude-binary $C/tests/fake_claude.py step $T; echo exit=$?`,
+   then `python3 -c "import json; print(json.load(open('$W/argv-default.json'))['argv'])"`.
+   Expected:
+   - `exit=30`;
+   - the argv is `-p`, `/milestone-implement live-greeting`, `--output-format json`,
+     `--permission-mode auto`, `--model claude-opus-5-5`, `--effort xhigh`. It has no
+     `--disallowedTools` and no `--resume`/`--continue`/`--session-id`;
+   - the newest `$RTF/jobs/*.json` has `worker_route` with role `milestone-implement`,
+     `single_agent: false`, `fresh_session: true`, and `sources` `default` for both model and
+     effort;
+   - `git -C $T status --porcelain` is still empty.
+3. **Overrides, and a bad override.** Run flow 2 again with diag file `argv-override.json` and
+   `--effort high --role-model milestone-implement=claude-sonnet-5` before `step`.
+   Expected:
+   - the argv has `--model claude-sonnet-5 --effort high`;
+   - the new record's `worker_route.sources` is `{'effort': 'cli', 'model': 'role-cli'}`.
+
+   Then run `python3 -P -m controller --runtime-dir $RTF --role-model bogus=x step $T; echo exit=$?`.
+   Expected: a usage error naming `unknown role 'bogus'` and listing the known roles, `exit=2`,
+   and no new job file.
+4. **One worker per worktree, an orphaned worker, and `resume`.**
+   1. Start a worker that hangs until released, in the background:
+      `rm -f $W/release; FAKE_CLAUDE_HANG_UNTIL_FILE=$W/release FAKE_CLAUDE_DIAG_FILE=$W/hang.json python3 -P -m controller --runtime-dir $RTF --claude-binary $C/tests/fake_claude.py step $T > $W/step1.out 2>&1 & CPID=$!`.
+      Wait until `$W/hang.json` exists (about a second). Its `pid`/`pgid` are the worker's.
+   2. Run `explain`. Expected:
+      - `pending job files: 1`, naming the `LAUNCHED` job and
+        `clear it with: workflow-controller resume <T>`;
+      - `lifecycle lock: held`.
+   3. Run a second `fakestep`, then `echo exit=$?`. Expected: `exit=45`. The message names the
+      lock path, `fuser -v`/`lsof +d`, and `recorded worker is running: pid <pid>, process group
+      <pgid>`, with `kill -TERM -- -<pgid>` and then `resume`. No second worker starts.
+   4. `kill -KILL $CPID`, to kill the Controller but not the worker. A plain
+      `python3 -P -m controller --runtime-dir $RTF step $T` still exits 45 with the same worker
+      named: the orphaned worker keeps the worktree.
+   5. `touch $W/release`. Once the worker has exited (`kill -0 <pid>` fails), `explain` shows
+      `lifecycle lock: free`, with the job still pending.
+   6. `fakestep` now exits 20, refusing with `1 earlier job file(s) are pending reconciliation`
+      and naming the `resume` command.
+   7. `python3 -P -m controller --runtime-dir $RTF resume $T; echo exit=$?`. Expected: that
+      job's line reads `INTERRUPTED`, and `exit=40`. A second `resume` lists the same statuses
+      and exits 0. `explain` shows no pending job files and again names `/milestone-implement`.
+5. **`resume --abandon` and the unreadable-file refusal.**
+   1. `echo 'not json' > $RTF/jobs/manual-garbage.json`. `explain` names it as a pending job
+      `(unreadable)`, cleared by `workflow-controller resume --abandon manual-garbage <T>`.
+      Plain `resume` exits 20 and names the same `--abandon` command.
+   2. `python3 -P -m controller --runtime-dir $RTF resume --abandon manual-garbage $T; echo exit=$?`.
+      Expected:
+      - `manual-garbage: FAILED (OperatorAbandoned)` and `exit=0`;
+      - the original bytes are under `$RTF/jobs/abandoned/manual-garbage.json`;
+      - `jobs/manual-garbage.json` is now a minimal terminal record;
+      - `explain` shows no pending files.
+   3. The self-review I2 fix: `echo '{}' > $RTF/jobs/manual-locked.json; chmod 000 $RTF/jobs/manual-locked.json`,
+      then `resume --abandon manual-locked` in the same form. Expected: a one-line refusal that
+      names `Permission denied` and the manual step, `exit=20`, and no Python traceback. Undo
+      with `chmod 644 $RTF/jobs/manual-locked.json; rm $RTF/jobs/manual-locked.json`.
+6. **An uncommitted checkpoint completion launches nothing (the self-review I1 fix).** In the
+   disposable target only, make the working tree record what an interrupted
+   `/milestone-implement` would have left, CP1 `COMPLETE` and the `SELF_REVIEWING_IMPLEMENTATION`
+   transition, without committing it:
+   `python3 -c "import json; p='$T/docs/ai-workflow/WORKFLOW_STATE.json'; s=json.load(open(p)); w=s['work_items']['live-greeting']; w['checkpoints']={'CP1':{'status':'COMPLETE','start_commit':w['base_commit']}}; w['last_completed_checkpoint_id']='CP1'; w['phase']='SELF_REVIEWING_IMPLEMENTATION'; open(p,'w').write(json.dumps(s,indent=2)+'\n')"`.
+   1. Run `explain`. Expected:
+      - two `evidence:` lines: CP1 is `COMPLETE` in the working tree but absent at `HEAD`, and
+        the working tree's phase is `SELF_REVIEWING_IMPLEMENTATION` while `HEAD`'s is
+        `IMPLEMENTING`;
+      - a `human gate` saying that another `/milestone-implement` worker could build on the
+        uncommitted completion or commit it, so none is launched.
+   2. `FAKE_CLAUDE_INVOCATIONS_FILE=$W/count` followed by `fakestep`, then `echo exit=$?`.
+      Expected: `exit=10`, and `$W/count` does not exist, because no worker started.
+   3. `git -C $T checkout -- docs/ai-workflow/WORKFLOW_STATE.json`. `explain` again names
+      `/milestone-implement live-greeting`.
+7. **The final self-review pass is single-agent, whatever the overrides.** Repeat flow 6's
+   `python3 -c ...` edit, then commit it in the disposable target, so `HEAD` agrees with the
+   working tree: `git -C $T commit -qam "manual check: simulate every checkpoint complete"`.
+   1. `explain` now names `/milestone-implement live-greeting`, with no gate.
+   2. Run flow 2's command with diag file `argv-selfreview.json` and `--model claude-sonnet-5`
+      before `step`. Expected:
+      - `exit=30`, and the argv ends `--model claude-sonnet-5 --effort xhigh --disallowedTools Agent,Workflow,Skill`;
+      - the record's `worker_route` has role `milestone-implement-self-review`,
+        `single_agent: true`, and model source `cli`. The override changed the model, but not
+        single-agent.
+8. **The end-to-end lifecycle, automated.** These flows need a scripted worker that makes real
+   Workflow commits: `python3 -m unittest -v tests.test_lifecycle_orchestration`. Expected: 19
+   tests, OK, in a few seconds. They pin:
+   - `run` from `IMPLEMENTING` through checkpoints, the self-review pass, a local `REVISE`, the
+     remediation round with its pending-write addendum, and a fresh review, up to the manual
+     external gate (exit 10, exactly six workers, each with the expected role, model and effort);
+   - manual-verdict ingestion, stopping at the `/approve-review implementation` gate;
+   - no user-only command ever launched, and a fail-if-invoked worker never started at any gate;
+   - the fail-closed artifact cases, including the uncommitted-completion gate
+     (`UncommittedImplementationStateTest`);
+   - the literal apply worker, the relaunch bound, `same_content` recovery, resume
+     reconciliation, and the plan stage unchanged.
+9. **Optional, live: a real implementation lifecycle.** This runs real `claude` workers: about 10
+   minutes and roughly $5 (the self-review rerun reported $5.14).
+   `CONTROLLER_LIVE_WORKER=1 python3 -m unittest -v tests.test_integration_disposable_repo.LiveImplementationLifecycleTest`.
+   Expected: OK. Phase A runs `run` from `IMPLEMENTING` to the manual gate (exit 10). Phase B
+   ingests a fixture manual `REVISE`, runs a real `/apply-implementation-review` round and a
+   fresh local review, and stops at the manual gate again. All six jobs are `FINISHED`, on
+   `claude-opus-5-5`/`xhigh`, with no permission denials. Its workspace is under
+   `~/.cache/workflow-controller-live/`.
+10. `find $C/.controller -newer $W/.start 2>/dev/null` prints nothing, because this checkout's
+    runtime root was never written. `ps -eo args | grep -c 'tests/fake_[c]laude[.]py'` prints 0.
+    Clean up with `rm -rf $W`.
+
+### Known limitations and out of scope
+
+- A gate's `safe resume command: workflow-controller explain --work-item <id>` does not parse as
+  written (flow 6 shows one). Run `workflow-controller --work-item <id> explain <repo>` instead,
+  as the README says. The text predates this milestone and is plan-pinned (self-review M1, manual
+  review O2).
+- Performing the manual external implementation review, `/approve-review`, `/accept-milestone`
+  and the functional-review stage stay human. `/apply-functional-review` is declined. A `"1"`
+  item's `/milestone-implement` is declined, and a `"2.1"` item's external implementation verdict
+  is not consumed.
+- The lifecycle lock is per worktree. It does not exclude the same work item driven from two
+  different worktrees by Controllers with different runtime roots; that residual is documented.
+- A `jobs/` entry that is not a regular file, or a regular file the Controller cannot read, must
+  be cleared by hand (O2's narrowed no-wedge guarantee).
+- In a container, `lifecycle lock: unknown` is the usual answer when nobody visibly holds the
+  lock. `step` decides by acquiring the lock, never by the report.
+- Deferred optional review findings, not conditions of approval:
+  - the manual-external gate can name a stale ledger `review_content_id` after a failed
+    local-review job (manual O1);
+  - there is no explicit test for `OperatorAbandoned`/`UnreconcilableJobError` records in the
+    apply relaunch bound (manual O3);
+  - the plan's own O4 wording and citation drifts are uncorrected, because editing the plan
+    would make its approval stale.
+- Out of scope: release and runtime isolation, Workflow Manager fixes, observability and
+  multi-harness work.

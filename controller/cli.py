@@ -62,6 +62,12 @@ TEST_HOOKS_ENV = "WORKFLOW_CONTROLLER_TEST_HOOKS"
 
 _PAUSE_POLL_SECONDS = 0.05
 
+#: The run record the current ``step``/``run`` created
+#: (``workflow-controller-release-runtime-observability`` CP5).
+#: ``cmd_step``/``cmd_run`` register it and never close it: the final exit
+#: code is only known in :func:`main`, whose one ``finally`` closes it.
+_open_run: job.RunRecord | None = None
+
 
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -514,7 +520,11 @@ def _run_one_step(
 
     Returns ``(exit_code, result)``, where ``result`` is ``None`` for a
     handoff, a :class:`~controller.decision.Decision` for the no-action
-    class, or a ``JobRecord`` otherwise."""
+    class, or a ``JobRecord`` otherwise.
+
+    With a run open (CP5), a detected handoff and a no-action decision are
+    recorded in its log, and the job it launches carries its ``run_id``."""
+    run = _open_run
     origin_source_root = ident.origin_source_root or ident.source_root
     pending = handoff.detect(ident, origin_source_root)
     if pending is not None:
@@ -525,6 +535,8 @@ def _run_one_step(
             next_generation_command=_next_generation_command(runtime_root, args.repo),
             now=_now(),
         )
+        if run is not None:
+            run.event("handoff_detected")
         return EXIT_HANDOFF_PENDING, None
 
     result = job.execute_step(
@@ -536,11 +548,14 @@ def _run_one_step(
         timeout=args.timeout,
         claude_bin=args.claude_binary,
         routing=routing_options,
+        run_id=None if run is None else run.run_id,
     )
 
     if isinstance(result, Decision):
         # LEGACY_READY / MILESTONE_COMPLETE: nothing ran, nothing is
         # pending.
+        if run is not None:
+            run.event("no_action", observed_phase=phase_to_wire(result.observed_phase), reason=result.reason)
         return EXIT_OK, result
 
     # `execute_step`'s own `status` field, mapped to the exit-code table
@@ -565,8 +580,24 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     require_pinned_execution()
     routing_options = _routing_options(args)
     target = _inspect_target(args)
+    run = _start_run("step", runtime_root, ident, target, max_steps=None)
+    run.event("step_started", n=1)
     exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
     return exit_code
+
+
+def _start_run(command: str, runtime_root: Path, ident: identity.ControllerIdentity,
+               target: managed_repo.ManagedRepository, *, max_steps: int | None) -> job.RunRecord:
+    """Create this invocation's run record and register it in
+    :data:`_open_run` for :func:`main` to close. ``command`` is the
+    subcommand name, never argv; ``target_repo`` is the canonical root job
+    records carry."""
+    global _open_run
+    if _open_run is not None:
+        _open_run.discard()  # never closed (a direct call, not through `main`)
+    _open_run = job.open_run(runtime_root, command=command, target_repo=str(target.root),
+                             max_steps=max_steps, ident=ident)
+    return _open_run
 
 
 def _classify_jobs(runtime_root: Path) -> tuple[list[str], list[str]]:
@@ -622,6 +653,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
 
     routing_options = _routing_options(args)
     target = _inspect_target(args)
+    run = _start_run("run", runtime_root, ident, target, max_steps=args.max_steps)
 
     steps_run = 0
     while steps_run < args.max_steps:
@@ -633,6 +665,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
         # boundary where detect() runs".
         _await_pause_file(args.pause_file)
 
+        run.event("step_started", n=steps_run + 1)
         exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
         steps_run += 1
 
@@ -845,14 +878,46 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(raw_argv)
     if args.command == "resume" and args.acknowledge_unverifiable_worker and args.abandon is None:
         parser.error("--acknowledge-unverifiable-worker is accepted only with --abandon JOB_ID")
+    global _open_run
+    if _open_run is not None:
+        _open_run.discard()  # only a run this invocation creates is closed below
+    _open_run = None
+    exit_code: int | None = None
+    interrupted = False
     try:
-        return _dispatch(args, raw_argv)
-    except LifecycleWorkerActiveError as exc:
-        # CP5: its own clause, *before* the blanket handler below, so a
-        # held worktree exits 45, never 20. `LifecycleLockError` is a
-        # sibling, not a subclass, and reaches the blanket clause.
-        print(f"error: {exc.message}", file=sys.stderr)
-        return EXIT_WORKER_ACTIVE
-    except ControllerError as exc:
-        print(f"error: {exc.message}", file=sys.stderr)
-        return EXIT_FAIL_CLOSED
+        try:
+            exit_code = _dispatch(args, raw_argv)
+        except LifecycleWorkerActiveError as exc:
+            # CP5: its own clause, *before* the blanket handler below, so a
+            # held worktree exits 45, never 20. `LifecycleLockError` is a
+            # sibling, not a subclass, and reaches the blanket clause.
+            print(f"error: {exc.message}", file=sys.stderr)
+            exit_code = EXIT_WORKER_ACTIVE
+        except ControllerError as exc:
+            print(f"error: {exc.message}", file=sys.stderr)
+            exit_code = EXIT_FAIL_CLOSED
+        return exit_code
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
+    finally:
+        _close_open_run(exit_code, interrupted=interrupted)
+
+
+def _close_open_run(exit_code: int | None, *, interrupted: bool) -> None:
+    """The one closing site for the run ``cmd_step``/``cmd_run``
+    registered (release-runtime-observability CP5): ``ended`` with the
+    code :func:`main` computed, or ``interrupted`` on ``KeyboardInterrupt``
+    (``exit_code`` ``null``, ``current_job_id`` kept). Any other exception
+    leaves the record ``running``, as a killed Controller would. Closing is
+    best-effort and never raises into the exit path."""
+    global _open_run
+    run, _open_run = _open_run, None
+    if run is None:
+        return
+    if interrupted:
+        run.interrupt()
+    elif exit_code is not None:
+        run.close(exit_code)
+    else:
+        run.discard()

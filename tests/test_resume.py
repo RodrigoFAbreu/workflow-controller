@@ -19,6 +19,7 @@ test".
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -32,7 +33,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, lock, worker  # noqa: E402
+from controller import cli, job, lock, worker  # noqa: E402
 from controller import runtime as runtime_module  # noqa: E402
 from controller.errors import (  # noqa: E402
     GitDirectoryUnresolvableError,
@@ -2245,6 +2246,221 @@ class ResumeLockScopeTest(_DispositionCase):
         with self.assertRaises(GitDirectoryUnresolvableError):
             self._abandon("j1")
         self.assertEqual(self._bytes("j1"), before)
+
+
+
+# ---------------------------------------------------------------------------
+# Release-runtime-observability CP5: `resume` and `--abandon` continue the
+# job's event sequence from the record's `event_seq`, never reading the log,
+# and nothing that decides reads `runs/` or `jobs/<id>/`.
+# ---------------------------------------------------------------------------
+
+
+def _events(runtime_root: Path, job_id: str) -> list[dict]:
+    path = runtime_root / "jobs" / job_id / "events.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+class ReconciliationEventTest(_DispositionCase):
+    def test_a_planned_record_without_event_seq_reconciles_as_seq_one(self) -> None:
+        _write_record(self.runtime_root, _record(job_id="j1", target_repo=str(self.root),
+                                                 status=job.STATUS_PLANNED, phase="PLANNING"))
+        [result] = self._resume()
+        self.assertEqual(result["status"], job.STATUS_INTERRUPTED)
+        [event] = _events(self.runtime_root, "j1")
+        self.assertEqual({k: event[k] for k in ("v", "seq", "job_id", "event", "status", "code")},
+                         {"v": 1, "seq": 1, "job_id": "j1", "event": "reconciled",
+                          "status": job.STATUS_INTERRUPTED, "code": None})
+        self.assertEqual(_read_record(self.runtime_root, "j1")["event_seq"], 1)
+
+    def test_a_launched_record_continues_from_its_event_seq(self) -> None:
+        _write_record(self.runtime_root, self._launched("j1", event_seq=4))
+        [result] = self._resume()
+        self.assertEqual(result["status"], job.STATUS_INTERRUPTED)
+        self.assertEqual([(e["seq"], e["event"], e["status"]) for e in _events(self.runtime_root, "j1")],
+                         [(5, "reconciled", job.STATUS_INTERRUPTED)])
+        self.assertEqual(_read_record(self.runtime_root, "j1")["event_seq"], 5)
+
+    def test_an_unreconcilable_orphan_marked_failed_records_its_code(self) -> None:
+        _write_record(self.runtime_root, self._launched(
+            "j1", event_seq=2, lifecycle_lock={"path": str(lock.resolve_git_dir(self.root))}))
+        (self.root / "moved.txt").write_text("x\n")
+        fixtures.commit_all(self.root, "move HEAD")
+        _set_target_phase(self.root, "wi-1", "AWAITING_LOCAL_PLAN_REVIEW")
+        with self.assertRaises(UnreconcilableJobError):
+            self._resume()
+        [event] = _events(self.runtime_root, "j1")
+        self.assertEqual((event["seq"], event["status"], event["code"]),
+                         (3, job.STATUS_FAILED, "UnreconcilableJobError"))
+
+    def test_a_malformed_event_seq_restarts_at_one_and_never_raises(self) -> None:
+        for job_id, value in (("j-str", "3"), ("j-neg", -2), ("j-bool", True), ("j-list", [1])):
+            with self.subTest(event_seq=value):
+                _write_record(self.runtime_root, self._launched(job_id, event_seq=value))
+        results = self._resume()
+        self.assertEqual({r["status"] for r in results}, {job.STATUS_INTERRUPTED})
+        for job_id in ("j-str", "j-neg", "j-bool", "j-list"):
+            self.assertEqual([e["seq"] for e in _events(self.runtime_root, job_id)], [1])
+
+    def test_abandon_marking_failed_continues_the_sequence(self) -> None:
+        _write_record(self.runtime_root, self._launched("j1", event_seq=3))
+        record = self._abandon("j1")
+        self.assertEqual(record["event_seq"], 4)
+        [event] = _events(self.runtime_root, "j1")
+        self.assertEqual((event["seq"], event["event"], event["abandoned_status"]),
+                         (4, "abandoned", job.STATUS_LAUNCHED))
+
+    def test_abandon_replacing_carries_only_a_valid_event_seq(self) -> None:
+        jobs_dir = self.runtime_root / "jobs"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        cases = {
+            "unparseable": ("{", 1),
+            "unknown-schema": (json.dumps({"schema_version": 99, "event_seq": 7}), 8),
+            "bad-seq": (json.dumps({"schema_version": 99, "event_seq": True}), 1),
+        }
+        for job_id, (text, expected) in cases.items():
+            with self.subTest(job_id=job_id):
+                (jobs_dir / f"{job_id}.json").write_text(text)
+                record = self._abandon(job_id)
+                self.assertEqual(record["event_seq"], expected)
+                [event] = _events(self.runtime_root, job_id)
+                self.assertEqual((event["seq"], event["event"]), (expected, "abandoned"))
+                self.assertEqual(event["original"], record["reconciliation_evidence"]["original"])
+
+
+_CHILD_ABANDON = (
+    "import sys; sys.path.insert(0, sys.argv[1]); "
+    "from pathlib import Path; from controller import job; "
+    "from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT; "
+    "ident = ControllerIdentity(generation=7, source_root=Path('/fake'), "
+    "origin_source_root=Path('/fake'), source_kind=SOURCE_KIND_COMMIT, "
+    "source_commit='a'*40, tree_digest='b'*64, generation_source='head', "
+    "pinned_at='2024-01-01T00:00:00Z'); "
+    "from controller.managed_repo import ManagedRepository; "
+    "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
+    "workflow_version='2.3.1', profile='full', "
+    "verify={'returncode': 0, 'stdout': '', 'stderr': ''}, "
+    "status={'returncode': 0, 'stdout': '', 'stderr': ''}); "
+    "job.abandon(mr, identity=ident, runtime=Path(sys.argv[3]), job_id=sys.argv[4])"
+)
+
+
+class CrossProcessEventSeqTest(_OrphanWorkerCase):
+    """``execute_step`` is killed in one process, ``resume`` reconciles its
+    job in a second, and ``--abandon`` disposes of a second orphan in a
+    third: each job's log is ``seq`` ``1..n`` with no repeat, continuing
+    from the record's ``event_seq``."""
+
+    def _orphan_then_wait(self, managed_repo) -> dict:
+        record = self._orphan_worker(managed_repo.root)
+        self.release.touch()
+        self._await_worker_gone(record, managed_repo.root)
+        self.release.unlink()
+        return record
+
+    def test_seq_continues_across_processes(self) -> None:
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
+        first = self._orphan_then_wait(managed_repo)
+        self.assertEqual(first["event_seq"], 3)
+        [result] = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(result["status"], job.STATUS_INTERRUPTED)
+
+        second = self._orphan_then_wait(managed_repo)
+        subprocess.run([sys.executable, "-c", _CHILD_ABANDON, str(fixtures.REPO_ROOT), str(managed_repo.root),
+                        str(self.runtime_root), second["job_id"]], check=True, timeout=60)
+
+        for record, last in ((first, "reconciled"), (second, "abandoned")):
+            log = _events(self.runtime_root, record["job_id"])
+            self.assertEqual([e["event"] for e in log], ["planned", "launched", "worker_spawned", last])
+            self.assertEqual([e["seq"] for e in log], [1, 2, 3, 4])
+            self.assertEqual(_read_record(self.runtime_root, record["job_id"])["event_seq"], 4)
+        self.assertEqual(_read_record(self.runtime_root, second["job_id"])["status"], job.STATUS_FAILED)
+
+
+class ObservationPathsNeverReadTest(_DispositionCase):
+    """``resume``, ``pending_reconciliation_jobs``, ``_classify_jobs`` and
+    ``abandon`` never read anything under ``runs/`` or ``jobs/<id>/`` --
+    asserted by a spy on every read path, with both trees populated."""
+
+    def _populate_observation_trees(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            events = self.runtime_root / "jobs" / job_id / "events.jsonl"
+            events.parent.mkdir(parents=True, exist_ok=True)
+            events.write_text('{"v": 1, "seq": 99}\n')
+        runs = self.runtime_root / "runs"
+        (runs / "r1").mkdir(parents=True)
+        (runs / "r1.json").write_text('{"state": "running"}\n')
+        (runs / "r1" / "events.jsonl").write_text('{"v": 1, "seq": 1}\n')
+
+    def _spied_reads(self):
+        reads: list[str] = []
+        real_open, real_os_open = open, os.open
+        real_read_bytes, real_read_text, real_path_open = Path.read_bytes, Path.read_text, Path.open
+
+        def spy_open(file, mode="r", *args, **kwargs):
+            if isinstance(file, (str, os.PathLike)) and not any(c in mode for c in "wax+"):
+                reads.append(str(file))
+            return real_open(file, mode, *args, **kwargs)
+
+        def spy_os_open(path, flags, *args, **kwargs):
+            if not flags & (os.O_WRONLY | os.O_RDWR):
+                reads.append(str(path))
+            return real_os_open(path, flags, *args, **kwargs)
+
+        def spy_read_bytes(self_path):
+            reads.append(str(self_path))
+            return real_read_bytes(self_path)
+
+        def spy_read_text(self_path, *args, **kwargs):
+            reads.append(str(self_path))
+            return real_read_text(self_path, *args, **kwargs)
+
+        def spy_path_open(self_path, mode="r", *args, **kwargs):
+            if not any(c in mode for c in "wax+"):
+                reads.append(str(self_path))
+            return real_path_open(self_path, mode, *args, **kwargs)
+
+        stack = contextlib.ExitStack()
+        stack.enter_context(unittest.mock.patch("builtins.open", spy_open))
+        stack.enter_context(unittest.mock.patch("os.open", spy_os_open))
+        stack.enter_context(unittest.mock.patch.object(Path, "read_bytes", spy_read_bytes))
+        stack.enter_context(unittest.mock.patch.object(Path, "read_text", spy_read_text))
+        stack.enter_context(unittest.mock.patch.object(Path, "open", spy_path_open))
+        return stack, reads
+
+    def _observation_reads(self, reads: list[str]) -> list[str]:
+        runtime_root = self.runtime_root.resolve()
+        hits = []
+        for path in reads:
+            try:
+                parts = Path(path).resolve().relative_to(runtime_root).parts
+            except ValueError:
+                continue
+            if parts[0] == "runs" or (parts[0] == "jobs" and len(parts) > 2 and parts[1] != "abandoned"):
+                hits.append(path)
+        return hits
+
+    def test_no_decision_reads_under_runs_or_a_job_directory(self) -> None:
+        _write_record(self.runtime_root, self._launched("j1", event_seq=2))
+        _write_record(self.runtime_root, self._launched("j2", event_seq=2))
+        _write_record(self.runtime_root, _record(job_id="j3", target_repo=str(self.root),
+                                                 status=job.STATUS_FINISHED, phase="PLANNING"))
+        self._populate_observation_trees(["j1", "j2", "j3"])
+        calls = {
+            "pending_reconciliation_jobs":
+                lambda: job.pending_reconciliation_jobs(self.runtime_root, self.managed_repo, FAKE_IDENTITY),
+            "_classify_jobs": lambda: cli._classify_jobs(self.runtime_root),
+            "abandon": lambda: self._abandon("j2"),
+            "resume": self._resume,
+        }
+        for name, call in calls.items():
+            with self.subTest(call=name):
+                stack, reads = self._spied_reads()
+                with stack:
+                    call()
+                self.assertTrue(reads, "the spy saw no read at all")
+                self.assertEqual(self._observation_reads(reads), [])
+        self.assertEqual(_events(self.runtime_root, "j1")[-1]["seq"], 3, "continued from the record, not the log")
 
 
 if __name__ == "__main__":

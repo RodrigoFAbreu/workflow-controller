@@ -29,8 +29,10 @@ import errno
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -46,6 +48,7 @@ from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
     LifecycleWorkerUnverifiableError,
     PendingJobReconciliationError,
+    RuntimeContainmentError,
     SourceSnapshotError,
     UnmanagedRepositoryError,
 )
@@ -1596,6 +1599,287 @@ class LifecycleLockReportTest(unittest.TestCase):
                     self.assertEqual(json.loads(self._run(command, json_out=True))["lifecycle_lock"], "held")
                 finally:
                     held.release()
+
+
+
+# ---------------------------------------------------------------------------
+# Release-runtime-observability CP5: run records. `step`/`run` create
+# `runs/<run_id>.json` at entry; `main()` closes it once, with the code it
+# returns, or marks it `interrupted` on Ctrl-C.
+# ---------------------------------------------------------------------------
+
+
+class _RunRecordFixture(_StepFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(setattr, cli, "_open_run", None)
+        self.release = self.tmp_root / "release"
+        self.addCleanup(self._end_workers)
+
+    def _end_workers(self) -> None:
+        self.release.touch()
+        for path in (self.runtime_root / "jobs").glob("*.json"):
+            try:
+                process_fixtures.kill_group((json.loads(path.read_text()).get("worker_process") or {}).get("pgid"))
+            except (OSError, ValueError, AttributeError):
+                continue
+
+    def _main(self, command: str, args: _Args | None = None, *, argv: list[str] | None = None) -> int:
+        args = args or self._args()
+        command_fn = {"step": cli.cmd_step, "run": cli.cmd_run}[command]
+        with unittest.mock.patch.object(cli, "_dispatch",
+                                        lambda _args, _argv: command_fn(args, self.runtime_root, self.ident)), \
+                contextlib.redirect_stderr(io.StringIO()) as self.stderr:
+            return cli.main(argv or [command, args.repo])
+
+    def _real_args(self, **kwargs) -> _Args:
+        return _Args(str(self.repo), workflow_manager=str(self.stub_manager), claude_binary=str(FAKE_CLAUDE),
+                     timeout=10, **kwargs)
+
+    def _runs(self) -> list[dict]:
+        return [json.loads(p.read_text()) for p in sorted((self.runtime_root / "runs").glob("*.json"))]
+
+    def _run_events(self, run_id: str) -> list[dict]:
+        path = self.runtime_root / "runs" / run_id / "events.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def _jobs(self) -> list[dict]:
+        return [json.loads(p.read_text()) for p in sorted((self.runtime_root / "jobs").glob("*.json"))]
+
+
+class RunRecordExitPathTest(_RunRecordFixture, unittest.TestCase):
+    """Every exit path closes the run ``ended`` with the code ``main()``
+    returned -- including a raised ``ControllerError`` (20) and 45."""
+
+    def _fake_execute_step(self, value):
+        def fake_execute_step(*a, **k):
+            if isinstance(value, BaseException):
+                raise value
+            return value
+        return fake_execute_step
+
+    def test_every_exit_code_is_recorded(self) -> None:
+        no_action = Decision(observed_phase="MILESTONE_COMPLETE", evidence=(), action=None, automatic=False,
+                             gate=None, declined=False, reason="nothing to do")
+        cases = [
+            ("step", {"status": job.STATUS_FINISHED}, cli.EXIT_OK),
+            ("step", {"status": job.STATUS_GATE_BLOCKED}, cli.EXIT_GATE),
+            ("step", {"status": job.STATUS_DECLINED}, cli.EXIT_DECLINED),
+            ("step", {"status": job.STATUS_FAILED}, cli.EXIT_WORKER_FAILED),
+            ("step", {"status": job.STATUS_INCOMPLETE}, cli.EXIT_INCOMPLETE),
+            ("step", {"status": job.STATUS_HANDOFF_PENDING}, cli.EXIT_HANDOFF_PENDING),
+            ("step", no_action, cli.EXIT_OK),
+            ("step", PendingJobReconciliationError("a pending job"), cli.EXIT_FAIL_CLOSED),
+            ("step", LifecycleWorkerActiveError("the worktree is held"), cli.EXIT_WORKER_ACTIVE),
+            ("run", {"status": job.STATUS_FINISHED}, cli.EXIT_MAX_STEPS),
+            ("run", {"status": job.STATUS_FAILED}, cli.EXIT_WORKER_FAILED),
+            ("run", no_action, cli.EXIT_OK),
+            ("run", PendingJobReconciliationError("a pending job"), cli.EXIT_FAIL_CLOSED),
+            ("run", LifecycleWorkerActiveError("the worktree is held"), cli.EXIT_WORKER_ACTIVE),
+        ]
+        for command, outcome, expected in cases:
+            with self.subTest(command=command, outcome=outcome):
+                shutil.rmtree(self.runtime_root / "runs", ignore_errors=True)
+                job.execute_step = self._fake_execute_step(outcome)
+                code = self._main(command, _Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                                                 max_steps=2))
+                self.assertEqual(code, expected)
+                [run] = self._runs()
+                self.assertEqual((run["state"], run["exit_code"], run["command"]), ("ended", code, command))
+                self.assertIsNotNone(run["ended_at"])
+                self.assertEqual(run["max_steps"], 2 if command == "run" else None)
+                events = self._run_events(run["run_id"])
+                self.assertEqual(events[0]["event"], "run_started")
+                self.assertEqual((events[-1]["event"], events[-1]["exit_code"]), ("run_ended", code))
+                self.assertEqual([e["seq"] for e in events], list(range(1, len(events) + 1)))
+                steps = [e["n"] for e in events if e["event"] == "step_started"]
+                self.assertEqual(steps, [1, 2] if code == cli.EXIT_MAX_STEPS else [1])
+                if outcome is no_action:
+                    [no_action_event] = [e for e in events if e["event"] == "no_action"]
+                    self.assertEqual((no_action_event["observed_phase"], no_action_event["reason"]),
+                                     ("MILESTONE_COMPLETE", "nothing to do"))
+                self.assertIsNone(cli._open_run)
+                self.assertNotIn(run["run_id"], job._OPEN_RUNS)
+
+    def test_a_detected_handoff_is_logged_and_the_run_ends_50(self) -> None:
+        (self.origin / "controller" / "GENERATION.json").write_text(
+            json.dumps({"schema_version": 1, "generation": 2}) + "\n")
+        fixtures.commit_all(self.origin, "bump generation")
+        self.assertEqual(self._main("run"), cli.EXIT_HANDOFF_PENDING)
+        [run] = self._runs()
+        self.assertEqual((run["state"], run["exit_code"]), ("ended", 50))
+        self.assertEqual([e["event"] for e in self._run_events(run["run_id"])],
+                         ["run_started", "step_started", "handoff_detected", "run_ended"])
+
+    def test_the_record_carries_the_controller_process_and_runtime(self) -> None:
+        job.execute_step = self._fake_execute_step({"status": job.STATUS_GATE_BLOCKED})
+        self._main("step")
+        [run] = self._runs()
+        self.assertEqual(run["controller_process"]["pid"], os.getpid())
+        self.assertEqual(run["controller_runtime"], identity.runtime_record(self.ident))
+        self.assertEqual(run["schema_version"], 1)
+        self.assertEqual(sorted(run), sorted([
+            "schema_version", "run_id", "command", "target_repo", "max_steps", "controller_process",
+            "controller_runtime", "state", "exit_code", "job_ids", "current_job_id", "started_at",
+            "updated_at", "ended_at",
+        ]))
+        self.assertEqual(self.stderr.getvalue(), "")
+
+
+class RunRecordJobTrackingTest(_RunRecordFixture, unittest.TestCase):
+    """A real job: the run is ``running`` with ``current_job_id`` while the
+    worker is paused, the job record carries ``run_id``, and the run log
+    mirrors the job's start and end."""
+
+    def test_running_during_a_paused_job_then_ended(self) -> None:
+        outcome: dict = {}
+
+        def run_main() -> None:
+            outcome["code"] = self._main("step", self._real_args())
+
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release)}):
+            thread = threading.Thread(target=run_main, daemon=True)
+            thread.start()
+            self.addCleanup(thread.join, 30)
+            self.assertTrue(process_fixtures.wait_until(
+                lambda: any("worker_process" in r for r in self._jobs())), "the worker never started")
+            [run] = self._runs()
+            [record] = self._jobs()
+            self.assertEqual(run["state"], "running")
+            self.assertIsNone(run["exit_code"])
+            self.assertEqual((run["job_ids"], run["current_job_id"]), ([record["job_id"]], record["job_id"]))
+            self.assertEqual(record["run_id"], run["run_id"])
+            self.release.touch()
+            thread.join(30)
+        self.assertEqual(outcome["code"], cli.EXIT_WORKER_FAILED)
+        [run] = self._runs()
+        [record] = self._jobs()
+        self.assertEqual((run["state"], run["exit_code"], run["current_job_id"], run["job_ids"]),
+                         ("ended", cli.EXIT_WORKER_FAILED, None, [record["job_id"]]))
+        events = self._run_events(run["run_id"])
+        self.assertEqual([e["event"] for e in events],
+                         ["run_started", "step_started", "job_started", "job_ended", "run_ended"])
+        self.assertEqual(events[2]["job_id"], record["job_id"])
+        self.assertEqual((events[3]["job_id"], events[3]["status"]), (record["job_id"], job.STATUS_FAILED))
+
+    def test_command_is_the_subcommand_and_target_repo_is_canonical(self) -> None:
+        (self.repo / "sub").mkdir()
+        link = self.tmp_root / "repo-link"
+        link.symlink_to(self.repo)
+        spellings = {"root": str(self.repo), "subdirectory": str(self.repo / "sub"), "symlink": str(link)}
+        for command in ("step", "run"):
+            for follow in (False, True):
+                for name, repo in spellings.items():
+                    with self.subTest(command=command, follow=follow, repo=name):
+                        shutil.rmtree(self.runtime_root, ignore_errors=True)
+                        args = self._real_args(max_steps=1)
+                        args.repo = repo
+                        if follow:
+                            args.follow = True  # `--follow` lands in CP6; the record must not see it
+                        argv = [command, repo, *(["--follow"] if follow else [])]
+                        code = self._main(command, args, argv=[command, repo])
+                        self.assertEqual(code, cli.EXIT_WORKER_FAILED)
+                        [run] = self._runs()
+                        [record] = self._jobs()
+                        self.assertEqual(run["command"], command)
+                        self.assertEqual(run["target_repo"], record["target_repo"])
+                        self.assertEqual(run["target_repo"], str(self.repo.resolve()))
+                        self.assertNotIn("follow", run)
+                        self.assertNotIn("argv", run)
+                        self.assertNotIn(" ".join(argv), json.dumps(run))
+
+
+_CHILD_RUN = (
+    "import sys; sys.path.insert(0, sys.argv[1]); "
+    "from pathlib import Path; from controller import cli, identity; "
+    "ident = identity.ControllerIdentity(generation=1, source_root=Path(sys.argv[2]), "
+    "origin_source_root=Path(sys.argv[2]), source_kind=identity.SOURCE_KIND_COMMIT, "
+    "source_commit=sys.argv[3], tree_digest='d'*64, generation_source='head', "
+    "pinned_at='2024-01-01T00:00:00Z'); "
+    "identity.pin = lambda: ident; identity.current = lambda: ident; "
+    "sys.exit(cli.main(sys.argv[4:]))"
+)
+
+
+class RunRecordCtrlCTest(_RunRecordFixture, unittest.TestCase):
+    """``run`` interrupted with ``SIGINT`` while its fake worker is paused:
+    the run reads ``interrupted``, ``exit_code`` ``null``, and
+    ``current_job_id`` names the orphan's job, whose worker still runs."""
+
+    def test_sigint_marks_the_run_interrupted_and_keeps_the_orphan(self) -> None:
+        import signal
+        import subprocess
+        child = subprocess.Popen(
+            [sys.executable, "-c", _CHILD_RUN, str(fixtures.REPO_ROOT), str(self.origin),
+             self.ident.source_commit, "--runtime-dir", str(self.runtime_root),
+             "--workflow-manager", str(self.stub_manager), "--claude-binary", str(FAKE_CLAUDE),
+             "run", str(self.repo)],
+            env={**os.environ, "FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release)},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait(10)))
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: any("worker_process" in r for r in self._jobs()), timeout=30), "the worker never started")
+        child.send_signal(signal.SIGINT)
+        _out, err = child.communicate(timeout=30)
+        self.assertNotEqual(child.returncode, 0)
+        self.assertIn("KeyboardInterrupt", err)
+        [run] = self._runs()
+        [record] = self._jobs()
+        self.assertEqual((run["state"], run["exit_code"], run["current_job_id"]),
+                         ("interrupted", None, record["job_id"]))
+        self.assertEqual(run["command"], "run")
+        self.assertEqual(self._run_events(run["run_id"])[-1]["event"], "run_interrupted")
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertTrue(process_fixtures.group_has_running_member(record["worker_process"]["pgid"]),
+                        "the Controller must not end the worker")
+
+
+class RunRecordBestEffortTest(_RunRecordFixture, unittest.TestCase):
+    """A failing event append or run-record write changes nothing that
+    counts: the exit code, the job's status and ``event_seq`` are the
+    unforced run's, and exactly one warning is printed."""
+
+    def _step_once(self) -> tuple[int, dict]:
+        shutil.rmtree(self.runtime_root, ignore_errors=True)
+        with unittest.mock.patch.object(runtime, "_best_effort_warned", False):
+            code = self._main("step", self._real_args())
+        [record] = self._jobs()
+        return code, record
+
+    def _significant(self, code: int, record: dict) -> tuple:
+        return (code, record["status"], record["worker_outcome"], record["transition_verified"],
+                record["observed_phase_after"], record["event_seq"], sorted(record))
+
+    def test_forced_failures_leave_the_lifecycle_unchanged(self) -> None:
+        unforced = self._significant(*self._step_once())
+        self.assertNotIn("warning", self.stderr.getvalue())
+        real_append, real_write_json = runtime.append_jsonl, runtime.write_json
+
+        def non_json_append(runtime_root, rel_path, obj):
+            return real_append(runtime_root, rel_path, {**obj, "detail": object()})
+
+        def failing_run_write(runtime_root, rel_path, obj):
+            if str(rel_path).startswith("runs/"):
+                raise OSError(errno.ENOSPC, "injected run-record failure")
+            return real_write_json(runtime_root, rel_path, obj)
+
+        forcings = {
+            "append OSError": unittest.mock.patch.object(
+                runtime, "append_jsonl", side_effect=OSError(errno.EIO, "injected")),
+            "append RuntimeContainmentError": unittest.mock.patch.object(
+                runtime, "append_jsonl", side_effect=RuntimeContainmentError("injected", evidence={})),
+            "append TypeError": unittest.mock.patch.object(runtime, "append_jsonl", non_json_append),
+            "run-record OSError": unittest.mock.patch.object(runtime, "write_json", failing_run_write),
+        }
+        for name, forcing in forcings.items():
+            with self.subTest(forcing=name):
+                with forcing:
+                    forced = self._significant(*self._step_once())
+                self.assertEqual(forced, unforced)
+                warnings = [l for l in self.stderr.getvalue().splitlines()
+                            if l.startswith("workflow-controller: warning: could not write ")]
+                self.assertEqual(len(warnings), 1, self.stderr.getvalue())
 
 
 if __name__ == "__main__":

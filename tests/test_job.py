@@ -517,7 +517,8 @@ class LaunchPathTest(unittest.TestCase):
 
     def test_the_second_launched_write_adds_only_the_worker_process(self) -> None:
         """CP5: the two LAUNCHED writes differ only by ``worker_process``
-        (the spawn-time process identity) and ``updated_at``."""
+        (the spawn-time process identity), ``updated_at`` and
+        (release-runtime-observability CP5) the incremented ``event_seq``."""
         with _WriteSpy() as spy:
             job.execute_step(
                 self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
@@ -529,8 +530,9 @@ class LaunchPathTest(unittest.TestCase):
         self.assertNotIn("worker_process", first)
         self.assertEqual(
             {key for key in set(first) | set(second) if first.get(key) != second.get(key)} - {"updated_at"},
-            {"worker_process"},
+            {"worker_process", "event_seq"},
         )
+        self.assertEqual(second["event_seq"], first["event_seq"] + 1)
         worker_process = second["worker_process"]
         self.assertEqual(
             set(worker_process),
@@ -608,6 +610,8 @@ class LaunchPathTest(unittest.TestCase):
             "controller_runtime",
             # Release-runtime-observability CP4.
             "worker_streams",
+            # Release-runtime-observability CP5.
+            "event_seq",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -1978,10 +1982,9 @@ class ProseOverStateTest(_LifecycleCase):
         self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result")])
 
 
-class StreamingJobTest(_LifecycleCase):
-    """``workflow-controller-release-runtime-observability`` CP4: the
-    worker's stream files are created before spawn and named in the
-    ``LAUNCHED`` record, and the group drain is recorded and announced."""
+class _StreamingCase(_LifecycleCase):
+    """The descendant fixture and write spy shared by the CP4 streaming
+    tests and the CP5 worker-event tests."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -2020,6 +2023,12 @@ class StreamingJobTest(_LifecycleCase):
                 unittest.mock.patch.object(job.runtime, "write_json", spy):
             record = self._step(**kwargs)
         return record, writes
+
+
+class StreamingJobTest(_StreamingCase):
+    """``workflow-controller-release-runtime-observability`` CP4: the
+    worker's stream files are created before spawn and named in the
+    ``LAUNCHED`` record, and the group drain is recorded and announced."""
 
     def test_worker_streams_is_in_the_first_launched_flush_before_spawn(self) -> None:
         record, writes = self._spied_step(timeout=10)
@@ -2138,6 +2147,228 @@ class StreamingJobTest(_LifecycleCase):
         with unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: self._step(timeout=10)), \
                 contextlib.redirect_stderr(stderr):
             self.assertEqual(cli.main(["step", str(self.root)]), cli.EXIT_WORKER_ACTIVE)
+
+
+
+# ---------------------------------------------------------------------------
+# Release-runtime-observability CP5: every job-record write appends its named
+# event to `jobs/<job_id>/events.jsonl`, with `seq` equal to the record's
+# `event_seq` at that write.
+# ---------------------------------------------------------------------------
+
+
+def _job_events(runtime_root: Path, job_id: str) -> list[dict]:
+    path = runtime_root / "jobs" / job_id / "events.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+class _EventLogAssertions:
+    def _assert_log(self, runtime_root: Path, record: dict, events: list[str]) -> list[dict]:
+        """The job's log is exactly ``events``, in order, ``seq`` ``1..n``
+        with the last equal to the record's ``event_seq``, every line in the
+        declared shape, and the final event agreeing with the status."""
+        log = _job_events(runtime_root, record["job_id"])
+        self.assertEqual([e["event"] for e in log], events)
+        self.assertEqual([e["seq"] for e in log], list(range(1, len(events) + 1)))
+        self.assertEqual(record["event_seq"], len(events))
+        for line in log:
+            self.assertEqual(line["v"], 1)
+            self.assertEqual(line["job_id"], record["job_id"])
+            self.assertRegex(line["at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+            self.assertNotIn("follow", line)
+        self.assertNotIn("follow", record)
+        final = log[-1]["event"]
+        if final == "reconciled":
+            self.assertEqual(log[-1]["status"], record["status"])
+        elif final in ("worker_not_started", "abandoned"):
+            self.assertEqual(record["status"], job.STATUS_FAILED)
+        else:
+            self.assertEqual(final, record["status"].lower())
+        return log
+
+
+class _SeqSpy:
+    """Records ``(event_seq, status)`` at every job-record write, so each
+    event's ``seq`` can be matched to the record written just before it."""
+
+    def __init__(self) -> None:
+        self.writes: list[tuple[int, str]] = []
+        self._original = job.runtime.write_json
+
+    def __enter__(self) -> "_SeqSpy":
+        def spy(runtime_root, rel_path, obj):
+            if str(rel_path).startswith("jobs/"):
+                self.writes.append((obj.get("event_seq"), obj.get("status")))
+            return self._original(runtime_root, rel_path, obj)
+
+        self._patch = unittest.mock.patch.object(job.runtime, "write_json", spy)
+        self._patch.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._patch.stop()
+
+
+class JobEventLogPathTest(_EventLogAssertions, _LifecycleCase):
+    """The launch paths on the minimal ``PLANNING`` target."""
+
+    def test_a_failed_verification_appends_each_write_in_order(self) -> None:
+        with _SeqSpy() as spy:
+            record = self._step(timeout=10)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        log = self._assert_log(self.runtime_root, record,
+                               ["planned", "launched", "worker_spawned", "completed", "failed"])
+        self.assertEqual([seq for seq, _status in spy.writes], [1, 2, 3, 4, 5])
+        self.assertEqual(log[0]["command"], "/milestone-plan wi-1")
+        self.assertEqual((log[2]["pid"], log[2]["pgid"]),
+                         (record["worker_process"]["pid"], record["worker_process"]["pgid"]))
+        self.assertEqual((log[3]["outcome"], log[3]["exit_code"]), ("SUCCESS", 0))
+        self.assertEqual((log[4]["observed_phase_after"], log[4]["transition_verified"]), ("PLANNING", False))
+        self.assertEqual(Path(record["worker_streams"]["events_path"]),
+                         (self.runtime_root / "jobs" / record["job_id"] / "events.jsonl").resolve())
+
+    def test_a_declined_decision_is_one_declined_event(self) -> None:
+        declined = Decision(observed_phase="PLANNING", evidence=(), action=None, automatic=False,
+                            gate=None, declined=True, reason="a patched decline")
+        with unittest.mock.patch.object(job.evidence, "decide", return_value=declined):
+            record = self._step()
+        [line] = self._assert_log(self.runtime_root, record, ["declined"])
+        self.assertEqual(line["reason"], "a patched decline")
+
+    def test_a_pending_handoff_is_one_handoff_pending_event(self) -> None:
+        (self.runtime_root / "handoff.json").write_text("{}\n")
+        record = self._step()
+        self.assertEqual(record["status"], job.STATUS_HANDOFF_PENDING)
+        self._assert_log(self.runtime_root, record, ["handoff_pending"])
+
+    def test_worker_not_started_follows_planned(self) -> None:
+        with self.assertRaises(WorkerLaunchError):
+            self._step(claude_bin=str(self.tmp_root / "no-such-claude"))
+        [record] = self._records()
+        log = self._assert_log(self.runtime_root, record, ["planned", "launched", "worker_not_started"])
+        self.assertEqual(log[-1]["error"], "WorkerLaunchError")
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+
+    def test_a_stream_file_failure_is_worker_not_started_after_planned(self) -> None:
+        job_id = "20260101T000000Z-0000000a"
+        (self.runtime_root / "jobs" / job_id).mkdir(parents=True)
+        (self.runtime_root / "jobs" / job_id / "worker.stdout").write_text("")
+        with unittest.mock.patch.object(job, "_new_job_id", return_value=job_id), \
+                self.assertRaises(WorkerLaunchError):
+            self._step(timeout=10)
+        [record] = self._records()
+        self._assert_log(self.runtime_root, record, ["planned", "worker_not_started"])
+
+    def test_a_record_without_event_seq_starts_at_one_and_stays_valid(self) -> None:
+        """A record in the base version's shape (no ``event_seq``) validates,
+        and its first new event is ``seq`` ``1``."""
+        record = self._step(timeout=10)
+        base = {key: value for key, value in record.items() if key != "event_seq"}
+        (self.runtime_root / "jobs" / record["job_id"] / "events.jsonl").unlink()
+        self.assertTrue(job.validate_record(base, managed_repo=self.managed_repo, identity=FAKE_IDENTITY).valid)
+        written = job._persist(self.runtime_root, record["job_id"], base, event="reconciled",
+                               details=job._reconciled_details(base))
+        self.assertEqual(written["event_seq"], 1)
+        self.assertEqual([e["seq"] for e in _job_events(self.runtime_root, record["job_id"])], [1])
+        self.assertTrue(job.validate_record(written, managed_repo=self.managed_repo,
+                                            identity=FAKE_IDENTITY).valid)
+
+    def test_a_keyboard_interrupt_from_the_append_propagates_after_the_record_write(self) -> None:
+        record = {"job_id": "j", "status": job.STATUS_PLANNED}
+        with unittest.mock.patch.object(job.runtime, "append_jsonl", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                job._persist(self.runtime_root, "j", record, event="planned")
+        self.assertEqual(json.loads((self.runtime_root / "jobs" / "j.json").read_text())["event_seq"], 1)
+
+
+class JobEventLogVerifiedPathTest(_EventLogAssertions, unittest.TestCase):
+    """``FINISHED`` and ``GATE_BLOCKED``, on the partial-apply fixture."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir(parents=True)
+        self.managed_repo = seed_partial_apply_plan_review(self.tmp_root)
+
+    def _execute(self, env: dict[str, str]):
+        with unittest.mock.patch.dict("os.environ", env):
+            return job.execute_step(self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                                    claude_bin=str(FAKE_CLAUDE), timeout=10)
+
+    def test_a_finished_job(self) -> None:
+        record = self._execute(partial_apply_plan_review_worker_env(self.managed_repo.root, manifest_revision=11))
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        log = self._assert_log(self.runtime_root, record,
+                               ["planned", "launched", "worker_spawned", "completed", "finished"])
+        self.assertEqual(log[-1]["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertTrue(log[-1]["transition_verified"])
+
+    def test_a_gate(self) -> None:
+        self._execute(partial_apply_plan_review_worker_env(self.managed_repo.root))
+        record = self._execute({"FAKE_CLAUDE_REQUIRE_FILE": str(self.tmp_root / "never"), "FAKE_CLAUDE_WRITES": ""})
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        [line] = self._assert_log(self.runtime_root, record, ["gate_blocked"])
+        self.assertEqual(line["what_is_required"], record["human_gate_pending"]["what_is_required"])
+        self.assertIn("reason", line)
+
+
+class WorkerEventBestEffortTest(_EventLogAssertions, _StreamingCase):
+    """The ``worker_spawned``/``worker_exited`` appends run inside
+    ``worker.launch``'s callbacks, whose exceptions are fatal to the worker
+    -- so a failure of either is swallowed and the job ends as unforced."""
+
+    def _failing_event(self, event: str, error: BaseException):
+        real = job.runtime.append_jsonl
+
+        def append(runtime_root, rel_path, obj):
+            if obj.get("event") == event:
+                raise error
+            return real(runtime_root, rel_path, obj)
+
+        return unittest.mock.patch.object(job.runtime, "append_jsonl", append)
+
+    def test_worker_exited_follows_worker_spawned_and_precedes_completed(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            record, writes = self._spied_step(env=self._descendant_env("group-closed:1"), timeout=30)
+        log = self._assert_log(self.runtime_root, record,
+                               ["planned", "launched", "worker_spawned", "worker_exited", "completed", "failed"])
+        exited = log[3]
+        drained = next(w for _t, w in writes if "worker_group_drain" in w)
+        self.assertEqual(exited["seq"], drained["event_seq"])
+        self.assertEqual(exited["pid"], record["worker_process"]["pid"])
+        self.assertEqual(exited["remaining_pids"], record["worker_group_drain"]["remaining_pids"])
+
+    def test_a_failing_worker_exited_append_changes_nothing(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            unforced, _ = self._spied_step(env=self._descendant_env("group-closed:1"), timeout=30)
+        self.descendant.unlink()
+        stderr = io.StringIO()
+        with self._failing_event("worker_exited", OSError(errno.EIO, "injected")), \
+                unittest.mock.patch.object(job.runtime, "_best_effort_warned", False), \
+                contextlib.redirect_stderr(stderr):
+            forced, _ = self._spied_step(env=self._descendant_env("group-closed:1"), timeout=30)
+        self.assertEqual((forced["status"], forced["worker_outcome"], forced["event_seq"]),
+                         (unforced["status"], unforced["worker_outcome"], unforced["event_seq"]))
+        self.assertEqual([e["seq"] for e in _job_events(self.runtime_root, forced["job_id"])], [1, 2, 3, 5, 6])
+        self.assertEqual(sum("warning: could not write" in l for l in stderr.getvalue().splitlines()), 1)
+
+    def test_a_failing_worker_spawned_append_neither_kills_nor_changes_the_job(self) -> None:
+        unforced, _ = self._spied_step(timeout=10)
+        for error in (OSError(errno.EIO, "injected"), TypeError("injected non-JSON detail")):
+            with self.subTest(error=type(error).__name__):
+                with self._failing_event("worker_spawned", error), \
+                        unittest.mock.patch.object(job.runtime, "_best_effort_warned", False), \
+                        unittest.mock.patch.object(job.worker, "_kill_process_group",
+                                                   side_effect=AssertionError("no kill-and-reap may run")), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    forced, _ = self._spied_step(timeout=10)
+                self.assertEqual((forced["status"], forced["worker_outcome"], forced["event_seq"]),
+                                 (unforced["status"], unforced["worker_outcome"], unforced["event_seq"]))
+                self.assertEqual(forced["worker"]["exit_code"], 0)
+                self.assertEqual([e["event"] for e in _job_events(self.runtime_root, forced["job_id"])],
+                                 ["planned", "launched", "completed", "failed"])
 
 
 if __name__ == "__main__":

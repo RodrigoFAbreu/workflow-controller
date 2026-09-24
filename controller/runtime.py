@@ -12,6 +12,7 @@ import json
 import os
 import secrets
 import subprocess
+import sys
 from pathlib import Path
 
 from controller.errors import RuntimeContainmentError, RuntimeRootUnwritableError
@@ -189,6 +190,68 @@ def create_log_file(runtime_root: Path, rel_path: str | os.PathLike) -> Path:
     full_path.parent.mkdir(parents=True, exist_ok=True)
     os.close(os.open(full_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
     return full_path
+
+
+def append_jsonl(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
+    """Append ``obj`` as one JSON line to ``<runtime_root>/<rel_path>``
+    (``workflow-controller-release-runtime-observability`` CP5's lifecycle
+    event logs). Containment-checked like every runtime write; the object
+    is serialised before the file is opened, so a non-JSON value is a
+    ``TypeError`` that leaves the log untouched. ``O_APPEND | O_CREAT``,
+    mode ``0o600``, one ``write()`` per line and no ``fsync``: the log is
+    presentation, never an authority. Parent directories are created as
+    needed."""
+    data = json.dumps(obj, sort_keys=True).encode("utf-8") + b"\n"
+    full_path = runtime_root / rel_path
+    _assert_contained(runtime_root, full_path)
+    full_path = full_path.resolve()
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(full_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+    return full_path
+
+
+#: The one-warning-per-process latch :func:`_best_effort` sets.
+_best_effort_warned = False
+
+
+def _best_effort(runtime_root: Path, rel_path: str | os.PathLike, write) -> bool:
+    """Run ``write()``; on any ``Exception`` (never a ``BaseException``, so
+    ``KeyboardInterrupt``/``SystemExit`` still propagate) report the first
+    failure in this process on stderr and return ``False``. Catching
+    ``Exception`` rather than ``OSError`` is deliberate: a containment
+    refusal is a ``ControllerError`` and a non-JSON detail is a
+    ``TypeError``, and neither may reach the lifecycle. The warning itself
+    never raises either."""
+    global _best_effort_warned
+    try:
+        write()
+    except Exception as exc:  # noqa: BLE001 -- best-effort by contract
+        if not _best_effort_warned:
+            _best_effort_warned = True
+            try:
+                print(f"workflow-controller: warning: could not write {Path(runtime_root) / rel_path}: {exc}",
+                      file=sys.stderr, flush=True)
+            except Exception:  # noqa: BLE001 -- a closed stderr is not a lifecycle failure
+                pass
+        return False
+    return True
+
+
+def append_jsonl_best_effort(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> bool:
+    """:func:`append_jsonl`, best-effort: every event-log append goes
+    through here. Returns whether the line was written."""
+    return _best_effort(runtime_root, rel_path, lambda: append_jsonl(runtime_root, rel_path, obj))
+
+
+def write_json_best_effort(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> bool:
+    """:func:`write_json`, best-effort: the run record
+    (``runs/<run_id>.json``) goes through here. The job record never
+    does -- it stays the only authority."""
+    return _best_effort(runtime_root, rel_path, lambda: write_json(runtime_root, rel_path, obj))
 
 
 def read_json(path: Path) -> dict | None:

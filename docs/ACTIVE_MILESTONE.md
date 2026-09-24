@@ -168,5 +168,40 @@ The previous milestone's narrative is archived at
     (10). The full suite passed (1085 tests, 6 skipped), and so did
     `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 tests.test_packaged_runtime` (9).
 
+- **CP5 -- lifecycle event logs and run records: complete.**
+  - `runtime.append_jsonl` (contained, `O_APPEND | O_CREAT`, mode `0o600`, one `write()` per line,
+    no `fsync`; the object is serialised before the file is opened). `append_jsonl_best_effort` and
+    `write_json_best_effort` catch `Exception` (never `BaseException`) and print
+    `workflow-controller: warning: could not write <path>: ...` once per process. The warning itself
+    never raises.
+  - `job._persist(..., event=, details=)` increments the record's additive `event_seq`, writes the
+    record (still the authority, still raising), then appends
+    `{"v": 1, "seq", "at", "job_id", "event", ...}` to `jobs/<id>/events.jsonl`, best-effort.
+    Every call site keeps the returned record. The events are `planned`, `launched`,
+    `worker_spawned` (pid, pgid), `worker_exited` (pid, remaining pids), `completed` (outcome, exit
+    code), `finished`/`failed`/`incomplete` (observed phase, `transition_verified`),
+    `gate_blocked`/`declined`/`handoff_pending` (reason), `worker_not_started` (error),
+    `reconciled` (status, code) and `abandoned`. A missing or malformed `event_seq` starts at `1`
+    and never raises. `--abandon`'s replace path carries only a valid prior `event_seq`.
+  - `job.RunRecord`/`open_run`: `runs/<run_id>.json` (`schema_version`, `run_id`, `command`,
+    `target_repo`, `max_steps`, `controller_process`, `controller_runtime`, `state`, `exit_code`,
+    `job_ids`, `current_job_id`, `started_at`/`updated_at`/`ended_at`) and
+    `runs/<run_id>/events.jsonl` (`run_started`, `step_started`, `job_started`, `job_ended`,
+    `handoff_detected`, `no_action`, `run_ended`/`run_interrupted`). Every write is best-effort.
+    `execute_step(run_id=)` records `run_id` on the job and mirrors the job's start and end into the
+    open run's log, through a per-process registry.
+  - `cli`: `cmd_step`/`cmd_run` create the run after `_inspect_target` and register it in
+    `_open_run`. `main()` closes it once, in a `finally`: `ended` with the code it returns (including
+    `20` and `45`), or `interrupted` with `exit_code: null` on `KeyboardInterrupt`. Any other
+    exception leaves the run `running`, like a killed Controller. A stale registration (from a
+    direct `cmd_*` call) is discarded, never closed.
+  - The `--follow` half of the `command` test uses an args namespace with `follow=True`, because the
+    flag lands in CP6. The record takes `command` from the subcommand, never argv.
+  - Verified: the narrow set `tests.test_job tests.test_cli tests.test_resume tests.test_observe
+    tests.test_write_containment` passed (277 tests). The full suite passed (1121 tests, 6
+    skipped). A read spy on `open`/`os.open`/`Path.read_*` pins that `resume`,
+    `pending_reconciliation_jobs`, `_classify_jobs` and `abandon` read nothing under `runs/` or
+    `jobs/<id>/`, and a negative control confirmed that the spy catches such a read.
+
 **Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP5 or CP8).
+next ready checkpoint (CP6 or CP8).

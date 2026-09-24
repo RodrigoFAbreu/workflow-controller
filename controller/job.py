@@ -2123,7 +2123,8 @@ def _reconcile_planned(record: JobRecord, *, runtime_root: Path) -> JobRecord:
     ever written for this record)."""
     now = _now()
     reconciled = {**record, "status": STATUS_INTERRUPTED, "reconciled_at": now, "updated_at": now}
-    return _persist(runtime_root, record["job_id"], reconciled)
+    return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                    details=_reconciled_details(reconciled))
 
 
 def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
@@ -2159,7 +2160,8 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
             **record, "status": STATUS_FINISHED, "transition_verified": True,
             "observed_phase_after": observed_phase_after_wire, "reconciled_at": now, "updated_at": now,
         }
-        return _persist(runtime_root, record["job_id"], reconciled)
+        return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                        details=_reconciled_details(reconciled))
 
     phase_unchanged = observed_phase_after_wire == pre_state.get("phase")
     head_unchanged = observed_head == pre_state.get("target_head")
@@ -2168,7 +2170,8 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
             **record, "status": STATUS_INTERRUPTED, "observed_phase_after": observed_phase_after_wire,
             "reconciled_at": now, "updated_at": now,
         }
-        return _persist(runtime_root, record["job_id"], reconciled)
+        return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                        details=_reconciled_details(reconciled))
 
     unreconcilable_evidence = {
         "job_id": record["job_id"], "work_item_id": work_item_id,
@@ -2202,7 +2205,7 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
             "reconciliation_evidence": {"code": "UnreconcilableJobError", **unreconcilable_evidence},
             "reconciled_at": now, "updated_at": now,
         }
-        _persist(runtime_root, record["job_id"], failed)
+        _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
         message += (
             " -- the worker has ended (the lifecycle lock is free and no running member of its "
             "process group is observed), so the record is now FAILED; the next `step` decides "
@@ -2243,7 +2246,8 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
             **record, "status": STATUS_FINISHED, "transition_verified": True,
             "observed_phase_after": observed_phase_after_wire, "reconciled_at": now, "updated_at": now,
         }
-        return _persist(runtime_root, record["job_id"], reconciled)
+        return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                        details=_reconciled_details(reconciled))
 
     reconciled = {
         **record,
@@ -2257,7 +2261,8 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         "reconciled_at": now,
         "updated_at": now,
     }
-    return _persist(runtime_root, record["job_id"], reconciled)
+    return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                    details=_reconciled_details(reconciled))
 
 
 def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord]:
@@ -2981,7 +2986,8 @@ def _abandon_locked(managed_repo: Any, *, identity: Any, runtime_root: Path, pat
         if record.get("schema_version") == SCHEMA_VERSION:
             return _abandon_mark_failed(managed_repo, identity=identity, runtime_root=runtime_root,
                                         job_id=job_id, record=record, acknowledge=acknowledge)
-    return _abandon_replace(runtime_root, path, raw)
+    return _abandon_replace(runtime_root, path, raw,
+                            prior_event_seq=_event_seq(record) if isinstance(record, dict) else None)
 
 
 def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path, job_id: str,
@@ -3038,14 +3044,19 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
     }
     if worker_liveness is not None:
         abandoned["worker_liveness"] = worker_liveness
-    return _persist(runtime_root, job_id, abandoned)
+    return _persist(runtime_root, job_id, abandoned, event="abandoned",
+                    details={"abandoned_status": status})
 
 
-def _abandon_replace(runtime_root: Path, path: Path, raw: bytes) -> JobRecord:
+def _abandon_replace(runtime_root: Path, path: Path, raw: bytes, *,
+                     prior_event_seq: int | None = None) -> JobRecord:
     """Copy the file's original bytes unchanged to ``jobs/abandoned/``
     (outside the ``jobs/*.json`` scan), then replace it with a minimal
     terminal record. An existing copy of the same name is never
-    overwritten."""
+    overwritten. ``prior_event_seq`` is the replaced object's own
+    ``event_seq``, when it had a positive integer one, so the job's event
+    log continues rather than repeating a ``seq``; nothing else from an
+    untrusted record is carried."""
     copy_name = path.name
     if (Path(runtime_root) / "jobs" / "abandoned" / copy_name).exists():
         copy_name = f"{path.name}.{_new_job_id()}"
@@ -3061,7 +3072,9 @@ def _abandon_replace(runtime_root: Path, path: Path, raw: bytes) -> JobRecord:
         "reconciled_at": now,
         "updated_at": now,
     }
-    return _persist(runtime_root, path.stem, minimal)
+    if prior_event_seq is not None:
+        minimal["event_seq"] = prior_event_seq
+    return _persist(runtime_root, path.stem, minimal, event="abandoned", details={"original": original})
 
 
 # ---------------------------------------------------------------------------
@@ -3182,9 +3195,173 @@ def _worker_dict(result: worker.WorkerResult, *, stdout_path: str, stderr_path: 
 # ---------------------------------------------------------------------------
 
 
-def _persist(runtime_root: Path, job_id: str, record: JobRecord) -> JobRecord:
+#: The version every lifecycle event line carries as ``v``
+#: (``workflow-controller-release-runtime-observability`` CP5).
+EVENT_LOG_VERSION = 1
+
+
+def _persist(runtime_root: Path, job_id: str, record: JobRecord, *, event: str,
+             details: Mapping | None = None) -> JobRecord:
+    """Write the job record, then append ``event`` to
+    ``jobs/<job_id>/events.jsonl``, and return the record written.
+
+    ``event_seq`` (additive, CP5) is incremented on the record before the
+    write -- a record without it starts at ``1`` -- and the event carries
+    that value as ``seq``, so ``resume`` and ``--abandon`` continue the
+    sequence from the record alone, never reading the log. The record write
+    is the authority and raises as before; the append after it is
+    best-effort (``runtime.append_jsonl_best_effort``), so a lost line is a
+    gap in ``seq``, never a repeat and never a lifecycle failure. Every
+    caller keeps the returned record, so the next write continues from it."""
+    seq = (_event_seq(record) or 0) + 1
+    record = {**record, "event_seq": seq}
     runtime.write_json(runtime_root, f"jobs/{job_id}.json", record)
+    runtime.append_jsonl_best_effort(runtime_root, f"jobs/{job_id}/events.jsonl", {
+        "v": EVENT_LOG_VERSION, "seq": seq, "at": _now(), "job_id": job_id, "event": event,
+        **(details or {}),
+    })
     return record
+
+
+def _event_seq(record: Mapping) -> int | None:
+    """``record``'s ``event_seq`` when it is a positive integer, else
+    ``None``. ``validate_record`` does not read the field, so a malformed
+    value must not raise here, inside ``resume`` or ``--abandon``; the
+    sequence restarts at ``1`` instead."""
+    value = record.get("event_seq")
+    return value if type(value) is int and value > 0 else None
+
+
+def _final_event(status: str) -> str:
+    """The job event a final (or no-launch) status is recorded under."""
+    return status.lower()
+
+
+def _reconciled_details(record: JobRecord) -> dict:
+    """The ``reconciled`` event's details: the new status and, when the
+    reconciliation recorded one, its evidence code."""
+    evidence_block = record.get("reconciliation_evidence")
+    code = evidence_block.get("code") if isinstance(evidence_block, Mapping) else None
+    return {"status": record.get("status"), "code": code}
+
+
+# ---------------------------------------------------------------------------
+# Run records (`workflow-controller-release-runtime-observability` CP5):
+# `runs/<run_id>.json` and `runs/<run_id>/events.jsonl`, written by the one
+# process that owns the run. Both are best-effort and read by no lifecycle
+# decision.
+# ---------------------------------------------------------------------------
+
+RUN_SCHEMA_VERSION = 1
+RUN_STATE_RUNNING = "running"
+RUN_STATE_ENDED = "ended"
+RUN_STATE_INTERRUPTED = "interrupted"
+
+
+class RunRecord:
+    """One ``step``/``run`` invocation's run record and event log. The
+    per-run ``seq`` is held here, in the owning process; nothing else
+    appends to the log. Every write is best-effort."""
+
+    def __init__(self, runtime_root: Path, *, command: str, target_repo: str, max_steps: int | None,
+                 ident: Any) -> None:
+        self.runtime_root = runtime_root
+        self.run_id = _new_job_id()
+        self._seq = 0
+        now = _now()
+        self.record: dict = {
+            "schema_version": RUN_SCHEMA_VERSION,
+            "run_id": self.run_id,
+            "command": command,
+            "target_repo": target_repo,
+            "max_steps": max_steps,
+            "controller_process": _controller_process(),
+            "controller_runtime": identity.runtime_record(ident),
+            "state": RUN_STATE_RUNNING,
+            "exit_code": None,
+            "job_ids": [],
+            "current_job_id": None,
+            "started_at": now,
+            "updated_at": now,
+            "ended_at": None,
+        }
+        self._flush()
+        self.event("run_started")
+
+    def _flush(self) -> None:
+        self.record["updated_at"] = _now()
+        runtime.write_json_best_effort(self.runtime_root, f"runs/{self.run_id}.json", self.record)
+
+    def event(self, event: str, **details: Any) -> None:
+        self._seq += 1
+        runtime.append_jsonl_best_effort(self.runtime_root, f"runs/{self.run_id}/events.jsonl", {
+            "v": EVENT_LOG_VERSION, "seq": self._seq, "at": _now(), "run_id": self.run_id, "event": event,
+            **details,
+        })
+
+    def job_started(self, job_id: str) -> None:
+        self.record["job_ids"] = [*self.record["job_ids"], job_id]
+        self.record["current_job_id"] = job_id
+        self._flush()
+        self.event("job_started", job_id=job_id)
+
+    def job_ended(self, job_id: str, status: str) -> None:
+        self.record["current_job_id"] = None
+        self._flush()
+        self.event("job_ended", job_id=job_id, status=status)
+
+    def close(self, exit_code: int) -> None:
+        self.record.update(state=RUN_STATE_ENDED, exit_code=exit_code, ended_at=_now())
+        self._flush()
+        self.event("run_ended", exit_code=exit_code)
+        _OPEN_RUNS.pop(self.run_id, None)
+
+    def interrupt(self) -> None:
+        """Ctrl-C: ``current_job_id`` is kept -- its worker may still run."""
+        self.record.update(state=RUN_STATE_INTERRUPTED, exit_code=None, ended_at=_now())
+        self._flush()
+        self.event("run_interrupted")
+        _OPEN_RUNS.pop(self.run_id, None)
+
+    def discard(self) -> None:
+        """Unregister without writing: the record stays ``running``."""
+        _OPEN_RUNS.pop(self.run_id, None)
+
+
+def _controller_process() -> dict | None:
+    """This process's identity, as ``worker.capture_worker_process`` records
+    a worker's -- ``None`` if it cannot be read, since the run record is
+    best-effort and must never stop the run it describes."""
+    try:
+        return worker.capture_worker_process(os.getpid()).to_dict()
+    except Exception:  # noqa: BLE001 -- best-effort by contract
+        return None
+
+
+#: Runs open in this process, by id -- how :func:`execute_step`'s
+#: ``run_id`` reaches the run whose log it mirrors job events into.
+_OPEN_RUNS: dict[str, RunRecord] = {}
+
+
+def open_run(runtime_root: Path, *, command: str, target_repo: str, max_steps: int | None,
+             ident: Any) -> RunRecord:
+    """Create and register a run record (state ``running``). Never raises
+    for a failed write: the record is best-effort."""
+    run = RunRecord(runtime_root, command=command, target_repo=target_repo, max_steps=max_steps, ident=ident)
+    _OPEN_RUNS[run.run_id] = run
+    return run
+
+
+def _run_job_started(run_id: str | None, job_id: str) -> None:
+    run = _OPEN_RUNS.get(run_id) if run_id is not None else None
+    if run is not None:
+        run.job_started(job_id)
+
+
+def _run_job_ended(run_id: str | None, job_id: str, status: str) -> None:
+    run = _OPEN_RUNS.get(run_id) if run_id is not None else None
+    if run is not None:
+        run.job_ended(job_id, status)
 
 
 def _pending_handoff(runtime_root: Path) -> dict | None:
@@ -3240,10 +3417,12 @@ def _announce_group_drain(pid: int, remaining_pids: list[int]) -> None:
 
 def _no_launch_record(
     runtime_root: Path, managed_repo: Any, ident: Any, work_item_id: str | None, observed_phase: Any,
-    pre_state: dict, decision: Decision, *, status: str,
+    pre_state: dict, decision: Decision, *, status: str, run_id: str | None = None,
 ) -> JobRecord:
     """The single-flush record for every outcome that never reaches a
-    worker launch: ``GATE_BLOCKED``, ``DECLINED``, ``HANDOFF_PENDING``."""
+    worker launch: ``GATE_BLOCKED``, ``DECLINED``, ``HANDOFF_PENDING``.
+    Its one event is the status itself, carrying the decision's reason;
+    a run mirrors it as a job that started and ended at once."""
     job_id = _new_job_id()
     now = _now()
     record: JobRecord = {
@@ -3258,7 +3437,15 @@ def _no_launch_record(
         "created_at": now,
         "updated_at": now,
     }
-    return _persist(runtime_root, job_id, record)
+    if run_id is not None:
+        record["run_id"] = run_id
+    details: dict = {"reason": decision.reason}
+    if status == STATUS_GATE_BLOCKED:
+        details["what_is_required"] = decision.gate.what_is_required
+    _run_job_started(run_id, job_id)
+    record = _persist(runtime_root, job_id, record, event=_final_event(status), details=details)
+    _run_job_ended(run_id, job_id, status)
+    return record
 
 
 def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOptions) -> routing.ResolvedRoute:
@@ -3286,6 +3473,7 @@ def execute_step(
     timeout: float | None = None,
     claude_bin: str | None = None,
     routing: routing.RoutingOptions = routing.NO_OVERRIDES,
+    run_id: str | None = None,
 ) -> JobRecord | Decision:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -3306,13 +3494,20 @@ def execute_step(
     routing overrides; the default is the built-in routing alone. The
     launched worker's resolved route is recorded as ``worker_route`` from
     the ``PLANNED`` flush on, and its model, effort and disallowed tools
-    reach the worker's command line."""
+    reach the worker's command line.
+
+    ``run_id`` (``workflow-controller-release-runtime-observability`` CP5)
+    names the ``step``/``run`` invocation this job belongs to. It is
+    recorded as the job record's additive ``run_id``, and when that run is
+    open in this process (:func:`open_run`) the job's start and end are
+    mirrored into its log. Every job-record write also appends its named
+    event to ``jobs/<job_id>/events.jsonl`` (:func:`_persist`)."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
             managed_repo, work_item_id=work_item_id, identity=identity, runtime=runtime,
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
-            lifecycle_lock=lifecycle_lock, routing=routing,
+            lifecycle_lock=lifecycle_lock, routing=routing, run_id=run_id,
         )
 
 
@@ -3340,6 +3535,7 @@ def _execute_step_locked(
     claude_bin: str | None,
     lifecycle_lock: lock.LifecycleLock,
     routing: routing.RoutingOptions,
+    run_id: str | None = None,
 ) -> JobRecord | Decision:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -3400,12 +3596,12 @@ def _execute_step_locked(
     if decision.gate is not None:
         return _no_launch_record(
             runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
-            decision, status=STATUS_GATE_BLOCKED,
+            decision, status=STATUS_GATE_BLOCKED, run_id=run_id,
         )
     if decision.declined:
         return _no_launch_record(
             runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
-            decision, status=STATUS_DECLINED,
+            decision, status=STATUS_DECLINED, run_id=run_id,
         )
     if not decision.automatic:
         # LEGACY_READY / MILESTONE_COMPLETE: action=None, automatic=False,
@@ -3419,7 +3615,7 @@ def _execute_step_locked(
     if _pending_handoff(runtime) is not None:
         return _no_launch_record(
             runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
-            decision, status=STATUS_HANDOFF_PENDING,
+            decision, status=STATUS_HANDOFF_PENDING, run_id=run_id,
         )
 
     # Defensive: by construction, every branch above that could return
@@ -3456,7 +3652,11 @@ def _execute_step_locked(
         "created_at": now,
         "updated_at": now,
     }
-    _persist(runtime, job_id, record)
+    if run_id is not None:
+        record["run_id"] = run_id
+    _run_job_started(run_id, job_id)
+    record = _persist(runtime, job_id, record, event="planned",
+                      details={"command": decision.action.command})
 
     expected_transition = _expected_transition(decision.observed_phase, governing_workflow_version, decision)
     record = {
@@ -3479,7 +3679,8 @@ def _execute_step_locked(
                 "message": exc.message, "evidence": exc.evidence,
             },
             "updated_at": _now(),
-        })
+        }, event="worker_not_started", details={"error": type(exc).__name__})
+        _run_job_ended(run_id, job_id, STATUS_FAILED)
 
     # CP4 (release-runtime-observability): the worker writes its own
     # stdout/stderr into these files, created before the LAUNCHED flush so
@@ -3490,7 +3691,7 @@ def _execute_step_locked(
         worker_not_started(exc)
         raise
     record = {**record, "worker_streams": worker_streams, "updated_at": _now()}
-    _persist(runtime, job_id, record)
+    record = _persist(runtime, job_id, record, event="launched")
 
     # Step 5: launch the worker and wait synchronously -- with no limit
     # unless the operator set one (CP5, "Time is not termination"). The
@@ -3508,7 +3709,10 @@ def _execute_step_locked(
         nonlocal record
         spawned["worker_process"] = worker_process
         record = {**record, "worker_process": worker_process.to_dict(), "updated_at": _now()}
-        _persist(runtime, job_id, record)
+        # The record write may raise (`launch` then ends the group); the
+        # `worker_spawned` append after it never does -- it is best-effort.
+        record = _persist(runtime, job_id, record, event="worker_spawned",
+                          details={"pid": worker_process.pid, "pgid": worker_process.pgid})
         spawned["flushed"] = True
 
     def on_group_drain(pid: int, remaining_pids: list[int]) -> None:
@@ -3521,7 +3725,8 @@ def _execute_step_locked(
             "worker_group_drain": {"direct_child_exited_at": _now(), "remaining_pids": list(remaining_pids)},
             "updated_at": _now(),
         }
-        _persist(runtime, job_id, record)
+        record = _persist(runtime, job_id, record, event="worker_exited",
+                          details={"pid": pid, "remaining_pids": list(remaining_pids)})
         _announce_group_drain(pid, remaining_pids)
 
     try:
@@ -3562,7 +3767,8 @@ def _execute_step_locked(
         "worker_outcome": result.outcome,
         "updated_at": _now(),
     }
-    _persist(runtime, job_id, record)
+    record = _persist(runtime, job_id, record, event="completed",
+                      details={"outcome": result.outcome, "exit_code": result.returncode})
 
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
     # -- never the `snapshot`/`work_item` captured before the worker ran
@@ -3629,5 +3835,8 @@ def _execute_step_locked(
             "observed_phase": phase_to_wire(observed_phase_after),
             "worker_stdout": result.stdout,
         }
-    _persist(runtime, job_id, record)
+    record = _persist(runtime, job_id, record, event=_final_event(final_status), details={
+        "observed_phase_after": record["observed_phase_after"], "transition_verified": verified,
+    })
+    _run_job_ended(run_id, job_id, final_status)
     return record

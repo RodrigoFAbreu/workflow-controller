@@ -446,5 +446,95 @@ The previous milestone's narrative is archived at
   - Verified: `tests.test_plan_document_consistency tests.test_checklist_corrections` passed (47
     tests).
 
-**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP11).
+- **CP11 -- full verification: complete.** No code changed. The drill scripts are throwaway files
+  under `/tmp`, not committed.
+  1. `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t . -v` (no
+     `PYTHONPATH`): **Ran 1274 tests in 96.5 s, OK (skipped=6)**. All six skips are the
+     `CONTROLLER_LIVE_WORKER=1` opt-ins in `tests.test_integration_disposable_repo`.
+  2. The seven conformance suites, from `scripts/`, all passed (timings under step 7).
+  3. `python3 tools/ci_workflows.py --check`: exit `0`.
+  4. **Packaged drill, real pipx 1.15.0**, isolated with `PIPX_HOME`/`PIPX_BIN_DIR`/
+     `PIPX_MAN_DIR` and `XDG_STATE_HOME` in a temporary directory. The operator's own
+     `~/.local/share/pipx/venvs/workflow-controller` was untouched. The worker was
+     `tests/fake_claude.py`, the Manager was the test stub, and the target was the
+     `test_packaged_runtime` `PLANNING` fixture.
+     - Base commit `16c3fb4`: wheel `workflow_controller-1.0.1`. `pipx install`, then `step`
+       gave **exit `20`**, `error: git archive failed: fatal: not a git repository (or any parent
+       up to mount point /)`. That reproduces the defect.
+     - HEAD `d33840d`: wheel `workflow_controller-1.1.0`, pipx-installed, clone then moved away.
+       - `--version` printed `workflow-controller 1.1.0` / `runtime: package (local build from
+         d33840df1350)`.
+       - `status` printed `controller: workflow-controller 1.1.0 -- package (local build from
+         d33840df1350)` and `no Controller runtime state at <xdg>/workflow-controller (ladder
+         row 4)`.
+       - `inspect` exited `0`.
+       - `step` exited `0`, and the target moved to `AWAITING_LOCAL_PLAN_REVIEW`.
+       - The job record is `FINISHED`/`SUCCESS`, with `controller_source_commit` `d33840d...`.
+       - Its `controller_runtime` is `{runtime_kind: package, source_kind: package, version:
+         1.1.0, generation: 1, source_commit: d33840d..., build_origin: local, release_tag: null,
+         package_digest: cd9011ed..., tree_digest: d5982c90...}`.
+  5. **Real-CLI stream check:** Claude Code `2.1.281`, `claude -p "Reply with the word ok."
+     --output-format stream-json --verbose --model haiku`, exit `0`. The stream has five events
+     (`system`/`init` on `claude-haiku-4-5-20251001`, `assistant` x2, `rate_limit_event`,
+     `result`). `_parse_worker_stream` returned the `result` event (`result: "ok"`, `is_error:
+     false`), and `_classify` gave **`SUCCESS`**.
+  6. **Live drill, run once, real spend:**
+     - The target was `_seed_target` from `tests.test_integration_disposable_repo`: a real
+       Workflow `2.5.1` `full` install with the trivial `hello-file` milestone.
+     - The command was `run --follow --max-steps 1`, default routing and default permission mode
+       (`auto`), from the source runtime with `--runtime-dir`. `--max-steps 1` limits the spend
+       to the one `/milestone-plan` worker.
+     - A second `follow <target>` process attached 15 s after `worker_spawned`. It was
+       `SIGKILL`ed 25 s later with the worker still running, then re-attached 5 s later.
+     - Results:
+       - Run `20260924T110338Z-ba362f56` ended with exit `16` (`EXIT_MAX_STEPS`, as expected)
+         after 122 s.
+       - Job `20260924T110338Z-cbed733d` is `FINISHED`, worker `SUCCESS`,
+         `transition_verified: true`, `__NO_PHASE__ -> AWAITING_LOCAL_PLAN_REVIEW`.
+       - Worker session `a750ce64-...`, model `claude-opus-5-5[1m]`, permission `auto`.
+       - 23 turns, cost $0.967, 119.4 s.
+     - The real stream (109 events) **passes the strict parser**.
+     - **Tool calls and results render**: the `--from-start` replay has 22 `worker tool Bash:`
+       lines and 22 `worker result Bash ok:` lines.
+     - **No thinking block is rendered.** The raw `worker.stdout` holds 16 events with thinking
+       blocks, kept as evidence, and none of the four renderings (run stderr, both follows, the
+       replay) contains the word "thinking". `worker.stdout` and `events.jsonl` are `0o600`.
+     - The killed follow exited `-9` with no effect on the run. The re-attached follow printed
+       the replay, followed live and **exited `0`** when the run ended, printing `run ended:
+       exit 16`.
+     - `follow --run 20260924T110338Z-ba362f56 --from-start` exited `0` with 504 lines,
+       identical in length to the run's own `--follow` stderr (504 lines).
+     - Observation: `rate_limit_event` renders as `worker unknown event rate_limit_event`. That
+       is harmless and presentation-only, but it is noise; see "For the reviewer" below.
+  7. **Per-shard timings**, from one local run of each shard's command (host: this machine, run
+     sequentially). Each shard exited `0` with `OK`:
+
+     | Shard | Tests | Time |
+     |---|---|---|
+     | controller (identity) | 141 | 10.1 s |
+     | controller (job) | 211 | 19.0 s |
+     | controller (resume) | 90 | 2.5 s |
+     | controller (decision) | 392 | 2.2 s |
+     | controller (cli) | 114 | 12.7 s |
+     | controller (worker) | 141 | 20.7 s |
+     | controller (docs) | 158 | 9.2 s |
+     | package (`tests.test_packaged_runtime`, `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`) | 9 | 20.4 s |
+     | conformance `workflow_fingerprint_test.py` | 218 | 1.8 s |
+     | conformance `workflow_state_test.py` | 853 | 23.1 s |
+     | conformance `workflow_test_harness_test.py` | 19 | 0.1 s |
+     | conformance `workflow_integration_test.py` | 260 (skipped 1) | 1.9 s |
+     | conformance `workflow_acceptance_matrix_test.py` | 146 (skipped 18) | 75.8 s |
+     | conformance `workflow_state_completion_obligations_test.py` | 106 | 4.0 s |
+     | conformance `workflow_fingerprint_generalization_test.py` | 79 | 4.2 s |
+
+     The Controller shards plus the package shard total 1256 tests. Adding the 18 tests of the
+     excluded `test_integration_disposable_repo` gives the full-suite count of 1274, so every
+     module is covered.
+  - **For the reviewer:** the `stream-json` CLI emits `rate_limit_event` lines. The strict parser
+    accepts them, since they are JSON objects, and the renderer shows them as an "unknown event"
+    line. No change was made in CP11: this is a verification checkpoint, and the plan does not
+    list the event kind.
+
+**Next action:** `/milestone-implement workflow-controller-release-runtime-observability`. Every
+checkpoint is complete, so the next invocation enters self-review (step 2) and then generates the
+implementation bundle.

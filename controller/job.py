@@ -2345,13 +2345,19 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             )
         try:
             record = json.loads(path.read_text())
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise StaleJobRecordError(
                 f"job record at {path} could not be read or parsed as JSON: {exc} -- "
                 f"`{_abandon_command(path.stem, root)}` sets its bytes aside under jobs/abandoned/ "
                 f"and replaces it with a terminal record",
                 evidence={"path": str(path), "error": str(exc),
                           "clearing_command": _abandon_command(path.stem, root)},
+            ) from exc
+        except OSError as exc:
+            raise StaleJobRecordError(
+                f"job file {path} cannot be read: {exc} -- `resume --abandon` cannot set unreadable "
+                f"bytes aside, so it is cleared by hand: {_unreadable_clearing(path)}",
+                evidence={"path": str(path), "error": str(exc), "clearing_command": _unreadable_clearing(path)},
             ) from exc
         if not isinstance(record, dict) or record.get("target_repo") != target_repo_str:
             continue  # not "for this target repository" -- left untouched.
@@ -2566,6 +2572,13 @@ def _manual_removal(path: Path) -> str:
     return f"remove {path} by hand"
 
 
+def _unreadable_clearing(path: Path) -> str:
+    """The clearing command for a regular job file whose bytes cannot be
+    read (after a permissions change, say): ``--abandon`` cannot set
+    unreadable bytes aside, so only a human clears it."""
+    return f"make {path} readable again, or remove it by hand"
+
+
 def _newer_generation(record: Mapping, identity: Any) -> int | None:
     """The record's ``controller_generation`` when it is an integer newer
     than the running Controller's (``validate_record`` case 1,
@@ -2652,6 +2665,8 @@ def pending_reconciliation_jobs(runtime_root: Path, managed_repo: Any, identity:
     - any entry that does not parse as a JSON object: its target cannot be
       read, and it could be this target's ``LAUNCHED`` record (fail
       closed);
+    - any regular file that cannot be read at all (cleared by hand, because
+      ``--abandon`` cannot set unreadable bytes aside);
     - any entry that is not a regular file (never opened; cleared by hand,
       because ``--abandon`` replaces only regular files).
 
@@ -2659,7 +2674,7 @@ def pending_reconciliation_jobs(runtime_root: Path, managed_repo: Any, identity:
     can reconcile; ``resume --abandon JOB_ID`` for one it cannot (an
     unparseable file, a record failing ``validate_record``, an unknown
     status); for a newer generation's record, that generation's own
-    ``resume``."""
+    ``resume``; by hand for the two kinds of entry above."""
     root = managed_repo.root
     target_repo = str(root)
     pending: list[PendingJob] = []
@@ -2674,9 +2689,14 @@ def pending_reconciliation_jobs(runtime_root: Path, managed_repo: Any, identity:
             continue
         try:
             record = json.loads(path.read_text())
-        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        except (UnicodeDecodeError, ValueError, RecursionError):
             record = None
             parsed = False
+        except OSError as exc:
+            pending.append(PendingJob(path.stem, None, _unreadable_clearing(path),
+                                      f"it cannot be read ({exc}), and `resume --abandon` cannot set "
+                                      "unreadable bytes aside (it could be this target's record)"))
+            continue
         else:
             parsed = isinstance(record, dict)
         if not parsed:
@@ -2906,9 +2926,10 @@ def abandon(
       its bytes are copied unchanged to ``jobs/abandoned/<file name>``,
       then it is replaced by a minimal terminal record with a ``null``
       ``target_repo`` -- from any target, since its target cannot be read.
-    - **Refused**: a ``JOB_ID`` breaking the constraint, a terminal record,
-      another target's record, or a newer generation's record
-      (:class:`~controller.errors.JobAbandonRefusedError`, exit 20); a
+    - **Refused**: a ``JOB_ID`` breaking the constraint, a file whose bytes
+      cannot be read (nothing can be set aside, so it is cleared by hand), a
+      terminal record, another target's record, or a newer generation's
+      record (:class:`~controller.errors.JobAbandonRefusedError`, exit 20); a
       recorded worker that is ``active``
       (:class:`~controller.errors.LifecycleWorkerActiveError`, exit 45 --
       no flag overrides it); or one that is ``unverifiable`` without
@@ -2933,7 +2954,14 @@ def _abandon_locked(managed_repo: Any, *, identity: Any, runtime_root: Path, pat
             f"`resume --abandon {job_id!r}` refused: {path} is no longer a regular file",
             evidence={"job_id": job_id},
         )
-    raw = path.read_bytes()
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: {path} cannot be read ({exc}), so its bytes cannot "
+            f"be set aside under jobs/abandoned/ -- {_unreadable_clearing(path)}",
+            evidence={"job_id": job_id, "error": str(exc), "clearing_command": _unreadable_clearing(path)},
+        ) from exc
     try:
         record = json.loads(raw)
     except (UnicodeDecodeError, ValueError, RecursionError):

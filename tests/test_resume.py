@@ -1957,6 +1957,44 @@ class AbandonBeyondPreMilestoneRecordsTest(_DispositionCase):
             self._step(managed_repo)
         self.assertEqual(self._launches(), 2)
 
+    def test_an_unreadable_file_is_named_for_clearing_by_hand_everywhere(self) -> None:
+        """A regular job file whose bytes cannot be read: ``--abandon``
+        cannot set them aside, so the pending refusal, ``resume`` and
+        ``--abandon`` each name the manual disposition, and ``--abandon``
+        refuses cleanly (``JobAbandonRefusedError``, exit 20) instead of
+        raising ``PermissionError``."""
+        _write_record(self.runtime_root, self._launched("j-locked"))
+        path = self.runtime_root / "jobs" / "j-locked.json"
+        path.chmod(0)
+        self.addCleanup(path.chmod, 0o600)
+        try:
+            path.read_bytes()
+        except PermissionError:
+            pass
+        else:
+            self.skipTest("running as root: chmod 000 does not make a file unreadable")
+        clearing = f"make {path} readable again, or remove it by hand"
+
+        with self.assertRaises(PendingJobReconciliationError) as ctx:
+            self._step()
+        self.assertIn(clearing, ctx.exception.message)
+        self.assertNotIn("--abandon j-locked", ctx.exception.message)
+        self.assertEqual(ctx.exception.evidence["pending_jobs"],
+                         [{"job_id": "j-locked", "status": None, "clearing_command": clearing}])
+        with self.assertRaises(StaleJobRecordError) as ctx:
+            self._resume()
+        self.assertIn(clearing, ctx.exception.message)
+        self.assertNotIn("--abandon j-locked", ctx.exception.message)
+        with self.assertRaises(JobAbandonRefusedError) as ctx:
+            self._abandon("j-locked")
+        self.assertIn(clearing, ctx.exception.message)
+        self.assertFalse((self.runtime_root / "jobs" / "abandoned").exists())
+        self.assertEqual(self._launches(), 0)
+
+        # Made readable again, it is an ordinary pending record.
+        path.chmod(0o600)
+        self.assertEqual([r["status"] for r in self._resume()], [job.STATUS_INTERRUPTED])
+
     def test_an_unknown_schema_version_is_replaced(self) -> None:
         _write_record(self.runtime_root, self._launched("j-schema", schema_version=99))
         original = self._bytes("j-schema")

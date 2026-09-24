@@ -591,6 +591,20 @@ class _LifecycleTestCase(unittest.TestCase):
         self.assertIn(f"run scripts/prepare-ai-review.sh {lc.base_commit} {stage} {WI}", gate["safe_resume_command"])
         self.assertIn("implementation_revision:", gate["safe_resume_command"])
 
+    def assert_uncommitted_state_gate(self, gate: dict, lc: Lifecycle, facts: tuple[str, ...]) -> None:
+        """The durable-state gate: every fact, in order, then what a human
+        does; never a regeneration step or a Workflow command to launch."""
+        what = gate["what_is_required"]
+        self.assertTrue(what.startswith(
+            f"the working tree's {STATE_REL} records state that HEAD does not durably record: "
+            + "; ".join(facts) + ". "
+        ), what)
+        self.assertIn("so none is launched", what)
+        self.assertIn("A human reconciles the working tree with HEAD first", what)
+        self.assertNotIn("prepare-ai-review.sh", what)
+        self.assertEqual(gate["artifact_path"], str(lc.root / STATE_REL))
+        self.assertEqual(gate["safe_resume_command"], f"workflow-controller explain --work-item {WI}")
+
     def assert_no_user_only_task(self, lc: Lifecycle) -> None:
         """No worker was ever handed a user-only command."""
         tasks = fixtures.scripted_worker_tasks(lc.script_path)
@@ -857,21 +871,31 @@ def _approval_refusal_next(test: "FailClosedArtifactTest", lc: Lifecycle) -> Non
                   gate["what_is_required"])
 
 
-def _checkpoint_next(test: "FailClosedArtifactTest", lc: Lifecycle) -> None:
-    """The cases the plan's "the next ``step`` gates" does not reach: after
-    an uncommitted checkpoint completion or an uncommitted
+def uncommitted_checkpoint_fact(checkpoint_id: str) -> str:
+    """The durable-state gate's fact for a checkpoint ``COMPLETE`` only in
+    the working tree, whose committed status is absent."""
+    return (f"checkpoint {checkpoint_id!r} is COMPLETE in the working tree's WORKFLOW_STATE.json, but its "
+            "status in the state committed at HEAD is absent")
+
+
+#: The durable-state gate's fact for an uncommitted
+#: ``SELF_REVIEWING_IMPLEMENTATION`` transition.
+UNCOMMITTED_PHASE_FACT = (f"the working tree's phase is {SELF_REVIEWING!r}, but the committed phase at HEAD "
+                          f"is {IMPLEMENTING!r}")
+
+
+def _uncommitted_state_next(*facts: str):
+    """After an uncommitted checkpoint completion or an uncommitted
     ``SELF_REVIEWING_IMPLEMENTATION`` transition, the working tree records
-    ``SELF_REVIEWING_IMPLEMENTATION``, which has no bundle to gate on, and
-    CP3's approved handler gates it only on the plan approval -- so the
-    next decision re-selects ``/milestone-implement`` (the self-review
-    role). Pinned here as the approved design stands, and reported for
-    review; the ``FAILED`` record and ``run``'s exit 30 are what stop the
-    loop."""
-    decision = test.explain(lc)
-    test.assertTrue(decision["automatic"])
-    test.assertEqual(decision["action"], MILESTONE_IMPLEMENT)
-    test.assertIsNone(decision["gate"])
-    test.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["phase"], IMPLEMENTING)
+    state ``HEAD`` does not: the next ``step`` is the durable-state gate
+    (``evidence.uncommitted_implementation_state``), naming each fact, and
+    launches nothing -- another ``/milestone-implement`` worker could
+    otherwise build on the uncommitted completion or commit it."""
+    def check(test: "FailClosedArtifactTest", lc: Lifecycle) -> None:
+        gate = test.next_step_gate(lc, safe=f"workflow-controller explain --work-item {WI}")
+        test.assert_uncommitted_state_gate(gate, lc, facts)
+        test.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["phase"], IMPLEMENTING)
+    return check
 
 
 FAIL_CLOSED_CASES: dict[str, FailClosedCase] = {
@@ -879,7 +903,8 @@ FAIL_CLOSED_CASES: dict[str, FailClosedCase] = {
         prepare="at_last_checkpoint", task=MILESTONE_IMPLEMENT,
         effect=lambda lc: lc.implement("CP2", last=True, commit="product"),
         row=(IMPLEMENTING, "2.2", "/milestone-implement"), observed=SELF_REVIEWING,
-        detail="the checkpoint completion is uncommitted", next_step=_checkpoint_next,
+        detail="the checkpoint completion is uncommitted",
+        next_step=_uncommitted_state_next(uncommitted_checkpoint_fact("CP2"), UNCOMMITTED_PHASE_FACT),
     ),
     "milestone-implement leaves the self-review transition uncommitted": FailClosedCase(
         prepare="at_every_checkpoint_done", task=MILESTONE_IMPLEMENT,
@@ -887,7 +912,7 @@ FAIL_CLOSED_CASES: dict[str, FailClosedCase] = {
         row=(IMPLEMENTING, "2.2", "/milestone-implement"), observed=SELF_REVIEWING,
         detail="the committed phase at HEAD is 'IMPLEMENTING', not 'SELF_REVIEWING_IMPLEMENTATION': "
                "the transition is uncommitted",
-        next_step=_checkpoint_next,
+        next_step=_uncommitted_state_next(UNCOMMITTED_PHASE_FACT),
     ),
     "final pass leaves a stale bundle": FailClosedCase(
         prepare="at_self_reviewing", task=MILESTONE_IMPLEMENT,
@@ -1039,6 +1064,106 @@ REVIEW_APPROVE = (REVIEW_IMPLEMENTATION, lambda lc: lc.local_review("APPROVE", 1
 REVIEW_REVISE = (REVIEW_IMPLEMENTATION, lambda lc: lc.local_review("REVISE", 1))
 MANUAL_APPROVE = (RECORD_MANUAL, lambda lc: lc.manual_review("APPROVE", 1))
 APPLY_ROUND = (APPLY_PENDING, lambda lc: lc.apply())
+
+
+@dataclasses.dataclass(frozen=True)
+class UncommittedCase:
+    """A ``/milestone-implement`` worker that leaves a completion only in
+    the working tree. ``prepare`` names the pre-state builder, ``effect``
+    the failing action list, ``reason`` the failed record's reason,
+    ``facts`` the gate's facts, ``checkpoint`` the checkpoint whose
+    completion the human commits (``None`` for the step-2 transition), and
+    ``next_effect``/``next_observed`` the durable path's next worker."""
+
+    prepare: str
+    effect: Callable[[Lifecycle], list[dict]]
+    observed: str
+    reason: str
+    facts: tuple[str, ...]
+    checkpoint: str | None
+    next_effect: Callable[[Lifecycle], list[dict]]
+    next_observed: str
+
+
+UNCOMMITTED_CASES: dict[str, UncommittedCase] = {
+    "a checkpoint completion at IMPLEMENTING": UncommittedCase(
+        prepare="at_first_checkpoint", effect=lambda lc: lc.implement("CP1", commit="product"),
+        observed=IMPLEMENTING, reason="predicate_not_satisfied", facts=(uncommitted_checkpoint_fact("CP1"),),
+        checkpoint="CP1", next_effect=lambda lc: lc.implement("CP2", last=True), next_observed=SELF_REVIEWING,
+    ),
+    "the last checkpoint completion": UncommittedCase(
+        prepare="at_last_checkpoint", effect=lambda lc: lc.implement("CP2", last=True, commit="product"),
+        observed=SELF_REVIEWING, reason="postcondition_not_satisfied",
+        facts=(uncommitted_checkpoint_fact("CP2"), UNCOMMITTED_PHASE_FACT),
+        checkpoint="CP2", next_effect=lambda lc: lc.generate(), next_observed=AWAITING_LOCAL,
+    ),
+    "the SELF_REVIEWING_IMPLEMENTATION transition": UncommittedCase(
+        prepare="at_every_checkpoint_done", effect=lambda lc: lc.enter_self_review(commit=False),
+        observed=SELF_REVIEWING, reason="postcondition_not_satisfied", facts=(UNCOMMITTED_PHASE_FACT,),
+        checkpoint=None, next_effect=lambda lc: lc.generate(), next_observed=AWAITING_LOCAL,
+    ),
+}
+
+
+class UncommittedImplementationStateTest(_LifecycleTestCase):
+    """Scenario 3's uncommitted-completion cases, end to end. Once a
+    ``/milestone-implement`` worker leaves a checkpoint completion or the
+    ``SELF_REVIEWING_IMPLEMENTATION`` transition only in the working tree,
+    neither ``run`` nor ``step`` launches another lifecycle worker: the
+    durable-state gate stops both, at ``IMPLEMENTING`` and at
+    ``SELF_REVIEWING_IMPLEMENTATION`` alike. Once a human commits the
+    completion as the Workflow step would have, with its trailers, the
+    committed, durable path proceeds as before."""
+
+    def at_first_checkpoint(self, name: str) -> Lifecycle:
+        return self.seed(name, IMPLEMENTING)
+
+    def test_no_lifecycle_worker_launches_until_the_completion_is_committed(self) -> None:
+        for i, (name, case) in enumerate(UNCOMMITTED_CASES.items()):
+            with self.subTest(case=name):
+                lc = getattr(self, case.prepare)(f"uncommitted-{i}")
+                lc.add(MILESTONE_IMPLEMENT, case.effect(lc))
+                failed = self.cli(lc, "step")
+                self.assertEqual(failed.code, cli.EXIT_WORKER_FAILED, failed.stderr)
+                [record] = failed.records
+                self.assertEqual(record["observed_phase_after"], case.observed)
+                self.assert_failed(record, case.reason)
+                self.assertEqual(self.processes(lc), 1)
+
+                # Neither `run` nor `step` launches a worker: each records
+                # the one gate, and the fail-if-invoked fake never starts.
+                for command in ("run", "step"):
+                    result = self.cli(lc, command, fail_if_invoked=True)
+                    self.assertEqual(len(result.records), 1, command)
+                    gate = self.assert_gate(result, lc, processes_before=1)
+                    self.assert_uncommitted_state_gate(gate, lc, case.facts)
+                decision = self.explain(lc)
+                self.assertFalse(decision["automatic"])
+                self.assertIsNone(decision["action"])
+                self.assertEqual(decision["evidence"], list(case.facts))
+
+                # The human commits the completion as the step would have:
+                # step 1f's trailers, or step 2's single work-item trailer.
+                trailers = ((WORK_ITEM, WI),)
+                if case.checkpoint is not None:
+                    trailers = (("Workflow-Checkpoint", case.checkpoint),) + trailers
+                lc.perform([fixtures.script_commit(
+                    fixtures.trailer_message("Commit the completion", *trailers), STATE_REL,
+                )])
+                self.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["phase"], case.observed)
+
+                # The committed, durable path proceeds: the next worker is
+                # selected, launched and verified.
+                decision = self.explain(lc)
+                self.assertTrue(decision["automatic"])
+                self.assertEqual(decision["action"], MILESTONE_IMPLEMENT)
+                self.assertEqual(decision["evidence"], [])
+                lc.add(MILESTONE_IMPLEMENT, case.next_effect(lc))
+                proceeded = self.cli(lc, "step")
+                self.assertEqual(proceeded.code, cli.EXIT_OK, proceeded.stderr)
+                [record] = proceeded.records
+                self.assert_finished(record, case.next_observed)
+                self.assertEqual(self.processes(lc), 2)
 
 
 # ---------------------------------------------------------------------------

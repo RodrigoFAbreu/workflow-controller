@@ -124,14 +124,16 @@ At the 2.5.1 reference release, that makes these launches automatic:
 | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | `"2.1"`, `"2.2"` | `/record-manual-plan-review` |
 | `REVISING_PLAN` | `"2.1"`, `"2.2"` | `/apply-plan-review` |
 | `AWAITING_EXTERNAL_PLAN_REVIEW` | `"1"` | `/apply-plan-review` |
-| `IMPLEMENTING`, `SELF_REVIEWING_IMPLEMENTATION` | `"2.1"`, `"2.2"` | `/milestone-implement`, once the plan approval is `CURRENT` |
+| `IMPLEMENTING`, `SELF_REVIEWING_IMPLEMENTATION` | `"2.1"`, `"2.2"` | `/milestone-implement`, once the plan approval is `CURRENT` and `HEAD` records every checkpoint completion and phase transition the working tree records |
 | `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` | `"2.2"` | `/review-implementation` |
 | `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` | `"2.2"` | `/record-manual-implementation-review`, only for an already-pasted, admissible manual `APPROVE`/`REVISE` |
 | `APPLYING_REVIEW_FEEDBACK` | `"2.2"` | `/apply-implementation-review`, for an admissible `REVISE` |
 
 Every one of these is still gated first when its evidence says so: a
 `REJECTED` bundle marker, a stale or incoherent bundle, a `BLOCK` verdict,
-an inadmissible verdict, a missing or stale plan approval. Everything
+an inadmissible verdict, a missing or stale plan approval, a checkpoint
+`COMPLETE` or a `SELF_REVIEWING_IMPLEMENTATION` transition that the
+working tree's `WORKFLOW_STATE.json` records but `HEAD` does not. Everything
 else is a gate or a decline. That includes performing the manual external
 review, `/approve-review`, `/accept-milestone`, the functional-review
 stage (`/apply-functional-review` is declined), `AMENDING_PLAN`, and
@@ -145,7 +147,13 @@ implementation-stage outcome also checks the artifacts it promises (the
 checkpoint completion committed at `HEAD`, a coherent implementation
 bundle generated at the live `HEAD`, a review ledger bound to the
 bundle's content). A stale, withdrawn, `REJECTED` or mis-bound artifact
-makes the job `FAILED` (exit 30), and `run` stops there.
+makes the job `FAILED` (exit 30), and `run` stops there. The next decision
+launches nothing either. After an uncommitted checkpoint completion or
+`SELF_REVIEWING_IMPLEMENTATION` transition, for example, it is a gate
+naming each uncommitted fact, because another `/milestone-implement`
+worker could build on the completion or commit it. A human commits the
+completion as the Workflow step would have, with its trailers, or
+discards it and reruns the step.
 
 ## Worker routing
 
@@ -401,7 +409,9 @@ malformed `JOB_ID` should have named. The exceptions need a human. A
 other special file) is never opened or replaced, and every refusal names
 it for removal by hand. A regular job file the Controller cannot read
 (after a permissions change, say) has to be made readable again, or
-removed, by hand.
+removed, by hand: `--abandon` cannot set unreadable bytes aside, so it
+refuses (exit 20), and the pending report, `resume` and `--abandon` each
+name that manual step.
 
 ## Controller-owned runtime state
 

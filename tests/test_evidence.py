@@ -3143,5 +3143,168 @@ class PendingReviewStageWriteAddendumTest(unittest.TestCase):
         worker._assert_not_user_only(f"/apply-implementation-review wi-1\n\n{formatted}")
 
 
+
+class UncommittedImplementationStateGateTest(unittest.TestCase):
+    """The durable-state gate at ``IMPLEMENTING``/
+    ``SELF_REVIEWING_IMPLEMENTATION`` (the approved plan's CP7 scenario 3),
+    against a real repository whose committed state differs from the
+    working tree's: a checkpoint ``COMPLETE`` or the
+    ``SELF_REVIEWING_IMPLEMENTATION`` transition recorded only in the
+    working tree replaces the automatic ``/milestone-implement`` selection
+    with a gate, while a committed, durable state still selects it."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _state(self, phase: str, checkpoints: dict, *, others: dict | None = None) -> None:
+        _write_state(self.root, {_WI: {"work_item_id": _WI, "phase": phase, "checkpoints": checkpoints},
+                                 **(others or {})})
+
+    def _decide(self, phase: str, checkpoints: dict, version: str = "2.2", **overrides):
+        """The decision for the working tree's ``phase``/``checkpoints``
+        (also written to disk, uncommitted)."""
+        self._state(phase, checkpoints)
+        overrides.setdefault("plan_approval", {"status": "CURRENT"})
+        work_item = fixtures.build_work_item_view(
+            phase=phase, governing_workflow_version=version, checkpoints=checkpoints, **overrides,
+        )
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item), work_item
+
+    def _assert_gate(self, result, phase: str, facts: tuple[str, ...]) -> None:
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertEqual(result.observed_phase, phase)
+        self.assertEqual(result.evidence, facts)
+        gate = result.gate
+        self.assertEqual(gate.phase, phase)
+        self.assertEqual(gate.work_item_id, _WI)
+        self.assertEqual(gate.repository, str(self.root))
+        self.assertEqual(gate.artifact_path, str(self.root / _STATE_REL))
+        self.assertEqual(gate.safe_resume_command, f"workflow-controller explain --work-item {_WI}")
+        self.assertTrue(gate.what_is_required.startswith(
+            f"the working tree's {_STATE_REL} records state that HEAD does not durably record: "
+            + "; ".join(facts) + ". "
+        ), gate.what_is_required)
+        self.assertIn("commit the completion as that step would have, with its trailers, or discard it",
+                      gate.what_is_required)
+        self.assertIn("HEAD does not durably record", result.reason)
+
+    def _assert_selected(self, result, phase: str) -> None:
+        self.assertTrue(result.automatic)
+        self.assertIsNone(result.gate)
+        self.assertEqual(result.observed_phase, phase)
+        self.assertEqual(result.action.command, f"/milestone-implement {_WI}")
+
+    def test_a_committed_durable_state_still_selects_milestone_implement(self) -> None:
+        complete = {"status": "COMPLETE"}
+        cases = (
+            ("IMPLEMENTING", {"CP1": complete}, {"CP1": complete}),
+            # Step 1d's uncommitted IN_PROGRESS is the dirty-resume state
+            # the command itself resolves, never a fact here.
+            ("IMPLEMENTING", {"CP1": complete}, {"CP1": complete, "CP2": {"status": "IN_PROGRESS"}}),
+            ("SELF_REVIEWING_IMPLEMENTATION", {"CP1": complete, "CP2": complete},
+             {"CP1": complete, "CP2": complete}),
+        )
+        for version in ("2.1", "2.2"):
+            for phase, committed, working in cases:
+                with self.subTest(version=version, phase=phase, working=working):
+                    self._state(phase, committed)
+                    _commit(self.root, "committed state")
+                    result, work_item = self._decide(phase, working, version)
+                    self._assert_selected(result, phase)
+                    self.assertEqual(evidence.uncommitted_implementation_state(self.root, work_item), ())
+
+    def test_an_uncommitted_checkpoint_completion_gates(self) -> None:
+        self._state("IMPLEMENTING", {"CP1": {"status": "IN_PROGRESS"}})
+        _commit(self.root, "CP1 started")
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                result, _ = self._decide("IMPLEMENTING", {"CP1": {"status": "COMPLETE"}}, version)
+                self._assert_gate(result, "IMPLEMENTING", (
+                    "checkpoint 'CP1' is COMPLETE in the working tree's WORKFLOW_STATE.json, but its status "
+                    "in the state committed at HEAD is 'IN_PROGRESS'",
+                ))
+
+    def test_an_uncommitted_self_review_transition_gates(self) -> None:
+        complete = {"CP1": {"status": "COMPLETE"}, "CP2": {"status": "COMPLETE"}}
+        self._state("IMPLEMENTING", complete)
+        _commit(self.root, "every checkpoint complete")
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                result, _ = self._decide("SELF_REVIEWING_IMPLEMENTATION", complete, version)
+                self._assert_gate(result, "SELF_REVIEWING_IMPLEMENTATION", (
+                    "the working tree's phase is 'SELF_REVIEWING_IMPLEMENTATION', but the committed phase at "
+                    "HEAD is 'IMPLEMENTING'",
+                ))
+
+    def test_an_uncommitted_last_checkpoint_names_the_checkpoint_then_the_phase(self) -> None:
+        self._state("IMPLEMENTING", {"CP1": {"status": "COMPLETE"}})
+        _commit(self.root, "CP1 complete")
+        result, _ = self._decide(
+            "SELF_REVIEWING_IMPLEMENTATION", {"CP1": {"status": "COMPLETE"}, "CP2": {"status": "COMPLETE"}},
+        )
+        self._assert_gate(result, "SELF_REVIEWING_IMPLEMENTATION", (
+            "checkpoint 'CP2' is COMPLETE in the working tree's WORKFLOW_STATE.json, but its status in the "
+            "state committed at HEAD is absent",
+            "the working tree's phase is 'SELF_REVIEWING_IMPLEMENTATION', but the committed phase at HEAD is "
+            "'IMPLEMENTING'",
+        ))
+
+    def test_another_work_items_committed_status_never_counts(self) -> None:
+        self._state("IMPLEMENTING", {}, others={
+            "wi-2": {"work_item_id": "wi-2", "phase": "IMPLEMENTING",
+                     "checkpoints": {"CP1": {"status": "COMPLETE"}}},
+        })
+        _commit(self.root, "another item's CP1")
+        result, _ = self._decide("IMPLEMENTING", {"CP1": {"status": "COMPLETE"}})
+        self._assert_gate(result, "IMPLEMENTING", (
+            "checkpoint 'CP1' is COMPLETE in the working tree's WORKFLOW_STATE.json, but its status in the "
+            "state committed at HEAD is absent",
+        ))
+
+    def test_an_unreadable_committed_state_fails_closed(self) -> None:
+        # WORKFLOW_STATE.json was never committed: HEAD records nothing.
+        result, work_item = self._decide("SELF_REVIEWING_IMPLEMENTATION", {"CP1": {"status": "COMPLETE"}})
+        facts = (
+            "checkpoint 'CP1' is COMPLETE in the working tree's WORKFLOW_STATE.json, but its status in the "
+            "state committed at HEAD is unreadable (WORKFLOW_STATE.json cannot be read at HEAD)",
+            "the working tree's phase is 'SELF_REVIEWING_IMPLEMENTATION', but the committed phase at HEAD is None",
+        )
+        self._assert_gate(result, "SELF_REVIEWING_IMPLEMENTATION", facts)
+        self.assertEqual(evidence.uncommitted_implementation_state(self.root, work_item), facts)
+
+    def test_it_replaces_only_a_launching_selection(self) -> None:
+        """A decision that launches nothing passes through unchanged: the
+        plan-approval gate (CP3) keeps its precedence, and ``"1"``, which
+        has no ``ExpectedOutcome`` row, stays declined."""
+        self._state("IMPLEMENTING", {})
+        _commit(self.root, "nothing complete")
+        uncommitted = {"CP1": {"status": "COMPLETE"}}
+        for phase in sorted(evidence.MILESTONE_IMPLEMENT_PHASES):
+            with self.subTest(phase=phase, case="plan approval absent"):
+                result, _ = self._decide(phase, uncommitted, plan_approval=None)
+                self.assertIsNone(result.action)
+                self.assertIn("entry validation (step 1a)", result.gate.what_is_required)
+                self.assertEqual(result.evidence, ("plan_approval: absent",))
+            with self.subTest(phase=phase, case='"1"'):
+                result, _ = self._decide(phase, uncommitted, "1")
+                self.assertTrue(result.declined)
+                self.assertFalse(result.automatic)
+                self.assertIsNone(result.gate)
+                self.assertEqual(result.action.command, f"/milestone-implement {_WI}")
+
+    def test_the_gated_phases_are_the_milestone_implement_phases(self) -> None:
+        self.assertEqual(evidence.MILESTONE_IMPLEMENT_PHASES,
+                         frozenset({"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION"}))
+        self.assertEqual(
+            {phase for (phase, _version, token) in decision.AUTOMATIC_TRIPLES if token == "/milestone-implement"},
+            evidence.MILESTONE_IMPLEMENT_PHASES,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

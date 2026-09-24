@@ -1226,6 +1226,48 @@ class LockErrorCliTest(_StepFixture, unittest.TestCase):
         self.assertEqual(on_disk["status"], job.STATUS_LAUNCHED)
 
 
+class UnreadableJobFileCliTest(_StepFixture, unittest.TestCase):
+    """A regular job file the Controller cannot read: ``explain`` names its
+    manual disposition, and ``resume --abandon`` exits 20 through
+    ``cli.main`` -- never an uncaught ``PermissionError``."""
+
+    def test_abandon_exits_20_and_explain_names_the_manual_disposition(self) -> None:
+        runtime.write_json(self.runtime_root, "jobs/j-locked.json", {
+            **_job_record(job_id="j-locked", target_repo=str(self.repo.resolve()), status=job.STATUS_LAUNCHED),
+        })
+        path = self.runtime_root / "jobs" / "j-locked.json"
+        path.chmod(0)
+        self.addCleanup(path.chmod, 0o600)
+        try:
+            path.read_bytes()
+        except PermissionError:
+            pass
+        else:
+            self.skipTest("running as root: chmod 000 does not make a file unreadable")
+        clearing = f"make {path} readable again, or remove it by hand"
+
+        abandon_args = _Args(str(self.repo), workflow_manager=str(self.stub_manager))
+        abandon_args.abandon = "j-locked"
+        abandon_args.acknowledge_unverifiable_worker = False
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(
+                cli, "_dispatch", lambda args, argv: cli.cmd_resume(abandon_args, self.runtime_root, self.ident)), \
+                contextlib.redirect_stderr(stderr):
+            code = cli.main(["resume", str(self.repo)])
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
+        self.assertIn("`resume --abandon 'j-locked'` refused", stderr.getvalue())
+        self.assertIn(clearing, stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertFalse((self.runtime_root / "jobs" / "abandoned").exists())
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            explain_args = _Args(str(self.repo), workflow_manager=str(self.stub_manager), json_out=True)
+            self.assertEqual(cli.cmd_explain(explain_args, self.runtime_root, self.ident), cli.EXIT_OK)
+        self.assertEqual(json.loads(out.getvalue())["pending_jobs"],
+                         [{"job_id": "j-locked", "status": None, "clearing_command": clearing}])
+
+
 class ResumeWorkerHoldExitTest(unittest.TestCase):
     """``cmd_resume`` exits 45 when ``resume`` left a record alone because
     its recorded worker is ``active`` or ``unverifiable``; ``--abandon``

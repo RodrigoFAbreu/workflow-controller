@@ -56,7 +56,8 @@ this module only ever reads ``managed_repo.root`` and, off ``work_item``:
 handlers (automatic-lifecycle-orchestration CP1/CP4) --
 ``governing_workflow_version``, ``work_item_type``,
 ``reviewed_implementation_head``, ``implementation_review_stages`` and
-``technical_review_block_pins``.
+``technical_review_block_pins``, plus ``checkpoints`` for the
+``IMPLEMENTING``/``SELF_REVIEWING_IMPLEMENTATION`` durable-state gate.
 
 **What this module does not do.** It never recomputes ``review_content_id``
 or ``bundle_id`` -- ``controller.target_state`` already declares that
@@ -74,6 +75,7 @@ import dataclasses
 import json
 import re
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -2590,6 +2592,102 @@ def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Dec
 
 
 # ---------------------------------------------------------------------------
+# ``IMPLEMENTING``/``SELF_REVIEWING_IMPLEMENTATION``: the durable-state gate
+# (automatic-lifecycle-orchestration CP7 scenario 3, closed at step 2's
+# self-review).
+# ---------------------------------------------------------------------------
+
+#: The two phases whose handler (``controller.decision``) selects
+#: ``/milestone-implement``. The durable-state gate replaces that selection
+#: only where it would launch: a gate or a decline (the plan-approval gate,
+#: or ``"1"``, which has no ``ExpectedOutcome`` row) passes through
+#: unchanged, since it launches nothing.
+MILESTONE_IMPLEMENT_PHASES: frozenset[str] = frozenset({"IMPLEMENTING", _SELF_REVIEWING_IMPLEMENTATION})
+
+
+def uncommitted_implementation_state(root: Path, work_item: Any) -> tuple[str, ...]:
+    """Each fact the working tree's ``WORKFLOW_STATE.json`` records for
+    ``work_item`` that the state committed at ``HEAD`` does not: a
+    checkpoint the working tree records ``COMPLETE`` whose committed status
+    is not ``COMPLETE`` (``committed_checkpoint_statuses``, the fact
+    ``workflow_state.committed_checkpoint_status`` reads), in the working
+    tree's checkpoint order; then a working-tree
+    ``SELF_REVIEWING_IMPLEMENTATION`` whose committed phase differs. Empty
+    when ``HEAD`` durably records both.
+
+    ``/milestone-implement`` commits a checkpoint completion together with
+    its checkpoint (step 1f) and the ``SELF_REVIEWING_IMPLEMENTATION``
+    transition alone (step 2), so neither is ever legitimately left only in
+    the working tree between invocations. An uncommitted ``IN_PROGRESS``
+    (step 1d's write, which step 1f commits) is not a fact here: that is the
+    dirty-resume state the command's own step 1c resolves. A committed state
+    that cannot be read records nothing, so every such working-tree fact
+    counts (fail closed)."""
+    work_item_id = work_item.work_item_id
+    committed_statuses = committed_checkpoint_statuses(root, "HEAD")
+    facts: list[str] = []
+    checkpoints = work_item.checkpoints if isinstance(work_item.checkpoints, Mapping) else {}
+    for checkpoint_id, checkpoint in checkpoints.items():
+        status = checkpoint.get("status") if isinstance(checkpoint, Mapping) else None
+        if status != "COMPLETE":
+            continue
+        if committed_statuses is None:
+            committed = "unreadable (WORKFLOW_STATE.json cannot be read at HEAD)"
+        else:
+            committed = committed_statuses.get((work_item_id, checkpoint_id))
+            if committed == "COMPLETE":
+                continue
+            committed = repr(committed) if committed is not None else "absent"
+        facts.append(
+            f"checkpoint {checkpoint_id!r} is COMPLETE in the working tree's WORKFLOW_STATE.json, "
+            f"but its status in the state committed at HEAD is {committed}"
+        )
+    if work_item.phase == _SELF_REVIEWING_IMPLEMENTATION:
+        committed_phase = _committed_phase(root, work_item_id, "HEAD")
+        if committed_phase != _SELF_REVIEWING_IMPLEMENTATION:
+            facts.append(
+                f"the working tree's phase is {_SELF_REVIEWING_IMPLEMENTATION!r}, but the committed "
+                f"phase at HEAD is {committed_phase!r}"
+            )
+    return tuple(facts)
+
+
+def _uncommitted_implementation_state_gate(root: Path, work_item: Any, facts: tuple[str, ...]) -> Decision:
+    """The gate :func:`decide` returns at ``IMPLEMENTING``/
+    ``SELF_REVIEWING_IMPLEMENTATION`` while the working tree records a
+    checkpoint completion or the ``SELF_REVIEWING_IMPLEMENTATION``
+    transition that ``HEAD`` does not (:func:`uncommitted_implementation_state`).
+    Another ``/milestone-implement`` worker launched now could build on the
+    uncommitted completion or commit it into a later commit, so nothing is
+    launched until a human reconciles the working tree with ``HEAD``."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    what = (
+        f"the working tree's {_STATE_REL_PATH} records state that HEAD does not durably record: "
+        + "; ".join(facts)
+        + ". /milestone-implement commits a checkpoint completion together with that checkpoint's "
+        "commit (step 1f) and the SELF_REVIEWING_IMPLEMENTATION transition in a state-only commit "
+        "(step 2), so this is an interrupted or defective run. Another /milestone-implement worker "
+        "could build on the uncommitted completion or commit it, so none is launched. A human "
+        "reconciles the working tree with HEAD first: commit the completion as that step would have, "
+        "with its trailers, or discard it and rerun the step"
+    )
+    return Decision(
+        observed_phase=phase,
+        evidence=facts,
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=what, artifact_path=str(root / _STATE_REL_PATH),
+            safe_resume_command=_explain_command(work_item_id),
+        ),
+        declined=False,
+        reason=f"{phase}: the working tree records a checkpoint completion or phase transition that "
+               "HEAD does not durably record, so /milestone-implement is not launched",
+    )
+
+
+# ---------------------------------------------------------------------------
 # ``"2.2"`` ``APPLYING_REVIEW_FEEDBACK``: the automatic path in front of the
 # corrected gate (automatic-lifecycle-orchestration CP4B).
 # ---------------------------------------------------------------------------
@@ -2813,7 +2911,13 @@ def decide(
     ``"2.2"`` implementation-bundle-consuming phase, an implementation
     bundle incoherent with the state's implementation round
     (:func:`implementation_bundle_coherence`) gates in the same position
-    (automatic-lifecycle-orchestration CP4). A handler's selected action
+    (automatic-lifecycle-orchestration CP4). At
+    ``IMPLEMENTING``/``SELF_REVIEWING_IMPLEMENTATION``, an automatic
+    ``/milestone-implement`` selection (``controller.decision``'s, after
+    its plan-approval gate and the dispatch rule) is replaced by a gate
+    while the working tree records a checkpoint completion or the
+    ``SELF_REVIEWING_IMPLEMENTATION`` transition that ``HEAD`` does not
+    (:func:`uncommitted_implementation_state`). A handler's selected action
     then goes through the same general automatic-dispatch rule
     (``decision.apply_dispatch_rule``) as every selection
     :func:`controller.decision.decide` makes.
@@ -2849,6 +2953,14 @@ def decide(
         )
         if not coherent:
             return _implementation_bundle_gate(root, work_item, clause, detail, current_head)
+
+    if phase in MILESTONE_IMPLEMENT_PHASES:
+        selected = _decision.decide(managed_repo, snapshot, work_item)
+        if selected.automatic:
+            facts = uncommitted_implementation_state(root, work_item)
+            if facts:
+                return _uncommitted_implementation_state_gate(root, work_item, facts)
+        return selected
 
     if phase == _APPLYING_REVIEW_FEEDBACK and work_item.governing_workflow_version in _APPLY_AUTOMATION_VERSIONS:
         return _decision.apply_dispatch_rule(

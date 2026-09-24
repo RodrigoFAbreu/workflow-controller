@@ -887,6 +887,8 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
     (the self-review role). The test pins this through `explain`, which launches nothing. Only
     the `FAILED` record, and `run`'s exit 30, stop the loop. Closing the gap needs a new decision
     gate in `controller/decision.py`, outside CP7's files, so it is left to the review.
+    Closed at step 2's self-review (below): the next decision is now a gate, and the test asserts
+    it.
   - Judgment calls, where the plan text left a detail open:
     - Besides `{HEAD}`, a write resolves `{HEAD^}` and `{HEAD~N}`. The manifest's
       `reviewed_implementation_head` is `T`'s parent, and so is the reviewed head in every
@@ -1002,6 +1004,8 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
       parse under the live parser (a global option after the subcommand, and no repository):
       exit 2. It is pre-existing at the base commit, and the approved plan pins that text
       (CP3, CP4, CP4B).
+
+    Step 2's self-review (below) fixed the first and left the second as it is.
   - Verified with `python3 -m unittest tests.test_plan_document_consistency
     tests.test_checklist_corrections`: 43 tests OK. The full suite (`python3 -m unittest discover
     -s tests -t .`) ran 967 tests: OK, 2 skipped, and left no `tests/fake_claude.py` process
@@ -1160,3 +1164,115 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
   - Stop conditions: none fired in the recorded runs. There was no `FAILED` job, no malformed
     generation-record commit or generator refusal, no local `BLOCK`, no permission denial, no
     model other than the routed one, and no worker at the manual gate.
+
+## Self-review (`SELF_REVIEWING_IMPLEMENTATION`, step 2)
+
+A full review of the milestone diff (`abd34a0..HEAD`) for correctness, layer boundaries, missing
+tests and maintainability. It found no Blocking finding, two Important ones and one Minor one.
+Both Important findings are fixed in production code, and each has regression tests.
+
+- **I1 (Important, the user's decision): an uncommitted completion could launch another worker.**
+  The approved plan's CP7 scenario 3 requires the next `step` after a fail-closed case to gate and
+  launch nothing. The two uncommitted-transition cases did not: `/milestone-implement` was
+  selected again, and CP7's `_checkpoint_next` pinned the defect. A second worker could then
+  build on the uncommitted completion or commit it.
+  - `controller/evidence.py`: `uncommitted_implementation_state(root, work_item)` lists each fact
+    the working tree's `WORKFLOW_STATE.json` records for the work item that the state committed
+    at `HEAD` does not:
+    - a checkpoint recorded `COMPLETE` whose committed status (`committed_checkpoint_statuses`,
+      keyed by this work item) is not `COMPLETE`;
+    - a working-tree `SELF_REVIEWING_IMPLEMENTATION` whose committed phase differs.
+
+    An unreadable committed state counts every such fact (fail closed). An uncommitted
+    `IN_PROGRESS` is not a fact: it is the dirty-resume state step 1c resolves.
+  - `evidence.decide` at `IMPLEMENTING`/`SELF_REVIEWING_IMPLEMENTATION`
+    (`MILESTONE_IMPLEMENT_PHASES`) takes `controller.decision`'s decision first. If that decision
+    would launch and any fact exists, it is replaced by a gate
+    (`_uncommitted_implementation_state_gate`). The gate names each fact, what a human does
+    (commit the completion as that step would have, with its trailers, or discard it and rerun
+    the step), the state file as its artifact, and `workflow-controller explain --work-item <id>`
+    as its resume command, like its sibling gates. A decision that launches nothing passes
+    through unchanged: the CP3 plan-approval gate keeps its precedence, and `"1"` stays declined.
+    `controller/decision.py` stays git-free.
+  - Tests:
+    - `tests/test_lifecycle_orchestration.py`: `_checkpoint_next` became `_uncommitted_state_next`,
+      so both scenario-3 cases now assert that the next `step` is the gate (exit 10, fail-if-invoked
+      fake, the facts in order).
+    - The new `UncommittedImplementationStateTest` covers a non-last checkpoint at
+      `IMPLEMENTING`, the last checkpoint, and the step-2 transition. In each case neither `run`
+      nor `step` starts a worker, and `explain` reports the gate. Once the completion is committed
+      with the step's trailers, `explain` selects `/milestone-implement` again and the next worker
+      is launched and verified `FINISHED`. That is the durable path.
+    - `tests/test_evidence.py` `UncommittedImplementationStateGateTest`, against real
+      repositories, at `"2.1"` and `"2.2"`: committed durable states (a dirty `IN_PROGRESS`
+      included) still select; the checkpoint, phase and combined facts gate in order; another work
+      item's committed status never counts; an unreadable `HEAD` state fails closed; the gate
+      replaces only a launching selection; and the gated phases equal the `/milestone-implement`
+      phases of `AUTOMATIC_TRIPLES`.
+  - `README.md`'s "Automatic dispatch" states the gate.
+- **I2 (Important, CP8's deferred finding): `resume --abandon` crashed on an unreadable job file.**
+  For a regular job file whose bytes cannot be read, the pending report and `resume` named
+  `--abandon`, and `--abandon` raised a bare `PermissionError` (a traceback, not exit 20).
+  `README.md`/the ADR already documented the manual disposition. `controller/job.py` now matches
+  them:
+  - the pending scan and `resume` name `make <path> readable again, or remove it by hand`
+    (`_unreadable_clearing`);
+  - `--abandon` refuses with `JobAbandonRefusedError` (exit 20) naming the same step, and writes
+    nothing.
+
+  An unparseable but readable file still goes to `--abandon`, unchanged. Tests:
+  `tests/test_resume.py` covers the refusal, `resume` and `--abandon`, and that the file is an
+  ordinary pending record once it is readable again. `tests/test_cli.py`
+  `UnreadableJobFileCliTest` runs `--abandon` through `cli.main` (exit 20, no traceback) and
+  checks `explain`'s pending report. `README.md` names the refusal.
+- **M1 (Minor, not fixed): the gates' `explain` resume hint does not parse.**
+  `workflow-controller explain --work-item <id>` is pre-existing at base and pinned by the
+  approved plan text (CP3, CP4, CP4B). The README already explains it as shorthand and gives the
+  form that parses. The new gate uses the same shorthand, so the gates stay consistent.
+- Reviewed with no finding: the dispatch rule and `AUTOMATIC_TRIPLES`, the implementation-review
+  handlers and admissibility evaluators, the bundle and generation-record gates, the
+  `EXPECTED_OUTCOMES` rows 12-18 and their postconditions, the lock, liveness and `--abandon`
+  paths, routing, and the CLI exit-code mapping. No layer-boundary violation:
+  - `decision` reads no git;
+  - `evidence` imports only `decision`;
+  - `routing` imports only `errors` and `decision`.
+- Mutation checks were run in a scratch copy, against the new tests plus
+  `tests.test_lifecycle_orchestration`, `tests.test_job.PendingJobReconciliationRefusalTest` and
+  the abandon tests. All 9 mutants were caught:
+  - the gate ignoring checkpoints, ignoring the phase, counting an unreadable `HEAD` as
+    committed, replacing non-launching decisions too, counting another work item's status, or
+    counting `IN_PROGRESS`;
+  - `--abandon` not catching the read error;
+  - the pending scan or `resume` naming `--abandon` for an unreadable file.
+- Verification, run on this tree:
+  - `python3 -m unittest discover -s tests -t .` ran 982 tests: OK, with 6 skipped (the six
+    opt-in live tests). No `tests/fake_claude.py` process was left behind (0 before, 0 after).
+  - The seven frozen suites each exit 0:
+    - `workflow_acceptance_matrix_test` 146 OK (18 skipped);
+    - `workflow_fingerprint_generalization_test` 79 OK;
+    - `workflow_fingerprint_test` 218 OK;
+    - `workflow_integration_test` 260 OK (1 skipped);
+    - `workflow_state_completion_obligations_test` 106 OK;
+    - `workflow_state_test` 853 OK;
+    - `workflow_test_harness_test` 19 OK.
+  - The goldens:
+    - `generate_external_implementation_review_decisions.py --check` reports that golden as
+      current.
+    - The plan-stage golden's raw `--check` reports only CP3's documented `AMENDING_PLAN`
+      difference, and its test is green.
+  - The live lifecycle was rerun (`CONTROLLER_LIVE_WORKER=1`,
+    `LiveImplementationLifecycleTest`), because I1 changes the decision at the phases it
+    drives. It passed in 608 s, in workspace `cp9-lifecycle-r3_orfq6`, logged in
+    `~/.cache/workflow-controller-live/selfreview-evidence/live-lifecycle.log`. All six workers
+    were `FINISHED`:
+    - checkpoint;
+    - self-review, single-agent;
+    - local `APPROVE`;
+    - manual ingestion;
+    - the apply round;
+    - local `APPROVE`.
+
+    Phase A and Phase B each stopped at the manual gate with no worker. The durable-state gate
+    never fired on the committed path. $5.14 was reported.
+  - The single-agent probe and the concurrency drill were not rerun. Neither fix touches routing
+    or the lock, and the drill's decision path is the one the lifecycle rerun covers.

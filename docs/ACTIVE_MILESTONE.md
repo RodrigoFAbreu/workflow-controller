@@ -123,3 +123,62 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
       (18 skipped), `workflow_state_completion_obligations_test.py` 106,
       `workflow_fingerprint_generalization_test.py` 79;
     - `python3 tools/ci_workflows.py --check`: passes.
+- **CP2 -- repository policy: complete.**
+  - New `controller/repo_policy.py`, after `errors` in the dependency order. It imports only
+    `buildinfo` (`SEMVER_RE`) and `errors`.
+  - `parse_policy(raw)` validates the exact bytes and returns a frozen `RepositoryPolicy`: the raw
+    bytes, their SHA-256 (the future binding snapshot), trunk, forge, `MilestoneBranches` and
+    `Release`. The first broken rule raises the new `InvalidRepositoryPolicyError`
+    (`INVALID_REPOSITORY_POLICY`). Its evidence names the path, the field and the problem, plus
+    the revision when read from Git. The rules:
+    - UTF-8 JSON object, no duplicate key, no unknown key and no missing required key at any
+      level. `abandoned_tags` and a command's `env` are the only optional keys;
+    - `schema_version` is the integer `1`;
+    - placeholders are the closed set of the plan, and each templated field admits a subset:
+      branch format `{work_item_id}`; tag format `{version}`; build `{version}`/`{tag}`/
+      `{commit}`; verify also `{artifact}`; artifact paths `{version}`; publication
+      `{version}`/`{tag}`/`{commit}`. An unmatched brace refuses too;
+    - `branch_format` holds `{work_item_id}` exactly once. It must render a valid branch
+      (`git check-ref-format --branch`) for every id matching `^[a-z0-9][a-z0-9_-]{0,63}$`. The
+      module documents why a fixed sample of ids decides that exactly: every ref rule is decided
+      by the literal text, except a `.lock` component suffix, which an id completes only as a
+      substring of `lock`, so every such substring is sampled. It must not render the trunk name.
+      Also refused, since Git cannot create such a branch next to the trunk: a name that is a
+      `/`-component prefix or extension of the trunk. This is decided exactly over the id
+      alphabet;
+    - `tag_format` holds `{version}` exactly once and no other placeholder (invertible), and
+      renders valid tags (`check-ref-format refs/tags/...`);
+    - each `abandoned_tags` entry must parse back through `tag_format` to a semver version. No
+      duplicates;
+    - `forge.repository` is `OWNER/NAME`, `trunk.branch` a valid branch, `trunk.remote` a plain
+      remote name;
+    - `pull_request.draft` must be `true`: only Draft PRs are implemented;
+    - artifact and version-source paths are normalised relative paths. `checksums` is a plain
+      file name that no artifact shares.
+  - Closed adapter registries, each unknown `kind` naming the known ones: version source
+    `pyproject` (static `[project].version` with `tomllib`; a `dynamic` or missing version
+    refuses), scheme `semver` (a total-order key), `command` for build and verify (argv and env
+    templates, `Command.render`, no shell), publication `github_release`, forge `github`, trigger
+    `version_change`.
+  - A `git check-ref-format` outcome other than valid or invalid refuses (I9). `--branch` reports
+    an invalid name as exit 128 with a fixed message, read under `LC_ALL=C`.
+  - `read_committed_policy(repo_root, rev="HEAD")` never reads the working tree. It runs
+    `git ls-tree -z <rev> -- .workflow-controller/policy.json`: exit 0 with no output is absent
+    (`None`). A present entry must be a regular-file blob, and is read with `git cat-file blob`
+    by the listed object id. This is `git show <rev>:<path>`'s content, bound to the tree entry
+    just listed, so a moving `HEAD` cannot mix two trees. Any other Git outcome refuses and is
+    never "absent", including an unborn `HEAD`, which CP8's probe classifies itself.
+  - `read_committed_version(repo_root, policy, rev)` reads the policy's version source from the
+    committed tree, for CP4.
+  - `milestone_branches_enabled(policy)` and `release_enabled(policy)` are the two independent
+    switches. `None` (no file) means both off.
+  - `.workflow-controller/policy.json` holds the plan's reference content. A test compares it with
+    the plan's JSON block. Nothing reads it at runtime until CP6/CP8.
+  - Tests: new `tests/test_repo_policy.py` (40 tests) in the `trunk` CI shard, with
+    `validate.yml` regenerated. `test_package_structure.DEPENDENCY_ORDER` gains `repo_policy`.
+  - Verified:
+    - narrow: `tests.test_repo_policy`, `tests.test_package_structure`,
+      `tests.test_write_containment`, `tests.test_ci_workflows`, all OK;
+    - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
+      ran 1335 tests, OK (6 skipped), in 101 s;
+    - `python3 tools/ci_workflows.py --check`: passes.

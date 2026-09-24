@@ -568,3 +568,27 @@ class RoutingConfigError(ControllerError):
     """
 
     code = "ROUTING_CONFIG_ERROR"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-trunk-branch-pr-release-orchestration CP2 -- the
+# repository policy (``controller.repo_policy``).
+# ---------------------------------------------------------------------------
+
+
+class InvalidRepositoryPolicyError(ControllerError):
+    """A committed ``.workflow-controller/policy.json`` cannot be used: it is
+    not UTF-8 JSON, carries a duplicate or unknown key, an unsupported
+    ``schema_version``, an unknown adapter ``kind``, an unknown or misplaced
+    placeholder, or a value that fails its rule (a branch or tag format that
+    does not render to a valid ref, a tag format that is not invertible, an
+    ``abandoned_tags`` entry that does not render from ``tag_format``, ...).
+    Also raised when Git cannot say whether the policy exists or what it
+    holds: an undecidable read is a refusal, never "absent".
+
+    A present but inadmissible policy is never ignored: every command that
+    consults it refuses, exit ``20``. ``evidence`` names the path, the
+    revision read, the offending field and the problem.
+    """
+
+    code = "INVALID_REPOSITORY_POLICY"

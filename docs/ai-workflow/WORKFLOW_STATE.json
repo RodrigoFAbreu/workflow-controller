@@ -1379,12 +1379,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-release-runtime-observability-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-release-runtime-observability-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 6,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "16c3fb4670bfeb9c7ce82aaff13f5a643a3f2400",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "35493111ef9e0df58c046c0df0c769310e7bc883",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP11",
       "checkpoints": {
@@ -1484,8 +1484,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 42,
-      "last_transition": "2026-09-24T11:10:16Z"
+      "state_revision": 43,
+      "last_transition": "2026-09-24T11:18:45Z"
     }
   }
 }

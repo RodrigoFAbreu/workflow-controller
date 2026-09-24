@@ -2570,6 +2570,13 @@ def _resume_command(root: Path) -> str:
     return f"workflow-controller resume {root}"
 
 
+def follow_command(runtime_root: Path, root: Path) -> str:
+    """The command that follows ``root``'s active run or orphaned worker
+    (``workflow-controller-release-runtime-observability`` CP6) -- the hint
+    every exit-45 and orphan message carries."""
+    return f"workflow-controller --runtime-dir {runtime_root} follow {root}"
+
+
 def _abandon_command(job_id: str, root: Path, *, acknowledge: bool = False) -> str:
     flag = " --acknowledge-unverifiable-worker" if acknowledge else ""
     return f"workflow-controller resume --abandon {job_id}{flag} {root}"
@@ -2847,7 +2854,8 @@ def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.Lifec
     except LifecycleWorkerActiveError as exc:
         detail, recorded = _recorded_worker_detail(runtime_root, managed_repo.root)
         raise LifecycleWorkerActiveError(
-            f"{exc.message}. {detail}", evidence={**exc.evidence, "recorded_workers": recorded},
+            f"{exc.message}. {detail} Follow it: `{follow_command(runtime_root, managed_repo.root)}`",
+            evidence={**exc.evidence, "recorded_workers": recorded},
         ) from exc
 
 
@@ -3015,7 +3023,7 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
         if assessment.verdict == worker.ACTIVE:
             raise LifecycleWorkerActiveError(
                 f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                f"{_active_guidance(job_id, assessment, root)}",
+                f"{_active_guidance(job_id, assessment, root)} Follow it: `{follow_command(runtime_root, root)}`",
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
             )
         if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
@@ -3511,17 +3519,27 @@ def execute_step(
         )
 
 
-def _announce_orphaned_worker(worker_process: worker.WorkerProcess, root: Path) -> None:
+def _announce_orphaned_worker(worker_process: worker.WorkerProcess, root: Path, runtime_root: Path, *,
+                              drained: bool = False) -> None:
     """The Ctrl-C line: the Controller does not forward the interrupt to the
     worker, which runs in its own session and keeps running headless,
-    holding the worktree. Ending it is the operator's decision."""
-    print(
-        f"workflow-controller: interrupted -- the worker (pid {worker_process.pid}, process group "
-        f"{worker_process.pgid}) keeps running in its own session and holds the worktree {root}; wait "
-        f"for it, or end the group (`kill -TERM -- -{worker_process.pgid}`), then run "
-        f"`{_resume_command(root)}`",
-        file=sys.stderr,
-    )
+    holding the worktree. Ending it is the operator's decision.
+
+    ``drained`` (release-runtime-observability CP6) is set once
+    ``on_group_drain`` has flushed: pid P has already exited and only its
+    process group's other members remain, so the line says that instead.
+    Either way it is followed by the ``follow`` command."""
+    pid, pgid = worker_process.pid, worker_process.pgid
+    if drained:
+        line = (f"workflow-controller: interrupted -- worker pid {pid} exited; its process group {pgid} "
+                f"still has members running in their own session and holding the worktree {root}; wait "
+                f"for them, or end the group (`kill -TERM -- -{pgid}`), then run `{_resume_command(root)}`")
+    else:
+        line = (f"workflow-controller: interrupted -- the worker (pid {pid}, process group {pgid}) keeps "
+                f"running in its own session and holds the worktree {root}; wait for it, or end the group "
+                f"(`kill -TERM -- -{pgid}`), then run `{_resume_command(root)}`")
+    print(line, file=sys.stderr)
+    print(f"workflow-controller: follow it: `{follow_command(runtime_root, root)}`", file=sys.stderr)
 
 
 def _execute_step_locked(
@@ -3727,6 +3745,7 @@ def _execute_step_locked(
         }
         record = _persist(runtime, job_id, record, event="worker_exited",
                           details={"pid": pid, "remaining_pids": list(remaining_pids)})
+        spawned["drained"] = True
         _announce_group_drain(pid, remaining_pids)
 
     try:
@@ -3754,7 +3773,8 @@ def _execute_step_locked(
         # flush the record stays LAUNCHED with it, so `resume` applies the
         # liveness verdict later; the interrupt propagates unchanged.
         if spawned.get("flushed"):
-            _announce_orphaned_worker(spawned["worker_process"], managed_repo.root)
+            _announce_orphaned_worker(spawned["worker_process"], managed_repo.root, runtime,
+                                      drained=spawned.get("drained", False))
         raise
 
     # Step 6: record the worker result. The streams are already on disk --

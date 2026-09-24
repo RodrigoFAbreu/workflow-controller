@@ -21,10 +21,13 @@ import datetime
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
-from controller import evidence, handoff, identity, job, lock, managed_repo, routing, runtime, target_state, version
+from controller import (
+    evidence, handoff, identity, job, lock, managed_repo, observe, routing, runtime, target_state, version,
+)
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
 
@@ -32,8 +35,8 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: requires a pinned identity (`source_kind != "unpinned"`), by construction
 #: rather than by a denylist a future command could be added without
 #: updating.
-READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status"})
-ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume"})
+READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow"})
+ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume", "follow"})
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
 #: "Exit codes"). ``2`` is argparse's own default usage-error code and is
@@ -67,6 +70,14 @@ _PAUSE_POLL_SECONDS = 0.05
 #: ``cmd_step``/``cmd_run`` register it and never close it: the final exit
 #: code is only known in :func:`main`, whose one ``finally`` closes it.
 _open_run: job.RunRecord | None = None
+
+#: ``step --follow``/``run --follow``'s renderer thread and its stop event
+#: (release-runtime-observability CP6), started by :func:`_start_follower`
+#: and stopped by :func:`main`.
+_follower: tuple[threading.Thread, threading.Event] | None = None
+
+#: The bounded join :func:`main` gives the renderer thread on completion.
+FOLLOWER_JOIN_SECONDS = 2.0
 
 
 def _now() -> str:
@@ -255,9 +266,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     step_p = subparsers.add_parser("step")
     step_p.add_argument("repo")
+    step_p.add_argument("--follow", action="store_true", default=False,
+                        help="render the run's events and worker output on stderr while it runs")
 
     run_p = subparsers.add_parser("run")
     run_p.add_argument("repo")
+    run_p.add_argument("--follow", action="store_true", default=False,
+                       help="render the run's events and worker output on stderr while it runs")
     run_p.add_argument("--max-steps", type=int, default=20)
     run_p.add_argument("--pause-file", default=None)
 
@@ -274,6 +289,15 @@ def build_parser() -> argparse.ArgumentParser:
     resume_p.add_argument("repo")
 
     subparsers.add_parser("status")
+
+    follow_p = subparsers.add_parser(
+        "follow", help="follow a run or job's events and worker output, read-only")
+    follow_target = follow_p.add_mutually_exclusive_group()
+    follow_target.add_argument("--job", metavar="JOB_ID", default=None)
+    follow_target.add_argument("--run", metavar="RUN_ID", default=None)
+    follow_p.add_argument("--from-start", action="store_true", default=False,
+                          help="replay every event, not only the last 20")
+    follow_p.add_argument("repo", nargs="?", default=".")
 
     return parser
 
@@ -312,8 +336,159 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     else:
         print("handoff: none")
 
+    _print_active(runtime_root)
+
     print(f"runtime root: {runtime_root} (ladder row {pre_existing['ladder_row']})")
     return EXIT_OK
+
+
+def _print_active(runtime_root: Path) -> None:
+    """``status``'s ``active:`` section (release-runtime-observability
+    CP6): every ``running`` run with its Controller's liveness and every
+    non-terminal job with its worker's (read-only), across every target in
+    this runtime root, each with the command that follows it."""
+    runs, jobs = observe.active_runs(runtime_root), observe.active_jobs(runtime_root)
+    if not runs and not jobs:
+        print("active: none")
+        return
+    print("active:")
+    for run, liveness in runs:
+        process = run.get("controller_process") or {}
+        print(f"  run {run.get('run_id')} ({run.get('command')}, target {run.get('target_repo')}): "
+              f"controller pid {process.get('pid')} {liveness}")
+        print(f"    follow: {job.follow_command(runtime_root, run.get('target_repo'))}")
+    for record, liveness in jobs:
+        process = record.get("worker_process") or {}
+        worker_text = observe.drain_text(record) or (
+            "no worker recorded" if liveness is None else f"worker pid {process.get('pid')} {liveness}")
+        print(f"  job {record.get('job_id')} ({record.get('status')}, target {record.get('target_repo')}): "
+              f"{worker_text}")
+        print(f"    follow: {job.follow_command(runtime_root, record.get('target_repo'))}")
+
+
+def _follow_runtime_root(args: argparse.Namespace) -> Path:
+    """The runtime root ``follow`` reads: the one ``step`` would use, found
+    read-only -- the running code's kind from ``identity.resolve_runtime``
+    (or a snapshot's own ``SOURCE_PIN.json``), never ``pin()``,
+    materialisation or any write."""
+    code_root = Path(identity.__file__).resolve().parent.parent
+    pin = runtime.read_json(code_root / identity._SOURCE_PIN_NAME) if (
+        code_root / identity._SOURCE_PIN_NAME).is_file() else None
+    if pin is not None:
+        origin = Path(pin["origin_source_root"]) if pin.get("origin_source_root") else code_root
+        kind = pin.get("runtime_kind", identity.RUNTIME_KIND_SOURCE)
+    else:
+        origin, kind = code_root, identity.resolve_runtime(code_root).runtime_kind
+    runtime_root, _row = runtime.resolve_runtime_root(
+        runtime_dir=args.runtime_dir, origin_source_root=origin, runtime_kind=kind,
+    )
+    return runtime_root
+
+
+def _stdout_sink(text: str) -> None:
+    print(text, flush=True)
+
+
+def cmd_follow(args: argparse.Namespace) -> int:
+    """``follow`` (release-runtime-observability CP6): print a run's or a
+    job's events and worker output as they are written, read-only.
+
+    Dispatched before runtime-root creation, pinning, materialisation and
+    the ``identity.json`` write: it writes nothing, takes no lock and sends
+    no signal. With ``--run``/``--job`` it follows that record, live or
+    finished, refusing (exit 20) an unknown id or a record for another
+    target. Otherwise it follows the newest running run for ``<repo>``, or
+    an orphaned job whose worker is still active, or says there is nothing
+    to follow (exit 0). It never mirrors the followed run's exit code."""
+    runtime_root = _follow_runtime_root(args)
+    target_repo = str(managed_repo._resolve_repository_root(Path(args.repo)))
+    kind, record_id = ("run", args.run) if args.run else ("job", args.job) if args.job else (None, None)
+    if kind is None:
+        selected = observe.select_active(runtime_root, target_repo)
+        if selected is None:
+            last = observe.last_run(runtime_root, target_repo)
+            if last is None:
+                print(f"nothing active for {target_repo}; no runs recorded")
+            else:
+                print(f"nothing active for {target_repo}; last run {last['run_id']} "
+                      f"{_run_outcome(last)}; replay: workflow-controller --runtime-dir {runtime_root} "
+                      f"follow --run {last['run_id']} --from-start {target_repo}")
+            return EXIT_OK
+        kind, record_id = selected
+    record = (observe.read_run if kind == "run" else observe.read_job)(runtime_root, record_id)
+    if record is None:
+        raise ControllerError(
+            f"no readable {kind} record {record_id!r} under {runtime_root}",
+            evidence={"kind": kind, "id": record_id, "runtime_root": str(runtime_root)},
+        )
+    if record.get("target_repo") != target_repo:
+        raise ControllerError(
+            f"{kind} {record_id} belongs to target {record.get('target_repo')!r}, not {target_repo}",
+            evidence={"kind": kind, "id": record_id, "target_repo": record.get("target_repo")},
+        )
+    follow = observe.follow_run if kind == "run" else observe.follow_job
+    try:
+        follow(runtime_root, record_id, _stdout_sink, from_start=args.from_start, json_output=args.json)
+    except KeyboardInterrupt:
+        pass  # the operator stopped following; nothing else is affected
+    return EXIT_OK
+
+
+def _run_outcome(run: dict) -> str:
+    if run.get("state") == job.RUN_STATE_ENDED:
+        return f"ended with exit {run.get('exit_code')}"
+    if run.get("state") == job.RUN_STATE_INTERRUPTED:
+        return "was interrupted"
+    return "was not closed"
+
+
+def _start_follower(args: argparse.Namespace, runtime_root: Path, run_id: str) -> None:
+    """The one place ``--follow`` is read. When set, start a daemon thread
+    rendering run ``run_id`` from its durable logs onto a private duplicate
+    of stderr (:class:`observe.FdSink`). The lifecycle calls are the same
+    either way; the thread's failures stay in the thread."""
+    global _follower
+    if not getattr(args, "follow", False):
+        return
+    try:
+        fd = os.dup(2)
+    except OSError:
+        return
+    sink = observe.FdSink(fd)
+    stop = threading.Event()
+    thread = threading.Thread(target=_render_run, args=(runtime_root, run_id, sink, stop),
+                              name="workflow-controller-follow", daemon=True)
+    thread.start()
+    _follower = (thread, stop)
+
+
+def _render_run(runtime_root: Path, run_id: str, sink: observe.FdSink, stop: threading.Event) -> None:
+    """The renderer thread's body. Any exception disables rendering for the
+    rest of the process (one note, if the descriptor still works) and is
+    never propagated."""
+    try:
+        observe.follow_run(runtime_root, run_id, sink, from_start=True, stop=stop)
+    except Exception as exc:  # noqa: BLE001 -- a renderer failure never reaches the lifecycle
+        sink.fail(exc)
+    finally:
+        try:
+            os.close(sink.fd)
+        except OSError:
+            pass
+
+
+def _stop_follower(*, join: bool) -> None:
+    """Tell the renderer thread to drain and stop; give it
+    :data:`FOLLOWER_JOIN_SECONDS` when ``join``. A thread still running
+    after that is abandoned (it is a daemon)."""
+    global _follower
+    follower, _follower = _follower, None
+    if follower is None:
+        return
+    thread, stop = follower
+    stop.set()
+    if join:
+        thread.join(FOLLOWER_JOIN_SECONDS)
 
 
 def _inspect_target(args: argparse.Namespace) -> managed_repo.ManagedRepository:
@@ -581,6 +756,7 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     routing_options = _routing_options(args)
     target = _inspect_target(args)
     run = _start_run("step", runtime_root, ident, target, max_steps=None)
+    _start_follower(args, runtime_root, run.run_id)
     run.event("step_started", n=1)
     exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
     return exit_code
@@ -654,6 +830,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
     routing_options = _routing_options(args)
     target = _inspect_target(args)
     run = _start_run("run", runtime_root, ident, target, max_steps=args.max_steps)
+    _start_follower(args, runtime_root, run.run_id)
 
     steps_run = 0
     while steps_run < args.max_steps:
@@ -787,6 +964,7 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         for record in records
     )
     if any_worker_held:
+        print(f"follow it: {job.follow_command(runtime_root, target.root)}", file=sys.stderr)
         return EXIT_WORKER_ACTIVE
     return EXIT_INTERRUPTED if any_interrupted else EXIT_OK
 
@@ -818,6 +996,10 @@ def _capture_pre_existing_state(runtime_root: Path) -> dict:
 
 def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     command = args.command
+    if command == "follow":
+        # Before pinning, runtime-root creation, materialisation and the
+        # identity write: `follow` only reads.
+        return cmd_follow(args)
     ident = identity.pin()
 
     handoff = identity.read_exec_handoff()
@@ -882,6 +1064,7 @@ def main(argv: list[str] | None = None) -> int:
     if _open_run is not None:
         _open_run.discard()  # only a run this invocation creates is closed below
     _open_run = None
+    _stop_follower(join=False)
     exit_code: int | None = None
     interrupted = False
     try:
@@ -902,6 +1085,7 @@ def main(argv: list[str] | None = None) -> int:
         raise
     finally:
         _close_open_run(exit_code, interrupted=interrupted)
+        _stop_follower(join=not interrupted)
 
 
 def _close_open_run(exit_code: int | None, *, interrupted: bool) -> None:

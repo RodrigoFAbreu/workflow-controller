@@ -203,5 +203,73 @@ The previous milestone's narrative is archived at
     `pending_reconciliation_jobs`, `_classify_jobs` and `abandon` read nothing under `runs/` or
     `jobs/<id>/`, and a negative control confirmed that the spy catches such a read.
 
+- **CP6 -- observation surface: complete.**
+  - New `controller/observe.py`, placed after `job` and before `cli` in `__init__` and the
+    dependency-order test. It imports only `job` (statuses, run states) and `worker` (liveness
+    readers), and it only reads.
+    - `Tail` reads a file by offset, holds back a partial trailing line (`flush()` releases it on
+      the final drain, so a legacy newline-less `worker.stdout` replays), and tolerates a file
+      that appears late. It never opens anything for writing.
+    - `normalise(source, line, tools)` returns a list of presentation events. It never raises: a
+      non-JSON line is `raw` and an unknown type is `unknown`. A message with several content
+      blocks yields several events, and thinking/redacted-thinking blocks yield none.
+      `tool_result` names its tool through the `tool_use` id map. `render_text` prefixes local
+      time and a source column and indents continuation lines. `render_json` prints one object
+      per line.
+    - `follow_run`/`follow_job` multiplex the run log, each job's `events.jsonl`,
+      `worker.stdout` and `worker.stderr`. A `job_ended`/`run_ended` event is emitted after that
+      job's (or every job's) pending lines, so replays read in order. Without `--from-start`
+      the last 20 events are replayed. The record is written before its event is appended, so
+      the final drain waits up to 2 s for `run_ended`/`run_interrupted`, or for the job's
+      `event_seq`.
+    - Endings: an `ended` run; a `running` run whose Controller is `inactive` ("controller
+      process is gone; run record was not closed"); an `interrupted` run, which hands over to
+      the job while its worker is `active`. A job ends when its record is terminal, or when its
+      worker is not `active` ("worker exited; job <id> awaits resume"). **Design choice for the
+      reviewer:** a job whose own run is still `running` with a live Controller is never ended
+      by its worker's exit, because that Controller is still verifying it. A non-terminal job
+      with no recorded worker ends with "no worker is recorded for job <id>; ...".
+      `unverifiable` Controllers and workers warn once and keep following.
+    - `controller_liveness` is pid-level: same boot and pid namespace, the pid is present with
+      the recorded `start_ticks`, and it is not a zombie. It uses `worker`'s `/proc` readers and
+      never the process group.
+    - Heartbeats (`HEARTBEAT_SECONDS`, 30 s by default and overridable) print `worker running:
+      pid P, elapsed M:SS, last event Ns ago`, or the drain wording when the record carries
+      `worker_group_drain`.
+    - `FdSink` writes with `os.write` to `os.dup(2)`, in chunks of at most `PIPE_BUF`, after a
+      `poll(POLLOUT)` wait of at most 1 s. A wait that times out disables it. On a FIFO it also
+      disables itself rather than leave less than 16 KiB free (`F_GETPIPE_SZ` − `FIONREAD`).
+      `fail()` makes one attempt at a note and then disables it.
+  - `cli`:
+    - `follow [--job ID | --run ID] [--from-start] [<repo>]` is dispatched at the top of
+      `_dispatch`, before `pin()`, runtime-root creation, materialisation and the
+      `identity.json` write. The runtime root comes from `identity.resolve_runtime(code_root)`
+      (or a snapshot's `SOURCE_PIN.json`) through `resolve_runtime_root`. `<repo>` resolves to
+      the Git top level, the same value as `target_repo`. An unknown id or another target's
+      record is a plain `ControllerError` (exit 20). Ctrl-C ends the follow with exit 0.
+    - `--follow` on `step`/`run`: `_start_follower` is the only reader. It starts a daemon
+      thread running `follow_run(..., from_start=True)` into an `FdSink`. `main()`'s `finally`
+      closes the run, then stops the thread with a 2 s join (no join on Ctrl-C). A renderer
+      exception stays in the thread.
+    - `status` gains `active:` (running runs with Controller liveness, non-terminal jobs with
+      worker liveness or the drain wording, and a `follow:` line for each), or `active: none`.
+    - `resume`'s exit-45 path prints `follow it: ...` on stderr.
+  - `job`: `follow_command(runtime_root, root)`. The lifecycle-lock refusal and `--abandon`'s
+    active-worker refusal (both exit 45) end with `Follow it: ...`. `_announce_orphaned_worker`
+    takes `runtime_root` and prints the follow line. With `drained` (set by `on_group_drain`
+    after its flush) it says `worker pid P exited; its process group G still has members
+    running ...`.
+  - Scope notes: `observe` calls `managed_repo._resolve_repository_root` and `worker`'s private
+    `/proc` readers rather than widening either module. The existing Ctrl-C test in
+    `tests/test_job.py` now expects two lines, and the drain-aware Ctrl-C test sits beside it.
+    `follow` does not handle `BrokenPipeError` on stdout yet (CP7's detach test). A
+    devnull-`dup2` would trip the write-containment scan.
+  - Verified: the narrow set `tests.test_observe tests.test_cli tests.test_package_structure`
+    passed (156 tests), and `tests.test_job tests.test_resume tests.test_write_containment
+    tests.test_lock` passed (226). The full suite passed (1181 tests, 6 skipped). The CLI tests
+    include a real source-checkout `step` followed by a bare `follow <repo>` with no
+    `--runtime-dir` (ladder row 3, runtime tree unchanged), and a child-process
+    `step --follow` whose exit code, stdout and job status match a plain step.
+
 **Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP6 or CP8).
+next ready checkpoint (CP7 or CP8).

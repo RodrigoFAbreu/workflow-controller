@@ -1906,14 +1906,42 @@ class CtrlCTest(_LifecycleCase):
                 self._step()
         self.assertIs(ctx.exception, interrupt)
         lines = stderr.getvalue().splitlines()
-        self.assertEqual(len(lines), 1)
-        self.assertIn(f"pid {sleeper.pid}", lines[0])
-        self.assertIn(f"process group {sleeper.pid}", lines[0])
+        self.assertEqual(len(lines), 2)
+        self.assertIn(f"the worker (pid {sleeper.pid}, process group {sleeper.pid}) keeps running", lines[0])
         self.assertIn(f"workflow-controller resume {self.root}", lines[0])
+        self.assertIn(f"`workflow-controller --runtime-dir {self.runtime_root} follow {self.root}`", lines[1])
         [record] = self._records()
         self.assertEqual(record["status"], job.STATUS_LAUNCHED)
         self.assertEqual(record["worker_process"]["pid"], sleeper.pid)
         self.assertIsNone(sleeper.poll(), "the Controller must not end the worker")
+
+    def test_an_interrupt_during_the_group_drain_says_the_worker_exited(self) -> None:
+        # CP6 (release-runtime-observability): Ctrl-C in the drain wait,
+        # after `on_group_drain` flushed -- pid P is gone, its group is not.
+        sleeper = process_fixtures.spawn_sleeper(self)
+        interrupt = KeyboardInterrupt()
+
+        def launch(task, *, on_spawn, on_group_drain, **kwargs):
+            on_spawn(worker.capture_worker_process(sleeper.pid))
+            on_group_drain(sleeper.pid, [sleeper.pid + 1])
+            raise interrupt
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(job.worker, "launch", launch), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(KeyboardInterrupt) as ctx:
+                self._step()
+        self.assertIs(ctx.exception, interrupt)
+        [interrupted] = [line for line in stderr.getvalue().splitlines() if "interrupted --" in line]
+        pid = sleeper.pid
+        self.assertIn(f"worker pid {pid} exited; its process group {pid} still has members running", interrupted)
+        self.assertIn(f"`kill -TERM -- -{pid}`", interrupted)
+        self.assertIn(f"workflow-controller resume {self.root}", interrupted)
+        self.assertNotIn("keeps running", interrupted)
+        self.assertNotIn(f"the worker (pid {pid}, process group {pid})", interrupted)
+        self.assertIn(f"`workflow-controller --runtime-dir {self.runtime_root} follow {self.root}`",
+                      stderr.getvalue())
+        [record] = self._records()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
 
     def test_an_interrupt_before_the_flush_prints_nothing(self) -> None:
         def launch(task, **kwargs):

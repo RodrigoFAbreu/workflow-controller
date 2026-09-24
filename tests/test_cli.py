@@ -39,7 +39,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, evidence, identity, job, lock, managed_repo, routing, runtime, version, worker  # noqa: E402
+from controller import (  # noqa: E402
+    cli, evidence, identity, job, lock, managed_repo, observe, routing, runtime, version, worker,
+)
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
     GitDirectoryUnresolvableError,
@@ -111,7 +113,7 @@ class _Args:
 
 
 class ParserTest(unittest.TestCase):
-    def test_all_six_commands_are_declared(self) -> None:
+    def test_every_command_is_declared(self) -> None:
         parser = cli.build_parser()
         subparsers_action = next(
             a for a in parser._subparsers._group_actions if a.dest == "command"
@@ -168,6 +170,27 @@ class ParserTest(unittest.TestCase):
         args = parser.parse_args(["status"])
         self.assertEqual(args.command, "status")
         self.assertFalse(hasattr(args, "repo"))
+
+    def test_follow_options(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["--runtime-dir", "/rt", "--json", "follow"])
+        self.assertEqual((args.command, args.repo, args.job, args.run, args.from_start, args.json),
+                         ("follow", ".", None, None, False, True))
+        args = parser.parse_args(["follow", "--run", "r1", "--from-start", "/target"])
+        self.assertEqual((args.run, args.from_start, args.repo), ("r1", True, "/target"))
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(io.StringIO()):
+            parser.parse_args(["follow", "--run", "r1", "--job", "j1"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
+
+    def test_follow_is_a_step_and_run_flag_only(self) -> None:
+        parser = cli.build_parser()
+        for command in ("step", "run"):
+            self.assertTrue(parser.parse_args([command, "/t", "--follow"]).follow)
+            self.assertFalse(parser.parse_args([command, "/t"]).follow)
+        for argv in (["resume", "--follow", "/t"], ["--follow", "step", "/t"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                parser.parse_args(argv)
 
 
 class VersionFlagTest(unittest.TestCase):
@@ -299,7 +322,8 @@ class StatusFirstLineTest(unittest.TestCase):
             self.assertEqual(lines[0], expected_first)
             self.assertTrue(lines[1].startswith("pinned identity: source_kind=unpinned "), lines)
             self.assertEqual(lines[2:], [
-                "jobs: none", "handoff: none", f"runtime root: {runtime_root.resolve()} (ladder row 1)",
+                "jobs: none", "handoff: none", "active: none",
+                f"runtime root: {runtime_root.resolve()} (ladder row 1)",
             ])
             record = runtime.read_json(runtime_root / "identity.json")
             self.assertEqual(record["controller_runtime"]["runtime_kind"], "source")
@@ -1646,6 +1670,11 @@ class _RunRecordFixture(_StepFixture):
     def _jobs(self) -> list[dict]:
         return [json.loads(p.read_text()) for p in sorted((self.runtime_root / "jobs").glob("*.json"))]
 
+    def _quiet_follower(self):
+        """``--follow``'s renderer writes to a duplicate of the real fd 2;
+        point it at ``/dev/null`` instead, so the test output stays clean."""
+        return unittest.mock.patch.object(cli.os, "dup", lambda fd: os.open(os.devnull, os.O_WRONLY))
+
 
 class RunRecordExitPathTest(_RunRecordFixture, unittest.TestCase):
     """Every exit path closes the run ``ended`` with the code ``main()``
@@ -1775,9 +1804,10 @@ class RunRecordJobTrackingTest(_RunRecordFixture, unittest.TestCase):
                         args = self._real_args(max_steps=1)
                         args.repo = repo
                         if follow:
-                            args.follow = True  # `--follow` lands in CP6; the record must not see it
+                            args.follow = True  # the record must not see it
                         argv = [command, repo, *(["--follow"] if follow else [])]
-                        code = self._main(command, args, argv=[command, repo])
+                        with self._quiet_follower():
+                            code = self._main(command, args, argv=[command, repo])
                         self.assertEqual(code, cli.EXIT_WORKER_FAILED)
                         [run] = self._runs()
                         [record] = self._jobs()
@@ -1880,6 +1910,360 @@ class RunRecordBestEffortTest(_RunRecordFixture, unittest.TestCase):
                 warnings = [l for l in self.stderr.getvalue().splitlines()
                             if l.startswith("workflow-controller: warning: could not write ")]
                 self.assertEqual(len(warnings), 1, self.stderr.getvalue())
+
+
+# ---------------------------------------------------------------------------
+# CP6 (release-runtime-observability): `follow`, `--follow`, `status`'s
+# `active:` section and the follow hints.
+# ---------------------------------------------------------------------------
+
+
+def _tree_listing(root: Path) -> list[tuple]:
+    """Every path under ``root`` with its type, size and mtime."""
+    if not root.exists():
+        return []
+    listing = []
+    for path in sorted(root.rglob("*")):
+        st = path.lstat()
+        listing.append((str(path.relative_to(root)), st.st_mode, st.st_size, st.st_mtime_ns))
+    return listing
+
+
+class _FollowCliCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.repo = fixtures.build_target_git_repo(self.tmp_root / "repo").resolve()
+        self.runtime_root = self.tmp_root / "runtime"
+        self.runtime_root.mkdir()
+        for name, value in (("POLL_SECONDS", 0.02), ("FINAL_EVENT_GRACE_SECONDS", 0.2)):
+            patcher = unittest.mock.patch.object(observe, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _run(self, run_id: str, **fields) -> dict:
+        record = {"schema_version": 1, "run_id": run_id, "command": "step", "target_repo": str(self.repo),
+                  "max_steps": None, "controller_process": worker.capture_worker_process(os.getpid()).to_dict(),
+                  "controller_runtime": {}, "state": "ended", "exit_code": 10, "job_ids": [],
+                  "current_job_id": None, "started_at": "2026-01-01T00:00:00Z",
+                  "updated_at": "2026-01-01T00:00:00Z", "ended_at": None, **fields}
+        runtime.write_json(self.runtime_root, f"runs/{run_id}.json", record)
+        return record
+
+    def _run_event(self, run_id: str, seq: int, event: str, **details) -> None:
+        runtime.append_jsonl(self.runtime_root, f"runs/{run_id}/events.jsonl",
+                             {"v": 1, "seq": seq, "at": "2026-01-01T00:00:00Z", "run_id": run_id,
+                              "event": event, **details})
+
+    def _job(self, job_id: str, **fields) -> dict:
+        record = {"job_id": job_id, "target_repo": str(self.repo), "status": job.STATUS_LAUNCHED,
+                  "created_at": "2026-01-01T00:00:00Z", **fields}
+        runtime.write_json(self.runtime_root, f"jobs/{job_id}.json", record)
+        return record
+
+    def _dead_process(self) -> dict:
+        import subprocess
+        proc = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
+        captured = worker.capture_worker_process(proc.pid).to_dict()
+        proc.wait()
+        return captured
+
+    def _follow(self, *argv: str, cwd: Path | None = None) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        previous = os.getcwd()
+        if cwd is not None:
+            os.chdir(cwd)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(["--runtime-dir", str(self.runtime_root), *argv])
+        finally:
+            os.chdir(previous)
+        return code, out.getvalue(), err.getvalue()
+
+
+class FollowCommandTest(_FollowCliCase):
+    def test_a_running_run_is_chosen(self) -> None:
+        self._run("r-old", started_at="2026-01-01T00:00:00Z")
+        self._run("r-live", state="running", exit_code=None, started_at="2026-01-02T00:00:00Z")
+        self._run_event("r-live", 1, "run_started")
+        done = threading.Timer(0.3, lambda: (self._run("r-live", state="ended", exit_code=0),
+                                             self._run_event("r-live", 2, "run_ended", exit_code=0)))
+        done.start()
+        self.addCleanup(done.cancel)
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("run r-live started", out)
+        self.assertTrue(out.splitlines()[-1].endswith("run ended: exit 0"))
+
+    def test_a_running_run_whose_controller_is_gone_is_not_chosen(self) -> None:
+        self._run("r-dead", state="running", exit_code=None, controller_process=self._dead_process())
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn(f"nothing active for {self.repo}; last run r-dead was not closed", out)
+
+    def test_with_no_run_an_orphan_job_with_an_active_worker_is_chosen(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self._run("r-int", state="interrupted", exit_code=None)
+        self._job("j-orphan", worker_process=process_fixtures.worker_process_dict(sleeper.pid))
+        runtime.append_jsonl(self.runtime_root, "jobs/j-orphan/events.jsonl",
+                             {"v": 1, "seq": 1, "at": "2026-01-01T00:00:00Z", "job_id": "j-orphan",
+                              "event": "worker_spawned", "pid": sleeper.pid, "pgid": sleeper.pid})
+        threading.Timer(0.3, process_fixtures.kill_group, (sleeper.pid,)).start()
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn(f"job j-orphan worker spawned: pid {sleeper.pid}", out)
+        self.assertTrue(out.splitlines()[-1].endswith("worker exited; job j-orphan awaits resume"))
+
+    def test_nothing_active(self) -> None:
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual((code, out), (cli.EXIT_OK, f"nothing active for {self.repo}; no runs recorded\n"))
+        self._run("r-1", exit_code=30)
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(out, f"nothing active for {self.repo}; last run r-1 ended with exit 30; replay: "
+                              f"workflow-controller --runtime-dir {self.runtime_root} follow --run r-1 "
+                              f"--from-start {self.repo}\n")
+
+    def test_explicit_run_and_job(self) -> None:
+        self._run("r-1", exit_code=10, job_ids=["j-1"])
+        self._run_event("r-1", 1, "run_started")
+        self._run_event("r-1", 2, "run_ended", exit_code=10)
+        self._job("j-1", status=job.STATUS_GATE_BLOCKED, event_seq=1)
+        runtime.append_jsonl(self.runtime_root, "jobs/j-1/events.jsonl",
+                             {"v": 1, "seq": 1, "at": "2026-01-01T00:00:00Z", "job_id": "j-1",
+                              "event": "gate_blocked", "reason": "needs a human"})
+        code, out, _err = self._follow("follow", "--run", "r-1", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertTrue(out.splitlines()[-1].endswith("run ended: exit 10"))
+        code, out, _err = self._follow("--json", "follow", "--job", "j-1", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        [event] = [json.loads(line) for line in out.splitlines()]
+        self.assertEqual((event["kind"], event["event"], event["reason"]),
+                         ("job_event", "gate_blocked", "needs a human"))
+
+    def test_the_repo_defaults_to_the_working_directory(self) -> None:
+        (self.repo / "sub").mkdir()
+        self._run("r-1", exit_code=0)
+        self._run_event("r-1", 1, "run_ended", exit_code=0)
+        for cwd in (self.repo, self.repo / "sub"):
+            with self.subTest(cwd=cwd):
+                code, out, _err = self._follow("follow", cwd=cwd)
+                self.assertEqual(code, cli.EXIT_OK)
+                self.assertIn(f"nothing active for {self.repo}; last run r-1", out)
+                code, out, _err = self._follow("follow", "--run", "r-1", cwd=cwd)
+                self.assertEqual(code, cli.EXIT_OK)
+                self.assertIn("run ended: exit 0", out)
+
+    def test_a_target_mismatch_or_an_unknown_id_exits_20(self) -> None:
+        other = fixtures.build_target_git_repo(self.tmp_root / "other").resolve()
+        self._run("r-1")
+        self._job("j-1", status=job.STATUS_FINISHED)
+        for argv in (["follow", "--run", "r-1", str(other)], ["follow", "--job", "j-1", str(other)],
+                     ["follow", "--run", "r-none", str(self.repo)], ["follow", "--job", "j-none", str(self.repo)]):
+            with self.subTest(argv=argv):
+                code, out, err = self._follow(*argv)
+                self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
+                self.assertEqual(out, "")
+                self.assertTrue(err.startswith("error: "), err)
+
+    def test_follow_writes_nothing(self) -> None:
+        self._run("r-1", exit_code=10, job_ids=["j-1"])
+        self._run_event("r-1", 1, "run_started")
+        self._run_event("r-1", 2, "run_ended", exit_code=10)
+        self._job("j-1", status=job.STATUS_FINISHED)
+        runtime.write_json(self.runtime_root, "identity.json", {"schema_version": 1, "generation": 3})
+        before = _tree_listing(self.runtime_root)
+        for argv in (["follow", str(self.repo)], ["follow", "--run", "r-1", "--from-start", str(self.repo)],
+                     ["follow", "--job", "j-1", str(self.repo)]):
+            with self.subTest(argv=argv):
+                code, _out, _err = self._follow(*argv)
+                self.assertEqual(code, cli.EXIT_OK)
+                self.assertEqual(_tree_listing(self.runtime_root), before)
+
+    def test_a_nonexistent_runtime_dir_is_not_created(self) -> None:
+        missing = self.tmp_root / "no-runtime"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = cli.main(["--runtime-dir", str(missing), "follow", str(self.repo)])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("no runs recorded", out.getvalue())
+        self.assertFalse(missing.exists())
+
+    def test_follow_never_pins_materialises_or_locks(self) -> None:
+        with unittest.mock.patch.object(identity, "pin", side_effect=AssertionError("pinned")), \
+                unittest.mock.patch.object(identity, "materialise", side_effect=AssertionError("materialised")), \
+                unittest.mock.patch.object(runtime, "ensure_runtime_root", side_effect=AssertionError("created")), \
+                unittest.mock.patch.object(lock, "acquire_lifecycle_lock", side_effect=AssertionError("locked")):
+            code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("nothing active", out)
+
+
+class FollowSourceCheckoutTest(unittest.TestCase):
+    """From a source checkout, a bare ``follow <repo>`` without
+    ``--runtime-dir`` finds the run ``step`` recorded there without one
+    (ladder row 3, through the read-only ``resolve_runtime``), and writes
+    nothing."""
+
+    def test_follow_finds_steps_row_3_runtime_root(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        tmp_root = Path(tmp.name)
+        checkout = fixtures.build_checkout(tmp_root / "checkout", generation=1)
+        repo = _build_managed_target(tmp_root, phase="PLANNING").resolve()
+        stub_manager = fixtures.write_stub_workflow_manager(tmp_root / "workflow-manager")
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("WORKFLOW_CONTROLLER_HOME", "XDG_STATE_HOME", "PYTHONPATH")}
+        env["PYTHONPATH"] = str(checkout)
+        stepped = fixtures.run_controller_module(
+            ["--workflow-manager", str(stub_manager), "--claude-binary", str(FAKE_CLAUDE), "--timeout", "30",
+             "step", str(repo)], cwd=checkout, env=env)
+        self.assertEqual(stepped.returncode, cli.EXIT_WORKER_FAILED, stepped.stderr)
+        runtime_root = (checkout / ".controller").resolve()
+        [run_path] = (runtime_root / "runs").glob("*.json")
+        run_id = run_path.stem
+        before = _tree_listing(runtime_root)
+
+        followed = fixtures.run_controller_module(["follow", str(repo)], cwd=checkout, env=env)
+        self.assertEqual(followed.returncode, cli.EXIT_OK, followed.stderr)
+        self.assertEqual(followed.stdout,
+                         f"nothing active for {repo}; last run {run_id} ended with exit 30; replay: "
+                         f"workflow-controller --runtime-dir {runtime_root} follow --run {run_id} "
+                         f"--from-start {repo}\n")
+        replayed = fixtures.run_controller_module(["follow", "--run", run_id, "--from-start", str(repo)],
+                                                  cwd=checkout, env=env)
+        self.assertEqual(replayed.returncode, cli.EXIT_OK, replayed.stderr)
+        self.assertIn("worker session", replayed.stdout)
+        self.assertTrue(replayed.stdout.splitlines()[-1].endswith("run ended: exit 30"))
+        self.assertEqual(_tree_listing(runtime_root), before)
+
+
+class StatusActiveSectionTest(_FollowCliCase):
+    def _status(self) -> str:
+        pre_existing = cli._capture_pre_existing_state(self.runtime_root)
+        pre_existing["ladder_row"] = 1
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.cmd_status(_Args(str(self.repo)), self.runtime_root, FAKE_IDENTITY, pre_existing=pre_existing)
+        return out.getvalue()
+
+    def test_idle(self) -> None:
+        self._run("r-1")
+        self._job("j-1", status=job.STATUS_FINISHED)
+        self.assertIn("\nactive: none\n", self._status())
+
+    def test_the_running_run_and_the_non_terminal_job_with_the_follow_command(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self._run("r-live", state="running", exit_code=None)
+        self._job("j-live", worker_process=process_fixtures.worker_process_dict(sleeper.pid))
+        self._job("j-drain", worker_process=process_fixtures.worker_process_dict(sleeper.pid),
+                  worker_group_drain={"direct_child_exited_at": "2026-01-01T00:00:00Z", "remaining_pids": [7, 8]})
+        text = self._status()
+        follow = f"    follow: workflow-controller --runtime-dir {self.runtime_root} follow {self.repo}"
+        self.assertIn("active:\n", text)
+        self.assertIn(f"  run r-live (step, target {self.repo}): controller pid {os.getpid()} active\n{follow}\n",
+                      text)
+        self.assertIn(f"  job j-live (LAUNCHED, target {self.repo}): worker pid {sleeper.pid} active\n{follow}\n",
+                      text)
+        self.assertIn(f"  job j-drain (LAUNCHED, target {self.repo}): worker exited; waiting on process group: "
+                      f"2 process(es) at drain start (7 8)\n{follow}\n", text)
+        self.assertNotIn("r-1", text)
+
+
+class FollowHintTest(_StepFixture, unittest.TestCase):
+    """The exit-45 messages carry the ``follow`` command."""
+
+    def test_the_lock_refusal_names_the_follow_command(self) -> None:
+        held = lock.acquire_lifecycle_lock(self.repo)
+        self.addCleanup(held.release)
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            self._step()
+        self.assertIn(f"`workflow-controller --runtime-dir {self.runtime_root} follow {self.repo.resolve()}`",
+                      ctx.exception.message)
+
+    def test_resume_exit_45_prints_the_follow_command(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        record = _job_record(job_id="j-active", target_repo=str(self.repo.resolve()), status=job.STATUS_LAUNCHED)
+        for key in ("worker_outcome", "observed_phase_after", "transition_verified"):
+            record.pop(key)
+        record["lifecycle_lock"] = {"path": str(lock.resolve_git_dir(self.repo))}
+        record["worker_process"] = process_fixtures.worker_process_dict(sleeper.pid)
+        runtime.write_json(self.runtime_root, "jobs/j-active.json", record)
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+            code = cli.cmd_resume(self._args(), self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(code, cli.EXIT_WORKER_ACTIVE)
+        self.assertIn(f"follow it: workflow-controller --runtime-dir {self.runtime_root} follow "
+                      f"{self.repo.resolve()}", stderr.getvalue())
+        abandon = self._args()
+        abandon.abandon, abandon.acknowledge_unverifiable_worker = "j-active", False
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            cli.cmd_resume(abandon, self.runtime_root, FAKE_IDENTITY)
+        self.assertIn(f"follow {self.repo.resolve()}`", ctx.exception.message)
+
+
+class FollowAttributeReadTest(unittest.TestCase):
+    """``--follow`` is read in exactly one place, ``cli._start_follower``."""
+
+    def test_the_follow_attribute_is_read_only_in_start_follower(self) -> None:
+        readers = []
+        for path in sorted((fixtures.REPO_ROOT / "controller").glob("*.py")):
+            tree = ast.parse(path.read_text(), filename=str(path))
+            parents = {}
+            for node in ast.walk(tree):
+                for child in ast.iter_child_nodes(node):
+                    parents[child] = node
+
+            def enclosing(node):
+                while node in parents:
+                    node = parents[node]
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        return node.name
+                return None
+
+            for node in ast.walk(tree):
+                reads = (
+                    (isinstance(node, ast.Attribute) and node.attr == "follow")
+                    or (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id in ("getattr", "hasattr") and len(node.args) >= 2
+                        and isinstance(node.args[1], ast.Constant) and node.args[1].value == "follow")
+                )
+                if reads:
+                    readers.append((path.name, enclosing(node)))
+        self.assertEqual(readers, [("cli.py", "_start_follower")])
+
+
+class StepFollowTest(_RunRecordFixture, unittest.TestCase):
+    """``step --follow`` renders the run on stderr through the private
+    descriptor, and its exit code and records are those of a plain step."""
+
+    def _child(self, *extra: str) -> tuple[int, str, str]:
+        import subprocess
+        shutil.rmtree(self.runtime_root, ignore_errors=True)
+        child = subprocess.run(
+            [sys.executable, "-c", _CHILD_RUN, str(fixtures.REPO_ROOT), str(self.origin),
+             self.ident.source_commit, "--runtime-dir", str(self.runtime_root),
+             "--workflow-manager", str(self.stub_manager), "--claude-binary", str(FAKE_CLAUDE),
+             "--timeout", "30", "step", str(self.repo), *extra],
+            capture_output=True, text=True, timeout=60,
+        )
+        return child.returncode, child.stdout, child.stderr
+
+    def test_step_follow_renders_and_changes_nothing_else(self) -> None:
+        plain_code, plain_out, plain_err = self._child()
+        [plain_record] = self._jobs()
+        code, out, err = self._child("--follow")
+        [record] = self._jobs()
+        self.assertEqual((code, out), (plain_code, plain_out))
+        self.assertEqual(plain_err, "")
+        self.assertIn("worker session", err)
+        self.assertIn("tool Bash: true", err)
+        self.assertTrue(err.splitlines()[-1].endswith(f"run ended: exit {code}"), err)
+        self.assertEqual({k: v for k, v in record.items() if k in ("status", "worker_outcome", "event_seq")},
+                         {k: v for k, v in plain_record.items() if k in ("status", "worker_outcome", "event_seq")})
+        [run] = self._runs()
+        self.assertNotIn("follow", run)
 
 
 if __name__ == "__main__":

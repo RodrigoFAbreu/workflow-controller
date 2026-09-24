@@ -2,11 +2,12 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-release-runtime-observability`, governing workflow version
-`2.2`, base commit `16c3fb4670bfeb9c7ce82aaff13f5a643a3f2400` (the acceptance commit of
-`workflow-controller-automatic-lifecycle-orchestration`). Plan revision 6 was approved by both
-plan-review stages (approval commit `3397e39`). `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground truth for the phase and for each checkpoint's status.
+**Awaiting functional review.** `workflow-controller-release-runtime-observability`, governing
+workflow version `2.2`, base commit `16c3fb4670bfeb9c7ce82aaff13f5a643a3f2400` (the acceptance
+commit of `workflow-controller-automatic-lifecycle-orchestration`). Plan revision 6 was approved by
+both plan-review stages (approval commit `3397e39`). Implementation revision 1 was technically
+approved (commit `0e8cecb`). `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for the
+phase and for each checkpoint's status. See "Functional review checklist" at the end.
 
 ## Goal
 
@@ -572,5 +573,206 @@ Verified after the fixes:
   106 and 79 tests, all OK.
 - `python3 tools/ci_workflows.py --check`: exit `0`.
 
-**Next action:** the implementation bundle (`/milestone-implement` step 4), then the
-`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` gate.
+Both implementation-review stages then approved implementation revision 1: local round 1 and
+manual external round 1, against bundle `7e4f29e9...` and `review_content_id` `aa88a009...`. The
+external reviewer left one optional finding (O1): where the drain cannot count the process
+group's members, `status`, the follower heartbeat and `worker_exited` say `0 process(es)`, but the
+stderr drain line says `an unknown number of processes`. Technical approval is commit `0e8cecb`.
+
+## Functional review checklist
+
+This checklist covers implementation revision 1, reviewed at `3549311`, with technical approval
+`0e8cecb`. The automated state is current: at `3549311` the full suite ran 1275 tests, OK (6
+opt-in live skips), and the seven frozen Workflow suites passed. Only `WORKFLOW_STATE.json` and
+this file have changed since. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+Every flow below was dry-run before this checklist was committed, except the spend in flow 9.
+Flows 1-8 cost nothing: the worker is `tests/fake_claude.py` and the Workflow Manager is the
+offline test stub. Flow 9 is optional and live (about USD 1).
+
+### Setup
+
+1. `claude` and `workflow-manager` are on `PATH` (flow 9 only). `pipx` is installed.
+2. In one zsh shell, used for every later step (under bash, replace `${pipestatus[1]}` with
+   `${PIPESTATUS[0]}`):
+
+   ```zsh
+   C=/home/rodrigo/Workspace/workflow-controller; W=$(mktemp -d); unset PYTHONPATH
+   export PIPX_HOME=$W/pipx PIPX_BIN_DIR=$W/bin PIPX_MAN_DIR=$W/man XDG_STATE_HOME=$W/xdg
+   WC=$W/bin/workflow-controller
+   seed() { (cd $C && python3 -c "import shlex; from pathlib import Path; from tests.test_packaged_runtime import _build_planning_target as b, _planning_worker_env as e; from tests.fixtures import write_stub_workflow_manager as m; w=Path('$W'); t=b(w/'t$1'); m(w/'workflow-manager'); open(w/'t$1.env','w').write(''.join(f'{k}={shlex.quote(v)}\n' for k,v in e(t, w/'inv$1').items()))") }
+   fake() { local n=$1; shift; (set -a; . $W/t$n.env; set +a; cd /tmp; $WC --workflow-manager $W/workflow-manager --claude-binary $C/tests/fake_claude.py "$@") }
+   ```
+
+   The pipx variables isolate everything, so your own pipx install of `workflow-controller` is
+   never touched. `XDG_STATE_HOME` puts the Controller's runtime root at
+   `$W/xdg/workflow-controller` (ladder row 4). `seed N` builds a committed `"2.1"` `PLANNING`
+   target at `$W/tN`, plus the fake worker's environment in `$W/tN.env`. With that environment,
+   the fake worker performs `/milestone-plan`'s transition to `AWAITING_LOCAL_PLAN_REVIEW`.
+   `fake N <args>` runs the installed Controller from `/tmp` with that worker and the stub
+   Manager.
+3. Build a local wheel from a clean clone of this commit, install it with pipx, then delete the
+   clone:
+
+   ```zsh
+   git clone -q $C $W/clone && (cd $W && python3 -m pip wheel -q --no-deps --no-build-isolation --wheel-dir $W/dist $W/clone)
+   pipx install -q $W/dist/*.whl && rm -rf $W/clone; H=$(git -C $C rev-parse --short=12 HEAD)
+   ```
+
+   Expected: one wheel, `$W/dist/workflow_controller-1.1.0-py3-none-any.whl`. `pipx install`
+   succeeds, and `$W/clone` no longer exists.
+
+### Test data
+
+Only the throwaway `PLANNING` targets that `seed` creates under `$W`, one per flow that launches a
+worker. Nothing in this repository is modified. `pip wheel` runs against the clone, so it writes
+no `build/` directory into `$C`.
+
+### Flows
+
+1. **Runtime identity, with no checkout.** From `/tmp`, run `$WC --version`, then `$WC status`.
+   Expected:
+   - `--version` prints exactly two lines: `workflow-controller 1.1.0` and
+     `runtime: package (local build from $H)`;
+   - `status` opens with `controller: workflow-controller 1.1.0 -- package (local build from $H)`,
+     then says `no Controller runtime state at $W/xdg/workflow-controller (ladder row 4)`. Exit
+     `0`.
+2. **The packaged runtime launches a worker (the `git archive failed` defect).** Run
+   `seed 1; fake 1 step $W/t1; echo exit=$?`.
+   Expected:
+   - `exit=0`, and no `git archive` anywhere in the output;
+   - the target's phase is now `AWAITING_LOCAL_PLAN_REVIEW`. To check it, run
+     `python3 -c "import json; print(json.load(open('$W/t1/docs/ai-workflow/WORKFLOW_STATE.json'))['work_items']['wi-1']['phase'])"`;
+   - the only job record, `$W/xdg/workflow-controller/jobs/*.json`, is `FINISHED`, with
+     `worker_outcome` `SUCCESS` and `transition_verified: true`. Its `controller_runtime` is
+     `runtime_kind: package`, `source_kind: package`, `version: 1.1.0`, `generation: 1`,
+     `build_origin: local`, `release_tag: null`, and a `source_commit` that starts with `$H`;
+   - `stat -c '%a %n' $W/xdg/workflow-controller/jobs/*/*` lists `worker.stdout`, `worker.stderr`
+     and `events.jsonl`, each with mode `600`.
+3. **`step --follow`.** Run
+   `seed 2; FAKE_CLAUDE_EVENT_DELAY=1 fake 2 step --follow $W/t2 >$W/f2.out 2>$W/f2.err; echo exit=$?`,
+   then `cat $W/f2.out $W/f2.err`.
+   Expected:
+   - `exit=0`, and `f2.out` is empty (the rendering goes to stderr only);
+   - `f2.err` has about 15 time-stamped lines, each with a `run`/`job`/`worker` source column:
+     `run ... started`, `step 1`, `job ... started`, `PLANNED (/milestone-plan wi-1)`,
+     `LAUNCHED (..., milestone-plan, None/None)` (the route inherits the model and effort),
+     `worker spawned: pid P, process group P`, `worker session fake-session-id ...`,
+     `Working on it.`, `tool Bash: true`, `result Bash ok:`, `COMPLETED (worker SUCCESS, exit
+     0)`, `FINISHED (PLANNING -> AWAITING_LOCAL_PLAN_REVIEW verified)`,
+     `worker result: success, ... turns=1, cost=0.0 ...`, `job ... ended: FINISHED` and
+     `run ended: exit 0`;
+   - the worker lines arrive about a second apart, live, not all at the end.
+4. **`status` while a worker runs, and `follow` from a second process.**
+   1. Start a worker that pauses after 3 events:
+      `seed 3; rm -f $W/rel3; FAKE_CLAUDE_PAUSE_AFTER_EVENTS_FILE=3:$W/rel3 fake 3 step $W/t3 >$W/s3.out 2>&1 & SP=$!`.
+      Wait about 3 s.
+   2. `(cd /tmp; $WC status)`. Expected: under `active:`, a `run ... (step, target $W/t3):
+      controller pid ... active` line and a `job ... (LAUNCHED, target $W/t3): worker pid ...
+      active` line. Each is followed by a `follow:` line, which is a complete
+      `workflow-controller --runtime-dir $W/xdg/workflow-controller follow $W/t3` command.
+   3. `(cd /tmp; $WC follow $W/t3) & FP=$!`. Expected: it replays the events so far at once
+      (`run ... started` through `worker session`, `Working on it.` and `tool Bash: true`), then
+      waits.
+   4. `touch $W/rel3; wait $SP; echo step=$?; wait $FP; echo follow=$?`. Expected: the follower
+      prints the rest, through `run ended: exit 0`, and then exits by itself. `step=0` and
+      `follow=0`.
+   5. `(cd /tmp; $WC status)`. Expected: `active: none`.
+5. **`follow` when nothing is active, replay, `--json`, and refusals.** Set
+   `R=$(basename $(ls $W/xdg/workflow-controller/runs/*.json | tail -1) .json)` (flow 4's run).
+   All commands below run from `/tmp`.
+   - `$WC follow $W/t3; echo exit=$?`: `nothing active for $W/t3; last run $R ended with exit 0;
+     replay: workflow-controller ... follow --run $R --from-start $W/t3`, then `exit=0`;
+   - `$WC follow --run $R --from-start $W/t3 | wc -l`: `15`, the same lines as flow 4's follower
+     printed;
+   - `$WC --json follow --run $R $W/t3 | head -2`: one JSON object per line, the first being
+     `"event": "run_started"`, `"kind": "run_event"`, `"source": "run"`;
+   - `$WC follow --run nope $W/t3; echo exit=$?`: `error: no readable run record 'nope' ...`,
+     then `exit=20`;
+   - `$WC follow --job $(basename $(ls -d $W/xdg/workflow-controller/jobs/*/ | tail -1)) $W/t1; echo exit=$?`:
+     `error: job ... belongs to target '$W/t3', not $W/t1`, then `exit=20`.
+6. **`follow` writes nothing, and a closed stdout.**
+   - Run `find $W/xdg -printf '%T@ %s %p\n' | sort > $W/a; (cd /tmp; $WC follow --run $R --from-start $W/t3 >/dev/null); find $W/xdg -printf '%T@ %s %p\n' | sort > $W/b; cmp $W/a $W/b && echo unchanged`.
+     Expected: `unchanged`.
+   - Run `(cd /tmp; $WC follow --run $R --from-start $W/t3 2>$W/pipe.err | true); echo follow=${pipestatus[1]}; wc -c < $W/pipe.err`
+     three times. Expected: `follow=0` and `0` bytes of stderr each time, with no
+     `BrokenPipeError` (this was self-review I1). For contrast, a plain Python program shows the
+     traceback it replaced:
+     `python3 -c "import time; time.sleep(0.2); print('x'*100)" | true; echo ${pipestatus[1]}`
+     prints `BrokenPipeError`, then `120`.
+7. **A tampered install refuses.** Edit one installed byte, try a step, then restore:
+
+   ```zsh
+   SP=$(echo $W/pipx/venvs/workflow-controller/lib/python3*/site-packages)
+   python3 -c "p='$SP/controller/cli.py'; d=bytearray(open(p,'rb').read()); d[3]=ord('X'); open(p,'wb').write(d)"
+   seed 4; fake 4 step $W/t4; echo exit=$?; ls $W/inv4
+   pipx uninstall workflow-controller && pipx install -q $W/dist/*.whl
+   fake 4 step $W/t4; echo exit=$?
+   ```
+
+   Expected:
+   - the first step prints `error: the installed package at $SP does not match its own build
+     info: package digest <new> != recorded <old> -- it was modified after it was built, or
+     partially upgraded`, then `exit=20`;
+   - `ls $W/inv4` fails, because no worker ran. The number of `$W/xdg/workflow-controller/jobs/*.json`
+     files is unchanged;
+   - after the reinstall, the same step gives `exit=0`.
+
+   Use `uninstall` + `install` here, not `pipx install --force`. With pipx's `uv` backend,
+   `--force` on this machine fails with `A virtual environment already exists`.
+8. **Release tooling, local only.** From `$C`:
+   - `python3 tools/release.py verify-tag v1.1.0` prints `ok: v1.1.0 matches version 1.1.0`.
+     `verify-tag v1.2.0` is refused with `tag/version`, exit `1`;
+   - `python3 tools/release.py verify-wheel $W/dist/*.whl --local --commit $(git rev-parse HEAD)`
+     prints `ok: ... verified`. With `--commit $(git rev-parse HEAD~1)` it is refused with
+     `source commit`, and with `--tag v1.1.0` instead of `--local` it is refused with `build origin`
+     (`got 'local'`);
+   - a release build:
+     `git clone -q $C $W/rclone && (cd $W && WORKFLOW_CONTROLLER_RELEASE_TAG=v1.1.0 python3 -m pip wheel -q --no-deps --no-build-isolation --wheel-dir $W/rdist $W/rclone)`,
+     then `verify-wheel $W/rdist/*.whl --tag v1.1.0 --commit $(git rev-parse HEAD)` prints `ok`.
+     After `python3 -m venv $W/rv && $W/rv/bin/pip install -q --no-deps --no-index $W/rdist/*.whl`,
+     running `(cd /tmp; $W/rv/bin/workflow-controller --version)` prints
+     `runtime: package (release v1.1.0; built from $H; package <12 hex>)`;
+   - `mkdir $W/sums && cp $W/rdist/*.whl $W/sums/ && python3 tools/release.py checksums $W/sums && (cd $W/sums && sha256sum -c SHA256SUMS)`
+     prints `workflow_controller-1.1.0-py3-none-any.whl: OK`;
+   - `python3 tools/release.py check-unpublished v1.1.0` prints
+     `ok: no GitHub Release exists for v1.1.0`. This needs `gh` authenticated. Any other `gh`
+     failure is refused as `release lookup undecidable`;
+   - `python3 tools/ci_workflows.py --check` exits `0`.
+   - **Optional, needs a push:** after this milestone lands on `main`, the `CI` workflow on
+     GitHub runs the 7 `controller` shards, the `conformance` matrix and `package` in parallel,
+     and a failing shard does not cancel the others. Do not push a `v*` tag as part of this
+     review. That publishes a real Release.
+9. **Optional, live, real spend (about USD 1): a real worker through the installed package.**
+   Run
+   `(cd $C && python3 -c "from pathlib import Path; from tests.test_integration_disposable_repo import _seed_target as s; s(Path('$W/live'))")`,
+   then `(cd /tmp; $WC explain $W/live)`. That prints `next automatic action: /milestone-plan`.
+   Then `(cd /tmp; $WC run --follow --max-steps 1 $W/live); echo exit=$?`. After about 15 s, from
+   a second terminal with the same `W`/`WC`/`XDG_STATE_HOME`, run `$WC follow $W/live`, and
+   Ctrl-C it partway through.
+   Expected:
+   - `exit=16` (the step limit). The job is `FINISHED` and the target is at
+     `AWAITING_LOCAL_PLAN_REVIEW`;
+   - the rendering shows `worker tool Bash: ...` and `worker result Bash ok:` pairs, and never a
+     thinking block;
+   - Ctrl-C ends the second `follow` with exit `0`, and the run carries on to completion.
+
+   The dry run for this checklist seeded the target and ran `explain`, but did not launch the
+   worker. CP11 step 6 ran the same live flow from the source runtime.
+
+### Known limitations and out of scope
+
+- **Line order across sources.** A job's `COMPLETED`/`FINISHED` lines can print before the worker's
+  last one or two stream lines. The follower reads each file in turn, not by timestamp. Only
+  `job ... ended` and `run ended` are guaranteed to come after all of that job's lines (flows 3
+  and 4 show this).
+- `rate_limit_event` from the real CLI renders as `worker unknown event rate_limit_event` (M2, left
+  for review).
+- The external reviewer's optional O1, above: an uncountable process group shows as `0 process(es)` in `status`, the heartbeat and
+  `worker_exited`, but as `an unknown number of processes` on the stderr drain line.
+- `step` prints nothing to stdout without `--json`; with `--follow` the rendering goes to stderr.
+- There is no real GitHub Release in this review: the release workflow's tag, publish and
+  duplicate-refusal path is covered by `tests.test_ci_workflows`/`tests.test_release_tools` and
+  by flow 8's local commands, not by a published tag.
+- No log retention or pruning. The carried-over follow-ups O1-O3 from the previous milestone
+  remain out of scope.

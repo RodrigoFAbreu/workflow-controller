@@ -1017,7 +1017,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automatic-lifecycle-orchestration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automatic-lifecycle-orchestration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -1099,7 +1099,241 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-23T17:20:03Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "04eb37d78d4e655000f23946e650c054a28797fb7bd15d302acd450d2217da22",
+        "approved_review_content_id": "dac3aaaadeb757b35ff88ce509fa52eeff66c2488d198aeee54bbca8ffe242bc",
+        "review_content_manifest": [
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fd02a182e2ca069f011d6c1b3316b170ae18a7a3"
+          },
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "30fe9de75cd82b30ef9183babf1371698541f1c7"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1615d1706d13c82c96ab5cd19dd75e3eac813856"
+          },
+          {
+            "path": "controller/decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "669bfbd4fd62da3d79bf273aa83ba29b23d4beb3"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c08ef62eb6380a210679fa5148fe9eb3235ee2a3"
+          },
+          {
+            "path": "controller/evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3895cf9b2b2796cd33dff2cd575be95217d75cae"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da4168b81eb8f3c4801afab7680b27eacbd81ed2"
+          },
+          {
+            "path": "controller/lock.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dda294b80b8d019b8da52d736b586a09ee0987d1"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2125fc397a6d11a37e0a84897bf061774a428d8c"
+          },
+          {
+            "path": "controller/target_state.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b3567fa8d650d9af2efd7544645c29021afbd049"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "761db79961127eccdc10eb7aa375b9e041592cf0"
+          },
+          {
+            "path": "docs/adr/0001-controller-generation-1-architecture.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f57a3f35a5dc7469aa0af3bff03e64c33a3ed34e"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-automatic-lifecycle-orchestration-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "237d84f467925a6d2552d49f4ecdf005f6364690"
+          },
+          {
+            "path": "pyproject.toml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b6b9efdb9f38d0f36988b2463084c0848ef5f547"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "e800d96dc1d0c4e3479f0022163f2b67227fbdb1"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2f3502c15eb49074309edef3ad8434cb02ab22ea"
+          },
+          {
+            "path": "tests/golden/external_implementation_review_decisions.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "689560cbfc6db346bed0b731f25297e631b4c569"
+          },
+          {
+            "path": "tests/golden/generate_external_implementation_review_decisions.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e7bb3e176603f6700b6bab1aab50efcbeaf68be7"
+          },
+          {
+            "path": "tests/golden/generate_plan_stage_decisions.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1d9365de9a5865f89fb726f6d23fccbe35cbdeaa"
+          },
+          {
+            "path": "tests/golden/plan_stage_decisions.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b3b918d35b39b304b47ddfc04c513a05183c2f31"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2fd923fae876d2ea29d2abf99134368f62ee780f"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "936207afbe5f850c7c0cd134167bd77594bdccc1"
+          },
+          {
+            "path": "tests/test_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "48cb6001ecc8b673df64ce2671fbe06a6ff4bab3"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c269444e8f42b65d888b4c41bb064b428e813d2a"
+          },
+          {
+            "path": "tests/test_golden_plan_stage_decisions.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "54f54a8ee371b739d189758b3bda4bccce301fdc"
+          },
+          {
+            "path": "tests/test_integration_disposable_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5608bdf7b7ff8b925682337e49df331e4a7cec1d"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "eb64a2c7c3e74ae2875fbe75b21d87a32212d122"
+          },
+          {
+            "path": "tests/test_job_validation.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f70fdaf69d494b0b25176fe31849561644d8dbe4"
+          },
+          {
+            "path": "tests/test_lifecycle_orchestration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5f41b4347490fb7a4d25f1e5236adc7318ef29f2"
+          },
+          {
+            "path": "tests/test_lock.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "513120228c32ae7965051fd40d2202eaac6ac982"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ab6eaf10f076730a93ed85210efc82a3841e697c"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7039ed72e0ed6e53ed1d339633e3429af7627602"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "65a8387f3d6407fd8860ba866e24fe2161bc5dd5"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "93313c74b54add5dc3d2e83711bbb66bda5d07f3"
+          },
+          {
+            "path": "tests/test_target_state.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4bb51aaed22166e980d2b04abce3d8b539396c64"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6c121889b5939040ef296085d7e026d96b2083e9"
+          },
+          {
+            "path": "tests/test_write_containment.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bfdad7d3b4ba20b3a516173839db20ee805703fc"
+          }
+        ],
+        "reviewed_content_commit": "411dcb19d822c37c6212d21e65fac32fa81aae9a",
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the implementation stage for workflow-controller-automatic-lifecycle-orchestration",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-24T01:08:45Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "dd4a1b476bb55971c81f8df891f7652dd30acdd8489fa137d77f7134f8bc850f",
@@ -1118,8 +1352,23 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 38,
-      "last_transition": "2026-09-24T00:36:22Z"
+      "state_revision": 41,
+      "last_transition": "2026-09-24T01:08:45Z",
+      "implementation_review_stages": {
+        "review_content_id": "dac3aaaadeb757b35ff88ce509fa52eeff66c2488d198aeee54bbca8ffe242bc",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "04eb37d78d4e655000f23946e650c054a28797fb7bd15d302acd450d2217da22",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-24T00:55:52Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "04eb37d78d4e655000f23946e650c054a28797fb7bd15d302acd450d2217da22",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-24T01:06:19Z"
+        }
+      }
     }
   }
 }

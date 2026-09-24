@@ -271,5 +271,54 @@ The previous milestone's narrative is archived at
     `--runtime-dir` (ladder row 3, runtime tree unchanged), and a child-process
     `step --follow` whose exit code, stdout and job status match a plain step.
 
+- **CP7 -- observation isolation and equivalence: complete.** No product code changed.
+  - New `tests/test_observation_equivalence.py`. Every Controller is a real `python -m controller`
+    process run from a committed `fixtures.build_checkout` clone. It pins and materialises for
+    real, owns a real fd 2, and exits through real interpreter finalisation. The worker is the
+    scripted fake, driven by `test_lifecycle_orchestration.Lifecycle` (imported, not factored
+    out). Commit dates are fixed (`GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`), so identical fixtures
+    have identical Git histories. Ids, timestamps, pids and fixture paths are replaced by
+    placeholders; everything else is compared exactly.
+  - The scripted lifecycle has two legs. Leg 1 is `run` on a `"2.2"` `PLANNING` item:
+    `/milestone-plan`, then `/review-plan`, then the manual-external plan gate (exit 10). Then
+    the human's approval is performed in-process. Leg 2 is `run --max-steps 1`: one
+    `/milestone-implement` checkpoint (exit 16).
+  - Tests:
+    1. equivalence: plain, `--follow`, and plain with a `follow` process attached after the
+       first event and `SIGKILL`ed mid-job. Equal exit codes, stdout, run records and logs, job
+       records, logs and worker streams, target state, `git log`/`git status`, and each worker's
+       argv, cwd, env keys and fd count;
+    2. attach: a paused worker, a second-process `follow <repo>` prints the emitted events, then
+       the post-release ones, and exits 0 when the run ends;
+    3. detach: one follower `SIGKILL`ed and one whose stdout reader is already closed. The job is
+       `FINISHED`, exit 0, and the results equal a plain step's;
+    4. `run --follow` with a closed stderr reader: exit code and results equal the plain run;
+    4a. an unread stderr pipe and a stream that renders larger than the pipe: bounded, not
+       signalled, results equal. In the `ControllerError` variant, a hold file keeps the second
+       worker waiting until `FIONREAD` shows the renderer has filled the pipe down to its
+       reserve. The single `error:` line must then land after more than 32 KiB of rendering.
+       The renderer's lines are under 100 bytes, so without the reserve that line would block;
+    5. a streamed job's `worker`, `worker_outcome`, `transition_verified` and `status` equal
+       those of a result-only stream;
+    - end to end, `follow` (bare, `--run`, `--job`) leaves the runtime root and target
+      unchanged (type, size, mtime), and a legacy single-JSON `worker.stdout` with no
+      `worker_streams` replays as its `worker result` line.
+  - `tests/fake_claude.py` gains `FAKE_CLAUDE_DIAG_LOG`, which appends one line per invocation
+    (argv, cwd, sorted env keys, fd count). `FAKE_CLAUDE_DIAG_FILE` keeps only the last worker.
+  - Mutation checks, each reverted afterwards: a follower-written run event fails test 1; a
+    `follow` that touches the runtime root fails the zero-write test; an `FdSink` without the
+    poll/reserve check hangs the `ControllerError` variant past its 30 s bound; a renderer
+    writing through buffered `sys.stderr` fails tests 4 (exit 120) and 4a (hang).
+  - **Open for the reviewer:** a `follow` whose stdout reader is gone dies with a
+    `BrokenPipeError` traceback and exit 120 (CP6 left this to CP7). The worker and the run are
+    unaffected, which is all test 3 asserts. The plan says `follow` uses only `0`/`2`/`20`
+    (ADR 0002, CP10), but it names no code for a broken stdout. CP7 is test-only, so the
+    behaviour is recorded here, not changed.
+  - Verified: the narrow set `tests.test_observation_equivalence tests.test_lifecycle_orchestration
+    tests.test_lock tests.test_routing tests.test_resume tests.test_golden_plan_stage_decisions`
+    passed (188 tests). The new module passed 5 sequential runs and 4 concurrent ones.
+    `tests.test_worker tests.test_job tests.test_cli tests.test_observe
+    tests.test_package_structure` passed (332) after the `fake_claude` change.
+
 **Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP7 or CP8).
+next ready checkpoint (CP8).

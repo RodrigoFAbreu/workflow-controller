@@ -23,6 +23,13 @@ Recognised environment variables (all optional):
     (after the invocation counter). This is how the launch-mechanics tests (cwd,
     closed stdin, no inherited ``PYTHONPATH``) observe the child's own
     view of the world without needing it to also be the case under test.
+``FAKE_CLAUDE_DIAG_LOG``
+    If set, one JSON line per invocation is appended to this path, right
+    after ``FAKE_CLAUDE_DIAG_FILE``'s record: ``argv``, ``cwd``,
+    ``env_keys`` (the sorted names of the environment) and ``fd_count``
+    (the number of open descriptors) -- every worker of a multi-job run,
+    in launch order, so an equivalence test can compare each worker's own
+    view (release-runtime-observability CP7).
 ``FAKE_CLAUDE_HANG``
     If set, sleep forever (a real ``SIGKILL`` is required to end it) --
     used by the timeout/interruption tests.
@@ -179,6 +186,19 @@ def _write_diagnostics() -> None:
     }
     with open(diag_file, "w") as fh:
         json.dump(diag, fh)
+
+
+def _append_diagnostics_log() -> None:
+    log_file = os.environ.get("FAKE_CLAUDE_DIAG_LOG")
+    if not log_file:
+        return
+    try:
+        fd_count = len(os.listdir("/proc/self/fd"))
+    except OSError:
+        fd_count = None
+    entry = {"argv": sys.argv[1:], "cwd": os.getcwd(), "env_keys": sorted(os.environ), "fd_count": fd_count}
+    with open(log_file, "a") as fh:
+        fh.write(json.dumps(entry) + "\n")
 
 
 #: The session id every default event carries.
@@ -438,6 +458,7 @@ def main() -> None:
     _refuse_stream_json_without_verbose()
     _count_invocation()
     _write_diagnostics()
+    _append_diagnostics_log()
     _check_required_file()
     _hang_until_file()
     _run_script()

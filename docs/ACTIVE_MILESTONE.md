@@ -320,5 +320,46 @@ The previous milestone's narrative is archived at
     `tests.test_worker tests.test_job tests.test_cli tests.test_observe
     tests.test_package_structure` passed (332) after the `fake_claude` change.
 
+- **CP8 -- release tooling: complete.**
+  - New stdlib-only `tools/release.py`, which puts the repository root on `sys.path` and imports
+    `controller.buildinfo` and `controller.version`. Every refusal exits `1` with one stderr line,
+    `release.py <command>: refused: <check>: <detail>`. The subcommands:
+    - `version`;
+    - `verify-tag TAG`: checks `tag format` and `tag/version`, and the `pyproject version source`
+      check requires dynamic `version`, no static `version`, and
+      `attr = "controller.version.__version__"`;
+    - `verify-wheel WHEEL (--tag TAG | --local) --commit SHA`. Its checks, in order: `wheel filename`,
+      `wheel metadata` (`Name`, `Version`), `entry point` (parsed `console_scripts`),
+      `required files`, `forbidden files` (`SOURCE_PIN.json`, `__pycache__`, `*.pyc`), `build info`,
+      `package digest` (recomputed from the wheel's `controller/` member bytes), `source commit`,
+      `source dirty` and `build origin`;
+    - `check-unpublished TAG`: runs `gh release view TAG --json tagName` and passes only when it
+      exits non-zero with a stderr line that is exactly `release not found`. Exit 0 is refused as
+      `already published`. Anything else, including `gh` being absent, is refused as
+      `release lookup undecidable`;
+    - `verify-tag-commit TAG SHA`: runs `git ls-remote origin refs/tags/TAG refs/tags/TAG^{}` and
+      uses the peeled line when there is one. A different commit is refused as `tag moved`. A
+      non-zero exit, no direct line, a malformed line, an unexpected or duplicated ref, or `git`
+      being absent is refused as `tag commit undecidable`;
+    - `checksums DIR`: covers regular files only, sorted, in `sha256sum` format. `SHA256SUMS` is
+      excluded by name, and the file is written atomically.
+  - `controller/buildinfo.py`: the canonical digest form is now `digest_of_file_hashes`, which
+    `compute_package_digest` and `verify-wheel` share. This is a refactor with no digest change.
+  - **Defect fixed in CP1 code:** `buildinfo`'s `SEMVER_RE`/`_COMMIT_RE`/`_DIGEST_RE` checks used
+    `.match` with a `$` anchor, which also matches before a trailing newline. So
+    `version_for_tag("v1.1.0\n")` returned `"1.1.0\n"`, and a `source_commit` or `package_digest`
+    with a trailing newline validated. All five sites now use `.fullmatch`, and
+    `tests.test_buildinfo` covers each one.
+  - New `tests/test_release_tools.py`. `verify-wheel` runs against a local wheel and a release
+    wheel, both built once per class from a committed `build_checkout` clone, and against copies
+    of them mutated in-test. `gh` and Git are injected runners. The test covers every plan case,
+    plus the one-line CLI refusal and `version`.
+  - Mutation checks, each reverted afterwards, were all caught: skipping the digest comparison;
+    ignoring the peeled line; treating any `gh` failure as not found; not excluding
+    `SHA256SUMS`; and reverting `fullmatch` in `buildinfo`.
+  - Verified: `tests.test_release_tools tests.test_buildinfo` passed (67 tests,
+    `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, no skips). `tests.test_identity tests.test_runtime
+    tests.test_package_structure` passed, and so did `tests.test_packaged_runtime` (9).
+
 **Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
-next ready checkpoint (CP8).
+next ready checkpoint (CP9).

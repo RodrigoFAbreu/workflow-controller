@@ -58,13 +58,13 @@ class BuildInfo:
 
 
 def tag_for_version(version: str) -> str:
-    if not isinstance(version, str) or not SEMVER_RE.match(version):
+    if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
         raise ValueError(f"version {version!r} is not MAJOR.MINOR.PATCH")
     return f"v{version}"
 
 
 def version_for_tag(tag: str) -> str:
-    if not isinstance(tag, str) or not tag.startswith("v") or not SEMVER_RE.match(tag[1:]):
+    if not isinstance(tag, str) or not tag.startswith("v") or not SEMVER_RE.fullmatch(tag[1:]):
         raise ValueError(f"tag {tag!r} is not vMAJOR.MINOR.PATCH")
     return tag[1:]
 
@@ -86,6 +86,13 @@ def compute_package_digest(package_dir: Path) -> str:
             if not stat.S_ISREG(os.lstat(path).st_mode):
                 continue
             entries[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digest_of_file_hashes(entries)
+
+
+def digest_of_file_hashes(entries: dict[str, str]) -> str:
+    """The canonical form ``compute_package_digest`` hashes: ``entries``
+    maps each included file's relative POSIX path to the SHA-256 hex of its
+    bytes. ``tools/release.py`` feeds it a wheel's members directly."""
     canonical = json.dumps(entries, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -106,13 +113,13 @@ def validate_build_info(obj: object, *, expected_version: str) -> BuildInfo:
         raise ValueError(f"build info name {obj['name']!r} is not {PACKAGE_NAME!r}")
 
     version = obj["version"]
-    if not isinstance(version, str) or not SEMVER_RE.match(version):
+    if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
         raise ValueError(f"build info version {version!r} is not MAJOR.MINOR.PATCH")
     if version != expected_version:
         raise ValueError(f"build info version {version!r} does not match {expected_version!r}")
 
     source_commit = obj["source_commit"]
-    if source_commit is not None and not (isinstance(source_commit, str) and _COMMIT_RE.match(source_commit)):
+    if source_commit is not None and not (isinstance(source_commit, str) and _COMMIT_RE.fullmatch(source_commit)):
         raise ValueError(f"build info source_commit {source_commit!r} is not null or a 40-hex commit")
     source_dirty = obj["source_dirty"]
     if source_dirty is not None and type(source_dirty) is not bool:
@@ -122,7 +129,7 @@ def validate_build_info(obj: object, *, expected_version: str) -> BuildInfo:
                          "(unknown provenance) or both known")
 
     package_digest = obj["package_digest"]
-    if not (isinstance(package_digest, str) and _DIGEST_RE.match(package_digest)):
+    if not (isinstance(package_digest, str) and _DIGEST_RE.fullmatch(package_digest)):
         raise ValueError(f"build info package_digest {package_digest!r} is not a 64-hex digest")
 
     build_origin = obj["build_origin"]

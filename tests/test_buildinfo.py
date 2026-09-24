@@ -66,10 +66,10 @@ class VersionSourceTest(unittest.TestCase):
     def test_tag_round_trip(self) -> None:
         self.assertEqual(buildinfo.tag_for_version("1.2.3"), "v1.2.3")
         self.assertEqual(buildinfo.version_for_tag("v1.2.3"), "1.2.3")
-        for bad in ("1.2", "01.2.3", "1.2.3-rc.1", "1.2.3rc1"):
+        for bad in ("1.2", "01.2.3", "1.2.3-rc.1", "1.2.3rc1", "1.2.3\n"):
             with self.assertRaises(ValueError):
                 buildinfo.tag_for_version(bad)
-        for bad in ("1.2.3", "v1.2", "V1.2.3", "v1.2.3-rc.1"):
+        for bad in ("1.2.3", "v1.2", "V1.2.3", "v1.2.3-rc.1", "v1.2.3\n"):
             with self.assertRaises(ValueError):
                 buildinfo.version_for_tag(bad)
 
@@ -174,6 +174,12 @@ class ValidateBuildInfoTest(unittest.TestCase):
         self._rejects(_record(source_commit=None), "null together")
         self._rejects(_record(build_origin="nightly"), "build_origin")
         self._rejects(_record(release_tag=f"v{VERSION}"), "local build must not carry")
+
+    def test_rejects_a_trailing_newline_in_any_pattern_field(self) -> None:
+        self._rejects(_record(source_commit=COMMIT + "\n"), "source_commit")
+        self._rejects(_record(package_digest=DIGEST + "\n"), "package_digest")
+        self._rejects(_record(version=VERSION + "\n"), "MAJOR.MINOR.PATCH",
+                      expected_version=VERSION + "\n")
 
 
 def _clean_env(**extra: str) -> dict:

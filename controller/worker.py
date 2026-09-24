@@ -1,17 +1,19 @@
 """Fresh Claude worker abstraction (capability 4,
 ``docs/ACTIVE_MILESTONE.md``).
 
-``launch(task, *, cwd, permission_mode, timeout, claude_bin=None,
-pass_fds=(), on_spawn=None, model=None, effort=None, disallowed_tools=None)
--> WorkerResult`` is the whole launch entry point: it runs exactly the
-mechanism ``docs/ACTIVE_MILESTONE.md`` records as proven --
+``launch(task, *, cwd, permission_mode, timeout, stdout_path, stderr_path,
+claude_bin=None, pass_fds=(), on_spawn=None, on_group_drain=None,
+model=None, effort=None, disallowed_tools=None) -> WorkerResult`` is the
+whole launch entry point: it runs --
 
-    claude -p "<task>" --output-format json --permission-mode <mode> \\
-        [--model <model>] [--effort <effort>] \\
+    claude -p "<task>" --output-format stream-json --verbose \\
+        --permission-mode <mode> [--model <model>] [--effort <effort>] \\
         [--disallowedTools <tool>,<tool>] < /dev/null
 
-against ``cwd``, waits for it to finish (or times out), and classifies the
-result into exactly one of four outcomes. It never inspects, repairs, or
+against ``cwd``, with the worker's stdout and stderr written by the worker
+itself straight into two caller-created files, waits until it has returned
+control (or times out), and classifies the result into exactly one of four
+outcomes. It never inspects, repairs, or
 writes Workflow state; it never decides *what* task to run (that is
 ``controller.decision``); it is a pure launch-and-classify primitive
 ``controller.job`` (CP6) composes.
@@ -35,6 +37,16 @@ it. ``launch`` never passes ``--resume``/``-r``, ``--continue``/``-c``,
 ``--fork-session`` or ``--session-id``: every worker is a fresh session.
 The route itself is ``controller.routing``'s; this module only places it
 on the command line.
+
+``workflow-controller-release-runtime-observability`` CP4 streams the
+worker's output (``docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md``,
+"Streaming worker output"): ``stream-json`` events land in the durable log
+files as the worker produces them, with no pipe the Controller or a
+follower could apply back-pressure through. Control returns when the
+direct child has exited **and** its process group is empty (the group
+drain). The final ``result`` event is parsed strictly
+(:func:`_parse_worker_stream`) into the same fields the single JSON body
+carried before.
 """
 
 from __future__ import annotations
@@ -45,6 +57,7 @@ import os
 import signal
 import socket
 import subprocess
+import time
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
@@ -56,8 +69,8 @@ from controller.errors import UserOnlyCommandError, WorkerLaunchError
 #: ``INTERRUPTED`` is checked first (a timeout, or termination by signal --
 #: a negative return code), then ``FAILURE`` (non-zero exit, or exit 0 with
 #: parsed ``is_error: true``), then ``AMBIGUOUS`` (exit 0 but stdout is not
-#: a single parseable JSON object carrying the fields the Controller
-#: needs), and only then ``SUCCESS``.
+#: a well-formed event stream ending in one ``result`` event carrying the
+#: fields the Controller needs), and only then ``SUCCESS``.
 SUCCESS = "SUCCESS"
 FAILURE = "FAILURE"
 AMBIGUOUS = "AMBIGUOUS"
@@ -103,7 +116,7 @@ _TRAILING_PUNCTUATION = "`'\",.;:)]}"
 #: until the backtick is stripped first.
 _LEADING_MARKERS = "`/"
 
-#: The two required fields a parsed worker-stdout JSON object must carry
+#: The two required fields the parsed ``result`` event must carry
 #: for its result to be decidable at all (``docs/ACTIVE_MILESTONE.md``'s
 #: own field list; every other field is optional and defaults to
 #: ``None`` when absent).
@@ -157,15 +170,14 @@ class WorkerResult:
     :data:`AMBIGUOUS`/:data:`INTERRUPTED`. ``returncode`` is the worker
     process's own exit status (negative when it was terminated by a
     signal, including the Controller's own timeout-driven ``SIGKILL``).
-    ``stdout``/``stderr`` are the worker's raw, undecoded-error-tolerant
-    text streams, preserved verbatim so a human can read exactly what the
-    worker said -- a later checkpoint (CP6) is what writes them to
-    ``.controller/jobs/<job_id>/worker.std{out,err}``, this module never
-    writes any file itself. ``raw_json`` is the full parsed JSON result
-    object when one was decidable (``None`` otherwise); the eight named
-    fields below are that same object's own fields, extracted for
-    convenience and ``None`` wherever the object was undecidable or the
-    field was absent.
+    ``stdout``/``stderr`` are the contents of the two files the worker
+    wrote itself (``launch``'s ``stdout_path``/``stderr_path``), decoded as
+    UTF-8 with ``errors="replace"`` and preserved verbatim so a human can
+    read exactly what the worker said; this module never writes those
+    files. ``raw_json`` is the stream's final ``result`` event when the
+    stream was decidable (``None`` otherwise); the eight named fields below
+    are that same event's own fields, extracted for convenience and
+    ``None`` wherever the stream was undecidable or the field was absent.
     """
 
     outcome: str
@@ -185,55 +197,52 @@ class WorkerResult:
     raw_json: dict | None
 
 
-def _parse_worker_stdout(stdout: str) -> dict | None:
-    """``REQ-26``: delimit the worker-stdout JSON classification's
-    candidate span over the worker's own byte stream, rather than leaving
-    it implicit.
+def _parse_worker_stream(stdout: str) -> dict | None:
+    """The worker's final ``result`` event, parsed strictly from its
+    ``--output-format stream-json`` stdout, or ``None`` when the stream is
+    undecidable (which the caller classifies :data:`AMBIGUOUS`).
 
-    - ``stdout`` reaches this function already decoded with
-      ``errors="replace"`` (:func:`launch`'s own
-      ``subprocess.Popen(..., text=True, errors="replace")``), so a
-      non-UTF-8 byte in the worker's output degrades to the U+FFFD
-      replacement character rather than raising -- it then simply fails
-      to parse as JSON below, exactly like any other malformed byte
-      content, rather than crashing the Controller mid-classification.
-    - the candidate span is ``stdout`` with **exactly one** trailing
-      newline (``\\r\\n`` or ``\\n``) stripped -- ``--output-format json``
-      emits its JSON body as a single terminated line, and this is the
-      only trim this function performs. It is never a general
-      ``.strip()``: leading or embedded whitespace inside a malformed
-      body is preserved and still fails to parse, rather than being
-      trimmed into something that accidentally does.
-    - the whole candidate span is parsed as **exactly one** JSON
-      document. Python's own ``json.loads`` already refuses trailing
-      "extra data" after a complete value, so two concatenated JSON
-      documents (or one valid document followed by trailing prose) fail
-      to parse as a single candidate and fall through to ``None`` here --
-      classified :data:`AMBIGUOUS` by the caller -- rather than either
-      document being silently selected.
-
-    Returns the parsed object only when it is a JSON *object* (a Python
-    ``dict``); any other JSON value (a list, string, number, boolean or
-    ``null``) is not the shape the Controller needs and also returns
-    ``None``.
+    - ``stdout`` is already decoded with ``errors="replace"``, so a
+      non-UTF-8 byte degrades to U+FFFD and then fails to parse below,
+      like any other malformed content, rather than raising.
+    - The text is split on ``\\n``, with one trailing ``\\r`` stripped per
+      line. Only a single final empty segment (the terminator of the last
+      line) is ignored.
+    - Every other line must parse, by itself, as exactly one JSON
+      **object**. An empty line, a non-JSON line (``json.loads`` refuses
+      trailing extra data, so two documents on one line fail too) or a
+      non-object line makes the whole stream undecidable -- no line is
+      ever skipped to reach a result.
+    - Exactly one event must have ``"type": "result"``, and it must be
+      the last line. That event is returned.
     """
-    if stdout.endswith("\r\n"):
-        candidate = stdout[:-2]
-    elif stdout.endswith("\n"):
-        candidate = stdout[:-1]
-    else:
-        candidate = stdout
-    try:
-        parsed = json.loads(candidate)
-    except (json.JSONDecodeError, ValueError):
+    lines = stdout.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    events = []
+    for line in lines:
+        if line.endswith("\r"):
+            line = line[:-1]
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(event, dict):
+            return None
+        events.append(event)
+    results = [index for index, event in enumerate(events) if event.get("type") == "result"]
+    if results != [len(events) - 1]:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    return events[-1]
 
 
-def _classify(returncode: int | None, parsed: dict | None) -> str:
+def _classify(returncode: int | None, parsed: dict | None, *, timed_out: bool) -> str:
     """The fixed classification order the plan's table states, applied to
-    an already-completed (or already-reaped-after-timeout) process."""
-    if returncode is None or returncode < 0:
+    an already-completed (or already-reaped-after-timeout) process.
+    ``timed_out`` is checked first: a worker whose process group outlived
+    the ``timeout`` budget is ``INTERRUPTED`` even when the direct child
+    itself exited ``0`` with a well-formed stream."""
+    if timed_out or returncode is None or returncode < 0:
         return INTERRUPTED
     if returncode != 0:
         return FAILURE
@@ -266,15 +275,72 @@ def _kill_process_group(pid: int) -> None:
         pass
 
 
+#: How often the group drain rescans the worker's process group.
+_DRAIN_POLL_SECONDS = 0.2
+
+#: How often, and for how long at most, :func:`launch` rescans the group
+#: after the phase-2 kill before it stops waiting for the scan to report it
+#: empty.
+_DRAIN_KILL_POLL_SECONDS = 0.05
+_DRAIN_KILL_SETTLE_SECONDS = 2.0
+
+
+def _kill_drained_group(pgid: int) -> None:
+    """``SIGKILL`` the process group ``pgid`` once its leader has been
+    reaped. :func:`_kill_process_group` cannot do this: ``os.getpgid`` of
+    the reaped leader raises ``ProcessLookupError`` and it would signal
+    nothing. ``pgid`` is the leader's pid (``start_new_session=True``), and
+    Linux never reuses a pid that still names a process group, so the
+    signal cannot reach an unrelated group. Tolerates the group already
+    being empty."""
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def _group_members(worker_process: WorkerProcess) -> tuple[bool, list[int]]:
+    """``(empty, members)`` for the worker's process group after its
+    leader was reaped, through :func:`process_test`. Only ``not live``
+    means empty: under the ``killpg`` form ``possibly live`` keeps the
+    drain waiting (a zombie member included), as
+    :func:`assess_worker_liveness` never reads it as gone. ``members`` is
+    the ``/proc`` member scan's list, and empty under the ``killpg`` form,
+    which has none."""
+    answer = process_test(worker_process.pid, worker_process.pid, worker_process.start_ticks)
+    return answer.answer == NOT_LIVE, list(answer.members)
+
+
+def _end_drained_group(worker_process: WorkerProcess) -> None:
+    """The phase-2 kill: ``SIGKILL`` the group, then rescan it until it is
+    reported empty, for at most :data:`_DRAIN_KILL_SETTLE_SECONDS`. The
+    members are not the Controller's children, so it cannot reap them; a
+    group still reported non-empty after the bound (the ``killpg`` form
+    cannot tell a zombie from a running process; a ``/proc`` member may be
+    in uninterruptible sleep) is not waited for further."""
+    _kill_drained_group(worker_process.pid)
+    deadline = time.monotonic() + _DRAIN_KILL_SETTLE_SECONDS
+    while not _group_members(worker_process)[0] and time.monotonic() < deadline:
+        time.sleep(_DRAIN_KILL_POLL_SECONDS)
+
+
+def _read_stream(path: str | Path) -> str:
+    with open(path, "rb") as fh:
+        return fh.read().decode("utf-8", errors="replace")
+
+
 def launch(
     task: str,
     *,
     cwd: str | Path,
     permission_mode: str,
     timeout: float | None,
+    stdout_path: str | Path,
+    stderr_path: str | Path,
     claude_bin: str | None = None,
     pass_fds: Iterable[int] = (),
     on_spawn: Callable[["WorkerProcess"], None] | None = None,
+    on_group_drain: Callable[[int, list[int]], None] | None = None,
     model: str | None = None,
     effort: str | None = None,
     disallowed_tools: Iterable[str] | None = None,
@@ -288,10 +354,32 @@ def launch(
     disposable throwaway repository -- the caller states its posture
     explicitly every time.
 
+    ``stdout_path``/``stderr_path`` are files the caller has already
+    created, empty. Each is opened ``O_WRONLY | O_APPEND`` and handed to
+    the worker as its stdout/stderr; ``launch`` closes its own copies once
+    the worker is spawned. The worker writes its ``stream-json`` events
+    there itself, so the file is the durable log as it is produced, and
+    nothing the Controller does can block or signal the worker through it.
+    After the wait both files are read back (UTF-8, ``errors="replace"``)
+    into ``WorkerResult.stdout``/``.stderr``.
+
+    **Returning control** is two phases under one ``timeout`` budget:
+    ``proc.wait()`` for the direct child, then a group drain that rescans
+    the worker's process group every :data:`_DRAIN_POLL_SECONDS` until
+    :func:`process_test` reports it ``not live`` (a zombie counts as gone;
+    under the ``killpg`` form ``possibly live`` keeps waiting). A
+    descendant that stays in the group keeps the Controller waiting; one
+    that left it (``setsid``) does not.
+
     ``timeout`` is ``None`` for no limit: the wait lasts until the worker
     returns control, however long or silent it is. A number is the
-    operator's explicit opt-in; when it expires, the whole process group is
-    killed and reaped before the result is classified.
+    operator's explicit opt-in; when it expires in phase 1 the whole
+    process group is killed and the direct child reaped; when it expires in
+    phase 2 the group is killed through :func:`_kill_drained_group` (the
+    leader is already reaped, so ``os.getpgid`` would find nothing). Either
+    way the result is ``INTERRUPTED``, and ``returncode`` stays the direct
+    child's real exit status -- ``INTERRUPTED`` with ``returncode == 0`` is
+    a worker that exited cleanly but whose group outlived the budget.
 
     ``pass_fds`` are descriptors the worker inherits (``controller.job``
     passes the lifecycle lock's, so an orphaned worker keeps the lock until
@@ -302,6 +390,13 @@ def launch(
     then. If it raises anything (``KeyboardInterrupt`` included), the
     worker's process group is killed and reaped, and then the original
     exception propagates unchanged, so no untracked worker survives.
+
+    ``on_group_drain``, when given, is called once, as
+    ``on_group_drain(pid, remaining_pids)``, when phase 1 ends and the
+    group still has live members: ``remaining_pids`` is the ``/proc``
+    member scan's list, or ``[]`` under the ``killpg`` form, which has
+    none. It has ``on_spawn``'s contract: if it raises, the group is ended
+    by the phase-2 kill and the exception propagates.
 
     ``model``/``effort`` add ``--model``/``--effort`` when not ``None``,
     passed through unvalidated (the ``claude`` CLI is the authority, as for
@@ -316,17 +411,19 @@ def launch(
     *selects* such a command; this makes it impossible to *execute* one
     even through a hand-written task string). Raises
     :class:`~controller.errors.WorkerLaunchError` if the worker process
-    itself could not be started at all (an ``OSError`` from
-    ``subprocess.Popen``, e.g. ``claude_bin`` does not exist). Every other
-    outcome -- including a non-zero exit, a malformed result, or a
-    timeout/signal interruption -- is not a raised exception but the
-    returned :class:`WorkerResult`'s own ``outcome``.
+    itself could not be started at all (an ``OSError`` from opening the
+    stream files or from ``subprocess.Popen``, e.g. ``claude_bin`` does not
+    exist). Every other outcome -- including a non-zero exit, a malformed
+    stream, or a timeout/signal interruption -- is not a raised exception
+    but the returned :class:`WorkerResult`'s own ``outcome``.
     """
     _assert_not_user_only(task)
 
     resolved_claude_bin = claude_bin or "claude"
+    # `stream-json` in print mode requires `--verbose` (the CLI refuses it
+    # otherwise, before any request).
     args = [
-        resolved_claude_bin, "-p", task, "--output-format", "json",
+        resolved_claude_bin, "-p", task, "--output-format", "stream-json", "--verbose",
         "--permission-mode", permission_mode,
     ]
     # CP6: the worker's route. The disallow list goes last -- the CLI's
@@ -348,15 +445,16 @@ def launch(
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
 
+    stream_fds: list[int] = []
     try:
+        for path in (stdout_path, stderr_path):
+            stream_fds.append(os.open(path, os.O_WRONLY | os.O_APPEND))
         proc = subprocess.Popen(
             args,
             cwd=cwd,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            errors="replace",
+            stdout=stream_fds[0],
+            stderr=stream_fds[1],
             start_new_session=True,
             env=env,
             pass_fds=tuple(pass_fds),
@@ -366,32 +464,66 @@ def launch(
             f"could not launch the Claude worker ({resolved_claude_bin!r}): {exc}",
             evidence={"claude_bin": resolved_claude_bin, "os_error": str(exc)},
         ) from exc
+    finally:
+        for fd in stream_fds:
+            os.close(fd)
 
+    worker_process = capture_worker_process(proc.pid)
     if on_spawn is not None:
         try:
-            on_spawn(capture_worker_process(proc.pid))
+            on_spawn(worker_process)
         except BaseException:
             # A process exists, so this is never "the worker never
             # started": end the whole group and reap it before the
             # original error propagates, so no untracked worker survives.
             _kill_process_group(proc.pid)
-            proc.communicate()
+            proc.wait()
             raise
 
+    deadline = None if timeout is None else time.monotonic() + timeout
+    timed_out = False
+
+    def remaining() -> float | None:
+        return None if deadline is None else max(0.0, deadline - time.monotonic())
+
+    # Phase 1: the direct child.
     try:
-        stdout, stderr = proc.communicate(timeout=timeout)
+        proc.wait(timeout=remaining())
     except subprocess.TimeoutExpired:
-        # `communicate()`'s own timeout handling never kills the child (see
-        # its docstring's recommended usage) -- and killing only the direct
-        # child would leave a process-group sibling the worker itself
-        # spawned still running and holding the target repository, so the
-        # whole group is torn down before reaping.
+        # Kill the whole group, not only the direct child, so no
+        # process-group sibling the worker spawned keeps running and
+        # holding the target repository; then reap the child.
+        timed_out = True
         _kill_process_group(proc.pid)
-        stdout, stderr = proc.communicate()
+        proc.wait()
+
+    # Phase 2: the group drain. The leader is reaped from here on, so
+    # only `_kill_drained_group` can end the group.
+    if not timed_out:
+        empty, members = _group_members(worker_process)
+        if not empty and on_group_drain is not None:
+            try:
+                on_group_drain(proc.pid, members)
+            except BaseException:
+                _end_drained_group(worker_process)
+                raise
+        while not empty:
+            wait = _DRAIN_POLL_SECONDS
+            left = remaining()
+            if left is not None:
+                if left <= 0:
+                    timed_out = True
+                    _end_drained_group(worker_process)
+                    break
+                wait = min(wait, left)
+            time.sleep(wait)
+            empty = _group_members(worker_process)[0]
 
     returncode = proc.returncode
-    parsed = _parse_worker_stdout(stdout)
-    outcome = _classify(returncode, parsed)
+    stdout = _read_stream(stdout_path)
+    stderr = _read_stream(stderr_path)
+    parsed = _parse_worker_stream(stdout)
+    outcome = _classify(returncode, parsed, timed_out=timed_out)
     fields = _extract_fields(parsed)
 
     return WorkerResult(

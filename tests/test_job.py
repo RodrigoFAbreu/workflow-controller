@@ -25,8 +25,10 @@ import io
 import json
 import os
 import signal
+import stat
 import sys
 import threading
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -43,7 +45,7 @@ from controller.errors import (  # noqa: E402
 )
 from controller.decision import Action, NO_PHASE, Decision, phase_from_wire  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT, SOURCE_KIND_WORKTREE  # noqa: E402
-from tests import fixtures, process_fixtures  # noqa: E402
+from tests import fake_claude, fixtures, process_fixtures  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -604,6 +606,8 @@ class LaunchPathTest(unittest.TestCase):
             "worker_route",
             # Release-runtime-observability CP2.
             "controller_runtime",
+            # Release-runtime-observability CP4.
+            "worker_streams",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -955,8 +959,8 @@ class WorkerRouteTest(unittest.TestCase):
             self.assertEqual(write["worker_route"], expected, write["status"])
         self.assertEqual(record["worker_route"], expected)
         # An inherit role passes neither flag, and no disallow list.
-        self.assertEqual(argv, ["-p", "/milestone-plan wi-1", "--output-format", "json",
-                                "--permission-mode", "auto"])
+        self.assertEqual(argv, ["-p", "/milestone-plan wi-1", "--output-format", "stream-json",
+                                "--verbose", "--permission-mode", "auto"])
 
     def test_each_role_reaches_the_record_and_the_worker_argv(self) -> None:
         opus = ("claude-opus-5-5", "xhigh")
@@ -1951,10 +1955,10 @@ class ProseOverStateTest(_LifecycleCase):
     code reads ``WorkerResult.result``/``raw_json`` except ``_worker_dict``."""
 
     def test_a_success_claim_over_an_unchanged_state_fails(self) -> None:
-        body = json.dumps({
-            "session_id": "s", "is_error": False, "subtype": "success",
-            "result": "Done: the work item is now at AWAITING_LOCAL_PLAN_REVIEW and the bundle is generated.",
-        })
+        body = fake_claude.stream_text([fake_claude.result_event(
+            session_id="s",
+            result="Done: the work item is now at AWAITING_LOCAL_PLAN_REVIEW and the bundle is generated.",
+        )])
         with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_STDOUT": body}):
             record = self._step(timeout=10)
         self.assertEqual(record["worker_outcome"], "SUCCESS")
@@ -1972,6 +1976,168 @@ class ProseOverStateTest(_LifecycleCase):
                     if isinstance(node, ast.Attribute) and node.attr in ("result", "raw_json"):
                         readers.append((path.name, func.name, node.attr))
         self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result")])
+
+
+class StreamingJobTest(_LifecycleCase):
+    """``workflow-controller-release-runtime-observability`` CP4: the
+    worker's stream files are created before spawn and named in the
+    ``LAUNCHED`` record, and the group drain is recorded and announced."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.descendant = self.tmp_root / "descendant.json"
+        self.addCleanup(self._end_descendant)
+
+    def _end_descendant(self) -> None:
+        try:
+            pid = json.loads(self.descendant.read_text())["pid"]
+        except (OSError, ValueError, KeyError):
+            return
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+
+    def _descendant_env(self, spec: str) -> dict:
+        return {"FAKE_CLAUDE_DESCENDANT": spec, "FAKE_CLAUDE_DESCENDANT_FILE": str(self.descendant)}
+
+    def _spied_step(self, env: dict | None = None, **kwargs) -> tuple[dict, list[tuple[float, dict]]]:
+        """Run one step, recording ``(time.time(), record)`` for every job
+        record write, and every stream file's mode at the first
+        ``LAUNCHED`` write."""
+        writes: list[tuple[float, dict]] = []
+        real_write_json = job.runtime.write_json
+
+        def spy(runtime_root, rel_path, obj):
+            if str(rel_path).startswith("jobs/") and obj.get("status") == job.STATUS_LAUNCHED \
+                    and not any(w.get("status") == job.STATUS_LAUNCHED for _t, w in writes):
+                streams = obj.get("worker_streams") or {}
+                self.stream_modes = {key: stat.S_IMODE(os.stat(streams[key]).st_mode)
+                                     for key in ("stdout_path", "stderr_path") if key in streams}
+                self.invocations_at_launched = len(_read_lines(self.invocations))
+            writes.append((time.time(), copy.deepcopy(obj)))
+            return real_write_json(runtime_root, rel_path, obj)
+
+        with unittest.mock.patch.dict("os.environ", env or {}), \
+                unittest.mock.patch.object(job.runtime, "write_json", spy):
+            record = self._step(**kwargs)
+        return record, writes
+
+    def test_worker_streams_is_in_the_first_launched_flush_before_spawn(self) -> None:
+        record, writes = self._spied_step(timeout=10)
+        launched = [w for _t, w in writes if w.get("status") == job.STATUS_LAUNCHED]
+        first = launched[0]
+        self.assertNotIn("worker_process", first)
+        self.assertEqual(self.invocations_at_launched, 0, "the worker ran before the LAUNCHED flush")
+        streams = first["worker_streams"]
+        job_dir = (self.runtime_root / "jobs" / record["job_id"]).resolve()
+        self.assertEqual(streams, {
+            "format": "stream-json",
+            "stdout_path": str(job_dir / "worker.stdout"),
+            "stderr_path": str(job_dir / "worker.stderr"),
+            "events_path": str(job_dir / "events.jsonl"),
+        })
+        self.assertEqual(self.stream_modes, {"stdout_path": 0o600, "stderr_path": 0o600})
+        self.assertEqual(record["worker_streams"], streams)
+        self.assertEqual(record["worker"]["stdout_path"], streams["stdout_path"])
+        self.assertEqual(record["worker"]["stderr_path"], streams["stderr_path"])
+        written = [json.loads(line) for line in Path(streams["stdout_path"]).read_text().splitlines()]
+        self.assertEqual([event["type"] for event in written],
+                         [event["type"] for event in fake_claude.default_events()])
+        self.assertEqual(written[0]["cwd"], str(self.root))
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertNotIn("worker_group_drain", record)
+        self.assertFalse(any("worker_group_drain" in w for _t, w in writes))
+
+    def test_a_stream_file_creation_failure_is_worker_not_started(self) -> None:
+        def preexisting(job_id: str) -> None:
+            job_dir = self.runtime_root / "jobs" / job_id
+            job_dir.mkdir(parents=True)
+            (job_dir / "worker.stdout").write_text("")
+
+        preexisting("20260101T000000Z-00000001")
+        with unittest.mock.patch.object(job, "_new_job_id", return_value="20260101T000000Z-00000001"):
+            with self.assertRaises(WorkerLaunchError) as ctx:
+                self._step(timeout=10)
+        [record] = self._records()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        self.assertNotIn("worker_streams", record)
+        self.assertEqual(record["reconciliation_evidence"], {
+            "code": job.WORKER_NOT_STARTED_CODE, "error": "WorkerLaunchError",
+            "message": ctx.exception.message, "evidence": ctx.exception.evidence,
+        })
+        self.assertIn("worker.stdout", ctx.exception.message)
+        self.assertEqual(_read_lines(self.invocations), [], "a worker was invoked")
+
+        preexisting("20260101T000000Z-00000002")
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(job, "_new_job_id", return_value="20260101T000000Z-00000002"), \
+                unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: self._step(timeout=10)), \
+                contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", str(self.root)]), cli.EXIT_FAIL_CLOSED)
+        lines = stderr.getvalue().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("error: "), lines)
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertEqual(_read_lines(self.invocations), [])
+
+    def test_a_same_group_descendant_is_drained_visibly_and_verification_waits_for_it(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            record, writes = self._spied_step(env=self._descendant_env("group-closed:2"), timeout=30)
+        descendant = json.loads(self.descendant.read_text())
+        self.assertIn("exited_at", descendant)
+        pid = record["worker_process"]["pid"]
+        lines = stderr.getvalue().splitlines()
+        self.assertEqual(lines, [
+            f"worker pid {pid} exited; waiting for 1 process(es) still in its process group: {descendant['pid']}",
+        ])
+        drained = [w for _t, w in writes if "worker_group_drain" in w]
+        self.assertEqual(drained[0]["status"], job.STATUS_LAUNCHED)
+        self.assertEqual(drained[0]["worker_group_drain"]["remaining_pids"], [descendant["pid"]])
+        self.assertIsInstance(drained[0]["worker_group_drain"]["direct_child_exited_at"], str)
+        completed_at = next(t for t, w in writes if w.get("status") == job.STATUS_COMPLETED)
+        self.assertGreater(completed_at, descendant["exited_at"])
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertEqual(record["worker_group_drain"], drained[0]["worker_group_drain"])
+
+    def test_a_timeout_during_the_drain_is_interrupted_with_the_real_exit_code(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            record, _writes = self._spied_step(env=self._descendant_env("group-closed:30"), timeout=3)
+        descendant = json.loads(self.descendant.read_text())
+        self.assertNotIn("exited_at", descendant)
+
+        def gone() -> bool:
+            stat_ = process_fixtures.read_stat(descendant["pid"])
+            return stat_ is None or stat_[0] == "Z"
+
+        self.assertTrue(process_fixtures.wait_until(gone, timeout=5))
+        self.assertEqual(record["worker_outcome"], "INTERRUPTED")
+        self.assertEqual(record["worker"]["exit_code"], 0)
+
+    def test_a_drain_line_stderr_oserror_does_not_end_the_group(self) -> None:
+        class BrokenStderr(io.StringIO):
+            def write(self, text):
+                raise OSError(errno.EPIPE, "Broken pipe")
+
+        with contextlib.redirect_stderr(BrokenStderr()):
+            record, _writes = self._spied_step(env=self._descendant_env("group-closed:1"), timeout=30)
+        self.assertIn("exited_at", json.loads(self.descendant.read_text()))
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertIn("worker_group_drain", record)
+
+    def test_a_setsid_descendant_holding_the_lock_is_not_waited_for_and_the_next_step_exits_45(self) -> None:
+        started = time.monotonic()
+        record, _writes = self._spied_step(env=self._descendant_env("setsid:5"), timeout=30)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertNotIn("worker_group_drain", record)
+        self.assertNotIn("exited_at", json.loads(self.descendant.read_text()))
+        with self.assertRaises(LifecycleWorkerActiveError):
+            self._step(timeout=10)
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: self._step(timeout=10)), \
+                contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", str(self.root)]), cli.EXIT_WORKER_ACTIVE)
 
 
 if __name__ == "__main__":

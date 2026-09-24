@@ -175,6 +175,22 @@ def write_bytes(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) ->
     return _atomic_write(runtime_root, rel_path, data)
 
 
+def create_log_file(runtime_root: Path, rel_path: str | os.PathLike) -> Path:
+    """Create ``<runtime_root>/<rel_path>`` empty, with mode ``0o600``,
+    and return its resolved path -- the file a worker then writes its own
+    stream into (``workflow-controller-release-runtime-observability``
+    CP4's ``jobs/<job_id>/worker.std{out,err}``). Containment-checked like
+    every runtime write; ``O_CREAT | O_EXCL``, so an existing file is an
+    ``OSError`` rather than a log two jobs share. Parent directories are
+    created as needed."""
+    full_path = runtime_root / rel_path
+    _assert_contained(runtime_root, full_path)
+    full_path = full_path.resolve()
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    os.close(os.open(full_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+    return full_path
+
+
 def read_json(path: Path) -> dict | None:
     """Read and parse a JSON file, returning ``None`` if it does not exist.
     A malformed file raises ``json.JSONDecodeError`` (or ``OSError``) --

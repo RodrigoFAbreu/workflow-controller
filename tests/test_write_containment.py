@@ -112,15 +112,38 @@ def _is_read_only_os_open(callee: str, node: ast.Call) -> bool:
     return "os.O_RDONLY" in names and all(name in _READ_ONLY_OS_OPEN_FLAGS for name in names)
 
 
-def _write_call_description(node: ast.Call):
+#: The one append-only ``os.open`` form, and the only ``(module, function)``
+#: site it is accepted at (`workflow-controller-release-runtime-
+#: observability` CP4): ``worker.launch`` opens the worker's two stream
+#: files ``os.O_WRONLY | os.O_APPEND`` and hands the descriptors to the
+#: worker. It has no runtime root to check them against; containment is
+#: enforced where they are created (``runtime.create_log_file``, checked and
+#: ``O_EXCL``), and without ``O_CREAT``/``O_TRUNC`` this open cannot create
+#: or truncate anything. Any other flag, or the same form anywhere else, is
+#: still flagged.
+_APPEND_ONLY_OS_OPEN_FLAGS = {"os.O_WRONLY", "os.O_APPEND"}
+_APPEND_ONLY_OS_OPEN_SITES = {("worker.py", "launch")}
+
+
+def _is_append_only_os_open(callee: str, node: ast.Call) -> bool:
+    if callee != "os.open" or len(node.args) < 2:
+        return False
+    names = [_dotted_name(operand) for operand in _or_operands(node.args[1])]
+    return sorted(names) == sorted(_APPEND_ONLY_OS_OPEN_FLAGS)
+
+
+def _write_call_description(node: ast.Call, *, append_only_site: bool = False):
     """``(callee, description)`` if ``node`` is a recognized write-call
-    form, else ``None``."""
+    form, else ``None``. ``append_only_site`` accepts the append-only
+    ``os.open`` form (:data:`_APPEND_ONLY_OS_OPEN_SITES`)."""
     callee = _dotted_name(node.func)
     if callee is None:
         return None
     attr = callee.rsplit(".", 1)[-1]
 
     if _is_read_only_os_open(callee, node):
+        return None
+    if append_only_site and _is_append_only_os_open(callee, node):
         return None
 
     if attr == "open" or callee == "open":
@@ -165,10 +188,11 @@ def _is_exempt_runtime_api_call(callee: str) -> bool:
     return head == "runtime" and name in _EXEMPT_RUNTIME_API_NAMES
 
 
-def scan_module(source: str, *, exempt: bool) -> list[str]:
+def scan_module(source: str, *, exempt: bool, module: str | None = None) -> list[str]:
     """Return a violation description per unguarded write-call site found
     in ``source``. ``exempt=True`` (the module is ``runtime.py`` itself)
-    short-circuits to no violations."""
+    short-circuits to no violations. ``module`` is the file name, which
+    :data:`_APPEND_ONLY_OS_OPEN_SITES` is keyed on."""
     if exempt:
         return []
     tree = ast.parse(source)
@@ -182,7 +206,9 @@ def scan_module(source: str, *, exempt: bool) -> list[str]:
             if callee and _is_guard_call(callee):
                 guarded = True
                 continue
-            described = _write_call_description(call)
+            described = _write_call_description(
+                call, append_only_site=(module, func_node.name) in _APPEND_ONLY_OS_OPEN_SITES,
+            )
             if described is None:
                 continue
             write_callee, desc = described
@@ -202,7 +228,7 @@ class PackageWideWriteContainmentScanTest(unittest.TestCase):
     def test_no_unguarded_write_call_anywhere_under_controller(self) -> None:
         violations: dict[str, list[str]] = {}
         for path in sorted(CONTROLLER_DIR.glob("*.py")):
-            found = scan_module(path.read_text(), exempt=(path.name == _EXEMPT_FILENAME))
+            found = scan_module(path.read_text(), exempt=(path.name == _EXEMPT_FILENAME), module=path.name)
             if found:
                 violations[path.name] = found
         self.assertEqual(violations, {})
@@ -253,6 +279,27 @@ class SyntheticInstantiationTest(unittest.TestCase):
         source = (CONTROLLER_DIR / "lock.py").read_text()
         self.assertIn("os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)", source)
         self.assertEqual(scan_module(source, exempt=False), [])
+
+    def test_the_append_only_os_open_is_accepted_only_in_worker_launch(self) -> None:
+        """Release-runtime-observability CP4: ``os.O_WRONLY | os.O_APPEND``
+        is accepted in ``worker.py``'s ``launch`` and nowhere else, and any
+        added flag there is still flagged."""
+        accepted = "def launch(path):\n    return os.open(path, os.O_WRONLY | os.O_APPEND)\n"
+        self.assertEqual(scan_module(accepted, exempt=False, module="worker.py"), [])
+        self.assertEqual(len(scan_module(accepted, exempt=False, module="job.py")), 1)
+        self.assertEqual(len(scan_module(accepted, exempt=False)), 1)
+        elsewhere = accepted.replace("def launch", "def other")
+        self.assertEqual(len(scan_module(elsewhere, exempt=False, module="worker.py")), 1)
+        for flags in ("os.O_WRONLY | os.O_APPEND | os.O_CREAT", "os.O_WRONLY | os.O_APPEND | os.O_TRUNC",
+                      "os.O_WRONLY", "os.O_RDWR | os.O_APPEND", "flags"):
+            with self.subTest(flags=flags):
+                source = f"def launch(path, flags):\n    return os.open(path, {flags})\n"
+                self.assertEqual(len(scan_module(source, exempt=False, module="worker.py")), 1, flags)
+
+    def test_worker_launch_carries_the_accepted_append_only_form(self) -> None:
+        source = (CONTROLLER_DIR / "worker.py").read_text()
+        self.assertIn("os.open(path, os.O_WRONLY | os.O_APPEND)", source)
+        self.assertEqual(scan_module(source, exempt=False, module="worker.py"), [])
 
     def test_a_runtime_call_outside_the_checked_api_is_still_flagged(self) -> None:
         """Round-2 implementation-review finding O4: a hypothetical

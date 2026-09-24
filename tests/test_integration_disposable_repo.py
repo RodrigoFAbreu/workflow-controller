@@ -1909,6 +1909,19 @@ def _transcript_tool_uses(path: Path | None) -> list[dict]:
     return [uses[tool_id] for tool_id in order]
 
 
+def _worker_streams(test_case: unittest.TestCase) -> dict:
+    """``stdout_path``/``stderr_path`` for one direct ``worker.launch``: two
+    fresh, empty files outside the target repository, removed by the
+    test's cleanup (release-runtime-observability CP4)."""
+    directory = Path(tempfile.mkdtemp(prefix="worker-streams-"))
+    test_case.addCleanup(shutil.rmtree, directory, True)
+    paths = {}
+    for key, name in (("stdout_path", "worker.stdout"), ("stderr_path", "worker.stderr")):
+        (directory / name).touch(mode=0o600)
+        paths[key] = str(directory / name)
+    return paths
+
+
 def _stream_json_tool_list(cwd: Path, disallowed: tuple[str, ...]) -> list[str] | None:
     """The installed CLI's own tool list for a session, read from the
     ``system``/``init`` event of ``--output-format stream-json``, which the
@@ -1981,7 +1994,7 @@ class LiveSingleAgentProbeTest(unittest.TestCase):
             result = worker.launch(
                 task, cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=1800,
                 claude_bin=CLAUDE_BIN, model=route.model, effort=route.effort,
-                disallowed_tools=route.disallowed_tools,
+                disallowed_tools=route.disallowed_tools, **_worker_streams(self),
             )
             transcript, subagent_transcripts = _session_transcript(result.session_id or "")
             tool_uses = _transcript_tool_uses(transcript)
@@ -2011,7 +2024,7 @@ class LiveSingleAgentProbeTest(unittest.TestCase):
         expanded = worker.launch(
             "/echo-probe arg-one", cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=1800,
             claude_bin=CLAUDE_BIN, model=route.model, effort=route.effort,
-            disallowed_tools=route.disallowed_tools,
+            disallowed_tools=route.disallowed_tools, **_worker_streams(self),
         )
         evidence["slash_command"] = {
             "outcome": expanded.outcome, "session_id": expanded.session_id,
@@ -2180,13 +2193,14 @@ class LiveConcurrencyDrillTest(unittest.TestCase):
         spawned: dict = {}
         outcome: dict = {}
         holders: dict[int, dict] = {}
+        streams = _worker_streams(self)
         with lock.acquire_lifecycle_lock(repo) as held:
             def _launch() -> None:
                 outcome["result"] = worker.launch(
                     task, cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=900,
                     claude_bin=CLAUDE_BIN, pass_fds=(held.fd,),
                     on_spawn=lambda process: spawned.setdefault("process", process),
-                    model=routing.DEFAULT_MODEL, effort="low",
+                    model=routing.DEFAULT_MODEL, effort="low", **streams,
                 )
             thread = threading.Thread(target=_launch)
             thread.start()

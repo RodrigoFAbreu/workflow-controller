@@ -336,7 +336,9 @@ class WorkerLaunchError(ControllerError):
     """The worker subprocess itself could not be started.
 
     Raised when ``subprocess.Popen`` fails with an ``OSError`` -- e.g. the
-    resolved ``claude_bin`` does not exist or is not executable. Distinct
+    resolved ``claude_bin`` does not exist or is not executable -- or when
+    the worker's stream files cannot be created or opened before the spawn
+    (``workflow-controller-release-runtime-observability`` CP4). Distinct
     from every outcome ``WorkerResult.outcome`` classifies: those all
     require the worker process to have actually started and either run to
     completion or be interrupted mid-flight.

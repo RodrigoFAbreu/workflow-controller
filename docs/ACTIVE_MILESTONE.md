@@ -125,4 +125,48 @@ The previous milestone's narrative is archived at
     tests.test_plan_document_consistency tests.test_handoff tests.test_identity` passed (152
     tests). No product code changed.
 
-**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for CP4.
+- **CP4 -- streaming worker output: complete.**
+  - `worker.launch` runs `claude -p <task> --output-format stream-json --verbose
+    --permission-mode <mode> [--model] [--effort] [--disallowedTools]`, with the disallow list
+    still last. It takes two new required arguments, `stdout_path`/`stderr_path`: files the
+    caller has created. It opens each `O_WRONLY | O_APPEND`, hands them to the worker, and closes
+    its own copies, so the worker writes its stream into the durable log itself, with no pipe.
+  - Control returns when the direct child has exited and its process group is empty. Phase 1 is
+    `proc.wait()`. Phase 2 is a group drain that rescans the group every 0.2 s through
+    `process_test`. A zombie counts as gone, and under the `killpg` form only
+    `killpg_no_such_group` ends the drain. A `--timeout` expiring in phase 2 ends the group through
+    the new `_kill_drained_group` (a direct `killpg`, never `os.getpgid`), then waits at most 2 s
+    for the scan to report it empty. `_classify` gains `timed_out`, checked first, so
+    `INTERRUPTED` with exit code `0` is a clean exit whose group outlived the budget. The new
+    `on_group_drain(pid, remaining_pids)` callback has `on_spawn`'s contract.
+  - `_parse_worker_stream` replaces `_parse_worker_stdout`. Every line must be one JSON object,
+    and exactly one `result` event must come last. Anything else is `AMBIGUOUS`. `WorkerResult`,
+    the field lists and `_worker_dict` are unchanged, and `raw_json` is the result event.
+  - `job`: after the `PLANNED` flush, `runtime.create_log_file` (new: contained, `O_EXCL`, mode
+    `0o600`) creates `jobs/<id>/worker.stdout` and `worker.stderr`. A failure is wrapped in
+    `WorkerLaunchError` and recorded `FAILED`/`WorkerNotStarted` (exit `20`). The `LAUNCHED`
+    flush carries `worker_streams` (`format`, `stdout_path`, `stderr_path`, `events_path`). The
+    drain callback persists `worker_group_drain` and writes one
+    `worker pid P exited; waiting for N process(es) ...` line to stderr, ignoring an `OSError`.
+    `_write_worker_streams` is gone.
+  - `tests/fake_claude.py` emits a five-event stream by default. It refuses `stream-json`
+    without `--verbose` with the real CLI's message, and gains `FAKE_CLAUDE_EVENT_DELAY`,
+    `FAKE_CLAUDE_PAUSE_AFTER_EVENTS_FILE` (`<n>:<path>`), `FAKE_CLAUDE_DESCENDANT`
+    (`group:`/`group-closed:`/`setsid:<seconds>`) and `FAKE_CLAUDE_DESCENDANT_FILE`. It also
+    exposes `result_event`/`default_events`/`stream_text` for the tests.
+  - New `tests/golden/claude_stream_json_2.1.281.jsonl`: a real `claude -p "Reply with the word
+    ok." --output-format stream-json --verbose --model haiku` transcript (claude 2.1.281, 7
+    lines, USD 0.018), sanitised as its sibling `.md` records.
+  - **Test-policy change for the reviewer:** `tests/test_write_containment.py`'s package-wide
+    scan flagged `launch`'s `os.open(path, os.O_WRONLY | os.O_APPEND)`. `launch` has no runtime
+    root to check against, and containment is enforced where the files are created. So the scan
+    now accepts exactly that flag pair at exactly `("worker.py", "launch")`. Adding `O_CREAT` or
+    `O_TRUNC` there, or using the form anywhere else, is still flagged, and synthetic tests pin
+    both.
+  - Verified: the narrow set `tests.test_worker tests.test_job tests.test_resume
+    tests.test_lifecycle_orchestration` passed (264 tests). `tests.test_write_containment` passed
+    (10). The full suite passed (1085 tests, 6 skipped), and so did
+    `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 tests.test_packaged_runtime` (9).
+
+**Next action:** `/milestone-implement workflow-controller-release-runtime-observability` for the
+next ready checkpoint (CP5 or CP8).

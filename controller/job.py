@@ -38,7 +38,7 @@ runtime-root ``Path``) -- the plan's own declared signature -- which
 shadow this module's ``controller.identity``/``controller.runtime``
 imports *inside that one function's body*. This is intentional, not an
 oversight: every module-level helper below that actually performs I/O
-(:func:`_persist`, :func:`_pending_handoff`, :func:`_write_worker_streams`)
+(:func:`_persist`, :func:`_pending_handoff`, :func:`_create_worker_streams`)
 is defined *outside* :func:`execute_step`, where the real modules are
 still in scope, and takes the runtime root as an explicit ``runtime_root``
 parameter -- never named ``runtime`` -- so :func:`execute_step` calls them
@@ -104,6 +104,7 @@ from controller.errors import (
     LifecycleWorkerActiveError,
     LifecycleWorkerUnverifiableError,
     PendingJobReconciliationError,
+    RuntimeContainmentError,
     StaleJobRecordError,
     UnreconcilableJobError,
     UserOnlyCommandError,
@@ -182,11 +183,12 @@ PRE_STATE_FIELDS: frozenset[str] = frozenset({
 DEFAULT_PERMISSION_MODE = "auto"
 
 #: No limit (`workflow-controller-automatic-lifecycle-orchestration` CP5,
-#: "Time is not termination"): `communicate()` waits until the worker
-#: returns control, however long or silent it is. `--timeout` stays the
-#: operator's explicit opt-in; when set, it kills and reaps the whole
-#: process group before classifying. The Controller has no other path that
-#: concludes a worker has ended.
+#: "Time is not termination"): `worker.launch` waits until the worker
+#: returns control -- its direct child has exited and its process group is
+#: empty (release-runtime-observability CP4) -- however long or silent it
+#: is. `--timeout` stays the operator's explicit opt-in; when set, it kills
+#: the whole process group before classifying. The Controller has no other
+#: path that concludes a worker has ended.
 DEFAULT_WORKER_TIMEOUT = None
 
 #: The generator-written subset of `<bundle_dir>` that `_bundle_generated_
@@ -3189,14 +3191,51 @@ def _pending_handoff(runtime_root: Path) -> dict | None:
     return runtime.read_json(runtime_root / "handoff.json")
 
 
-def _write_worker_streams(runtime_root: Path, job_id: str, result: worker.WorkerResult) -> tuple[str, str]:
-    stdout_full = runtime.write_bytes(
-        runtime_root, f"jobs/{job_id}/worker.stdout", result.stdout.encode("utf-8", errors="replace"),
-    )
-    stderr_full = runtime.write_bytes(
-        runtime_root, f"jobs/{job_id}/worker.stderr", result.stderr.encode("utf-8", errors="replace"),
-    )
-    return str(stdout_full), str(stderr_full)
+#: The ``worker_streams.format`` every ``LAUNCHED`` record written since
+#: ``workflow-controller-release-runtime-observability`` CP4 carries.
+WORKER_STREAM_FORMAT = "stream-json"
+
+
+def _create_worker_streams(runtime_root: Path, job_id: str) -> dict:
+    """Create ``jobs/<job_id>/worker.stdout`` and ``worker.stderr`` empty
+    (``runtime.create_log_file``: contained, ``O_EXCL``, mode ``0o600``)
+    before the worker is spawned, and return the record's
+    ``worker_streams`` block, so a follower can find the logs before the
+    worker writes anything. ``events_path`` names the job's lifecycle event
+    log beside them. An ``OSError`` is wrapped in
+    :class:`~controller.errors.WorkerLaunchError`: no worker exists yet, so
+    the caller records ``WorkerNotStarted``, exactly as for a ``Popen``
+    failure."""
+    paths = {}
+    for key, name in (("stdout_path", "worker.stdout"), ("stderr_path", "worker.stderr")):
+        rel = f"jobs/{job_id}/{name}"
+        try:
+            paths[key] = str(runtime.create_log_file(runtime_root, rel))
+        except OSError as exc:
+            raise WorkerLaunchError(
+                f"could not create the worker's stream file {rel} under {runtime_root}: {exc}",
+                evidence={"runtime_root": str(runtime_root), "path": rel, "os_error": str(exc)},
+            ) from exc
+    return {
+        "format": WORKER_STREAM_FORMAT,
+        **paths,
+        "events_path": str(Path(paths["stdout_path"]).parent / "events.jsonl"),
+    }
+
+
+def _announce_group_drain(pid: int, remaining_pids: list[int]) -> None:
+    """The drain line. An ``OSError`` writing it is ignored: a closed
+    stderr must not end the worker's group (``on_group_drain``'s own
+    contract would)."""
+    if remaining_pids:
+        waiting = (f"waiting for {len(remaining_pids)} process(es) still in its process group: "
+                   f"{' '.join(str(member) for member in remaining_pids)}")
+    else:
+        waiting = "waiting for an unknown number of processes still in its process group"
+    try:
+        print(f"worker pid {pid} exited; {waiting}", file=sys.stderr, flush=True)
+    except OSError:
+        pass
 
 
 def _no_launch_record(
@@ -3424,8 +3463,33 @@ def _execute_step_locked(
         **record,
         "expected_transition": expected_transition,
         "status": STATUS_LAUNCHED,
-        "updated_at": _now(),
     }
+
+    def worker_not_started(exc: ControllerError) -> None:
+        # CP5: a worker that never started is terminal at once -- the
+        # Controller knows for certain no worker exists, so the record is
+        # FAILED (`WorkerNotStarted`, which the apply relaunch bound never
+        # counts) and needs no `resume`. The exit code is today's.
+        _persist(runtime, job_id, {
+            **record,
+            "status": STATUS_FAILED,
+            "transition_verified": False,
+            "reconciliation_evidence": {
+                "code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
+                "message": exc.message, "evidence": exc.evidence,
+            },
+            "updated_at": _now(),
+        })
+
+    # CP4 (release-runtime-observability): the worker writes its own
+    # stdout/stderr into these files, created before the LAUNCHED flush so
+    # the record names them before the worker produces anything.
+    try:
+        worker_streams = _create_worker_streams(runtime, job_id)
+    except (WorkerLaunchError, RuntimeContainmentError) as exc:
+        worker_not_started(exc)
+        raise
+    record = {**record, "worker_streams": worker_streams, "updated_at": _now()}
     _persist(runtime, job_id, record)
 
     # Step 5: launch the worker and wait synchronously -- with no limit
@@ -3447,35 +3511,38 @@ def _execute_step_locked(
         _persist(runtime, job_id, record)
         spawned["flushed"] = True
 
+    def on_group_drain(pid: int, remaining_pids: list[int]) -> None:
+        # CP4 (release-runtime-observability): the worker exited but its
+        # process group has not emptied. Authoritative like the on_spawn
+        # flush; the list is captured once, at drain start.
+        nonlocal record
+        record = {
+            **record,
+            "worker_group_drain": {"direct_child_exited_at": _now(), "remaining_pids": list(remaining_pids)},
+            "updated_at": _now(),
+        }
+        _persist(runtime, job_id, record)
+        _announce_group_drain(pid, remaining_pids)
+
     try:
         result = worker.launch(
             worker_task(decision.action),
             cwd=managed_repo.root,
             permission_mode=permission_mode,
             timeout=resolved_timeout,
+            stdout_path=worker_streams["stdout_path"],
+            stderr_path=worker_streams["stderr_path"],
             claude_bin=claude_bin,
             pass_fds=(lifecycle_lock.fd,),
             on_spawn=on_spawn,
+            on_group_drain=on_group_drain,
             model=route.model,
             effort=route.effort,
             disallowed_tools=route.disallowed_tools,
         )
     except (UserOnlyCommandError, WorkerLaunchError) as exc:
-        # CP5: a worker that never started is terminal at once -- the
-        # Controller knows for certain no worker exists, so the record is
-        # FAILED (`WorkerNotStarted`, which the apply relaunch bound never
-        # counts) and needs no `resume`. The exit code is today's.
         if "worker_process" not in spawned:
-            _persist(runtime, job_id, {
-                **record,
-                "status": STATUS_FAILED,
-                "transition_verified": False,
-                "reconciliation_evidence": {
-                    "code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
-                    "message": exc.message, "evidence": exc.evidence,
-                },
-                "updated_at": _now(),
-            })
+            worker_not_started(exc)
         raise
     except KeyboardInterrupt:
         # CP5: Ctrl-C ends only the Controller. After the worker_process
@@ -3485,12 +3552,13 @@ def _execute_step_locked(
             _announce_orphaned_worker(spawned["worker_process"], managed_repo.root)
         raise
 
-    # Step 6: record the worker result.
-    stdout_path, stderr_path = _write_worker_streams(runtime, job_id, result)
+    # Step 6: record the worker result. The streams are already on disk --
+    # the worker wrote them itself.
     record = {
         **record,
         "status": STATUS_COMPLETED,
-        "worker": _worker_dict(result, stdout_path=stdout_path, stderr_path=stderr_path),
+        "worker": _worker_dict(result, stdout_path=worker_streams["stdout_path"],
+                               stderr_path=worker_streams["stderr_path"]),
         "worker_outcome": result.outcome,
         "updated_at": _now(),
     }

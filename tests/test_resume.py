@@ -44,7 +44,7 @@ from controller.errors import (  # noqa: E402
     UnreconcilableJobError,
 )
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
-from tests import fixtures, process_fixtures  # noqa: E402
+from tests import fake_claude, fixtures, process_fixtures  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
@@ -1172,6 +1172,12 @@ class EndToEndInterruptionTest(_OrphanWorkerCase):
 
         self.release.touch()
         self._await_worker_gone(record, managed_repo.root)
+        # Release-runtime-observability CP4: the orphan wrote its whole
+        # stream into the file named before spawn, with no Controller alive.
+        written = [json.loads(line) for line in
+                   Path(on_disk["worker_streams"]["stdout_path"]).read_text().splitlines()]
+        self.assertEqual([event["type"] for event in written],
+                         [event["type"] for event in fake_claude.default_events()])
         results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["status"], job.STATUS_INTERRUPTED)

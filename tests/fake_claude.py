@@ -3,8 +3,9 @@
 by ``tests/test_worker.py``.
 
 ``controller.worker.launch`` always invokes its subprocess with the exact,
-fixed argv shape ``-p <task> --output-format json --permission-mode
-<mode>``, so this script cannot be driven by its own arguments the way
+fixed argv shape ``-p <task> --output-format stream-json --verbose
+--permission-mode <mode>``, so this script cannot be driven by its own
+arguments the way
 ``tests/fixtures.py``'s stub ``workflow-manager`` is (that one branches on
 its first positional argument). Instead every behaviour is selected by
 environment variable, which ``tests/test_worker.py`` sets per case before
@@ -54,10 +55,37 @@ Recognised environment variables (all optional):
     classification without needing a second process to race a signal
     against this one.
 ``FAKE_CLAUDE_STDOUT``
-    The exact stdout to write. Defaults to a canned, well-formed
-    ``SUCCESS``-shaped JSON body.
+    The exact stdout to write, all at once. Defaults to a canned,
+    well-formed ``SUCCESS``-shaped ``stream-json`` event stream
+    (:func:`default_events`: ``system/init``, an assistant text, a Bash
+    ``tool_use``, its ``tool_result`` and a final ``result``), one event
+    per line, each flushed as it is written.
+``FAKE_CLAUDE_EVENT_DELAY``
+    Seconds to sleep between two default events -- a worker whose stream
+    a follower can watch arrive.
+``FAKE_CLAUDE_PAUSE_AFTER_EVENTS_FILE``
+    ``<n>:<path>``: write the first ``n`` default events, then poll until
+    the file at ``path`` exists before writing the rest -- so a test can
+    read the stream file while the worker is provably still running.
+``FAKE_CLAUDE_DESCENDANT``
+    ``group:<seconds>``, ``group-closed:<seconds>`` or
+    ``setsid:<seconds>``: after its output, and before exiting, this
+    process forks a descendant that lives that long. ``group:`` stays in
+    the worker's process group with stdout and stderr open;
+    ``group-closed:`` stays in the group but points both at ``/dev/null``
+    first; ``setsid:`` leaves the group (``os.setsid``) and keeps stdout
+    open. The descendant inherits every other descriptor (the lifecycle
+    lock's included).
+``FAKE_CLAUDE_DESCENDANT_FILE``
+    Only with ``FAKE_CLAUDE_DESCENDANT``: the descendant writes
+    ``{"pid"}`` here as JSON when it starts, and rewrites it as
+    ``{"pid", "exited_at"}`` (``time.time()``) just before it exits.
 ``FAKE_CLAUDE_STDERR``
     The exact stderr to write. Defaults to empty.
+
+Like the real CLI, ``--output-format stream-json`` without ``--verbose``
+is refused before anything else runs: stderr ``Error: When using --print,
+--output-format=stream-json requires --verbose``, exit ``1``.
 ``FAKE_CLAUDE_EXIT``
     The exit code. Defaults to ``0``.
 ``FAKE_CLAUDE_REQUIRE_FILE``
@@ -153,11 +181,22 @@ def _write_diagnostics() -> None:
         json.dump(diag, fh)
 
 
-def _default_stdout() -> str:
-    return json.dumps({
-        "session_id": "fake-session-id",
-        "is_error": False,
+#: The session id every default event carries.
+FAKE_SESSION_ID = "fake-session-id"
+
+#: The real CLI's refusal of ``stream-json`` in print mode without
+#: ``--verbose`` (``claude`` 2.1.281).
+STREAM_JSON_REQUIRES_VERBOSE = "Error: When using --print, --output-format=stream-json requires --verbose"
+
+
+def result_event(**overrides) -> dict:
+    """The default final ``result`` event (the fields ``--output-format
+    json`` also carries), with ``overrides`` applied."""
+    return {
+        "type": "result",
         "subtype": "success",
+        "is_error": False,
+        "session_id": FAKE_SESSION_ID,
         "terminal_reason": None,
         "stop_reason": None,
         "result": "ok",
@@ -165,7 +204,110 @@ def _default_stdout() -> str:
         "permission_denials": [],
         "total_cost_usd": 0.0,
         "duration_ms": 1,
-    })
+        **overrides,
+    }
+
+
+def default_events() -> list[dict]:
+    """The default stream: ``system/init``, an assistant text, a Bash
+    ``tool_use``, its ``tool_result`` and the final ``result``."""
+    return [
+        {"type": "system", "subtype": "init", "session_id": FAKE_SESSION_ID, "cwd": os.getcwd(),
+         "model": "fake-model", "tools": ["Bash", "Read"]},
+        {"type": "assistant", "session_id": FAKE_SESSION_ID, "parent_tool_use_id": None,
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "Working on it."}]}},
+        {"type": "assistant", "session_id": FAKE_SESSION_ID, "parent_tool_use_id": None,
+         "message": {"role": "assistant", "content": [
+             {"type": "tool_use", "id": "toolu_fake_1", "name": "Bash", "input": {"command": "true"}}]}},
+        {"type": "user", "session_id": FAKE_SESSION_ID, "parent_tool_use_id": None,
+         "message": {"role": "user", "content": [
+             {"type": "tool_result", "tool_use_id": "toolu_fake_1", "content": "", "is_error": False}]}},
+        result_event(),
+    ]
+
+
+def stream_text(events: list[dict]) -> str:
+    """``events`` as ``stream-json`` text: one compact JSON object per line."""
+    return "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in events)
+
+
+def _refuse_stream_json_without_verbose() -> None:
+    argv = sys.argv[1:]
+    stream_json = any(
+        (arg == "--output-format" and argv[index + 1:index + 2] == ["stream-json"])
+        or arg == "--output-format=stream-json"
+        for index, arg in enumerate(argv)
+    )
+    if stream_json and "--verbose" not in argv:
+        sys.stderr.write(STREAM_JSON_REQUIRES_VERBOSE + "\n")
+        sys.exit(1)
+
+
+def _pause_after() -> tuple[int, str] | None:
+    raw = os.environ.get("FAKE_CLAUDE_PAUSE_AFTER_EVENTS_FILE")
+    if not raw:
+        return None
+    count, _, path = raw.partition(":")
+    return int(count), path
+
+
+def _write_stdout() -> None:
+    exact = os.environ.get("FAKE_CLAUDE_STDOUT")
+    if exact is not None:
+        sys.stdout.write(exact)
+        sys.stdout.flush()
+        return
+    delay = float(os.environ.get("FAKE_CLAUDE_EVENT_DELAY") or 0)
+    pause = _pause_after()
+    for index, event in enumerate(default_events()):
+        if pause is not None and index == pause[0]:
+            while not os.path.exists(pause[1]):
+                time.sleep(0.05)
+        if index and delay:
+            time.sleep(delay)
+        sys.stdout.write(stream_text([event]))
+        sys.stdout.flush()
+
+
+def _write_descendant_file(path: str | None, record: dict) -> None:
+    if not path:
+        return
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        json.dump(record, fh)
+    os.replace(tmp, path)
+
+
+def _fork_descendant() -> None:
+    spec = os.environ.get("FAKE_CLAUDE_DESCENDANT")
+    if not spec:
+        return
+    mode, _, seconds = spec.partition(":")
+    if mode not in ("group", "group-closed", "setsid"):
+        raise ValueError(f"unknown FAKE_CLAUDE_DESCENDANT mode {mode!r}")
+    record_path = os.environ.get("FAKE_CLAUDE_DESCENDANT_FILE")
+    sys.stdout.flush()
+    sys.stderr.flush()
+    if os.fork() != 0:
+        # The worker itself: wait until the descendant has recorded its
+        # pid, so a test never races the fork.
+        if record_path:
+            while not os.path.exists(record_path):
+                time.sleep(0.01)
+        return
+    try:
+        if mode == "setsid":
+            os.setsid()
+        elif mode == "group-closed":
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, 1)
+            os.dup2(devnull, 2)
+            os.close(devnull)
+        _write_descendant_file(record_path, {"pid": os.getpid()})
+        time.sleep(float(seconds))
+        _write_descendant_file(record_path, {"pid": os.getpid(), "exited_at": time.time()})
+    finally:
+        os._exit(0)
 
 
 def _check_required_file() -> None:
@@ -293,6 +435,7 @@ def _run_script() -> None:
 
 
 def main() -> None:
+    _refuse_stream_json_without_verbose()
     _count_invocation()
     _write_diagnostics()
     _check_required_file()
@@ -317,10 +460,12 @@ def main() -> None:
                 fh.write(str(child.pid))
         time.sleep(3600)
 
-    sys.stdout.write(os.environ.get("FAKE_CLAUDE_STDOUT", _default_stdout()))
+    _write_stdout()
     stderr = os.environ.get("FAKE_CLAUDE_STDERR", "")
     if stderr:
         sys.stderr.write(stderr)
+        sys.stderr.flush()
+    _fork_descendant()
     sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
 
 

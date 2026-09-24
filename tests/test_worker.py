@@ -2,9 +2,9 @@
 ``controller.worker``).
 
 ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``'s CP5 section names these
-cases: success JSON classifies ``SUCCESS`` with fields extracted; a
+cases: a success result classifies ``SUCCESS`` with fields extracted; a
 non-zero exit classifies ``FAILURE``; exit 0 with ``is_error: true``
-classifies ``FAILURE``; non-JSON stdout on exit 0 classifies
+classifies ``FAILURE``; an undecidable stream on exit 0 classifies
 ``AMBIGUOUS``; a hanging worker with a short timeout classifies
 ``INTERRUPTED`` and its whole process group is confirmed reaped; a
 ``SIGTERM``-ed worker classifies ``INTERRUPTED``; a task naming
@@ -27,6 +27,7 @@ import errno
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -40,9 +41,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import lock, routing, worker  # noqa: E402
 from controller.errors import UserOnlyCommandError, WorkerLaunchError  # noqa: E402
-from tests import process_fixtures  # noqa: E402
+from tests import fake_claude, process_fixtures  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
+
+
+def _stream_paths(directory) -> dict:
+    """``stdout_path``/``stderr_path`` for one launch: two fresh, empty
+    files in ``directory``, as ``controller.job`` creates them."""
+    paths = {}
+    for key in ("stdout_path", "stderr_path"):
+        fd, path = tempfile.mkstemp(prefix=f"worker-{key[:6]}-", dir=directory)
+        os.close(fd)
+        paths[key] = path
+    return paths
+
+
+def _stream(**result_overrides) -> str:
+    """A well-formed stream: the fake's default events with the final
+    ``result`` event's fields overridden."""
+    events = fake_claude.default_events()[:-1]
+    return fake_claude.stream_text([*events, fake_claude.result_event(**result_overrides)])
 
 
 def _launch(task="do the bounded thing", *, cwd, env_overrides, timeout=10, claude_bin=None):
@@ -51,7 +70,7 @@ def _launch(task="do the bounded thing", *, cwd, env_overrides, timeout=10, clau
     try:
         return worker.launch(
             task, cwd=cwd, permission_mode="acceptEdits", timeout=timeout,
-            claude_bin=claude_bin or str(FAKE_CLAUDE),
+            claude_bin=claude_bin or str(FAKE_CLAUDE), **_stream_paths(cwd),
         )
     finally:
         for k, v in old.items():
@@ -62,15 +81,14 @@ def _launch(task="do the bounded thing", *, cwd, env_overrides, timeout=10, clau
 
 
 class SuccessTest(unittest.TestCase):
-    def test_success_json_classifies_success_with_fields_extracted(self) -> None:
+    def test_success_result_classifies_success_with_fields_extracted(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            body = {
-                "session_id": "abc123", "is_error": False, "subtype": "success",
-                "terminal_reason": "end_turn", "stop_reason": None, "result": "did it",
-                "num_turns": 3, "permission_denials": ["x"], "total_cost_usd": 0.01,
-                "duration_ms": 500,
-            }
-            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": json.dumps(body)})
+            body = fake_claude.result_event(
+                session_id="abc123", terminal_reason="end_turn", stop_reason=None, result="did it",
+                num_turns=3, permission_denials=["x"], total_cost_usd=0.01, duration_ms=500,
+            )
+            stream = fake_claude.stream_text([*fake_claude.default_events()[:-1], body])
+            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": stream})
             self.assertEqual(result.outcome, worker.SUCCESS)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(result.session_id, "abc123")
@@ -83,6 +101,7 @@ class SuccessTest(unittest.TestCase):
             self.assertEqual(result.total_cost_usd, 0.01)
             self.assertEqual(result.duration_ms, 500)
             self.assertEqual(result.raw_json, body)
+            self.assertEqual(result.stdout, stream)
 
 
 class FailureTest(unittest.TestCase):
@@ -94,8 +113,9 @@ class FailureTest(unittest.TestCase):
 
     def test_exit_zero_with_is_error_true_classifies_failure(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            body = {"session_id": "s", "is_error": True, "result": "went wrong"}
-            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": json.dumps(body)})
+            result = _launch(cwd=td, env_overrides={
+                "FAKE_CLAUDE_STDOUT": _stream(session_id="s", is_error=True, result="went wrong"),
+            })
             self.assertEqual(result.outcome, worker.FAILURE)
             self.assertEqual(result.returncode, 0)
             self.assertIs(result.is_error, True)
@@ -109,9 +129,11 @@ class AmbiguousTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0)
             self.assertIsNone(result.raw_json)
 
-    def test_json_missing_required_fields_classifies_ambiguous(self) -> None:
+    def test_a_result_missing_session_id_classifies_ambiguous(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": json.dumps({"foo": "bar"})})
+            event = fake_claude.result_event()
+            del event["session_id"]
+            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": fake_claude.stream_text([event])})
             self.assertEqual(result.outcome, worker.AMBIGUOUS)
 
     def test_json_array_classifies_ambiguous(self) -> None:
@@ -119,13 +141,12 @@ class AmbiguousTest(unittest.TestCase):
             result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": "[1, 2, 3]\n"})
             self.assertEqual(result.outcome, worker.AMBIGUOUS)
 
-    def test_two_concatenated_json_documents_classify_ambiguous(self) -> None:
-        # REQ-26: the candidate span is exactly one JSON document -- trailing
-        # "extra data" after a complete value must never be silently
-        # dropped in favour of the first document.
+    def test_two_json_documents_on_one_line_classify_ambiguous(self) -> None:
+        # REQ-26: each line is exactly one JSON document -- trailing "extra
+        # data" after a complete value is never silently dropped.
         with tempfile.TemporaryDirectory() as td:
-            body = json.dumps({"session_id": "s", "is_error": False}) + json.dumps({"session_id": "t", "is_error": False})
-            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": body})
+            line = json.dumps(fake_claude.result_event()) + json.dumps(fake_claude.result_event())
+            result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_STDOUT": line + "\n"})
             self.assertEqual(result.outcome, worker.AMBIGUOUS)
 
 
@@ -272,21 +293,21 @@ class RouteArgvTest(unittest.TestCase):
             with _environment({"FAKE_CLAUDE_DIAG_FILE": str(marker)}):
                 result = worker.launch(
                     "/review-plan wi-1", cwd=td, permission_mode="auto", timeout=10,
-                    claude_bin=str(FAKE_CLAUDE), **route,
+                    claude_bin=str(FAKE_CLAUDE), **_stream_paths(td), **route,
                 )
             self.assertEqual(result.outcome, worker.SUCCESS)
             return json.loads(marker.read_text())["argv"]
 
     def test_without_a_route_the_argv_is_unchanged(self) -> None:
-        self.assertEqual(self._argv(), ["-p", "/review-plan wi-1", "--output-format", "json",
-                                        "--permission-mode", "auto"])
+        self.assertEqual(self._argv(), ["-p", "/review-plan wi-1", "--output-format", "stream-json",
+                                        "--verbose", "--permission-mode", "auto"])
         self.assertEqual(self._argv(model=None, effort=None, disallowed_tools=()), self._argv())
 
     def test_model_effort_and_the_disallow_list_last(self) -> None:
         argv = self._argv(model="claude-opus-5-5", effort="xhigh", disallowed_tools=routing.SUBAGENT_TOOLS)
         self.assertEqual(argv, [
-            "-p", "/review-plan wi-1", "--output-format", "json", "--permission-mode", "auto",
-            "--model", "claude-opus-5-5", "--effort", "xhigh", "--disallowedTools", "Agent,Workflow,Skill",
+            "-p", "/review-plan wi-1", "--output-format", "stream-json", "--verbose",
+            "--permission-mode", "auto", "--model", "claude-opus-5-5", "--effort", "xhigh", "--disallowedTools", "Agent,Workflow,Skill",
         ])
 
     def test_each_flag_is_independent(self) -> None:
@@ -338,7 +359,7 @@ class WorkerLaunchErrorTest(unittest.TestCase):
             with self.assertRaises(WorkerLaunchError):
                 worker.launch(
                     "do the thing", cwd=td, permission_mode="acceptEdits", timeout=5,
-                    claude_bin=str(missing),
+                    claude_bin=str(missing), **_stream_paths(td),
                 )
 
 
@@ -377,6 +398,7 @@ class _SpawnedWorkerCase(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.dir, True)
         self.release = self.dir / "release"
         self.diag = self.dir / "diag.json"
+        self.streams = _stream_paths(self.dir)
         self.spawned_groups: list[int] = []
         self.addCleanup(self._end_spawned)
 
@@ -385,7 +407,8 @@ class _SpawnedWorkerCase(unittest.TestCase):
         for pgid in self.spawned_groups:
             process_fixtures.kill_group(pgid)
 
-    def _launch(self, *, on_spawn=None, pass_fds=(), timeout=30, env=None) -> worker.WorkerResult:
+    def _launch(self, *, on_spawn=None, pass_fds=(), timeout=30, env=None,
+                on_group_drain=None) -> worker.WorkerResult:
         overrides = {
             "FAKE_CLAUDE_DIAG_FILE": str(self.diag),
             "FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
@@ -401,6 +424,7 @@ class _SpawnedWorkerCase(unittest.TestCase):
             return worker.launch(
                 "do the bounded thing", cwd=self.dir, permission_mode="acceptEdits", timeout=timeout,
                 claude_bin=str(FAKE_CLAUDE), pass_fds=pass_fds, on_spawn=recording_on_spawn,
+                on_group_drain=on_group_drain, **self.streams,
             )
 
     def _safety_release(self, seconds: float) -> None:
@@ -556,6 +580,317 @@ class TimeoutNoneTest(_SpawnedWorkerCase):
         result = self._launch(timeout=_FORMER_DEFAULT_TIMEOUT)
         self.assertEqual(result.outcome, worker.INTERRUPTED)
         self.assertLess(result.returncode, 0)
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-release-runtime-observability CP4: streaming worker
+# output (docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md,
+# "Streaming worker output" and CP4's Tests list).
+# ---------------------------------------------------------------------------
+
+GOLDEN_STREAM = Path(__file__).resolve().parent / "golden" / "claude_stream_json_2.1.281.jsonl"
+
+
+def _lines(*events) -> str:
+    return "".join((event if isinstance(event, str) else json.dumps(event)) + "\n" for event in events)
+
+
+class StreamParseTest(unittest.TestCase):
+    """``_parse_worker_stream`` and ``_classify``, over stream text."""
+
+    def _classified(self, stdout: str, returncode: int = 0, *, timed_out: bool = False) -> str:
+        return worker._classify(returncode, worker._parse_worker_stream(stdout), timed_out=timed_out)
+
+    def test_a_well_formed_stream_returns_its_result_event_and_is_success(self) -> None:
+        result = fake_claude.result_event()
+        stdout = fake_claude.stream_text([*fake_claude.default_events()[:-1], result])
+        self.assertEqual(worker._parse_worker_stream(stdout), result)
+        self.assertEqual(self._classified(stdout), worker.SUCCESS)
+
+    def test_is_error_true_is_failure(self) -> None:
+        self.assertEqual(self._classified(_lines(fake_claude.result_event(is_error=True))), worker.FAILURE)
+
+    def test_a_non_zero_exit_is_failure(self) -> None:
+        self.assertEqual(self._classified(_lines(fake_claude.result_event()), 1), worker.FAILURE)
+
+    def test_undecidable_streams_are_ambiguous(self) -> None:
+        init = fake_claude.default_events()[0]
+        result = fake_claude.result_event()
+        no_session = fake_claude.result_event()
+        del no_session["session_id"]
+        cases = {
+            "no result event": _lines(init),
+            "two result events": _lines(init, result, result),
+            "a result that is not last": _lines(init, result, init),
+            "a non-JSON line": _lines(init, "not json", result),
+            "a blank interior line": _lines(init, "", result),
+            "a non-object line": _lines(init, "[1, 2]", result),
+            "a result missing session_id": _lines(init, no_session),
+            "an empty stream": "",
+            "two final empty segments": _lines(init, result) + "\n",
+        }
+        for name, stdout in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self._classified(stdout), worker.AMBIGUOUS)
+
+    def test_crlf_lines_and_a_missing_final_newline_are_accepted(self) -> None:
+        init, result = fake_claude.default_events()[0], fake_claude.result_event()
+        self.assertEqual(worker._parse_worker_stream(json.dumps(init) + "\r\n" + json.dumps(result) + "\r\n"), result)
+        self.assertEqual(worker._parse_worker_stream(json.dumps(init) + "\n" + json.dumps(result)), result)
+
+    def test_a_signal_is_interrupted(self) -> None:
+        self.assertEqual(self._classified(_lines(fake_claude.result_event()), -9), worker.INTERRUPTED)
+
+    def test_timed_out_is_interrupted_even_for_a_clean_exit_with_a_well_formed_stream(self) -> None:
+        stdout = _lines(fake_claude.result_event())
+        self.assertEqual(self._classified(stdout, 0, timed_out=True), worker.INTERRUPTED)
+        self.assertEqual(self._classified(stdout, 1, timed_out=True), worker.INTERRUPTED)
+
+    def test_timed_out_false_leaves_the_table_unchanged(self) -> None:
+        rows = [
+            (0, fake_claude.result_event(), worker.SUCCESS),
+            (0, fake_claude.result_event(is_error=True), worker.FAILURE),
+            (2, fake_claude.result_event(), worker.FAILURE),
+            (0, None, worker.AMBIGUOUS),
+            (0, {"is_error": False}, worker.AMBIGUOUS),
+            (-15, None, worker.INTERRUPTED),
+            (None, None, worker.INTERRUPTED),
+        ]
+        for returncode, parsed, expected in rows:
+            with self.subTest(returncode=returncode, parsed=parsed):
+                self.assertEqual(worker._classify(returncode, parsed, timed_out=False), expected)
+
+    def test_the_result_fields_equal_the_former_single_json_bodys(self) -> None:
+        """``raw_json`` is the result event, and ``_worker_dict`` reads the
+        same values the ``--output-format json`` body carried."""
+        from controller import job
+
+        event = fake_claude.result_event(
+            session_id="abc", terminal_reason="completed", stop_reason="end_turn", result="done",
+            num_turns=4, permission_denials=[{"tool_name": "Bash"}], total_cost_usd=0.5, duration_ms=9,
+        )
+        former_body = {key: value for key, value in event.items() if key != "type"}
+
+        def worker_dict(parsed: dict) -> dict:
+            result = worker.WorkerResult(
+                outcome=worker._classify(0, parsed, timed_out=False), returncode=0, stdout="", stderr="",
+                raw_json=parsed, **worker._extract_fields(parsed),
+            )
+            return job._worker_dict(result, stdout_path="o", stderr_path="e")
+
+        parsed = worker._parse_worker_stream(_lines(fake_claude.default_events()[0], event))
+        self.assertEqual(parsed, event)
+        self.assertEqual(worker_dict(parsed), worker_dict(former_body))
+
+
+class GoldenTranscriptTest(unittest.TestCase):
+    """A real ``claude -p --output-format stream-json --verbose``
+    transcript (``tests/golden/claude_stream_json_2.1.281.md``)."""
+
+    def test_the_real_cli_transcript_parses_to_its_result_event_and_is_success(self) -> None:
+        text = GOLDEN_STREAM.read_text()
+        last = json.loads(text.splitlines()[-1])
+        parsed = worker._parse_worker_stream(text)
+        self.assertEqual(parsed, last)
+        self.assertEqual(parsed["type"], "result")
+        self.assertEqual(worker._classify(0, parsed, timed_out=False), worker.SUCCESS)
+        fields = worker._extract_fields(parsed)
+        self.assertEqual(fields["session_id"], "00000000-0000-4000-8000-000000000001")
+        self.assertIs(fields["is_error"], False)
+        self.assertEqual(fields["num_turns"], 1)
+        self.assertEqual(fields["result"], "ok")
+
+
+class StreamFilesTest(_SpawnedWorkerCase):
+    """The worker writes its own stdout/stderr into the caller's files."""
+
+    def test_bytes_reach_stdout_path_while_the_worker_is_still_running(self) -> None:
+        self._safety_release(20)
+        outcome: dict = {}
+        env = {"FAKE_CLAUDE_HANG_UNTIL_FILE": "",
+               "FAKE_CLAUDE_PAUSE_AFTER_EVENTS_FILE": f"2:{self.release}"}
+
+        def run() -> None:
+            outcome["result"] = self._launch(env=env)
+
+        # The environment is set by `_launch` inside the thread only: a
+        # second, overlapping `_environment` here would restore out of order.
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 30)
+        stdout_path = Path(self.streams["stdout_path"])
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: stdout_path.read_text().count("\n") >= 2), "no event reached the file")
+        self.assertTrue(thread.is_alive(), "launch returned before the worker was released")
+        self.assertTrue(self.spawned_groups and process_fixtures.group_has_running_member(self.spawned_groups[0]))
+        partial = stdout_path.read_text()
+        self.release.touch()
+        thread.join(30)
+        result = outcome["result"]
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(result.stdout, stdout_path.read_text())
+        lines = result.stdout.splitlines(keepends=True)
+        self.assertEqual(len(lines), len(fake_claude.default_events()))
+        self.assertEqual(partial, "".join(lines[:2]))
+
+    def test_stderr_reaches_stderr_path(self) -> None:
+        result = self._launch(env={"FAKE_CLAUDE_HANG_UNTIL_FILE": "", "FAKE_CLAUDE_STDERR": "a warning\n"})
+        self.assertEqual(Path(self.streams["stderr_path"]).read_text(), "a warning\n")
+        self.assertEqual(result.stderr, "a warning\n")
+        self.assertEqual(result.stdout, Path(self.streams["stdout_path"]).read_text())
+
+    def test_the_fake_refuses_stream_json_without_verbose_like_the_real_cli(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "x", "--output-format", "stream-json"],
+            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30,
+        )
+        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.stderr.strip(), fake_claude.STREAM_JSON_REQUIRES_VERBOSE)
+        self.assertEqual(completed.stdout, "")
+
+    def test_an_unopenable_stream_file_is_worker_launch_error_with_no_worker(self) -> None:
+        marker = self.dir / "diag-missing.json"
+        with self.assertRaises(WorkerLaunchError):
+            with _environment({"FAKE_CLAUDE_DIAG_FILE": str(marker)}):
+                worker.launch("x", cwd=self.dir, permission_mode="auto", timeout=10,
+                              claude_bin=str(FAKE_CLAUDE), stdout_path=self.dir / "no" / "such",
+                              stderr_path=self.streams["stderr_path"])
+        self.assertFalse(marker.exists())
+
+
+class GroupDrainTest(_SpawnedWorkerCase):
+    """Control returns when the direct child has exited and its process
+    group is empty (``FAKE_CLAUDE_DESCENDANT``)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.descendant = self.dir / "descendant.json"
+        self.addCleanup(self._end_descendant)
+
+    def _end_descendant(self) -> None:
+        try:
+            pid = json.loads(self.descendant.read_text())["pid"]
+        except (OSError, ValueError, KeyError):
+            return
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+
+    def _env(self, spec: str) -> dict:
+        return {"FAKE_CLAUDE_HANG_UNTIL_FILE": "", "FAKE_CLAUDE_DESCENDANT": spec,
+                "FAKE_CLAUDE_DESCENDANT_FILE": str(self.descendant)}
+
+    def _descendant(self) -> dict:
+        return json.loads(self.descendant.read_text())
+
+    def _assert_gone(self, pid: int) -> None:
+        def gone() -> bool:
+            stat = process_fixtures.read_stat(pid)
+            return stat is None or stat[0] == "Z"
+        self.assertTrue(process_fixtures.wait_until(gone, timeout=5), f"descendant {pid} is still running")
+
+    def test_a_same_group_descendant_holding_stdout_is_waited_for(self) -> None:
+        drains: list = []
+        result = self._launch(env=self._env("group:2"), on_group_drain=lambda *a: drains.append(a))
+        returned_at = time.time()
+        record = self._descendant()
+        self.assertIn("exited_at", record, "launch returned before the descendant exited")
+        self.assertLessEqual(record["exited_at"], returned_at)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(len(drains), 1)
+        pid, remaining = drains[0]
+        self.assertEqual(pid, self.spawned_groups[0])
+        self.assertEqual(remaining, [record["pid"]])
+
+    def test_a_same_group_descendant_that_closed_its_streams_is_still_waited_for(self) -> None:
+        drains: list = []
+        result = self._launch(env=self._env("group-closed:2"), on_group_drain=lambda *a: drains.append(a))
+        returned_at = time.time()
+        record = self._descendant()
+        self.assertIn("exited_at", record)
+        self.assertLessEqual(record["exited_at"], returned_at)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual([remaining for _pid, remaining in drains], [[record["pid"]]])
+
+    def test_a_setsid_descendant_is_not_waited_for(self) -> None:
+        drains: list = []
+        started = time.monotonic()
+        result = self._launch(env=self._env("setsid:5"), on_group_drain=lambda *a: drains.append(a))
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(drains, [])
+        self.assertNotIn("exited_at", self._descendant())
+
+    def test_with_no_descendant_on_group_drain_is_never_called(self) -> None:
+        drains: list = []
+        result = self._launch(env={"FAKE_CLAUDE_HANG_UNTIL_FILE": ""}, on_group_drain=lambda *a: drains.append(a))
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(drains, [])
+
+    def test_a_timeout_during_the_drain_kills_the_group_without_getpgid(self) -> None:
+        drain_started = threading.Event()
+        getpgid_after_phase_1: list = []
+        real_getpgid = os.getpgid
+
+        def spy_getpgid(pid):
+            if drain_started.is_set():
+                getpgid_after_phase_1.append(pid)
+            return real_getpgid(pid)
+
+        kills: list = []
+        real_kill_drained = worker._kill_drained_group
+
+        def spy_kill_drained(pgid):
+            kills.append(pgid)
+            real_kill_drained(pgid)
+
+        with unittest.mock.patch.object(worker.os, "getpgid", spy_getpgid), \
+                unittest.mock.patch.object(worker, "_kill_drained_group", spy_kill_drained):
+            started = time.monotonic()
+            result = self._launch(env=self._env("group-closed:30"), timeout=3,
+                                  on_group_drain=lambda *a: drain_started.set())
+            elapsed = time.monotonic() - started
+        self.assertTrue(drain_started.is_set())
+        self.assertEqual(getpgid_after_phase_1, [])
+        self.assertEqual(kills, [self.spawned_groups[0]])
+        self.assertLess(elapsed, 3 + worker._DRAIN_KILL_SETTLE_SECONDS + 2)
+        self.assertEqual(result.outcome, worker.INTERRUPTED)
+        self.assertEqual(result.returncode, 0)
+        self._assert_gone(self._descendant()["pid"])
+        self.assertNotIn("exited_at", self._descendant())
+
+    def test_under_the_killpg_form_the_drain_waits_until_no_such_group(self) -> None:
+        answers: list = []
+        real_killpg = worker._killpg
+
+        def spy_killpg(pgid, sig):
+            try:
+                real_killpg(pgid, sig)
+            except ProcessLookupError:
+                answers.append((sig, "no such group"))
+                raise
+            answers.append((sig, "delivered"))
+
+        drains: list = []
+        with unittest.mock.patch.object(worker, "_proc_numbers_own_namespace", return_value=False), \
+                unittest.mock.patch.object(worker, "_killpg", spy_killpg):
+            result = self._launch(env=self._env("group:1"), on_group_drain=lambda *a: drains.append(a))
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual([remaining for _pid, remaining in drains], [[]])
+        self.assertIn((0, "delivered"), answers)
+        self.assertEqual(answers[-1], (0, "no such group"))
+        self.assertIn("exited_at", self._descendant())
+
+    def test_on_group_drain_raising_ends_the_group_and_propagates(self) -> None:
+        failure = OSError(errno.EIO, "drain flush failed")
+
+        def on_group_drain(pid, remaining):
+            raise failure
+
+        with self.assertRaises(OSError) as ctx:
+            self._launch(env=self._env("group-closed:30"), on_group_drain=on_group_drain)
+        self.assertIs(ctx.exception, failure)
+        self._assert_gone(self._descendant()["pid"])
+        self.assertNotIn("exited_at", self._descendant())
 
 
 # ---------------------------------------------------------------------------

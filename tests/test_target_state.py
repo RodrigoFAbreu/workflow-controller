@@ -159,11 +159,15 @@ class ReadHappyPathTest(unittest.TestCase):
     def test_real_repository_own_workflow_state_reads_cleanly(self) -> None:
         """This repository is itself a real, currently-managed Workflow
         repository -- its own WORKFLOW_STATE.json should always read
-        without refusal."""
+        without refusal. Between milestones (right after an acceptance
+        commit) ``active_work_item_id`` is legitimately null, so the
+        assertion holds in both the active and the idle state."""
         managed_repo = fixtures.build_target_managed_repository(REPO_ROOT)
         snapshot = target_state.read(managed_repo)
         self.assertEqual(snapshot.schema_version, 1)
-        self.assertIn(snapshot.active_work_item_id, snapshot.work_items)
+        self.assertTrue(snapshot.work_items)
+        if snapshot.active_work_item_id is not None:
+            self.assertIn(snapshot.active_work_item_id, snapshot.work_items)
 
 
 class MissingStateTest(unittest.TestCase):
@@ -508,12 +512,21 @@ class RegistryCompleteTest(unittest.TestCase):
                 target_state.read(managed_repo)
 
     def test_this_repository_own_registry_reads_as_a_boolean(self) -> None:
-        """Integration case: this repository's own real registry file for
-        its active work item, read the same way a real inspection would."""
+        """Integration case: this repository's own real registry files, read
+        the same way a real inspection would. Every work item is checked,
+        not just the active one, since between milestones there is none."""
         managed_repo = fixtures.build_target_managed_repository(REPO_ROOT)
         snapshot = target_state.read(managed_repo)
+        for view in snapshot.work_items.values():
+            with self.subTest(work_item_id=view.work_item_id):
+                self.assertIn(view.registry_complete, (True, False, None))
+        self.assertTrue(any(
+            isinstance(view.registry_complete, bool)
+            for view in snapshot.work_items.values()
+        ))
         active = target_state.select_work_item(snapshot)
-        self.assertIsInstance(active.registry_complete, bool)
+        if active is not NoWorkItemYet:
+            self.assertIsInstance(active.registry_complete, bool)
 
 
 class ImplementationReviewFieldsTest(unittest.TestCase):

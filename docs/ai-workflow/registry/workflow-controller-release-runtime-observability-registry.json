@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-release-runtime-observability",
+  "plan_revision": 6,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Single authoritative semantic version (controller/version.py) wired into pyproject as the dynamic version, package data so GENERATION.json ships in the wheel, the setup.py build_py hook that writes controller/BUILD_INFO.json (version, source commit, dirty flag, package digest, build origin, release tag) through the dependency-free controller/buildinfo.py, and workflow-controller --version",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Packaged runtime identity: runtime_kind source/package/unidentified resolution without direct_url.json, git-free materialisation of a package snapshot from the installed tree with package-digest verification, dirty or unknown-provenance build gating, runtime-root ladder row 3 restricted to source runtimes, package-mode generation handoff, and the controller_runtime block in SOURCE_PIN.json, identity.json, job records and status",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 5,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Packaged-runtime regression suite: wheel built from a disposable clone, non-editable venv install, inspect/step/worker launch with the fake worker, source checkout absent, renamed and modified after install, version and job-record identity assertions, the reproduced git-archive failure, a venv inside a checkout, and retained editable/source execution",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Streaming worker output: claude -p --output-format stream-json --verbose, worker stdout/stderr written by the worker directly into per-job files created before spawn, strict stream parsing that preserves the structured final result and the four-outcome classification, worker_streams in the LAUNCHED record, and a stream-emitting fake worker",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Durable Controller lifecycle event logs: per-job events.jsonl appended at every job-record transition (including resume and abandon), run records runs/<run_id>.json with the Controller's own process identity and runs/<run_id>/events.jsonl for step/run boundaries, run_id linkage in job records, and best-effort write semantics that never alter a lifecycle outcome",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Observation surface: controller/observe.py (offset tailer, event normaliser, text and JSON renderers that omit thinking blocks, heartbeat), the zero-write follow command with active run/job discovery, step/run --follow as a stderr renderer thread isolated from the lifecycle, status active runs/jobs and follow hints in resume exit 45, Ctrl-C and worker-active messages",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Observation isolation and equivalence tests: followed versus unfollowed durable-result equivalence, attach to an active job from a second process, follower kill and broken pipe leaving the worker and exit code unaffected, follower zero-write proof, legacy json worker.stdout replay, and the unchanged lifecycle orchestration, locking and routing regression",
+      "depends_on": [
+        "CP6"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP8",
+      "name": "Release tooling tools/release.py: tag/version verification, wheel verification (metadata, BUILD_INFO, package digest, required files, entry point), duplicate-release refusal through gh that fails closed on an undecidable answer, tag-to-built-commit verification immediately before publication, and SHA256SUMS, with unit tests",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP9",
+      "name": "GitHub Actions: tools/ci_workflows.py model and deterministic YAML emitter, reusable validate.yml (Controller shard matrix, frozen conformance matrix, package job with pipx smoke, fail-fast false, ubuntu-latest), ci.yml with same-ref cancel-in-progress, release.yml gated on validation with non-cancelling concurrency and an immutable GitHub Release, removal of controller-tests.yml, and structural tests",
+      "depends_on": [
+        "CP3",
+        "CP8"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP10",
+      "name": "Operator documentation: README install, verify, upgrade, rollback, development install, runtime identity, follow and release procedure; ADR 0002 for release runtime identity and observability; ACTIVE_MILESTONE narrative; README invocation lines parsed by the live parser",
+      "depends_on": [
+        "CP2",
+        "CP6",
+        "CP9"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP11",
+      "name": "Full verification: Controller suite, frozen conformance suites, workflow render check, local wheel build and isolated pipx install drill including the reproduced base-commit failure and the removed-checkout case, and one live disposable-repository run --follow with a second-terminal attach and detach",
+      "depends_on": [
+        "CP7",
+        "CP10"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    }
+  ]
+}

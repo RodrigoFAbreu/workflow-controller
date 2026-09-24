@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-release-runtime-observability",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -1369,6 +1369,78 @@
           "completed_at": "2026-09-24T01:06:19Z"
         }
       }
+    },
+    "workflow-controller-release-runtime-observability": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-release-runtime-observability",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-release-runtime-observability-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-release-runtime-observability-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "16c3fb4670bfeb9c7ce82aaff13f5a643a3f2400",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "2a58e25042aaf4ca843067f630cd2089712eccde76e2d479fbc154a0daab1577",
+        "approved_review_content_id": "1121f5592fbf0e52da1ab680e714887f22919a8c442d140f0717f47dd7a05625",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fdfc7bc71d940960c8379136c0884e238d5bb73c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-release-runtime-observability-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a3f3845e4c5f3f6a335b04ce7071a3d7566604bb"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-release-runtime-observability-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3ed867918bdb184e8d20594da5e50e08299de5e2"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve plan for workflow-controller-release-runtime-observability",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-24T08:24:30Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "1121f5592fbf0e52da1ab680e714887f22919a8c442d140f0717f47dd7a05625",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "2a58e25042aaf4ca843067f630cd2089712eccde76e2d479fbc154a0daab1577",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-09-24T03:30:26Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "2a58e25042aaf4ca843067f630cd2089712eccde76e2d479fbc154a0daab1577",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-24T08:22:41Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 20,
+      "last_transition": "2026-09-24T08:24:30Z"
     }
   }
 }

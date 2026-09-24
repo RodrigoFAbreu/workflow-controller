@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-release-runtime-observability",
+  "requirements": {
+    "R1": {
+      "description": "One authoritative semantic version source drives the wheel metadata, workflow-controller --version and every recorded runtime identity",
+      "checkpoint_ids": [
+        "CP1",
+        "CP10"
+      ]
+    },
+    "R2": {
+      "description": "The distributable wheel carries the complete runtime (including GENERATION.json) and an explicit build identity (version, source commit, dirty flag, package digest, build origin, release tag)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3",
+        "CP8"
+      ]
+    },
+    "R3": {
+      "description": "A non-editable wheel/pipx runtime runs inspect, step and worker launch without git, without a source checkout and without direct_url.json; the reproduced git-archive failure is a regression case",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP11"
+      ]
+    },
+    "R4": {
+      "description": "Runtime identity distinguishes source from package runtimes, is stable when the source checkout changes or disappears, and is recorded in job records, identity.json, status and --version",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "Editable/source execution keeps its commit/worktree snapshot semantics and fail-closed dirty handling",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "Install, verify, upgrade and rollback procedures are documented",
+      "checkpoint_ids": [
+        "CP10"
+      ]
+    },
+    "R7": {
+      "description": "CI runs Controller shards and frozen conformance suites as parallel, hermetic ubuntu-latest matrix jobs with fail-fast false, and ordinary same-workflow same-ref runs cancel older in-progress runs",
+      "checkpoint_ids": [
+        "CP9"
+      ]
+    },
+    "R8": {
+      "description": "The release pipeline publishes only after all validation passes, fails closed on tag/version mismatch, on an existing release and on a tag that no longer names the built commit, builds and verifies the wheel before publication, publishes an immutable GitHub Release with the wheel and checksums, never cancels a tagged release run for another, and needs no live Claude spend",
+      "checkpoint_ids": [
+        "CP8",
+        "CP9"
+      ]
+    },
+    "R9": {
+      "description": "Workers stream stream-json output that is teed to durable per-job logs while preserving the structured final result, classification and reconciliation evidence",
+      "checkpoint_ids": [
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R10": {
+      "description": "Operators can observe a running worker live via step/run --follow and attach from another terminal with follow, discovering the active run/job without searching job files",
+      "checkpoint_ids": [
+        "CP5",
+        "CP6",
+        "CP7"
+      ]
+    },
+    "R11": {
+      "description": "Observation is presentation-only and read-only: it changes no command selection, routing, model/effort, permission mode, locking, expected outcome, reconciliation, Workflow state, retry/failure handling or exit code, and a follower detaching never affects the worker",
+      "checkpoint_ids": [
+        "CP6",
+        "CP7"
+      ]
+    },
+    "R12": {
+      "description": "status and diagnostics show the active Controller version and runtime identity and the active runs/jobs, with existing exit-code semantics preserved",
+      "checkpoint_ids": [
+        "CP2",
+        "CP6",
+        "CP10"
+      ]
+    },
+    "R13": {
+      "description": "No regression to automatic lifecycle orchestration, locking, routing, review gates or Workflow conformance",
+      "checkpoint_ids": [
+        "CP7",
+        "CP11"
+      ]
+    }
+  }
+}

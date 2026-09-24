@@ -7,4 +7,4 @@ recorded runtime identity read it at runtime. This module holds exactly one
 assignment and imports nothing.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"

@@ -56,8 +56,8 @@ and a `SHA256SUMS` file. Install it with pipx, so the Controller runs in
 its own venv and never from a checkout:
 
 ```bash
-BASE=https://github.com/RodrigoFAbreu/workflow-controller/releases/download/v1.1.0
-pipx install "$BASE/workflow_controller-1.1.0-py3-none-any.whl"
+BASE=https://github.com/RodrigoFAbreu/workflow-controller/releases/download/v1.1.1
+pipx install "$BASE/workflow_controller-1.1.1-py3-none-any.whl"
 ```
 
 **Verify** a release before you install it. Download both assets, check
@@ -65,16 +65,16 @@ the wheel against `SHA256SUMS`, install the verified file, then check
 what is running:
 
 ```bash
-curl -fLO "$BASE/workflow_controller-1.1.0-py3-none-any.whl"
+curl -fLO "$BASE/workflow_controller-1.1.1-py3-none-any.whl"
 curl -fLO "$BASE/SHA256SUMS"
 sha256sum -c SHA256SUMS
-pipx install ./workflow_controller-1.1.0-py3-none-any.whl
+pipx install ./workflow_controller-1.1.1-py3-none-any.whl
 workflow-controller --version
 ```
 
-`--version` prints `workflow-controller 1.1.0` on its first line and the
+`--version` prints `workflow-controller 1.1.1` on its first line and the
 runtime on its second, for a release
-`runtime: package (release v1.1.0; built from <commit>; package <digest>)`
+`runtime: package (release v1.1.1; built from <commit>; package <digest>)`
 (see "Runtime identity").
 
 **Upgrade.** First check that nothing is running: `workflow-controller status`
@@ -548,8 +548,8 @@ The Controller never reads installer metadata such as `direct_url.json`.
 `workflow-controller --version` prints two lines and writes nothing:
 
 ```
-workflow-controller 1.1.0
-runtime: package (release v1.1.0; built from 0123456789ab; package 3f2a1c9d0b7e)
+workflow-controller 1.1.1
+runtime: package (release v1.1.1; built from 0123456789ab; package 3f2a1c9d0b7e)
 ```
 
 Line 1 is always `workflow-controller <version>`. Line 2 is one of
@@ -557,7 +557,7 @@ Line 1 is always `workflow-controller <version>`. Line 2 is one of
 `, uncommitted changes` when that applies, `package (local build, unknown
 provenance)`, `source (<checkout> @ <commit>)` with the same suffix, or
 `unidentified (<reason>)`. `status` opens with the same text:
-`controller: workflow-controller 1.1.0 -- package (...)`.
+`controller: workflow-controller 1.1.1 -- package (...)`.
 
 Every job record carries a `controller_runtime` block (`runtime_kind`,
 `version`, `source_kind`, `source_commit`, `tree_digest`,
@@ -576,7 +576,7 @@ later.
 The version (`controller/version.py`, `MAJOR.MINOR.PATCH`) and the
 generation (`controller/GENERATION.json`) are separate. The generation is
 the compatibility axis that handoff and job-record validation compare.
-Version 1.1.0 is still generation 1.
+Version 1.1.1 is still generation 1.
 
 ## Observing workers
 

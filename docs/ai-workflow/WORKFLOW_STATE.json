@@ -1379,7 +1379,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-release-runtime-observability-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-release-runtime-observability-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 6,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -1465,7 +1465,277 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-24T08:24:30Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "7e4f29e93977b6c2a4d379b92010abba3ec1592c4163dd7656896861932422bb",
+        "approved_review_content_id": "aa88a0096a8950671f758a52a71aad57ddb3ac423581daeffa0635a8a8d72e8c",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/ci.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f1626a4a0123e35391261361f538f94c4827ced"
+          },
+          {
+            "path": ".github/workflows/controller-tests.yml",
+            "exists": false,
+            "mode": null,
+            "blob": null
+          },
+          {
+            "path": ".github/workflows/release.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9a135cb0bbdc88bb736d0b70eb42f09bcf5f78c2"
+          },
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c978f89bdf38ca0e892da7bc84ff5c48931c716"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dfbe837e278dd34e1815db23282ae2b436fac9cc"
+          },
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7c4fb8843d44b385debee03643822996e1d18ca5"
+          },
+          {
+            "path": "controller/buildinfo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d4f5976f1b0ad8da76663ac5492dee6787f9c805"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "865b871744a0f4d7941c919f387b7f59a2257204"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a058136d0840982321b2efdc4e7a81725b671c2f"
+          },
+          {
+            "path": "controller/handoff.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2b49114c8ee361ee52b2ccca64b79be659673cb5"
+          },
+          {
+            "path": "controller/identity.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c559716b1187e6d4eff7ce91616945294526849d"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "753302d067917e3e5690d416f5e8b3a192f91525"
+          },
+          {
+            "path": "controller/observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1bd264fb1784cf7805bd3925b4c6fad4883856b9"
+          },
+          {
+            "path": "controller/runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "53908dda61e89bdbe350cc872321b5d92cdeef87"
+          },
+          {
+            "path": "controller/version.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e6d0efdc29dccd5c0940fcec72bc9d4c660445e1"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4beb19641508afcc41afe2d200b1ab2dba316566"
+          },
+          {
+            "path": "docs/adr/0002-release-runtime-identity-and-observability.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8879dd1d931a85e1c8041a163d38eade880b64e"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-release-runtime-observability-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ad6deb11ea9cfea0d5f25ae754ae956a7751b16"
+          },
+          {
+            "path": "pyproject.toml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "81eeec946af2ac9ccc4e2d91f9dcbb06c0fe8bb2"
+          },
+          {
+            "path": "setup.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1fa7d4d3f8096e245f5ddb6434fca9897a6d5506"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "8cdc51e80631d2dca1413622e4853aa416436991"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5e00b2b4549047e3e5f2d4a2e757a7b1edbf7142"
+          },
+          {
+            "path": "tests/golden/claude_stream_json_2.1.281.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f1b948b587a7382d1f9ce725377c7ad935f3705a"
+          },
+          {
+            "path": "tests/golden/claude_stream_json_2.1.281.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "95db65aad9430be70ee7f55376c10e14d3f3f142"
+          },
+          {
+            "path": "tests/test_buildinfo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9515b100e549a86146f4caf186238d0936ad940e"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "60fb1ab661e1f3f94352b62798e5ce4f5840c7c2"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "80314edbd30a0effb24ced43179f45f0e8d13fd2"
+          },
+          {
+            "path": "tests/test_handoff.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "34fb9e076e31f2d87c86d6b90e78965411f2a26e"
+          },
+          {
+            "path": "tests/test_identity.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f863997788b1c1bed3759d91e9a4e4b0e0f40919"
+          },
+          {
+            "path": "tests/test_integration_disposable_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bc85e036e6536442bb51a9324d13a0cedfd1c863"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "09d93353e409ec58089ab7285288e9ed290dde92"
+          },
+          {
+            "path": "tests/test_observation_equivalence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f0b2aa77a1328bbece394f621ca019f6779d7dd5"
+          },
+          {
+            "path": "tests/test_observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5b074bd70bc3d5d2a9ba00cfe3c10c3216ed519c"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "103b4a55500575c802f1965a1658ff1379bfe19b"
+          },
+          {
+            "path": "tests/test_packaged_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ed99dd5d0c3670524549bd4b96391b62a83522db"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d2644c72b40c298be3fb5018442f6f4511a0d493"
+          },
+          {
+            "path": "tests/test_release_tools.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1e2279e8eeff41ec65aa714c41ed2e8ef9770a17"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "30a67b955e7c1eb63e615d4783813ebe2b48ec4b"
+          },
+          {
+            "path": "tests/test_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "99e9c25e4c8fe2d5b74ba1c0f1b9ee47c404bc9f"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7002f575c3e78a712980a508eaa692765b4f034b"
+          },
+          {
+            "path": "tests/test_write_containment.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0550cf40647674324560255292d119b226fe5d92"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7edd629b6f5520ea94ccd69eb57bf341195e3293"
+          },
+          {
+            "path": "tools/release.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "a5eaf1ca864748ecc24b1851e13462db07849974"
+          }
+        ],
+        "reviewed_content_commit": "35493111ef9e0df58c046c0df0c769310e7bc883",
+        "legacy_evidence": null,
+        "user_confirmation": "I approve workflow-controller-release-runtime-observability implementation",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-24T11:48:15Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "1121f5592fbf0e52da1ab680e714887f22919a8c442d140f0717f47dd7a05625",
@@ -1484,8 +1754,23 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 43,
-      "last_transition": "2026-09-24T11:18:45Z"
+      "state_revision": 46,
+      "last_transition": "2026-09-24T11:48:15Z",
+      "implementation_review_stages": {
+        "review_content_id": "aa88a0096a8950671f758a52a71aad57ddb3ac423581daeffa0635a8a8d72e8c",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7e4f29e93977b6c2a4d379b92010abba3ec1592c4163dd7656896861932422bb",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-24T11:25:41Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7e4f29e93977b6c2a4d379b92010abba3ec1592c4163dd7656896861932422bb",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-24T11:40:00Z"
+        }
+      }
     }
   }
 }

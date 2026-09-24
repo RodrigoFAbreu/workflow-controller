@@ -61,7 +61,9 @@ class RoutingTableTest(unittest.TestCase):
                                  routing.SUBAGENT_TOOLS if role in SINGLE_AGENT_ROLES else ())
 
     def test_the_subagent_tools_name_the_installed_clis_delegation_tools(self) -> None:
-        self.assertEqual(routing.SUBAGENT_TOOLS, ("Agent", "Workflow"))
+        # `Skill` joined after CP9's live probe ran a forked skill in a
+        # subagent on a route that disallowed only `Agent` and `Workflow`.
+        self.assertEqual(routing.SUBAGENT_TOOLS, ("Agent", "Workflow", "Skill"))
 
     def test_the_three_unnamed_roles_inherit_both_fields(self) -> None:
         for role in INHERIT_ROLES:

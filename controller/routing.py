@@ -103,11 +103,14 @@ ROLES: frozenset[str] = frozenset(ROLE_ROUTES)
 
 #: The Claude Code tools that spawn a subagent or a workflow, disallowed
 #: (``--disallowedTools``) for every single-agent worker. Confirmed against
-#: the installed CLI (2.1.281): the subagent tool is ``Agent`` (its legacy
-#: name ``Task`` is an alias of it), and ``Workflow`` runs a workflow
-#: script. Whether ``Skill`` can reach a forked (subagent) skill, and so
-#: belongs here too, is settled by CP9's live single-agent probe.
-SUBAGENT_TOOLS: tuple[str, ...] = ("Agent", "Workflow")
+#: the installed CLI (2.1.281): the subagent tool is ``Agent`` (the session's
+#: tool list names it ``Task``, and disallowing ``Agent`` removes it), and
+#: ``Workflow`` runs a workflow script. ``Skill`` belongs here too: CP9's
+#: live single-agent probe showed a worker with only ``Agent`` and
+#: ``Workflow`` disallowed running a ``context: fork`` skill in a subagent.
+#: Disallowing ``Skill`` leaves the task's own slash command working: the
+#: CLI expands a ``-p`` prompt's command itself, without the tool.
+SUBAGENT_TOOLS: tuple[str, ...] = ("Agent", "Workflow", "Skill")
 
 # ---------------------------------------------------------------------------
 # Role derivation.

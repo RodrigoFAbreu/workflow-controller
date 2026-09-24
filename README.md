@@ -199,10 +199,13 @@ no worker runs.
 
 Single-agent cannot be overridden: the review roles and the final
 self-review pass always run with the subagent-spawning tools disallowed
-(`--disallowedTools Agent,Workflow`). Every worker is a fresh session:
-the Controller never passes `--resume`, `--continue`, `--fork-session`
-or `--session-id`. The resolved route, with the level each value came
-from, is recorded in the job record's `worker_route`.
+(`--disallowedTools Agent,Workflow,Skill`). `Skill` is on the list
+because a `context: fork` skill runs in a subagent; the task's own slash
+command still runs, since the CLI expands it without that tool. Every
+worker is a fresh session: the Controller never passes `--resume`,
+`--continue`, `--fork-session` or `--session-id`. The resolved route,
+with the level each value came from, is recorded in the job record's
+`worker_route`.
 
 ## Implementation-review apply rounds
 

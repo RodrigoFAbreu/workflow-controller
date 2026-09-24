@@ -1011,4 +1011,152 @@ Ground truth is `docs/ai-workflow/WORKFLOW_STATE.json`.
     `EXIT_*` constant, the exception covering a dropped row, no duplicate-row check, no
     shared-constant check, `bool` accepted as a constant, a README invocation that does not
     parse, and every meaning difference ignored.
-- **CP9 -- pending.**
+- **CP9 -- complete.** Full verification. Raw logs, one per run, are kept outside the
+  repository in `~/.cache/workflow-controller-live/cp9-evidence/`, beside the kept disposable
+  workspaces (`CONTROLLER_LIVE_KEEP=1`). Every `CP9_*` evidence line quoted below is printed by
+  the test that produced it.
+  - Changes:
+    - `tests/test_integration_disposable_repo.py` gains the live tests (3)-(5) run through, all
+      opt-in behind `CONTROLLER_LIVE_WORKER=1`. They are `LiveImplementationLifecycleTest`,
+      `LiveSingleAgentProbeTest` and `LiveConcurrencyDrillTest` (two methods).
+    - Their disposable directories go under `~/.cache/workflow-controller-live`
+      (`CONTROLLER_LIVE_BASE_DIR` overrides it). That is on the checkout's btrfs filesystem, as
+      the drill needs, and outside the checkout, so a worker never loads this repository's
+      `CLAUDE.md`. `CONTROLLER_LIVE_KEEP=1` keeps them, and `CONTROLLER_LIVE_CLI_TIMEOUT` bounds
+      one Controller subprocess (default 6 h). The Controller itself runs with no `--timeout`.
+    - The seed runs frozen Workflow's own writers inside the target, importing the target's own
+      `scripts/` in the order its acceptance matrix uses, with no hand-written state:
+      `route_work_item`, `generate_registry`/`generate_mapping`/`write_registry_and_mapping`,
+      `generate_artifacts_declarations`, `publish_plan_revision`, the real
+      `prepare-ai-review.sh` plan bundle, `record_local_plan_review`,
+      `record_manual_plan_review`, then `apply_plan_approval` with the fixture literal and the
+      `Workflow-Plan-Approval` commit. It checks itself with `verify_post_approval_manifest_match`,
+      `implementing_entry_reachable` and a clean tree.
+    - **A CP6 defect, found by the probe and fixed:** `routing.SUBAGENT_TOOLS` is now
+      `("Agent", "Workflow", "Skill")`. Also updated: its comment in `controller/routing.py`,
+      the pins in `tests/test_routing.py` and `tests/test_worker.py`, and README's routing
+      paragraph. The approved plan's "Worker routing" section names this outcome ("If the probe
+      shows that `Skill` can run a forked (subagent) skill, `Skill` joins the set").
+  - (1) `python3 -m unittest discover -s tests -t .`: 971 tests OK, 6 skipped (the six opt-in
+    live tests). Both live-state-dependent baseline tests pass
+    (`test_real_repository_own_workflow_state_reads_cleanly`,
+    `test_this_repository_own_registry_reads_as_a_boolean`). The census, taken with the pattern
+    `tests/fake_[c]laude[.]py` so it cannot match its own shell, found 0 processes before and
+    0 after. The plain `pgrep -f tests/fake_claude.py` matches the shell running it, and it
+    reported 2 both times for that reason. CP5's `unshare` test
+    (`ProbeChildPidNamespaceTest`) ran and passed (`unshare -Urpf --mount-proc` is available
+    here), and so did the subreaper zombie tests.
+  - (2) Frozen suites, each `python3 scripts/<name>.py`, all exit 0:
+    - `workflow_acceptance_matrix_test` 146 OK (18 skipped);
+    - `workflow_fingerprint_generalization_test` 79 OK;
+    - `workflow_fingerprint_test` 218 OK;
+    - `workflow_integration_test` 260 OK (1 skipped);
+    - `workflow_state_completion_obligations_test` 106 OK;
+    - `workflow_state_test` 853 OK;
+    - `workflow_test_harness_test` 19 OK.
+
+    Re-derived at base: `scripts/` is unchanged since `abd34a0`. The two excluded suites still
+    fail, only on their real-repository classes: `workflow_fingerprint_demo_test` (5 errors)
+    and `workflow_state_demo_test` (11 failures, 16 errors).
+  - (3) Live lifecycle (`LiveImplementationLifecycleTest`, run 2: OK in 782 s, workspace
+    `cp9-lifecycle-7pegnwmc`). Controller source tree digest `e6664f76...` (worktree snapshot).
+    The seed: base `2ad69c6`, approval commit `0c5e93d`, basis `EXTERNAL_APPROVE`.
+    - Phase A: `run` with no `--model`/`--effort`/`--timeout`/`--permission-mode` (so `auto`),
+      exit 10 at `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`, 360 s. The local review
+      returned `APPROVE`, so Phase A had no apply round. Commits: `783a2b9` (CP1, trailers
+      `Workflow-Checkpoint: CP1` + `Workflow-Work-Item`), then T1 `d0b0114`
+      (`Workflow-Bundle-Generation-Record: live-greeting/1`,
+      `SELF_REVIEWING_IMPLEMENTATION -> AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, validated `OK` by
+      the target's `validate_bundle_generation_record_commit`).
+    - Phase B: the fixture manual `REVISE` (finding M1: `greet("  ada  ")` keeps the padding),
+      bound to bundle `a9926996...` and content `a93c8a61...`. Then `run` exit 10 at the manual
+      gate again, 421 s. The apply round's commits: `bcbc668` (state-only, trailer
+      `Workflow-Work-Item` only, committed phase `APPLYING_REVIEW_FEEDBACK`), then `454f2d6`
+      (the fix: `app/greeting.py`, `app/test_greeting.py`, `docs/ACTIVE_MILESTONE.md`), then T2
+      `d4ef318` (`live-greeting/2`, parent's committed phase `APPLYING_REVIEW_FEEDBACK`, own
+      `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, validated `OK`). After it, `greet("  ada  ")` is
+      `'hello, ada'`.
+    - Jobs, all `FINISHED` with `transition_verified: true` and `permission_denials: []`
+      (route model/effort, `single_agent`, reported `modelUsage` model, cost, worker duration,
+      session):
+
+      | Role | Route | Single | Reported | Cost | Duration | Session |
+      |---|---|---|---|---|---|---|
+      | `milestone-implement` | opus-5-5/xhigh (default) | no | `claude-opus-5-5` | $0.68 | 75 s | `65a2bc45` |
+      | `milestone-implement-self-review` | opus-5-5/xhigh | yes | `claude-opus-5-5` | $1.12 | 133 s | `f3dce734` |
+      | `review-implementation` (local `APPROVE`) | opus-5-5/xhigh | yes | `claude-opus-5-5` | $1.01 | 136 s | `f4552392` |
+      | `record-manual-implementation-review` | inherit/inherit | no | `claude-opus-5-5[1m]` | $0.62 | 63 s | `9061ef41` |
+      | `apply-implementation-review` (with the addendum) | opus-5-5/xhigh | no | `claude-opus-5-5` | $2.04 | 214 s | `246c2ca7` |
+      | `review-implementation` (local `APPROVE`) | opus-5-5/xhigh | yes | `claude-opus-5-5` | $1.17 | 140 s | `b4b67a95` |
+
+      No worker launched at the manual gate, except the one ingestion of the fixture verdict.
+      Each phase ends in a `GATE_BLOCKED` record with no worker. The review jobs ran under
+      `--disallowedTools Agent,Workflow,Skill`, which confirms the review command still runs
+      under the final disallow list.
+    - Run 1 (`cp9-lifecycle-zr9gzl7m`) passed Phase A the same way: $3.38, local `APPROVE`,
+      T1 `OK`. Its Phase B then failed on a test bug. `resolve_feedback_dir` answers a path
+      relative to the target root, and the test wrote the fixture verdict to that relative path
+      from its own working directory, this checkout. So the Controller gated with no worker,
+      and the file landed in **this repository's** `.ai-review/feedback/REVIEW_FEEDBACK.md`,
+      overwriting the untracked, gitignored plan-stage manual-external `APPROVE` feedback.
+      That file was restored byte for byte (6836 bytes) from the orchestrator's saved copy
+      (`PLAN_REVIEW_FEEDBACK_rev5_manual.md` in its scratchpad). The copy's content matches what
+      the CP8 worker read from the file at 23:09Z. The test now anchors the path to the target
+      and asserts it lies inside it before writing.
+  - (4) Single-agent probe (`LiveSingleAgentProbeTest`, `worker.launch` with the
+    `review-implementation` route, `auto`).
+    - The CLI's own `stream-json` init tool list, read before any request and then killed, so
+      nothing is spent: 2.1.281 lists the subagent tool as `Task`, plus `Workflow` and `Skill`.
+      `--disallowedTools Agent,...` removes `Task`, so `Agent` is an accepted name for it. The
+      test maps `Agent` to its listed names (`Agent`, `Task`).
+    - Run 1, with `Agent,Workflow` disallowed: `Agent` and `Workflow` reported `UNAVAILABLE`
+      with no tool use (sessions `36bdd48d`, `54857298`). **`Skill` spawned**: session
+      `3673f3ad` called `Skill(fork-probe)`, which returned "completed (forked execution)" with
+      the marker, and left a subagent transcript at `3673f3ad.../subagents/agent-a92917e7b71936993.jsonl`.
+      That is the CP6 defect fixed above.
+    - Before changing anything, `claude -p "/echo-probe arg-one" --disallowedTools
+      Agent,Workflow,Skill` expanded the project command and replied `COMMAND_EXPANDED arg-one`
+      ($0.09).
+    - Run 2, with `Agent,Workflow,Skill` disallowed: OK. All three paths reported
+      `UNAVAILABLE`, with no tool use, no subagent transcript and no denials (sessions
+      `e15efcfd`, `df915976`, `26166051`, all `claude-opus-5-5`). A fourth launch ran
+      `/echo-probe arg-one` on the review route: `COMMAND_EXPANDED arg-one` (session `90086667`).
+  - (5) Concurrency drill (`LiveConcurrencyDrillTest`, run 2: OK in 199 s, workspace
+    `cp9-drill-lkopx0a7`; init pid namespace `pid:[4026531836]`; target and checkout both on
+    `/dev/nvme0n1p2[/@home] btrfs 0:29`).
+    - `step` at `IMPLEMENTING` launched the checkpoint worker (pid/pgid 2404742). About 20 s
+      after its `worker_process` flush, the test `SIGKILL`ed the Controller (pid 2404729,
+      returncode -9). The worker kept running.
+    - While it lived: `explain` printed `lifecycle lock: held`, and `step` and `resume` both
+      exited 45. Their message named the recorded worker ("Job 20260923T234409Z-ca21d9e5's
+      recorded worker is running: pid 2404742, process group 2404742 ...") separately from
+      other holders (the "not a recorded worker" sentence).
+    - `fuser -v <git-dir>`, sampled 56 times (once right after the kill, between the three
+      commands, then every second), named exactly one holder: `claude` pid 2404742 (`f....`),
+      the recorded worker, running `/milestone-implement live-greeting`. No descendant ever held
+      the descriptor.
+    - After the worker exited: `explain` printed `lifecycle lock: free`, and `resume` exit 0
+      reconciled the record `FINISHED` (`transition_verified: true`, observed
+      `SELF_REVIEWING_IMPLEMENTATION`, CP1 `COMPLETE`) from the durable state, the worker's
+      stdout having gone with its Controller. The next `step` exited 0 and ran the self-review
+      pass (`FINISHED` to `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, $0.98, session `2d472b88`,
+      no denials).
+    - The orphaned worker's own session is `dbd11f91`. Its cost is unknown, because its JSON
+      result was lost with its Controller.
+    - Run 1 (`cp9-drill-wmzbqf4q`) passed every Controller-side check the same way. It failed
+      only on the test's `fuser` parse: `fuser -v` prints the pids on stdout and a table
+      without them on stderr, so the parse found nothing. Fixed.
+    - Descendant inheritance is settled by a second, direct method
+      (`test_whether_a_bash_tool_child_of_the_worker_inherits_the_lock_descriptor`). It launches
+      a real worker as `job` does, with the lock's descriptor in `pass_fds`, and runs one long
+      Bash-tool command that lists its own descriptors while `fuser` is sampled. **The
+      Bash-tool child does not inherit the descriptor**: its listing shows stdio, the task
+      output file, `/dev/null` and a socket. `fuser` named only the test process (the lock's
+      taker) and the `claude` worker (session `5cd05cda`, $0.10).
+    - The drill runs in the init pid namespace on a systemd host, so round 4's two container
+      cases are covered by CP5's `unshare` and subreaper tests, both of which ran (see (1)).
+  - Live spend across every CP9 run: $12.70 reported, plus the two orphaned drill workers
+    (sessions `97d52f55`, `dbd11f91`), whose results were lost with their Controllers.
+  - Stop conditions: none fired in the recorded runs. There was no `FAILED` job, no malformed
+    generation-record commit or generator refusal, no local `BLOCK`, no permission denial, no
+    model other than the routed one, and no worker at the manual gate.

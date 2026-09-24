@@ -24,9 +24,11 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import unittest.mock
@@ -34,8 +36,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import identity, job  # noqa: E402
-from controller.cli import EXIT_INCOMPLETE, EXIT_OK, EXIT_WORKER_FAILED  # noqa: E402
+from controller import identity, job, lock, routing, worker  # noqa: E402
+from controller.cli import (  # noqa: E402
+    EXIT_FAIL_CLOSED, EXIT_GATE, EXIT_INCOMPLETE, EXIT_INTERRUPTED, EXIT_OK, EXIT_WORKER_ACTIVE, EXIT_WORKER_FAILED,
+)
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from controller.managed_repo import (  # noqa: E402
     REFERENCE_WORKFLOW_RELEASE, SUPPORTED_PROFILES, VALIDATED_WORKFLOW_RELEASES,
@@ -1041,6 +1045,1230 @@ class DisposableRepoRealWorkflowActionTest(unittest.TestCase):
             jobs_dir = runtime_root / "jobs"
             job_files = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
             self.assertEqual(len(job_files), 2, f"expected exactly two job records, got {job_files!r}")
+
+
+# ---------------------------------------------------------------------------
+# automatic-lifecycle-orchestration CP9: the live implementation-lifecycle
+# run (3), the live single-agent probe (4) and the live concurrency drill
+# (5). All three are opt-in behind CONTROLLER_LIVE_WORKER=1, like the two
+# live tests above: they launch the real `claude` binary and spend money.
+# ---------------------------------------------------------------------------
+
+#: Where CP9's live tests create their disposable directories. The default
+#: sits on the same filesystem as a checkout under the home directory (btrfs
+#: on the development machine, where `/tmp` is tmpfs), so the drill checks the
+#: lock probe's device source against a real worker (round 2's I1). It is
+#: outside the checkout on purpose: a worker loads every `CLAUDE.md` above
+#: its working directory, and the Controller repository's own must not reach
+#: a worker in a disposable target.
+LIVE_BASE_DIR_ENV = "CONTROLLER_LIVE_BASE_DIR"
+#: `"1"` keeps each live test's disposable directory for inspection.
+LIVE_KEEP_ENV = "CONTROLLER_LIVE_KEEP"
+#: The outer bound, in seconds, on one live Controller subprocess. It is not
+#: a Controller option -- every `run`/`step` below passes no `--timeout`, so
+#: its workers wait without a limit -- and only keeps a wedged live test from
+#: hanging forever.
+LIVE_CLI_TIMEOUT_ENV = "CONTROLLER_LIVE_CLI_TIMEOUT"
+_DEFAULT_LIVE_CLI_TIMEOUT = 6 * 3600
+
+_LIVE_WORK_ITEM_ID = "live-greeting"
+_LIVE_PLAN_PATH = f"docs/milestones/{_LIVE_WORK_ITEM_ID}-plan.md"
+_LIVE_REGISTRY_PATH = f"docs/ai-workflow/registry/{_LIVE_WORK_ITEM_ID}-registry.json"
+_LIVE_MAPPING_PATH = f"docs/ai-workflow/requirements/{_LIVE_WORK_ITEM_ID}-mapping.json"
+_LIVE_ARTIFACTS_PATH = f"docs/ai-workflow/registry/{_LIVE_WORK_ITEM_ID}-artifacts.json"
+#: The fixture confirmation literal `apply_plan_approval`'s record carries.
+#: It names the work item and the stage, as `validate_user_confirmation`
+#: requires; it is test setup for a disposable repository, never a
+#: Controller capability.
+_LIVE_PLAN_CONFIRMATION = (
+    f"I approve the plan stage for {_LIVE_WORK_ITEM_ID} (disposable CP9 fixture)"
+)
+
+_LIVE_CHECKPOINTS = [
+    {"id": "CP1", "name": "greet() and its unit test", "depends_on": [], "complexity": 1,
+     "session_target": 1},
+]
+_LIVE_REQUIREMENTS = {
+    "R1": {"description": "greet(name) returns 'hello, ' followed by name, with a unit test",
+           "checkpoint_ids": ["CP1"]},
+}
+
+_LIVE_PLAN_BODY = """## Goal
+
+Add a tiny greeting helper to this disposable repository, with a unit test. This work item is a
+disposable fixture for the Workflow Controller's live implementation-lifecycle verification
+(`tests/test_integration_disposable_repo.py` in the Controller repository). Keep every change as
+small as the checkpoint allows.
+
+## Non-goals
+
+No packaging, no command-line interface, and no file beyond the ones CP1 names.
+
+## Checkpoints
+
+### CP1 -- `greet()` and its unit test
+
+- Create `app/greeting.py` defining `greet(name: str) -> str`, which returns the string
+  `"hello, "` followed by `name`, so `greet("controller") == "hello, controller"`.
+- Create `app/test_greeting.py`, a standard-library `unittest` module that imports `greet` from
+  `greeting` and asserts that example.
+- Files: `app/greeting.py`, `app/test_greeting.py`, and this work item's narrative in
+  `docs/ACTIVE_MILESTONE.md`.
+
+## Verification
+
+This repository has no Android or Gradle build. The `./gradlew ...` and
+`connectedDebugAndroidTest` checks the Workflow commands name do not apply here and are not run.
+The narrowest check and the full required verification are both:
+
+    python3 -m unittest discover -s app -v
+"""
+
+_LIVE_MILESTONE = f"""# Active Milestone
+
+## Milestone
+
+{_LIVE_WORK_ITEM_ID} -- a disposable fixture work item for the Workflow Controller's live
+implementation-lifecycle verification.
+
+## Goal
+
+Add `app/greeting.py` (`greet(name)`) and its unit test. The approved plan is
+`{_LIVE_PLAN_PATH}`.
+
+## Current checkpoint
+
+None.
+
+## Current blockers
+
+None.
+
+## Active plan
+
+`{_LIVE_PLAN_PATH}`
+
+## Functional review checklist
+
+Empty.
+"""
+
+#: The frozen Workflow writer sequence that seeds the live item at
+#: `IMPLEMENTING` with a `CURRENT` plan approval. It runs inside the
+#: disposable target, importing the target's *own* installed
+#: `scripts/workflow_state.py`/`workflow_fingerprint.py`, and mirrors the
+#: order those scripts' own acceptance matrix drives the plan stage in
+#: (`/milestone-plan`'s writes, the real plan-bundle generator, the two
+#: plan-review stage writers, then `apply_plan_approval` and the approval
+#: commit). No `WORKFLOW_STATE.json` is ever hand-written. It checks its own
+#: result with the same functions `/milestone-implement` step 1a and
+#: `/approve-review` step 7 use, and prints the approval evidence as JSON.
+_IMPLEMENTING_SEED_SCRIPT = r'''
+import datetime
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path.cwd()
+sys.path.insert(0, str(root / "scripts"))
+import workflow_fingerprint as fingerprint  # noqa: E402
+import workflow_state as ws  # noqa: E402
+
+args = json.loads(sys.argv[1])
+wid = args["work_item_id"]
+base_commit = args["base_commit"]
+confirmation = args["user_confirmation"]
+plan_path = args["plan_path"]
+registry_path = args["registry_path"]
+mapping_path = args["mapping_path"]
+artifacts_path = args["artifacts_path"]
+state_path = Path("docs/ai-workflow/WORKFLOW_STATE.json")
+
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def git(*git_args):
+    return subprocess.run(["git", *git_args], cwd=root, check=True, capture_output=True,
+                          text=True).stdout
+
+
+def tx(mutator):
+    return ws.state_transaction(root, mutator)
+
+
+def entry():
+    return json.loads((root / state_path).read_text())["work_items"][wid]
+
+
+config = json.loads((root / "docs/ai-workflow/WORKFLOW_CONFIG.json").read_text())
+
+# /milestone-plan's writes.
+tx(lambda state: ws.route_work_item(
+    state, config, work_item_id=wid, work_item_type="product", work_item_kind="product",
+    plan_path=plan_path, registry_path=registry_path, plan_revision=1, now=now(),
+    mapping_path=mapping_path, base_commit=base_commit, repo_root=root,
+))
+registry = ws.generate_registry(wid, 1, args["checkpoints"])
+mapping = ws.generate_mapping(wid, args["requirements"], registry=registry)
+ws.write_registry_and_mapping(root, Path(registry_path), Path(mapping_path), registry, mapping)
+declarations = ws.generate_artifacts_declarations(
+    wid, plan_path, registry_path, mapping_path, work_item_type="product",
+)
+(root / artifacts_path).write_text(json.dumps(declarations, indent=2) + "\n")
+(root / plan_path).parent.mkdir(parents=True, exist_ok=True)
+(root / plan_path).write_text(
+    f"# {wid} plan (Revision 1)\n\n{args['plan_body']}\n" + ws.render_registry_markdown(registry) + "\n"
+)
+tx(lambda state: ws.publish_plan_revision(state, wid, 1, now()))
+git("add", "-N", "--", plan_path, registry_path, mapping_path, artifacts_path)
+
+# The plan-stage bundle, through the real generator.
+bundle = root / fingerprint.resolve_bundle_dir(root, wid, stage="plan")
+bundle.mkdir(parents=True, exist_ok=True)
+review_content_id, projection = fingerprint.compute_review_content_id_plan_stage_for_work_item(root, wid)
+metadata = fingerprint.resolve_plan_stage_metadata(root, wid)
+(bundle / "REVIEW_REQUEST.md").write_text(
+    f"# Review request\n\nstage: plan\nwork item: {wid}\nreview_content_id: {review_content_id}\n"
+)
+(bundle / "TEST_RESULTS.md").write_text(
+    f"stage: plan (revision {metadata.plan_revision})\nhead: {git('rev-parse', 'HEAD').strip()}\n\n"
+    "No automated checks are required at the plan stage.\n"
+)
+(bundle / "CONTEXT_FILES.txt").write_text("")
+subprocess.run(["./scripts/prepare-ai-review.sh", base_commit, "plan", wid], cwd=root, check=True,
+               capture_output=True, text=True)
+bundle_id = fingerprint.read_manifest_identifiers(bundle / "MANIFEST.md")["bundle_id"]
+
+# The two plan-review stages: a local APPROVE, then a manual APPROVE on file.
+feedback_dir = root / fingerprint.resolve_feedback_dir(root, wid)
+feedback_dir.mkdir(parents=True, exist_ok=True)
+(feedback_dir / "REVIEW_FEEDBACK.md").write_text(
+    "# Review Decision\n\nStatus: APPROVE\n"
+    "Reviewer role: MANUAL_EXTERNAL_PLAN_REVIEW\n"
+    f"Reviewed bundle ID: {bundle_id}\nReviewed base commit: {base_commit}\nWork item: {wid}\n"
+    f"Reviewed review content ID: {review_content_id}\n\n"
+    "## Blocking findings\n\nNone (disposable CP9 fixture).\n"
+)
+tx(lambda state: ws.record_local_plan_review(
+    state, wid, verdict="APPROVE", bundle_id=bundle_id, review_content_id=review_content_id,
+    round=1, now=now(),
+))
+tx(lambda state: ws.record_manual_plan_review(
+    state, wid, verdict="APPROVE", bundle_id=bundle_id, round=1, now=now(),
+    current_review_content_id=review_content_id, feedback_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+    feedback_review_content_id=review_content_id,
+))
+
+# The plan approval: apply_plan_approval with the fixture confirmation literal,
+# committed with the plan-approval trailer pair as the message's final paragraph.
+feedback = fingerprint.parse_review_feedback_binding_fields((feedback_dir / "REVIEW_FEEDBACK.md").read_text())
+pre_entry = entry()
+if not ws.plan_approval_gate_reachable(
+    latest_round_status=feedback["status"],
+    governing_workflow_version=pre_entry["governing_workflow_version"],
+    plan_review_stages=pre_entry.get("plan_review_stages"),
+    current_review_content_id=review_content_id,
+):
+    raise SystemExit("seed: the plan-approval gate is not reachable")
+ws.validate_user_confirmation(confirmation, work_item_id=wid, stage="plan")
+basis = ws.resolve_approval_basis(
+    latest_round_status=feedback["status"], feedback_bundle_id=feedback["reviewed_bundle_id"],
+    current_bundle_id=bundle_id, user_confirmation=confirmation, work_item_id=wid, stage="plan",
+)
+approval_now = now()
+record = ws.build_approval_record(
+    basis=basis, stage="plan", user_confirmation=confirmation, now=approval_now,
+    reviewed_bundle_id=bundle_id, approved_review_content_id=review_content_id,
+    review_content_manifest=projection["review_content_manifest"],
+)
+commit_plan = fingerprint.resolve_plan_stage_approval_commit_paths(root, wid, state_path)
+tx(lambda state: ws.apply_plan_approval(state, wid, record, approval_now))
+git("add", "--", *commit_plan.paths)
+git("commit", "-q", "-m",
+    f"Approve plan for {wid} (disposable CP9 fixture)\n\n"
+    f"Workflow-Plan-Approval: {review_content_id}\nWorkflow-Work-Item: {wid}\n")
+approval_commit = git("rev-parse", "HEAD").strip()
+
+post_entry = entry()
+ws.verify_post_approval_manifest_match(root, post_entry, stage="plan", base_commit=base_commit,
+                                       commit=approval_commit)
+if post_entry["phase"] != "IMPLEMENTING":
+    raise SystemExit(f"seed: phase is {post_entry['phase']!r}, expected IMPLEMENTING")
+if not ws.implementing_entry_reachable(root, post_entry, base_commit):
+    raise SystemExit("seed: implementing_entry_reachable is False after the approval commit")
+dirty = git("status", "--porcelain")
+if dirty.strip():
+    raise SystemExit(f"seed: the working tree is dirty after the approval commit:\n{dirty}")
+print(json.dumps({
+    "approval_commit": approval_commit, "plan_review_content_id": review_content_id,
+    "plan_bundle_id": bundle_id, "basis": basis, "approval_paths": list(commit_plan.paths),
+}))
+'''
+
+
+def _live_workspace(test: unittest.TestCase, prefix: str) -> Path:
+    """A fresh disposable directory under :data:`LIVE_BASE_DIR_ENV` (default
+    ``~/.cache/workflow-controller-live``), removed after the test unless
+    :data:`LIVE_KEEP_ENV` is ``"1"``."""
+    base = Path(os.environ.get(LIVE_BASE_DIR_ENV) or Path.home() / ".cache" / "workflow-controller-live")
+    base.mkdir(parents=True, exist_ok=True)
+    workspace = Path(tempfile.mkdtemp(prefix=prefix, dir=base))
+    print(f"CP9 live workspace: {workspace}", flush=True)
+    if os.environ.get(LIVE_KEEP_ENV) != "1":
+        test.addCleanup(shutil.rmtree, workspace, True)
+    return workspace
+
+
+def _live_cli_timeout() -> float:
+    return float(os.environ.get(LIVE_CLI_TIMEOUT_ENV) or _DEFAULT_LIVE_CLI_TIMEOUT)
+
+
+def _controller_argv(runtime_root: Path, argv: list[str]) -> tuple[list[str], dict]:
+    """The Controller exactly as an operator runs it from this checkout:
+    ``python3 -P -m controller`` with ``PYTHONPATH`` naming the checkout (it
+    re-execs from its own materialised snapshot), its own runtime root, and
+    ``--allow-dirty-source`` only when ``controller/`` is dirty."""
+    full = [sys.executable, "-P", "-m", "controller", "--runtime-dir", str(runtime_root)]
+    if _source_is_dirty():
+        full.append("--allow-dirty-source")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    env.pop("WORKFLOW_CONTROLLER_EXEC_HANDOFF", None)
+    return full + list(argv), env
+
+
+def _run_controller(runtime_root: Path, argv: list[str], *, timeout: float | None = None,
+                    ) -> subprocess.CompletedProcess:
+    full, env = _controller_argv(runtime_root, argv)
+    return subprocess.run(full, cwd=REPO_ROOT, env=env, capture_output=True, text=True,
+                          timeout=timeout if timeout is not None else _live_cli_timeout())
+
+
+def _git(target: Path, *args: str, check: bool = True) -> str:
+    return fixtures.run(["git", *args], cwd=target, check=check).stdout
+
+
+def _git_head(target: Path) -> str:
+    return _git(target, "rev-parse", "HEAD").strip()
+
+
+def _target_python(target: Path, code: str, *args: str) -> str:
+    """Run ``code`` inside ``target`` with the target's own installed
+    ``scripts/`` first on ``sys.path``; return its stdout."""
+    prelude = "import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path.cwd() / 'scripts'))\n"
+    result = fixtures.run([sys.executable, "-c", prelude + code, *args], cwd=target, check=False)
+    if result.returncode != 0:
+        raise AssertionError(
+            f"target-side script failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+        )
+    return result.stdout
+
+
+def _seed_implementing_target(target: Path) -> dict:
+    """A disposable managed repository (a `VALIDATED_WORKFLOW_RELEASES` member
+    installed by the real Manager, `"2.2"` activated) whose one work item,
+    :data:`_LIVE_WORK_ITEM_ID`, is at `IMPLEMENTING` with a `CURRENT` plan
+    approval and one outstanding checkpoint, produced by the frozen Workflow
+    writer sequence :data:`_IMPLEMENTING_SEED_SCRIPT`."""
+    _seed_target_2_2(target)
+    (target / "docs" / "ACTIVE_MILESTONE.md").write_text(_LIVE_MILESTONE)
+    base_commit = fixtures.commit_all(target, f"seed the {_LIVE_WORK_ITEM_ID} milestone narrative")
+    result = fixtures.run(
+        [sys.executable, "-c", _IMPLEMENTING_SEED_SCRIPT, json.dumps({
+            "work_item_id": _LIVE_WORK_ITEM_ID, "base_commit": base_commit,
+            "user_confirmation": _LIVE_PLAN_CONFIRMATION, "plan_path": _LIVE_PLAN_PATH,
+            "registry_path": _LIVE_REGISTRY_PATH, "mapping_path": _LIVE_MAPPING_PATH,
+            "artifacts_path": _LIVE_ARTIFACTS_PATH, "checkpoints": _LIVE_CHECKPOINTS,
+            "requirements": _LIVE_REQUIREMENTS, "plan_body": _LIVE_PLAN_BODY,
+        })],
+        cwd=target, check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"the IMPLEMENTING seed failed (exit {result.returncode}):\n"
+                             f"{result.stdout}\n{result.stderr}")
+    seed = json.loads(result.stdout.strip().splitlines()[-1])
+    return {"work_item_id": _LIVE_WORK_ITEM_ID, "base_commit": base_commit, **seed}
+
+
+def _state_entry(target: Path, work_item_id: str) -> dict:
+    state = json.loads((target / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_text())
+    return state["work_items"][work_item_id]
+
+
+def _committed_entry(target: Path, commit: str, work_item_id: str) -> dict | None:
+    result = fixtures.run(["git", "show", f"{commit}:docs/ai-workflow/WORKFLOW_STATE.json"],
+                          cwd=target, check=False)
+    if result.returncode != 0:
+        return None
+    return json.loads(result.stdout).get("work_items", {}).get(work_item_id)
+
+
+def _commit_trailers(target: Path, commit: str) -> dict[str, str]:
+    body = _git(target, "log", "-1", "--format=%B", commit)
+    parsed = fixtures.run(["git", "interpret-trailers", "--parse"], cwd=target, input=body).stdout
+    trailers: dict[str, str] = {}
+    for line in parsed.splitlines():
+        key, _, value = line.partition(":")
+        trailers[key.strip()] = value.strip()
+    return trailers
+
+
+def _commit_paths(target: Path, commit: str) -> list[str]:
+    return [p for p in _git(target, "show", "--format=", "--name-only", commit).splitlines() if p]
+
+
+def _validate_generation_record(target: Path, commit: str, work_item_id: str) -> str | None:
+    """``None`` when the target's own
+    ``workflow_state.validate_bundle_generation_record_commit`` accepts
+    ``commit``, else its refusal text."""
+    code = (
+        "import workflow_state as ws\n"
+        "try:\n"
+        "    ws.validate_bundle_generation_record_commit(Path.cwd(), sys.argv[1], sys.argv[2])\n"
+        "except Exception as exc:\n"
+        "    print(f'{type(exc).__name__}: {exc}')\n"
+        "else:\n"
+        "    print('OK')\n"
+    )
+    out = _target_python(target, code, commit, work_item_id).strip()
+    return None if out == "OK" else out
+
+
+def _commit_sequence(target: Path, start: str, end: str, work_item_id: str) -> list[dict]:
+    """Every commit in ``start..end``, oldest first, classified: a
+    generation-record commit (``T``, with its parent's committed phase and
+    the target's own validation verdict), a state-only commit (only
+    ``WORKFLOW_STATE.json``), or an ordinary commit."""
+    commits = _git(target, "rev-list", "--reverse", f"{start}..{end}").split()
+    sequence = []
+    for commit in commits:
+        trailers = _commit_trailers(target, commit)
+        paths = _commit_paths(target, commit)
+        own = _committed_entry(target, commit, work_item_id) or {}
+        parent = _committed_entry(target, f"{commit}^", work_item_id) or {}
+        entry = {
+            "commit": commit,
+            "subject": _git(target, "log", "-1", "--format=%s", commit).strip(),
+            "trailers": trailers,
+            "paths": paths,
+            "committed_phase": own.get("phase"),
+            "parent_committed_phase": parent.get("phase"),
+        }
+        if "Workflow-Bundle-Generation-Record" in trailers:
+            entry["kind"] = "generation-record"
+            entry["validation"] = _validate_generation_record(target, commit, work_item_id) or "OK"
+        elif paths == ["docs/ai-workflow/WORKFLOW_STATE.json"]:
+            entry["kind"] = "state-only"
+        else:
+            entry["kind"] = "ordinary"
+        sequence.append(entry)
+    return sequence
+
+
+def _job_records(runtime_root: Path) -> list[dict]:
+    """Every job record, in the order the Controller wrote them (the
+    ``created_at`` second, then the file's modification time)."""
+    jobs_dir = runtime_root / "jobs"
+    paths = [p for p in jobs_dir.glob("*.json") if p.is_file()] if jobs_dir.is_dir() else []
+    keyed = []
+    for path in paths:
+        record = json.loads(path.read_text())
+        keyed.append(((record.get("created_at") or "", path.stat().st_mtime_ns), record))
+    return [record for _, record in sorted(keyed, key=lambda item: item[0])]
+
+
+def _worker_result_json(record: dict) -> dict | None:
+    stdout_path = (record.get("worker") or {}).get("stdout_path")
+    if not stdout_path or not Path(stdout_path).is_file():
+        return None
+    try:
+        parsed = json.loads(Path(stdout_path).read_text())
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _reported_models(worker_json: dict | None) -> list[str]:
+    """The canonical model ids the worker's own JSON result reports under
+    ``modelUsage`` (a key such as ``claude-opus-5-5[1m]`` carries its
+    ``canonicalModel``)."""
+    usage = (worker_json or {}).get("modelUsage") or {}
+    models = []
+    for key, value in usage.items():
+        canonical = value.get("canonicalModel") if isinstance(value, dict) else None
+        models.append(canonical or re.sub(r"\[.*\]$", "", key))
+    return sorted(set(models))
+
+
+def _elapsed_seconds(start: str | None, end: str | None) -> float | None:
+    if not start or not end:
+        return None
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    return (time.mktime(time.strptime(end, fmt)) - time.mktime(time.strptime(start, fmt)))
+
+
+def _job_evidence(record: dict) -> dict:
+    """What CP9's TEST_RESULTS.md records for one job."""
+    worker_block = record.get("worker") or {}
+    worker_json = _worker_result_json(record)
+    usage = (worker_json or {}).get("modelUsage") or {}
+    return {
+        "job_id": record.get("job_id"),
+        "command": (record.get("selected_action") or {}).get("command"),
+        "task_addendum": (record.get("selected_action") or {}).get("task_addendum") is not None,
+        "status": record.get("status"),
+        "transition_verified": record.get("transition_verified"),
+        "pre_phase": (record.get("pre_state") or {}).get("phase"),
+        "post_phase": record.get("observed_phase_after"),
+        "pre_head": (record.get("pre_state") or {}).get("target_head"),
+        "worker_route": record.get("worker_route"),
+        "session_id": worker_block.get("session_id"),
+        "worker_exit_code": worker_block.get("exit_code"),
+        "num_turns": worker_block.get("num_turns"),
+        "permission_denials": worker_block.get("permission_denials"),
+        "total_cost_usd": worker_block.get("total_cost_usd"),
+        "worker_duration_ms": worker_block.get("duration_ms"),
+        "record_wall_clock_seconds": _elapsed_seconds(record.get("created_at"), record.get("updated_at")),
+        "reported_models": _reported_models(worker_json),
+        "model_usage_keys": sorted(usage),
+        "reconciliation_evidence": record.get("reconciliation_evidence"),
+        "human_gate_pending": record.get("human_gate_pending"),
+    }
+
+
+def _print_evidence(tag: str, payload: dict) -> None:
+    print(f"{tag} " + json.dumps(payload, sort_keys=True, default=str), flush=True)
+
+
+def _required_outcome_violations(record: dict) -> list[str]:
+    """CP9 (3)'s "Required outcome" and its model stop condition, for one
+    launched job: ``FINISHED`` with ``transition_verified``, no permission
+    denial, the built-in route for a named role (with ``single_agent`` for a
+    review role), and the worker reporting the routed model."""
+    problems = []
+    job_id = record.get("job_id")
+    if record.get("status") != job.STATUS_FINISHED or record.get("transition_verified") is not True:
+        problems.append(f"{job_id}: status {record.get('status')!r}, transition_verified "
+                        f"{record.get('transition_verified')!r} (stop condition: a FAILED job)")
+    denials = (record.get("worker") or {}).get("permission_denials")
+    if denials:
+        problems.append(f"{job_id}: permission_denials {denials!r} (stop condition)")
+    route = record.get("worker_route") or {}
+    role = route.get("role")
+    built_in = routing.ROLE_ROUTES.get(role)
+    if built_in is None:
+        problems.append(f"{job_id}: unknown role {role!r}")
+        return problems
+    if built_in.model is not None and (route.get("model"), route.get("effort")) != (
+        routing.DEFAULT_MODEL, routing.DEFAULT_EFFORT,
+    ):
+        problems.append(f"{job_id}: role {role} routed to {route.get('model')!r}/{route.get('effort')!r}, "
+                        f"expected {routing.DEFAULT_MODEL}/{routing.DEFAULT_EFFORT}")
+    if route.get("single_agent") is not built_in.single_agent:
+        problems.append(f"{job_id}: role {role} single_agent {route.get('single_agent')!r}")
+    if role in (routing.REVIEW_IMPLEMENTATION, routing.REVIEW_PLAN) and route.get("single_agent") is not True:
+        problems.append(f"{job_id}: review role {role} is not single-agent")
+    if route.get("fresh_session") is not True:
+        problems.append(f"{job_id}: fresh_session {route.get('fresh_session')!r}")
+    if route.get("model") is not None:
+        reported = _reported_models(_worker_result_json(record))
+        if route["model"] not in reported:
+            problems.append(f"{job_id}: routed {route['model']}, the worker reported {reported!r} "
+                            f"(stop condition: a model other than the routed one)")
+    return problems
+
+
+def _manual_revise_verdict(target: Path, work_item_id: str) -> tuple[str, dict]:
+    """The fixture manual ``REVISE`` CP9 (3) Phase B writes, acting as the
+    human: bound to the current implementation bundle (``MANIFEST.md``'s
+    ``bundle_id``) and content (the ledger's ``review_content_id``, which the
+    local ``APPROVE`` recorded), naming one small, concrete finding in the
+    checkpoint's own code."""
+    code = (
+        "import json\n"
+        "import workflow_fingerprint as fp\n"
+        "root = Path.cwd()\n"
+        "wid = sys.argv[1]\n"
+        "manifest = root / fp.resolve_bundle_dir(root, wid) / 'MANIFEST.md'\n"
+        "print(json.dumps({\n"
+        "    'bundle_id': fp.read_manifest_identifiers(manifest)['bundle_id'],\n"
+        "    'feedback_dir': str(fp.resolve_feedback_dir(root, wid)),\n"
+        "}))\n"
+    )
+    located = json.loads(_target_python(target, code, work_item_id).strip().splitlines()[-1])
+    entry = _state_entry(target, work_item_id)
+    fields = {
+        "bundle_id": located["bundle_id"],
+        "base_commit": entry["base_commit"],
+        "review_content_id": (entry.get("implementation_review_stages") or {}).get("review_content_id"),
+        # The resolver answers relative to the target's own root.
+        "feedback_path": str(target / located["feedback_dir"] / "REVIEW_FEEDBACK.md"),
+    }
+    text = f"""# Review Decision
+
+Status: REVISE
+Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW
+Reviewed bundle ID: {fields['bundle_id']}
+Reviewed base commit: {fields['base_commit']}
+Work item: {work_item_id}
+Reviewed review content ID: {fields['review_content_id']}
+
+## Blocking findings
+
+None.
+
+## Important findings
+
+- **M1 (`app/greeting.py`, `greet`): surrounding whitespace in `name` is kept.**
+  `greet("  ada  ")` returns `"hello,   ada  "`. Strip leading and trailing whitespace from
+  `name` before formatting, so that it returns `"hello, ada"`, and add a test for that case to
+  `app/test_greeting.py`.
+
+## Optional findings
+
+None.
+
+## Missing tests
+
+- The whitespace case in M1.
+
+## Architecture and maintainability concerns
+
+None.
+
+## Migration and data-integrity concerns
+
+None.
+
+## Usability concerns
+
+None.
+
+## Required acceptance criteria
+
+- `greet("  ada  ") == "hello, ada"`, covered by a test in `app/test_greeting.py`.
+- `python3 -m unittest discover -s app -v` passes.
+"""
+    return text, fields
+
+
+def _greet_probe(target: Path) -> str:
+    """What the target's own ``greet`` returns for a padded name (the Phase B
+    finding's subject), or why it could not be called."""
+    result = fixtures.run(
+        [sys.executable, "-c", "import sys; sys.path.insert(0, 'app'); from greeting import greet; "
+                               "print(repr(greet('  ada  ')))"],
+        cwd=target, check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else f"error: {result.stderr.strip()[-300:]}"
+
+
+_LIVE = unittest.skipUnless(
+    os.environ.get("CONTROLLER_LIVE_WORKER") == "1",
+    "requires a live claude binary, network access and real spend -- set "
+    "CONTROLLER_LIVE_WORKER=1 to opt in",
+)
+
+
+@_LIVE
+class LiveImplementationLifecycleTest(unittest.TestCase):
+    """CP9 (3): one `workflow-controller run` carries a `"2.2"` item from
+    `IMPLEMENTING` to the manual gate (Phase A), then, after the fixture
+    manual `REVISE`, a second `run` ingests it and drives a real
+    `/apply-implementation-review` round and a fresh `/review-implementation`
+    (Phase B). Every launched job must meet the "Required outcome"; every
+    stop condition fails the test by name."""
+
+    def _assert_launched_jobs(self, launched: list[dict]) -> None:
+        problems = [problem for record in launched for problem in _required_outcome_violations(record)]
+        self.assertEqual(problems, [], "CP9 (3) required outcome / stop conditions")
+
+    def _assert_generation_records_well_formed(self, sequence: list[dict]) -> None:
+        malformed = [c for c in sequence if c["kind"] == "generation-record" and c["validation"] != "OK"]
+        self.assertEqual(malformed, [], "stop condition: a malformed generation-record commit")
+
+    def test_run_carries_a_2_2_item_from_implementing_through_a_real_apply_round(self) -> None:
+        self.assertIsNotNone(CLAUDE_BIN, "a live claude binary is required for this test")
+        workspace = _live_workspace(self, "cp9-lifecycle-")
+        target = workspace / "target"
+        runtime_root = workspace / "runtime"
+        seed = _seed_implementing_target(target)
+        work_item_id = seed["work_item_id"]
+        _print_evidence("CP9_LIFECYCLE_SEED", {**seed, "workspace": str(workspace)})
+
+        # Phase A: `run` with no --model/--effort/--timeout (and the default
+        # permission mode), from IMPLEMENTING to the manual gate.
+        head_a = _git_head(target)
+        start = time.monotonic()
+        proc_a = _run_controller(runtime_root, ["run", str(target)])
+        wall_a = round(time.monotonic() - start, 1)
+        jobs_a = _job_records(runtime_root)
+        entry_a = _state_entry(target, work_item_id)
+        sequence_a = _commit_sequence(target, head_a, _git_head(target), work_item_id)
+        _print_evidence("CP9_LIFECYCLE_PHASE_A", {
+            "exit_code": proc_a.returncode, "wall_clock_seconds": wall_a,
+            "final_phase": entry_a["phase"], "implementation_revision": entry_a.get("implementation_revision"),
+            "jobs": [_job_evidence(r) for r in jobs_a], "commits": sequence_a,
+            "stdout_tail": proc_a.stdout[-3000:], "stderr_tail": proc_a.stderr[-3000:],
+            "greet_padded": _greet_probe(target),
+        })
+        self.assertNotIn("Traceback (most recent call last)", proc_a.stderr)
+        launched_a = [r for r in jobs_a if "worker" in r]
+        self._assert_launched_jobs(launched_a)
+        self._assert_generation_records_well_formed(sequence_a)
+        self.assertNotEqual(
+            entry_a["phase"], "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "stop condition: Phase A stopped at a local BLOCK, which leaves Phase B unreachable",
+        )
+        self.assertEqual(proc_a.returncode, EXIT_GATE, proc_a.stderr[-3000:])
+        self.assertEqual(entry_a["phase"], "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(
+            [r["job_id"] for r in launched_a
+             if r["pre_state"]["phase"] == "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"],
+            [], "stop condition: a worker launched at the manual gate",
+        )
+        roles_a = [r["worker_route"]["role"] for r in launched_a]
+        self.assertEqual(roles_a[:2], [routing.MILESTONE_IMPLEMENT, routing.MILESTONE_IMPLEMENT_SELF_REVIEW])
+        self.assertEqual(roles_a[-1], routing.REVIEW_IMPLEMENTATION)
+        self.assertEqual(jobs_a[-1]["status"], job.STATUS_GATE_BLOCKED)
+        self.assertNotIn("worker", jobs_a[-1])
+
+        # Phase B: acting as the human, an admissible manual REVISE, then a
+        # second `run`.
+        verdict_text, verdict_fields = _manual_revise_verdict(target, work_item_id)
+        feedback_path = Path(verdict_fields["feedback_path"])
+        self.assertTrue(feedback_path.resolve().is_relative_to(target.resolve()), feedback_path)
+        feedback_path.parent.mkdir(parents=True, exist_ok=True)
+        feedback_path.write_text(verdict_text)
+        head_b = _git_head(target)
+        start = time.monotonic()
+        proc_b = _run_controller(runtime_root, ["run", str(target)])
+        wall_b = round(time.monotonic() - start, 1)
+        seen_a = {r["job_id"] for r in jobs_a}
+        jobs_b = [r for r in _job_records(runtime_root) if r["job_id"] not in seen_a]
+        entry_b = _state_entry(target, work_item_id)
+        launched_b = [r for r in jobs_b if "worker" in r]
+        apply_rounds = []
+        for index, record in enumerate(launched_b):
+            if record["worker_route"]["role"] != routing.APPLY_IMPLEMENTATION_REVIEW:
+                continue
+            later = launched_b[index + 1] if index + 1 < len(launched_b) else None
+            end = later["pre_state"]["target_head"] if later is not None else _git_head(target)
+            apply_rounds.append({
+                "job_id": record["job_id"],
+                "commits": _commit_sequence(target, record["pre_state"]["target_head"], end, work_item_id),
+            })
+        sequence_b = _commit_sequence(target, head_b, _git_head(target), work_item_id)
+        _print_evidence("CP9_LIFECYCLE_PHASE_B", {
+            "exit_code": proc_b.returncode, "wall_clock_seconds": wall_b, "verdict": verdict_fields,
+            "final_phase": entry_b["phase"], "implementation_revision": entry_b.get("implementation_revision"),
+            "jobs": [_job_evidence(r) for r in jobs_b], "apply_rounds": apply_rounds,
+            "commits": sequence_b, "stdout_tail": proc_b.stdout[-3000:],
+            "stderr_tail": proc_b.stderr[-3000:], "greet_padded": _greet_probe(target),
+        })
+        self.assertNotIn("Traceback (most recent call last)", proc_b.stderr)
+        self._assert_launched_jobs(launched_b)
+        self._assert_generation_records_well_formed(sequence_b)
+        self.assertEqual(proc_b.returncode, EXIT_GATE, proc_b.stderr[-3000:])
+
+        # Ingestion, the one launch at the manual phase: its REVISE write is
+        # left uncommitted, so the apply job carries the pending-write addendum.
+        self.assertGreaterEqual(
+            len(launched_b), 3,
+            f"Phase B must launch the ingestion, the apply round and a fresh review: {jobs_b[-1:]!r}",
+        )
+        ingest = launched_b[0]
+        self.assertEqual(ingest["worker_route"]["role"], routing.RECORD_MANUAL_IMPLEMENTATION_REVIEW)
+        self.assertEqual(ingest["pre_state"]["phase"], "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(ingest["observed_phase_after"], "APPLYING_REVIEW_FEEDBACK")
+        self.assertEqual(
+            [r["job_id"] for r in launched_b[1:]
+             if r["pre_state"]["phase"] == "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"],
+            [], "stop condition: a worker launched at the manual gate",
+        )
+        first_apply = launched_b[1]
+        self.assertEqual(first_apply["worker_route"]["role"], routing.APPLY_IMPLEMENTATION_REVIEW)
+        self.assertIsNotNone(first_apply["selected_action"]["task_addendum"])
+        self.assertTrue(apply_rounds)
+        round_commits = apply_rounds[0]["commits"]
+        self.assertTrue(round_commits, "the apply round landed no commit")
+        self.assertEqual(round_commits[0]["kind"], "state-only")
+        self.assertEqual(round_commits[0]["committed_phase"], "APPLYING_REVIEW_FEEDBACK")
+        self.assertEqual(
+            {k: v for k, v in round_commits[0]["trailers"].items() if k.startswith("Workflow-")},
+            {"Workflow-Work-Item": work_item_id},
+        )
+        records_t = [c for c in round_commits if c["kind"] == "generation-record"]
+        self.assertEqual(len(records_t), 1, round_commits)
+        self.assertEqual(round_commits[-1]["kind"], "generation-record")
+        self.assertEqual(records_t[0]["parent_committed_phase"], "APPLYING_REVIEW_FEEDBACK")
+        self.assertEqual(records_t[0]["committed_phase"], "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertIn(routing.REVIEW_IMPLEMENTATION,
+                      [r["worker_route"]["role"] for r in launched_b[2:]],
+                      "no fresh /review-implementation after the apply round")
+        self.assertIn(entry_b["phase"], ("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+                                         "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"))
+        self.assertEqual(jobs_b[-1]["status"], job.STATUS_GATE_BLOCKED)
+        self.assertNotIn("worker", jobs_b[-1])
+
+
+#: The fixture skill for the probe's third path: a skill whose frontmatter
+#: runs it in a forked subagent (`context: fork`), waited for in-line.
+_FORK_PROBE_SKILL = """---
+name: fork-probe
+description: Controller single-agent probe fixture. Runs in a forked subagent and replies with a fixed marker.
+context: fork
+background: false
+---
+
+Reply with exactly this line and nothing else: FORK_PROBE_SUBAGENT_RAN
+"""
+
+#: A project command the probe runs on the review route, to show the task's
+#: own slash command still expands with `Skill` disallowed.
+_ECHO_PROBE_COMMAND = """---
+description: Controller single-agent probe fixture command.
+---
+
+Reply with exactly this line and nothing else: COMMAND_EXPANDED $ARGUMENTS
+"""
+
+#: The name the CLI's session tool list gives a disallow-list entry, where
+#: they differ: 2.1.281 lists the subagent tool as `Task`, and disallowing
+#: `Agent` removes it.
+_LISTED_TOOL_NAMES = {"Agent": ("Agent", "Task")}
+
+_PROBE_REPORT = (
+    "End your reply with exactly one line: `DELEGATION_RESULT: SPAWNED` if a subagent or workflow "
+    "actually ran, `DELEGATION_RESULT: UNAVAILABLE` if the tool is not in your tool list, or "
+    "`DELEGATION_RESULT: DENIED` if you called it and the call was refused. If the path is not "
+    "available, do not look for another way to delegate and do not do the work yourself."
+)
+
+#: CP9 (4)'s three delegation paths: each task explicitly asks the worker to
+#: delegate through one of them.
+_PROBE_TASKS = {
+    "Agent": (
+        "This is a capability probe for a single-agent review route. Use the Agent tool (the "
+        "subagent tool, formerly called Task) to spawn one general-purpose subagent whose only job "
+        "is to reply with the word PONG. " + _PROBE_REPORT
+    ),
+    "Workflow": (
+        "This is a capability probe for a single-agent review route. Use the Workflow tool to run "
+        "a one-step workflow whose only step replies with the word PONG. " + _PROBE_REPORT
+    ),
+    "Skill": (
+        "This is a capability probe for a single-agent review route. Use the Skill tool to invoke "
+        "the project skill named fork-probe, which runs in a forked subagent, and report its reply. "
+        + _PROBE_REPORT
+    ),
+}
+
+
+def _session_transcript(session_id: str) -> tuple[Path | None, list[Path]]:
+    """The worker session's own transcript under ``~/.claude/projects`` and
+    any subagent transcripts beside it (``<session_id>/subagents/*.jsonl``)."""
+    projects = Path.home() / ".claude" / "projects"
+    matches = sorted(projects.glob(f"*/{session_id}.jsonl"))
+    main = matches[0] if matches else None
+    subagents = sorted(projects.glob(f"*/{session_id}/subagents/*.jsonl"))
+    return main, subagents
+
+
+def _transcript_tool_uses(path: Path | None) -> list[dict]:
+    """Every ``tool_use`` in a transcript, with its ``tool_result``'s error
+    flag and an excerpt, and whether any entry is a sidechain."""
+    if path is None:
+        return []
+    uses: dict[str, dict] = {}
+    order: list[str] = []
+    for line in path.read_text().splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        message = entry.get("message") if isinstance(entry, dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use":
+                uses[block.get("id")] = {"name": block.get("name"), "input": block.get("input"),
+                                         "sidechain": bool(entry.get("isSidechain"))}
+                order.append(block.get("id"))
+            elif block.get("type") == "tool_result" and block.get("tool_use_id") in uses:
+                result_content = block.get("content")
+                text = result_content if isinstance(result_content, str) else json.dumps(result_content)
+                uses[block["tool_use_id"]].update({"is_error": bool(block.get("is_error")),
+                                                   "result_excerpt": text[:600]})
+    return [uses[tool_id] for tool_id in order]
+
+
+def _stream_json_tool_list(cwd: Path, disallowed: tuple[str, ...]) -> list[str] | None:
+    """The installed CLI's own tool list for a session, read from the
+    ``system``/``init`` event of ``--output-format stream-json``, which the
+    CLI emits before any model request; the process is killed as soon as it
+    is read, so nothing is spent."""
+    argv = [CLAUDE_BIN, "-p", "Reply OK.", "--output-format", "stream-json", "--verbose",
+            "--permission-mode", "auto", "--model", routing.DEFAULT_MODEL]
+    if disallowed:
+        argv += ["--disallowedTools", ",".join(disallowed)]
+    proc = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+    tools = None
+    try:
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "system" and event.get("subtype") == "init":
+                tools = list(event.get("tools") or [])
+                break
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
+    return tools
+
+
+@_LIVE
+class LiveSingleAgentProbeTest(unittest.TestCase):
+    """CP9 (4): workers launched through ``worker.launch`` with a review
+    route, one per delegation path (``Agent``, ``Workflow``, and ``Skill``
+    invoking a forked fixture skill). Each must find its path unavailable or
+    denied; a probe that spawns a subagent by any path is a CP6 defect. The
+    first run of this probe found one (the ``Skill`` path ran the forked
+    skill), which added ``Skill`` to ``routing.SUBAGENT_TOOLS``; a fourth
+    launch shows the review route still runs a project slash command."""
+
+    def test_review_route_workers_cannot_delegate_by_any_path(self) -> None:
+        self.assertIsNotNone(CLAUDE_BIN, "a live claude binary is required for this test")
+        workspace = _live_workspace(self, "cp9-probe-")
+        repo = workspace / "probe-repo"
+        fixtures.build_target_git_repo(repo)
+        skill = repo / ".claude" / "skills" / "fork-probe" / "SKILL.md"
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        skill.write_text(_FORK_PROBE_SKILL)
+        command = repo / ".claude" / "commands" / "echo-probe.md"
+        command.parent.mkdir(parents=True, exist_ok=True)
+        command.write_text(_ECHO_PROBE_COMMAND)
+        (repo / "README.md").write_text("single-agent probe fixture\n")
+        fixtures.commit_all(repo, "single-agent probe fixture")
+
+        route = routing.NO_OVERRIDES.resolve(routing.REVIEW_IMPLEMENTATION)
+        self.assertTrue(route.single_agent)
+        evidence: dict = {
+            "route": route.to_record(), "disallowed_tools": list(route.disallowed_tools),
+            "claude_version": fixtures.run([CLAUDE_BIN, "--version"], check=False).stdout.strip(),
+            "tools_unrestricted": _stream_json_tool_list(repo, ()),
+            "tools_review_route": _stream_json_tool_list(repo, route.disallowed_tools),
+            "probes": {},
+        }
+        spawned = []
+        for path_name, task in _PROBE_TASKS.items():
+            result = worker.launch(
+                task, cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=1800,
+                claude_bin=CLAUDE_BIN, model=route.model, effort=route.effort,
+                disallowed_tools=route.disallowed_tools,
+            )
+            transcript, subagent_transcripts = _session_transcript(result.session_id or "")
+            tool_uses = _transcript_tool_uses(transcript)
+            reply = result.result or ""
+            reported = re.findall(r"DELEGATION_RESULT:\s*(SPAWNED|UNAVAILABLE|DENIED)", reply)
+            delegating = [u for u in tool_uses if u["name"] in ("Agent", "Task", "Workflow", "Skill")]
+            ran = bool(subagent_transcripts) or any(u.get("sidechain") for u in tool_uses) or any(
+                "FORK_PROBE_SUBAGENT_RAN" in (u.get("result_excerpt") or "") or
+                (u["name"] in ("Agent", "Task", "Workflow") and u.get("is_error") is False)
+                for u in delegating
+            )
+            evidence["probes"][path_name] = {
+                "outcome": result.outcome, "session_id": result.session_id,
+                "permission_denials": result.permission_denials,
+                "total_cost_usd": result.total_cost_usd, "duration_ms": result.duration_ms,
+                "reported_models": _reported_models(result.raw_json),
+                "reported": reported[-1] if reported else None, "reply_tail": reply[-800:],
+                "transcript": str(transcript) if transcript else None,
+                "subagent_transcripts": [str(p) for p in subagent_transcripts],
+                "delegating_tool_uses": delegating, "subagent_ran": ran,
+            }
+            if ran:
+                spawned.append(path_name)
+
+        # The review route still runs the task's own slash command: the CLI
+        # expands a `-p` prompt's project command itself, `Skill` disallowed.
+        expanded = worker.launch(
+            "/echo-probe arg-one", cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=1800,
+            claude_bin=CLAUDE_BIN, model=route.model, effort=route.effort,
+            disallowed_tools=route.disallowed_tools,
+        )
+        evidence["slash_command"] = {
+            "outcome": expanded.outcome, "session_id": expanded.session_id,
+            "result": expanded.result, "permission_denials": expanded.permission_denials,
+            "total_cost_usd": expanded.total_cost_usd,
+        }
+        _print_evidence("CP9_SINGLE_AGENT_PROBE", evidence)
+
+        # The CLI's own tool list: each disallowed name is one the installed
+        # CLI offers unrestricted (under the name it lists, `Task` for
+        # `Agent`), and none of those names is offered on the review route.
+        unrestricted = evidence["tools_unrestricted"] or []
+        restricted = evidence["tools_review_route"] or []
+        for name in route.disallowed_tools:
+            listed = _LISTED_TOOL_NAMES.get(name, (name,))
+            self.assertTrue(set(listed) & set(unrestricted), f"{name} is not a tool of the installed CLI")
+            self.assertFalse(set(listed) & set(restricted), f"{name} is still offered on the review route")
+        self.assertEqual(expanded.outcome, worker.SUCCESS)
+        self.assertIn("COMMAND_EXPANDED arg-one", expanded.result or "")
+        for path_name, probe in evidence["probes"].items():
+            self.assertIsNotNone(probe["session_id"], f"{path_name}: no session id")
+            self.assertIsNotNone(probe["transcript"], f"{path_name}: no session transcript found")
+        self.assertEqual(spawned, [], "CP6 defect: a review-route worker spawned a subagent by these paths")
+
+
+@_LIVE
+class LiveConcurrencyDrillTest(unittest.TestCase):
+    """CP9 (5): ``step`` on a disposable repository at a phase whose worker
+    takes real time; ``SIGKILL`` the Controller; ``step``/``resume`` exit 45
+    and ``explain`` reports the lock held while the worker lives; once every
+    holder has exited, ``explain`` reports it free, ``resume`` reconciles
+    the record from its real outcome, and the next ``step`` proceeds."""
+
+    def test_sigkilled_controller_leaves_the_worker_holding_the_worktree(self) -> None:
+        self.assertIsNotNone(CLAUDE_BIN, "a live claude binary is required for this test")
+        self.assertIsNotNone(shutil.which("fuser"), "fuser is required for this drill")
+        workspace = _live_workspace(self, "cp9-drill-")
+        target = workspace / "target"
+        runtime_root = workspace / "runtime"
+        seed = _seed_implementing_target(target)
+        work_item_id = seed["work_item_id"]
+        git_dir = lock.resolve_git_dir(target)
+        evidence: dict = {
+            "workspace": str(workspace), "seed": seed, "git_dir": str(git_dir),
+            "pid_namespace": os.readlink("/proc/self/ns/pid"),
+            "filesystem_target": fixtures.run(["findmnt", "-no", "SOURCE,FSTYPE,MAJ:MIN", "-T", str(target)],
+                                              check=False).stdout.strip(),
+            "filesystem_checkout": fixtures.run(["findmnt", "-no", "SOURCE,FSTYPE,MAJ:MIN", "-T",
+                                                 str(REPO_ROOT)], check=False).stdout.strip(),
+        }
+
+        # 1. `step` at IMPLEMENTING: the checkpoint worker takes real time.
+        full, env = _controller_argv(runtime_root, ["step", str(target)])
+        with open(workspace / "step-1.stdout", "w") as out, open(workspace / "step-1.stderr", "w") as err:
+            controller_proc = subprocess.Popen(full, cwd=REPO_ROOT, env=env, stdout=out, stderr=err)
+        record = None
+        deadline = time.monotonic() + 600
+        while time.monotonic() < deadline and controller_proc.poll() is None:
+            records = _job_records(runtime_root)
+            if records and "worker_process" in records[-1]:
+                record = records[-1]
+                break
+            time.sleep(1)
+        self.assertIsNotNone(record, f"no worker_process was recorded (controller exit {controller_proc.poll()})")
+        worker_pid = record["worker_process"]["pid"]
+        worker_pgid = record["worker_process"]["pgid"]
+        time.sleep(20)
+
+        # 2. SIGKILL the Controller.
+        os.kill(controller_proc.pid, signal.SIGKILL)
+        controller_proc.wait()
+        evidence["controller"] = {"pid": controller_proc.pid, "returncode": controller_proc.returncode}
+        evidence["worker_process"] = record["worker_process"]
+        evidence["job_id"] = record["job_id"]
+        self.assertTrue(_group_alive(record["worker_process"]), "the worker died with its Controller")
+
+        # 3. While the worker lives: `fuser` names the holders, `explain`
+        # reports the lock held, and `step` and `resume` exit 45.
+        holders: dict[int, dict] = {}
+        first_sample = _sample_holders(git_dir, worker_pid, holders)
+        evidence["fuser_first_sample"] = first_sample.stdout + first_sample.stderr
+        explain_held = _run_controller(runtime_root, ["explain", str(target)], timeout=300)
+        _sample_holders(git_dir, worker_pid, holders)
+        step_held = _run_controller(runtime_root, ["step", str(target)], timeout=300)
+        _sample_holders(git_dir, worker_pid, holders)
+        resume_held = _run_controller(runtime_root, ["resume", str(target)], timeout=300)
+        evidence["while_live"] = {
+            "explain_exit": explain_held.returncode,
+            "explain_lock_line": [l for l in explain_held.stdout.splitlines() if "lifecycle lock" in l],
+            "step_exit": step_held.returncode, "step_stderr": step_held.stderr.strip(),
+            "resume_exit": resume_held.returncode, "resume_stderr": resume_held.stderr.strip(),
+            "step_names_recorded_worker": f"pid {worker_pid}, process group {worker_pgid}" in step_held.stderr,
+            "step_names_other_holders": "not a recorded worker" in step_held.stderr,
+        }
+
+        # 4. Let the worker finish, including every holder `fuser` names,
+        # sampled every second until the group has ended and nothing holds it.
+        samples = 3
+        deadline = time.monotonic() + _live_cli_timeout()
+        while time.monotonic() < deadline:
+            fuser = _sample_holders(git_dir, worker_pid, holders)
+            samples += 1
+            if not _group_alive(record["worker_process"]) and fuser.returncode != 0:
+                break
+            time.sleep(1)
+        evidence["fuser_samples"] = samples
+        evidence["fuser_holders"] = holders
+        self.assertFalse(_group_alive(record["worker_process"]), "the worker's group never ended")
+
+        # 5. Every holder gone: free, `resume` reconciles, the next `step` proceeds.
+        explain_free = _run_controller(runtime_root, ["explain", str(target)], timeout=300)
+        resume_after = _run_controller(runtime_root, ["--json", "resume", str(target)], timeout=300)
+        reconciled = next((r for r in _job_records(runtime_root) if r["job_id"] == record["job_id"]), {})
+        entry_after_worker = _state_entry(target, work_item_id)
+        step_next = _run_controller(runtime_root, ["step", str(target)])
+        next_records = [r for r in _job_records(runtime_root) if r["job_id"] != record["job_id"]]
+        evidence["after_exit"] = {
+            "explain_lock_line": [l for l in explain_free.stdout.splitlines() if "lifecycle lock" in l],
+            "resume_exit": resume_after.returncode, "resume_stderr": resume_after.stderr.strip(),
+            "reconciled_status": reconciled.get("status"),
+            "reconciled_transition_verified": reconciled.get("transition_verified"),
+            "reconciled_observed_phase_after": reconciled.get("observed_phase_after"),
+            "reconciliation_evidence": reconciled.get("reconciliation_evidence"),
+            "phase_after_worker": entry_after_worker["phase"],
+            "checkpoint_after_worker": entry_after_worker.get("checkpoints"),
+            "next_step_exit": step_next.returncode, "next_step_stderr_tail": step_next.stderr[-2000:],
+            "next_jobs": [_job_evidence(r) for r in next_records],
+        }
+        _print_evidence("CP9_CONCURRENCY_DRILL", evidence)
+
+        self.assertIn("lifecycle lock: held", explain_held.stdout)
+        self.assertEqual(step_held.returncode, EXIT_WORKER_ACTIVE, step_held.stderr)
+        self.assertEqual(resume_held.returncode, EXIT_WORKER_ACTIVE, resume_held.stderr)
+        self.assertTrue(evidence["while_live"]["step_names_recorded_worker"], step_held.stderr)
+        self.assertIn(worker_pid, holders, "fuser never named the recorded worker")
+        self.assertIn("lifecycle lock: free", explain_free.stdout)
+        self.assertIn(resume_after.returncode, (EXIT_OK, EXIT_INTERRUPTED), resume_after.stderr)
+        self.assertIn(reconciled.get("status"), job.TERMINAL_STATUSES)
+        if (entry_after_worker["phase"] == "SELF_REVIEWING_IMPLEMENTATION"
+                and (entry_after_worker.get("checkpoints") or {}).get("CP1", {}).get("status") == "COMPLETE"):
+            # The worker's real outcome was a completed, committed checkpoint.
+            self.assertEqual(reconciled.get("status"), job.STATUS_FINISHED, reconciled)
+        self.assertNotIn(step_next.returncode, (EXIT_FAIL_CLOSED, EXIT_WORKER_ACTIVE), step_next.stderr[-2000:])
+        launched_next = [r for r in next_records if "worker" in r or "worker_process" in r]
+        self.assertTrue(launched_next, "the next `step` launched nothing")
+
+    def test_whether_a_bash_tool_child_of_the_worker_inherits_the_lock_descriptor(self) -> None:
+        """Step 3's open question, settled directly: a real worker launched
+        as ``controller.job`` launches one (the lifecycle lock's descriptor in
+        ``pass_fds``) runs one long Bash-tool command that lists its own
+        descriptors, while ``fuser`` is sampled. Recorded either way: a
+        Bash-tool child holding the descriptor is correct behavior (the lock
+        then lasts until it exits), not a defect."""
+        self.assertIsNotNone(CLAUDE_BIN, "a live claude binary is required for this test")
+        workspace = _live_workspace(self, "cp9-inherit-")
+        repo = workspace / "repo"
+        fixtures.build_target_git_repo(repo)
+        (repo / "README.md").write_text("descriptor-inheritance fixture\n")
+        fixtures.commit_all(repo, "descriptor-inheritance fixture")
+        git_dir = lock.resolve_git_dir(repo)
+        task = (
+            "Run exactly this one Bash command, once, and then reply with its complete output "
+            "verbatim and nothing else: "
+            "`for f in /proc/$$/fd/*; do echo \"$f -> $(readlink $f)\"; done; sleep 12; echo done`"
+        )
+        spawned: dict = {}
+        outcome: dict = {}
+        holders: dict[int, dict] = {}
+        with lock.acquire_lifecycle_lock(repo) as held:
+            def _launch() -> None:
+                outcome["result"] = worker.launch(
+                    task, cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=900,
+                    claude_bin=CLAUDE_BIN, pass_fds=(held.fd,),
+                    on_spawn=lambda process: spawned.setdefault("process", process),
+                    model=routing.DEFAULT_MODEL, effort="low",
+                )
+            thread = threading.Thread(target=_launch)
+            thread.start()
+            while thread.is_alive():
+                worker_pid = spawned["process"].pid if "process" in spawned else -1
+                _sample_holders(git_dir, worker_pid, holders)
+                time.sleep(0.5)
+            thread.join()
+        result = outcome["result"]
+        worker_pid = spawned["process"].pid
+        for pid, holder in holders.items():  # a sample may precede `on_spawn`
+            holder["is_recorded_worker"] = pid == worker_pid
+            holder["descends_from_worker"] = worker_pid in holder["ancestry"]
+        reply = result.result or ""
+        bash_lines = [line for line in reply.splitlines() if " -> " in line]
+        bash_child_holds = any(line.rstrip().endswith(str(git_dir)) for line in bash_lines)
+        descendant_holders = {pid: h for pid, h in holders.items() if worker_pid in h["ancestry"]}
+        evidence = {
+            "workspace": str(workspace), "git_dir": str(git_dir), "test_pid": os.getpid(),
+            "worker_pid": worker_pid, "outcome": result.outcome, "session_id": result.session_id,
+            "total_cost_usd": result.total_cost_usd, "permission_denials": result.permission_denials,
+            "bash_child_fd_listing": bash_lines, "bash_child_holds_descriptor": bash_child_holds,
+            "fuser_holders": holders, "descendant_holders": descendant_holders,
+        }
+        _print_evidence("CP9_DESCRIPTOR_INHERITANCE", evidence)
+        self.assertEqual(result.outcome, worker.SUCCESS, reply[-1000:])
+        self.assertTrue(bash_lines, f"the worker did not report the command's output: {reply[-1000:]}")
+        self.assertIn(worker_pid, holders, "fuser never named the worker")
+        # The two instruments must agree: the child's own listing and fuser.
+        self.assertEqual(bash_child_holds, bool(descendant_holders), evidence)
+
+
+def _sample_holders(path: Path, worker_pid: int, holders: dict[int, dict]) -> subprocess.CompletedProcess:
+    """One ``fuser -v path`` sample, adding each holder not seen before to
+    ``holders``. ``fuser`` prints the pids on stdout and the verbose table
+    (user, access, command, in the same order, without the pid) on stderr."""
+    fuser = fixtures.run(["fuser", "-v", str(path)], check=False)
+    pids = [int(p) for p in re.findall(r"\d+", fuser.stdout)]
+    rows = [m.groups() for m in (re.match(r"^\s*(?:\S+:\s+)?\S+\s+([cefFrm.]{5})\s+(\S+)\s*$", line)
+                                  for line in fuser.stderr.splitlines()) if m]
+    for index, pid in enumerate(pids):
+        if pid in holders:
+            continue
+        access, command = rows[index] if index < len(rows) else (None, None)
+        ancestry = _proc_ancestry(pid)
+        holders[pid] = {"access": access, "command": command, "is_recorded_worker": pid == worker_pid,
+                        "cmdline": _proc_cmdline(pid), "ancestry": ancestry,
+                        "descends_from_worker": worker_pid in ancestry,
+                        "first_seen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    return fuser
+
+
+def _group_alive(worker_process: dict) -> bool:
+    """Whether the recorded worker's group still has a running process, by
+    the Controller's own process test (which never counts a zombie)."""
+    answer = worker.process_test(
+        worker_process["pid"], worker_process["pgid"], worker_process.get("start_ticks"),
+    )
+    return answer.answer != worker.NOT_LIVE
+
+
+def _proc_cmdline(pid: int) -> str | None:
+    try:
+        return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+    except OSError:
+        return None
+
+
+def _proc_ancestry(pid: int) -> list[int]:
+    chain = []
+    current = pid
+    for _ in range(64):
+        try:
+            stat = Path(f"/proc/{current}/stat").read_text()
+        except OSError:
+            break
+        ppid = int(stat.rsplit(")", 1)[1].split()[1])
+        if ppid <= 0:
+            break
+        chain.append(ppid)
+        current = ppid
+    return chain
 
 
 if __name__ == "__main__":

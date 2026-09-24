@@ -286,7 +286,7 @@ class RouteArgvTest(unittest.TestCase):
         argv = self._argv(model="claude-opus-5-5", effort="xhigh", disallowed_tools=routing.SUBAGENT_TOOLS)
         self.assertEqual(argv, [
             "-p", "/review-plan wi-1", "--output-format", "json", "--permission-mode", "auto",
-            "--model", "claude-opus-5-5", "--effort", "xhigh", "--disallowedTools", "Agent,Workflow",
+            "--model", "claude-opus-5-5", "--effort", "xhigh", "--disallowedTools", "Agent,Workflow,Skill",
         ])
 
     def test_each_flag_is_independent(self) -> None:

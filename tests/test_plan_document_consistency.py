@@ -89,6 +89,7 @@ REGISTRY_PATH = (
 )
 ADR_PATH = REPO_ROOT / "docs" / "adr" / "0001-controller-generation-1-architecture.md"
 ADR_0002_PATH = REPO_ROOT / "docs" / "adr" / "0002-release-runtime-identity-and-observability.md"
+TRUNK_PLAN_PATH = REPO_ROOT / "docs" / "ai-workflow" / "CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md"
 README_PATH = REPO_ROOT / "README.md"
 CI_WORKFLOWS_PY = REPO_ROOT / "tools" / "ci_workflows.py"
 
@@ -380,7 +381,7 @@ def round_count_violations(plan_text: str, expected: int) -> list[str]:
 # parser.
 # ---------------------------------------------------------------------------
 
-_COMMAND_NAMES = frozenset({"inspect", "explain", "step", "run", "resume", "status", "follow"})
+_COMMAND_NAMES = frozenset({"inspect", "explain", "step", "run", "resume", "status", "follow", "milestone-binding"})
 _INVOCATION_PREFIX_RE = re.compile(r"^(workflow-controller |python(?:\s+\S+)*?\s+-m\s+controller\s)")
 
 
@@ -392,7 +393,7 @@ def extract_invocation_lines(text: str) -> list[str]:
     """Every code span whose text is a **Controller invocation line**:
     it begins ``workflow-controller `` or ``python <flags> -m
     controller ``; its tokens after that prefix contain, as a whole
-    token, one of the seven command names; and it contains neither ``[``
+    token, one of the eight command names; and it contains neither ``[``
     nor ``]``. Backtick pairing is scoped to the paragraph (a blank-line
     -delimited span of the raw text), never to the whole document, so an
     unmatched backtick elsewhere cannot pair across a blank line and
@@ -540,6 +541,13 @@ class OperatorDocumentCommandLineTest(unittest.TestCase):
 
     def test_every_adr_0002_invocation_line_parses_under_the_live_parser(self) -> None:
         self.assertEqual(command_line_violations(ADR_0002_PATH.read_text(), self.parser), [])
+
+    def test_every_trunk_plan_invocation_line_parses_under_the_live_parser(self) -> None:
+        # trunk-branch-pr-release-orchestration CP8: the plan's
+        # `milestone-binding` lines are recognised (not vacuous) and parse.
+        text = TRUNK_PLAN_PATH.read_text()
+        self.assertTrue(any("milestone-binding" in line.split() for line in extract_invocation_lines(text)))
+        self.assertEqual(command_line_violations(text, self.parser), [])
 
     def test_follow_invocation_lines_are_recognised_and_checked(self) -> None:
         # Not vacuous: `follow` is a recognised command name, and the

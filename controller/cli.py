@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, observe, routing, runtime, target_state,
+    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, target_state,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -36,7 +36,7 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: rather than by a denylist a future command could be added without
 #: updating.
 READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow"})
-ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume", "follow"})
+ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding"})
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
 #: "Exit codes"). ``2`` is argparse's own default usage-error code and is
@@ -298,6 +298,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("status")
 
+    # trunk-branch-pr-release-orchestration CP8 (TBR-R4-001): the operator
+    # acknowledgement of a refusal-state binding record. `--work-item` (a
+    # global option) is required; `main` refuses its absence as a usage
+    # error.
+    binding_p = subparsers.add_parser(
+        "milestone-binding", help="acknowledge a milestone binding that is in a refusal state")
+    disposition = binding_p.add_mutually_exclusive_group(required=True)
+    disposition.add_argument("--new-pr", action="store_true", default=False,
+                             help="rebind to the same branch; the next branch commit opens a new pull request")
+    disposition.add_argument("--abandon", action="store_true", default=False,
+                             help="retire the binding; the milestone is planned again from the trunk")
+    binding_p.add_argument("repo")
+
     follow_p = subparsers.add_parser(
         "follow", help="follow a run or job's events and worker output, read-only")
     follow_target = follow_p.add_mutually_exclusive_group()
@@ -345,6 +358,11 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         print("handoff: none")
 
     _print_active(runtime_root)
+
+    # CP8 (trunk-branch-pr-release-orchestration): one line per binding
+    # record, only when one exists.
+    for line in milestone_branch.binding_lines(runtime_root):
+        print(line)
 
     print(f"runtime root: {runtime_root} (ladder row {pre_existing['ladder_row']})")
     return EXIT_OK
@@ -549,6 +567,10 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # CP5: the non-acquiring lifecycle-lock probe -- `unknown` never means
     # `free`, and `step` decides by acquiring, never by this report.
     lock_state = lock.probe_lifecycle_lock(target.root)
+    # CP8 (trunk-branch-pr-release-orchestration): `repository_policy` and
+    # `milestone_branch`, from local Git and the binding records only, each
+    # omitted -- never `null` -- when it does not apply (I1, I10).
+    branch_blocks = milestone_branch.observation(_branch_context(target, runtime_root))
 
     if work_item is target_state.NoWorkItemYet:
         # revision 63/64's B2 bootstrap sentinel (CONTROLLER_GEN1_PLAN.md's
@@ -564,11 +586,13 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 "work_item": None,
                 "lifecycle_lock": lock_state,
                 "controller": identity.runtime_record(ident),
+                **branch_blocks,
             }))
             return EXIT_OK
         print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
         print(f"lifecycle lock: {lock_state}")
         print("work item: none -- no non-terminal work item exists and none was explicitly named")
+        _print_branch_blocks(branch_blocks)
         return EXIT_OK
 
     if args.json:
@@ -581,6 +605,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             "work_item": _work_item_payload(work_item),
             "lifecycle_lock": lock_state,
             "controller": identity.runtime_record(ident),
+            **branch_blocks,
         }))
         return EXIT_OK
 
@@ -598,7 +623,33 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
           f"registry_complete={work_item.registry_complete}")
     if work_item.incomplete_children:
         print(f"incomplete children: {', '.join(work_item.incomplete_children)}")
+    _print_branch_blocks(branch_blocks)
     return EXIT_OK
+
+
+def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path) -> milestone_branch.Context:
+    return milestone_branch.Context(repo_root=target.root, runtime_root=runtime_root)
+
+
+def _print_branch_blocks(blocks: dict) -> None:
+    """``inspect``'s text form of the CP8 blocks: one line each, printed
+    only when the block is present."""
+    policy = blocks.get("repository_policy")
+    if policy is not None:
+        print(f"repository policy: {policy['path']} ({policy['source']}, sha256 {policy['sha256']}) "
+              f"milestone_branches={policy['milestone_branches_enabled']} release={policy['release_enabled']} "
+              f"trunk={policy['trunk']['remote']}/{policy['trunk']['branch']} forge={policy['forge_repository']}")
+    binding = blocks.get("milestone_branch")
+    if binding is not None:
+        pr = binding["pr"]
+        pr_text = "no pull request" if pr is None else (
+            f"pull request #{pr['number']} {pr['url']}{' (draft)' if pr['draft'] else ''}")
+        observed = binding["last_observation"]
+        drift = "not observed yet" if observed is None else (
+            f"{'fresh' if observed['fresh'] else 'behind'} ({observed['behind']} behind the trunk), "
+            f"observed {observed['observed_at']}")
+        print(f"milestone branch: {binding['branch']} for {binding['work_item_id']} ({binding['state']}), "
+              f"branch point {binding['branch_point']}, {pr_text}, {drift}")
 
 
 def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
@@ -630,6 +681,12 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             last_apply_job=job.last_launched_apply_job_view(runtime_root, target.root, work_item.work_item_id),
         )
     )
+    # CP8 (trunk-branch-pr-release-orchestration): the preflight outcome the
+    # next step would take, from local Git and the records only (no fetch,
+    # no `gh`); `None`, and the key omitted, when no policy or binding
+    # applies (I1, I10).
+    preflight = milestone_branch.predict(_branch_context(target, runtime_root), requested_work_item_id=args.work_item)
+    preflight_block = {} if preflight is None else {"repository_preflight": preflight}
 
     if args.json:
         gate = decision.gate
@@ -652,9 +709,13 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             "pending_jobs": [entry.to_dict() for entry in pending],
             "lifecycle_lock": lock_state,
             "controller": identity.runtime_record(ident),
+            **preflight_block,
         }))
         return EXIT_OK
 
+    if preflight is not None:
+        gate_text = "" if preflight["gate"] is None else f" ({preflight['gate']})"
+        print(f"repository preflight: {preflight['action']}{gate_text} -- {preflight['detail']}")
     print(f"phase: {decision.observed_phase}")
     for line in decision.evidence:
         print(f"  evidence: {line}")
@@ -992,12 +1053,33 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     return EXIT_INTERRUPTED if any_interrupted else EXIT_OK
 
 
+def cmd_milestone_binding(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
+    """``milestone-binding --new-pr``/``--abandon`` (trunk-branch-pr-release-
+    orchestration CP8, TBR-R4-001): acknowledge a binding record of
+    ``--work-item`` in a refusal state (or, for ``--abandon``, a plan-stage
+    one), under the lifecycle lock. Exit 0, or 20 when a check refuses and
+    nothing is written. Never launches a worker, writes a job record, or
+    touches a ref or a pull request."""
+    require_pinned_execution()
+    target = _inspect_target(args)
+    disposition = milestone_branch.NEW_PR if args.new_pr else milestone_branch.ABANDON
+    record = job.acknowledge_milestone_binding(target, runtime=runtime_root, work_item_id=args.work_item,
+                                               disposition=disposition)
+    if args.json:
+        print(json.dumps(record))
+    else:
+        print(f"milestone-binding --{disposition}: the {record['branch']} binding of {record['work_item_id']} "
+              f"is now {record['state']}")
+    return EXIT_OK
+
+
 _DISPATCH = {
     "inspect": cmd_inspect,
     "explain": cmd_explain,
     "step": cmd_step,
     "run": cmd_run,
     "resume": cmd_resume,
+    "milestone-binding": cmd_milestone_binding,
     # "status" is dispatched specially: it needs the pre-existing-state
     # snapshot captured before this run's own identity.json write.
 }
@@ -1083,6 +1165,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(raw_argv)
     if args.command == "resume" and args.acknowledge_unverifiable_worker and args.abandon is None:
         parser.error("--acknowledge-unverifiable-worker is accepted only with --abandon JOB_ID")
+    if args.command == "milestone-binding" and args.work_item is None:
+        parser.error("milestone-binding requires --work-item <id>")
     global _open_run
     if _open_run is not None:
         _open_run.discard()  # only a run this invocation creates is closed below

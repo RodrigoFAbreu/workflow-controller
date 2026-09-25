@@ -38,6 +38,15 @@ it. ``launch`` never passes ``--resume``/``-r``, ``--continue``/``-c``,
 The route itself is ``controller.routing``'s; this module only places it
 on the command line.
 
+``workflow-controller-trunk-branch-pr-release-orchestration`` CP8 widens
+the list, when a milestone-branch binding governs the step, with
+``routing.BRANCH_GUARD_TOOLS`` -- Bash permission rules such as
+``Bash(git push:*)``. They stay in the same single comma-joined element:
+the CLI splits the list on commas and whitespace outside parentheses, so a
+rule's own space (``Bash(git reset --hard:*)``) stays inside the rule, and
+``Bash(<prefix>:*)`` denies every Bash command that starts with
+``<prefix>``.
+
 ``workflow-controller-release-runtime-observability`` CP4 streams the
 worker's output (``docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md``,
 "Streaming worker output"): ``stream-json`` events land in the durable log

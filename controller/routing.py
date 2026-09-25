@@ -112,6 +112,37 @@ ROLES: frozenset[str] = frozenset(ROLE_ROUTES)
 #: CLI expands a ``-p`` prompt's command itself, without the tool.
 SUBAGENT_TOOLS: tuple[str, ...] = ("Agent", "Workflow", "Skill")
 
+#: The Bash prefixes disallowed for every worker launched under an active
+#: milestone-branch binding (``workflow-controller-trunk-branch-pr-release-
+#: orchestration`` CP8): the forge CLI, and the Git commands that publish,
+#: rewrite or move the branch. Claude Code matches ``Bash(<prefix>:*)``
+#: against the start of the command, so ``Bash(git push:*)`` blocks every
+#: ``git push ...``. ``git merge``, ``git branch`` and ``git tag`` are
+#: deliberately absent: their prefixes would also block the read-only
+#: ``git merge-base``, ``git branch --show-current`` and ``git tag -l`` that
+#: Workflow commands run. This is defense in depth only -- prefix matching
+#: is bypassable (``bash -c``); the post-step branch verification is the
+#: guarantee.
+BRANCH_GUARD_TOOLS: tuple[str, ...] = (
+    "Bash(gh:*)",
+    "Bash(git push:*)",
+    "Bash(git rebase:*)",
+    "Bash(git switch:*)",
+    "Bash(git checkout -b:*)",
+    "Bash(git reset --hard:*)",
+)
+
+
+def worker_disallowed_tools(route: "ResolvedRoute", *, branch_bound: bool) -> tuple[str, ...]:
+    """The launched worker's ``--disallowedTools``: the route's own
+    (:data:`SUBAGENT_TOOLS` for a single-agent route), plus
+    :data:`BRANCH_GUARD_TOOLS` when a milestone-branch binding governs the
+    step. Without a binding it is exactly the route's own list."""
+    tools = route.disallowed_tools
+    if not branch_bound:
+        return tools
+    return tools + tuple(tool for tool in BRANCH_GUARD_TOOLS if tool not in tools)
+
 # ---------------------------------------------------------------------------
 # Role derivation.
 # ---------------------------------------------------------------------------

@@ -317,6 +317,15 @@ class RouteArgvTest(unittest.TestCase):
         self.assertNotIn("--model", self._argv(effort="high"))
         self.assertEqual(self._argv(disallowed_tools=["Agent"])[-2:], ["--disallowedTools", "Agent"])
 
+    def test_the_branch_guard_rules_stay_one_last_element(self) -> None:
+        # trunk-branch-pr-release-orchestration CP8: Bash rules with a space
+        # inside (`Bash(git reset --hard:*)`) are joined like any other name.
+        route = routing.NO_OVERRIDES.resolve(routing.REVIEW_IMPLEMENTATION)
+        argv = self._argv(disallowed_tools=routing.worker_disallowed_tools(route, branch_bound=True))
+        self.assertEqual(argv[-2:], ["--disallowedTools", "Agent,Workflow,Skill,Bash(gh:*),Bash(git push:*),"
+                                     "Bash(git rebase:*),Bash(git switch:*),Bash(git checkout -b:*),"
+                                     "Bash(git reset --hard:*)"])
+
     def test_every_resolved_route_reaches_the_argv_with_no_session_reuse_flag(self) -> None:
         option_sets = (
             routing.NO_OVERRIDES,

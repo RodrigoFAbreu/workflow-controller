@@ -207,6 +207,25 @@ def common_dir(repo_root: Path, *, runner: Runner | None = None) -> Path:
     return Path(_single_line(out, "git rev-parse --git-common-dir"))
 
 
+def head_tree_has(repo_root: Path, path: str, *, runner: Runner | None = None) -> bool:
+    """Whether ``HEAD``'s committed tree lists ``path``: one
+    ``git ls-tree -z HEAD -- <path>`` (exit 0, empty output is absent).
+    Only an unborn ``HEAD`` makes it exit 128; on exactly that exit two
+    more reads confirm it (``rev-parse --verify -q HEAD`` exit 1 with no
+    output, ``symbolic-ref -q HEAD`` exit 0), and an unborn ``HEAD``, which
+    has no commit, lists nothing. Any other outcome refuses (I9)."""
+    argv, result = _run(repo_root, ["ls-tree", "-z", "HEAD", "--", path], runner)
+    if result.returncode == 0:
+        return bool(result.stdout)
+    if result.returncode == 128:
+        _argv, verify = _run(repo_root, ["rev-parse", "--verify", "-q", "HEAD"], runner)
+        _argv, symbolic = _run(repo_root, ["symbolic-ref", "-q", "HEAD"], runner)
+        if verify.returncode == 1 and not verify.stdout and symbolic.returncode == 0:
+            return False
+    raise _failure(f"cannot list {path} at HEAD (exit {result.returncode}): "
+                   f"{_text(result.stderr).strip()}", argv, result)
+
+
 def remote_url(repo_root: Path, remote: str, *, runner: Runner | None = None) -> str | None:
     """``remote``'s fetch URL, or ``None`` when no such remote exists."""
     out = _probe(repo_root, ["remote", "get-url", "--", remote], runner, absent=2,

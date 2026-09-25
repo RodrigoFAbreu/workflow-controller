@@ -987,6 +987,11 @@ def script_delete(path: str) -> dict:
     return {"action": "delete", "path": path}
 
 
+def script_git(*args: str) -> dict:
+    """A scripted ``git <args>`` in the target (a worker moving its branch)."""
+    return {"action": "git", "args": list(args)}
+
+
 def trailer_message(subject: str, *trailers: tuple[str, str]) -> str:
     """A commit message whose final paragraph is exactly ``trailers``, in
     order -- the shape ``git interpret-trailers --parse`` reads."""

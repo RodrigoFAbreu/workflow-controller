@@ -594,3 +594,98 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     `test_package_structure`, `test_write_containment`, `test_ci_workflows` and
     `test_plan_document_consistency` (475 tests), OK; `python3 tools/ci_workflows.py --check`
     passes.
+- **CP8 -- lifecycle wiring and observation: complete.**
+  - `job._execute_step_locked` gains step 1b after the state read and before `decide`, under
+    the lifecycle lock: `milestone_branch.repository_preflight`.
+    - It runs the no-policy `probe` first: `rev-parse --path-format=absolute --git-common-dir`,
+      then `ls-tree -z HEAD -- .workflow-controller/policy.json` (`gitrepo.head_tree_has`). On an
+      unborn `HEAD` it adds `rev-parse --verify -q HEAD` and `symbolic-ref -q HEAD`. Any other
+      result refuses (I9).
+    - With no binding record and nothing listed, the result is `Proceed()` and nothing else
+      runs. Otherwise `preflight` runs. A policy committed at `HEAD` but deleted in the worktree
+      stays active.
+    - A `Gate` becomes a `GATE_BLOCKED` record through `_no_launch_record` (exit 10). Its
+      `HumanGate` comes from `decision.branch_human_gate` (phase `MILESTONE_BRANCH`). The record
+      carries the gate's work item and its Workflow phase, or `NO_PHASE` when the state lacks it.
+    - A refusal raises (exit 20). After a preflight that did anything, the state is read again,
+      because a bind or close-out may have moved `HEAD`. `work_item_override` replaces the
+      selection.
+  - Under an active binding (`Proceed.binding`):
+    - the job record gains `branch_binding` (work item, branch, pre-step tip);
+    - the worker's `--disallowedTools` is `routing.worker_disallowed_tools`, the route's own list
+      plus the pinned `routing.BRANCH_GUARD_TOOLS`. `git merge`/`branch`/`tag` are absent, and
+      the matching semantics are documented in `routing` and `worker`;
+    - before a job can be `FINISHED`, `milestone_branch.verify_post_step` checks that `HEAD` is
+      still attached to the bound branch and that the tip descends from the pre-step tip. A
+      violation, or an undecidable read, is `FAILED` with the new
+      `reconciliation_evidence.code` `BranchInvariantViolated`. The Controller never repairs it.
+  - Observation (I10), from local Git and the records only, with no fetch and no `gh`. Every new
+    key and line is omitted when the probe finds nothing:
+    - `inspect` gains `repository_policy` (path, source `binding` or `HEAD`, SHA-256, both
+      switches, trunk, forge repository) and `milestone_branch` (state, branch, branch point,
+      generation, PR number/URL/draft, `last_observation`), each with a text line;
+    - `explain` gains `repository_preflight` (`milestone_branch.predict`). Its `action` is one of
+      `bind`, `adopt`, `complete_binding`, `push`, `create_pr`, `ready`, `close_out`, `gate`,
+      `refuse` or `proceed`. It also carries the work item, branch, binding state, gate code,
+      detail, and `as_of` (the last observation) for anything network-dependent. The text form
+      is one `repository preflight:` line;
+    - `status` prints one `milestone:` line per live binding record in the runtime root;
+    - `follow` is untouched.
+  - `milestone-binding` subcommand:
+    `workflow-controller --work-item <id> milestone-binding --new-pr|--abandon <repo>`. The
+    disposition group is required and exclusive, and a missing `--work-item` is a usage error
+    (exit 2). It dispatches as a mutating command, then takes the lifecycle lock
+    (`job.acknowledge_milestone_binding`) and calls `milestone_branch.acknowledge`. The exit is
+    0, or 20 with nothing written. It writes no job record and launches no worker.
+    `cli.ALL_COMMANDS` and the consistency test's `_COMMAND_NAMES` include it, the
+    `extract_invocation_lines` docstring says "eight", and a new test parses this plan's
+    `milestone-binding` lines.
+  - **Deviations, for the reviewer.**
+    - The post-step verification also runs at `resume`. A `LAUNCHED` or `COMPLETED` record with
+      `branch_binding` whose transition verifies is `FAILED` (`BranchInvariantViolated`) instead
+      of `FINISHED` when the branch invariant fails. The plan says "before the job is marked
+      `FINISHED`", and `resume` also marks jobs `FINISHED`.
+    - The job record's `branch_binding` block is additive. The plan names no field for the
+      pre-step tip, but `resume` needs it after the process that captured it is gone. It is
+      absent with no binding (I1).
+    - `explain`'s action vocabulary and the `inspect` field names above are this checkpoint's
+      choice. The plan names the categories, not the exact keys.
+    - `tests/fake_claude.py` gains a `git` scripted action (`fixtures.script_git`), so a test
+      worker can switch or rewrite the branch.
+  - Tests:
+    - new `tests/test_trunk_preflight.py` (29), in the `trunk` shard (`validate.yml`
+      regenerated);
+    - the no-policy golden `tests/golden/no_policy_lifecycle.json` was generated by
+      `tests/golden/generate_no_policy_lifecycle.py` from the unchanged CP7 tree (`86801f6`,
+      extracted with `git archive`). It holds job records, worker argv, `inspect`/`explain` JSON
+      and exit codes for three scenarios: the full `"2.2"` implementation run to the manual gate,
+      the bootstrap `step`, and an unborn-`HEAD` `step`. It re-derives byte-identically from the
+      CP8 code, with no new key;
+    - the rest: the exact probe argv (two, or four when unborn), the undecidable listing, the
+      deleted-in-worktree policy, the inadmissible policy, and the pinned guard list and its
+      union. Then, end to end through `cli.main` on a policy-enabled origin/clone with the fake
+      `gh`:
+      - the bind step's worker argv;
+      - the wrong-branch refusal;
+      - unrelated item versus bound item and remediation child;
+      - a verifying worker that keeps the branch, one that switches it, and one that rewrites it;
+      - the same verification at `resume`;
+      - the `inspect`/`explain` blocks on trunk and on the branch;
+      - `explain` without fetch or `gh` (a git spy and the `gh` log);
+      - the `status` line;
+      - `follow` output equal, after normalisation, to that of the same step on a no-policy
+        target;
+      - every `milestone-binding` case in the CP8 list. These are the parser, `--abandon` after a
+        closed PR, `--new-pr` after a merge before acceptance with the new Draft PR one branch
+        commit later, and the PR-less close-out from the branch and from trunk. They also cover
+        the discarded plan after a bind, a refused disposition, and no record with the ordinary
+        dispatch footprint;
+    - `test_worker` pins the widened list as one argv element;
+    - mutating the tool union, the post-step verification, the probe short-circuit, the
+      `branch_binding` write, or the omit-never-`null` rule each fails the module.
+  - Verified:
+    - narrow: `tests.test_trunk_preflight`, `test_worker`, `test_routing`,
+      `test_plan_document_consistency`, `test_write_containment`, `test_package_structure`,
+      `test_gitrepo` and `test_ci_workflows`, OK; `python3 tools/ci_workflows.py --check` passes;
+    - full: `python3 -m unittest discover -s tests -t .` ran 1593 tests, OK (6 skipped), in
+      152 s.

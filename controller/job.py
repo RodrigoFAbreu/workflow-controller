@@ -88,16 +88,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from controller import evidence, identity, lock, routing, runtime, target_state, worker
+from controller import evidence, identity, lock, milestone_branch, routing, runtime, target_state, worker
 from controller.decision import (
     NO_PHASE,
     NO_PHASE_WIRE,
     Decision,
+    branch_human_gate,
     decide_no_work_item,
     phase_from_wire,
     phase_to_wire,
 )
 from controller.errors import (
+    BranchInvariantViolatedError,
     ControllerError,
     HumanGateError,
     JobAbandonRefusedError,
@@ -2155,6 +2157,9 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
         observed_phase_after=observed_phase_after, status=STATUS_LAUNCHED, worker_outcome=None,
     )
     now = _now()
+    branch_violation = _branch_invariant_violation(root, runtime_root, record) if verified else None
+    if branch_violation is not None:
+        return _branch_violation_failed(record, runtime_root, observed_phase_after_wire, branch_violation, now)
     if verified:
         reconciled = {
             **record, "status": STATUS_FINISHED, "transition_verified": True,
@@ -2220,6 +2225,18 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     raise UnreconcilableJobError(message, evidence=unreconcilable_evidence)
 
 
+def _branch_violation_failed(record: JobRecord, runtime_root: Path, observed_phase_after_wire: Any,
+                             violation: dict, now: str) -> JobRecord:
+    """A reconciled job whose transition verified but whose post-step
+    branch verification did not (CP8): ``FAILED``, never ``FINISHED``."""
+    failed = {
+        **record, "status": STATUS_FAILED, "transition_verified": False,
+        "observed_phase_after": observed_phase_after_wire, "reconciliation_evidence": violation,
+        "reconciled_at": now, "updated_at": now,
+    }
+    return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
+
+
 def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
     """Row 2 (verifying) / row 5 (failing): ``COMPLETED``. Mirrors CP6B
     step 8/9's own verification rule exactly -- "exactly as CP6B step 8
@@ -2241,6 +2258,9 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         observed_phase_after=observed_phase_after, status=STATUS_COMPLETED, worker_outcome=worker_outcome,
     )
     now = _now()
+    branch_violation = _branch_invariant_violation(root, runtime_root, record) if verified else None
+    if branch_violation is not None:
+        return _branch_violation_failed(record, runtime_root, observed_phase_after_wire, branch_violation, now)
     if verified:
         reconciled = {
             **record, "status": STATUS_FINISHED, "transition_verified": True,
@@ -3456,6 +3476,63 @@ def _no_launch_record(
     return record
 
 
+#: ``reconciliation_evidence.code`` of a job whose worker left the bound
+#: milestone branch, or rewrote it (trunk-branch-pr-release-orchestration
+#: CP8).
+BRANCH_INVARIANT_VIOLATED_CODE = "BranchInvariantViolated"
+
+
+def _branch_binding_block(binding: Mapping, pre_step_tip: str | None) -> dict:
+    return {"work_item_id": binding["work_item_id"], "branch": binding["branch"], "pre_step_tip": pre_step_tip}
+
+
+def _worker_disallowed_tools(route: routing.ResolvedRoute, binding: Mapping | None) -> tuple[str, ...]:
+    return routing.worker_disallowed_tools(route, branch_bound=binding is not None)
+
+
+def _branch_invariant_violation(root: Path, runtime_root: Path, record: Mapping) -> dict | None:
+    """The post-step verification of a job launched under a binding (its
+    record's ``branch_binding``): ``None`` when it holds or no binding
+    governed the job, else the ``BranchInvariantViolated`` evidence. A
+    missing pre-step tip is itself a violation: there is nothing the new
+    tip can be shown to descend from."""
+    block = record.get("branch_binding")
+    if block is None:
+        return None
+    ctx = milestone_branch.Context(repo_root=root, runtime_root=runtime_root)
+    try:
+        if block.get("pre_step_tip") is None:
+            raise BranchInvariantViolatedError(
+                f"the job recorded no pre-step tip for {block.get('branch')}", evidence=dict(block))
+        milestone_branch.verify_post_step(ctx, block, block["pre_step_tip"])
+    except ControllerError as exc:  # an undecidable Git read fails closed too (I9)
+        return {"code": BRANCH_INVARIANT_VIOLATED_CODE, "error": type(exc).__name__, "message": exc.message,
+                "evidence": exc.evidence}
+    return None
+
+
+def _branch_gate_record(runtime_root: Path, managed_repo: Any, ident: Any, snapshot: Any,
+                        gate: milestone_branch.Gate, *, run_id: str | None) -> JobRecord:
+    """A repository-preflight gate (CP8), recorded through
+    :func:`_no_launch_record` as ``GATE_BLOCKED``: the gate's work item and
+    its Workflow phase when the state has it (``NO_PHASE`` otherwise, as for
+    ``bound_item_missing`` or a trunk gate), and the preflight's
+    :class:`~controller.decision.HumanGate`, phase ``MILESTONE_BRANCH``."""
+    view = snapshot.work_items.get(gate.work_item_id) if gate.work_item_id is not None else None
+    work_item = target_state.NoWorkItemYet if view is None else view
+    phase = NO_PHASE if view is None else view.phase
+    decision = Decision(
+        observed_phase=phase,
+        evidence=(f"repository preflight: {gate.code} ({gate.branch})",
+                  *(f"exit: {exit_}" for exit_ in gate.exits)),
+        action=None, automatic=False, gate=branch_human_gate(str(managed_repo.root), gate),
+        declined=False, reason=gate.message,
+    )
+    pre_state = _capture_pre_state(managed_repo, snapshot, work_item)
+    return _no_launch_record(runtime_root, managed_repo, ident, gate.work_item_id, phase, pre_state, decision,
+                             status=STATUS_GATE_BLOCKED, run_id=run_id)
+
+
 def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOptions) -> routing.ResolvedRoute:
     """The launched worker's route (automatic-lifecycle-orchestration CP6):
     its role, from durable state only (the observed phase, the selected
@@ -3517,6 +3594,18 @@ def execute_step(
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
             lifecycle_lock=lifecycle_lock, routing=routing, run_id=run_id,
         )
+
+
+def acknowledge_milestone_binding(managed_repo: Any, *, runtime: Path, work_item_id: str,
+                                  disposition: str) -> dict:
+    """``milestone-binding --new-pr``/``--abandon`` (trunk-branch-pr-release-
+    orchestration CP8, TBR-R4-001): under the target's lifecycle lock, like
+    ``step``, :func:`controller.milestone_branch.acknowledge`. It writes no
+    job record, launches no worker and touches no ref or pull request;
+    returns the binding record it wrote."""
+    with _acquire_lifecycle_lock(runtime, managed_repo):
+        ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime)
+        return milestone_branch.acknowledge(ctx, work_item_id, disposition)
 
 
 def _announce_orphaned_worker(worker_process: worker.WorkerProcess, root: Path, runtime_root: Path, *,
@@ -3589,6 +3678,25 @@ def _execute_step_locked(
     # here, once, rather than re-derived at every later site that would
     # otherwise read them straight off `work_item`.
     snapshot = target_state.read(managed_repo)
+
+    # Step 1b (trunk-branch-pr-release-orchestration CP8): the repository
+    # preflight, under the lifecycle lock, after the state read and before
+    # `decide`. With no binding record and no policy at HEAD it makes its
+    # two probe calls and returns `Proceed()`, and nothing below changes
+    # (I1). Otherwise it may have bound, switched or closed out, so the
+    # state is read again; a gate is recorded GATE_BLOCKED like any other
+    # (exit 10), and a refusal raises (exit 20).
+    branch_ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime)
+    preflight = milestone_branch.repository_preflight(branch_ctx, requested_work_item_id=work_item_id)
+    if isinstance(preflight, milestone_branch.Gate):
+        return _branch_gate_record(runtime, managed_repo, identity, target_state.read(managed_repo), preflight,
+                                   run_id=run_id)
+    binding = preflight.binding
+    if binding is not None or preflight.action != "none":
+        snapshot = target_state.read(managed_repo)
+    if preflight.work_item_override is not None:
+        work_item_id = preflight.work_item_override
+
     work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
     is_bootstrap = work_item is target_state.NoWorkItemYet
     resolved_work_item_id = None if is_bootstrap else work_item.work_item_id
@@ -3672,6 +3780,11 @@ def _execute_step_locked(
     }
     if run_id is not None:
         record["run_id"] = run_id
+    if binding is not None:
+        # CP8 (trunk-branch-pr-release-orchestration): the governing
+        # binding and the pre-step tip the post-step verification checks
+        # against, here and at `resume`. Absent without a binding (I1).
+        record["branch_binding"] = _branch_binding_block(binding, pre_state["target_head"])
     _run_job_started(run_id, job_id)
     record = _persist(runtime, job_id, record, event="planned",
                       details={"command": decision.action.command})
@@ -3762,7 +3875,7 @@ def _execute_step_locked(
             on_group_drain=on_group_drain,
             model=route.model,
             effort=route.effort,
-            disallowed_tools=route.disallowed_tools,
+            disallowed_tools=_worker_disallowed_tools(route, binding),
         )
     except (UserOnlyCommandError, WorkerLaunchError) as exc:
         if "worker_process" not in spawned:
@@ -3831,7 +3944,14 @@ def _execute_step_locked(
         worker_outcome=result.outcome,
     )
 
-    if verified:
+    # CP8 (trunk-branch-pr-release-orchestration): the post-step branch
+    # verification, before the job can be FINISHED. A violation fails the
+    # job whatever the transition did; the Controller never repairs it.
+    branch_violation = _branch_invariant_violation(managed_repo.root, runtime, record)
+
+    if branch_violation is not None:
+        verified, final_status, verification_evidence = False, STATUS_FAILED, branch_violation
+    elif verified:
         final_status = STATUS_FINISHED
     elif observed_phase_after in incomplete_effect_phases:
         final_status = STATUS_INCOMPLETE

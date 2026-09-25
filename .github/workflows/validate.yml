@@ -30,7 +30,7 @@ jobs:
           - shard: docs
             modules: "tests.test_plan_document_consistency tests.test_checklist_corrections tests.test_ci_workflows tests.test_release_tools tests.test_buildinfo"
           - shard: trunk
-            modules: "tests.test_version_authority tests.test_repo_policy tests.test_gitrepo tests.test_forge tests.test_milestone_branch tests.test_pull_request_lifecycle tests.test_release_txn tests.test_no_rewrite_invariants"
+            modules: "tests.test_version_authority tests.test_repo_policy tests.test_gitrepo tests.test_forge tests.test_milestone_branch tests.test_pull_request_lifecycle tests.test_release_txn tests.test_no_rewrite_invariants tests.test_trunk_preflight"
     steps:
       - uses: actions/checkout@v4
         with:

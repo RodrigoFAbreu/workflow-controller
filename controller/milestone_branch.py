@@ -21,8 +21,15 @@ branch sync (CP6); then the Draft PR lifecycle (creation, discovery, reuse,
 re-verification), drift, readiness, the merge gate, the merged-PR handling
 and close-out, from the branch and from trunk, and the PR-less close-out
 (CP7). :func:`acknowledge` is the operator acknowledgement
-(``milestone-binding --new-pr`` / ``--abandon``). The lifecycle wiring is
-CP8.
+(``milestone-binding --new-pr`` / ``--abandon``).
+
+CP8 wires it into the lifecycle: :func:`repository_preflight` is step 1b of
+every ``step`` (the no-policy :func:`probe` first, so a repository with no
+policy at ``HEAD`` and no binding record costs two read-only ``git`` calls
+and nothing else, I1), :func:`verify_post_step` is the post-step branch
+verification of every worker job run under a binding, and
+:func:`observation`, :func:`predict` and :func:`binding_lines` are the
+read-only ``inspect``/``explain``/``status`` views (I10).
 
 Every Git call goes through :mod:`controller.gitrepo`, every record write
 through :mod:`controller.runtime`. Every record write is checked against
@@ -1775,3 +1782,299 @@ def acknowledge(ctx: Context, work_item_id: str, disposition: str) -> dict:
            pr=None if pr is None else pr.get("number"),
            reason=f"milestone-binding --{disposition} on a {state} binding")
     return _write(ctx, key, updated)
+
+
+# ---------------------------------------------------------------------------
+# The lifecycle wiring (CP8): the no-policy probe, the post-step
+# verification, and the read-only observation `inspect`/`explain`/`status`
+# render (I10).
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class Probe:
+    """What the no-policy probe read: the repository key, its live binding
+    records (a filesystem read) and whether ``HEAD``'s committed tree lists
+    the policy file."""
+
+    key: str
+    records: Mapping[str, dict]
+    policy_committed: bool
+
+    @property
+    def inactive(self) -> bool:
+        """No binding record and no policy at ``HEAD``: I1 holds, and
+        nothing else runs."""
+        return not self.records and not self.policy_committed
+
+
+def probe(ctx: Context) -> Probe:
+    """The no-policy probe (I1): exactly two read-only ``git`` calls, in
+    this order -- ``rev-parse --path-format=absolute --git-common-dir``
+    (for ``repo_key``) and ``ls-tree -z HEAD -- <policy path>`` -- or four
+    on an unborn ``HEAD`` (:func:`controller.gitrepo.head_tree_has`)."""
+    key = repo_key(gitrepo.common_dir(ctx.repo_root, runner=ctx.runner))
+    records = live_records(ctx.runtime_root, key)
+    committed = gitrepo.head_tree_has(ctx.repo_root, repo_policy.POLICY_PATH, runner=ctx.runner)
+    return Probe(key=key, records=records, policy_committed=committed)
+
+
+def repository_preflight(ctx: Context, *, requested_work_item_id: str | None = None) -> Proceed | Gate:
+    """Step 1b of a lifecycle step: the probe, then, unless it found
+    nothing, :func:`preflight`. With no binding record and no policy at
+    ``HEAD`` it returns ``Proceed()`` after the probe's own calls and
+    nothing else (I1)."""
+    found = probe(ctx)
+    if found.inactive:
+        return Proceed()
+    return preflight(ctx, requested_work_item_id=requested_work_item_id,
+                     head_policy=_UNSET if found.policy_committed else None)
+
+
+def verify_post_step(ctx: Context, binding: Mapping[str, Any], pre_step_tip: str) -> None:
+    """The post-step verification of a worker job run under ``binding``:
+    ``HEAD`` is still attached to the bound branch, and its tip descends
+    from ``pre_step_tip``. Raises :class:`BranchInvariantViolatedError`;
+    the Controller never repairs the branch."""
+    branch = binding["branch"]
+    head = gitrepo.head_state(ctx.repo_root, runner=ctx.runner)
+    evidence = {"work_item_id": binding["work_item_id"], "branch": branch, "pre_step_tip": pre_step_tip,
+                "head_branch": head.branch, "head": head.commit}
+    if head.branch != branch:
+        raise BranchInvariantViolatedError(
+            f"the worker left HEAD on {head.branch or 'a detached commit'}, not on the bound branch {branch}",
+            evidence=evidence)
+    if head.commit is None or not _ancestor(ctx, pre_step_tip, head.commit):
+        raise BranchInvariantViolatedError(
+            f"the worker rewrote {branch}: its tip {head.commit} does not descend from the pre-step tip "
+            f"{pre_step_tip}", evidence=evidence)
+
+
+def _policy_view(policy: repo_policy.RepositoryPolicy, source: str) -> dict:
+    return {
+        "path": repo_policy.POLICY_PATH,
+        "source": source,
+        "sha256": policy.sha256,
+        "milestone_branches_enabled": policy.milestone_branches.enabled,
+        "release_enabled": policy.release.enabled,
+        "trunk": {"branch": policy.trunk_branch, "remote": policy.trunk_remote},
+        "forge_repository": policy.forge_repository,
+    }
+
+
+def _binding_view(record: Mapping[str, Any]) -> dict:
+    pr = record.get("pr")
+    observation = record.get("last_observation") or None
+    return {
+        "work_item_id": record["work_item_id"],
+        "state": record["state"],
+        "branch": record["branch"],
+        "trunk": record["trunk"],
+        "branch_point": record["branch_point"],
+        "binding_generation": record["binding_generation"],
+        "pr": None if pr is None else {"number": pr.get("number"), "url": pr.get("url"),
+                                       "draft": pr.get("is_draft")},
+        "last_observation": None if observation is None else {
+            key: observation.get(key)
+            for key in ("observed_at", "tip", "remote_branch", "remote_trunk", "fresh", "behind")},
+    }
+
+
+def _governing(records: Mapping[str, dict], head: gitrepo.HeadState) -> dict | None:
+    if head.branch is None:
+        return None
+    return next((record for record in records.values() if record["branch"] == head.branch), None)
+
+
+def observation(ctx: Context) -> dict:
+    """``inspect``'s additive blocks, read from local Git and the records
+    only: ``repository_policy`` when a policy is committed at ``HEAD`` or a
+    binding governs (the governing binding's snapshot, else ``HEAD``'s),
+    and ``milestone_branch`` when a binding governs. Both are omitted --
+    the result is ``{}`` -- when the probe finds nothing (I1)."""
+    found = probe(ctx)
+    if found.inactive:
+        return {}
+    head = gitrepo.head_state(ctx.repo_root, runner=ctx.runner)
+    governing = _governing(found.records, head)
+    out: dict[str, Any] = {}
+    if governing is not None:
+        out["repository_policy"] = _policy_view(binding_policy(governing), "binding")
+        out["milestone_branch"] = _binding_view(governing)
+    elif found.policy_committed:
+        out["repository_policy"] = _policy_view(repo_policy.read_committed_policy(ctx.repo_root, "HEAD"), "HEAD")
+    return out
+
+
+def binding_lines(runtime_root: Path) -> list[str]:
+    """``status``'s ``milestone:`` lines: one per live binding record under
+    ``runtime_root``, for every repository. Read-only."""
+    base = Path(runtime_root) / "repositories"
+    if not base.is_dir():
+        return []
+    lines = []
+    for directory in sorted(p for p in base.iterdir() if p.is_dir()):
+        for work_item_id, record in live_records(runtime_root, directory.name).items():
+            pr = record.get("pr")
+            pr_text = "" if pr is None else f", pull request #{pr.get('number')}"
+            lines.append(f"milestone: {work_item_id} {record['state']} on {record['branch']}{pr_text} "
+                         f"(worktree {record['repository'].get('worktree_root')})")
+    return lines
+
+
+def _prediction(action: str, detail: str, *, record: Mapping[str, Any] | None = None,
+                work_item_id: str | None = None, branch: str | None = None, gate: str | None = None,
+                network: bool = False) -> dict:
+    as_of = ((record or {}).get("last_observation") or {}).get("observed_at")
+    if network:
+        detail = f"{detail} (as of {as_of or 'no observation yet'})"
+    return {
+        "action": action,
+        "work_item_id": work_item_id if record is None else record["work_item_id"],
+        "branch": branch if record is None else record["branch"],
+        "binding_state": None if record is None else record["state"],
+        "gate": gate,
+        "detail": detail,
+        "as_of": as_of if network else None,
+    }
+
+
+def _local_remote_trunk(ctx: Context, remote: str, trunk: str) -> str | None:
+    return gitrepo.ref_commit(ctx.repo_root, f"refs/remotes/{remote}/{trunk}", runner=ctx.runner)
+
+
+def predict(ctx: Context, *, requested_work_item_id: str | None = None) -> dict | None:
+    """``explain``'s ``repository_preflight``: the preflight outcome the next
+    step would take -- ``bind``, ``adopt``, ``complete_binding``, ``push``,
+    ``create_pr``, ``ready``, ``close_out``, ``gate``, ``refuse`` or
+    ``proceed`` -- computed from local Git and the records only, with no
+    fetch and no ``gh`` (I10). Anything that depends on the network is
+    labelled "as of" the binding's last observation. ``None`` when the probe
+    finds nothing (I1). The step itself decides; this only predicts."""
+    found = probe(ctx)
+    if found.inactive:
+        return None
+    head = gitrepo.head_state(ctx.repo_root, runner=ctx.runner)
+    policy = repo_policy.read_committed_policy(ctx.repo_root, "HEAD") if found.policy_committed else None
+    governing = _governing(found.records, head)
+    if governing is not None:
+        return _predict_on_branch(ctx, governing, head, requested_work_item_id)
+    if not found.records and not repo_policy.milestone_branches_enabled(policy):
+        return _prediction("proceed", "the policy at HEAD does not enable milestone branches")
+    if head.branch is None:
+        return _prediction("refuse", "HEAD is detached; attach it to the trunk or to a milestone branch")
+    trunks = ({policy.trunk_branch} if policy is not None
+              else {record["trunk"] for record in found.records.values()})
+    if head.branch in trunks:
+        return _predict_on_trunk(ctx, found.records, head, policy)
+    if policy is not None:
+        candidate = _invert_branch(policy.milestone_branches.branch_format, head.branch)
+        if candidate is not None and candidate not in found.records:
+            return _prediction("adopt", f"{head.branch} is adopted as the branch of {candidate}, subject to "
+                                        f"the adopt preconditions", work_item_id=candidate, branch=head.branch)
+    return _prediction("refuse", f"HEAD is on {head.branch}, which is neither the trunk nor a milestone branch "
+                                 f"this repository can bind", branch=head.branch)
+
+
+def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.HeadState,
+                       requested: str | None) -> dict:
+    state, work_item_id, branch = record["state"], record["work_item_id"], record["branch"]
+    if state == BRANCH_PLANNED:
+        return _prediction("complete_binding", f"the interrupted bind of {work_item_id} completes", record=record)
+    if state == MERGED_REWRITTEN and not record.get("rewrite_gate_shown"):
+        return _prediction("gate", "the merge rewrote the reviewed history", record=record,
+                           gate=GATE_MERGE_METHOD_REWROTE_HISTORY)
+    if state in TERMINAL_STATES:
+        return _prediction("gate", f"the binding is {state}; switch to {record['trunk']}", record=record,
+                           gate=GATE_SWITCH_TO_TRUNK)
+    if state == PR_CLOSED_UNMERGED:
+        return _prediction("gate", "the pull request was closed without merge, unless it has been reopened",
+                           record=record, gate=GATE_PR_CLOSED_UNMERGED, network=True)
+    if state == MERGED_BEFORE_ACCEPTANCE:
+        return _prediction("gate", "the branch was merged before acceptance", record=record,
+                           gate=GATE_MERGED_BEFORE_ACCEPTANCE)
+    wt = worktree_state(ctx)
+    items = _work_items(wt, "the working tree's state") if wt else {}
+    if work_item_id not in items:
+        return _prediction("gate", f"{work_item_id} is missing from the working tree's state", record=record,
+                           gate=GATE_BOUND_ITEM_MISSING)
+    selected = requested or wt.get("active_work_item_id")
+    if selected is not None and selected != work_item_id \
+            and (items.get(selected) or {}).get("parent_work_item_id") != work_item_id:
+        return _prediction("refuse", f"{selected} is neither {work_item_id}, which {branch} is bound to, nor one "
+                                     f"of its remediation children", record=record)
+    if state == MERGED:
+        return _prediction("close_out", f"the merged binding closes out and HEAD switches to {record['trunk']}",
+                           record=record)
+    if state == READY:
+        return _prediction("gate", "the pull request is ready; a human merges it", record=record,
+                           gate=GATE_MERGE_PULL_REQUEST, network=True)
+    tip = head.commit
+    observed = record.get("last_observation") or {}
+    complete = tip is not None and _phase(committed_state(ctx, "HEAD"), work_item_id) == MILESTONE_COMPLETE
+    if state == PR_OPEN:
+        if complete:
+            return _prediction("ready", "readiness is checked and the pull request is marked ready if it holds",
+                               record=record, network=True)
+        if observed.get("remote_branch") != tip:
+            return _prediction("push", f"{branch} is pushed at {tip}", record=record, network=True)
+        return _prediction("proceed", "the pull request is open", record=record, network=True)
+    if state == PR_PLANNED:
+        return _prediction("create_pr", "the pull request is discovered, or created as a draft", record=record,
+                           network=True)
+    remote_trunk = _local_remote_trunk(ctx, record["repository"]["remote"], record["trunk"]) \
+        or observed.get("remote_trunk")
+    if tip is not None and remote_trunk is not None and not _ancestor(ctx, tip, remote_trunk):
+        return _prediction("create_pr", f"{branch} is pushed and a draft pull request is created", record=record,
+                           network=True)
+    if complete:
+        return _prediction("close_out", "the PR-less close-out runs", record=record, network=True)
+    return _prediction("proceed", f"{branch} has no commit beyond the trunk yet", record=record, network=True)
+
+
+def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.HeadState,
+                      policy: repo_policy.RepositoryPolicy | None) -> dict:
+    for record in records.values():
+        state = record["state"]
+        if state == BRANCH_PLANNED:
+            return _prediction("complete_binding", f"the interrupted bind of {record['work_item_id']} completes",
+                               record=record)
+        if state == MERGED_REWRITTEN and not record.get("rewrite_gate_shown"):
+            return _prediction("gate", "the merge rewrote the reviewed history", record=record,
+                               gate=GATE_MERGE_METHOD_REWROTE_HISTORY)
+        if state == MERGED:
+            return _prediction("close_out", "the merged binding closes out from the trunk", record=record)
+        if state not in TERMINAL_STATES:
+            return _prediction("refuse", f"{record['work_item_id']} is bound to {record['branch']} (binding "
+                                         f"state {state}), so the trunk cannot start a milestone, unless its "
+                                         f"pull request has been merged", record=record, network=True)
+    if not repo_policy.milestone_branches_enabled(policy):
+        return _prediction("proceed", "the policy at HEAD does not enable milestone branches")
+    wt = worktree_state(ctx)
+    items = _work_items(wt, "the working tree's state") if wt else {}
+    candidates = sorted(
+        work_item_id for work_item_id, item in items.items()
+        if item.get("phase") != MILESTONE_COMPLETE and item.get("parent_work_item_id") is None
+        and (work_item_id not in records or records[work_item_id]["state"] == ABANDONED))
+    if len(candidates) > 1:
+        return _prediction("refuse", f"several unbound work items are in progress: {', '.join(candidates)}",
+                           branch=head.branch)
+    if candidates:
+        branch = policy.milestone_branches.branch_name(candidates[0])
+        return _prediction("bind", f"{candidates[0]} is bound to {branch}, subject to the bind preconditions",
+                           work_item_id=candidates[0], branch=branch)
+    trunk, remote = policy.trunk_branch, policy.trunk_remote
+    if gitrepo.tracked_changes(ctx.repo_root, runner=ctx.runner):
+        return _prediction("refuse", f"the tracked tree on {trunk} has changes", branch=trunk)
+    remote_tip = _local_remote_trunk(ctx, remote, trunk)
+    fetched = f"as of the last fetch of {remote}/{trunk}"
+    if remote_tip is None or head.commit is None:
+        return _prediction("proceed", f"the trunk start compares {trunk} with {remote}/{trunk} ({fetched})",
+                           branch=trunk)
+    if remote_tip == head.commit:
+        return _prediction("proceed", f"{trunk} equals {remote}/{trunk} ({fetched})", branch=trunk)
+    if _ancestor(ctx, head.commit, remote_tip):
+        return _prediction("gate", f"{trunk} is behind {remote}/{trunk} ({fetched})", branch=trunk,
+                           gate=GATE_FAST_FORWARD_TRUNK)
+    return _prediction("refuse", f"{trunk} is ahead of or diverged from {remote}/{trunk} ({fetched})",
+                       branch=trunk)

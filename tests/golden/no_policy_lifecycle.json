@@ -1,0 +1,1528 @@
+{
+  "bootstrap_step": {
+    "after": {
+      "explain": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "action": "/milestone-plan",
+          "automatic": true,
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "declined": false,
+          "evidence": [],
+          "gate": null,
+          "lifecycle_lock": "free",
+          "observed_phase": "__NO_PHASE__",
+          "pending_jobs": [],
+          "reason": "no non-terminal work item exists and none was explicitly named; frozen /milestone-plan derives and creates the first one from docs/ACTIVE_MILESTONE.md",
+          "task_addendum": null
+        }
+      },
+      "inspect": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "lifecycle_lock": "free",
+          "repository": {
+            "profile": "full",
+            "root": "<TMP>/bootstrap_step/target",
+            "workflow_version": "2.5.1"
+          },
+          "work_item": null
+        }
+      }
+    },
+    "before": {
+      "explain": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "action": "/milestone-plan",
+          "automatic": true,
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "declined": false,
+          "evidence": [],
+          "gate": null,
+          "lifecycle_lock": "free",
+          "observed_phase": "__NO_PHASE__",
+          "pending_jobs": [],
+          "reason": "no non-terminal work item exists and none was explicitly named; frozen /milestone-plan derives and creates the first one from docs/ACTIVE_MILESTONE.md",
+          "task_addendum": null
+        }
+      },
+      "inspect": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "lifecycle_lock": "free",
+          "repository": {
+            "profile": "full",
+            "root": "<TMP>/bootstrap_step/target",
+            "workflow_version": "2.5.1"
+          },
+          "work_item": null
+        }
+      }
+    },
+    "step": {
+      "exit_code": 30,
+      "jobs": [
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "__NO_PHASE__",
+            "to_any_of": [
+              "AWAITING_LOCAL_PLAN_REVIEW"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/bootstrap_step/target/.git"
+          },
+          "observed_phase_after": "__NO_PHASE__",
+          "observed_phase_before": "__NO_PHASE__",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": null,
+            "bundle_manifest_generation_head": null,
+            "bundle_manifest_readable": false,
+            "checkpoints": {},
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": null,
+            "implementation_revision": null,
+            "last_completed_checkpoint_id": null,
+            "phase": "__NO_PHASE__",
+            "plan_revision": null,
+            "pre_work_item_keys": [],
+            "rejected_marker_present": false,
+            "state_revision": null,
+            "target_head": "<SHA>"
+          },
+          "reconciliation_evidence": {
+            "code": "TransitionNotObservedError",
+            "expected_to_any_of": [
+              "AWAITING_LOCAL_PLAN_REVIEW"
+            ],
+            "observed_phase": "__NO_PHASE__",
+            "reason": "worker_outcome",
+            "worker_outcome": "FAILURE"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/milestone-plan",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "no non-terminal work item exists and none was explicitly named; frozen /milestone-plan derives and creates the first one from docs/ACTIVE_MILESTONE.md",
+            "task_addendum": null
+          },
+          "status": "FAILED",
+          "target_repo": "<TMP>/bootstrap_step/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": false,
+          "updated_at": "<TS>",
+          "work_item_id": null,
+          "worker": {
+            "duration_ms": null,
+            "exit_code": 92,
+            "is_error": null,
+            "num_turns": null,
+            "permission_denials": null,
+            "result_excerpt": null,
+            "session_id": null,
+            "stderr_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": null,
+            "terminal_reason": null,
+            "total_cost_usd": null
+          },
+          "worker_outcome": "FAILURE",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": null,
+            "fresh_session": true,
+            "model": null,
+            "role": "milestone-plan",
+            "single_agent": false,
+            "sources": {
+              "effort": "inherit",
+              "model": "inherit"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/worker.stdout"
+          }
+        }
+      ]
+    },
+    "worker_argv": [
+      [
+        "-p",
+        "/milestone-plan",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto"
+      ]
+    ]
+  },
+  "implementation_run": {
+    "after": {
+      "explain": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "action": null,
+          "automatic": false,
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "declined": false,
+          "evidence": [],
+          "gate": {
+            "artifact_path": ".ai-review/wi-1/current",
+            "phase": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "repository": "<TMP>/implementation_run/target",
+            "safe_resume_command": "/record-manual-implementation-review wi-1",
+            "what_is_required": "upload .ai-review/wi-1/current (bundle_id <SHA>, review_content_id <SHA> from the ledger) to a manual external reviewer and paste the verdict into .ai-review/wi-1/feedback/REVIEW_FEEDBACK.md, declaring Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "work_item_id": "wi-1"
+          },
+          "lifecycle_lock": "free",
+          "observed_phase": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+          "pending_jobs": [],
+          "reason": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW: feedback declares Reviewer role 'LOCAL_MODEL_IMPLEMENTATION_REVIEW', not MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+          "task_addendum": null
+        }
+      },
+      "inspect": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "lifecycle_lock": "free",
+          "repository": {
+            "profile": "full",
+            "root": "<TMP>/implementation_run/target",
+            "workflow_version": "2.5.1"
+          },
+          "work_item": {
+            "current_checkpoint_id": null,
+            "functional_review_round": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": 2,
+            "incomplete_children": [],
+            "last_completed_checkpoint_id": "CP2",
+            "phase": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "plan_revision": 1,
+            "registry_complete": true,
+            "work_item_id": "wi-1",
+            "work_item_kind": "product",
+            "work_item_type": "product"
+          }
+        }
+      }
+    },
+    "before": {
+      "explain": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "action": "/milestone-implement wi-1",
+          "automatic": true,
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "declined": false,
+          "evidence": [],
+          "gate": null,
+          "lifecycle_lock": "free",
+          "observed_phase": "IMPLEMENTING",
+          "pending_jobs": [],
+          "reason": "IMPLEMENTING: /milestone-implement is the phase's one legal next step (one checkpoint per invocation, then the final self-review and bundle generation)",
+          "task_addendum": null
+        }
+      },
+      "inspect": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "lifecycle_lock": "free",
+          "repository": {
+            "profile": "full",
+            "root": "<TMP>/implementation_run/target",
+            "workflow_version": "2.5.1"
+          },
+          "work_item": {
+            "current_checkpoint_id": null,
+            "functional_review_round": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": null,
+            "incomplete_children": [],
+            "last_completed_checkpoint_id": null,
+            "phase": "IMPLEMENTING",
+            "plan_revision": 1,
+            "registry_complete": false,
+            "work_item_id": "wi-1",
+            "work_item_kind": "product",
+            "work_item_type": "product"
+          }
+        }
+      }
+    },
+    "run": {
+      "exit_code": 10,
+      "jobs": [
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "IMPLEMENTING",
+            "to_any_of": [
+              "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+              "IMPLEMENTING",
+              "SELF_REVIEWING_IMPLEMENTATION"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/implementation_run/target/.git"
+          },
+          "observed_phase_after": "IMPLEMENTING",
+          "observed_phase_before": "IMPLEMENTING",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": null,
+            "bundle_manifest_generation_head": null,
+            "bundle_manifest_readable": false,
+            "checkpoints": {},
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": null,
+            "last_completed_checkpoint_id": null,
+            "phase": "IMPLEMENTING",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 1,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/milestone-implement wi-1",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "IMPLEMENTING: /milestone-implement is the phase's one legal next step (one checkpoint per invocation, then the final self-review and bundle generation)",
+            "task_addendum": null
+          },
+          "status": "FINISHED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": true,
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1",
+          "worker": {
+            "duration_ms": "<V>",
+            "exit_code": 0,
+            "is_error": false,
+            "num_turns": 1,
+            "permission_denials": [],
+            "result_excerpt": "ok",
+            "session_id": "fake-session-id",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": "success",
+            "terminal_reason": null,
+            "total_cost_usd": 0.0
+          },
+          "worker_outcome": "SUCCESS",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": "xhigh",
+            "fresh_session": true,
+            "model": "claude-opus-5-5",
+            "role": "milestone-implement",
+            "single_agent": false,
+            "sources": {
+              "effort": "default",
+              "model": "default"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout"
+          }
+        },
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "IMPLEMENTING",
+            "to_any_of": [
+              "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+              "IMPLEMENTING",
+              "SELF_REVIEWING_IMPLEMENTATION"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/implementation_run/target/.git"
+          },
+          "observed_phase_after": "SELF_REVIEWING_IMPLEMENTATION",
+          "observed_phase_before": "IMPLEMENTING",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": null,
+            "bundle_manifest_generation_head": null,
+            "bundle_manifest_readable": false,
+            "checkpoints": {
+              "CP1": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              }
+            },
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": null,
+            "last_completed_checkpoint_id": "CP1",
+            "phase": "IMPLEMENTING",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 2,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/milestone-implement wi-1",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "IMPLEMENTING: /milestone-implement is the phase's one legal next step (one checkpoint per invocation, then the final self-review and bundle generation)",
+            "task_addendum": null
+          },
+          "status": "FINISHED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": true,
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1",
+          "worker": {
+            "duration_ms": "<V>",
+            "exit_code": 0,
+            "is_error": false,
+            "num_turns": 1,
+            "permission_denials": [],
+            "result_excerpt": "ok",
+            "session_id": "fake-session-id",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": "success",
+            "terminal_reason": null,
+            "total_cost_usd": 0.0
+          },
+          "worker_outcome": "SUCCESS",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": "xhigh",
+            "fresh_session": true,
+            "model": "claude-opus-5-5",
+            "role": "milestone-implement",
+            "single_agent": false,
+            "sources": {
+              "effort": "default",
+              "model": "default"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout"
+          }
+        },
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "SELF_REVIEWING_IMPLEMENTATION",
+            "to_any_of": [
+              "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/implementation_run/target/.git"
+          },
+          "observed_phase_after": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+          "observed_phase_before": "SELF_REVIEWING_IMPLEMENTATION",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": null,
+            "bundle_manifest_generation_head": null,
+            "bundle_manifest_readable": false,
+            "checkpoints": {
+              "CP1": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              },
+              "CP2": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              }
+            },
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": null,
+            "last_completed_checkpoint_id": "CP2",
+            "phase": "SELF_REVIEWING_IMPLEMENTATION",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 3,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/milestone-implement wi-1",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "SELF_REVIEWING_IMPLEMENTATION: /milestone-implement is the phase's one legal next step (one checkpoint per invocation, then the final self-review and bundle generation)",
+            "task_addendum": null
+          },
+          "status": "FINISHED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": true,
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1",
+          "worker": {
+            "duration_ms": "<V>",
+            "exit_code": 0,
+            "is_error": false,
+            "num_turns": 1,
+            "permission_denials": [],
+            "result_excerpt": "ok",
+            "session_id": "fake-session-id",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": "success",
+            "terminal_reason": null,
+            "total_cost_usd": 0.0
+          },
+          "worker_outcome": "SUCCESS",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": "xhigh",
+            "fresh_session": true,
+            "model": "claude-opus-5-5",
+            "role": "milestone-implement-self-review",
+            "single_agent": true,
+            "sources": {
+              "effort": "default",
+              "model": "default"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout"
+          }
+        },
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "to_any_of": [
+              "APPLYING_REVIEW_FEEDBACK",
+              "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+              "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/implementation_run/target/.git"
+          },
+          "observed_phase_after": "APPLYING_REVIEW_FEEDBACK",
+          "observed_phase_before": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": "<SHA>",
+            "bundle_manifest_generation_head": "<SHA>",
+            "bundle_manifest_readable": true,
+            "checkpoints": {
+              "CP1": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              },
+              "CP2": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              }
+            },
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": 1,
+            "last_completed_checkpoint_id": "CP2",
+            "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 4,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/review-implementation wi-1",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW: no current-round local BLOCK on file and the implementation bundle is coherent -- a fresh worker is the independent local review this stage asks for",
+            "task_addendum": null
+          },
+          "status": "FINISHED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": true,
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1",
+          "worker": {
+            "duration_ms": "<V>",
+            "exit_code": 0,
+            "is_error": false,
+            "num_turns": 1,
+            "permission_denials": [],
+            "result_excerpt": "ok",
+            "session_id": "fake-session-id",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": "success",
+            "terminal_reason": null,
+            "total_cost_usd": 0.0
+          },
+          "worker_outcome": "SUCCESS",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": "xhigh",
+            "fresh_session": true,
+            "model": "claude-opus-5-5",
+            "role": "review-implementation",
+            "single_agent": true,
+            "sources": {
+              "effort": "default",
+              "model": "default"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout"
+          }
+        },
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "APPLYING_REVIEW_FEEDBACK",
+            "to_any_of": [
+              "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/implementation_run/target/.git"
+          },
+          "observed_phase_after": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+          "observed_phase_before": "APPLYING_REVIEW_FEEDBACK",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": "<SHA>",
+            "bundle_manifest_generation_head": "<SHA>",
+            "bundle_manifest_readable": true,
+            "checkpoints": {
+              "CP1": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              },
+              "CP2": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              }
+            },
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": 1,
+            "last_completed_checkpoint_id": "CP2",
+            "phase": "APPLYING_REVIEW_FEEDBACK",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 5,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/apply-implementation-review wi-1",
+            "declined": false,
+            "evidence": [
+              "admissible LOCAL_MODEL_IMPLEMENTATION_REVIEW Status: REVISE, bound to bundle <SHA>",
+              "committed phase at HEAD: AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+            ],
+            "kind": "slash_command",
+            "reason": "APPLYING_REVIEW_FEEDBACK: admissible LOCAL_MODEL_IMPLEMENTATION_REVIEW REVISE on file; HEAD records AWAITING_LOCAL_IMPLEMENTATION_REVIEW, so the review-stage state write is pending and the task carries the pending-write addendum",
+            "task_addendum": "Controller note (pending review-stage state write): `docs/ai-workflow/WORKFLOW_STATE.json` carries this work item's uncommitted review-stage write (working-tree phase `APPLYING_REVIEW_FEEDBACK`; `HEAD` records `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`). Before any other commit this command makes, commit that pending change alone: stage exactly `docs/ai-workflow/WORKFLOW_STATE.json`, unmodified from what the review-stage writer produced, with a message whose final paragraph is the single trailer `Workflow-Work-Item: wi-1` and no other Workflow trailer. This is the same shape `/milestone-implement` step 2 uses for its state-only transition commit. Without it, step 7's generation-record commit has no phase change in its own diff, and `validate_bundle_generation_record_commit` rejects it (`OPUS-R101-001`)."
+          },
+          "status": "FINISHED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": true,
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1",
+          "worker": {
+            "duration_ms": "<V>",
+            "exit_code": 0,
+            "is_error": false,
+            "num_turns": 1,
+            "permission_denials": [],
+            "result_excerpt": "ok",
+            "session_id": "fake-session-id",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": "success",
+            "terminal_reason": null,
+            "total_cost_usd": 0.0
+          },
+          "worker_outcome": "SUCCESS",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": "xhigh",
+            "fresh_session": true,
+            "model": "claude-opus-5-5",
+            "role": "apply-implementation-review",
+            "single_agent": false,
+            "sources": {
+              "effort": "default",
+              "model": "default"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout"
+          }
+        },
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "to_any_of": [
+              "APPLYING_REVIEW_FEEDBACK",
+              "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+              "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/implementation_run/target/.git"
+          },
+          "observed_phase_after": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+          "observed_phase_before": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": "<SHA>",
+            "bundle_manifest_generation_head": "<SHA>",
+            "bundle_manifest_readable": true,
+            "checkpoints": {
+              "CP1": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              },
+              "CP2": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              }
+            },
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": 2,
+            "last_completed_checkpoint_id": "CP2",
+            "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 6,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/review-implementation wi-1",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW: no current-round local BLOCK on file and the implementation bundle is coherent -- a fresh worker is the independent local review this stage asks for",
+            "task_addendum": null
+          },
+          "status": "FINISHED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": true,
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1",
+          "worker": {
+            "duration_ms": "<V>",
+            "exit_code": 0,
+            "is_error": false,
+            "num_turns": 1,
+            "permission_denials": [],
+            "result_excerpt": "ok",
+            "session_id": "fake-session-id",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": "success",
+            "terminal_reason": null,
+            "total_cost_usd": 0.0
+          },
+          "worker_outcome": "SUCCESS",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": "xhigh",
+            "fresh_session": true,
+            "model": "claude-opus-5-5",
+            "role": "review-implementation",
+            "single_agent": true,
+            "sources": {
+              "effort": "default",
+              "model": "default"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout"
+          }
+        },
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 1,
+          "handoff_pending": false,
+          "human_gate_pending": {
+            "artifact_path": ".ai-review/wi-1/current",
+            "phase": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "repository": "<TMP>/implementation_run/target",
+            "safe_resume_command": "/record-manual-implementation-review wi-1",
+            "what_is_required": "upload .ai-review/wi-1/current (bundle_id <SHA>, review_content_id <SHA> from the ledger) to a manual external reviewer and paste the verdict into .ai-review/wi-1/feedback/REVIEW_FEEDBACK.md, declaring Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "work_item_id": "wi-1"
+          },
+          "job_id": "<ID>",
+          "observed_phase_before": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": "<SHA>",
+            "bundle_manifest_generation_head": "<SHA>",
+            "bundle_manifest_readable": true,
+            "checkpoints": {
+              "CP1": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              },
+              "CP2": {
+                "start_commit": "<SHA>",
+                "status": "COMPLETE"
+              }
+            },
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": "2.2",
+            "implementation_revision": 2,
+            "last_completed_checkpoint_id": "CP2",
+            "phase": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "plan_revision": 1,
+            "pre_work_item_keys": [
+              "wi-1"
+            ],
+            "rejected_marker_present": false,
+            "state_revision": 7,
+            "target_head": "<SHA>"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": false,
+            "command": null,
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW: feedback declares Reviewer role 'LOCAL_MODEL_IMPLEMENTATION_REVIEW', not MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            "task_addendum": null
+          },
+          "status": "GATE_BLOCKED",
+          "target_repo": "<TMP>/implementation_run/target",
+          "target_workflow_version": "2.5.1",
+          "updated_at": "<TS>",
+          "work_item_id": "wi-1"
+        }
+      ]
+    },
+    "worker_argv": [
+      [
+        "-p",
+        "/milestone-implement wi-1",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh"
+      ],
+      [
+        "-p",
+        "/milestone-implement wi-1",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh"
+      ],
+      [
+        "-p",
+        "/milestone-implement wi-1",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh",
+        "--disallowedTools",
+        "Agent,Workflow,Skill"
+      ],
+      [
+        "-p",
+        "/review-implementation wi-1",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh",
+        "--disallowedTools",
+        "Agent,Workflow,Skill"
+      ],
+      [
+        "-p",
+        "/apply-implementation-review wi-1\n\nController note (pending review-stage state write): `docs/ai-workflow/WORKFLOW_STATE.json` carries this work item's uncommitted review-stage write (working-tree phase `APPLYING_REVIEW_FEEDBACK`; `HEAD` records `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`). Before any other commit this command makes, commit that pending change alone: stage exactly `docs/ai-workflow/WORKFLOW_STATE.json`, unmodified from what the review-stage writer produced, with a message whose final paragraph is the single trailer `Workflow-Work-Item: wi-1` and no other Workflow trailer. This is the same shape `/milestone-implement` step 2 uses for its state-only transition commit. Without it, step 7's generation-record commit has no phase change in its own diff, and `validate_bundle_generation_record_commit` rejects it (`OPUS-R101-001`).",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh"
+      ],
+      [
+        "-p",
+        "/review-implementation wi-1",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh",
+        "--disallowedTools",
+        "Agent,Workflow,Skill"
+      ]
+    ]
+  },
+  "unborn_head_step": {
+    "after": {
+      "explain": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "action": "/milestone-plan",
+          "automatic": true,
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "declined": false,
+          "evidence": [],
+          "gate": null,
+          "lifecycle_lock": "free",
+          "observed_phase": "__NO_PHASE__",
+          "pending_jobs": [],
+          "reason": "no non-terminal work item exists and none was explicitly named; frozen /milestone-plan derives and creates the first one from docs/ACTIVE_MILESTONE.md",
+          "task_addendum": null
+        }
+      },
+      "inspect": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "lifecycle_lock": "free",
+          "repository": {
+            "profile": "full",
+            "root": "<TMP>/unborn_head_step/target",
+            "workflow_version": "2.5.1"
+          },
+          "work_item": null
+        }
+      }
+    },
+    "before": {
+      "explain": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "action": "/milestone-plan",
+          "automatic": true,
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "declined": false,
+          "evidence": [],
+          "gate": null,
+          "lifecycle_lock": "free",
+          "observed_phase": "__NO_PHASE__",
+          "pending_jobs": [],
+          "reason": "no non-terminal work item exists and none was explicitly named; frozen /milestone-plan derives and creates the first one from docs/ACTIVE_MILESTONE.md",
+          "task_addendum": null
+        }
+      },
+      "inspect": {
+        "exit_code": 0,
+        "jobs": [],
+        "json": {
+          "controller": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "lifecycle_lock": "free",
+          "repository": {
+            "profile": "full",
+            "root": "<TMP>/unborn_head_step/target",
+            "workflow_version": "2.5.1"
+          },
+          "work_item": null
+        }
+      }
+    },
+    "step": {
+      "exit_code": 30,
+      "jobs": [
+        {
+          "controller_generation": 1,
+          "controller_runtime": {
+            "build_origin": null,
+            "generation": 1,
+            "package_digest": null,
+            "release_tag": null,
+            "runtime_kind": "source",
+            "source_commit": "<SHA>",
+            "source_kind": "commit",
+            "tree_digest": "<SHA>",
+            "version": "1.1.1"
+          },
+          "controller_source_commit": "<SHA>",
+          "controller_source_tree_digest": "<SHA>",
+          "created_at": "<TS>",
+          "event_seq": 5,
+          "expected_transition": {
+            "from": "__NO_PHASE__",
+            "to_any_of": [
+              "AWAITING_LOCAL_PLAN_REVIEW"
+            ]
+          },
+          "handoff_pending": false,
+          "human_gate_pending": null,
+          "job_id": "<ID>",
+          "lifecycle_lock": {
+            "path": "<TMP>/unborn_head_step/target/.git"
+          },
+          "observed_phase_after": "__NO_PHASE__",
+          "observed_phase_before": "__NO_PHASE__",
+          "pre_state": {
+            "bundle_generated_digest": null,
+            "bundle_id": null,
+            "bundle_manifest_bundle_id": null,
+            "bundle_manifest_generation_head": null,
+            "bundle_manifest_readable": false,
+            "checkpoints": {},
+            "child_work_item_ids": [],
+            "functional_checklist_evidence": null,
+            "functional_review_consumed_blob": null,
+            "governing_workflow_version": null,
+            "implementation_revision": null,
+            "last_completed_checkpoint_id": null,
+            "phase": "__NO_PHASE__",
+            "plan_revision": null,
+            "pre_work_item_keys": [],
+            "rejected_marker_present": false,
+            "state_revision": null,
+            "target_head": null
+          },
+          "reconciliation_evidence": {
+            "code": "TransitionNotObservedError",
+            "expected_to_any_of": [
+              "AWAITING_LOCAL_PLAN_REVIEW"
+            ],
+            "observed_phase": "__NO_PHASE__",
+            "reason": "worker_outcome",
+            "worker_outcome": "FAILURE"
+          },
+          "run_id": "<ID>",
+          "schema_version": 1,
+          "selected_action": {
+            "automatic": true,
+            "command": "/milestone-plan",
+            "declined": false,
+            "evidence": [],
+            "kind": "slash_command",
+            "reason": "no non-terminal work item exists and none was explicitly named; frozen /milestone-plan derives and creates the first one from docs/ACTIVE_MILESTONE.md",
+            "task_addendum": null
+          },
+          "status": "FAILED",
+          "target_repo": "<TMP>/unborn_head_step/target",
+          "target_workflow_version": "2.5.1",
+          "transition_verified": false,
+          "updated_at": "<TS>",
+          "work_item_id": null,
+          "worker": {
+            "duration_ms": null,
+            "exit_code": 92,
+            "is_error": null,
+            "num_turns": null,
+            "permission_denials": null,
+            "result_excerpt": null,
+            "session_id": null,
+            "stderr_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/worker.stdout",
+            "stop_reason": null,
+            "subtype": null,
+            "terminal_reason": null,
+            "total_cost_usd": null
+          },
+          "worker_outcome": "FAILURE",
+          "worker_process": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
+          "worker_route": {
+            "effort": null,
+            "fresh_session": true,
+            "model": null,
+            "role": "milestone-plan",
+            "single_agent": false,
+            "sources": {
+              "effort": "inherit",
+              "model": "inherit"
+            }
+          },
+          "worker_streams": {
+            "events_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/events.jsonl",
+            "format": "stream-json",
+            "stderr_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/worker.stderr",
+            "stdout_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/worker.stdout"
+          }
+        }
+      ]
+    },
+    "worker_argv": [
+      [
+        "-p",
+        "/milestone-plan",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto"
+      ]
+    ]
+  }
+}

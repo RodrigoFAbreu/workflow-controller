@@ -149,6 +149,9 @@ The scripted actions (:func:`perform_actions`), each a JSON object with an
   (``git add --``) and commits them with ``message``.
 - ``{"action": "delete", "path"}`` removes a file or a whole directory
   tree (a withdrawn ``current/``).
+- ``{"action": "git", "args"}`` runs ``git <args>`` (a worker that
+  switches or rewrites the milestone branch, trunk-branch-pr-release-
+  orchestration CP8).
 
 A failing action (a commit with nothing staged, a missing path to delete)
 raises, so the worker exits non-zero -- a script error is never silent.
@@ -417,6 +420,8 @@ def perform_actions(actions: list, cwd: "str | os.PathLike" = ".") -> None:
                 shutil.rmtree(path)
             else:
                 os.unlink(path)
+        elif kind == "git":
+            subprocess.run(["git", *action["args"]], cwd=cwd, check=True)
         else:
             raise ValueError(f"unknown scripted action {kind!r}")
 

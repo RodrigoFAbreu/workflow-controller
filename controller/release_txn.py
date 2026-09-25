@@ -549,8 +549,13 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
             tagged = True
         except GitOperationError as exc:
             # Our local tag now differs from any tag another run pushed, so
-            # re-read the remote without fetching tags.
-            again = classify(ctx, commit, fetch_tags=False)
+            # re-read the remote without fetching tags. A tag at a commit this
+            # clone lacks cannot be classified; that is still the rejection.
+            try:
+                again = classify(ctx, commit, fetch_tags=False)
+            except GitOperationError as reread:
+                raise _refuse(f"pushing {tag} was rejected and {ctx.remote}'s tags could not be "
+                              f"reclassified ({reread})", tag=tag, push=exc.evidence) from reread
             if not (again.state == RESUME and again.target == target):
                 raise _refuse(f"pushing {tag} was rejected and {tag} is now {again.state} "
                               f"({again.detail})", tag=tag, state=again.state,

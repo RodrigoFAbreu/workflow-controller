@@ -551,6 +551,17 @@ class TransactionTest(_ReleaseCase):
         self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.0.0"), earlier)
         self.assertIsNone(self.release_state("v1.0.0"))
 
+    def test_a_concurrent_tag_at_an_unknown_commit_fails_with_the_named_refusal(self) -> None:
+        self.build_at(self.base)
+        other = self._other_clone()
+        run(["git", "commit", "-q", "--allow-empty", "-m", "not on the trunk"], cwd=other)
+        foreign = run(["git", "rev-parse", "HEAD"], cwd=other).stdout.strip()
+        with self.assertRaises(ReleaseTransactionError) as raised:
+            self.publish(self.base, self.base, before_git=self._race_tag(foreign))
+        self.assertIn("pushing v1.0.0 was rejected", str(raised.exception))
+        self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.0.0"), foreign)
+        self.assertIsNone(self.release_state("v1.0.0"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -689,3 +689,88 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
       `test_gitrepo` and `test_ci_workflows`, OK; `python3 tools/ci_workflows.py --check` passes;
     - full: `python3 -m unittest discover -s tests -t .` ran 1593 tests, OK (6 skipped), in
       152 s.
+- **CP9 -- end-to-end disposable scenarios: complete.**
+  - New `tests/test_trunk_orchestration_e2e.py` (6 tests), in the `trunk` shard (`validate.yml`
+    regenerated). Each lifecycle target is a clone of a bare origin whose `main` carries the real
+    Workflow 2.5.1 tree (`fixtures.build_workflow_line_fixture`), the policy and an empty state.
+    The scenarios drive the real `cli.main` with the executable fake `gh`, the scripted fake
+    worker, the pinned identity and the stub Workflow Manager, as in
+    `tests/test_lifecycle_orchestration`. The user-only acts are simulated: the plan-approval
+    commit, the acceptance commit (it stands in for the manual review, `/approve-review
+    implementation` and `/accept-milestone`), and the merge on GitHub (a second clone plus an
+    edit of the fake forge's state).
+  - Scenario 1 (`PolicyLifecycleTest`), step by step:
+    - trunk start and the bare `/milestone-plan`, with no binding record;
+    - bind and `/review-plan` on the branch;
+    - the manual plan-review gate, with nothing pushed and no PR;
+    - the plan approval, then the step that pushes, opens the Draft PR (with the marker) and
+      implements CP1;
+    - CP2, the final pass and the local review, each step first syncing the previous step's
+      commits;
+    - acceptance, then readiness: "no checks reported yet", then green checks, then `READY` at
+      the acceptance commit and the merge gate, which holds on the next step;
+    - the human merge;
+    - close-out to `main` at the merge commit, then the next milestone's `/milestone-plan` on
+      the trunk, then its bind at the new trunk tip.
+
+    Asserted:
+    - one branch and one PR, locally and on the origin;
+    - no Controller `git -C <target>` argv forces, deletes or merges (only `merge --ff-only`),
+      and `gh` never gets `pr merge`;
+    - the origin's reflog of the branch (`core.logAllRefUpdates=always`) only ever moves forward;
+    - the worker task sequence, and the branch guard tools on exactly the bound workers.
+  - Scenario 2 (`InterruptedLifecycleTest`, two tests): the same lifecycle, with every Controller
+    invocation in a child process (`_child_main`) that `SIGKILL`s itself at a persist boundary.
+    Each `step` is attempted again and again. Every attempt is killed at the first
+    binding-record write boundary that no earlier attempt of that step was killed at, and
+    resumes from what the killed attempts left. Boundaries are told apart by what the write
+    persists: a state transition, `push_intent`, `pushed`, or a refresh. The loop ends when an
+    attempt meets no new boundary.
+
+    Asserted:
+    - the kills covered every transition from `None->BRANCH_PLANNED` to `MERGED->CLOSED`, plus
+      `push_intent` and `pushed`;
+    - no killed attempt launched a worker, and each automatic action ran exactly once;
+    - one branch, one PR, no force and no merge (from the children's argv log);
+    - the final record is `CLOSED` at the accepted head.
+  - Scenario 3 (`TrunkDriftTest`): a commit lands on the origin's `main` after the PR opens.
+    - The drift is recorded (`fresh: false`, `behind: 1`) while the steps proceed.
+    - At readiness the `integration_required` gate fires: the tip stays the acceptance commit,
+      nothing is integrated, `gh pr ready` is never called, and the PR stays a draft.
+    - The human readies and merges from `PR_OPEN`, and the next step converges to `CLOSED` on
+      `main` and starts the next milestone.
+  - Scenario 4 (`NoPolicyLifecycleTest`): the identical scripted lifecycle on a target with no
+    policy, run twice: once through the code as it stands, and once with
+    `job.milestone_branch.repository_preflight` replaced by `Proceed()` (the pre-milestone job
+    path).
+    - The normalised job records (9), worker argv, first-parent history, branches and `HEAD`
+      are equal, with no `branch_binding`.
+    - Neither run has a fetch, push, `ls-remote` or switch, a `gh` call, or a `repositories/`
+      runtime directory.
+  - Scenario 5 (`ReleaseHistoryTest`): `main.yml`'s path through `tools/release.py` for each
+    trunk commit (`classify`, then for `RELEASE_DUE`/`RESUME` `build` and `verify` at the
+    classified commit and `publish` from the tip), over `tests.test_release_txn`'s toy adopter:
+    - 1.0.0 is released, then `NO_CHANGE`;
+    - an orphan `v1.1.0` tag is acknowledged in `abandoned_tags` (`ABANDONED_VERSION`);
+    - 1.1.1 is released, then `NO_CHANGE`;
+    - the 1.2.0 bump's publish fails after the tag push (the tag is at the 1.2.0 commit, with no
+      release);
+    - the next merge classifies `RESUME` and publishes 1.2.0 at the unmoved tag, then
+      `NO_CHANGE`.
+  - **Deviations, for the reviewer.**
+    - Scenario 2 is two lifecycles, one killed just before each write and one just after. One
+      lifecycle cannot reach every boundary: killed just before `pushed`, the push has already
+      happened, so the resumed attempt never writes `pushed`.
+    - Scenario 4's "pre-milestone run" is the current job path with the preflight replaced, not
+      a capture from the pre-milestone tree. CP8's golden already pins the pre-CP8 output of its
+      own scenarios, and I1's claim is that the step-1b wiring is inert without a policy.
+    - "The real Workflow 2.5.1 scripts" are in the target tree the Controller admits and reads.
+      The workers are still the scripted fake, so no Workflow script is executed.
+    - Scenario 5 uses the toy adopter, not this repository's own policy, so that no wheel is
+      built per run.
+  - Verified (narrow):
+    - `tests.test_trunk_orchestration_e2e` (6), OK in about 15 s;
+    - with `test_trunk_preflight`, `test_pull_request_lifecycle`, `test_release_txn`,
+      `test_release_tools`, `test_write_containment`, `test_no_rewrite_invariants`,
+      `test_package_structure` and `test_plan_document_consistency`: 244 tests, OK;
+    - `test_ci_workflows` OK, and `python3 tools/ci_workflows.py --check` passes.

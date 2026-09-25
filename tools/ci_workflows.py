@@ -7,12 +7,18 @@ here as Python data and are rendered by a small deterministic emitter:
 - ``validate.yml`` (``workflow_call`` only) is the single definition of the
   required validation: the Controller shard matrix, the frozen conformance
   matrix and the ``package`` job;
-- ``ci.yml`` runs it on ``push: main`` and every pull request;
-- ``release.yml`` runs it on a ``v*`` tag, then builds, verifies and publishes
-  an immutable GitHub Release.
+- ``ci.yml`` runs it on every pull request;
+- ``main.yml`` runs it on every push to ``main`` (and on
+  ``workflow_dispatch``), then classifies the trunk commit with
+  ``tools/release.py classify`` and, when a release is due or resumable,
+  builds, verifies and publishes it as one release transaction.
 
-``--write`` renders ``.github/workflows/{validate,ci,release}.yml``; ``--check``
-exits ``1`` naming every committed file that differs from the render. The
+A ``v*`` tag push triggers nothing: the release transaction creates the tag,
+after validation.
+
+``--write`` renders ``.github/workflows/{validate,ci,main}.yml`` and removes
+the retired ``release.yml``; ``--check`` exits ``1`` naming every committed
+file that differs from the render, and a retired file that still exists. The
 committed YAML is what GitHub runs, so ``--check`` passing means GitHub runs
 exactly the model ``tests.test_ci_workflows`` asserts on.
 
@@ -45,10 +51,12 @@ RESERVED_SCALARS = frozenset({
 PYTHON_VERSION = "3.12"
 RUNNER = "ubuntu-latest"
 
-#: Every action ``release.yml`` uses, pinned to the full commit its tag named
-#: when CP9 read it (``git ls-remote https://github.com/actions/<repo>``; each
-#: is a lightweight tag, so the listed object is the commit). ``ci.yml`` and
-#: ``validate.yml`` keep the major tag, as the workflows before them did.
+#: Every action ``main.yml``'s ``release-plan``, ``build`` and ``publish``
+#: jobs use, pinned to the full commit its tag named when the retired
+#: ``release.yml`` first read it (``git ls-remote
+#: https://github.com/actions/<repo>``; each is a lightweight tag, so the
+#: listed object is the commit). ``validate.yml`` keeps the major tag, as
+#: the workflows before it did (ADR 0002).
 ACTION_PINS = {
     "actions/checkout": ("11d5960a326750d5838078e36cf38b85af677262", "v4"),
     "actions/setup-python": ("a26af69be951a213d495a4c3e4e4022e16d87065", "v5"),
@@ -56,15 +64,16 @@ ACTION_PINS = {
     "actions/download-artifact": ("d3f86a106a0bac45b974a628896c90dbdf5c8093", "v4"),
 }
 
-#: CP9's record of what ``$GITHUB_SHA`` holds for an annotated tag push.
+#: What ``$GITHUB_SHA`` holds for the runs ``main.yml`` classifies.
 GITHUB_SHA_NOTE = (
     "GitHub documents GITHUB_SHA for a push event as the \"Tip commit pushed to the ref\" "
     "(https://docs.github.com/en/actions/reference/workflows-and-actions/"
-    "events-that-trigger-workflows#push), so an annotated tag push should carry the "
-    "tagged commit, not the tag object. build peels it with "
-    "git rev-parse \"$GITHUB_SHA^{commit}\" regardless, a no-op for a commit."
+    "events-that-trigger-workflows#push), and for workflow_dispatch as the last commit on "
+    "the dispatched ref. release-plan peels it with git rev-parse \"$GITHUB_SHA^{commit}\" "
+    "regardless, a no-op for a commit."
 )
-#: CP9's record of how ``gh release create`` publishes assets.
+#: How ``controller/forge.py``'s ``create_release`` (``gh release create``)
+#: publishes assets.
 GH_RELEASE_CREATE_NOTE = (
     "gh release create with asset arguments creates the release as a draft, uploads "
     "the assets and then publishes it (gh manual: \"separate API calls are made to "
@@ -72,7 +81,7 @@ GH_RELEASE_CREATE_NOTE = (
     "https://cli.github.com/manual/gh_release_create, and draftWhileUploading in "
     "https://github.com/cli/cli/blob/trunk/pkg/cmd/release/create/create.go), so the "
     "single-command form is compatible with immutable releases and no gh release edit "
-    "is needed."
+    "is needed. An interrupted upload leaves that draft behind, which the next run resumes."
 )
 
 #: The Controller test shards. Every ``tests/test_*.py`` module is in exactly
@@ -222,10 +231,22 @@ def emit(value: object, header: str = "") -> str:
 # Model
 # ---------------------------------------------------------------------------
 
-def _checkout(pinned: bool, fetch_depth: int | None = None) -> dict:
+def _checkout(pinned: bool, fetch_depth: int | None = None, *, ref: str | None = None,
+              fetch_tags: bool = False, persist_credentials: bool = False) -> dict:
+    """A checkout step. Only the job that pushes a tag (``publish``) keeps
+    the token in the checkout's Git configuration."""
     step: dict = {"uses": Pinned("actions/checkout") if pinned else "actions/checkout@v4"}
+    options: dict = {}
+    if ref is not None:
+        options["ref"] = ref
     if fetch_depth is not None:
-        step["with"] = {"fetch-depth": fetch_depth}
+        options["fetch-depth"] = fetch_depth
+    if fetch_tags:
+        options["fetch-tags"] = True
+    if not persist_credentials:
+        options["persist-credentials"] = False
+    if options:
+        step["with"] = options
     return step
 
 
@@ -291,7 +312,7 @@ def validate_workflow() -> dict:
 def ci_workflow() -> dict:
     return {
         "name": "CI",
-        "on": {"push": {"branches": ["main"]}, "pull_request": None},
+        "on": {"pull_request": None},
         "concurrency": {"group": "${{ github.workflow }}-${{ github.ref }}",
                         "cancel-in-progress": True},
         "permissions": {"contents": "read"},
@@ -299,36 +320,60 @@ def ci_workflow() -> dict:
     }
 
 
-def release_workflow() -> dict:
-    peel = "\n".join([
-        'RELEASE_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")',
-        'echo "RELEASE_COMMIT=$RELEASE_COMMIT" >> "$GITHUB_ENV"',
-        'echo "release_commit=$RELEASE_COMMIT" >> "$GITHUB_OUTPUT"',
-    ])
-    verify_wheel = (f'python3 tools/release.py verify-wheel {DIST_DIR}/*.whl '
-                    '--tag "$GITHUB_REF_NAME" --commit "$RELEASE_COMMIT"')
+#: The ``release-plan`` states whose target ``build`` and ``publish`` act on.
+PUBLISHING_STATES = ("RELEASE_DUE", "RESUME")
+#: ``release-plan``'s outputs, written by ``tools/release.py classify``.
+PLAN_OUTPUTS = ("state", "version", "tag", "commit")
+ON_TRUNK = "github.ref == 'refs/heads/main'"
+#: ``classify`` fetches the trunk and the tags and runs ``ls-remote`` against
+#: ``origin``. The repository is private and ``release-plan``'s checkout does
+#: not persist its token, so that one step lends Git the job's read-only
+#: ``GH_TOKEN`` through ``gh`` as a credential helper, in its own environment
+#: only: nothing is written to the checkout's Git configuration.
+GIT_CREDENTIAL_ENV = {
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "credential.https://github.com.helper",
+    "GIT_CONFIG_VALUE_0": "!gh auth git-credential",
+}
+
+
+def _publishing_condition() -> str:
+    states = " || ".join(f"needs.release-plan.outputs.state == '{state}'"
+                         for state in PUBLISHING_STATES)
+    return f"{ON_TRUNK} && ({states})"
+
+
+def main_workflow() -> dict:
+    classify = ('python3 tools/release.py classify '
+                '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"')
     return {
-        "name": "Release",
-        "on": {"push": {"tags": ["v*"]}},
-        "concurrency": {"group": "release-${{ github.ref }}", "cancel-in-progress": False},
+        "name": "Main",
+        "on": {"push": {"branches": ["main"]}, "workflow_dispatch": None},
+        "concurrency": {"group": "main-release", "cancel-in-progress": False},
         "permissions": {"contents": "read"},
         "jobs": {
             "validate": {"uses": "./.github/workflows/validate.yml"},
-            "build": {
+            "release-plan": {
                 "needs": ["validate"],
+                "if": ON_TRUNK,
                 "runs-on": RUNNER,
-                "outputs": {"release_commit": "${{ steps.peel.outputs.release_commit }}"},
+                "env": {"GH_TOKEN": "${{ github.token }}"},
+                "outputs": {name: f"${{{{ steps.classify.outputs.{name} }}}}" for name in PLAN_OUTPUTS},
                 "steps": [
-                    _checkout(pinned=True, fetch_depth=0),
+                    _checkout(pinned=True, fetch_depth=0, fetch_tags=True),
                     _setup_python(pinned=True),
-                    {"name": "verify tag", "run": 'python3 tools/release.py verify-tag "$GITHUB_REF_NAME"'},
-                    {"name": "resolve release commit", "id": "peel", "run": peel},
-                    {"name": "release commit is on main",
-                     "run": 'git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main'},
-                    {"name": "build wheel",
-                     "run": 'WORKFLOW_CONTROLLER_RELEASE_TAG="$GITHUB_REF_NAME" '
-                            f"python -m pip wheel --no-deps -w {DIST_DIR} ."},
-                    {"name": "verify wheel", "run": verify_wheel},
+                    {"name": "classify", "id": "classify", "env": dict(GIT_CREDENTIAL_ENV), "run": classify},
+                ],
+            },
+            "build": {
+                "needs": ["validate", "release-plan"],
+                "if": _publishing_condition(),
+                "runs-on": RUNNER,
+                "steps": [
+                    _checkout(pinned=True, fetch_depth=0, ref="${{ needs.release-plan.outputs.commit }}"),
+                    _setup_python(pinned=True),
+                    {"name": "build", "run": "python3 tools/release.py build"},
+                    {"name": "verify", "run": "python3 tools/release.py verify"},
                     {"name": "pipx smoke test", "run": PIPX_SMOKE},
                     {"name": "checksums", "run": f"python3 tools/release.py checksums {DIST_DIR}"},
                     {"uses": Pinned("actions/upload-artifact"),
@@ -336,25 +381,18 @@ def release_workflow() -> dict:
                 ],
             },
             "publish": {
-                "needs": ["validate", "build"],
+                "needs": ["validate", "release-plan", "build"],
+                "if": _publishing_condition(),
                 "runs-on": RUNNER,
                 "permissions": {"contents": "write"},
                 "env": {"GH_TOKEN": "${{ github.token }}",
-                        "RELEASE_COMMIT": "${{ needs.build.outputs.release_commit }}"},
+                        "COMMIT": "${{ needs.release-plan.outputs.commit }}"},
                 "steps": [
-                    _checkout(pinned=True),
+                    _checkout(pinned=True, fetch_depth=0, fetch_tags=True, persist_credentials=True),
                     _setup_python(pinned=True),
                     {"uses": Pinned("actions/download-artifact"),
                      "with": {"name": ARTIFACT_NAME, "path": DIST_DIR}},
-                    {"name": "release does not exist yet",
-                     "run": 'python3 tools/release.py check-unpublished "$GITHUB_REF_NAME"'},
-                    {"name": "re-verify downloaded wheel", "run": verify_wheel},
-                    {"name": "tag still names the release commit",
-                     "run": 'python3 tools/release.py verify-tag-commit "$GITHUB_REF_NAME" "$RELEASE_COMMIT"'},
-                    {"name": "publish release",
-                     "run": f'gh release create "$GITHUB_REF_NAME" {DIST_DIR}/*.whl '
-                            f'{DIST_DIR}/SHA256SUMS --verify-tag --title "$GITHUB_REF_NAME" '
-                            '--notes "workflow-controller $GITHUB_REF_NAME"'},
+                    {"name": "publish", "run": 'python3 tools/release.py publish --commit "$COMMIT"'},
                 ],
             },
         },
@@ -366,13 +404,21 @@ _GENERATED = ("Generated by tools/ci_workflows.py -- do not edit by hand.\n"
 
 WORKFLOWS = {
     "validate.yml": (validate_workflow,
-                     "The required validation, called by ci.yml and release.yml."),
-    "ci.yml": (ci_workflow, "Runs the required validation on push to main and on pull requests."),
-    "release.yml": (release_workflow,
-                    "Tag-triggered release: validate, build and publish an immutable GitHub Release.\n"
-                    "Every action is pinned to a full commit SHA; publish is the only job that can write.\n\n"
-                    + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
+                     "The required validation, called by ci.yml and main.yml."),
+    "ci.yml": (ci_workflow, "Runs the required validation on pull requests. Milestone branches are\n"
+                            "validated through their Draft PR."),
+    "main.yml": (main_workflow,
+                 "Trunk: validate every push to main, then classify it and, when a release is due or\n"
+                 "resumable, build, verify and publish it as one release transaction\n"
+                 "(tools/release.py over controller/release_txn.py). Runs never cancel one another.\n"
+                 "Every action outside validate is pinned to a full commit SHA; publish is the only\n"
+                 "job that can write.\n\n"
+                 + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
 }
+#: Workflow files the model once rendered and no longer does. ``--write``
+#: removes them and ``--check`` fails while one exists: the tag-triggered
+#: ``release.yml`` would otherwise keep publishing on a hand-pushed ``v*`` tag.
+RETIRED_WORKFLOWS = ("release.yml",)
 
 
 def _wrap(text: str, width: int = 96) -> str:
@@ -396,7 +442,8 @@ def render() -> dict[str, str]:
 
 
 def check(root: Path = REPO_ROOT) -> list[str]:
-    """The workflow files under ``root`` that differ from the render."""
+    """The workflow files under ``root`` that differ from the render, then
+    every retired workflow file that still exists."""
     mismatched = []
     for name, text in render().items():
         path = root / WORKFLOWS_DIR / name
@@ -406,6 +453,9 @@ def check(root: Path = REPO_ROOT) -> list[str]:
             committed = None
         if committed != text.encode("utf-8"):
             mismatched.append(str(WORKFLOWS_DIR / name))
+    for name in RETIRED_WORKFLOWS:
+        if (root / WORKFLOWS_DIR / name).exists():
+            mismatched.append(str(WORKFLOWS_DIR / name))
     return mismatched
 
 
@@ -414,6 +464,8 @@ def write(root: Path = REPO_ROOT) -> None:
         path = root / WORKFLOWS_DIR / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(text.encode("utf-8"))
+    for name in RETIRED_WORKFLOWS:
+        (root / WORKFLOWS_DIR / name).unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -428,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     mismatched = check(args.root)
     for path in mismatched:
-        print(f"{path} differs from the model; run python3 tools/ci_workflows.py --write",
+        print(f"{path} differs from the model or is retired; run python3 tools/ci_workflows.py --write",
               file=sys.stderr)
     return 1 if mismatched else 0
 

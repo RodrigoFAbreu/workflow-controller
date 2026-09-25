@@ -1,7 +1,8 @@
-"""Tests for ``tools/ci_workflows.py`` (CP9): the committed workflow files
-equal the render, the emitter's quoting and layout, shard coverage, the
-conformance matrix, and the structure of ``ci.yml``, ``validate.yml`` and
-``release.yml``.
+"""Tests for ``tools/ci_workflows.py`` (CP9, and
+``workflow-controller-trunk-branch-pr-release-orchestration`` CP5): the
+committed workflow files equal the render, the retired ``release.yml`` is
+absent, the emitter's quoting and layout, shard coverage, the conformance
+matrix, and the structure of ``ci.yml``, ``validate.yml`` and ``main.yml``.
 
 The assertions are made on the Python model, and the committed bytes are
 asserted equal to its render, so what GitHub runs is what is tested here. A
@@ -113,6 +114,26 @@ class CommittedFilesTest(unittest.TestCase):
 
     def test_controller_tests_workflow_is_removed(self) -> None:
         self.assertFalse((WORKFLOWS / "controller-tests.yml").exists())
+
+    def test_the_tag_triggered_release_workflow_is_retired(self) -> None:
+        self.assertEqual(ci.RETIRED_WORKFLOWS, ("release.yml",))
+        self.assertNotIn("release.yml", ci.WORKFLOWS)
+        self.assertFalse((WORKFLOWS / "release.yml").exists())
+
+    def test_a_retired_file_fails_the_check_and_write_removes_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(WORKFLOWS, root / ".github" / "workflows")
+            retired = root / ".github" / "workflows" / "release.yml"
+            retired.write_text("name: Release\n")
+            self.assertEqual(ci.check(root), [".github/workflows/release.yml"])
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                self.assertEqual(ci.main(["--check", "--root", str(root)]), 1)
+            self.assertIn("release.yml", stderr.getvalue())
+            self.assertEqual(ci.main(["--write", "--root", str(root)]), 0)
+            self.assertFalse(retired.exists())
+            self.assertEqual(ci.check(root), [])
 
     def test_managed_conformance_workflow_is_untouched(self) -> None:
         record = json.loads(INSTALLATION.read_text(encoding="utf-8"))
@@ -301,10 +322,10 @@ class AllJobsTest(unittest.TestCase):
         writers = [(name, job_name) for name, workflow in _models().items()
                    for job_name, job in _jobs(workflow).items()
                    if "write" in job.get("permissions", {}).values()]
-        self.assertEqual(writers, [("release.yml", "publish")])
+        self.assertEqual(writers, [("main.yml", "publish")])
         for name, workflow in _models().items():
             with self.subTest(workflow=name):
-                self.assertNotIn("write", workflow.get("permissions", {}).values())
+                self.assertEqual(workflow.get("permissions", {"contents": "read"}), {"contents": "read"})
 
     def test_no_cache_no_secret_no_live_worker(self) -> None:
         for name, text in ci.render().items():
@@ -314,12 +335,12 @@ class AllJobsTest(unittest.TestCase):
                 self.assertNotIn("CONTROLLER_LIVE_WORKER", text)
                 self.assertNotRegex(text, r"(?m)^\s*(run: .*)?\bclaude\b")
 
-    def test_artifacts_only_in_release_build_and_publish(self) -> None:
+    def test_artifacts_only_in_main_build_and_publish(self) -> None:
         found = sorted((name, job_name, _uses(step).split("@")[0])
                        for name, job_name, _, step in _all_steps()
                        if "-artifact" in _uses(step))
-        self.assertEqual(found, [("release.yml", "build", "actions/upload-artifact"),
-                                 ("release.yml", "publish", "actions/download-artifact")])
+        self.assertEqual(found, [("main.yml", "build", "actions/upload-artifact"),
+                                 ("main.yml", "publish", "actions/download-artifact")])
 
     def test_no_bare_github_sha_commit(self) -> None:
         for name, text in ci.render().items():
@@ -336,58 +357,62 @@ class AllJobsTest(unittest.TestCase):
         verify = [_run(s) for s in _steps(package) if "verify-wheel" in _run(s)]
         self.assertEqual(verify, ['python3 tools/release.py verify-wheel dist/*.whl --local '
                                   '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"'])
-        self.assertEqual(_steps(package)[0]["with"], {"fetch-depth": 0})
+        self.assertEqual(_steps(package)[0]["with"]["fetch-depth"], 0)
         self.assertIn('pip install "setuptools>=70.1"', map(_run, _steps(package)))
         self.assertIn(ci.PIPX_SMOKE, map(_run, _steps(package)))
 
-    def test_no_release_mutation_other_than_create(self) -> None:
+    def test_no_step_tags_pushes_or_mutates_a_release(self) -> None:
+        # The only tag is created inside ``tools/release.py publish``, after
+        # validation, through controller/gitrepo.py and controller/forge.py.
         for name, job_name, _, step in _all_steps():
             run = _run(step)
             with self.subTest(workflow=name, job=job_name, run=run):
-                for forbidden in ("--clobber", "gh release upload", "gh release delete",
-                                  "gh release edit"):
+                for forbidden in ("--clobber", "--force", "delete", "git tag", "git push",
+                                  "gh release", "gh api"):
                     self.assertNotIn(forbidden, run)
+                self.assertNotRegex(run, r"(^|\s)-f(\s|$)")
+                self.assertNotRegex(run, r"(^|\s)gh\s")
+        for name, text in ci.render().items():
+            with self.subTest(workflow=name):
+                self.assertNotIn("--clobber", text)
+                self.assertNotIn("delete", text)
 
-    def test_gh_steps_see_gh_token(self) -> None:
-        checked = 0
+    def test_release_py_forge_steps_see_gh_token(self) -> None:
+        checked = []
         for name, job_name, job, step in _all_steps():
             run = _run(step)
-            if re.search(r"(^|\s)gh\s", run) or "check-unpublished" in run:
-                checked += 1
+            if re.search(r"tools/release\.py (classify|publish)\b", run):
+                checked.append(job_name)
                 env = {**job.get("env", {}), **step.get("env", {})}
                 with self.subTest(workflow=name, job=job_name, run=run):
                     self.assertEqual(env.get("GH_TOKEN"), "${{ github.token }}")
-        self.assertEqual(checked, 2)
+        self.assertEqual(checked, ["release-plan", "publish"])
 
-    def test_release_commit_steps_have_it_in_their_environment(self) -> None:
-        checked = 0
-        for job_name, job in _jobs(ci.release_workflow()).items():
-            steps = _steps(job)
-            peel = [i for i, step in enumerate(steps) if step.get("id") == "peel"]
-            for i, step in enumerate(steps):
-                if "$RELEASE_COMMIT" not in _run(step) or step.get("id") == "peel":
-                    continue
-                checked += 1
-                env = {**job.get("env", {}), **step.get("env", {})}
-                with self.subTest(job=job_name, step=step.get("name")):
-                    self.assertTrue("RELEASE_COMMIT" in env or (peel and peel[0] < i))
-        for name, workflow in _models().items():
-            if name != "release.yml":
-                self.assertNotIn("$RELEASE_COMMIT", ci.emit(workflow))
-        self.assertEqual(checked, 4)
+    def test_non_write_checkouts_do_not_persist_credentials(self) -> None:
+        checkouts = 0
+        for name, job_name, job, step in _all_steps():
+            if not _uses(step).startswith("actions/checkout@"):
+                continue
+            checkouts += 1
+            persist = step.get("with", {}).get("persist-credentials", True)
+            with self.subTest(workflow=name, job=job_name):
+                if "write" in job.get("permissions", {}).values():
+                    self.assertIs(persist, True)
+                else:
+                    self.assertIs(persist, False)
+        # validate.yml's three jobs, then release-plan, build and publish.
+        self.assertEqual(checkouts, 6)
 
 
 class CiWorkflowTest(unittest.TestCase):
     def test_triggers(self) -> None:
-        workflow = ci.ci_workflow()
-        self.assertEqual(workflow["on"], {"push": {"branches": ["main"]}, "pull_request": None})
-        self.assertNotIn("tags", workflow["on"]["push"])
+        self.assertEqual(ci.ci_workflow()["on"], {"pull_request": None})
 
     def test_same_ref_runs_cancel(self) -> None:
         concurrency = ci.ci_workflow()["concurrency"]
-        self.assertIn("github.workflow", concurrency["group"])
-        self.assertIn("github.ref", concurrency["group"])
+        self.assertEqual(concurrency["group"], "${{ github.workflow }}-${{ github.ref }}")
         self.assertIs(concurrency["cancel-in-progress"], True)
+        self.assertEqual(ci.ci_workflow()["permissions"], {"contents": "read"})
 
     def test_calls_validate(self) -> None:
         self.assertEqual(_jobs(ci.ci_workflow()),
@@ -397,126 +422,139 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertEqual(ci.validate_workflow()["on"], {"workflow_call": None})
 
 
-class ReleaseWorkflowTest(unittest.TestCase):
+class MainWorkflowTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.workflow = ci.release_workflow()
+        self.workflow = ci.main_workflow()
         self.jobs = _jobs(self.workflow)
+        self.plan = _steps(self.jobs["release-plan"])
         self.build = _steps(self.jobs["build"])
         self.publish = _steps(self.jobs["publish"])
 
-    def test_trigger_and_concurrency(self) -> None:
-        self.assertEqual(self.workflow["on"], {"push": {"tags": ["v*"]}})
-        self.assertIs(self.workflow["concurrency"]["cancel-in-progress"], False)
-        self.assertIn("github.ref", self.workflow["concurrency"]["group"])
+    def test_triggers(self) -> None:
+        # workflow_dispatch has no inputs: it classifies the trunk tip, and
+        # RESUME reaches an interrupted release's own tagged commit from there.
+        self.assertEqual(self.workflow["on"], {"push": {"branches": ["main"]}, "workflow_dispatch": None})
+        self.assertIn("workflow_dispatch:\n", ci.render()["main.yml"])
+        self.assertNotIn("inputs", ci.render()["main.yml"])
+        self.assertNotIn("pull_request", self.workflow["on"])
+        self.assertNotIn("tags", self.workflow["on"]["push"])
+
+    def test_concurrency_never_cancels(self) -> None:
+        self.assertEqual(self.workflow["concurrency"],
+                         {"group": "main-release", "cancel-in-progress": False})
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
 
-    def test_gating(self) -> None:
+    def test_needs_chain(self) -> None:
+        self.assertEqual(list(self.jobs), ["validate", "release-plan", "build", "publish"])
         self.assertEqual(self.jobs["validate"], {"uses": "./.github/workflows/validate.yml"})
-        self.assertLessEqual({"validate"}, set(self.jobs["build"]["needs"]))
-        self.assertLessEqual({"validate", "build"}, set(self.jobs["publish"]["needs"]))
-        self.assertEqual(self.jobs["publish"]["permissions"], {"contents": "write"})
+        self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
+        self.assertEqual(self.jobs["build"]["needs"], ["validate", "release-plan"])
+        self.assertEqual(self.jobs["publish"]["needs"], ["validate", "release-plan", "build"])
 
-    def test_every_action_is_pinned_to_a_commit(self) -> None:
-        uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()["release.yml"])
+    def test_conditions(self) -> None:
+        on_trunk = "github.ref == 'refs/heads/main'"
+        self.assertEqual(self.jobs["release-plan"]["if"], on_trunk)
+        publishing = (f"{on_trunk} && (needs.release-plan.outputs.state == 'RELEASE_DUE' || "
+                      "needs.release-plan.outputs.state == 'RESUME')")
+        self.assertEqual(self.jobs["build"]["if"], publishing)
+        self.assertEqual(self.jobs["publish"]["if"], publishing)
+
+    def test_permissions(self) -> None:
+        self.assertNotIn("permissions", self.jobs["release-plan"])
+        self.assertNotIn("permissions", self.jobs["build"])
+        self.assertEqual(self.jobs["publish"]["permissions"], {"contents": "write"})
+        self.assertEqual(self.jobs["release-plan"]["env"], {"GH_TOKEN": "${{ github.token }}"})
+        self.assertNotIn("env", self.jobs["build"])
+        self.assertEqual(self.jobs["publish"]["env"],
+                         {"GH_TOKEN": "${{ github.token }}",
+                          "COMMIT": "${{ needs.release-plan.outputs.commit }}"})
+        steps_with_env = [(job_name, step.get("name")) for job_name, job in self.jobs.items()
+                          for step in _steps(job) if "env" in step]
+        self.assertEqual(steps_with_env, [("release-plan", "classify")])
+
+    def test_classify_alone_lends_git_the_read_only_token(self) -> None:
+        # The repository is private and the checkout does not persist its
+        # token; classify's fetch and ls-remote reach origin through gh as a
+        # credential helper, which reads the job's read-only GH_TOKEN.
+        classify = self.plan[_index(self.plan, lambda s: "classify" in _run(s))]
+        self.assertEqual(classify["env"], {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "credential.https://github.com.helper",
+            "GIT_CONFIG_VALUE_0": "!gh auth git-credential",
+        })
+        self.assertNotIn("permissions", self.jobs["release-plan"])
+        self.assertIs(self.plan[0]["with"]["persist-credentials"], False)
+
+    def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
+        uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()["main.yml"])
         actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
-        self.assertEqual(len(actions), 6)
+        self.assertEqual(len(actions), 8)
         for ref, comment in actions:
             with self.subTest(ref=ref):
                 self.assertRegex(ref, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
                 action = ref.split("@")[0]
                 self.assertEqual(comment, f" # {ci.ACTION_PINS[action][1]}")
 
+    def test_release_plan_classifies_the_peeled_trunk_commit(self) -> None:
+        checkout = self.plan[0]
+        self.assertTrue(_uses(checkout).startswith("actions/checkout@"))
+        self.assertEqual(checkout["with"], {"fetch-depth": 0, "fetch-tags": True,
+                                            "persist-credentials": False})
+        classify = self.plan[_index(self.plan, lambda s: "classify" in _run(s))]
+        self.assertEqual(classify["id"], "classify")
+        self.assertEqual(_run(classify), 'python3 tools/release.py classify '
+                                         '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"')
+        self.assertEqual(self.jobs["release-plan"]["outputs"],
+                         {name: f"${{{{ steps.classify.outputs.{name} }}}}"
+                          for name in ("state", "version", "tag", "commit")})
+
     def test_build_order(self) -> None:
+        checkout = self.build[0]
+        self.assertEqual(checkout["with"], {"ref": "${{ needs.release-plan.outputs.commit }}",
+                                            "fetch-depth": 0, "persist-credentials": False})
+
         def at(fragment: str) -> int:
             return _index(self.build, lambda s: fragment in _run(s))
 
-        order = [at("release.py verify-tag "), _index(self.build, lambda s: s.get("id") == "peel"),
-                 at("merge-base --is-ancestor"), at("pip wheel"), at("verify-wheel"),
-                 at("pipx install"), at("checksums")]
+        order = [at("release.py build"), at("release.py verify"), at("pipx install"),
+                 at("release.py checksums"),
+                 _index(self.build, lambda s: "upload-artifact" in _uses(s))]
         self.assertEqual(order, sorted(order))
-        self.assertEqual(self.build[0]["with"], {"fetch-depth": 0})
-        self.assertEqual(_run(self.build[order[2]]),
-                         'git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main')
-        self.assertEqual(_run(self.build[order[4]]),
-                         'python3 tools/release.py verify-wheel dist/*.whl '
-                         '--tag "$GITHUB_REF_NAME" --commit "$RELEASE_COMMIT"')
-        self.assertIn('WORKFLOW_CONTROLLER_RELEASE_TAG="$GITHUB_REF_NAME"', _run(self.build[order[3]]))
+        self.assertEqual(order[-1], len(self.build) - 1)
+        self.assertEqual(_run(self.build[order[0]]), "python3 tools/release.py build")
+        self.assertEqual(_run(self.build[order[1]]), "python3 tools/release.py verify")
+        self.assertEqual(_run(self.build[order[2]]), ci.PIPX_SMOKE)
 
-    def test_peel_and_its_output(self) -> None:
-        peel_at = _index(self.build, lambda s: s.get("id") == "peel")
-        run = _run(self.build[peel_at])
-        self.assertIn('RELEASE_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")', run)
-        self.assertIn('echo "RELEASE_COMMIT=$RELEASE_COMMIT" >> "$GITHUB_ENV"', run)
-        self.assertIn('echo "release_commit=$RELEASE_COMMIT" >> "$GITHUB_OUTPUT"', run)
-        self.assertEqual(self.jobs["build"]["outputs"],
-                         {"release_commit": "${{ steps.peel.outputs.release_commit }}"})
-        for job in self.jobs.values():
-            for value in job.get("outputs", {}).values():
-                self.assertNotIn("env.", value)
-        for step in self.build[:peel_at]:
-            self.assertNotIn("RELEASE_COMMIT", _run(step))
-        for step in [*self.build[peel_at + 1:], *self.publish]:
-            self.assertNotIn("GITHUB_SHA", json.dumps(step, default=str))
-
-    def test_publish_environment(self) -> None:
-        self.assertEqual(self.jobs["publish"]["env"],
-                         {"GH_TOKEN": "${{ github.token }}",
-                          "RELEASE_COMMIT": "${{ needs.build.outputs.release_commit }}"})
-        for step in self.publish:
-            self.assertNotIn("env", step)
-
-    def test_publish_order(self) -> None:
-        checkout = _index(self.publish, lambda s: _uses(s).startswith("actions/checkout@"))
-        first_tool = min(i for i, s in enumerate(self.publish) if "tools/release.py" in _run(s))
-        self.assertLess(checkout, first_tool)
-        unpublished = _index(self.publish, lambda s: "check-unpublished" in _run(s))
-        reverify = _index(self.publish, lambda s: "verify-wheel" in _run(s))
-        tag_commit = _index(self.publish, lambda s: "verify-tag-commit" in _run(s))
-        create = _index(self.publish, lambda s: "gh release create" in _run(s))
-        self.assertLess(unpublished, tag_commit)
-        self.assertEqual(tag_commit + 1, create)
-        self.assertEqual(create, len(self.publish) - 1)
-        self.assertEqual(_run(self.publish[tag_commit]),
-                         'python3 tools/release.py verify-tag-commit "$GITHUB_REF_NAME" "$RELEASE_COMMIT"')
-        self.assertIn('--commit "$RELEASE_COMMIT"', _run(self.publish[reverify]))
-        self.assertIn('--tag "$GITHUB_REF_NAME"', _run(self.publish[reverify]))
-        self.assertIn("--verify-tag", _run(self.publish[create]).split())
-        self.assertNotIn("--draft", _run(self.publish[create]))
+    def test_publish_calls_the_transaction_with_the_peeled_commit(self) -> None:
+        checkout = self.publish[0]
+        self.assertTrue(_uses(checkout).startswith("actions/checkout@"))
+        # The trunk commit itself (no ref), with its credentials, to push the tag.
+        self.assertEqual(checkout["with"], {"fetch-depth": 0, "fetch-tags": True})
+        download = _index(self.publish, lambda s: "download-artifact" in _uses(s))
+        tools = [i for i, s in enumerate(self.publish) if "tools/release.py" in _run(s)]
+        self.assertEqual(tools, [len(self.publish) - 1])
+        self.assertLess(download, tools[0])
+        self.assertEqual(_run(self.publish[-1]), 'python3 tools/release.py publish --commit "$COMMIT"')
 
     def test_artifact_contract(self) -> None:
         upload = self.build[_index(self.build, lambda s: "upload-artifact" in _uses(s))]["with"]
         download = self.publish[_index(self.publish, lambda s: "download-artifact" in _uses(s))]["with"]
         self.assertEqual(upload["name"], download["name"])
-
-        wheel_dir = re.search(r"pip wheel .*-w (\S+)", _run(
-            self.build[_index(self.build, lambda s: "pip wheel" in _run(s))])).group(1)
+        policy = json.loads((fixtures.REPO_ROOT / ".workflow-controller" / "policy.json").read_text())
+        artifact_dirs = {_dir_of(path) for path in policy["release"]["artifacts"]["paths"]}
         sums_dir = re.search(r"checksums (\S+)$", _run(
             self.build[_index(self.build, lambda s: "checksums" in _run(s))])).group(1)
-        self.assertEqual(_normalise(upload["path"]), _normalise(wheel_dir))
+        self.assertEqual(artifact_dirs, {_normalise(upload["path"])})
         self.assertEqual(_normalise(upload["path"]), _normalise(sums_dir))
+        self.assertEqual(_normalise(download["path"]), _normalise(upload["path"]))
 
-        after = self.publish[_index(self.publish, lambda s: "download-artifact" in _uses(s)) + 1:]
-        globs = []
-        for step in after:
-            run = _run(step)
-            if "verify-wheel" in run:
-                globs.append(re.search(r"verify-wheel (\S+)", run).group(1))
-            if "gh release create" in run:
-                for arg in shlex.split(run)[4:]:
-                    if arg.startswith("-"):
-                        break
-                    globs.append(arg)
-        self.assertEqual(globs, ["dist/*.whl", "dist/*.whl", "dist/SHA256SUMS"])
-        for glob in globs:
-            self.assertEqual(_dir_of(glob), _normalise(download["path"]))
-
-    def test_cp9_records_the_documented_sources(self) -> None:
+    def test_the_documented_sources_are_recorded(self) -> None:
         self.assertIn("docs.github.com", ci.GITHUB_SHA_NOTE)
         self.assertIn("Tip commit pushed to the ref", ci.GITHUB_SHA_NOTE)
         self.assertIn("cli.github.com/manual/gh_release_create", ci.GH_RELEASE_CREATE_NOTE)
-        release = ci.render()["release.yml"]
-        self.assertIn("Tip commit pushed to the ref", release)
-        self.assertIn("gh_release_create", release)
+        main = ci.render()["main.yml"]
+        self.assertIn("Tip commit pushed to the ref", main)
+        self.assertIn("gh_release_create", main)
 
 
 if __name__ == "__main__":

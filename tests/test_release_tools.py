@@ -1,18 +1,18 @@
-"""Tests for ``tools/release.py`` (CP8): tag/version verification, wheel
-verification, the fail-closed duplicate-release check, the tag-to-commit
-check that runs immediately before publication, and ``SHA256SUMS``; and
-(``workflow-controller-trunk-branch-pr-release-orchestration`` CP4) the
-policy-driven ``version``, ``classify``, ``build``, ``verify`` and
-``publish`` subcommands.
+"""Tests for ``tools/release.py`` (CP8): wheel verification and
+``SHA256SUMS``; (``workflow-controller-trunk-branch-pr-release-orchestration``
+CP4) the policy-driven ``version``, ``classify``, ``build``, ``verify`` and
+``publish`` subcommands; and (CP5) the removal of the tag-first
+``verify-tag``, ``check-unpublished`` and ``verify-tag-commit``.
 
 ``verify-wheel`` runs against real wheels built once per class from a
 disposable committed clone (as ``tests.test_buildinfo`` does), and against
-copies of them mutated in-test. The ``gh`` and Git runners are injected, so
-nothing here reaches a network.
+copies of them mutated in-test. The transaction subcommands run over a bare
+origin and the fake ``gh``, so nothing here reaches a network.
 """
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import hashlib
 import importlib.util
@@ -45,27 +45,9 @@ VERSION = fixtures.CONTROLLER_VERSION
 TAG = f"v{VERSION}"
 WHEEL_NAME = f"workflow_controller-{VERSION}-py3-none-any.whl"
 DIST_INFO = f"workflow_controller-{VERSION}.dist-info"
-SHA = "0123456789abcdef0123456789abcdef01234567"
 OTHER_SHA = "89abcdef0123456789abcdef0123456789abcdef"
-TAG_OBJECT = "fedcba9876543210fedcba9876543210fedcba98"
-
-
-def _completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
-    return subprocess.CompletedProcess([], returncode, stdout, stderr)
-
-
-class Recorder:
-    """An injectable runner returning a fixed result and recording argv."""
-
-    def __init__(self, result: subprocess.CompletedProcess | Exception) -> None:
-        self.result = result
-        self.calls: list[list[str]] = []
-
-    def __call__(self, args: list[str]) -> subprocess.CompletedProcess:
-        self.calls.append(list(args))
-        if isinstance(self.result, Exception):
-            raise self.result
-        return self.result
+#: The tag-first subcommands the retired ``release.yml`` called (CP5).
+RETIRED_SUBCOMMANDS = ("verify-tag", "check-unpublished", "verify-tag-commit")
 
 
 class RefusalAssertions(unittest.TestCase):
@@ -74,55 +56,6 @@ class RefusalAssertions(unittest.TestCase):
             fn(*args, **kwargs)
         self.assertEqual(ctx.exception.check, check, str(ctx.exception))
         return ctx.exception
-
-
-class VerifyTagTest(RefusalAssertions):
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.pyproject = Path(self._tmp.name) / "pyproject.toml"
-        shutil.copy2(fixtures.PYPROJECT, self.pyproject)
-
-    def tearDown(self) -> None:
-        self._tmp.cleanup()
-
-    def _verify(self, tag: str) -> None:
-        release.verify_tag(tag, version=VERSION, pyproject=self.pyproject)
-
-    def test_the_version_tag_passes(self) -> None:
-        self._verify(TAG)
-        release.verify_tag(TAG, version=VERSION)  # the real pyproject.toml
-
-    def test_another_version_is_refused(self) -> None:
-        major, minor, patch = (int(p) for p in VERSION.split("."))
-        refusal = self.assertRefused("tag/version", self._verify, f"v{major}.{minor}.{patch + 1}")
-        self.assertIn(TAG, refusal.detail)
-
-    def test_malformed_tags_are_refused(self) -> None:
-        for tag in (VERSION, "v1.1", "v1.1.0-rc.1", "v01.1.0", f"{TAG}x", f"{TAG}\n", f"{TAG}.1",
-                    f"V{VERSION}", ""):
-            with self.subTest(tag=tag):
-                self.assertRefused("tag format", self._verify, tag)
-
-    def test_the_static_form_is_required(self) -> None:
-        text = self.pyproject.read_text()
-        static = f'version = "{VERSION}"\n'
-        self.assertIn(static, text)
-        for label, rewritten in (
-            ("no static version", text.replace(static, "")),
-            ("a dynamic version", text.replace(static, 'dynamic = ["version"]\n')),
-            ("static and dynamic", text.replace(static, static + 'dynamic = ["version"]\n')),
-            ("a setuptools version attr", text + '\n[tool.setuptools.dynamic]\n'
-                                                 'version = {attr = "controller.version.__version__"}\n'),
-        ):
-            with self.subTest(label):
-                self.pyproject.write_text(rewritten)
-                self.assertRefused("pyproject version source", self._verify, TAG)
-
-    def test_a_static_version_other_than_the_given_one_is_refused(self) -> None:
-        text = self.pyproject.read_text()
-        self.pyproject.write_text(text.replace(f'version = "{VERSION}"', 'version = "9.9.9"'))
-        refusal = self.assertRefused("pyproject version source", self._verify, TAG)
-        self.assertIn("9.9.9", refusal.detail)
 
 
 def _rewrite_wheel(source: Path, dest: Path, *, drop: tuple[str, ...] = (),
@@ -297,93 +230,6 @@ class VerifyWheelTest(RefusalAssertions):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
-class CheckUnpublishedTest(RefusalAssertions):
-    def test_release_not_found_passes(self) -> None:
-        gh = Recorder(_completed(1, stderr="release not found\n"))
-        release.check_unpublished(TAG, run_gh=gh)
-        self.assertEqual(gh.calls, [["gh", "release", "view", TAG, "--json", "tagName"]])
-
-    def test_an_existing_release_is_refused(self) -> None:
-        gh = Recorder(_completed(0, stdout=json.dumps({"tagName": TAG})))
-        self.assertRefused("already published", release.check_unpublished, TAG, run_gh=gh)
-
-    def test_any_other_failure_is_undecidable(self) -> None:
-        for label, runner in (
-            ("auth", Recorder(_completed(4, stderr="To get started with GitHub CLI, please run:  gh auth login\n"))),
-            ("network", Recorder(_completed(1, stderr="error connecting to api.github.com\n"))),
-            ("unknown", Recorder(_completed(1, stderr="HTTP 500: Internal Server Error\n"))),
-            ("silent", Recorder(_completed(1))),
-            ("not found in passing", Recorder(_completed(1, stderr="error: release not found for x\n"))),
-            ("gh missing", Recorder(FileNotFoundError("gh"))),
-        ):
-            with self.subTest(label):
-                self.assertRefused("release lookup undecidable", release.check_unpublished, TAG,
-                                   run_gh=runner)
-
-    def test_a_malformed_tag_never_reaches_gh(self) -> None:
-        gh = Recorder(_completed(1, stderr="release not found\n"))
-        self.assertRefused("tag format", release.check_unpublished, "main", run_gh=gh)
-        self.assertEqual(gh.calls, [])
-
-
-class VerifyTagCommitTest(RefusalAssertions):
-    def _git(self, stdout: str = "", returncode: int = 0, stderr: str = "") -> Recorder:
-        return Recorder(_completed(returncode, stdout, stderr))
-
-    def test_a_lightweight_tag_naming_the_commit_passes(self) -> None:
-        git = self._git(f"{SHA}\trefs/tags/{TAG}\n")
-        release.verify_tag_commit(TAG, SHA, run_git=git)
-        self.assertEqual(git.calls, [["git", "ls-remote", "origin", f"refs/tags/{TAG}",
-                                      f"refs/tags/{TAG}^{{}}"]])
-
-    def test_an_annotated_tag_uses_the_peeled_line(self) -> None:
-        stdout = f"{TAG_OBJECT}\trefs/tags/{TAG}\n{SHA}\trefs/tags/{TAG}^{{}}\n"
-        release.verify_tag_commit(TAG, SHA, run_git=self._git(stdout))
-        self.assertRefused("tag moved", release.verify_tag_commit, TAG, TAG_OBJECT,
-                           run_git=self._git(stdout))
-
-    def test_a_tag_naming_another_commit_is_refused(self) -> None:
-        for stdout in (f"{OTHER_SHA}\trefs/tags/{TAG}\n",
-                       f"{TAG_OBJECT}\trefs/tags/{TAG}\n{OTHER_SHA}\trefs/tags/{TAG}^{{}}\n"):
-            with self.subTest(stdout=stdout):
-                refusal = self.assertRefused("tag moved", release.verify_tag_commit, TAG, SHA,
-                                             run_git=self._git(stdout))
-                self.assertIn(OTHER_SHA, refusal.detail)
-
-    def test_undecidable_answers_are_refused(self) -> None:
-        cases = {
-            "non-zero exit": self._git(f"{SHA}\trefs/tags/{TAG}\n", returncode=128,
-                                       stderr="fatal: unable to access\n"),
-            "no matching line": self._git(""),
-            "only a peeled line": self._git(f"{SHA}\trefs/tags/{TAG}^{{}}\n"),
-            "short sha": self._git(f"{SHA[:12]}\trefs/tags/{TAG}\n"),
-            "space separated": self._git(f"{SHA} refs/tags/{TAG}\n"),
-            "trailing field": self._git(f"{SHA}\trefs/tags/{TAG}\textra\n"),
-            "another ref": self._git(f"{SHA}\trefs/tags/{TAG}\n{SHA}\trefs/heads/{TAG}\n"),
-            "duplicate ref": self._git(f"{SHA}\trefs/tags/{TAG}\n{OTHER_SHA}\trefs/tags/{TAG}\n"),
-            "git missing": Recorder(FileNotFoundError("git")),
-        }
-        for label, git in cases.items():
-            with self.subTest(label):
-                self.assertRefused("tag commit undecidable", release.verify_tag_commit, TAG, SHA,
-                                   run_git=git)
-
-    def test_malformed_arguments_are_refused(self) -> None:
-        git = self._git(f"{SHA}\trefs/tags/{TAG}\n")
-        self.assertRefused("tag format", release.verify_tag_commit, "latest", SHA, run_git=git)
-        self.assertRefused("commit format", release.verify_tag_commit, TAG, SHA.upper(), run_git=git)
-        self.assertEqual(git.calls, [])
-
-    def test_the_cli_refuses_with_one_line(self) -> None:
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            code = release.main(["verify-tag-commit", TAG, SHA],
-                                run_git=self._git(f"{OTHER_SHA}\trefs/tags/{TAG}\n"))
-        self.assertEqual(code, 1)
-        self.assertEqual(err.getvalue().count("\n"), 1)
-        self.assertIn("refused: tag moved:", err.getvalue())
-
-
 class ChecksumsTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -471,10 +317,10 @@ class VersionCommandTest(unittest.TestCase):
 
 
 class CheckedOutVersionTest(unittest.TestCase):
-    """``version`` (through the committed policy's version source),
-    ``verify-tag`` and ``verify-wheel`` all take the version from the
-    checked-out ``pyproject.toml``: rewriting and committing it in a
-    disposable checkout moves all three."""
+    """``version`` (through the committed policy's version source) and
+    ``verify-wheel`` both take the version from the checked-out
+    ``pyproject.toml``: rewriting and committing it in a disposable checkout
+    moves both."""
 
     MOVED = "7.8.9"
 
@@ -516,15 +362,9 @@ class CheckedOutVersionTest(unittest.TestCase):
         return fixtures.run([sys.executable, "-B", str(self.clone / "tools" / "release.py"), *args],
                             cwd=self.tmp, env=env, check=False)
 
-    def test_all_three_subcommands_follow_the_checked_out_pyproject(self) -> None:
+    def test_both_subcommands_follow_the_checked_out_pyproject(self) -> None:
         result = self._release("version")
         self.assertEqual((result.returncode, result.stdout), (0, f"{self.MOVED}\n"), result.stderr)
-
-        result = self._release("verify-tag", f"v{self.MOVED}")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        result = self._release("verify-tag", TAG)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(f"expected 'v{self.MOVED}'", result.stderr)
 
         result = self._release("verify-wheel", str(self.wheel), "--local", "--commit", self.commit)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -533,6 +373,30 @@ class CheckedOutVersionTest(unittest.TestCase):
         with self.assertRaises(release.Refusal):
             release.verify_wheel(self.wheel, version=release.checked_out_version(),
                                  commit=self.commit, tag=None)
+
+
+class RetiredSubcommandsTest(unittest.TestCase):
+    """CP5 removes the tag-first subcommands together with ``release.yml``,
+    their only caller: a release tag is created only by ``publish``."""
+
+    def test_the_parser_no_longer_offers_them(self) -> None:
+        commands = next(action for action in release.build_parser()._actions
+                        if isinstance(action, argparse._SubParsersAction)).choices
+        self.assertEqual(sorted(commands), sorted(["version", "classify", "build", "verify", "publish",
+                                                   "verify-wheel", "checksums"]))
+        for name in RETIRED_SUBCOMMANDS:
+            with self.subTest(name=name):
+                self.assertNotIn(name, commands)
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:
+                    release.main([name, TAG])
+                self.assertEqual(ctx.exception.code, 2)
+                self.assertIn("invalid choice", stderr.getvalue())
+
+    def test_the_module_no_longer_defines_them(self) -> None:
+        for attr in ("verify_tag", "check_unpublished", "verify_tag_commit", "remote_tag_commit"):
+            with self.subTest(attr=attr):
+                self.assertFalse(hasattr(release, attr))
 
 
 class ReleaseTransactionCliTest(_ReleaseCase):

@@ -349,3 +349,75 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
       ran 1417 tests, OK (6 skipped), in 110 s;
     - `python3 tools/ci_workflows.py --check`: passes.
+- **CP5 -- CI/CD: complete.**
+  - `tools/ci_workflows.py` is still the single model, rendered with `--write` and checked with
+    `--check`:
+    - `ci.yml`: `on: pull_request` only, concurrency `${{ github.workflow }}-${{ github.ref }}`
+      with `cancel-in-progress: true`, calling `validate.yml`;
+    - `main.yml` (new): `on: push: branches: [main]` and `workflow_dispatch` with no inputs,
+      concurrency group `main-release` with `cancel-in-progress: false`, top-level
+      `permissions: contents: read`. Jobs:
+      - `validate`: `uses: ./.github/workflows/validate.yml`;
+      - `release-plan` (needs `validate`, `if: github.ref == 'refs/heads/main'`, job env
+        `GH_TOKEN: ${{ github.token }}`, no job permissions, so read-only): a SHA-pinned checkout
+        with `fetch-depth: 0`, `fetch-tags: true` and `persist-credentials: false`, then
+        `python3 tools/release.py classify --commit "$(git rev-parse "$GITHUB_SHA^{commit}")"`
+        (step id `classify`). Its job outputs `state`, `version`, `tag` and `commit` are the
+        step outputs `classify` appends to `$GITHUB_OUTPUT`. A failing state fails the job;
+      - `build` (needs `validate` and `release-plan`, the same trunk condition and
+        `state == 'RELEASE_DUE' || state == 'RESUME'`): checkout of exactly
+        `needs.release-plan.outputs.commit` (`fetch-depth: 0`, `persist-credentials: false`),
+        then `tools/release.py build`, `tools/release.py verify`, the unchanged pipx smoke test,
+        `checksums dist`, and the `dist` artifact upload;
+      - `publish` (needs all three, the same condition, the only `contents: write` job, env
+        `GH_TOKEN` and `COMMIT: ${{ needs.release-plan.outputs.commit }}`): a credentialed
+        checkout of the trunk commit (`fetch-depth: 0`, `fetch-tags: true`, needed to push the
+        tag), the artifact download into `dist`, then
+        `python3 tools/release.py publish --commit "$COMMIT"`.
+    - `validate.yml`: jobs and matrices unchanged. Every checkout now carries
+      `persist-credentials: false`, and its header names `ci.yml` and `main.yml` as callers;
+    - `release.yml` is deleted. The model lists it in `RETIRED_WORKFLOWS`: `--write` removes it,
+      and `--check` fails while it exists, so a hand-pushed `v*` tag cannot trigger a release
+      again through a stale file.
+  - **Deviation, for the reviewer.** The plan puts `persist-credentials: false` on
+    `release-plan`, but `classify` runs `git fetch` (trunk and tags) and `git ls-remote` against
+    `origin`, and `RodrigoFAbreu/workflow-controller` is **private** (`gh repo view` reports
+    `PRIVATE`). As planned, those reads would fail without credentials on every trunk run. The
+    checkout still does not persist its token. Instead, the `classify` step alone carries
+    `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=credential.https://github.com.helper` and
+    `GIT_CONFIG_VALUE_0=!gh auth git-credential`. Git then gets the job's read-only `GH_TOKEN`
+    through `gh`, in that step's environment only, and nothing is written to the checkout's Git
+    configuration. `controller/gitrepo.py` inherits the environment, so the helper reaches its
+    `git` calls. `gh auth git-credential get` returning `GH_TOKEN` was checked locally with a
+    dummy token. No GitHub run was made (nothing is pushed in this milestone), so the end-to-end
+    behaviour is first exercised by the post-acceptance 1.2.0 release run.
+  - `tools/release.py`: `verify-tag`, `check-unpublished` and `verify-tag-commit` are removed,
+    with their helpers (`verify_tag`, `check_unpublished`, `remote_tag_commit`,
+    `verify_tag_commit`), the injectable `run_gh`/`run_git` runners of `main()`, and the imports
+    only they used. `verify-wheel` stays: it is the reference policy's `verify` command and
+    `validate.yml`'s `package` check.
+  - Tests:
+    - `tests/test_ci_workflows.py` (49), release section rewritten. `ci.yml` is triggered only by
+      pull requests and cancels on the same ref. `main.yml` is checked for: its triggers (no
+      `workflow_dispatch` inputs, no tags, no pull request); a `main-release` group that never
+      cancels; the needs chain; the trunk and `state` conditions on `release-plan`, `build` and
+      `publish`; `contents: write` only on `publish`, with a read-only top level;
+      `release-plan`'s `GH_TOKEN` and its step-scoped credential helper; eight SHA-pinned
+      actions; `classify`'s peeled `--commit` and the four outputs; the build order; `publish`
+      calling `tools/release.py publish --commit "$COMMIT"` as its only tool step; and the
+      artifact contract against the reference policy's artifact directory. Across all workflows:
+      `persist-credentials: false` on every checkout of a job that cannot write, and on none of
+      `publish`'s; no step with `--clobber`, `--force`, `delete`, `-f`, `git tag`, `git push`,
+      or a direct `gh` call; `release.yml` absent and retired (`--check` fails on it, and
+      `--write` removes it). `workflow-conformance.yml` still matches `installation.json`, and
+      the PyYAML cross-check parses every rendered file back to its model;
+    - `tests/test_release_tools.py`: the `VerifyTagTest`, `CheckUnpublishedTest` and
+      `VerifyTagCommitTest` classes are removed. `CheckedOutVersionTest` covers `version` and
+      `verify-wheel`. The new `RetiredSubcommandsTest` checks that the parser offers exactly
+      `version`, `classify`, `build`, `verify`, `publish`, `verify-wheel` and `checksums`, that
+      each retired name exits 2 with `invalid choice`, and that the module no longer defines the
+      retired helpers.
+  - Not changed here: `README.md`'s "Releasing" section and ADR 0002 still describe the
+    tag-triggered `release.yml`. The plan rewrites them in CP10.
+  - Verified (narrow): the `docs` and `trunk` shards (292 tests), OK;
+    `python3 tools/ci_workflows.py --check` passes.

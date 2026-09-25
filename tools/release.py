@@ -21,23 +21,14 @@ thin CLI:
   checked-out trunk commit and, for ``RELEASE_DUE`` or ``RESUME`` targeting
   ``TARGET``, tags (after validation, never moving a tag), publishes or
   completes a draft, and verifies the published release;
-- ``verify-tag TAG`` checks ``TAG`` is ``v<version>`` and that
-  ``pyproject.toml`` declares the version statically, with no dynamic
-  version source;
 - ``verify-wheel WHEEL (--tag TAG | --local) --commit SHA`` checks a built
   wheel's name, metadata, entry point, required and forbidden files, its
   ``BUILD_INFO.json`` and the package digest recomputed from the wheel's own
   members (the reference policy's ``verify`` command);
-- ``check-unpublished TAG`` refuses unless ``gh`` says the release does not
-  exist. Any other ``gh`` failure is undecidable and refused (fail closed);
-- ``verify-tag-commit TAG SHA`` asks the remote which commit ``TAG`` names
-  now, peeling an annotated tag, and refuses unless it is ``SHA``;
 - ``checksums DIR`` writes ``DIR/SHA256SUMS`` in ``sha256sum`` format.
 
-``verify-tag``, ``check-unpublished`` and ``verify-tag-commit`` serve the
-tag-triggered ``release.yml`` until it is removed.
-
-The ``gh`` and Git runners are injectable so the tests never reach a network.
+There is no tag-first subcommand: a release tag is created only by
+``publish``, after validation, so a hand-pushed ``v*`` tag triggers nothing.
 """
 
 from __future__ import annotations
@@ -49,13 +40,10 @@ import json
 import os
 import re
 import stat
-import subprocess
 import sys
 import tempfile
-import tomllib
 import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -66,21 +54,16 @@ from controller import gitrepo, release_txn, repo_policy  # noqa: E402
 from controller import version as version_module  # noqa: E402
 from controller.errors import ControllerError  # noqa: E402
 
-PYPROJECT = REPO_ROOT / "pyproject.toml"
 ENTRY_POINT_NAME = "workflow-controller"
 ENTRY_POINT_TARGET = "controller.cli:main"
 PACKAGE_DIR = "controller"
 REQUIRED_MEMBERS = (f"{PACKAGE_DIR}/GENERATION.json", f"{PACKAGE_DIR}/{buildinfo.BUILD_INFO_NAME}")
 SOURCE_PIN_NAME = "SOURCE_PIN.json"
 CHECKSUMS_NAME = "SHA256SUMS"
-GH_NOT_FOUND = "release not found"
 #: The identity a new release tag is created with on GitHub Actions.
 TAGGER = ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com")
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
-_LS_REMOTE_LINE_RE = re.compile(r"([0-9a-f]{40})\t(\S+)")
-
-Runner = Callable[[list[str]], subprocess.CompletedProcess]
 
 
 class Refusal(Exception):
@@ -90,10 +73,6 @@ class Refusal(Exception):
         super().__init__(f"{check}: {detail}")
         self.check = check
         self.detail = detail
-
-
-def _run(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
 def _is_semver(text: object) -> bool:
@@ -109,29 +88,6 @@ def _require_tag_format(tag: str) -> None:
 def _require_commit(sha: str) -> None:
     if not _COMMIT_RE.fullmatch(sha):
         raise Refusal("commit format", f"{sha!r} is not a 40-hex commit")
-
-
-# --- verify-tag ------------------------------------------------------------
-
-def verify_tag(tag: str, *, version: str, pyproject: Path = PYPROJECT) -> None:
-    _require_tag_format(tag)
-    if tag != f"v{version}":
-        raise Refusal("tag/version", f"tag {tag!r} does not match controller version {version!r} "
-                                     f"(expected 'v{version}')")
-    try:
-        project_file = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise Refusal("pyproject version source", f"cannot read {pyproject}: {exc}") from None
-    project = project_file.get("project", {})
-    if project.get("version") != version:
-        raise Refusal("pyproject version source",
-                      f"[project] version is {project.get('version')!r}, not the static {version!r}")
-    if "version" in project.get("dynamic", []):
-        raise Refusal("pyproject version source", "[project] dynamic includes 'version'")
-    dynamic = project_file.get("tool", {}).get("setuptools", {}).get("dynamic", {})
-    if "version" in dynamic:
-        raise Refusal("pyproject version source",
-                      f"[tool.setuptools.dynamic] declares a version source {dynamic['version']!r}")
 
 
 # --- verify-wheel ----------------------------------------------------------
@@ -237,60 +193,6 @@ def verify_wheel(wheel: Path, *, version: str, commit: str, tag: str | None) -> 
     return info
 
 
-# --- check-unpublished -----------------------------------------------------
-
-def check_unpublished(tag: str, *, run_gh: Runner = _run) -> None:
-    _require_tag_format(tag)
-    try:
-        result = run_gh(["gh", "release", "view", tag, "--json", "tagName"])
-    except OSError as exc:
-        raise Refusal("release lookup undecidable", f"cannot run gh: {exc}") from None
-    if result.returncode == 0:
-        raise Refusal("already published", f"a GitHub Release for {tag} already exists")
-    lines = [line.strip() for line in (result.stderr or "").splitlines()]
-    if GH_NOT_FOUND not in lines:
-        detail = " | ".join(line for line in lines if line) or "no output"
-        raise Refusal("release lookup undecidable",
-                      f"gh release view exited {result.returncode}: {detail}")
-
-
-# --- verify-tag-commit -----------------------------------------------------
-
-def remote_tag_commit(tag: str, *, run_git: Runner = _run) -> str:
-    """The commit ``TAG`` names on ``origin`` now: the peeled ``^{}`` line
-    for an annotated tag, the direct line otherwise."""
-    direct_ref, peeled_ref = f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"
-    try:
-        result = run_git(["git", "ls-remote", "origin", direct_ref, peeled_ref])
-    except OSError as exc:
-        raise Refusal("tag commit undecidable", f"cannot run git: {exc}") from None
-    if result.returncode != 0:
-        detail = (result.stderr or "").strip().replace("\n", " | ") or "no output"
-        raise Refusal("tag commit undecidable", f"git ls-remote exited {result.returncode}: {detail}")
-    found: dict[str, str] = {}
-    for line in (result.stdout or "").splitlines():
-        if not line.strip():
-            continue
-        match = _LS_REMOTE_LINE_RE.fullmatch(line)
-        if match is None:
-            raise Refusal("tag commit undecidable", f"malformed ls-remote line {line!r}")
-        sha, ref = match.groups()
-        if ref not in (direct_ref, peeled_ref) or ref in found:
-            raise Refusal("tag commit undecidable", f"unexpected ls-remote line {line!r}")
-        found[ref] = sha
-    if direct_ref not in found:
-        raise Refusal("tag commit undecidable", f"origin has no {direct_ref}")
-    return found.get(peeled_ref, found[direct_ref])
-
-
-def verify_tag_commit(tag: str, sha: str, *, run_git: Runner = _run) -> None:
-    _require_tag_format(tag)
-    _require_commit(sha)
-    current = remote_tag_commit(tag, run_git=run_git)
-    if current != sha:
-        raise Refusal("tag moved", f"{tag} now names {current}, the build is of {sha}")
-
-
 # --- checksums -------------------------------------------------------------
 
 def checksums(directory: Path) -> Path:
@@ -329,19 +231,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("verify", help="run the policy's verify command on every built artifact")
     publish = sub.add_parser("publish", help="tag and publish the checked-out trunk commit's release")
     publish.add_argument("--commit", required=True, help="the target commit the build job built")
-    tag = sub.add_parser("verify-tag", help="check TAG is v<version>")
-    tag.add_argument("tag")
     wheel = sub.add_parser("verify-wheel", help="verify a built wheel")
     wheel.add_argument("wheel", type=Path)
     mode = wheel.add_mutually_exclusive_group(required=True)
     mode.add_argument("--tag", help="a release wheel built for TAG")
     mode.add_argument("--local", action="store_true", help="a local (non-release) wheel")
     wheel.add_argument("--commit", required=True, help="the commit the wheel must be built from")
-    unpublished = sub.add_parser("check-unpublished", help="refuse if TAG's release exists")
-    unpublished.add_argument("tag")
-    tag_commit = sub.add_parser("verify-tag-commit", help="refuse unless origin's TAG names SHA")
-    tag_commit.add_argument("tag")
-    tag_commit.add_argument("sha")
     sums = sub.add_parser("checksums", help="write DIR/SHA256SUMS")
     sums.add_argument("directory", type=Path)
     return parser
@@ -426,8 +321,7 @@ def cmd_publish(repo_root: Path, target: str) -> None:
     print(f"ok: {outcome.tag} at {outcome.target}: {outcome.action} ({outcome.url})")
 
 
-def main(argv: list[str] | None = None, *, run_gh: Runner = _run, run_git: Runner = _run,
-         repo_root: Path = REPO_ROOT) -> int:
+def main(argv: list[str] | None = None, *, repo_root: Path = REPO_ROOT) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "version":
@@ -440,20 +334,10 @@ def main(argv: list[str] | None = None, *, run_gh: Runner = _run, run_git: Runne
             cmd_verify(repo_root)
         elif args.command == "publish":
             cmd_publish(repo_root, args.commit)
-        elif args.command == "verify-tag":
-            version = checked_out_version(repo_root)
-            verify_tag(args.tag, version=version, pyproject=repo_root / "pyproject.toml")
-            print(f"ok: {args.tag} matches version {version}")
         elif args.command == "verify-wheel":
             version = checked_out_version(repo_root)
             verify_wheel(args.wheel, version=version, commit=args.commit, tag=args.tag)
             print(f"ok: {args.wheel.name} verified")
-        elif args.command == "check-unpublished":
-            check_unpublished(args.tag, run_gh=run_gh)
-            print(f"ok: no GitHub Release exists for {args.tag}")
-        elif args.command == "verify-tag-commit":
-            verify_tag_commit(args.tag, args.sha, run_git=run_git)
-            print(f"ok: {args.tag} names {args.sha}")
         elif args.command == "checksums":
             print(f"ok: wrote {checksums(args.directory)}")
     except (Refusal, ControllerError) as exc:

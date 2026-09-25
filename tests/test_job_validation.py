@@ -1531,7 +1531,8 @@ class _ImplementationRowTestCase(unittest.TestCase):
         self.assertTrue(record["transition_verified"])
         self.assertEqual(record["observed_phase_after"], observed_phase)
 
-    def assert_failed(self, record: dict, reason: str, *, detail: str | None = None) -> dict:
+    def assert_failed(self, record: dict, reason: str, *, detail: str | None = None,
+                      predicate_detail: str | None = None) -> dict:
         self.assertEqual(record["status"], job.STATUS_FAILED)
         self.assertFalse(record["transition_verified"])
         ev = record["reconciliation_evidence"]
@@ -1541,6 +1542,10 @@ class _ImplementationRowTestCase(unittest.TestCase):
             self.assertIn(detail, ev["postcondition_detail"])
         else:
             self.assertNotIn("postcondition_detail", ev)
+        if predicate_detail is not None:
+            self.assertEqual(ev.get("predicate_detail"), predicate_detail, ev)
+        elif reason != "predicate_not_satisfied":
+            self.assertNotIn("predicate_detail", ev)
         return ev
 
 
@@ -1570,12 +1575,15 @@ class CheckpointRowsExecuteTest(_ImplementationRowTestCase):
                 managed_repo = self._in_progress_target(version)
                 record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
                                       fixtures.complete_checkpoint_effect("CP1", commit=commit))
-                self.assert_failed(record, "predicate_not_satisfied")
+                self.assert_failed(
+                    record, "predicate_not_satisfied",
+                    predicate_detail="head_unchanged" if commit == "none" else "last_completed_not_committed",
+                )
 
     def test_a_worker_that_changes_nothing_fails_the_predicate(self) -> None:
         managed_repo = self._in_progress_target("2.2")
         record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement")
-        self.assert_failed(record, "predicate_not_satisfied")
+        self.assert_failed(record, "predicate_not_satisfied", predicate_detail="head_unchanged")
 
     def test_the_last_checkpoint_entering_self_review_durably_finishes(self) -> None:
         for version in ("2.1", "2.2"):
@@ -1647,6 +1655,247 @@ class CheckpointRowsExecuteTest(_ImplementationRowTestCase):
                     record, "postcondition_not_satisfied",
                     detail="manifest implementation_revision 0 != state implementation_revision 1",
                 )
+
+
+# ---------------------------------------------------------------------------
+# Worker-lifecycle-ownership CP6 (plan F): same-phase durable progress --
+# one rule, evaluated only through `_row_clauses_failure`, with a
+# `predicate_detail` naming the first unmet condition.
+# ---------------------------------------------------------------------------
+
+
+def _cp3_to_cp4_target(case: "_ImplementationRowTestCase", version: str = "2.2"):
+    """CP1-CP3 ``COMPLETE``, CP4 ``IN_PROGRESS``, ``last_completed_checkpoint_id``
+    ``CP3``: the ordinary mid-milestone ``IMPLEMENTING`` self-loop."""
+    checkpoints = {cid: {"status": "COMPLETE"} for cid in ("CP1", "CP2", "CP3")}
+    checkpoints["CP4"] = {"status": "IN_PROGRESS"}
+    checkpoints["CP5"] = {"status": "PENDING"}
+    return case.target(
+        "IMPLEMENTING", version, checkpoint_ids=("CP1", "CP2", "CP3", "CP4", "CP5"),
+        checkpoints=checkpoints, last_completed_checkpoint_id="CP3",
+    )
+
+
+def _unrelated_edit_effect(*, commit: bool):
+    """``657c640e``'s shape: the worker stops on an unrelated edit and
+    completes no checkpoint -- committed (``HEAD`` moves) or not."""
+    def effect(root: Path) -> None:
+        (root / "unrelated.txt").write_text("an unrelated edit\n")
+        if commit:
+            fixtures.commit_paths(root, "An unrelated edit", "unrelated.txt")
+    return effect
+
+
+def _completion_without_last_completed_effect(root: Path) -> None:
+    """CP4 ``COMPLETE`` in the working tree only, the product change
+    committed, ``last_completed_checkpoint_id`` left alone."""
+    checkpoints = dict(fixtures.state_entry(root)["checkpoints"])
+    checkpoints["CP4"] = {**checkpoints["CP4"], "status": "COMPLETE"}
+    (root / "CP4.txt").write_text("CP4 implemented\n")
+    fixtures.update_workflow_state(root, "wi-1", checkpoints=checkpoints)
+    fixtures.commit_paths(root, "Implement CP4", "CP4.txt")
+
+
+class SamePhaseDurableProgressExecuteTest(_ImplementationRowTestCase):
+    """CP6 through ``execute_step``: ``IMPLEMENTING -> IMPLEMENTING``
+    verifies exactly when a checkpoint newly reaches ``COMPLETE`` in the
+    state committed at a moved ``HEAD``; on failure the evidence names the
+    first unmet condition."""
+
+    def test_cp3_to_cp4_committed_finishes(self) -> None:
+        for version in ("2.1", "2.2"):
+            with self.subTest(version=version):
+                managed_repo = _cp3_to_cp4_target(self, version)
+                record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                                      fixtures.complete_checkpoint_effect("CP4"))
+                self.assert_finished(record, "IMPLEMENTING")
+                self.assertEqual(record["pre_state"]["last_completed_checkpoint_id"], "CP3")
+                self.assertEqual(fixtures.state_entry(managed_repo.root)["last_completed_checkpoint_id"], "CP4")
+                self.assertNotIn("reconciliation_evidence", record)
+
+    def test_a_working_tree_only_completion_fails_with_last_completed_not_committed(self) -> None:
+        managed_repo = _cp3_to_cp4_target(self)
+        record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                              fixtures.complete_checkpoint_effect("CP4", commit="product"))
+        self.assert_failed(record, "predicate_not_satisfied", predicate_detail="last_completed_not_committed")
+
+    def test_a_working_tree_only_completion_without_the_pointer_fails_as_not_committed_at_head(self) -> None:
+        managed_repo = _cp3_to_cp4_target(self)
+        record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                              _completion_without_last_completed_effect)
+        self.assert_failed(record, "predicate_not_satisfied", predicate_detail="completion_not_committed_at_head")
+
+    def test_head_unchanged(self) -> None:
+        for effect in (None, fixtures.complete_checkpoint_effect("CP4", commit="none"),
+                       _unrelated_edit_effect(commit=False)):
+            with self.subTest(effect=effect):
+                managed_repo = _cp3_to_cp4_target(self)
+                record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement", effect)
+                self.assert_failed(record, "predicate_not_satisfied", predicate_detail="head_unchanged")
+
+    def test_an_unrelated_commit_is_no_newly_completed_checkpoint(self) -> None:
+        """``657c640e``'s shape stays ``FAILED``."""
+        managed_repo = _cp3_to_cp4_target(self)
+        record = self.execute(managed_repo, "IMPLEMENTING", "/milestone-implement",
+                              _unrelated_edit_effect(commit=True))
+        self.assert_failed(record, "predicate_not_satisfied", predicate_detail="no_newly_completed_checkpoint")
+
+    def test_self_reviewing_and_applying_self_loops_stay_phase_not_in_to_any_of(self) -> None:
+        """No phase-specific exception: a quiescent worker that leaves
+        ``SELF_REVIEWING_IMPLEMENTATION`` or ``APPLYING_REVIEW_FEEDBACK``
+        unchanged -- even with a commit -- fails the phase clause, and no
+        predicate is consulted."""
+        cases = {
+            "SELF_REVIEWING_IMPLEMENTATION": lambda: (
+                self.target("SELF_REVIEWING_IMPLEMENTATION"), "/milestone-implement"),
+            "APPLYING_REVIEW_FEEDBACK": lambda: (
+                _ReviewStageTarget.build(self, "APPLYING_REVIEW_FEEDBACK", feedback=local_feedback("REVISE")),
+                "/apply-implementation-review"),
+        }
+        for phase, build in cases.items():
+            for effect in (None, _unrelated_edit_effect(commit=True)):
+                with self.subTest(phase=phase, effect=effect):
+                    managed_repo, command = build()
+                    record = self.execute(managed_repo, phase, command, effect)
+                    ev = self.assert_failed(record, "phase_not_in_to_any_of")
+                    self.assertEqual(ev["observed_phase"], phase)
+                    self.assertNotIn("predicate_detail", ev)
+
+
+class CheckpointProgressDetailUnitTest(_ImplementationRowTestCase):
+    """``_checkpoint_completion_failure`` names each condition, in order,
+    and ``_predicate_checkpoint_completed_durably`` holds exactly when it
+    names none."""
+
+    def _assert_detail(self, root: Path, pre_state: dict, detail: "str | None") -> None:
+        self.assertEqual(job._checkpoint_completion_failure(root, "wi-1", pre_state), detail)
+        self.assertIs(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state), detail is None)
+        if detail is not None:
+            self.assertIn(detail, job.CHECKPOINT_PROGRESS_DETAILS)
+
+    def test_each_condition(self) -> None:
+        managed_repo = _cp3_to_cp4_target(self)
+        root = managed_repo.root
+        seeded = fixtures.current_head(root)
+        pre = {"target_head": seeded, "checkpoints": fixtures.state_entry(root)["checkpoints"],
+               "last_completed_checkpoint_id": "CP3"}
+        for incomplete in ({"checkpoints": {}}, {"target_head": seeded}, {**pre, "checkpoints": ["CP4"]}):
+            self._assert_detail(root, incomplete, "pre_state_incomplete")
+        self._assert_detail(root, pre, "head_unchanged")
+        _unrelated_edit_effect(commit=True)(root)
+        self._assert_detail(root, pre, "no_newly_completed_checkpoint")
+        fixtures.complete_checkpoint_effect("CP4", commit="product")(root)
+        self._assert_detail(root, pre, "last_completed_not_committed")
+        # The pointer did not advance (the pre-state already named CP4):
+        # the plain "not committed at HEAD" detail.
+        self._assert_detail(root, {**pre, "last_completed_checkpoint_id": "CP4"},
+                            "completion_not_committed_at_head")
+        fixtures.commit_paths(root, "Record CP4", "docs/ai-workflow/WORKFLOW_STATE.json")
+        self._assert_detail(root, pre, None)
+        (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
+        self._assert_detail(root, pre, "state_unreadable")
+
+    def test_the_details_are_a_closed_set(self) -> None:
+        self.assertEqual(job.CHECKPOINT_PROGRESS_DETAILS, frozenset({
+            "pre_state_incomplete", "head_unchanged", "state_unreadable", "no_newly_completed_checkpoint",
+            "completion_not_committed_at_head", "last_completed_not_committed",
+        }))
+
+
+class SelfLoopPredicateSingleSiteTest(unittest.TestCase):
+    """CP6's property: every ``EXPECTED_OUTCOMES`` row with a self-loop has
+    a predicate, and a row predicate is evaluated only inside
+    ``_row_clauses_failure``, which both verification sites
+    (``_verify_transition`` for ``execute_step``, ``_row2_verified`` for
+    ``resume``) call -- so the two paths cannot drift."""
+
+    def test_every_self_loop_row_has_a_predicate(self) -> None:
+        rows = [eo for eo in job.EXPECTED_OUTCOMES if eo.from_phase in eo.to_any_of]
+        self.assertTrue(rows)
+        for eo in rows:
+            with self.subTest(row=(eo.from_phase, eo.governing_version, eo.action)):
+                self.assertIsNotNone(eo.predicate)
+                if eo.predicate_detail is not None:
+                    self.assertIs(eo.predicate, job._predicate_checkpoint_completed_durably)
+
+    def test_implementing_self_loops_state_their_reason(self) -> None:
+        rows = [eo for eo in job.EXPECTED_OUTCOMES
+                if eo.from_phase == "IMPLEMENTING" and eo.action == "/milestone-implement"]
+        self.assertEqual({eo.governing_version for eo in rows}, {"2.1", "2.2"})
+        for eo in rows:
+            self.assertIs(eo.predicate_detail, job._checkpoint_completion_failure)
+
+    def test_no_self_loop_for_self_review_or_applying_feedback(self) -> None:
+        for eo in job.EXPECTED_OUTCOMES:
+            if eo.from_phase in ("SELF_REVIEWING_IMPLEMENTATION", "APPLYING_REVIEW_FEEDBACK"):
+                with self.subTest(row=(eo.from_phase, eo.governing_version, eo.action)):
+                    self.assertNotIn(eo.from_phase, eo.to_any_of)
+                    self.assertIsNone(eo.predicate)
+
+    def test_row_predicates_are_called_only_inside_row_clauses_failure(self) -> None:
+        import ast
+        import inspect
+
+        tree = ast.parse(inspect.getsource(job))
+        callers: dict[str, set[str]] = {}
+        clause_callers: set[str] = set()
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if isinstance(func, ast.Attribute) and func.attr in ("predicate", "predicate_detail"):
+                    callers.setdefault(func.attr, set()).add(fn.name)
+                name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+                if name == "_row_clauses_failure":
+                    clause_callers.add(fn.name)
+        self.assertEqual(callers, {"predicate": {"_row_clauses_failure"},
+                                   "predicate_detail": {"_row_clauses_failure"}})
+        self.assertEqual(clause_callers, {"_verify_transition", "_row2_verified"})
+
+    def test_both_sites_evaluate_the_predicate_through_the_helper(self) -> None:
+        """Behavioural half: each site's predicate evaluation happens while
+        ``_row_clauses_failure`` is on the stack."""
+        eo = next(eo for eo in job.EXPECTED_OUTCOMES
+                  if eo.from_phase == "IMPLEMENTING" and eo.governing_version == "2.2")
+        depth = [0]
+        seen: list[int] = []
+        real = job._row_clauses_failure
+
+        def clauses(*args, **kwargs):
+            depth[0] += 1
+            try:
+                return real(*args, **kwargs)
+            finally:
+                depth[0] -= 1
+
+        def detail(_root, _wid, _pre):
+            seen.append(depth[0])
+            return "head_unchanged"
+
+        row = dataclasses.replace(eo, predicate_detail=detail)
+        with unittest.mock.patch.object(job, "_row_clauses_failure", clauses):
+            verified, ev = job._verify_transition(
+                root=Path("/nonexistent"), work_item_id="wi-1", outcome=row, pre_state={},
+                observed_phase_after="IMPLEMENTING", worker_outcome="SUCCESS",
+            )
+            self.assertFalse(verified)
+            self.assertEqual(ev["predicate_detail"], "head_unchanged")
+            for status, outcome in ((job.STATUS_LAUNCHED, None), (job.STATUS_COMPLETED, "SUCCESS")):
+                result = job._row2_verified(
+                    root=Path("/nonexistent"), work_item_id="wi-1", outcome=row, pre_state={},
+                    observed_phase_after="IMPLEMENTING", status=status, worker_outcome=outcome,
+                )
+                self.assertEqual(result, (False, "predicate_not_satisfied", None, "head_unchanged"))
+        self.assertEqual(seen, [1, 1, 1])
+
+    def test_predicate_detail_without_a_predicate_is_a_violation(self) -> None:
+        eo = next(eo for eo in job.EXPECTED_OUTCOMES if eo.predicate is None)
+        broken = dataclasses.replace(eo, predicate_detail=job._checkpoint_completion_failure)
+        violations = job.property_table_violations([broken])
+        self.assertTrue(any("predicate_detail declared with no predicate" in v for v in violations), violations)
 
 
 class CheckpointPredicateUnitTest(_ImplementationRowTestCase):

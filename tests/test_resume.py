@@ -1609,8 +1609,19 @@ def _feedback(status: str, role: str, **kwargs) -> str:
 
 #: ``name -> (phase, version, command, seed kwargs, review_stage, pasted
 #: feedback, effect, expected COMPLETED outcome)``, where the expected
-#: outcome is ``("FINISHED", None)`` or ``(reason, postcondition detail
-#: fragment or None)``.
+#: outcome is ``("FINISHED", None)`` or ``(reason, detail or None)``: the
+#: detail is a ``postcondition_detail`` fragment for
+#: ``postcondition_not_satisfied`` and the exact ``predicate_detail`` (CP6)
+#: for ``predicate_not_satisfied``.
+#: CP6's ordinary mid-milestone seed: CP1-CP3 ``COMPLETE``, CP4
+#: ``IN_PROGRESS``, ``last_completed_checkpoint_id`` ``CP3``.
+_CP3_TO_CP4 = dict(
+    checkpoint_ids=("CP1", "CP2", "CP3", "CP4", "CP5"),
+    checkpoints={"CP1": {"status": "COMPLETE"}, "CP2": {"status": "COMPLETE"}, "CP3": {"status": "COMPLETE"},
+                 "CP4": {"status": "IN_PROGRESS"}, "CP5": {"status": "PENDING"}},
+    last_completed_checkpoint_id="CP3",
+)
+
 _IMPL_CASES = {
     "row 13 committed checkpoint": (
         "IMPLEMENTING", "2.2", "/milestone-implement",
@@ -1620,12 +1631,22 @@ _IMPL_CASES = {
     "row 12 uncommitted checkpoint, HEAD moved": (
         "IMPLEMENTING", "2.1", "/milestone-implement",
         dict(checkpoints={"CP1": {"status": "IN_PROGRESS"}, "CP2": {"status": "PENDING"}}), False, None,
-        fixtures.complete_checkpoint_effect("CP1", commit="product"), ("predicate_not_satisfied", None),
+        fixtures.complete_checkpoint_effect("CP1", commit="product"),
+        ("predicate_not_satisfied", "last_completed_not_committed"),
     ),
     "row 13 nothing done": (
         "IMPLEMENTING", "2.2", "/milestone-implement",
         dict(checkpoints={"CP1": {"status": "IN_PROGRESS"}, "CP2": {"status": "PENDING"}}), False, None,
-        None, ("predicate_not_satisfied", None),
+        None, ("predicate_not_satisfied", "head_unchanged"),
+    ),
+    "row 13 CP3 -> CP4 committed": (
+        "IMPLEMENTING", "2.2", "/milestone-implement", _CP3_TO_CP4, False, None,
+        fixtures.complete_checkpoint_effect("CP4"), ("FINISHED", None),
+    ),
+    "row 12 CP3 -> CP4 working tree only": (
+        "IMPLEMENTING", "2.1", "/milestone-implement", _CP3_TO_CP4, False, None,
+        fixtures.complete_checkpoint_effect("CP4", commit="product"),
+        ("predicate_not_satisfied", "last_completed_not_committed"),
     ),
     "row 13 uncommitted self-review entry": (
         "IMPLEMENTING", "2.2", "/milestone-implement",
@@ -1744,6 +1765,29 @@ class ImplementationStageResumeTest(_ResumeTestCase):
         _write_record(runtime_root, record)
         return managed_repo, runtime_root
 
+    def _assert_details(self, ev: dict, reason: str, detail: "str | None") -> None:
+        if reason == "postcondition_not_satisfied" and detail is not None:
+            self.assertIn(detail, ev["postcondition_detail"])
+        else:
+            self.assertNotIn("postcondition_detail", ev)
+        if reason == "predicate_not_satisfied" and detail is not None:
+            self.assertEqual(ev["predicate_detail"], detail)
+        else:
+            self.assertNotIn("predicate_detail", ev)
+
+    def test_cp3_to_cp4_launched_record_resumes_to_finished(self) -> None:
+        """CP6: a ``LAUNCHED`` ``IMPLEMENTING`` record whose worker
+        committed CP4's completion (``last_completed_checkpoint_id`` CP3 ->
+        CP4) is ``FINISHED`` by ``resume``, never relaunched."""
+        managed_repo, runtime_root = self._seed("cp6-launched", "row 13 CP3 -> CP4 committed",
+                                                status=job.STATUS_LAUNCHED)
+        with _NeverLaunches():
+            results = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root)
+        self.assertEqual(results[0]["status"], job.STATUS_FINISHED, results[0].get("reconciliation_evidence"))
+        self.assertTrue(results[0]["transition_verified"])
+        self.assertEqual(results[0]["observed_phase_after"], "IMPLEMENTING")
+        self.assertEqual(_read_record(runtime_root, "j1")["pre_state"]["last_completed_checkpoint_id"], "CP3")
+
     def test_completed_records_reconcile_exactly_as_execute_step_verifies(self) -> None:
         for i, (case, spec) in enumerate(_IMPL_CASES.items()):
             reason, detail = spec[-1]
@@ -1760,10 +1804,7 @@ class ImplementationStageResumeTest(_ResumeTestCase):
                 self.assertEqual(result["status"], job.STATUS_FAILED)
                 ev = result["reconciliation_evidence"]
                 self.assertEqual(ev["reason"], reason, ev)
-                if detail is None:
-                    self.assertNotIn("postcondition_detail", ev)
-                else:
-                    self.assertIn(detail, ev["postcondition_detail"])
+                self._assert_details(ev, reason, detail)
                 self.assertEqual(_read_record(runtime_root, "j1")["status"], job.STATUS_FAILED)
 
     def test_launched_records_reconcile_to_finished_interrupted_or_unreconcilable(self) -> None:
@@ -1792,11 +1833,11 @@ class ImplementationStageResumeTest(_ResumeTestCase):
                 ev = ctx.exception.evidence
                 self.assertEqual(ev["pre_phase"], phase)
                 self.assertEqual(ev["observed_phase_after"], observed_phase)
-                if detail is None:
-                    self.assertNotIn("postcondition_detail", ev)
-                else:
-                    self.assertIn(detail, ev["postcondition_detail"])
+                self._assert_details(ev, reason, detail)
+                if reason == "postcondition_not_satisfied":
                     self.assertIn("postcondition not satisfied", str(ctx.exception))
+                if reason == "predicate_not_satisfied" and detail is not None:
+                    self.assertIn(f"predicate not satisfied: {detail}", str(ctx.exception))
                 self.assertEqual(_read_record(runtime_root, "j1")["status"], job.STATUS_LAUNCHED)
 
     def test_the_launched_cases_cover_every_reconciliation_outcome(self) -> None:

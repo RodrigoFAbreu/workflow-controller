@@ -32,8 +32,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 | CP2 -- worker stream state machine | complete | `ed02157` |
 | CP3 -- streaming-input launch and supervision | complete | `e8364eb` |
 | CP4 -- job lifecycle integration | complete | `e354f10` |
-| CP5 -- restart recovery | complete | this checkpoint's commit |
-| CP6 -- same-phase durable progress | not started | |
+| CP5 -- restart recovery | complete | `4a03168` |
+| CP6 -- same-phase durable progress | complete | this checkpoint's commit |
 | CP7 -- operator diagnostics | not started | |
 | CP8 -- documentation and full verification | not started | |
 
@@ -282,6 +282,40 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   `resume --abandon` is needed and none is advised. A `resume` whose records end `FAILED` still exits 0, as today.
 - **Verification.** See the checkpoint commit for the exact commands and results.
 
+### CP6 -- same-phase durable progress (complete)
+
+- **One rule, with a reason (F).** `job._checkpoint_completion_failure` states the unchanged
+  `IMPLEMENTING -> IMPLEMENTING` rule once and returns the first unmet condition from the closed
+  `CHECKPOINT_PROGRESS_DETAILS` (`pre_state_incomplete`, `head_unchanged`, `state_unreadable`,
+  `no_newly_completed_checkpoint`, `last_completed_not_committed`,
+  `completion_not_committed_at_head`); `_predicate_checkpoint_completed_durably` is "it returns
+  `None`". `last_completed_not_committed` is reported when newly completed checkpoints exist but
+  none is committed at `HEAD` and `last_completed_checkpoint_id` advanced to a checkpoint not
+  `COMPLETE` in the committed state; an unreadable `HEAD` is `state_unreadable`.
+- **One site.** `ExpectedOutcome` gains an optional `predicate_detail`; rows 12/13 declare
+  `_checkpoint_completion_failure`. `_row_clauses_failure` evaluates it once (never alongside
+  `predicate`) and now returns `(reason, postcondition_detail, predicate_detail)`;
+  `_verify_transition` and `_row2_verified` carry it through, so `reconciliation_evidence`
+  (`execute_step`, `COMPLETED` resume) and `UnreconcilableJobError`'s evidence and message
+  (`LAUNCHED` resume with moved state) name it. `property_table_violations` rejects a
+  `predicate_detail` on a row with no predicate. No phase set changed: the
+  `SELF_REVIEWING_IMPLEMENTATION` and `APPLYING_REVIEW_FEEDBACK` rows still have no self-loop.
+- **The right moment** was delivered by CP4 (verification only after `ENDED` and the drain,
+  pinned by `tests/test_lifecycle_orchestration.py`'s predicate-after-launch check); CP6 adds no
+  second path.
+- **Tests.** `tests/test_job_validation.py`: CP3 -> CP4 committed `FINISHED` (both versions),
+  working-tree-only completion (`last_completed_not_committed`, and
+  `completion_not_committed_at_head` when the pointer did not move), `head_unchanged`,
+  `657c640e`'s shape (`no_newly_completed_checkpoint`), both non-self-loop phases staying
+  `phase_not_in_to_any_of` with and without a commit, a clause-by-clause unit test of the detail
+  function, and the single-site property (AST: row predicates are called only in
+  `_row_clauses_failure`, which only `_verify_transition` and `_row2_verified` call; behaviourally
+  both sites evaluate it inside the helper). Existing predicate failures now assert their detail.
+  `tests/test_resume.py`: the CP3 -> CP4 `LAUNCHED` record resumes to `FINISHED`; the
+  implementation-stage case table carries `predicate_detail` through `COMPLETED` and `LAUNCHED`
+  reconciliation.
+- **Verification.** See the checkpoint commit for the exact commands and results.
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP6.
+`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP7.

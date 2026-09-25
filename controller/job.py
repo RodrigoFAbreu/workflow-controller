@@ -445,6 +445,12 @@ class WriterCall:
 
 PredicateFn = Callable[[Path, str, dict], bool]
 
+#: A predicate stated with its reason (`workflow-controller-worker-
+#: lifecycle-ownership` CP6): ``(root, work_item_id, pre_state) -> None``
+#: when the row's predicate holds, else a short code naming the first unmet
+#: condition, written to ``reconciliation_evidence.predicate_detail``.
+PredicateDetailFn = Callable[[Path, str, dict], "str | None"]
+
 #: A row's artifact postcondition (`workflow-controller-worker-execution-
 #: hardening` CP3): ``(root, work_item_id, pre_state) -> (satisfied,
 #: detail)``, evaluated fresh against disk. Distinct from
@@ -485,6 +491,11 @@ class ExpectedOutcome:
     #: may declare none. Not subject to the predicate's own "iff
     #: self-loop" rule.
     postconditions: tuple[PostconditionEntry, ...] = ()
+    #: The row's predicate stated with a reason (CP6). When set, it is what
+    #: :func:`_row_clauses_failure` evaluates -- once, never alongside
+    #: ``predicate`` -- and ``predicate`` must hold exactly when it returns
+    #: ``None``. Only a predicate-bearing row may declare one.
+    predicate_detail: PredicateDetailFn | None = None
 
 
 def _row_branch(outcome: ExpectedOutcome) -> BranchSpec | None:
@@ -681,36 +692,76 @@ def _checkpoint_status(checkpoint: Any) -> Any:
     return checkpoint.get("status") if isinstance(checkpoint, Mapping) else None
 
 
-def _predicate_checkpoint_completed_durably(root: Path, work_item_id: str, pre_state: dict) -> bool:
-    """Rows 12/13's self-loop predicate (``/milestone-implement`` from
-    ``IMPLEMENTING`` back to ``IMPLEMENTING``): ``HEAD`` moved off
-    ``pre_state["target_head"]``, and at least one checkpoint is
-    ``COMPLETE`` in the fresh state, was not ``COMPLETE`` in
-    ``pre_state["checkpoints"]``, and is ``COMPLETE`` in the state
-    committed at ``HEAD`` (``evidence.committed_checkpoint_statuses``, the
-    fact ``workflow_state.committed_checkpoint_status`` reads) -- step 1f
-    persists the completion and commits it in one guard window. A
-    completion left only in the working tree is not durable, so it does
-    not verify. A pre-state lacking either input is "not satisfied"."""
+#: The closed set of ``reconciliation_evidence.predicate_detail`` values
+#: :func:`_checkpoint_completion_failure` returns (`workflow-controller-
+#: worker-lifecycle-ownership` CP6, plan section F): each names the first
+#: unmet condition of the same-phase durable-progress rule.
+CHECKPOINT_PROGRESS_DETAILS: frozenset[str] = frozenset({
+    "pre_state_incomplete",
+    "head_unchanged",
+    "state_unreadable",
+    "no_newly_completed_checkpoint",
+    "completion_not_committed_at_head",
+    "last_completed_not_committed",
+})
+
+
+def _checkpoint_completion_failure(root: Path, work_item_id: str, pre_state: dict) -> str | None:
+    """The same-phase durable-progress rule, stated once with a reason
+    (CP6): ``None`` when it holds, else the first unmet condition, one of
+    :data:`CHECKPOINT_PROGRESS_DETAILS`.
+
+    The rule is unchanged: ``HEAD`` moved off ``pre_state["target_head"]``,
+    and at least one checkpoint is ``COMPLETE`` in the fresh state, was not
+    ``COMPLETE`` in ``pre_state["checkpoints"]``, and is ``COMPLETE`` in the
+    state committed at ``HEAD``. When checkpoints newly completed but none
+    is committed at ``HEAD``, the detail is ``last_completed_not_committed``
+    if ``last_completed_checkpoint_id`` advanced to a checkpoint that is not
+    ``COMPLETE`` in the committed state (the "working-tree-only completion"
+    shape), else ``completion_not_committed_at_head``. An unreadable
+    ``HEAD`` counts as ``state_unreadable``."""
     pre_checkpoints = pre_state.get("checkpoints")
     pre_head = pre_state.get("target_head")
     if not isinstance(pre_checkpoints, Mapping) or not isinstance(pre_head, str):
-        return False
+        return "pre_state_incomplete"
     head = _current_head(root)
-    if head is None or head == pre_head:
-        return False
+    if head is None:
+        return "state_unreadable"
+    if head == pre_head:
+        return "head_unchanged"
     post_work_item, _detail = _fresh_work_item(root, work_item_id)
-    if post_work_item is None:
-        return False
+    if post_work_item is None or not isinstance(post_work_item.checkpoints, Mapping):
+        return "state_unreadable"
     committed = evidence.committed_checkpoint_statuses(root, "HEAD")
-    if committed is None or not isinstance(post_work_item.checkpoints, Mapping):
-        return False
-    return any(
-        _checkpoint_status(checkpoint) == "COMPLETE"
+    if committed is None:
+        return "state_unreadable"
+    newly_complete = [
+        checkpoint_id for checkpoint_id, checkpoint in post_work_item.checkpoints.items()
+        if _checkpoint_status(checkpoint) == "COMPLETE"
         and _checkpoint_status(pre_checkpoints.get(checkpoint_id)) != "COMPLETE"
-        and committed.get((work_item_id, checkpoint_id)) == "COMPLETE"
-        for checkpoint_id, checkpoint in post_work_item.checkpoints.items()
-    )
+    ]
+    if not newly_complete:
+        return "no_newly_completed_checkpoint"
+    if any(committed.get((work_item_id, checkpoint_id)) == "COMPLETE" for checkpoint_id in newly_complete):
+        return None
+    last_completed = post_work_item.last_completed_checkpoint_id
+    if (
+        last_completed is not None
+        and last_completed != pre_state.get("last_completed_checkpoint_id")
+        and committed.get((work_item_id, last_completed)) != "COMPLETE"
+    ):
+        return "last_completed_not_committed"
+    return "completion_not_committed_at_head"
+
+
+def _predicate_checkpoint_completed_durably(root: Path, work_item_id: str, pre_state: dict) -> bool:
+    """Rows 12/13's self-loop predicate (``/milestone-implement`` from
+    ``IMPLEMENTING`` back to ``IMPLEMENTING``): :func:`_checkpoint_completion_failure`
+    finds no unmet condition. Step 1f persists the completion and commits
+    it in one guard window, so a completion left only in the working tree
+    is not durable and does not verify; a pre-state lacking either input
+    is "not satisfied"."""
+    return _checkpoint_completion_failure(root, work_item_id, pre_state) is None
 
 
 def _postcondition_self_review_entered_durably(
@@ -1024,6 +1075,7 @@ def _milestone_implement_rows(version: str, review_phase: str) -> tuple[Expected
             to_any_of=frozenset({"IMPLEMENTING", _SELF_REVIEWING_IMPLEMENTATION, review_phase}),
             predicate=_predicate_checkpoint_completed_durably,
             predicate_inputs=frozenset({"checkpoints", "target_head"}),
+            predicate_detail=_checkpoint_completion_failure,
             writer_calls=(
                 WriterCall("complete_checkpoint", "milestone-implement.md", "milestone-implement.md:183",
                            WRITER_KIND_COMPLETION, branch=BranchSpec(kind="step", label="1f"),
@@ -1332,6 +1384,8 @@ def property_table_violations(
                 )
             if eo.predicate is None and eo.predicate_inputs:
                 violations.append(f"{key!r}: predicate_inputs declared with no predicate")
+        if eo.predicate is None and eo.predicate_detail is not None:
+            violations.append(f"{key!r}: predicate_detail declared with no predicate")
 
         if eo.predicate is not None:
             for wc in eo.writer_calls:
@@ -1692,11 +1746,14 @@ def _row_clauses_failure(
     revision 64's `B1`). The worker-outcome clause stays with each caller,
     since only they know whether an outcome exists at all.
 
-    Returns ``(reason, postcondition_detail)``: ``reason`` is ``None`` when
-    every clause holds, else ``"phase_not_in_to_any_of"``,
-    ``"predicate_not_satisfied"`` or ``"postcondition_not_satisfied"``;
-    ``postcondition_detail`` is the postcondition's own detail string, set
-    only for the last reason.
+    Returns ``(reason, postcondition_detail, predicate_detail)``:
+    ``reason`` is ``None`` when every clause holds, else
+    ``"phase_not_in_to_any_of"``, ``"predicate_not_satisfied"`` or
+    ``"postcondition_not_satisfied"``; ``postcondition_detail`` is the
+    postcondition's own detail string, set only for the last reason;
+    ``predicate_detail`` is the first unmet condition a row's
+    ``predicate_detail`` names (CP6), set only for
+    ``predicate_not_satisfied`` on such a row.
 
     The predicate clause's trigger is keyed on the row's own
     :func:`_row_branch` (revision 65's repair, round 64's `B1`): evaluated
@@ -1710,17 +1767,21 @@ def _row_clauses_failure(
     whose phase set contains ``observed_phase_after``, if any
     (:func:`_postcondition_for_phase`; per-phase since CP2)."""
     if observed_phase_after not in outcome.to_any_of:
-        return "phase_not_in_to_any_of", None
+        return "phase_not_in_to_any_of", None, None
     branch = _row_branch(outcome)
     if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
-        if not outcome.predicate(root, work_item_id, pre_state):
-            return "predicate_not_satisfied", None
+        if outcome.predicate_detail is not None:
+            predicate_detail = outcome.predicate_detail(root, work_item_id, pre_state)
+            if predicate_detail is not None:
+                return "predicate_not_satisfied", None, predicate_detail
+        elif not outcome.predicate(root, work_item_id, pre_state):
+            return "predicate_not_satisfied", None, None
     postcondition = _postcondition_for_phase(outcome, observed_phase_after)
     if postcondition is not None:
         satisfied, detail = postcondition(root, work_item_id, pre_state)
         if not satisfied:
-            return "postcondition_not_satisfied", detail
-    return None, None
+            return "postcondition_not_satisfied", detail, None
+    return None, None, None
 
 
 def _verify_transition(
@@ -1740,9 +1801,9 @@ def _verify_transition(
     clause as ``reason``, and (for the postcondition clause) its
     ``postcondition_detail``; ``{}`` when ``verified``."""
     if worker_outcome not in _VERIFYING_WORKER_OUTCOMES:
-        reason, postcondition_detail = "worker_outcome", None
+        reason, postcondition_detail, predicate_detail = "worker_outcome", None, None
     else:
-        reason, postcondition_detail = _row_clauses_failure(
+        reason, postcondition_detail, predicate_detail = _row_clauses_failure(
             root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
             observed_phase_after=observed_phase_after,
         )
@@ -1751,17 +1812,20 @@ def _verify_transition(
     return False, _transition_not_observed_evidence(
         outcome=outcome, observed_phase_after=phase_to_wire(observed_phase_after),
         worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
+        predicate_detail=predicate_detail,
     )
 
 
 def _transition_not_observed_evidence(
     *, outcome: ExpectedOutcome, observed_phase_after: str, worker_outcome: str | None,
-    reason: str, postcondition_detail: str | None,
+    reason: str, postcondition_detail: str | None, predicate_detail: str | None = None,
 ) -> dict:
     """The ``TransitionNotObservedError``-shaped ``reconciliation_evidence``
     both ``execute_step`` and ``_reconcile_completed`` write. The optional
     ``postcondition_detail`` key is present only on the
-    ``postcondition_not_satisfied`` reason."""
+    ``postcondition_not_satisfied`` reason, and the optional
+    ``predicate_detail`` key (CP6) only on ``predicate_not_satisfied`` for a
+    row whose predicate states its reason."""
     evidence_dict = {
         "code": "TransitionNotObservedError",
         "reason": reason,
@@ -1771,6 +1835,8 @@ def _transition_not_observed_evidence(
     }
     if postcondition_detail is not None:
         evidence_dict["postcondition_detail"] = postcondition_detail
+    if predicate_detail is not None:
+        evidence_dict["predicate_detail"] = predicate_detail
     return evidence_dict
 
 
@@ -2152,7 +2218,7 @@ def _expected_outcome_for_record(record: JobRecord) -> ExpectedOutcome:
 def _row2_verified(
     *, root: Path, work_item_id: str, outcome: ExpectedOutcome, pre_state: dict,
     observed_phase_after: str, status: str, worker_outcome: str | None,
-) -> tuple[bool, str | None, str | None]:
+) -> tuple[bool, str | None, str | None, str | None]:
     """The ``LAUNCHED``/``COMPLETED`` row's own rule (CP7's reconciliation
     table, row 2), stated once for both statuses. ``worker_outcome`` is
     guaranteed absent on a ``LAUNCHED`` record and present-and-known on a
@@ -2161,10 +2227,11 @@ def _row2_verified(
     stated positively here rather than by substituting a fake outcome
     value, so the returned reason (when unverified) never misreports what
     the record actually carried. Returns ``(verified, reason,
-    postcondition_detail)`` -- ``reason`` is one of ``"worker_outcome"``,
-    ``"phase_not_in_to_any_of"``, ``"predicate_not_satisfied"`` or
-    ``"postcondition_not_satisfied"``, ``None`` when verified;
-    ``postcondition_detail`` is set only for the last.
+    postcondition_detail, predicate_detail)`` -- ``reason`` is one of
+    ``"worker_outcome"``, ``"phase_not_in_to_any_of"``,
+    ``"predicate_not_satisfied"`` or ``"postcondition_not_satisfied"``,
+    ``None`` when verified; ``postcondition_detail`` is set only for the
+    last, ``predicate_detail`` (CP6) only for ``predicate_not_satisfied``.
 
     Every clause after the worker-outcome one is
     :func:`_row_clauses_failure`, the helper :func:`_verify_transition`
@@ -2178,12 +2245,12 @@ def _row2_verified(
     else:
         outcome_ok = True  # STATUS_LAUNCHED, validated absent by case 3.
     if not outcome_ok:
-        return False, "worker_outcome", None
-    reason, postcondition_detail = _row_clauses_failure(
+        return False, "worker_outcome", None, None
+    reason, postcondition_detail, predicate_detail = _row_clauses_failure(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after,
     )
-    return reason is None, reason, postcondition_detail
+    return reason is None, reason, postcondition_detail, predicate_detail
 
 
 def _reconcile_planned(record: JobRecord, *, runtime_root: Path) -> JobRecord:
@@ -2221,7 +2288,7 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     observed_phase_after_wire = phase_to_wire(observed_phase_after)
     observed_head = _current_head(root)
 
-    verified, reason, postcondition_detail = _row2_verified(
+    verified, reason, postcondition_detail, predicate_detail = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after, status=STATUS_LAUNCHED, worker_outcome=None,
     )
@@ -2263,6 +2330,11 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     if reason == "postcondition_not_satisfied":
         unreconcilable_evidence["postcondition_detail"] = postcondition_detail
         message += f"; postcondition not satisfied: {postcondition_detail}"
+    if predicate_detail is not None:
+        # CP6: likewise a same-phase self-loop that did not verify names
+        # the first unmet condition of its predicate.
+        unreconcilable_evidence["predicate_detail"] = predicate_detail
+        message += f"; predicate not satisfied: {predicate_detail}"
     if "lifecycle_lock" in record:
         # Automatic-lifecycle-orchestration CP5: the terminal disposition.
         # This record was written under the lifecycle lock, so its worker
@@ -2322,7 +2394,7 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
     observed_phase_after = _observe_post_phase(managed_repo, work_item_id, pre_state)
     observed_phase_after_wire = phase_to_wire(observed_phase_after)
 
-    verified, reason, postcondition_detail = _row2_verified(
+    verified, reason, postcondition_detail, predicate_detail = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after, status=STATUS_COMPLETED, worker_outcome=worker_outcome,
     )
@@ -2346,6 +2418,7 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         "reconciliation_evidence": _transition_not_observed_evidence(
             outcome=outcome, observed_phase_after=observed_phase_after_wire,
             worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
+            predicate_detail=predicate_detail,
         ),
         "reconciled_at": now,
         "updated_at": now,

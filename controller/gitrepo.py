@@ -227,6 +227,26 @@ def ls_remote(repo_root: Path, remote: str, refs: Sequence[str], *,
     # A pattern does not match its own peeled ``^{}`` line; ask for both.
     patterns = [p for ref in sorted(wanted) for p in (ref, f"{ref}^{{}}")]
     out = _git(repo_root, ["ls-remote", "--", remote, *patterns], runner)
+    # Pattern matching is by trailing path components; keep exact names only.
+    return {name: oid for name, oid in _peeled_listing(out).items() if name in wanted}
+
+
+def ls_remote_tags(repo_root: Path, remote: str, *, runner: Runner | None = None) -> dict[str, str]:
+    """``{tag short name: commit}`` for every tag ``remote`` has, an
+    annotated tag peeled to its commit. Contacts the remote; never updates a
+    local ref."""
+    out = _git(repo_root, ["ls-remote", "--tags", "--", remote], runner)
+    tags = {}
+    for name, oid in _peeled_listing(out).items():
+        if not name.startswith("refs/tags/"):
+            raise GitOperationError(f"git ls-remote --tags returned {name!r}", evidence={"stdout": out})
+        tags[name[len("refs/tags/"):]] = oid
+    return tags
+
+
+def _peeled_listing(out: str) -> dict[str, str]:
+    """``git ls-remote`` output as ``{ref: oid}``, each ``^{}`` line
+    replacing its ref's own object."""
     direct: dict[str, str] = {}
     peeled: dict[str, str] = {}
     for line in out.splitlines():
@@ -238,8 +258,7 @@ def ls_remote(repo_root: Path, remote: str, refs: Sequence[str], *,
             peeled[name[:-3]] = oid
         else:
             direct[name] = oid
-    # Pattern matching is by trailing path components; keep exact names only.
-    return {name: peeled.get(name, oid) for name, oid in direct.items() if name in wanted}
+    return {name: peeled.get(name, oid) for name, oid in direct.items()}
 
 
 def show(repo_root: Path, rev: str, path: str, *, runner: Runner | None = None) -> bytes | None:
@@ -425,14 +444,16 @@ def push_branch(repo_root: Path, remote: str, branch: str, *, runner: Runner | N
 
 
 def create_annotated_tag(repo_root: Path, tag: str, commit: str, message: str, *,
-                         runner: Runner | None = None) -> None:
-    """Create the annotated tag ``tag`` at ``commit``. Refuses when a local
-    tag of that name exists, at any commit."""
+                         tagger: tuple[str, str] | None = None, runner: Runner | None = None) -> None:
+    """Create the annotated tag ``tag`` at ``commit``, as ``tagger``
+    (``(name, email)``) when given, else the configured identity. Refuses
+    when a local tag of that name exists, at any commit."""
     existing = tag_commit(repo_root, tag, runner=runner)
     if existing is not None:
         raise GitOperationError(f"refusing to create tag {tag}: it already exists at {existing}",
                                 evidence={"tag": tag, "local_commit": existing, "reason": "exists"})
-    _git(repo_root, ["tag", "-a", "-m", message, "--", tag, commit], runner)
+    identity = [] if tagger is None else ["-c", f"user.name={tagger[0]}", "-c", f"user.email={tagger[1]}"]
+    _git(repo_root, identity + ["tag", "-a", "-m", message, "--", tag, commit], runner)
 
 
 def remote_tag_commit(repo_root: Path, remote: str, tag: str, *, runner: Runner | None = None) -> str | None:

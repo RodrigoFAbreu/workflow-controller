@@ -633,3 +633,24 @@ class ForgeUndecidableError(ForgeError):
     as "absent": the caller refuses, and re-reads on a later attempt."""
 
     code = "FORGE_UNDECIDABLE"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-trunk-branch-pr-release-orchestration CP4 -- the
+# release transaction (``controller.release_txn``).
+# ---------------------------------------------------------------------------
+
+
+class ReleaseTransactionError(ControllerError):
+    """The release transaction refused to act: the classified commit is not
+    on the trunk, the release switch is off, a built artifact is missing or
+    fails the policy's ``verify`` command, the recomputed target is not the
+    commit the build job built, a draft release holds a foreign,
+    unverifiable or contradicting asset, or a published release fails
+    post-publication verification.
+
+    Nothing is ever repaired by moving or deleting a tag or a release: a
+    human inspects. ``evidence`` names the state, tag and commits involved.
+    """
+
+    code = "RELEASE_TRANSACTION_REFUSED"

@@ -114,6 +114,15 @@ class ReadTest(_Case):
                                  ["refs/tags/v1.0.0", "refs/heads/main", "refs/heads/absent"])
         self.assertEqual(refs, {"refs/tags/v1.0.0": self.base, "refs/heads/main": self.base})
 
+    def test_ls_remote_tags_lists_every_tag_peeled(self) -> None:
+        self.assertEqual(gitrepo.ls_remote_tags(self.clone, "origin"), {})
+        second = self.commit("b.txt", "b\n")
+        run(["git", "tag", "-a", "-m", "annotated", "v1.0.0", self.base], cwd=self.clone)
+        run(["git", "tag", "light", second], cwd=self.clone)
+        run(["git", "push", "-q", "origin", "refs/tags/v1.0.0", "refs/tags/light"], cwd=self.clone)
+        self.assertEqual(gitrepo.ls_remote_tags(self.clone, "origin"),
+                         {"v1.0.0": self.base, "light": second})
+
     def test_worktree_branches_reports_linked_and_detached_worktrees(self) -> None:
         one, two = self.tmp / "wt-one", self.tmp / "wt-two"
         run(["git", "worktree", "add", "-q", "-b", "milestone/a", str(one)], cwd=self.clone)
@@ -221,6 +230,13 @@ class TagTest(_Case):
         self.assertEqual(run(["git", "cat-file", "-t", "refs/tags/v1.0.0"], cwd=self.clone).stdout.strip(), "tag")
         self.assertEqual(gitrepo.push_tag(self.clone, "origin", "v1.0.0"), self.base)
         self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.0.0"), self.base)
+
+    def test_a_tag_is_created_as_the_given_tagger(self) -> None:
+        tagger = ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com")
+        gitrepo.create_annotated_tag(self.clone, "v1.0.0", self.base, "Release", tagger=tagger)
+        line = run(["git", "for-each-ref", "--format=%(taggername) %(taggeremail)", "refs/tags/v1.0.0"],
+                   cwd=self.clone).stdout.strip()
+        self.assertEqual(line, f"{tagger[0]} <{tagger[1]}>")
 
     def test_creating_an_existing_local_tag_refuses(self) -> None:
         gitrepo.create_annotated_tag(self.clone, "v1.0.0", self.base, "one")

@@ -264,3 +264,88 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
       ran 1385 tests, OK (6 skipped), in 104 s;
     - `python3 tools/ci_workflows.py --check`: passes.
+- **CP4 -- release transaction: complete.**
+  - New `controller/release_txn.py`, after `runtime` in the dependency order (it imports
+    `errors`, `repo_policy`, `gitrepo`, `forge` and `runtime`). New error
+    `ReleaseTransactionError` (`RELEASE_TRANSACTION_REFUSED`). Nothing in it names a trunk, a tag
+    prefix, a version file or an artifact kind: all of that comes from the committed policy.
+  - `classify(ctx, C)`, the plan's table, first matching row:
+    - it refuses when `release.enabled` is off, and when `C` is not an ancestor of the freshly
+      fetched `<remote>/<trunk>`;
+    - it reads `V` with `read_committed_version` at `C`, fetches `refs/tags/*:refs/tags/*` (never
+      forced), lists the remote's tags with the new `gitrepo.ls_remote_tags` (peeled), keeps the
+      tags `tag_format` renders canonically from a version, and decides ancestry locally;
+    - `M` and the baseline set follow TBR-R3-002/TBR-R4-003. The baseline is read lazily, only
+      once every row above `BASELINE_UNRELEASED` has failed, so the forge sees one
+      `release view` for the tag plus one per non-acknowledged lower ancestor tag. An
+      acknowledged tag is never read;
+    - `ALREADY_RELEASED`/`RELEASE_MISMATCH` download the published assets and check asset-set
+      consistency: exactly the artifacts' file names plus the checksums file, a checksums file
+      listing exactly the other assets with matching SHA-256s, and the policy's `verify` command
+      passing each artifact for the target commit. `NO_CHANGE` downloads nothing;
+    - the result carries `state`, `version`, `tag`, `commit` (`C`), `target` (the tag's own
+      commit when the tag exists, else `C`), `unsettled` and `problems`. `outputs()` gives the CI
+      outputs, with `commit` being the target.
+    - Classification reads the policy committed at `C` itself, so the commit acknowledging a tag
+      carries its own `abandoned_tags`. The plan does not name the revision explicitly; this
+      follows "read from a committed tree". A pre-policy commit therefore refuses rather than
+      classifying: `main.yml` only ever classifies the trunk tip, and CP9's replay scenario
+      builds its own history with a policy.
+  - `build(ctx, commit)` requires `HEAD` to be the target commit, runs the policy's `build`
+    command there, and requires every artifact path to exist. `verify(ctx, commit)` runs the
+    policy's `verify` command on each artifact. Commands run without a shell, stdin closed,
+    30-minute timeout, through an injectable command runner.
+  - `publish(ctx, C, built_commit, tagger=...)` recomputes the classification (fresh tag fetch,
+    fresh forge reads):
+    - `ALREADY_RELEASED`/`NO_CHANGE` at the built commit is a verified no-op. Any other
+      non-publishing state refuses, and so does a target that is not the built commit;
+    - 1: the built artifacts at their policy paths are re-verified for the target;
+    - 2 (`RELEASE_DUE` only): `create_annotated_tag` at `C` as `tagger` (the new `tagger`
+      parameter passes `-c user.name/-c user.email`), then `push_tag`. A rejected push
+      reclassifies **without** fetching tags (our local tag object now differs from any tag
+      another run pushed, and the tag fetch would refuse to overwrite it). `RESUME` at `C`
+      continues; anything else refuses;
+    - 3: `ls-remote` must peel the tag to the target;
+    - 4: no release means `create_release` with the artifacts plus a freshly computed checksums
+      file. A draft is downloaded: a foreign name, an artifact failing `verify`, or a checksums
+      file that disagrees with the final artifact bytes refuses before anything is uploaded.
+      Present artifacts are authoritative, missing ones come from this run's build, and a
+      missing checksums file is computed over the final bytes. Then `upload_assets` for the
+      missing ones and `publish_draft`;
+    - 5: `view_release` must show a published release, and its downloaded asset set must be
+      consistent for the target.
+  - `tools/release.py`, the reference adopter's thin CLI: `version` now prints the policy's
+    version-source value at `HEAD`'s committed tree (an absent policy refuses). New `classify
+    --commit C` prints `key=value` lines and appends them to `$GITHUB_OUTPUT` when set, and
+    exits 1 on a failing state after writing them. New `build` and `verify` act at the checked-out
+    commit. New `publish --commit TARGET` classifies `HEAD` and tags as `github-actions[bot]`.
+    `verify-wheel` and `checksums` are unchanged. `verify-tag`, `check-unpublished` and
+    `verify-tag-commit` stay until CP5 deletes `release.yml`. A `ControllerError` becomes the
+    same one-line refusal (`refused: <CODE>: ...`), with newlines collapsed.
+  - Tests:
+    - `tests/test_release_txn.py` (25): a toy adopter, not this repository. Its `build` writes
+      `dist/pkg-<version>.txt` with a random nonce, so a rebuild is not byte-identical, as a
+      wheel is not. Its `verify` checks the first line and logs its argv. It runs over a bare
+      origin and the fake `gh`. It covers every row, including the v1.1.0 shape, interrupted
+      releases (absent and draft), the later-bump, hand-pushed-tag, acknowledged-higher-tag
+      (naming two unsettled tags) and resume-commit cases, the `release view` counts, and four
+      mismatch variants. Transaction cases: release due (tagger checked, re-publish is a no-op),
+      unbuilt/unverifiable artifacts refuse before tagging, a build of another commit refuses,
+      interrupted after the tag push (the policy's `verify` ran only for the tag's commit, and
+      the tag object is unchanged), the mid-upload draft keeping its artifact, a checksums-only
+      draft (disagreeing: untouched; agreeing: filled), foreign/unverifiable drafts untouched,
+      and concurrent tags at the same commit (continues) and at another commit (fails). At module
+      teardown, no `gh` or Git argv contains `--force*`, `--clobber`, `delete`, `-f` or `-d`;
+    - `tests/test_release_tools.py`: `version` through the policy (committed tree, not the
+      working tree; missing policy; unreadable version). `CheckedOutVersionTest` now copies the
+      reference policy. Plus the `classify`/`build`/`verify`/`publish` CLI end to end on the toy
+      adopter, including `$GITHUB_OUTPUT` and the one-line refusals;
+    - `tests/test_gitrepo.py`: `ls_remote_tags` and the tagger identity.
+  - `test_release_txn` joins the `trunk` CI shard, with `validate.yml` regenerated. `release_txn`
+    is added to `controller/__init__.py` and `test_package_structure`'s order.
+  - Verified:
+    - narrow: the `trunk` and `docs` shards plus `test_package_structure`,
+      `test_write_containment` and `test_identity` (367 tests), OK;
+    - full: `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest discover -s tests -t .`
+      ran 1417 tests, OK (6 skipped), in 110 s;
+    - `python3 tools/ci_workflows.py --check`: passes.

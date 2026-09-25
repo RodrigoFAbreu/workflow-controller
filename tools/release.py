@@ -1,23 +1,41 @@
 #!/usr/bin/env python3
 """Release tooling for the Workflow Controller. Stdlib only.
 
-The CI and release workflows call these subcommands; each one either succeeds
-or exits ``1`` with a single line naming the check that failed:
+The CI workflows call these subcommands; each one either succeeds or exits
+``1`` with a single line naming the check that failed. The release
+transaction itself is generic (``controller/release_txn.py``) and reads
+everything adopter-specific from the committed
+``.workflow-controller/policy.json``; this file is its reference adopter's
+thin CLI:
 
-- ``version`` prints the checked-out ``pyproject.toml``'s static
-  ``[project].version``, the version every subcommand below uses;
+- ``version`` prints the version the policy's version source declares at the
+  checked-out commit (``HEAD``'s committed tree);
+- ``classify --commit C`` classifies trunk commit ``C`` and prints the
+  ``state``, ``version``, ``tag`` and target ``commit`` as ``key=value``
+  lines (also appended to ``$GITHUB_OUTPUT`` when set). A failing state
+  exits ``1``;
+- ``build`` runs the policy's ``build`` command at the checked-out commit;
+- ``verify`` runs the policy's ``verify`` command on every built artifact
+  for the checked-out commit;
+- ``publish --commit TARGET`` recomputes the classification of the
+  checked-out trunk commit and, for ``RELEASE_DUE`` or ``RESUME`` targeting
+  ``TARGET``, tags (after validation, never moving a tag), publishes or
+  completes a draft, and verifies the published release;
 - ``verify-tag TAG`` checks ``TAG`` is ``v<version>`` and that
   ``pyproject.toml`` declares the version statically, with no dynamic
   version source;
 - ``verify-wheel WHEEL (--tag TAG | --local) --commit SHA`` checks a built
   wheel's name, metadata, entry point, required and forbidden files, its
   ``BUILD_INFO.json`` and the package digest recomputed from the wheel's own
-  members;
+  members (the reference policy's ``verify`` command);
 - ``check-unpublished TAG`` refuses unless ``gh`` says the release does not
   exist. Any other ``gh`` failure is undecidable and refused (fail closed);
 - ``verify-tag-commit TAG SHA`` asks the remote which commit ``TAG`` names
   now, peeling an annotated tag, and refuses unless it is ``SHA``;
 - ``checksums DIR`` writes ``DIR/SHA256SUMS`` in ``sha256sum`` format.
+
+``verify-tag``, ``check-unpublished`` and ``verify-tag-commit`` serve the
+tag-triggered ``release.yml`` until it is removed.
 
 The ``gh`` and Git runners are injectable so the tests never reach a network.
 """
@@ -43,7 +61,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import buildinfo  # noqa: E402
+from controller import forge as forge_module  # noqa: E402
+from controller import gitrepo, release_txn, repo_policy  # noqa: E402
 from controller import version as version_module  # noqa: E402
+from controller.errors import ControllerError  # noqa: E402
 
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 ENTRY_POINT_NAME = "workflow-controller"
@@ -53,6 +74,8 @@ REQUIRED_MEMBERS = (f"{PACKAGE_DIR}/GENERATION.json", f"{PACKAGE_DIR}/{buildinfo
 SOURCE_PIN_NAME = "SOURCE_PIN.json"
 CHECKSUMS_NAME = "SHA256SUMS"
 GH_NOT_FOUND = "release not found"
+#: The identity a new release tag is created with on GitHub Actions.
+TAGGER = ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com")
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 _LS_REMOTE_LINE_RE = re.compile(r"([0-9a-f]{40})\t(\S+)")
@@ -299,7 +322,13 @@ def checksums(directory: Path) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="release.py", description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("version", help="print the controller version")
+    sub.add_parser("version", help="print the policy's version at the checked-out commit")
+    classify = sub.add_parser("classify", help="classify a trunk commit for release")
+    classify.add_argument("--commit", required=True, help="the trunk commit to classify")
+    sub.add_parser("build", help="run the policy's build command at the checked-out commit")
+    sub.add_parser("verify", help="run the policy's verify command on every built artifact")
+    publish = sub.add_parser("publish", help="tag and publish the checked-out trunk commit's release")
+    publish.add_argument("--commit", required=True, help="the target commit the build job built")
     tag = sub.add_parser("verify-tag", help="check TAG is v<version>")
     tag.add_argument("tag")
     wheel = sub.add_parser("verify-wheel", help="verify a built wheel")
@@ -326,12 +355,91 @@ def checked_out_version(repo_root: Path = REPO_ROOT) -> str:
         raise Refusal("version source", str(exc)) from None
 
 
+# --- the release transaction ------------------------------------------------
+
+def committed_policy(repo_root: Path, rev: str = "HEAD") -> repo_policy.RepositoryPolicy:
+    """The admissible policy committed at ``rev``; an absent one refuses."""
+    try:
+        policy = repo_policy.read_committed_policy(repo_root, rev)
+    except ControllerError as exc:
+        raise Refusal("repository policy", str(exc)) from None
+    if policy is None:
+        raise Refusal("repository policy", f"{rev} has no {repo_policy.POLICY_PATH}")
+    return policy
+
+
+def policy_version(repo_root: Path, rev: str = "HEAD") -> str:
+    """The version the policy committed at ``rev`` reads from ``rev``."""
+    try:
+        return repo_policy.read_committed_version(repo_root, committed_policy(repo_root, rev), rev)
+    except ControllerError as exc:
+        raise Refusal("version source", str(exc)) from None
+
+
+def release_context(repo_root: Path, rev: str = "HEAD") -> release_txn.ReleaseContext:
+    policy = committed_policy(repo_root, rev)
+    return release_txn.ReleaseContext(repo_root=repo_root, policy=policy,
+                                      forge=forge_module.GhForge(policy.forge_repository))
+
+
+def _head(repo_root: Path) -> str:
+    commit = gitrepo.head_state(repo_root).commit
+    if commit is None:
+        raise Refusal("checkout", "HEAD has no commit")
+    return commit
+
+
+def write_outputs(outputs: dict[str, str]) -> None:
+    """Print ``key=value`` lines, and append them to ``$GITHUB_OUTPUT``."""
+    lines = "".join(f"{key}={value}\n" for key, value in outputs.items())
+    sys.stdout.write(lines)
+    target = os.environ.get("GITHUB_OUTPUT")
+    if target:
+        with open(target, "a", encoding="utf-8") as handle:
+            handle.write(lines)
+
+
+def cmd_classify(repo_root: Path, commit: str) -> None:
+    _require_commit(commit)
+    state = release_txn.classify(release_context(repo_root, commit), commit)
+    write_outputs(state.outputs())
+    if not state.succeeded:
+        raise Refusal(state.state, state.detail)
+    print(f"ok: {state.state}: {state.detail}", file=sys.stderr)
+
+
+def cmd_build(repo_root: Path) -> None:
+    head = _head(repo_root)
+    for path in release_txn.build(release_context(repo_root), head):
+        print(f"ok: built {path.relative_to(repo_root)}")
+
+
+def cmd_verify(repo_root: Path) -> None:
+    head = _head(repo_root)
+    for path in release_txn.verify(release_context(repo_root), head):
+        print(f"ok: {path.relative_to(repo_root)} verified for {head}")
+
+
+def cmd_publish(repo_root: Path, target: str) -> None:
+    _require_commit(target)
+    outcome = release_txn.publish(release_context(repo_root), _head(repo_root), target, tagger=TAGGER)
+    print(f"ok: {outcome.tag} at {outcome.target}: {outcome.action} ({outcome.url})")
+
+
 def main(argv: list[str] | None = None, *, run_gh: Runner = _run, run_git: Runner = _run,
          repo_root: Path = REPO_ROOT) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "version":
-            print(checked_out_version(repo_root))
+            print(policy_version(repo_root))
+        elif args.command == "classify":
+            cmd_classify(repo_root, args.commit)
+        elif args.command == "build":
+            cmd_build(repo_root)
+        elif args.command == "verify":
+            cmd_verify(repo_root)
+        elif args.command == "publish":
+            cmd_publish(repo_root, args.commit)
         elif args.command == "verify-tag":
             version = checked_out_version(repo_root)
             verify_tag(args.tag, version=version, pyproject=repo_root / "pyproject.toml")
@@ -348,8 +456,10 @@ def main(argv: list[str] | None = None, *, run_gh: Runner = _run, run_git: Runne
             print(f"ok: {args.tag} names {args.sha}")
         elif args.command == "checksums":
             print(f"ok: wrote {checksums(args.directory)}")
-    except Refusal as refusal:
-        print(f"release.py {args.command}: refused: {refusal}", file=sys.stderr)
+    except (Refusal, ControllerError) as exc:
+        reason = f"{exc.code}: {exc}" if isinstance(exc, ControllerError) else str(exc)
+        reason = " | ".join(line for line in reason.splitlines() if line.strip())
+        print(f"release.py {args.command}: refused: {reason}", file=sys.stderr)
         return 1
     return 0
 

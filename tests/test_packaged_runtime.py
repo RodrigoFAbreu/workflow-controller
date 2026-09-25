@@ -30,9 +30,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import buildinfo, identity, runtime  # noqa: E402
+from controller import buildinfo, gitrepo, identity, milestone_branch as mb, repo_policy, runtime  # noqa: E402
 from controller.cli import EXIT_FAIL_CLOSED, EXIT_HANDOFF_PENDING, EXIT_OK  # noqa: E402
-from tests import fixtures  # noqa: E402
+from tests import fake_gh, fixtures  # noqa: E402
+from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
+from tests.test_milestone_branch import policy  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 WI = "wi-1"
@@ -134,6 +136,29 @@ def _planning_worker_env(root: Path, invocations: Path) -> dict[str, str]:
     }
     env.update(fixtures.fake_worker_plan_manifest_env(root, WI, 1))
     return env
+
+
+def _build_policy_target(tmp: Path) -> tuple[Path, Path]:
+    """``(origin, clone)``: a bare origin whose ``main`` carries the real
+    Workflow 2.5.1 tree, the reference policy and an empty Workflow state,
+    and a clone of it on ``main`` -- ``tests.test_trunk_orchestration_e2e``'s
+    policy-enabled target."""
+    seed = fixtures.build_workflow_line_fixture(tmp / "seed", workflow_version="2.5.1")
+    fixtures.run(["git", "branch", "-q", "-M", "main"], cwd=seed)
+    (seed / ".gitignore").write_text(".ai-review/\n")
+    (seed / "README.md").write_text("packaged-runtime policy fixture\n")
+    (seed / repo_policy.POLICY_PATH).parent.mkdir(parents=True, exist_ok=True)
+    (seed / repo_policy.POLICY_PATH).write_text(json.dumps(policy(), indent=2) + "\n")
+    fixtures.write_workflow_state(seed, {"schema_version": 1, "active_work_item_id": None, "work_items": {}})
+    fixtures.commit_all(seed, "Add the policy and the Workflow state")
+    origin = tmp / "origin.git"
+    fixtures.run(["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)])
+    fixtures.run(["git", "push", "-q", str(origin), "main"], cwd=seed)
+    clone = tmp / "clone"
+    fixtures.run(["git", "clone", "-q", str(origin), str(clone)])
+    fixtures.run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=clone)
+    fixtures.run(["git", "config", "user.name", "Controller Tests"], cwd=clone)
+    return origin, clone.resolve()
 
 
 class _PackagedRuntimeCase(unittest.TestCase):
@@ -353,6 +378,78 @@ class _CheckoutGoneCase(_PackagedRuntimeCase):
         self.assert_finished_package_job(self.xdg_runtime, target, invocations)
         identity_record = runtime.read_json(self.xdg_runtime / "identity.json")
         self.assert_package_runtime(identity_record["controller_runtime"])
+
+        self.assert_branch_and_pr_work(script)
+
+    def assert_branch_and_pr_work(self, script: Path) -> None:
+        """A policy-enabled target: the bind step, then the branch-side step
+        that pushes the branch and opens the Draft PR (the plan's
+        "Compatibility and migration", R16)."""
+        case_dir = self.tmp / "policy"
+        origin, root = _build_policy_target(case_dir)
+        trunk_tip = fixtures.current_head(root)
+        gh_env = fixtures.fake_gh_env(case_dir, origin=origin)
+        branch = f"milestone/{WI}"
+        key = mb.repo_key(gitrepo.common_dir(root))
+        lc = lifecycle.Lifecycle(case_dir, root, trunk_tip, phase="AWAITING_LOCAL_PLAN_REVIEW", checkpoints={},
+                                 plan_approval=None, plan_review_stages=None)
+        env = {name: gh_env[name] for name in ("PATH", "FAKE_GH_STATE", "FAKE_GH_ORIGIN", "FAKE_GH_LOG",
+                                               "FAKE_GH_FAIL")}
+        env.update(FAKE_CLAUDE_SCRIPT=str(lc.script_path), FAKE_CLAUDE_INVOCATIONS_FILE=str(lc.processes_file))
+
+        def step(command: str) -> dict:
+            fixtures.write_worker_script(lc.script_path, lc.script)
+            result = self.controller(script, "step", str(root), env=env)
+            self.assertEqual(result.returncode, EXIT_OK, f"stdout={result.stdout!r} stderr={result.stderr!r}")
+            record = self.job_records(self.xdg_runtime)[-1]
+            self.assertEqual(record["status"], "FINISHED", record.get("reconciliation_evidence"))
+            self.assertEqual(record["selected_action"]["command"], command)
+            self.assertEqual(record["branch_binding"]["branch"], branch)
+            self.assert_package_runtime(record["controller_runtime"])
+            return mb.read_record(self.xdg_runtime, key, WI)
+
+        # /milestone-plan's effect, uncommitted on the trunk: the trunk start.
+        registry = {"schema_version": 1, "work_item_id": WI, "plan_revision": 1,
+                    "checkpoints": [{"id": cid, "name": cid, "depends_on": [], "complexity": 1,
+                                     "session_target": 1} for cid in lifecycle.CHECKPOINT_IDS]}
+        lc.perform([
+            fixtures.script_write(f"docs/plans/{WI}.md", f"# The plan of {WI}\n"),
+            fixtures.script_write(fixtures.registry_rel_path(WI), json.dumps(registry, indent=2) + "\n"),
+            fixtures.script_write(f".ai-review/{WI}/current/MANIFEST.md",
+                                  fixtures.build_plan_manifest_text(WI, 1, bundle_id="a" * 64)),
+            fixtures.script_write(lifecycle.STATE_REL, lc.state_text()),
+        ])
+
+        # The bind step: /review-plan's local APPROVE runs on the new branch.
+        lc.entry.update(phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", plan_review_stages={
+            "review_content_id": "c" * 64,
+            "LOCAL_MODEL_PLAN_REVIEW": {"bundle_id": "a" * 64, "verdict": "APPROVE", "round": 1,
+                                        "completed_at": lifecycle.COMPLETED_AT},
+            "MANUAL_EXTERNAL_PLAN_REVIEW": None})
+        lc.add(f"/review-plan {WI}", [
+            fixtures.script_write(f".ai-review/{WI}/feedback/REVIEW_FEEDBACK.md", fixtures.build_review_feedback_text(
+                status="APPROVE", reviewer_role="LOCAL_MODEL_PLAN_REVIEW", reviewed_bundle_id="a" * 64,
+                reviewed_base_commit=trunk_tip, work_item=WI)),
+            lc.write_state(),
+        ])
+        bound = step(f"/review-plan {WI}")
+        self.assertEqual((bound["state"], bound["branch_point"]), (mb.BRANCH_BOUND, trunk_tip))
+        self.assertEqual(gitrepo.head_state(root).branch, branch)
+
+        # /approve-review plan, then the step that pushes and opens the Draft PR.
+        lc.sync()
+        lc.entry.update(phase=lifecycle.IMPLEMENTING, plan_approval={"status": "CURRENT"})
+        (root / lifecycle.STATE_REL).write_text(lc.state_text())
+        approval = fixtures.commit_all(root, fixtures.trailer_message(
+            f"Approve plan for {WI}", ("Workflow-Plan-Approval", "ab" * 32), ("Workflow-Work-Item", WI)))
+        lc.add(lifecycle.MILESTONE_IMPLEMENT, lc.implement("CP1"))
+        opened = step(lifecycle.MILESTONE_IMPLEMENT)
+        self.assertEqual((opened["state"], opened["pr"]["number"]), (mb.PR_OPEN, 1))
+        [pr] = fake_gh.read_state(Path(gh_env["FAKE_GH_STATE"]))["prs"]
+        self.assertTrue(pr["isDraft"])
+        self.assertEqual((pr["headRefName"], pr["baseRefName"]), (branch, "main"))
+        pushed = fixtures.run(["git", "--git-dir", str(origin), "rev-parse", f"refs/heads/{branch}"]).stdout.strip()
+        self.assertEqual(pushed, approval)
 
 
 class CheckoutAbsentTest(_CheckoutGoneCase):

@@ -2,12 +2,15 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-trunk-branch-pr-release-orchestration`, governing workflow
-version `2.2`, base commit `00c3b7136dae2ca1993af91c999df48ad376f433` ("Prepare the 1.1.1 patch
-release"). Plan revision 10 was approved by both plan-review stages (approval commit `bb7839a`).
-`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for the phase and for each checkpoint's
-status. The installed release Controller 1.1.1 orchestrates this milestone, under the installed
-Workflow 2.5.1.
+**Awaiting functional review.** `workflow-controller-trunk-branch-pr-release-orchestration`,
+governing workflow version `2.2`, base commit `00c3b7136dae2ca1993af91c999df48ad376f433` ("Prepare
+the 1.1.1 patch release"). Plan revision 10 was approved by both plan-review stages (approval
+commit `bb7839a`). Implementation revision 2 was technically approved (commit `f218377`), after
+local implementation review round 2 and manual external round 1 both approved it, against bundle
+`78c55b3d...` and `review_content_id` `10348cff...`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
+ground truth for the phase and for each checkpoint's status. The installed release Controller 1.1.1
+orchestrates this milestone, under the installed Workflow 2.5.1. See "Functional review checklist"
+at the end.
 
 ## Goal
 
@@ -845,3 +848,390 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
   left for a later cleanup.
 - **Optional 4: accepted as-is.** This is self-review observation 4, and it is plan-order
   behaviour under the lifecycle lock.
+
+## Functional review checklist
+
+This checklist covers implementation revision 2, reviewed at `9d2d682`, with technical approval
+`f218377`. The automated state is current: at `835a79b` (the same protected content) the full
+suite ran 1600 tests, OK (6 opt-in live skips), the packaged-runtime suite ran 9, OK, the seven
+frozen Workflow suites passed, and `tools/ci_workflows.py --check` passed. Only
+`WORKFLOW_STATE.json` and this file have changed since. Record findings in
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+Every flow below was dry-run against a pipx install of a wheel built from a clean clone of
+`f218377` before this checklist was committed. Nothing here costs anything or touches GitHub: the
+worker is `tests/fake_claude.py`, the Workflow Manager is the offline test stub, `gh` is
+`tests/fake_gh.py` over a local bare origin, and the "human on GitHub" acts (green checks, merging)
+are done by the driver below. Nothing in this repository is modified.
+
+### Setup
+
+1. `pipx` is installed. Use one zsh shell for every later step.
+2. Define the session:
+
+   ```zsh
+   C=/home/rodrigo/Workspace/workflow-controller; W=$(mktemp -d); unset PYTHONPATH
+   export C W PIPX_HOME=$W/pipx PIPX_BIN_DIR=$W/bin PIPX_MAN_DIR=$W/man XDG_STATE_HOME=$W/xdg
+   export WC=$W/bin/workflow-controller
+   use() { . $W/$1/env; export PATH=$GHBIN:$PATH FAKE_GH_REPO=example-owner/example-repo; }
+   wcx() { (cd /tmp; $WC --runtime-dir $RT --workflow-manager $SM --claude-binary $C/tests/fake_claude.py --timeout 60 "$@") }
+   drive() { (cd /tmp; python3 $W/drive.py "$@") }
+   gate() { python3 -c "import glob, json, os; r = json.load(open(sorted(glob.glob('$RT/jobs/*.json'), key=os.path.getmtime)[-1])); g = r.get('human_gate_pending') or {}; print(r['status'], '--', g.get('what_is_required') or r['selected_action']['command'])" }
+   ```
+
+   - `drive stop <name> <point>` builds a disposable target under `$W/<name>`: a clone of a bare
+     origin carrying the real Workflow 2.5.1 tree and the reference policy (milestone branches on,
+     trunk `origin/main`, forge `example-owner/example-repo`). It then runs the installed
+     Controller, with scripted workers, up to `<point>`, and prints one `-- driver:` line per step.
+   - `use <name>` loads that target into the shell: `$R` (the target), `$O` (its bare origin),
+     `$RT` (its runtime root). It also puts the fake `gh` first on `PATH` for the rest of the
+     shell.
+   - `wcx <args>` runs the installed Controller against the loaded target's runtime root, worker
+     and Manager. `gate` prints the last job's status and, at a gate, its full text. (`step` itself
+     prints nothing; its exit code is the result: `0` a finished job, `10` a gate, `20` a
+     refusal.)
+3. Save the driver from this file, then build a wheel from a clean clone of this commit, install
+   it with pipx, and delete the clone:
+
+   ```zsh
+   awk '/^<!-- drive.py begin -->$/{f=1;next} /^<!-- drive.py end -->$/{f=0} f' $C/docs/ACTIVE_MILESTONE.md | sed '1d;$d' > $W/drive.py
+   git clone -q $C $W/clone && (cd $W && python3 -m pip wheel -q --no-deps --no-build-isolation --wheel-dir $W/dist $W/clone)
+   pipx install -q $W/dist/*.whl && rm -rf $W/clone; H=$(git -C $C rev-parse --short=12 HEAD)
+   ```
+
+   Expected: `$W/drive.py` starts with `"""Functional-review driver`. There is one wheel,
+   `$W/dist/workflow_controller-1.1.1-py3-none-any.whl`, and `$W/clone` no longer exists.
+
+<!-- drive.py begin -->
+```python
+"""Functional-review driver: disposable policy-enabled targets for the
+installed Controller, stopped at a named point, plus the user acts
+GitHub would perform. Run as: python3 $W/drive.py <command> <name> ..."""
+import json, os, shlex, subprocess, sys, tempfile, unittest, unittest.mock
+from pathlib import Path
+
+C, W, WC = Path(os.environ["C"]), Path(os.environ["W"]), os.environ["WC"]
+sys.path.insert(0, str(C))
+from tests import fake_gh, fixtures  # noqa: E402
+from tests import test_trunk_orchestration_e2e as e2e  # noqa: E402
+
+WI, BRANCH = e2e.WI, e2e.BRANCH
+
+
+class Case(e2e._E2ECase):
+    def runTest(self) -> None:
+        pass
+
+    def invoke(self, argv):
+        env = {k: v for k, v in {**os.environ, **self.env()}.items()
+               if k != "PYTHONPATH" and not k.startswith("GIT_")}
+        r = subprocess.run([WC, *argv], env=env, cwd="/tmp", capture_output=True, text=True)
+        print(f"-- driver: workflow-controller {argv[argv.index('60') + 1]} -> exit {r.returncode}")
+        return r.returncode, r.stdout, r.stderr
+
+
+def build(name: str, *, policy: bool = True) -> Case:
+    d = W / name
+    d.mkdir()
+    tempfile.tempdir = str(d)
+    Case.with_policy = policy
+    Case.setUpClass()
+    Case._class_tmp._finalizer.detach()
+    c = Case()
+    c.setUp()
+    c._tmp._finalizer.detach()
+    return c
+
+
+def save(name: str, c: Case) -> None:
+    fixtures.write_worker_script(c.lc.script_path, c.lc.script)
+    env = {**{k: c.env()[k] for k in ("FAKE_GH_STATE", "FAKE_GH_ORIGIN", "FAKE_GH_LOG", "FAKE_CLAUDE_SCRIPT",
+                                      "FAKE_CLAUDE_INVOCATIONS_FILE", "FAKE_CLAUDE_DIAG_LOG")},
+           "GHBIN": str(Path(c.gh_env["FAKE_GH_STATE"]).parent / "bin"), "R": str(c.root), "O": str(c.origin),
+           "RT": str(c.lc.runtime), "SM": str(c.stub_manager), "HUMAN": str(c.tmp_root / "human")}
+    (W / name / "env").write_text("".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items()))
+
+
+def stop(name: str, point: str) -> None:
+    c = build(name, policy=point != "nopolicy")
+    if point in ("start", "nopolicy"):
+        c.script_lifecycle()
+        if point == "start":
+            c.land_on_trunk("elsewhere.txt")
+    elif point == "badpolicy":
+        c.script_lifecycle()
+        policy = json.loads((c.root / e2e.POLICY).read_text())
+        policy["milestone_branches"]["surprise"] = True
+        (c.root / e2e.POLICY).write_text(json.dumps(policy, indent=2) + "\n")
+        fixtures.commit_all(c.root, "Add an unknown policy key")
+        c.git("push", "-q", "origin", "main")
+    else:
+        c.drive_to_pr()
+        if point == "closed":
+            c.gh_edit(1, state="CLOSED")
+        if point in ("accepted", "drift"):
+            if point == "drift":
+                c.land_on_trunk("drift.txt")
+            c.drive_implementation()
+            c.accept()
+            c.script_next_plan()
+            if point == "drift":
+                c.gh_edit(1, checks=e2e.PASSING_CHECKS)
+    save(name, c)
+    print(f"-- driver: {name} stopped at {point}; now run: use {name}")
+
+
+def act(name: str, what: str) -> None:
+    env = dict(line[len("export "):].split("=", 1) for line in (W / name / "env").read_text().splitlines())
+    env = {k: shlex.split(v)[0] for k, v in env.items()}
+    state = Path(env["FAKE_GH_STATE"])
+    data = fake_gh.read_state(state)
+    pr = data["prs"][0]
+    if what == "checks-green":
+        pr["checks"] = e2e.PASSING_CHECKS
+    elif what == "merge":
+        origin, human = env["O"], Path(env["HUMAN"])
+        if not human.exists():
+            fixtures.run(["git", "clone", "-q", origin, str(human)])
+        run = lambda *a: fixtures.run(["git", *a], cwd=human).stdout.strip()  # noqa: E731
+        run("fetch", "-q", "origin")
+        run("switch", "-q", "main")
+        run("reset", "-q", "--hard", "origin/main")
+        head = run("rev-parse", f"origin/{BRANCH}")
+        run("-c", "user.name=Human", "-c", "user.email=human@example.invalid", "merge", "-q", "--no-ff",
+            "-m", f"Merge pull request #{pr['number']}", f"origin/{BRANCH}")
+        run("push", "-q", "origin", "main")
+        merge_commit = run("rev-parse", "HEAD")
+        pr.update(state="MERGED", isDraft=False, headRefOid=head, mergedAt="2026-09-25T01:00:00Z",
+                  mergeCommit={"oid": merge_commit})
+        print(f"-- driver: PR #{pr['number']} merged as {merge_commit[:12]}")
+    else:
+        raise SystemExit(f"unknown act {what}")
+    fake_gh.write_state(state, data)
+
+
+class Rel(e2e.ReleaseHistoryTest):
+    def runTest(self) -> None:
+        pass
+
+
+def rel(argv: list[str]) -> None:
+    d = W / "rel"
+    r = Rel()
+    if argv[0] == "init":
+        d.mkdir()
+        tempfile.tempdir = str(d)
+        r.setUp()
+        r._tmp._finalizer.detach()
+        (d / "case.json").write_text(json.dumps({"tmp": str(r.tmp), "origin": str(r.origin), "clone": str(r.clone),
+                                                 "env": r.env, "abandoned": r.abandoned}))
+        print(f"-- driver: toy adopter at {r.clone}, trunk commit {r.base[:12]} carries 1.0.0")
+        return
+    case = json.loads((d / "case.json").read_text())
+    r.tmp, r.origin, r.clone, r.env = Path(case["tmp"]), Path(case["origin"]), Path(case["clone"]), case["env"]
+    r.abandoned, r.verify_log = case["abandoned"], Path(case["tmp"]) / "verify.jsonl"
+    cmd, args = argv[0], argv[1:]
+    if cmd == "bump":
+        sha = r.bump(args[0], abandoned=args[1:] or None)
+        case["abandoned"] = r.abandoned
+        (d / "case.json").write_text(json.dumps(case))
+        print(f"-- driver: {sha[:12]} sets version {args[0]}, abandoned_tags {r.abandoned}")
+    elif cmd == "merge":
+        print(f"-- driver: {r.merge(args[0])[:12]} lands {args[0]} (no version change)")
+    elif cmd == "tag":
+        tip = fixtures.run(["git", "rev-parse", "HEAD"], cwd=r.clone).stdout.strip()
+        r.tag(args[0], tip)
+        print(f"-- driver: {args[0]} pushed by hand at {tip[:12]}")
+    elif cmd == "run":
+        tip = fixtures.run(["git", "rev-parse", "HEAD"], cwd=r.clone).stdout.strip()
+        code, out, err = r._main("classify", "--commit", tip)
+        print(f"-- main.yml for {tip[:12]}: classify -> exit {code}")
+        sys.stdout.write(out + err)
+        outputs = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+        if code == 0 and outputs.get("state") in ("RELEASE_DUE", "RESUME"):
+            fixtures.run(["git", "switch", "-q", "--detach", outputs["commit"]], cwd=r.clone)
+            for step in ("build", "verify"):
+                code, out, err = r._main(step)
+                sys.stdout.write(f"{step} -> exit {code}: {(out + err).strip()}\n")
+            fixtures.run(["git", "switch", "-q", "--detach", tip], cwd=r.clone)
+            env = {"FAKE_GH_FAIL": json.dumps({"release create": "server_error"})} if args == ["--fail-publish"] else {}
+            with unittest.mock.patch.dict(r.env, env):
+                code, out, err = r._main("publish", "--commit", outputs["commit"])
+            sys.stdout.write(f"publish -> exit {code}: {(out + err).strip()}\n")
+            fixtures.run(["git", "switch", "-q", "main"], cwd=r.clone)
+            fixtures.run(["rm", "-rf", str(r.clone / "dist")])
+    elif cmd == "show":
+        tags = fixtures.run(["git", "--git-dir", str(r.origin), "for-each-ref", "--format=%(refname:short) %(*objectname:short)",
+                             "refs/tags"]).stdout
+        print("origin tags (tag -> commit):\n" + tags.rstrip())
+        for release in fake_gh.read_state(Path(r.env["FAKE_GH_STATE"]))["releases"]:
+            print(f"release {release['tagName']}: draft={release['isDraft']} assets="
+                  f"{sorted(a['name'] for a in release['assets'])}")
+    else:
+        raise SystemExit(f"unknown rel command {cmd}")
+
+
+if __name__ == "__main__":
+    command, rest = sys.argv[1], sys.argv[2:]
+    {"stop": lambda: stop(*rest), "act": lambda: act(*rest), "rel": lambda: rel(rest)}[command]()
+```
+<!-- drive.py end -->
+
+### Test data
+
+Only the disposable targets, origins and fake-`gh` state that `drive` creates under `$W`. Each
+flow uses its own target, so the flows are independent and can be run in any order.
+
+### Flows
+
+1. **One version authority.** From `/tmp`, run `$WC --version`, then
+   `python3 $C/tools/release.py version`.
+   Expected: `workflow-controller 1.1.1` and `runtime: package (local build from $H)`, then
+   `1.1.1`. Both read `pyproject.toml`'s static `version`, one through the installed wheel's
+   metadata and one from the checkout.
+2. **No policy: nothing changes.** Run `drive stop np nopolicy; use np`, then
+   `wcx inspect $R | grep -ci 'policy\|milestone branch'`, `wcx step $R; echo exit=$?; gate`,
+   and `wcx step $R; echo exit=$?; gate`.
+   Expected:
+   - `0` (`inspect` has no policy or branch lines);
+   - `exit=0` and `FINISHED -- /milestone-plan`, then `exit=0` and `FINISHED -- /review-plan wi-1`;
+   - `git -C $R branch --show-current` is `main`, `ls $RT` has no `repositories`, and
+     `ls $(dirname $FAKE_GH_LOG)` has no `invocations.jsonl` (`gh` was never called).
+3. **An inadmissible policy refuses.** The driver commits the policy with an unknown key,
+   `milestone_branches.surprise`. Run `drive stop bad badpolicy; use bad`, then
+   `wcx step $R; echo exit=$?` and `wcx inspect $R; echo exit=$?`.
+   Expected: both print
+   `error: .workflow-controller/policy.json: milestone_branches: unknown key(s) ['surprise']; the known keys are ['branch_format', 'enabled', 'pull_request']`,
+   then `exit=20`. No job record is written (`ls $RT/jobs` fails).
+4. **Trunk start: `main` behind its remote.** The driver lands a commit on the origin's `main`
+   from another clone. Run `drive stop ts start; use ts`, then `wcx step $R; echo exit=$?; gate`.
+   Expected:
+   - `exit=10`, then
+     `GATE_BLOCKED -- fast-forward the trunk to its remote before a milestone starts (fast_forward_trunk): main is 1 commit(s) behind origin/main; fast-forward it (`git merge --ff-only origin/main`) before a milestone starts`;
+   - after `git -C $R pull -q --ff-only`, `wcx step $R; echo exit=$?; gate` gives `exit=0` and
+     `FINISHED -- /milestone-plan`, still on `main` (the bind happens at the next step).
+5. **Bind, then push and a Draft PR.** Run `drive stop pr pr; use pr`. The driver prints four
+   steps: `exit 0` (`/milestone-plan` on `main`), `exit 0` (the bind, then `/review-plan` on the
+   branch), `exit 10` (the manual plan-review gate), then, after the driver's plan approval
+   commit, `exit 0` (push, Draft PR, then `/milestone-implement` for CP1).
+   - `git -C $R branch --show-current`: `milestone/wi-1`. `git -C $R log --oneline -3`:
+     `Implement CP1`, `Approve plan for wi-1`, `Add the policy and the Workflow state`.
+   - `git --git-dir $O for-each-ref --format='%(refname:short) %(objectname:short)' refs/heads`:
+     `main` at the policy commit and `milestone/wi-1` at the approval commit. The CP1 commit is
+     pushed by the next step, which first fast-forwards the remote branch.
+   - `gh pr list --repo $FAKE_GH_REPO --head milestone/wi-1 --state all --json number,state,isDraft,headRefName,baseRefName`:
+     one PR, `number 1`, `OPEN`, `isDraft true`, `milestone/wi-1` -> `main`.
+     The PR body carries the ownership marker: `grep -c 'workflow-controller: work_item=wi-1' $FAKE_GH_STATE`
+     prints `1` (the fake `gh` does not serve `--json body`, so this reads its state file).
+   - `wcx status`: a `milestone: wi-1 PR_OPEN on milestone/wi-1, pull request #1 (worktree $R)`
+     line.
+   - `wcx inspect $R`: a `repository policy: .workflow-controller/policy.json (binding, sha256 ...)
+     milestone_branches=True release=False trunk=origin/main forge=example-owner/example-repo`
+     line, and a `milestone branch: milestone/wi-1 for wi-1 (PR_OPEN), branch point <main's tip>,
+     pull request #1 https://github.com/example-owner/example-repo/pull/1 (draft), fresh (0 behind
+     the trunk), observed ...` line.
+   - `wcx explain $R`: `repository preflight: push -- milestone/wi-1 is pushed at <CP1 commit>`,
+     and `next automatic action: /milestone-implement wi-1`.
+   - The worker guard: run
+     `python3 -c "import json; [print('guard' if 'Bash(git push:*)' in json.loads(l)['argv'][-1] else 'no guard') for l in open('$FAKE_CLAUDE_DIAG_LOG')]"`.
+     Expected: `no guard` (the `/milestone-plan` worker on `main`), then `guard` for the two
+     workers on the branch. The guarded argv ends
+     `--disallowedTools Agent,Workflow,Skill,Bash(gh:*),Bash(git push:*),Bash(git rebase:*),Bash(git switch:*),Bash(git checkout -b:*),Bash(git reset --hard:*)`.
+6. **Readiness, the human merge and close-out.** Run `drive stop acc accepted; use acc`. The driver
+   also runs CP2, the bundle generation, the local implementation review and the manual-review
+   gate, then commits the acceptance (`Accept wi-1`, the `HEAD` of `$R`), so it prints eight steps,
+   ending `exit 10`. The pull request has no checks yet.
+   1. `wcx step $R; echo exit=$?; gate`. Expected: `exit=10`,
+      `GATE_BLOCKED -- wait for the pull request's checks to finish (checks_pending): pull request #1 has no checks reported yet`.
+      The PR is still a draft.
+   2. `drive act acc checks-green`, then the same step. Expected: `exit=10` and
+      `GATE_BLOCKED -- merge the pull request on GitHub with "Create a merge commit" (merge_pull_request): ...
+      The Controller never merges`. `gh pr view 1 --repo $FAKE_GH_REPO --json isDraft,state,headRefOid`
+      shows `isDraft false`, `OPEN`, and a `headRefOid` equal to `git -C $R rev-parse HEAD` (the
+      acceptance commit). `wcx status` shows `milestone: wi-1 READY ...`.
+   3. The same step once more. Expected: the same `merge_pull_request` gate. `gh pr ready` ran once
+      only: `grep -c '"ready"' $FAKE_GH_LOG` prints `1`.
+   4. `drive act acc merge` (a merge commit on the origin's `main`, as GitHub would make it), then
+      `wcx step $R; echo exit=$?; gate`. Expected:
+      - `exit=0` and `FINISHED -- /milestone-plan`: close-out, then the next milestone's plan;
+      - `git -C $R branch --show-current` is `main`, and `git -C $R log --oneline -2` is
+        `Merge pull request #1`, then `Accept wi-1`;
+      - `wcx status` shows `milestone: wi-1 CLOSED on milestone/wi-1, pull request #1 ...`;
+      - `wcx explain $R` shows `repository preflight: bind -- wi-2 is bound to milestone/wi-2 ...`
+        and `next automatic action: /review-plan wi-2`;
+      - `git -C $R branch --list` and `git --git-dir $O branch --list` both still list
+        `milestone/wi-1`: the Controller never deletes a branch.
+7. **Trunk drift ends at `integration_required`.** The driver lands a commit on `main` right after
+   the PR opens, runs the milestone to its acceptance and turns the checks green. Run
+   `drive stop dr drift; use dr`, then `wcx inspect $R | grep 'milestone branch'` and
+   `wcx step $R; echo exit=$?; gate`.
+   Expected:
+   - `inspect` says `behind (1 behind the trunk)`;
+   - `exit=10`, then
+     `GATE_BLOCKED -- the trunk moved past the milestone's base; mark the pull request ready and merge it on GitHub with "Create a merge commit" (integration_required): origin/main has moved 1 commit(s) past milestone/wi-1's base. Workflow 2.5.1 has no transition that re-establishes review against an integrated base, so the Controller does not integrate. ...`;
+   - the PR is still a draft, and `git -C $R log --oneline -1` is still `Accept wi-1`: nothing was
+     integrated;
+   - `drive act dr merge`, then `wcx step $R; echo exit=$?`: `exit=0`. `$R` is on `main` at
+     `Merge pull request #1`, whose second parent is `Accept wi-1`
+     (`git -C $R log --oneline --graph -3`), and `wcx status` shows `wi-1 CLOSED`.
+8. **A PR closed without merge, and the `--new-pr` exit.** The driver closes PR #1 on the fake
+   GitHub right after it opens. Run `drive stop cl closed; use cl`, then
+   `wcx step $R; echo exit=$?; gate`.
+   Expected:
+   - `exit=10`, then `GATE_BLOCKED -- the milestone's pull request was closed without merge;
+     reopen it, or run milestone-binding --new-pr or --abandon (pr_closed_unmerged): ...`. The
+     text names the three exclusive exits, with full `workflow-controller --work-item wi-1
+     milestone-binding --new-pr <R>` and `--abandon <R>` commands;
+   - `wcx --work-item wi-1 milestone-binding --new-pr $R; echo exit=$?`:
+     `milestone-binding --new-pr: the milestone/wi-1 binding of wi-1 is now BRANCH_BOUND`, then
+     `exit=0`;
+   - `wcx step $R; echo exit=$?`: `exit=0`. `wcx status` shows `wi-1 PR_OPEN ... pull request #2`,
+     and `gh pr list --repo $FAKE_GH_REPO --head milestone/wi-1 --state all --json number,state`
+     lists `#2 OPEN` and `#1 CLOSED`;
+   - the same `--new-pr` again: `error: --new-pr does not apply to the PR_OPEN binding of wi-1`,
+     then `exit=20`.
+9. **The release transaction, on a toy adopter.** `tools/release.py` is pinned to this repository,
+   so the driver runs the same `classify`/`build`/`verify`/`publish` code (`release.main`) against
+   a toy adopter: a bare origin, a `pyproject.toml` version, and the fake `gh` for releases.
+   `drive rel run` is one `main.yml` run for the trunk tip: `classify`, then, for `RELEASE_DUE` or
+   `RESUME`, `build` and `verify` at the classified commit, then `publish`. Run these in order:
+
+   | Command | Expected |
+   |---|---|
+   | `drive rel init; drive rel run` | `state=RELEASE_DUE`, `version=1.0.0`; `build`, `verify` and `publish` each `exit 0`, publish `ok: v1.0.0 at <commit>: created (...)` |
+   | `drive rel run` | `state=ALREADY_RELEASED` |
+   | `drive rel merge docs; drive rel run` | `state=NO_CHANGE`, `ok: NO_CHANGE: v1.0.0 is published at <commit>, an ancestor` |
+   | `drive rel bump 1.1.0; drive rel tag v1.1.0; drive rel bump 1.2.0; drive rel run` | `classify -> exit 1`, `state=BASELINE_UNRELEASED`, `refused: BASELINE_UNRELEASED: lower tag(s) ['v1.1.0'] have no published release and are not in abandoned_tags; resume or acknowledge them first`. Nothing is built or published |
+   | `drive rel bump 1.2.0 v1.1.0; drive rel run` | acknowledged: `state=RELEASE_DUE`, `version=1.2.0`, published |
+   | `drive rel bump 1.2.1; drive rel run --fail-publish` | `RELEASE_DUE`; build and verify pass; `publish -> exit 1: ... refused: FORGE_UNDECIDABLE: gh release create failed (exit 1)` |
+   | `drive rel show` | the tag `v1.2.1` exists at the 1.2.1 commit, but there is no `release v1.2.1`: the tag was pushed after validation, the release was not |
+   | `drive rel merge next; drive rel run` | `state=RESUME`, `ok: RESUME: v1.2.1 exists at <the 1.2.1 commit> with no release`; build and verify run at **that** commit (not the tip); publish `created` |
+   | `drive rel show` | tags `v1.0.0`, `v1.1.0`, `v1.2.0` and `v1.2.1`, each at its own version commit (`v1.2.1` unmoved); releases `v1.0.0`, `v1.2.0` and `v1.2.1`, each `draft=False` with `['SHA256SUMS', 'pkg-<version>.txt']`; no release for the abandoned `v1.1.0` |
+10. **The CI model.** In `$C`: `python3 tools/ci_workflows.py --check; echo exit=$?` prints
+    `exit=0`. `ls .github/workflows` lists `ci.yml`, `main.yml`, `validate.yml` and
+    `workflow-conformance.yml`, with no `release.yml`. In `main.yml`: it triggers on push to
+    `main` and `workflow_dispatch`; concurrency group `main-release` with
+    `cancel-in-progress: false`; top-level `permissions: contents: read`; and `publish` is the only
+    job with its own `permissions` (`contents: write`). `build` and `publish` run only for
+    `RELEASE_DUE` or `RESUME`.
+
+### Known limitations and out of scope
+
+- Nothing here runs against the real GitHub. `main.yml`, the step-scoped credential helper, the
+  real `gh` and the real release flow run for the first time at the post-acceptance 1.2.0 release
+  (README, "Runbook: the first automatic release"). Treat that run as supervised rollout evidence.
+- `tools/release.py classify` of this repository's own `HEAD` needs an `origin` whose `main` holds
+  `HEAD`, and nothing of this milestone is pushed yet. CP10 ran it against a local mirror
+  (`NO_CHANGE`).
+- The "human on GitHub" acts are simulated by editing the fake `gh` state: green checks, closing
+  the PR, and marking it ready and merging with a merge commit (flows 6 to 8).
+- `step` prints nothing; `gate` and `explain` are how a result is read. `explain` predicts the next
+  step, so after a gated step its `repository preflight` line may name the check it will run next
+  (for example `ready`) rather than the gate just recorded.
+- `status` lists every live binding record, terminal ones included (self-review observation 1).
+- Carried-forward optional findings, not addressed in this milestone: `repo_policy` keeps its own
+  committed-tree Git read path (round-1 Optional 1), and `test_packaged_runtime` reuses helpers
+  from two other test modules.
+- Integrating a moved trunk into a milestone branch is out of scope. Under Workflow 2.5.1 it is
+  the manual `integration_required` procedure; the Workflow 2.6.x integration milestone
+  (`docs/ROADMAP.md`) changes that.

@@ -1781,12 +1781,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-trunk-branch-pr-release-orchestration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-trunk-branch-pr-release-orchestration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 10,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "00c3b7136dae2ca1993af91c999df48ad376f433",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "d88871d7acc77dd18748543cd8ee6392d52d8e88",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP10",
       "checkpoints": {
@@ -1882,8 +1882,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 53,
-      "last_transition": "2026-09-25T10:50:04Z"
+      "state_revision": 54,
+      "last_transition": "2026-09-25T11:26:36Z"
     }
   }
 }

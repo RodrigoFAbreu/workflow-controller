@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-worker-lifecycle-ownership",
+  "requirements": {
+    "R1": {
+      "description": "The end of a worker turn alone never makes a worker or job terminal while owned asynchronous work remains (AC1)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R2": {
+      "description": "Background Bash tasks keep the job non-terminal (AC2)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R3": {
+      "description": "Monitor tasks keep the job non-terminal (AC3)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R4": {
+      "description": "Scheduled wakeups keep the job non-terminal; a wakeup that is never delivered fails closed (AC4)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "Descendant processes launched by the worker, including ones that left its process group or were reparented, stay owned by the job until they finish or are explicitly abandoned (AC5)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3",
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R6": {
+      "description": "The lifecycle lock cannot be released while owned action work is still active, including across Controller loss (AC6)",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R7": {
+      "description": "A later checkpoint or action cannot start while prior owned work is still active (AC7)",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R8": {
+      "description": "Same-phase durable progress is recognised by one shared rule, e.g. IMPLEMENTING -> IMPLEMENTING with last_completed_checkpoint_id advancing and committed (AC8)",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R9": {
+      "description": "Existing fail-closed recovery semantics remain intact for genuinely ambiguous or failed attempts (AC9)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP5",
+        "CP6"
+      ]
+    },
+    "R10": {
+      "description": "Controller interruption or restart recovers a waiting or draining job without duplicating the worker or losing ownership of the pending action (AC10)",
+      "checkpoint_ids": [
+        "CP3",
+        "CP5"
+      ]
+    },
+    "R11": {
+      "description": "follow, inspect, status and explain distinguish an active worker, a waiting worker, background-owned work, an ended worker and pending reconciliation (AC11)",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    },
+    "R12": {
+      "description": "Regression tests for the observed IMPLEMENTING, SELF_REVIEWING_IMPLEMENTATION and APPLYING_REVIEW_FEEDBACK failures, built from their real stream shapes (AC12)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "R13": {
+      "description": "Regression: checkpoint N+1 cannot start while checkpoint N still owns background verification (AC13)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R14": {
+      "description": "Regression: a waiting worker resumes after its background task or wakeup completes and then finishes normally (AC14)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R15": {
+      "description": "Regression: a Controller restart during the waiting state neither duplicates the worker nor loses the pending action (AC15)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R16": {
+      "description": "The harness contract the fix relies on is measured, pinned by fixtures and an opt-in live probe, and every limitation that needs the future Harness Adapter Protocol is documented",
+      "checkpoint_ids": [
+        "CP1",
+        "CP8"
+      ]
+    },
+    "R17": {
+      "description": "Developed and proven against the installed Workflow 2.5.1 with no Workflow edits; operator documentation and full verification",
+      "checkpoint_ids": [
+        "CP8"
+      ]
+    }
+  }
+}

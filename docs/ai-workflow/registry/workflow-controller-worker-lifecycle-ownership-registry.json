@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-worker-lifecycle-ownership",
+  "plan_revision": 7,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Harness contract evidence and fake harness: the measured claude 2.1.282 stream-json-input contract recorded as redacted fixtures (the real failing jobs' stream tails, background Bash, Monitor, ScheduleWakeup, slash-command and escaped-descendant probes), tests/fake_claude.py streaming-input mode (scripted turns, background tasks as real tagged processes with task events, wakeups, kill-at-EOF, escaped descendants, no descriptor inheritance by tool processes), and the opt-in live contract probe",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Worker stream state machine: controller/worker_stream.py, a pure incremental reader tracking turns, owned background tasks, pending wakeups and quiescence, with terminal classification into the closed four outcomes plus a structured stream_diagnosis (several results accepted, owned work killed at exit, exit while waiting, overdue wakeup, malformed stream); replaces worker._parse_worker_stream",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Streaming-input worker launch and supervision: worker.launch sends the task as one stream-json user message on a pipe whose write end is held by a Controller-spawned stdin anchor that also holds the lifecycle lock and ends itself once nothing it can see is owned and no supervisor is attached; it supervises RUNNING, WAITING, ENDING and DRAINING from the stream, ends the session only at a quiescent terminal turn, owns descendants through an environment ownership tag and a child subreaper, excludes recognised tool daemons, drains tagged descendants and the process group up to a drain bound and then detaches without ending anything, ends all owned work on an explicit timeout, adds the Controller's worker lifecycle system note, and disallows CronCreate, CronDelete and RemoteTrigger for every worker",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Job lifecycle integration: execute_step persists worker_state transitions, the anchor and owned-process snapshots while the record stays LAUNCHED, reconciles only after the worker has ENDED and its owned work has drained, keeps the lifecycle lock for the whole owned lifetime, and run cannot start the next action early; regressions for the observed IMPLEMENTING, SELF_REVIEWING_IMPLEMENTATION and APPLYING_REVIEW_FEEDBACK failures, for checkpoint N+1 blocked by checkpoint N's background verification, and for a waiting worker that resumes and finishes",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Restart recovery: a per-job supervisor lock; resume and abandon run supervision and anchor disposal first, under the supervisor lock and before the lifecycle lock, then reconcile under the lifecycle lock; resume re-attaches to a live unsupervised job without launching a worker, rebuilds its state by replaying the stream, ends it and reconciles; the ownership hold over the worker and its tagged descendants applies to LAUNCHED and COMPLETED records in resume, the pending-job refusal and abandon; regressions for Controller loss during WAITING and DRAINING, for a lost anchor and for an orphaned anchor",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Same-phase durable progress: one progress rule shared by execute_step and resume and evaluated only for an ended worker; IMPLEMENTING -> IMPLEMENTING is accepted exactly when a checkpoint newly reaches COMPLETE in the state committed at a moved HEAD (last_completed_checkpoint_id advancing); a structured predicate_detail on failure; no phase-specific exception for SELF_REVIEWING_IMPLEMENTATION or APPLYING_REVIEW_FEEDBACK",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Operator diagnostics: status, inspect, explain and follow distinguish an active worker, a waiting worker and what it waits on, owned background processes, an ended worker still draining, pending reconciliation and whether a supervisor is attached; the new job events are rendered, the heartbeat follows worker_state, JSON output carries the same fields, and every hint names the re-attach command",
+      "depends_on": [
+        "CP5",
+        "CP6"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP8",
+      "name": "Documentation and full verification under Workflow 2.5.1 (terminal checkpoint): README's concurrency and worker lifecycle section rewritten, ADR 0004 worker lifecycle ownership with the harness limitations, docs/ROADMAP.md section 1.4 updated, full suite, packaged runtime, and the opt-in live contract probe against the installed claude",
+      "depends_on": [
+        "CP7"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

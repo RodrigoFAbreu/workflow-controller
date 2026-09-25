@@ -1781,7 +1781,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-trunk-branch-pr-release-orchestration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-trunk-branch-pr-release-orchestration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 10,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -1863,7 +1863,361 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-24T23:01:36Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "78c55b3db312e07f6b8b21b914d9b71b35711e9f505417aa485a8d9387e8d656",
+        "approved_review_content_id": "10348cff0247a6b257e7fcc0f6e1e115bf3751665ff08d8d3d88cdcd6474da76",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/ci.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "226a6ebfcd1fabeeb06e0ffeb14ad9317a824449"
+          },
+          {
+            "path": ".github/workflows/main.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e22bad5936b1cc023e1fc56ab4615f592ee4a739"
+          },
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5bca1be18c0fa64876bb0da205f88f890dfb2d4f"
+          },
+          {
+            "path": ".workflow-controller/policy.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3f19ae6f38a886fd815372c88f269338b3b55965"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "50f104fbd04eb4b014a425fe7877ef2d003b7e86"
+          },
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1eaa5236a075961da7f799939868673e1ecbe624"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "920d560367491a751c7f3e6e9b553e62d9f32e87"
+          },
+          {
+            "path": "controller/decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f4e12d36d6c8a5b77f0570f4bbb562015eb045bd"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4178a1f764f8de9e93a949f53d39c819c9a0f4be"
+          },
+          {
+            "path": "controller/forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2fb9b17012324dc736643ddad4fb8644f016a545"
+          },
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "39ab766553b7700e4ad64b225baf79757ab1b85f"
+          },
+          {
+            "path": "controller/handoff.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f83068271fad3e7ca11a8e09da66173a9d21076"
+          },
+          {
+            "path": "controller/identity.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c8df99fc73b62595eebf7382499c8e6801b54477"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e04a6dc2453ff472ab4a2a3169fa751e1847399e"
+          },
+          {
+            "path": "controller/milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ce0444fd7f238d5619521f6d07a7e78e7e46d180"
+          },
+          {
+            "path": "controller/release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2249bb65ca3f9497b781a5dc54319c49315c139e"
+          },
+          {
+            "path": "controller/repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0453b3a4e7fd0b1e12d86478ed2b86a808577717"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0fdcc62aa25a3aab51f923e32121e5615ded12d4"
+          },
+          {
+            "path": "controller/runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "596384cf5af0930b0f788405bb35561fb31b7a31"
+          },
+          {
+            "path": "controller/version.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b2973a7b58c59f9359fe01acd5af6e74c23c4ebb"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e9ae88d03d74f02179bddcc2c32d8c7f046b8234"
+          },
+          {
+            "path": "docs/adr/0003-trunk-branch-pr-release-orchestration.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9808c0fdfd8849b73f7456237b56ea2f7f0b48e4"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-trunk-branch-pr-release-orchestration-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "13f4b4801addbb605e09f150ae712696890709a6"
+          },
+          {
+            "path": "pyproject.toml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2e42755e917388d6ba7636464bc8a13c374e861e"
+          },
+          {
+            "path": "setup.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2e3010f35057f1f651e3cce7a2a47d72063d4003"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "1ee31885cd47dabee8bace8ed5dd3f1820ac0314"
+          },
+          {
+            "path": "tests/fake_gh.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "83b13dd0366de29b0fba152b5054693368272a52"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5f749d4b1aeaa4b31c8fb9e3b4dc9e9042680d44"
+          },
+          {
+            "path": "tests/golden/generate_no_policy_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9bb399cfe779c6d69c63746cf2ec80e4469e6992"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57cf5d71e469eda9fa5db7f8f953ff0740d6562c"
+          },
+          {
+            "path": "tests/test_buildinfo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b905b802f510354c971add86a59074cd35f8d7dc"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c56bbf97929768b514254bda174da87157c669c3"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d76011f898856a4940284bf67680b0cc90fb4227"
+          },
+          {
+            "path": "tests/test_forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3bb2c84bed5511c8cd0393e51a0c1ec2ace3eb96"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "83fdfec2f48d42743c19b503a39bf922c81b2557"
+          },
+          {
+            "path": "tests/test_handoff.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2e754b94b41e904801c0f820a44bd94c0db1e2ae"
+          },
+          {
+            "path": "tests/test_identity.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3eeee9b152b65cab44e48219b3d9d9a9292e3416"
+          },
+          {
+            "path": "tests/test_integration_disposable_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1da570ced8b344df85ec9a0b97757c86d728c0eb"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5c1fdf47fe0c7085bfa0f7ac3ecc9a9375c4d3f7"
+          },
+          {
+            "path": "tests/test_job_validation.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "141049abafef3963b1c80d0707910e8c4bdcb534"
+          },
+          {
+            "path": "tests/test_lifecycle_orchestration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "71b97c214db5fc40ea967433abad1a2b59d7467f"
+          },
+          {
+            "path": "tests/test_milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "73229248c1f13102e1d6ccf368de36e97efc73d1"
+          },
+          {
+            "path": "tests/test_no_rewrite_invariants.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3399fbc1bc4cf6924717156179fa78900f3b2e26"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2977109eb1708a43cbb123fc860196ec7ac69ac3"
+          },
+          {
+            "path": "tests/test_packaged_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a62ef5eeb30cbbd5500f9c6062c1c17a8ba6488b"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cea3e6a669b63de66dca930a79d3386ae1ce59e5"
+          },
+          {
+            "path": "tests/test_pull_request_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "13561653cac6ac212a04271428122187ee98adb3"
+          },
+          {
+            "path": "tests/test_release_tools.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "466d3bdc0569eb74072c5664617049d0576a3526"
+          },
+          {
+            "path": "tests/test_release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "893377b30734cf3e8a249c5330d3d5fe08cf8df9"
+          },
+          {
+            "path": "tests/test_repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2204845eeb0335e0d6896c38640de8e3bcd4ef8b"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "480c072d58e0f571a28e3dbe7c714a80052ef119"
+          },
+          {
+            "path": "tests/test_trunk_orchestration_e2e.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3ec9246c04c9d02d0b2c10f8f195b7c9d7cdece3"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9071ff73bd433581c1f92b2056a04e44c17e06ac"
+          },
+          {
+            "path": "tests/test_version_authority.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a93de2c9e859c5dbccc9de61d101b5afa49a5382"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f78e2a22a05492cfda3cd504df3ca23ef64f426a"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "633539e7882d29d55526dae16994718d07551c8f"
+          },
+          {
+            "path": "tools/release.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "cd1943b90c54abf48a7c4a4f71bdac52f6fdc1dd"
+          }
+        ],
+        "reviewed_content_commit": "9d2d682a4f74bb08206ac358e58b54e35a3b937d",
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the implementation stage for workflow-controller-trunk-branch-pr-release-orchestration",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-25T12:30:55Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "8585e1d03cec71d09ca10bd13d06df5cd4b123026566090d288d5eaec4a8fee8",
@@ -1882,8 +2236,23 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 56,
-      "last_transition": "2026-09-25T12:10:19Z"
+      "state_revision": 59,
+      "last_transition": "2026-09-25T12:30:55Z",
+      "implementation_review_stages": {
+        "review_content_id": "10348cff0247a6b257e7fcc0f6e1e115bf3751665ff08d8d3d88cdcd6474da76",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "78c55b3db312e07f6b8b21b914d9b71b35711e9f505417aa485a8d9387e8d656",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-25T12:20:04Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "78c55b3db312e07f6b8b21b914d9b71b35711e9f505417aa485a8d9387e8d656",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-25T12:29:09Z"
+        }
+      }
     }
   }
 }

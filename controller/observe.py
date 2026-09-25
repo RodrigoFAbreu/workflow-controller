@@ -17,6 +17,12 @@ state.
   into a ``sink`` until the run or job ends;
 - :func:`select_active`, :func:`active_runs` and :func:`active_jobs` are
   the discovery reads the ``follow`` command and ``status`` use;
+- :func:`job_activity` (worker-lifecycle-ownership CP7) is the one presenter
+  of a job carrying ``worker_state`` -- active, waiting (and on what),
+  draining, unsupervised, pending reconciliation -- behind ``status``,
+  ``inspect``, ``explain`` and ``follow``'s heartbeat, and
+  :func:`stream_diagnosis`/:func:`diagnosis_lines` present an ended
+  worker's harness-lifecycle diagnosis for ``explain``;
 - :class:`FdSink` is ``step --follow``/``run --follow``'s renderer output:
   a private descriptor written with ``os.write``, which can never block
   the Controller's own stderr.
@@ -169,6 +175,23 @@ def _worker_result(obj: Mapping) -> dict:
     }
 
 
+#: The harness's background-task events (worker-lifecycle-ownership CP7),
+#: rendered as compact ``background task`` lines.
+_TASK_SUBTYPES = frozenset({"task_started", "task_updated", "task_notification", "background_tasks_changed"})
+
+
+def _background_task(obj: Mapping) -> dict:
+    subtype = obj.get("subtype")
+    if subtype == "background_tasks_changed":
+        tasks = obj.get("tasks") if isinstance(obj.get("tasks"), list) else []
+        return {"kind": "background_task", "event": "listed",
+                "task_ids": [t.get("task_id") for t in tasks if isinstance(t, Mapping)]}
+    patch = obj.get("patch") if isinstance(obj.get("patch"), Mapping) else {}
+    return {"kind": "background_task", "event": subtype.removeprefix("task_"), "task_id": obj.get("task_id"),
+            "status": patch.get("status") if subtype == "task_updated" else obj.get("status"),
+            "description": obj.get("description") if subtype == "task_started" else None}
+
+
 def _content_blocks(obj: Mapping) -> list:
     message = obj.get("message")
     content = message.get("content") if isinstance(message, Mapping) else None
@@ -182,6 +205,10 @@ def _normalise_worker(obj: Mapping, tools: dict) -> list[dict]:
     if kind == "system" and obj.get("subtype") == "init":
         return [{"kind": "worker_init", "session_id": obj.get("session_id"), "model": obj.get("model"),
                  "permission_mode": obj.get("permissionMode", obj.get("permission_mode"))}]
+    if kind == "system" and obj.get("subtype") in _TASK_SUBTYPES:
+        return [_background_task(obj)]
+    if kind == "command_lifecycle":
+        return [{"kind": "harness_command", "command_uuid": obj.get("command_uuid"), "state": obj.get("state")}]
     if kind == "result":
         return [_worker_result(obj)]
     if kind is None and "session_id" in obj and "is_error" in obj:
@@ -300,7 +327,38 @@ def _job_text(event: Mapping) -> str:
         return f"job {job_id} reconciled: {event.get('status')} ({event.get('code')})"
     if name == "abandoned":
         return f"job {job_id} ABANDONED"
+    if name in _WORKER_STATE_EVENTS:
+        return _worker_state_text(event)
+    if name == "worker_drain_detached":
+        remaining = [entry for entry in event.get("remaining") or [] if isinstance(entry, Mapping)]
+        return (f"job {job_id} worker drain detached: {len(remaining)} owned process(es) still running "
+                f"({', '.join(str(entry.get('pid')) for entry in remaining)}) -- end them, then "
+                f"workflow-controller resume {event.get('target_repo') or '<repo>'}")
     return f"job {job_id} {name}"
+
+
+#: The ``worker_<state>`` job events (worker-lifecycle-ownership CP4).
+_WORKER_STATE_EVENTS = frozenset(f"worker_{state.lower()}" for state in worker.WORKER_STATES)
+
+
+def _worker_state_text(event: Mapping) -> str:
+    state = str(event.get("event")).removeprefix("worker_").upper()
+    head = f"job {event.get('job_id')} worker {state}" + ("" if event.get("state_changed", True) else " (update)")
+    parts = []
+    if isinstance(event.get("turns"), int):
+        parts.append(f"turns {event['turns']}")
+    tasks = [str(task) for task in event.get("tasks") or []]
+    if tasks:
+        parts.append(f"tasks {' '.join(tasks)}")
+    wakeups = [w for w in event.get("wakeups") or [] if isinstance(w, Mapping)]
+    if wakeups:
+        parts.append("wakeups " + " ".join(f"{w.get('tool_use_id')}={w.get('state')}" for w in wakeups))
+    brackets = [_uuid8(uuid) for uuid in event.get("command_lifecycles") or []]
+    if brackets:
+        parts.append(f"harness commands {' '.join(brackets)}")
+    if event.get("owned_processes"):
+        parts.append(f"owned processes {event['owned_processes']}")
+    return head + (f": {', '.join(parts)}" if parts else "")
 
 
 def _run_text(event: Mapping) -> str:
@@ -346,6 +404,16 @@ def _body(event: Mapping) -> str:
         return (f"worker result: {event.get('subtype')}, is_error={event.get('is_error')}, "
                 f"turns={event.get('num_turns')}, cost={event.get('total_cost_usd')}, "
                 f"duration={event.get('duration_ms')}ms")
+    if kind == "background_task":
+        if event.get("event") == "listed":
+            ids = [str(task_id) for task_id in event.get("task_ids") or []]
+            return f"background tasks: {len(ids)} listed" + (f" ({' '.join(ids)})" if ids else "")
+        if event.get("event") == "started":
+            return f"background task {event.get('task_id')} started: {event.get('description')}"
+        status = event.get("status")
+        return f"background task {event.get('task_id')} {event.get('event')}" + (f": {status}" if status else "")
+    if kind == "harness_command":
+        return f"harness command {_uuid8(event.get('command_uuid'))} {event.get('state')}"
     if kind == "stderr":
         return f"stderr: {event.get('line')}"
     if kind == "job_event":
@@ -567,11 +635,13 @@ class _Follower:
         job_id = event.get("job_id")
         if isinstance(event.get("seq"), int) and isinstance(job_id, str):
             self.max_job_seq[job_id] = max(self.max_job_seq.get(job_id, 0), event["seq"])
-        if event.get("event") not in ("launched", "finished", "failed", "incomplete"):
+        if event.get("event") not in ("launched", "finished", "failed", "incomplete", "worker_drain_detached"):
             return event
         record = read_job(self.runtime_root, job_id) if isinstance(job_id, str) else None
         if record is None:
             return event
+        if event.get("event") == "worker_drain_detached":
+            return {"target_repo": record.get("target_repo"), **event}
         action = record.get("selected_action") if isinstance(record.get("selected_action"), Mapping) else {}
         route = record.get("worker_route") if isinstance(record.get("worker_route"), Mapping) else {}
         return {"command": action.get("command"), "role": route.get("role"), "model": route.get("model"),
@@ -627,13 +697,23 @@ class _Follower:
 
     def heartbeat(self, record: Mapping | None) -> None:
         """While ``record``'s job is ``LAUNCHED`` and nothing new arrived for
-        :data:`HEARTBEAT_SECONDS`: what the worker is doing."""
-        if record is None or record.get("status") != job.STATUS_LAUNCHED:
+        :data:`HEARTBEAT_SECONDS`: what the worker is doing. A record
+        carrying ``worker_state`` (worker-lifecycle-ownership CP7) is
+        described by :func:`job_activity` while it is not terminal --
+        ``WAITING`` included."""
+        if record is None:
+            return
+        tracked = "worker_state" in record and not _is_terminal(record)
+        if record.get("status") != job.STATUS_LAUNCHED and not tracked:
             return
         now = time.monotonic()
         if now - self.last_event < HEARTBEAT_SECONDS or now - self.last_heartbeat < HEARTBEAT_SECONDS:
             return
         self.last_heartbeat = now
+        if tracked:
+            activity = job_activity(record, self.runtime_root, last_event_seconds=now - self.last_event)
+            self.say(activity["text"])
+            return
         drain = record.get("worker_group_drain")
         if isinstance(drain, Mapping):
             pids = [str(pid) for pid in drain.get("remaining_pids") or []]
@@ -693,7 +773,7 @@ def follow_run(runtime_root: Path, run_id: str, sink: Callable[[str], Any], *, f
             follower.drain(lambda: "run_interrupted" in follower.run_events_seen)
             current = record.get("current_job_id")
             job_record = read_job(runtime_root, current) if isinstance(current, str) else None
-            if job_record is not None and worker_liveness(job_record) == worker.ACTIVE:
+            if job_record is not None and _job_live(runtime_root, job_record):
                 follower.say(f"run {run_id} was interrupted; worker for job {current} is still running; "
                              f"following the job")
                 _follow_job_loop(follower, current)
@@ -721,7 +801,9 @@ def follow_job(runtime_root: Path, job_id: str, sink: Callable[[str], Any], *, f
     ``active`` (``worker exited; job <id> awaits resume``) -- unless the
     job's own ``step``/``run`` is still running, whose Controller then
     finishes it. An ``unverifiable`` worker keeps it following, with a
-    one-time warning."""
+    one-time warning. A record carrying ``worker_state`` ends only at its
+    terminal record, or once nothing but ``resume`` can advance it
+    (:func:`_follow_tracked_job`)."""
     follower = _Follower(runtime_root, sink, json_output=json_output, stop=stop)
     follower.add_job(job_id)
     follower.replay(follower.poll(), from_start=from_start)
@@ -742,7 +824,10 @@ def _follow_job_loop(follower: _Follower, job_id: str) -> None:
             seq = record.get("event_seq")
             follower.drain(lambda: not isinstance(seq, int) or follower.max_job_seq.get(job_id, 0) >= seq)
             return
-        if not _controller_owns_job(runtime_root, record):
+        if "worker_state" in record and not _controller_owns_job(runtime_root, record):
+            if _follow_tracked_job(follower, job_id, record):
+                return
+        elif not _controller_owns_job(runtime_root, record):
             verdict = worker_liveness(record)
             if verdict is None:
                 follower.drain(lambda: True)
@@ -757,6 +842,42 @@ def _follow_job_loop(follower: _Follower, job_id: str) -> None:
                                              f"following until its job record ends")
         follower.heartbeat(record)
         time.sleep(POLL_SECONDS)
+
+
+def _follow_tracked_job(follower: _Follower, job_id: str, record: Mapping) -> bool:
+    """``follow``'s rule for a record carrying ``worker_state`` whose own
+    ``step``/``run`` no longer owns it (worker-lifecycle-ownership CP7,
+    plan G): the worker's exit no longer ends the follow -- a ``WAITING``
+    or draining job keeps being followed, and a Controller that re-attaches
+    (``resume``) carries it to its terminal record. With no Controller
+    attached the follower says so once, naming ``resume``; once nothing
+    the job owns is running either, nothing but ``resume`` can advance it,
+    so the follow ends saying so. Returns whether it ended."""
+    activity = job_activity(record, follower.runtime_root)
+    if activity is None:
+        return False
+    if activity["activity"] == ACTIVITY_PENDING:
+        follower.drain(lambda: True)
+        follower.say(f"job {job_id}: {activity['text']}")
+        return True
+    if activity["activity"] == ACTIVITY_UNSUPERVISED:
+        follower.warn_once("supervisor", f"no Controller is attached to job {job_id} -- "
+                                         f"{activity['resume_command']} re-attaches; following")
+    elif (activity.get("supervisor") or {}).get("state") == job.SUPERVISOR_UNKNOWN:
+        follower.warn_once("supervisor", f"whether a Controller is attached to job {job_id} cannot be read "
+                                         f"from /proc/locks; following until its job record ends")
+    return False
+
+
+def _job_live(runtime_root: Path, record: Mapping) -> bool:
+    """Whether ``record``'s worker or owned work may still be running: the
+    worker's verdict is ``active`` or, for a record carrying
+    ``worker_state``, :func:`job_activity` reads one of
+    :data:`LIVE_ACTIVITIES`."""
+    activity = job_activity(record, runtime_root)
+    if activity is not None:
+        return activity["activity"] in LIVE_ACTIVITIES
+    return worker_liveness(record) == worker.ACTIVE
 
 
 # ---------------------------------------------------------------------------
@@ -787,7 +908,9 @@ def select_active(runtime_root: Path, target_repo: str) -> tuple[str, str] | Non
     if runs:
         return "run", runs[-1][0]["run_id"]
     for record, liveness in reversed(active_jobs(runtime_root)):
-        if record.get("target_repo") == target_repo and liveness == worker.ACTIVE:
+        if record.get("target_repo") != target_repo:
+            continue
+        if liveness == worker.ACTIVE or ("worker_state" in record and _job_live(runtime_root, record)):
             return "job", record["job_id"]
     return None
 
@@ -806,6 +929,288 @@ def drain_text(record: Mapping) -> str | None:
         return None
     pids = [str(pid) for pid in drain.get("remaining_pids") or []]
     return f"worker exited; waiting on process group: {len(pids)} process(es) at drain start ({' '.join(pids)})"
+
+
+# ---------------------------------------------------------------------------
+# The job activity presenter (worker-lifecycle-ownership CP7, plan G)
+# ---------------------------------------------------------------------------
+
+#: The activity labels of plan G's table.
+ACTIVITY_ACTIVE = "active"
+ACTIVITY_WAITING = "waiting"
+ACTIVITY_DRAINING = "draining"
+ACTIVITY_UNSUPERVISED = "unsupervised"
+ACTIVITY_PENDING = "pending reconciliation"
+ACTIVITY_TERMINAL = "terminal"
+
+#: The activities whose worker or owned work may still be running: a
+#: follower keeps following them, and a bare ``follow <repo>`` selects them.
+LIVE_ACTIVITIES = frozenset({ACTIVITY_ACTIVE, ACTIVITY_WAITING, ACTIVITY_DRAINING, ACTIVITY_UNSUPERVISED})
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _uuid8(value: Any) -> str:
+    return str(value)[:8] if value is not None else "unknown"
+
+
+def resume_command(record: Mapping) -> str:
+    """The command that re-attaches to, or reconciles, ``record``'s job."""
+    return job._resume_command(Path(str(record.get("target_repo"))))
+
+
+def _stream_age(record: Mapping, runtime_root: Path) -> float | None:
+    """Seconds since the worker's stream was last written, from its
+    ``stdout`` file's modification time (read-only), or ``None``."""
+    streams = record.get("worker_streams") if isinstance(record.get("worker_streams"), Mapping) else {}
+    path = streams.get("stdout_path") if isinstance(streams.get("stdout_path"), str) else None
+    if path is None and isinstance(record.get("job_id"), str):
+        path = str(Path(runtime_root) / "jobs" / record["job_id"] / "worker.stdout")
+    try:
+        return max(0.0, time.time() - os.stat(path).st_mtime) if path else None
+    except OSError:
+        return None
+
+
+def _live_not_owned(worker_state: Mapping) -> list[dict]:
+    """The recorded recognised daemons (never owned, plan C) still running."""
+    excluded = worker_state.get("excluded_processes")
+    return [dict(entry) for entry in (excluded if isinstance(excluded, list) else [])
+            if isinstance(entry, Mapping)
+            and worker.identity_alive(entry.get("pid"), entry.get("start_ticks")) is True]
+
+
+def _task_clause(tasks: list) -> str:
+    listed = ", ".join(f"{task.get('task_id')} \"{task.get('description') or 'no description'}\""
+                       for task in tasks if isinstance(task, Mapping))
+    return _plural(len(tasks), "background task") + (f" ({listed})" if listed else "")
+
+
+def _wakeup_clause(pending: list) -> str:
+    dues = ", ".join(f"due {_clock(w.get('due_at'))}" if w.get("due_at") else "due time unknown"
+                     for w in pending if isinstance(w, Mapping))
+    return _plural(len(pending), "wakeup") + (f" ({dues})" if dues else "")
+
+
+def _bracket_clause(brackets: list, *, attached: bool, flushed_age: float) -> str:
+    parts = []
+    for bracket in brackets:
+        if not isinstance(bracket, Mapping):
+            continue
+        seen = "turn ended, awaiting completion" if bracket.get("turn_seen") else "no turn yet"
+        stalled = bracket.get("stalled_seconds")
+        if not attached:
+            stall = "stall time unknown (no Controller attached)"
+        elif isinstance(stalled, (int, float)):
+            stall = (f"stalled {_minutes(min(stalled + flushed_age, worker.COMMAND_LIFECYCLE_GRACE_SECONDS))} "
+                     f"of {_minutes(worker.COMMAND_LIFECYCLE_GRACE_SECONDS)}")
+        else:
+            stall = "stall time unknown"
+        parts.append(f"command_uuid {_uuid8(bracket.get('command_uuid'))}, {seen}; {stall}")
+    return _plural(len(brackets), "harness command") + f" ({' | '.join(parts)})"
+
+
+def _fire_matched_clause(matched: list, *, attached: bool, flushed_age: float) -> str:
+    parts = []
+    for wakeup in matched:
+        if not isinstance(wakeup, Mapping):
+            continue
+        left = wakeup.get("settle_seconds_left")
+        if not attached:
+            when = "settle time unknown (no Controller attached; restarts on resume)"
+        elif isinstance(left, (int, float)):
+            when = f"settles in {_minutes(max(0.0, left - flushed_age))}"
+        else:
+            when = "settle time unknown"
+        parts.append(f"matched by harness command {_uuid8(wakeup.get('command_uuid'))}; {when} unless another "
+                     f"harness command contradicts it; ScheduleWakeup stop:true settles it now")
+    noun = "wakeup presumed fired, not yet settled" if len(matched) == 1 else \
+        "wakeups presumed fired, not yet settled"
+    return f"{len(matched)} {noun} ({' | '.join(parts)})"
+
+
+def _waiting_text(pid: Any, waiting_on: Mapping, *, attached: bool, flushed_age: float) -> str:
+    tasks = [t for t in waiting_on.get("tasks") or [] if isinstance(t, Mapping)]
+    wakeups = [w for w in waiting_on.get("wakeups") or [] if isinstance(w, Mapping)]
+    pending = [w for w in wakeups if w.get("state") != "fire_matched"]
+    matched = [w for w in wakeups if w.get("state") == "fire_matched"]
+    brackets = [b for b in waiting_on.get("command_lifecycles") or [] if isinstance(b, Mapping)]
+    text = f"worker pid {pid} waiting on {_task_clause(tasks)} and {_wakeup_clause(pending)}"
+    if brackets:
+        text += f" and {_bracket_clause(brackets, attached=attached, flushed_age=flushed_age)}"
+    if matched:
+        text += f" and {_fire_matched_clause(matched, attached=attached, flushed_age=flushed_age)}"
+    return text
+
+
+def _pids_text(entries: list) -> str:
+    return ", ".join(str(entry.get("pid")) for entry in entries)
+
+
+def job_activity(record: Mapping, runtime_root: Path, *, last_event_seconds: float | None = None) -> dict | None:
+    """What a job carrying ``worker_state`` is doing (plan G), from the
+    record, the read-only supervisor-lock probe and a fresh owned-work
+    scan -- ``None`` for a record without ``worker_state``, whose
+    presentation is unchanged. Read-only: it takes no lock, sends no signal
+    and writes nothing.
+
+    The dict carries ``activity`` (one of plan G's labels), ``text`` (the
+    line ``status``, ``inspect``, ``explain`` and ``follow``'s heartbeat
+    print), and the structured fields ``--json`` carries: ``worker_state``,
+    ``waiting_on``, ``owned_processes`` (the fresh scan), ``not_owned``
+    (recognised daemons still running), ``supervisor`` and
+    ``resume_command``. A bracket's stall time and a ``fire_matched``
+    wakeup's settle time are shown only with a Controller attached --
+    otherwise they are unknown, never a number."""
+    worker_state = record.get("worker_state")
+    if "worker_state" not in record:
+        return None
+    worker_state = worker_state if isinstance(worker_state, Mapping) else {}
+    state = worker_state.get("state")
+    waiting_on = worker_state.get("waiting_on") if isinstance(worker_state.get("waiting_on"), Mapping) else {}
+    resume = resume_command(record)
+    status = record.get("status")
+    base = {"worker_state": state, "waiting_on": dict(waiting_on), "resume_command": resume}
+    if status in job.TERMINAL_STATUSES:
+        return {**base, "activity": ACTIVITY_TERMINAL, "text": f"job {status}", "owned_processes": [],
+                "not_owned": [], "supervisor": None}
+
+    supervisor, holders = job.supervisor_probe(runtime_root, record)
+    attached = supervisor == job.SUPERVISOR_ATTACHED
+    entries, verifiable = job._scan_record_owned(record)
+    not_owned = _live_not_owned(worker_state)
+    verdict = worker_liveness(record)
+    worker_live = verdict is not None and verdict != worker.INACTIVE
+    process = record.get("worker_process") if isinstance(record.get("worker_process"), Mapping) else {}
+    pid = process.get("pid")
+    flushed_age = _since(record.get("updated_at")) or 0.0
+
+    if status == job.STATUS_LAUNCHED and worker_live and state in (worker.STARTING, worker.RUNNING):
+        activity = ACTIVITY_ACTIVE
+        age = last_event_seconds if last_event_seconds is not None else _stream_age(record, runtime_root)
+        text = (f"worker pid {pid} running (turn {worker_state.get('turns') or 0}), "
+                f"elapsed {_minutes(_since(record.get('created_at')) or 0)}"
+                + (f", last event {int(age)}s ago" if age is not None else ""))
+        if entries:
+            text += f"; owns {_plural(len(entries), 'process')} ({_pids_text(entries)})"
+    elif status == job.STATUS_LAUNCHED and worker_live and state == worker.WAITING:
+        activity = ACTIVITY_WAITING
+        text = _waiting_text(pid, waiting_on, attached=attached, flushed_age=flushed_age)
+        if entries:
+            text += f"; owns {_plural(len(entries), 'process')} ({_pids_text(entries)})"
+    elif worker_live or entries or not verifiable:
+        activity = ACTIVITY_DRAINING
+        if worker_live:
+            text = f"worker pid {pid} ending ({state})"
+        else:
+            text = "worker ended"
+        if entries:
+            text += f"; {_plural(len(entries), 'owned process')} still running (pids {_pids_text(entries)})"
+        elif not verifiable:
+            text += "; its owned processes cannot be verified from here"
+        if record.get("drain_detached_at"):
+            text += (f"; detached after {_minutes(worker.DRAIN_DETACH_SECONDS)} -- end them, then {resume}")
+    else:
+        activity = ACTIVITY_PENDING
+        outcome = record.get("worker_outcome") or "not classified"
+        text = f"worker ended ({outcome}); pending reconciliation -- {resume}"
+    if not_owned and activity != ACTIVITY_PENDING:
+        text += "; not owned: " + ", ".join(
+            f"pid {entry.get('pid')} ({entry.get('cmdline') or 'command line unreadable'})" for entry in not_owned)
+    if activity in LIVE_ACTIVITIES and supervisor == job.SUPERVISOR_UNATTACHED:
+        activity = ACTIVITY_UNSUPERVISED
+        text += f"; no Controller attached -- {resume} re-attaches"
+    elif activity in LIVE_ACTIVITIES and supervisor == job.SUPERVISOR_UNKNOWN:
+        text += "; whether a Controller is attached cannot be read from /proc/locks"
+    return {**base, "activity": activity, "text": text, "owned_processes": entries, "not_owned": not_owned,
+            "supervisor": {"state": supervisor, "pids": list(holders)}}
+
+
+def activity_fields(activity: Mapping) -> dict:
+    """``job_activity``'s structured fields, as ``--json`` carries them."""
+    return {key: activity[key] for key in ("activity", "worker_state", "waiting_on", "owned_processes",
+                                           "not_owned", "supervisor", "resume_command")}
+
+
+def _wakeup_line(wakeup: Mapping) -> str:
+    state, settled_by = wakeup.get("state"), wakeup.get("settled_by")
+    head = f"wakeup {wakeup.get('tool_use_id')}: {state}"
+    if state == "fire_matched":
+        return f"{head}, matched by harness command {wakeup.get('matched_by')}, never settled"
+    if state == "settled" and settled_by == "settle_window":
+        return f"{head} by settle_window, matched by harness command {wakeup.get('command_uuid')}"
+    if state == "settled" and settled_by == "stop":
+        text = (f"{head} by stop (cancelledWakeups {wakeup.get('cancelled_wakeups')}, "
+                f"expected {wakeup.get('expected_count')})")
+        if wakeup.get("command_uuid"):
+            text += f", inside its own fire's harness command {wakeup.get('command_uuid')}"
+        return text
+    if state == "pending":
+        return f"{head}, never fired"
+    return head
+
+
+#: The stream-diagnosis reasons plan G has ``explain`` render.
+_LIFECYCLE_REASONS = frozenset({"command_lifecycle_irregular", "command_lifecycle_unterminated",
+                                "wakeup_not_delivered"})
+
+
+def stream_diagnosis(record: Mapping) -> dict | None:
+    """The part of a ``COMPLETED`` or terminal record's
+    ``worker.stream_diagnosis`` ``explain`` presents (plan G), or ``None``
+    when the record carries none, or it has no harness-lifecycle matter to
+    explain: no ``command_lifecycle`` anomaly, no wakeup, and none of
+    :data:`_LIFECYCLE_REASONS` among its reasons (an ordinary exit-status
+    failure is left to the job's own record, as before)."""
+    worker_block = record.get("worker") if isinstance(record.get("worker"), Mapping) else {}
+    diagnosis = worker_block.get("stream_diagnosis")
+    if not isinstance(diagnosis, Mapping):
+        return None
+    anomalies = [dict(a) for a in diagnosis.get("command_lifecycle_anomalies") or [] if isinstance(a, Mapping)]
+    wakeups = [dict(w) for w in diagnosis.get("wakeups_seen") or [] if isinstance(w, Mapping)]
+    secondary = [r for r in diagnosis.get("secondary_reasons") or [] if isinstance(r, str)]
+    reason = diagnosis.get("reason")
+    if not (anomalies or wakeups or _LIFECYCLE_REASONS.intersection([reason, *secondary])):
+        return None
+    facts = diagnosis.get("supervisor_facts") if isinstance(diagnosis.get("supervisor_facts"), Mapping) else {}
+    return {
+        "worker_outcome": record.get("worker_outcome"),
+        "reason": reason,
+        "secondary_reasons": secondary,
+        "command_lifecycle_anomalies": anomalies,
+        "wakeups": wakeups,
+        "command_lifecycle_overdue_command_uuid": facts.get("command_lifecycle_overdue_command_uuid")
+        or record.get("command_lifecycle_overdue_command_uuid"),
+    }
+
+
+def diagnosis_lines(diagnosis: Mapping) -> list[str]:
+    """:func:`stream_diagnosis` as ``explain``'s text lines: the reason
+    (``command_lifecycle_irregular`` and ``command_lifecycle_unterminated``
+    with the offending ``command_uuid``), one line per anomaly, and each
+    wakeup's final state and how it got there."""
+    reasons = [diagnosis.get("reason"), *diagnosis.get("secondary_reasons", [])]
+    lines = [f"worker outcome {diagnosis.get('worker_outcome')}: {diagnosis.get('reason')}"
+             + (f" (also: {', '.join(diagnosis['secondary_reasons'])})" if diagnosis.get("secondary_reasons")
+                else "")]
+    anomalies = diagnosis.get("command_lifecycle_anomalies") or []
+    if "command_lifecycle_irregular" in reasons:
+        uuids = list(dict.fromkeys(str(a["command_uuid"]) for a in anomalies if a.get("command_uuid")))
+        lines.append(f"command_lifecycle_irregular: harness command(s) {', '.join(uuids) or 'none named'}")
+    if "command_lifecycle_unterminated" in reasons:
+        lines.append(f"command_lifecycle_unterminated: harness command "
+                     f"{diagnosis.get('command_lifecycle_overdue_command_uuid')} never completed")
+    for anomaly in anomalies:
+        text = (f"command_lifecycle anomaly: {anomaly.get('kind')}, command_uuid {anomaly.get('command_uuid')}, "
+                f"offset {anomaly.get('offset')}")
+        if anomaly.get("kind") == "wakeup_count_mismatch":
+            text += (f", cancelledWakeups {anomaly.get('cancelled_wakeups')}, "
+                     f"expected {anomaly.get('expected_count')}")
+        lines.append(text)
+    lines.extend(_wakeup_line(wakeup) for wakeup in diagnosis.get("wakeups") or [])
+    return lines
 
 
 # ---------------------------------------------------------------------------

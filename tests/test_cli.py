@@ -1627,6 +1627,146 @@ class LifecycleLockReportTest(unittest.TestCase):
 
 
 
+
+class JobActivitySurfacesTest(unittest.TestCase):
+    """worker-lifecycle-ownership CP7 (plan G): ``status``, ``inspect`` and
+    ``explain`` (text and ``--json``) present a record carrying
+    ``worker_state`` through ``observe.job_activity``; a record without it
+    keeps its old text (pinned by the tests above)."""
+
+    BRACKET = "6ff491e4-0000-4000-8000-000000000000"
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+        self.repo = _build_managed_target(self.tmp_root, phase="PLANNING")
+        self.target = str(self.repo.resolve())
+        self.stub_manager = fixtures.write_stub_workflow_manager(self.tmp_root / "workflow-manager")
+        self.runtime_root = self.tmp_root / "runtime"
+        self.init_ns = lock.read_pid_namespace() == lock.INIT_PID_NAMESPACE
+
+    def _run(self, command, json_out: bool = False) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(command(_Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                                           json_out=json_out), self.runtime_root, FAKE_IDENTITY), cli.EXIT_OK)
+        return out.getvalue()
+
+    def _status(self) -> str:
+        pre_existing = cli._capture_pre_existing_state(self.runtime_root)
+        pre_existing["ladder_row"] = 1
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.cmd_status(_Args(str(self.repo)), self.runtime_root, FAKE_IDENTITY, pre_existing=pre_existing)
+        return out.getvalue()
+
+    def _job(self, job_id: str, **fields) -> dict:
+        record = {"job_id": job_id, "target_repo": self.target, "status": job.STATUS_LAUNCHED,
+                  "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z", **fields}
+        runtime.write_json(self.runtime_root, f"jobs/{job_id}.json", record)
+        return record
+
+    def _waiting(self, job_id: str = "j-wait") -> int:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self._job(job_id, worker_process=process_fixtures.worker_process_dict(sleeper.pid), worker_state={
+            "state": worker.WAITING, "since": "2026-01-01T00:00:00Z", "turns": 1, "owned_processes": [],
+            "waiting_on": {"tasks": [{"task_id": "suite", "description": "Run the suite"}], "wakeups": [],
+                           "command_lifecycles": [{"command_uuid": self.BRACKET, "turn_seen": False,
+                                                   "stalled_seconds": 1.0}]}})
+        return sleeper.pid
+
+    def _attach(self, job_id: str) -> None:
+        import fcntl
+        path = self.runtime_root / job.supervisor_lock_rel_path(job_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        self.addCleanup(os.close, fd)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+    def test_status_uses_the_presenter_for_a_waiting_job(self) -> None:
+        pid = self._waiting()
+        self._attach("j-wait")
+        text = self._status()
+        self.assertRegex(text, rf"  job j-wait \(LAUNCHED, target {self.target}\): worker pid {pid} waiting on "
+                               r"1 background task \(suite \"Run the suite\"\) and 0 wakeups and 1 harness "
+                               r"command \(command_uuid 6ff491e4, no turn yet; stalled \d+:\d\d of 5:00\)\n")
+
+    def test_status_names_resume_for_an_unsupervised_job(self) -> None:
+        if not self.init_ns:
+            self.skipTest("the supervisor probe reads unknown outside the init pid namespace")
+        self._waiting()
+        text = self._status()
+        self.assertIn("stall time unknown (no Controller attached)", text)
+        self.assertIn(f"; no Controller attached -- workflow-controller resume {self.target} re-attaches\n", text)
+
+    def test_inspect_gains_a_jobs_block_only_when_a_job_is_pending(self) -> None:
+        self.assertNotIn("jobs:", self._run(cli.cmd_inspect))
+        self.assertNotIn("jobs", json.loads(self._run(cli.cmd_inspect, json_out=True)))
+        pid = self._waiting()
+        self._attach("j-wait")
+        text = self._run(cli.cmd_inspect)
+        self.assertIn(f"jobs:\n  job j-wait (LAUNCHED): worker pid {pid} waiting on 1 background task", text)
+        self.assertLess(text.index("lifecycle lock:"), text.index("jobs:"))
+        [entry] = json.loads(self._run(cli.cmd_inspect, json_out=True))["jobs"]
+        self.assertEqual((entry["job_id"], entry["activity"], entry["worker_state"]),
+                         ("j-wait", "waiting", worker.WAITING))
+        self.assertEqual(entry["waiting_on"]["command_lifecycles"][0]["command_uuid"], self.BRACKET)
+        self.assertEqual(entry["owned_processes"], [])
+        self.assertEqual(entry["supervisor"]["state"], job.SUPERVISOR_ATTACHED)
+
+    def test_explain_appends_the_activity_to_each_pending_job(self) -> None:
+        pid = self._waiting()
+        self._attach("j-wait")
+        text = self._run(cli.cmd_explain)
+        self.assertRegex(text, rf"  pending job: j-wait \(LAUNCHED\) -- .*\n    activity: worker pid {pid} "
+                               r"waiting on 1 background task")
+        [entry] = json.loads(self._run(cli.cmd_explain, json_out=True))["pending_jobs"]
+        self.assertEqual((entry["activity"], entry["worker_state"]), ("waiting", worker.WAITING))
+        self.assertEqual([b["command_uuid"] for b in entry["waiting_on"]["command_lifecycles"]], [self.BRACKET])
+        self.assertEqual(entry["owned_processes"], [])
+
+    def test_explain_prints_a_completed_records_diagnosis_and_the_last_terminal_jobs(self) -> None:
+        diagnosis = {"reason": "command_lifecycle_irregular", "secondary_reasons": ["wakeup_not_delivered"],
+                     "command_lifecycle_anomalies": [{"kind": "wakeup_count_mismatch", "command_uuid": self.BRACKET,
+                                                      "offset": 7, "expected_count": 1, "cancelled_wakeups": 2}],
+                     "wakeups_seen": [{"tool_use_id": "w1", "state": "pending"}], "supervisor_facts": {}}
+        dead = process_fixtures.spawn_sleeper(self)
+        process_fixtures.kill_group(dead.pid)
+        dead.wait()
+        self._job("j-done", status=job.STATUS_COMPLETED, worker_outcome="AMBIGUOUS",
+                  worker_process=process_fixtures.worker_process_dict(dead.pid, start_ticks=1),
+                  worker_state={"state": worker.ENDED, "since": "2026-01-01T00:00:00Z"},
+                  worker={"stream_diagnosis": diagnosis})
+        text = self._run(cli.cmd_explain)
+        self.assertIn("    activity: worker ended (AMBIGUOUS); pending reconciliation -- "
+                      f"workflow-controller resume {self.target}\n", text)
+        self.assertIn("    worker outcome AMBIGUOUS: command_lifecycle_irregular (also: wakeup_not_delivered)\n", text)
+        self.assertIn(f"    command_lifecycle anomaly: wakeup_count_mismatch, command_uuid {self.BRACKET}, offset 7, "
+                      f"cancelledWakeups 2, expected 1\n", text)
+        self.assertIn("    wakeup w1: pending, never fired\n", text)
+        [entry] = json.loads(self._run(cli.cmd_explain, json_out=True))["pending_jobs"]
+        self.assertEqual(entry["stream_diagnosis"]["command_lifecycle_anomalies"][0]["cancelled_wakeups"], 2)
+
+        self._job("j-done", status=job.STATUS_FAILED, created_at="2026-01-02T00:00:00Z", worker_outcome="AMBIGUOUS",
+                  worker={"stream_diagnosis": {**diagnosis, "reason": "command_lifecycle_unterminated",
+                                               "supervisor_facts": {
+                                                   "command_lifecycle_overdue_command_uuid": self.BRACKET}}})
+        text = self._run(cli.cmd_explain)
+        self.assertIn(f"last job: j-done (FAILED)\n  worker outcome AMBIGUOUS: command_lifecycle_unterminated", text)
+        self.assertIn(f"  command_lifecycle_unterminated: harness command {self.BRACKET} never completed\n", text)
+        payload = json.loads(self._run(cli.cmd_explain, json_out=True))
+        self.assertEqual(payload["last_job"]["stream_diagnosis"]["command_lifecycle_overdue_command_uuid"],
+                         self.BRACKET)
+        self.assertEqual(payload["pending_jobs"], [])
+
+    def test_a_quiet_terminal_job_adds_no_last_job_block(self) -> None:
+        self._job("j-ok", status=job.STATUS_FINISHED, worker={"stream_diagnosis": {
+            "reason": "quiescent_terminal_turn", "secondary_reasons": [], "command_lifecycle_anomalies": [],
+            "wakeups_seen": []}})
+        self.assertNotIn("last job", self._run(cli.cmd_explain))
+        self.assertNotIn("last_job", json.loads(self._run(cli.cmd_explain, json_out=True)))
+
 # ---------------------------------------------------------------------------
 # Release-runtime-observability CP5: run records. `step`/`run` create
 # `runs/<run_id>.json` at entry; `main()` closes it once, with the code it

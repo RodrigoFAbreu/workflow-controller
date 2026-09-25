@@ -384,12 +384,46 @@ def _print_active(runtime_root: Path) -> None:
               f"controller pid {process.get('pid')} {liveness}")
         print(f"    follow: {job.follow_command(runtime_root, run.get('target_repo'))}")
     for record, liveness in jobs:
-        process = record.get("worker_process") or {}
-        worker_text = observe.drain_text(record) or (
-            "no worker recorded" if liveness is None else f"worker pid {process.get('pid')} {liveness}")
         print(f"  job {record.get('job_id')} ({record.get('status')}, target {record.get('target_repo')}): "
-              f"{worker_text}")
+              f"{_job_activity_text(runtime_root, record, liveness)}")
         print(f"    follow: {job.follow_command(runtime_root, record.get('target_repo'))}")
+
+
+def _job_activity_text(runtime_root: Path, record: dict, liveness: str | None) -> str:
+    """One non-terminal job's activity: :func:`observe.job_activity`'s line
+    for a record carrying ``worker_state`` (worker-lifecycle-ownership CP7),
+    else the release-runtime-observability text, unchanged."""
+    activity = observe.job_activity(record, runtime_root)
+    if activity is not None:
+        return activity["text"]
+    process = record.get("worker_process") or {}
+    return observe.drain_text(record) or (
+        "no worker recorded" if liveness is None else f"worker pid {process.get('pid')} {liveness}")
+
+
+def _target_jobs(runtime_root: Path, target: managed_repo.ManagedRepository) -> list[dict]:
+    """``inspect``'s ``jobs`` block (worker-lifecycle-ownership CP7): one
+    entry per non-terminal job for ``target``, read-only."""
+    entries = []
+    for record, liveness in observe.active_jobs(runtime_root):
+        if record.get("target_repo") != str(target.root):
+            continue
+        activity = observe.job_activity(record, runtime_root)
+        entry = {"job_id": record.get("job_id"), "status": record.get("status")}
+        if activity is None:
+            entry["text"] = _job_activity_text(runtime_root, record, liveness)
+        else:
+            entry.update(text=activity["text"], **observe.activity_fields(activity))
+        entries.append(entry)
+    return entries
+
+
+def _print_target_jobs(entries: list[dict]) -> None:
+    if not entries:
+        return
+    print("jobs:")
+    for entry in entries:
+        print(f"  job {entry['job_id']} ({entry['status']}): {entry['text']}")
 
 
 def _follow_runtime_root(args: argparse.Namespace) -> Path:
@@ -567,6 +601,10 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # CP5: the non-acquiring lifecycle-lock probe -- `unknown` never means
     # `free`, and `step` decides by acquiring, never by this report.
     lock_state = lock.probe_lifecycle_lock(target.root)
+    # worker-lifecycle-ownership CP7: the target's non-terminal jobs and
+    # what each is doing, beside the lock; omitted when there is none.
+    jobs = _target_jobs(runtime_root, target)
+    jobs_block = {"jobs": jobs} if jobs else {}
     # CP8 (trunk-branch-pr-release-orchestration): `repository_policy` and
     # `milestone_branch`, from local Git and the binding records only, each
     # omitted -- never `null` -- when it does not apply (I1, I10).
@@ -585,12 +623,14 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 },
                 "work_item": None,
                 "lifecycle_lock": lock_state,
+                **jobs_block,
                 "controller": identity.runtime_record(ident),
                 **branch_blocks,
             }))
             return EXIT_OK
         print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
         print(f"lifecycle lock: {lock_state}")
+        _print_target_jobs(jobs)
         print("work item: none -- no non-terminal work item exists and none was explicitly named")
         _print_branch_blocks(branch_blocks)
         return EXIT_OK
@@ -604,6 +644,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             },
             "work_item": _work_item_payload(work_item),
             "lifecycle_lock": lock_state,
+            **jobs_block,
             "controller": identity.runtime_record(ident),
             **branch_blocks,
         }))
@@ -611,6 +652,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
 
     print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
     print(f"lifecycle lock: {lock_state}")
+    _print_target_jobs(jobs)
     print(f"work item: {work_item.work_item_id} "
           f"(type={work_item.work_item_type} kind={work_item.work_item_kind} "
           f"governing_workflow_version={work_item.governing_workflow_version})")
@@ -665,8 +707,14 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # the refusal uses. Neither changes the exit code.
     pending = job.pending_reconciliation_jobs(runtime_root, target, ident)
     lock_state = lock.probe_lifecycle_lock(target.root)
+    # worker-lifecycle-ownership CP7: each pending job's activity, and the
+    # newest terminal job's stream diagnosis when it has one to explain.
+    pending_details = [_pending_job_details(runtime_root, target, entry) for entry in pending]
+    last_job = _last_job_diagnosis(runtime_root, target)
+    last_job_block = {} if last_job is None else {"last_job": last_job}
     if not args.json:
-        _print_pending_jobs(pending)
+        _print_pending_jobs(pending, pending_details)
+        _print_last_job(last_job)
         print(f"lifecycle lock: {lock_state}")
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
@@ -706,7 +754,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 "artifact_path": gate.artifact_path,
                 "safe_resume_command": gate.safe_resume_command,
             },
-            "pending_jobs": [entry.to_dict() for entry in pending],
+            "pending_jobs": [{**entry.to_dict(), **details} for entry, details in zip(pending, pending_details)],
+            **last_job_block,
             "lifecycle_lock": lock_state,
             "controller": identity.runtime_record(ident),
             **preflight_block,
@@ -738,15 +787,60 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     return EXIT_OK
 
 
-def _print_pending_jobs(pending: list) -> None:
+def _print_pending_jobs(pending: list, details: list[dict] | None = None) -> None:
     """``explain``'s pending report (CP5): each job file ``step``/``run``
-    refuse on, with the command that clears it."""
+    refuse on, with the command that clears it -- and, for a record carrying
+    ``worker_state`` (worker-lifecycle-ownership CP7), its activity and its
+    stream diagnosis."""
     if not pending:
         return
     print(f"pending job files: {len(pending)} -- `step`/`run` refuse until each is cleared")
-    for entry in pending:
+    for entry, extra in zip(pending, details or [{}] * len(pending)):
         print(f"  pending job: {entry.job_id} ({entry.status or 'unreadable'}) -- {entry.reason}; "
               f"clear it with: {entry.clearing_command}")
+        if extra.get("activity_text"):
+            print(f"    activity: {extra['activity_text']}")
+        for line in observe.diagnosis_lines(extra["stream_diagnosis"]) if extra.get("stream_diagnosis") else []:
+            print(f"    {line}")
+
+
+def _pending_job_details(runtime_root: Path, target: managed_repo.ManagedRepository, entry: job.PendingJob) -> dict:
+    """A pending job's CP7 fields for ``explain`` (worker-lifecycle-
+    ownership, plan G): ``activity``, ``worker_state``, ``waiting_on``,
+    ``owned_processes`` (and the rest of :func:`observe.activity_fields`),
+    plus ``stream_diagnosis`` for a ``COMPLETED`` record -- all omitted for
+    a record without ``worker_state``, whose report is unchanged."""
+    record = observe.read_job(runtime_root, entry.job_id)
+    if record is None or record.get("target_repo") != str(target.root):
+        return {}
+    activity = observe.job_activity(record, runtime_root)
+    if activity is None:
+        return {}
+    details = {**observe.activity_fields(activity), "activity_text": activity["text"]}
+    diagnosis = observe.stream_diagnosis(record) if record.get("status") == job.STATUS_COMPLETED else None
+    if diagnosis is not None:
+        details["stream_diagnosis"] = diagnosis
+    return details
+
+
+def _last_job_diagnosis(runtime_root: Path, target: managed_repo.ManagedRepository) -> dict | None:
+    """The newest job for ``target``, when it is terminal and its stream
+    diagnosis has something to explain (:func:`observe.stream_diagnosis`)."""
+    records = [r for r in observe.list_jobs(runtime_root) if r.get("target_repo") == str(target.root)]
+    if not records or records[-1].get("status") not in job.TERMINAL_STATUSES:
+        return None
+    diagnosis = observe.stream_diagnosis(records[-1])
+    if diagnosis is None:
+        return None
+    return {"job_id": records[-1].get("job_id"), "status": records[-1].get("status"), "stream_diagnosis": diagnosis}
+
+
+def _print_last_job(last_job: dict | None) -> None:
+    if last_job is None:
+        return
+    print(f"last job: {last_job['job_id']} ({last_job['status']})")
+    for line in observe.diagnosis_lines(last_job["stream_diagnosis"]):
+        print(f"  {line}")
 
 
 def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:

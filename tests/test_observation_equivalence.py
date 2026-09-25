@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import cli, job, observe  # noqa: E402
 from tests import fake_claude, fixtures  # noqa: E402
 from tests.test_lifecycle_orchestration import (  # noqa: E402
-    CHECKPOINT_IDS, IMPLEMENTING, MILESTONE_IMPLEMENT, STATE_REL, WI, WORK_ITEM, Lifecycle,
+    CHECKPOINT_IDS, IMPLEMENTING, MILESTONE_IMPLEMENT, SAYS_IT_WILL_CONTINUE, STATE_REL, WI, WORK_ITEM, Lifecycle,
 )
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
@@ -82,7 +82,13 @@ PROCESS_KEYS = frozenset({"pid", "pgid", "start_ticks"})
 #: differ, so an offset is normalised like a pid.
 OFFSET_KEYS = frozenset({"offset", "ending_point"})
 
-_TIMESTAMP_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z")
+
+#: A random UUID the fake harness gives a streaming turn's events (event
+#: ``uuid``s, ``command_uuid``s), and an epoch-milliseconds time a task
+#: event carries -- run-dependent values like a pid.
+_EPOCH_MS_RE = re.compile(r"(?<![0-9])1[0-9]{12}(?![0-9])")
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 class Fixture:
@@ -178,7 +184,8 @@ class _ObservationCase(unittest.TestCase):
 
     # --- fixtures --------------------------------------------------------------
 
-    def fixture(self, name: str, *, review_plan: list[dict] | None = None, hold: bool = False) -> Fixture:
+    def fixture(self, name: str, *, review_plan: list[dict] | None = None, hold: bool = False,
+                waiting: bool = False) -> Fixture:
         """A committed ``"2.2"`` target at ``PLANNING`` and its worker script:
         ``/milestone-plan`` (a coherent plan bundle and the committed
         ``AWAITING_LOCAL_PLAN_REVIEW`` write), ``/review-plan`` (the local
@@ -186,7 +193,10 @@ class _ObservationCase(unittest.TestCase):
         ``AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`` write, or ``review_plan``),
         then the human's approval (returned, performed later) and one
         ``/milestone-implement`` checkpoint. With ``hold``, ``/milestone-plan``
-        also deletes :data:`HOLD_REL`."""
+        also deletes :data:`HOLD_REL`. With ``waiting`` (worker-lifecycle-
+        ownership CP7), the ``/milestone-implement`` worker first starts a
+        background task and ends its turn, so it is ``WAITING`` until the
+        task's completion turn commits the checkpoint."""
         case_dir = self.tmp_root / name
         root = case_dir / "target"
         with unittest.mock.patch.dict(os.environ, GIT_DATES):
@@ -222,7 +232,13 @@ class _ObservationCase(unittest.TestCase):
         lc.entry["phase"] = IMPLEMENTING
         approval = [lc.write_state(), fixtures.script_commit(
             fixtures.trailer_message("Approve plan revision 1", (WORK_ITEM, WI)), STATE_REL)]
-        lc.add(MILESTONE_IMPLEMENT, lc.implement("CP1"))
+        if waiting:
+            lc.add(MILESTONE_IMPLEMENT, {"turns": [
+                [{"step": "bash_bg", "id": "suite", "seconds": 1}, SAYS_IT_WILL_CONTINUE],
+                [{"step": "actions", "actions": lc.implement("CP1")}],
+            ]})
+        else:
+            lc.add(MILESTONE_IMPLEMENT, lc.implement("CP1"))
         fixtures.write_worker_script(lc.script_path, lc.script)
         return Fixture(lc, approval)
 
@@ -347,7 +363,7 @@ def _normalise(value, names: dict[str, str]):
     if isinstance(value, str):
         for original in sorted(names, key=len, reverse=True):
             value = value.replace(original, names[original])
-        return _TIMESTAMP_RE.sub("<T>", value)
+        return _EPOCH_MS_RE.sub("<MS>", _UUID_RE.sub("<UUID>", _TIMESTAMP_RE.sub("<T>", value)))
     return value
 
 
@@ -393,6 +409,28 @@ class EquivalenceTest(_ObservationCase):
         self.assertIn("worker session", rendered[0])
         self.assertTrue(rendered[0].rstrip("\n").endswith(f"run ended: exit {cli.EXIT_GATE}"), rendered[0])
         self.assertTrue(rendered[1].rstrip("\n").endswith(f"run ended: exit {cli.EXIT_MAX_STEPS}"), rendered[1])
+
+
+    def test_a_waiting_worker_followed_and_unfollowed_leaves_identical_durable_results(self) -> None:
+        """worker-lifecycle-ownership CP7: following stays presentation-only
+        through a ``WAITING`` worker too -- the ``/milestone-implement`` leg
+        waits on a background task before committing its checkpoint."""
+        plain = self.fixture("plain-waiting", waiting=True)
+        self.run_lifecycle(plain)
+        followed = self.fixture("followed-waiting", waiting=True)
+        rendered = self.run_lifecycle(followed, follow=True)
+
+        expected = self.durable_results(plain)
+        self.assertEqual(expected["exit_codes"], [cli.EXIT_GATE, cli.EXIT_MAX_STEPS])
+        implement = expected["jobs"][-1]
+        self.assertEqual(implement["record"]["status"], job.STATUS_FINISHED)
+        self.assertIn("worker_waiting", [event["event"] for event in implement["events"]])
+        self.assertEqual(self.durable_results(followed), expected)
+        self.assertIn("job <JOB 3> worker WAITING", _normalise(rendered[1], {
+            job_id: f"<JOB {n}>" for n, job_id in enumerate(
+                j for run_id in followed.run_ids
+                for j in json.loads((followed.runtime / "runs" / f"{run_id}.json").read_text())["job_ids"])}))
+        self.assertIn("background task suite", rendered[1])
 
 
 # ---------------------------------------------------------------------------

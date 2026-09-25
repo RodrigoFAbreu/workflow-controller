@@ -35,7 +35,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, job, lock, worker  # noqa: E402
+from controller import cli, job, lock, observe, worker  # noqa: E402
 from controller import runtime as runtime_module  # noqa: E402
 from controller.errors import (  # noqa: E402
     GitDirectoryUnresolvableError,
@@ -2718,6 +2718,14 @@ class ReattachAfterControllerLossTest(_LostControllerCase):
         ], until=self.at_state(WAITING))
         job_id = record["job_id"]
         self.assertEqual(job.supervisor_probe(lc.runtime, record), (job.SUPERVISOR_UNATTACHED, []))
+        # CP7: the presenter reads the lost Controller's job as unsupervised
+        # and waiting, naming `resume` (plan G).
+        activity = observe.job_activity(self.job_record(lc, job_id), lc.runtime)
+        self.assertEqual(activity["activity"], observe.ACTIVITY_UNSUPERVISED)
+        self.assertRegex(activity["text"], rf"^worker pid {record['worker_process']['pid']} waiting on "
+                                           r"1 background task \(")
+        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- workflow-controller resume "
+                                                  f"{lc.root} re-attaches"), activity["text"])
 
         # step and run exit 45 at the lock the anchor holds, naming it and
         # `resume` (the exit-45 text of plan E).
@@ -2749,6 +2757,9 @@ class ReattachAfterControllerLossTest(_LostControllerCase):
             lambda: job.supervisor_probe(lc.runtime, record)[0] == job.SUPERVISOR_ATTACHED, timeout=30),
             "the first resume never attached")
         self.assertEqual(job.supervisor_probe(lc.runtime, record), (job.SUPERVISOR_ATTACHED, [first.pid]))
+        activity = observe.job_activity(self.job_record(lc, job_id), lc.runtime)
+        self.assertEqual(activity["activity"], observe.ACTIVITY_WAITING, activity["text"])
+        self.assertEqual(activity["supervisor"], {"state": job.SUPERVISOR_ATTACHED, "pids": [first.pid]})
         # Mid-supervision: the other record is untouched.
         self.assertEqual(fixture_path.read_bytes(), fixture_bytes)
         second = self.cli(lc, "resume")
@@ -3134,6 +3145,12 @@ class DrainDetachedReattachTest(_LostControllerCase):
         lc, record, entry = self._detached("detached-tagged", {
             "step": "bash_bg", "seconds": 0.2, "orphan": "setsid", "orphan_seconds": 120})
         self.assertEqual(entry["source"], "tag")
+        # CP7: the detached record is presented as draining, listing the
+        # escapee and naming `resume` (plan G).
+        activity = observe.job_activity(self.job_record(lc, record["job_id"]), lc.runtime)
+        self.assertIn(activity["activity"], (observe.ACTIVITY_DRAINING, observe.ACTIVITY_UNSUPERVISED))
+        self.assertIn(f"worker ended; 1 owned process still running (pids {entry['pid']}); detached after 0:01 "
+                      f"-- end them, then workflow-controller resume {lc.root}", activity["text"])
         again, _writes = self.resume(lc)
         self.assertEqual(again.code, cli.EXIT_WORKER_ACTIVE, again.stderr)
         self.assertIn(str(entry["pid"]), again.stderr)

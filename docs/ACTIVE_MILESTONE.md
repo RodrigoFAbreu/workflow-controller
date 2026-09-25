@@ -33,8 +33,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 | CP3 -- streaming-input launch and supervision | complete | `e8364eb` |
 | CP4 -- job lifecycle integration | complete | `e354f10` |
 | CP5 -- restart recovery | complete | `4a03168` |
-| CP6 -- same-phase durable progress | complete | this checkpoint's commit |
-| CP7 -- operator diagnostics | not started | |
+| CP6 -- same-phase durable progress | complete | `e2cb819` |
+| CP7 -- operator diagnostics | complete | this checkpoint's commit |
 | CP8 -- documentation and full verification | not started | |
 
 ### CP1 -- harness contract evidence and fake harness (complete)
@@ -316,6 +316,59 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   reconciliation.
 - **Verification.** See the checkpoint commit for the exact commands and results.
 
+### CP7 -- operator diagnostics (complete)
+
+- **One presenter (G).** `observe.job_activity(record, runtime_root)` derives the activity of a
+  record carrying `worker_state` from the record, `job.supervisor_probe` and a fresh
+  `job._scan_record_owned` scan: `active`, `waiting` (tasks, pending wakeups with due times, open
+  harness commands with stall time, `fire_matched` wakeups "presumed fired, not yet settled" with
+  settle time), `draining` (owned pids; after a detach `detached after 10:00 -- end them, then
+  workflow-controller resume <repo>`; live recognised daemons as `not owned`), `unsupervised`
+  (any live activity with the supervisor lock `unattached`, plus `no Controller attached --
+  workflow-controller resume <repo> re-attaches`), `pending reconciliation`, `terminal`. Stall and
+  settle times are shown only with a Controller attached (the recorded value plus the time since
+  the record's last flush, capped); otherwise `stall time unknown (no Controller attached)` /
+  `settle time unknown (no Controller attached; restarts on resume)`. A supervisor probe of
+  `unknown` keeps the base activity and says the probe could not be read. Records without
+  `worker_state` return `None` and keep every old string.
+- **Surfaces.** `status`'s `active:` lines and a new `inspect` `jobs:` block (text beside
+  `lifecycle lock:`, JSON `jobs`) use it; both are omitted when the target has no non-terminal
+  job, so the no-policy golden is unchanged. `explain` appends `activity:` to each pending job and
+  its `--json` `pending_jobs[]` gains `activity`, `worker_state`, `waiting_on`,
+  `owned_processes`, `not_owned`, `supervisor`, `resume_command`, `activity_text` (only for
+  records carrying `worker_state`). For a `COMPLETED` pending record and for the newest terminal
+  job of the target (`last job:` / JSON `last_job`), `explain` prints the stream diagnosis: the
+  reason and secondary reasons, the offending `command_uuid` for `command_lifecycle_irregular`
+  and `command_lifecycle_unterminated`, one line per anomaly (kind, `command_uuid`, offset; both
+  counts for `wakeup_count_mismatch`) and each wakeup's final state and how it got there. Choice:
+  the diagnosis is shown only when it carries an anomaly, a wakeup, or one of
+  `command_lifecycle_irregular`/`command_lifecycle_unterminated`/`wakeup_not_delivered`, so an
+  ordinary exit-status failure adds no block (and the no-policy golden stays byte-identical).
+- **follow.** The heartbeat of a non-terminal record carrying `worker_state` is the presenter's
+  line (`WAITING` included). With `worker_state`, the worker's exit no longer ends `follow`: it
+  keeps following while anything the job owns may run, warns once `no Controller is attached to
+  job <id> -- workflow-controller resume <repo> re-attaches; following` when unsupervised, and
+  ends (naming `resume`) only at the terminal record or once the job is `pending
+  reconciliation` with no Controller attached -- nothing but `resume` can advance it then
+  (interpretation of G's "ends only at a terminal record" + "says so and names resume").
+  `select_active` and the interrupted-run hand-over also pick a live tracked job whose worker
+  already exited (draining). `normalise` renders `task_started`/`task_updated`/
+  `task_notification`/`background_tasks_changed` as `background task` lines,
+  `command_lifecycle` as `harness command <uuid8> started|completed`, and `_job_text` renders
+  `worker_<state>` and `worker_drain_detached` job events.
+- **Tests.** `tests/test_observe.py`: every activity row on record fixtures (a sleeper as the
+  worker, a sleeper as owned process and as recognised daemon, the supervisor lock held by the
+  test as an attached Controller), unresolved brackets and `fire_matched` wakeups with and
+  without a Controller, read-only presenting, the follow heartbeat/notice/end rules, the new
+  rendering, and the diagnosis lines. `tests/test_cli.py`: `status`, `inspect` (text and JSON),
+  `explain` (text and JSON, pending activity, `COMPLETED` diagnosis, `last_job`, and no block for
+  a quiet terminal job). Live: R15 (`tests/test_resume.py`) asserts `unsupervised`+waiting after
+  the Controller loss and `waiting` with the re-attached `resume` as supervisor; the CP4
+  drain-detached run asserts the draining line with the escapee's pid. The
+  observation-equivalence suite gains a `WAITING` lifecycle (plain vs `--follow`), normalising
+  the fake's random event UUIDs, millisecond timestamps and epoch-ms task times.
+- **Verification.** See the checkpoint commit for the exact commands and results.
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP7.
+`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP8.

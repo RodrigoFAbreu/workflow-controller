@@ -34,8 +34,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 | CP4 -- job lifecycle integration | complete | `e354f10` |
 | CP5 -- restart recovery | complete | `4a03168` |
 | CP6 -- same-phase durable progress | complete | `e2cb819` |
-| CP7 -- operator diagnostics | complete | this checkpoint's commit |
-| CP8 -- documentation and full verification | not started | |
+| CP7 -- operator diagnostics | complete | `f85fa08` |
+| CP8 -- documentation and full verification | complete | this checkpoint's commit |
 
 ### CP1 -- harness contract evidence and fake harness (complete)
 
@@ -369,6 +369,49 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   the fake's random event UUIDs, millisecond timestamps and epoch-ms task times.
 - **Verification.** See the checkpoint commit for the exact commands and results.
 
+### CP8 -- documentation and full verification (complete)
+
+- **README.** "Concurrency and worker lifecycle" rewritten: the streaming session and the
+  `worker_state` machine, the worker lifecycle note and the disallowed `CronCreate`/`CronDelete`/
+  `RemoteTrigger`, the stdin anchor (its two roles and its 60 s orphan lifetime), owned processes
+  (group, tag, adoption, recorded entries), the recognised-daemon list and the 600 s drain bound
+  with its detach, scheduled wakeups (the `command_lifecycle` bracket, `fire_matched`, settlement
+  by a count-checked stop or the 305 s settle window and its cost, the fail-closed cases, H2's
+  double-breach residue, the fallback-wakeup delay of decision 11), the two time-based
+  harness-contract breaches, `resume`'s two-phase re-attach, and the corrected
+  descendant-inherits-the-lock text (tool processes never receive the descriptor; the anchor
+  carries it) in the lock paragraph and the exit-45 holder list. "Job dispositions" (resume
+  re-attaches and never reconciles held work; abandon's owned-process refusal and anchor
+  disposal; records from earlier versions), the command table's `resume` row, "Observing
+  workers" (streaming argv, new job events, the activity presenter) and the safety model's
+  one-worker bullet updated; the design-record list names the plan and ADR 0004.
+- **`docs/adr/0004-worker-lifecycle-ownership.md` (new).** The ownership model, I1-I11, the
+  anchor, the owned-process and daemon policy with the drain bound, disallowed tools and the
+  lifecycle note, decision 12's measured evidence and rejected recognisers, decision 13 and its
+  rejected alternatives, the time-based ends, restart recovery, H1-H9 (H2 with the bracket's
+  failure modes and the double-breach residue; H5 with both windows, including re-attached
+  supervision), and consequences. No exit code added.
+- **`docs/ROADMAP.md`.** Section 1.4 records the hotfix; the four listed patches stay open.
+- **Verification** (2026-09-26):
+  - `python3 -m unittest discover -s tests -t .`: 1878 tests, `OK (skipped=8)`, 475 s;
+  - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime`:
+    9 tests OK;
+  - `python3 tools/ci_workflows.py --check`: exit 0;
+  - `python3 -m unittest tests.test_plan_document_consistency` (README invocation lines and
+    `validate.yml` job names): 40 tests OK;
+  - opt-in live contract probe, `CONTROLLER_LIVE_WORKER=1 python3 -m unittest -v
+    tests.test_integration_disposable_repo.LiveHarnessContractProbeTest`, against the installed
+    `claude` **2.1.283** (the plan measured 2.1.282): 2 tests OK, 493 s.
+    `test_streaming_contract_against_the_installed_claude` re-ran P3, P4, P5/P11, P6/P10, P8
+    (both), P9 and P11 (every probe exit 0; P5/P11 done at 215.9 s) and the three bracket facts
+    held. `test_p12_stop_inside_fire_counts` re-ran both P12 probes (exit 0, done at 74.7 s and
+    76.0 s) and the counts held (`cancelledWakeups` 0 single, 1 nested): the final
+    re-measurement agrees with CP1's fixtures, so no plan amendment is triggered. The run printed
+    only `ResourceWarning`s for unclosed reader pipes inside `capture.py`'s threads (test
+    harness, not product code).
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP8.
+Every checkpoint is complete. The next `/milestone-implement
+workflow-controller-worker-lifecycle-ownership` invocation performs the final full-diff
+self-review and generates the implementation review bundle.

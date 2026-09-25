@@ -57,7 +57,7 @@ These are not blockers for the baseline, but should remain visible in later mile
 
 **Priority:** Immediate / High
 
-**Status:** 1.1-1.3 complete; 1.4 next
+**Status:** 1.1-1.3 complete; 1.4's worker lifecycle ownership hotfix delivered, its four listed patches still open
 
 Suggested milestone:
 `workflow-controller-release-runtime-observability`
@@ -178,7 +178,22 @@ Requirements:
 
 ## 1.4 Follow-up patches to fold in where appropriate
 
-**Status:** Not started -- the next milestone to plan (1.6 waits for the Workflow 2.6.x release)
+**Status:** One urgent correctness hotfix delivered in this slot; the four patches below remain
+open (1.6 waits for the Workflow 2.6.x release)
+
+**Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
+plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR
+`docs/adr/0004-worker-lifecycle-ownership.md`). Workers that started verification in the background
+and ended their turn were killed by the harness's print mode, and their jobs failed `AMBIGUOUS`
+or finished while processes still ran. Workers now run with streaming input, one session kept
+open while they own background work (tasks, Monitors, wakeups, background subagents); the
+Controller ends a session only at a quiescent terminal turn, owns escaped descendants through an
+ownership tag and a subreaper, keeps the lifecycle lock for the whole owned lifetime through a
+stdin anchor, reconciles only after the worker has ended and its owned work has drained, and
+`resume` re-attaches to a live job after a Controller loss. `status`, `inspect`, `explain` and
+`follow` show waiting, draining and unsupervised workers. The harness limitations it documents
+rather than solves (the wakeup-fire recogniser's residue, escape windows, daemon recognition by
+name) are in ADR 0004. It was not folded together with the patches below, which stay listed:
 
 - correct misordered `--work-item` resume hints;
 - improve manual-external gate behavior when local review ledger/content is incoherent;

@@ -149,7 +149,7 @@ or `resume`, is gone.
 | `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; read-only, always exits 0 |
 | `workflow-controller step [--follow] <repo>` | execute exactly one automatic action, validate the transition, stop |
 | `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
-| `workflow-controller resume <repo>` | reconcile this target's non-terminal job records, then report |
+| `workflow-controller resume <repo>` | re-attach to a job whose worker still runs with no Controller supervising it and supervise it to its end, then reconcile this target's non-terminal job records and report; never launches a worker |
 | `workflow-controller resume --abandon JOB_ID [--acknowledge-unverifiable-worker] <repo>` | mark one pending job file terminal instead of reconciling it (see "Job dispositions") |
 | `workflow-controller status` | Controller-owned view: the running Controller, pinned identity, job records, pending handoff, active runs and jobs; read-only |
 | `workflow-controller follow [--job JOB_ID \| --run RUN_ID] [--from-start] [<repo>]` | render a run's or job's events and worker output (see "Observing workers"); writes nothing |
@@ -335,16 +335,28 @@ has three safeguards:
 
 ## Concurrency and worker lifecycle
 
+A worker's lifecycle action is finished only when the worker has really
+finished, not when one of its turns ends. Workers routinely start long
+verification in the background and end a turn saying they will continue
+when it completes. The Controller keeps that session alive, lets the
+harness resume it, and reconciles the job only once the worker and every
+process it owns have ended. The design record is
+[`docs/adr/0004-worker-lifecycle-ownership.md`](docs/adr/0004-worker-lifecycle-ownership.md).
+
 **At most one lifecycle worker per target worktree.** `step`, `run`,
 `resume` and `resume --abandon` take an exclusive `flock` on the target
 worktree's own git directory (`git rev-parse --absolute-git-dir`). The
 lock writes nothing into the target, and it excludes every Controller on
 the machine working on that worktree, whatever runtime root each uses.
-The worker inherits the lock's descriptor, and the kernel keeps a `flock`
-held while any process holds that descriptor. So a worker orphaned by a
-Controller that died keeps the worktree until it really exits. "The
-previous worker is still alive" is answered by the kernel, never inferred
-from silence or elapsed time.
+The lock is held for the job's whole *owned lifetime*, not only while
+the Controller runs: the `claude` process and the job's *stdin anchor*
+(below) each hold a copy of its descriptor, and the kernel keeps a
+`flock` held while any process holds one. The harness's own tool
+processes do **not** inherit it (measured: `claude` starts them with no
+descriptor beyond 0-2), so the lock never follows a background command;
+the anchor carries it for them. "The previous worker is still alive" is
+answered by the kernel and by the job record, never inferred from
+silence or elapsed time.
 
 The lock is per worktree, which is stricter than per work item: two work
 items in one worktree share its index and working tree. It does not
@@ -354,30 +366,266 @@ not closed: there, only the Workflow's own checkpoint claims (for
 `/milestone-implement`) and the review commands' binding checks stand
 between two workers.
 
+### One session per worker, kept open while it owns work
+
+Every worker runs as one `claude` process and one session, from its
+task to its end:
+
+```text
+claude -p --input-format stream-json --output-format stream-json --verbose \
+    --permission-mode <mode> [--model <m>] [--effort <e>] \
+    --append-system-prompt <worker lifecycle note> --disallowedTools <list>
+```
+
+The task (the slash command) is written to the worker's stdin as one
+stream-json user message, and stdin stays open. With stdin open the
+harness does not kill background work at the end of a turn: when a
+background task, a `Monitor` event, a background subagent or a
+`ScheduleWakeup` fire completes, the harness itself starts a new turn in
+the same session and delivers the result. The Controller never resumes,
+relaunches or forks a session (`--resume`, `--continue`, `--session-id`
+and `--fork-session` are never passed), and `resume` never launches one.
+
+The job record stays `LAUNCHED` throughout, and a separate, closed
+`worker_state` says where the worker is:
+
+```text
+STARTING -> RUNNING --turn ends, owned work remains--> WAITING --owned work completes--> RUNNING
+               |
+               +--turn ends, nothing owned remains--> ENDING --> DRAINING --> ENDED
+```
+
+- **`RUNNING`**: a turn is open.
+- **`WAITING`**: no turn is open, and the worker still *owns work*: a
+  background task the harness lists and has not finished (background
+  Bash, `Monitor`, a background subagent), a scheduled wakeup that has
+  not settled (below), or a harness command still open.
+- **`ENDING`**: a quiescent terminal turn: no turn open, nothing owned,
+  no turn queued. Only here does the Controller end the session, by
+  closing the worker's stdin. A notification turn the harness had
+  already queued is followed to its end and judged, never assumed clean.
+- **`DRAINING`**: `claude` has exited, and processes it owned are still
+  alive (below).
+- **`ENDED`**: everything is gone. Only now is the worker's outcome
+  decided and the job reconciled against durable state, so `run` can
+  never start the next action while the previous one's verification
+  still runs.
+
+The job record and its events log (`worker_running`, `worker_waiting`,
+`worker_ending`, `worker_draining`, `worker_ended`) record each change,
+what the worker is waiting on and every owned process, before the
+Controller relies on it.
+
+Every worker also gets a fixed system note (`--append-system-prompt`):
+the Controller delivers every background notification, so the worker
+must not schedule fallback wakeups "in case a notification never
+arrives", and should cancel any wakeup it no longer needs
+(`ScheduleWakeup` with `stop: true`) before its final turn ends. A
+worker that ignores the note is still correct, only slower: its fallback
+wakeup is owned work, so the session waits for it to fire, the worker
+runs one more turn, and the job ends at the next quiescent turn.
+
+`CronCreate`, `CronDelete` and `RemoteTrigger` are disallowed for every
+worker, whatever its route: a recurring or remote schedule never
+finishes, so it cannot be owned to its end. `Monitor`, `ScheduleWakeup`,
+background Bash and background subagents stay allowed.
+
+### The stdin anchor
+
+The worker's stdin is a pipe whose write end is held by a small
+Controller-spawned process, the job's *stdin anchor*, recorded as
+`worker_anchor`. It also holds a copy of the lifecycle lock. It runs
+with an empty environment, depends on nothing but the Python standard
+library, and does two separate things:
+
+- it closes the worker's stdin when the supervising Controller asks, at
+  `ENDING`, which is the only normal way a session ends;
+- it keeps the lock until the Controller ends it after the drain.
+
+So if the Controller dies or is interrupted, the anchor keeps the
+session open and the worktree held, the waiting worker keeps waiting,
+and nothing owned is killed. `resume` can then re-attach (below). An
+anchor left with nothing to guard ends itself: once its worker and every
+process carrying the job's ownership tag have been gone for 60 s, with
+no Controller attached, it exits, so it can never hold the lock for
+good. An anchor that disappears while its worker waits gives the worker
+end-of-input early; the harness then kills the open work, and the run is
+classified `AMBIGUOUS` (`stdin_closed_while_waiting`), which fails
+closed.
+
+### Owned processes, the daemon list and the drain bound
+
+A process is owned by the job, and the job waits for it, when it is:
+
+- a member of the worker's process group; or
+- a same-user process whose environment carries the job's tag in
+  `WORKFLOW_CONTROLLER_OWNERSHIP` (a `:`-separated list, so a worker
+  running a nested Controller stays owned by the outer job too); or
+- a child adopted by the supervising Controller, which marks itself a
+  child subreaper for the worker's lifetime; or
+- an entry of the record's `worker_state.owned_processes` whose pid and
+  start time still match. Once seen as owned, a process stays owned for
+  as long as it lives, whichever Controller supervises.
+
+This is what catches a background command that detaches itself
+(`setsid`): the harness reports it `killed`, but it keeps running in its
+own session, outside the worker's process group. The Controller never
+trusts the harness's `killed` status and scans `/proc` itself.
+
+**Recognised daemons are never owned.** Long-lived tool daemons are
+shared infrastructure that later jobs reuse, so a process whose command
+line matches `worker.RECOGNISED_DAEMONS` is not waited for, never ended
+by `--timeout` or abandon, and never holds a later job. The list is
+closed: an `argv[0]` of `gpg-agent`, `keyboxd`, `dirmngr`, `scdaemon` or
+`ssh-agent`, or an argument `fsmonitor--daemon`,
+`org.gradle.launcher.daemon.bootstrap.GradleDaemon` or
+`org.jetbrains.kotlin.daemon.KotlinCompileDaemon`. Each one seen is
+recorded in `worker_state.excluded_processes`, so what was not owned is
+on the record. Recognition is by name: a daemon the list does not name
+is owned like any other process, and one that imitates a listed name is
+not waited for. Extending the list is a Controller change.
+
+**The drain bound.** After `claude` exits, the Controller waits for
+the remaining owned processes for at most 600 s
+(`worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends
+**nothing**. It *detaches*: the record stays `LAUNCHED` at `DRAINING`
+with `drain_detached_at`, a `worker_drain_detached` event names the
+processes, the anchor keeps the lock, and the command exits 45 naming
+each pid with its command line. Either run `workflow-controller resume
+<repo>`, which re-attaches and drains again with a fresh bound, or end
+the processes and then run `resume`. No later action can start while
+they run.
+
+### Scheduled wakeups
+
+A `ScheduleWakeup` is owned work from its successful `tool_result`
+until it *settles*. The harness emits no task event for a wakeup, so
+the Controller recognises the scheduling call by tool name, and a
+*fire* by the only evidence the stream carries: every measured fire
+turn is enclosed in a `command_lifecycle` `started`/`completed` pair
+sharing one `command_uuid`, and no other measured turn is. The stream
+never says *which* wakeup a fire belongs to, so a *regular* bracket
+(exactly one turn inside it, not overlapping another, opening at or
+after a pending wakeup's due time less 5 s) is matched to the
+earliest-due such wakeup. The turn's `result` `origin` is never evidence.
+
+A match is not proof, so a matched wakeup is only `fire_matched` and
+stays owned. It settles in one of two ways:
+
+- **a successful `ScheduleWakeup {stop: true}`** settles every wakeup
+  at once. The harness reports how many it cancelled
+  (`cancelledWakeups`), and the Controller compares that with its own
+  count of wakeups still scheduled (a stop inside a fire turn leaves out
+  the wakeup whose fire is running). A disagreement is the anomaly
+  `wakeup_count_mismatch`, and the run is `AMBIGUOUS`;
+- **the settle window**: 305 s (`worker.WAKEUP_SETTLE_SECONDS`) of idle
+  time after the matching bracket closed, with no turn, task or bracket
+  open, and no bracket arriving. This is the cost of a worker that lets
+  a wakeup fire and then ends without a stop: it waits up to 305 s of
+  idle time before `ENDING`. A worker that follows the system note
+  cancels from its fire turn and settles at once.
+
+The window equals the lateness the Controller already accepts for a
+fire (300 s) plus the match skew. If a bracket around some other turn
+was wrongly matched, the wakeup's real fire is still due at the harness
+and arrives inside the window, while the session is still open, and its
+bracket then matches nothing (`unmatched_bracket`): the run fails
+closed rather than ending before the fire.
+
+The bracket fails closed in every other case too. A bracket that breaks
+any of the conditions above, a `command_lifecycle` event with a missing
+`command_uuid` or an unknown `state`, a `completed` with no `started`,
+and a bracket that matches no due wakeup are each a sticky anomaly
+(`stream_diagnosis.command_lifecycle_anomalies`), and the run is
+`AMBIGUOUS` (`command_lifecycle_irregular`). If the harness stops
+bracketing fires, each wakeup goes overdue instead.
+
+**Double-breach residue.** One sequence is not caught: the harness
+brackets some non-fire turn after a wakeup's due time, *and* then
+delays that wakeup's real fire by more than 300 s of task-free idle
+time, with no stop in between. The second is itself the breach the
+overdue rule exists to declare, but by then nothing is left pending to
+declare it on, so the wrongly matched wakeup settles and the session
+may end before the real fire. Both halves are unmeasured; the opt-in
+live probe re-measures the bracket.
+
+A wakeup scheduled some way the Controller does not recognise (a
+renamed tool, for example) is not seen at all, so it is not owned and
+may be lost when the session ends. The tool name is pinned by the
+harness-contract fixtures and the live probe.
+
+### Time is not termination
+
+There is no default worker timeout: `step` and `run` wait for as long
+as the worker owns work. `--timeout SECONDS` is an explicit opt-in, now
+over the whole owned lifetime; when it fires, the Controller ends the
+worker's process group, every owned process (never a recognised
+daemon) and the anchor, reaps them, and classifies the run
+`INTERRUPTED`.
+
+The Controller ends a session on time in exactly two cases, both
+harness-contract breaches that fail closed (`AMBIGUOUS`):
+
+- a scheduled wakeup still not fired 300 s past its due time, counted
+  only while no turn and no task is open (`wakeup_not_delivered`);
+- a harness command (`command_lifecycle` bracket) stalled 300 s with no
+  turn open inside it and no task open (`command_lifecycle_unterminated`).
+
+The settle window is not a third case: it ends nothing, it only decides
+when a matched wakeup stops being owned, and the session still ends
+only at a quiescent turn. The drain bound ends nothing either.
+
+### Restart: `resume` re-attaches
+
+A Controller that dies, or is interrupted, leaves the worker and its
+anchor running, and the job `LAUNCHED`. Each supervising Controller
+holds the job's own supervisor lock, `jobs/<job_id>/supervisor.lock`,
+which dies with it. `workflow-controller resume <repo>` works in two
+phases:
+
+1. **Supervision, before the lifecycle lock** (which the anchor still
+   holds). For a job whose supervisor lock is free, `resume` takes it,
+   rebuilds the worker's state by replaying `worker.stdout` from the
+   start, and carries on supervising exactly as the original Controller
+   would: it waits while the worker owns work, ends the session at a
+   quiescent turn, drains owned processes, ends the anchor, and records
+   `COMPLETED`. It is not the worker's parent, so it cannot read the
+   exit status; a session that a supervisor ended at a quiescent turn is
+   then judged from the stream alone, and any other exit is
+   `AMBIGUOUS`. Timers the lost Controller held (the settle window, a
+   bracket's stall time) restart at re-attach, so a re-attached
+   supervisor may wait longer, never shorter. If another Controller
+   holds the supervisor lock, `resume` exits 45 naming it.
+2. **Reconciliation**, under the lifecycle lock, exactly as before.
+
+`step` and `run` never re-attach: while a job is non-terminal they exit
+20 (a pending job) or 45 (the worktree is held), and name `resume`.
+
 **Exit 45** means the worktree is held, and nothing was launched,
 reconciled or abandoned. Its message names:
 
 - the lock path, and how to find every holder:
   `fuser -v <git-dir>` or `lsof +d <git-dir>`. A holder that is not a
-  recorded worker is a process that inherited the descriptor, for example
-  a stray background descendant of an earlier worker. It keeps the lock
-  until it exits, which is correct: the lock is released only when
-  nothing from that worker's process tree holds it;
+  recorded worker is that job's recorded stdin anchor, which holds the
+  lock for the job's whole owned lifetime, or a member of the worker's
+  own process group. The message names a live recorded anchor as "job
+  `<id>`'s stdin anchor", with what clears it: `resume` while its worker
+  or owned work lives and no Controller is attached, or nothing at all
+  once they have ended (it ends itself within 60 s, or `resume` ends it
+  now);
 - the recorded worker's pid and process group, only when a `LAUNCHED`
-  job record's worker is `active` (below). When the recorded leader
-  process itself is running, the message says to wait for it, or to end
-  that group (`kill -TERM -- -<pgid>`), then run `resume`. When the leader
-  is gone and only other running members of the recorded group were
-  found, that group number may have been reused since the job started, so
-  the message lists the members and asks you to verify them
-  (`ps -o pid,pgid,lstart,args -g <pgid>`) before ending the group;
+  job record's worker is `active` (see "Job dispositions"). When the
+  recorded leader process itself is running, the message says to wait
+  for it, or to end that group (`kill -TERM -- -<pgid>`), then run
+  `resume`. When the leader is gone and only other running members of
+  the recorded group were found, that group number may have been reused
+  since the job started, so the message lists the members and asks you
+  to verify them (`ps -o pid,pgid,lstart,args -g <pgid>`) before ending
+  the group;
 - no process group at all for any other verdict. After a reboot, a
-  recorded group number may name an unrelated live group of yours.
-
-`resume` exits 45 too, reconciling nothing, while a recorded worker is
-`active` or `unverifiable`. So a pending job's clearing command can be
-plain `resume`, which then names the next step once it can see the
-worker.
+  recorded group number may name an unrelated live group of yours;
+- after a drain detach, the owned processes still alive, each with its
+  command line.
 
 **The lifecycle lock report.** `explain` and `inspect` print
 `lifecycle lock: held`, `free` or `unknown` (and `--json` carries
@@ -407,20 +655,34 @@ which need a writable descriptor). Mount it with `local_lock=flock` (the
 lock then excludes only Controllers on the same machine), or keep the
 worktree on a local filesystem.
 
-**Time is not termination.** There is no default worker timeout: `step`
-and `run` wait until the worker returns control. `--timeout SECONDS` is
-an explicit opt-in; when it fires, the worker's whole process group is
-killed and reaped before the result is classified.
-
 **Ctrl-C ends only the Controller.** The worker runs in its own session,
-so it keeps running headless, holding the lock and the worktree. The
+and its anchor in another, so both keep running headless, holding the
+lock and the worktree, and a waiting worker keeps waiting. The
 Controller does not forward the interrupt: ending the worker is your
-decision. On Ctrl-C during a worker, the Controller prints one stderr
-line naming the worker's pid and process group before the interrupt
-propagates. The job record's `worker_process` under `<runtime>/jobs/`
-names them too, and so does the exit-45 message of a later `step` or
-`resume` while that worker is `active`. Wait for it, or end the group,
-then run `workflow-controller resume <repo>`.
+decision. On Ctrl-C during a worker, the Controller prints, on stderr
+and before the interrupt propagates, the worker's pid and process group,
+the anchor's pid with the command that re-attaches, and the `follow`
+command. The job record under `<runtime>/jobs/` names them too. Run
+`workflow-controller resume <repo>` to re-attach and let the job finish,
+or end the worker's group first and then `resume`.
+
+### What is not solved here
+
+These need OS-level containment or a future harness adapter, and are
+recorded in ADR 0004:
+
+- the whole model rests on the harness keeping a session open while
+  stdin is open (measured, not documented);
+- wakeup fires are recognised by an undocumented `command_lifecycle`
+  event, matched by time, with the double-breach residue above;
+- a descendant that scrubs its environment (`env -i`) and is orphaned
+  while no Controller is supervising, or while a re-attached `resume`
+  supervises (it is not the worker's ancestor, so its subreaper adopts
+  nothing), and was never seen owned, is not owned. A per-job cgroup
+  would close this;
+- a tagged descendant that makes itself non-dumpable and has left the
+  worker's process group is not owned by tag;
+- daemon recognition is by name.
 
 ## Job dispositions
 
@@ -435,8 +697,14 @@ is added as soon as it is spawned, and `resume` never launches a worker.
   refusal, and `explain` ahead of its decision, name each pending file
   with the command that clears it. `explain --json` carries them as
   `pending_jobs`.
-- **`workflow-controller resume <repo>`** reconciles each pending record
-  against the target's durable state, under the lock. A record written by
+- **`workflow-controller resume <repo>`** first re-attaches to a job whose
+  worker or owned work is still live and no Controller supervises (see
+  "Restart: `resume` re-attaches"), supervises it to its end and records
+  it `COMPLETED`. It then reconciles each pending record against the
+  target's durable state, under the lock. A record that still owns work
+  (its worker `active` or `unverifiable`, a recorded or tagged owned
+  process alive, or an owned-process scan that could not complete) is
+  never reconciled: `resume` exits 45 and names it. A record written by
   this version that it cannot reconcile belongs to a worker that has
   definitively ended, so `resume` persists it `FAILED`
   (`UnreconcilableJobError`) and exits 20 once. The next `resume` passes
@@ -456,7 +724,11 @@ is added as soon as it is spawned, and `resume` never launches a worker.
   directly, and a record written by a newer Controller generation (that
   generation's own `resume` clears it). It refuses with exit 45 while the
   lock is held, while the recorded worker is `active` (no flag overrides
-  that), and while it is `unverifiable` without the flag below.
+  that), and while it is `unverifiable` without the flag below. For a
+  record carrying `worker_state`, it also refuses (exit 45, naming the
+  pids) while any owned process is alive. Once the worker and every
+  owned process are gone, it ends a leftover stdin anchor itself, before
+  taking the lock, so it never waits for the anchor to end on its own.
 - **A launch that never started a worker** (for example a wrong
   `--claude-binary`) is `FAILED` (`WorkerNotStarted`) at once, with the
   same exit code as before, and needs no `resume`.
@@ -497,6 +769,12 @@ it for removal by hand. A regular job file the Controller cannot read
 removed, by hand: `--abandon` cannot set unreadable bytes aside, so it
 refuses (exit 20), and the pending report, `resume` and `--abandon` each
 name that manual step.
+
+**Job records from earlier versions.** A record without `worker_state`
+(written by Controller 1.2.x or earlier, whose worker ran in print mode)
+is handled exactly as before: it is never re-attached, and `resume`
+exits 45 while its recorded worker is `active` or `unverifiable`. Upgrade
+the Controller between jobs, not during one.
 
 ## Controller-owned runtime state
 
@@ -607,7 +885,8 @@ Version 1.1.1 is still generation 1.
 
 ## Observing workers
 
-Workers run `claude -p ... --output-format stream-json --verbose`, and
+Workers run `claude -p --input-format stream-json --output-format
+stream-json --verbose ...` (see "Concurrency and worker lifecycle"), and
 write their stdout and stderr straight into files under the runtime
 root. The Controller also appends a lifecycle event log per job and per
 `step`/`run`:
@@ -616,7 +895,7 @@ root. The Controller also appends a lifecycle event log per job and per
 |---|---|
 | `jobs/<job_id>/worker.stdout` | the worker's stream, one JSON event per line, verbatim |
 | `jobs/<job_id>/worker.stderr` | the worker's stderr, verbatim |
-| `jobs/<job_id>/events.jsonl` | the job's lifecycle events (`planned`, `launched`, `worker_spawned`, `completed`, `finished`, ...) |
+| `jobs/<job_id>/events.jsonl` | the job's lifecycle events (`planned`, `launched`, `worker_spawned`, `worker_running`, `worker_waiting`, `worker_ending`, `worker_draining`, `worker_ended`, `worker_drain_detached`, `completed`, `finished`, ...) |
 | `runs/<run_id>.json` | one record per `step`/`run`: its Controller process, state, exit code and jobs |
 | `runs/<run_id>/events.jsonl` | the run's events (`run_started`, `step_started`, `job_started`, `job_ended`, `run_ended`, ...) |
 
@@ -649,6 +928,26 @@ Three ways to watch:
   liveness, and the exact `follow` command for each. When `resume`, a
   held lock (exit `45`) or a Ctrl-C reports a running worker, it prints
   the `follow` command too.
+
+For a job whose record carries `worker_state`, `status`, `follow`'s
+heartbeat, `explain` (after each pending job, as `activity:`) and a
+`jobs:` block in `inspect` say what the worker is doing: running (with
+its turn), waiting (on which background tasks, which wakeups and their
+due times, which harness commands, and which wakeups are presumed fired
+but not yet settled), draining (which owned processes are still alive,
+and which recognised daemons are not owned), whether a Controller is
+attached (else `no Controller attached -- workflow-controller resume
+<repo> re-attaches`), and whether the job only awaits reconciliation.
+Stall and settle times are shown only while a Controller is attached,
+since only it keeps them. `--json` carries the same fields. For the
+newest finished job of the target, `explain` also prints its stream
+diagnosis when it holds an anomaly, a wakeup or a harness-contract
+breach: the reason, each `command_lifecycle` anomaly with its
+`command_uuid`, and how each wakeup ended. `follow` keeps following a
+waiting worker, and a job whose worker exited while its owned processes
+drain, until the record is terminal; background-task events and harness
+commands are rendered as `background task` and `harness command <uuid8>
+started|completed` lines.
 
 `follow` must find the runtime root `step` used. It resolves it the same
 way, so from the same install with the same `--runtime-dir` or
@@ -695,8 +994,10 @@ and killed mid-job, and requires identical durable results.
   against durable Workflow and Git state, including the artifacts its
   command promises; the worker's own report is never read to decide.
 - **One worker per worktree, and never a replacement too early.** The
-  lifecycle lock and the recorded worker process decide when the previous
-  worker has ended, never elapsed time.
+  lifecycle lock, the recorded worker and the processes it owns decide
+  when the previous worker has ended, never elapsed time or the end of a
+  turn. A job is reconciled only after its worker has ended and its owned
+  work has drained.
 - **Never hot-reloads.** A running Controller generation executes from an
   immutable, content-addressed snapshot of its own source and never
   mutates or reloads it; a newer approved generation triggers an
@@ -1073,8 +1374,12 @@ for the implementation-stage automation, routing and concurrency design,
 the release, runtime-identity and observation design,
 `docs/ai-workflow/CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md` for the
 milestone-branch, pull-request and release-transaction design,
+`docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md` for the
+worker lifecycle ownership design,
 `docs/adr/0001-controller-generation-1-architecture.md` for the
 decisions most likely to matter to a later generation,
 `docs/adr/0002-release-runtime-identity-and-observability.md` for
-1.1's, and `docs/adr/0003-trunk-branch-pr-release-orchestration.md` for
-the trunk, pull-request and release decisions.
+1.1's, `docs/adr/0003-trunk-branch-pr-release-orchestration.md` for
+the trunk, pull-request and release decisions, and
+`docs/adr/0004-worker-lifecycle-ownership.md` for the worker ownership
+model and the harness limitations it documents.

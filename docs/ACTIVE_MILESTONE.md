@@ -821,3 +821,27 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     classification ran in a throwaway clone whose `origin` is a local bare mirror of this
     repository (tags `v1.1.0`, `v1.1.1` fetched from GitHub first, `main` = `HEAD`); releases were
     read from the real GitHub repository through the policy's forge, read-only.
+
+## Implementation review round 1 (`LOCAL_MODEL_IMPLEMENTATION_REVIEW`, `REVISE`)
+
+- **Important 1 (R16, plan "Compatibility and migration"): fixed.** `test_packaged_runtime`'s
+  `_CheckoutGoneCase` (`CheckoutAbsentTest`, `CheckoutRenamedTest`) now also drives a
+  policy-enabled target through the installed wheel with the checkout gone. The target is a clone
+  of a bare origin with the reference policy committed, and the fake `gh` is on `PATH`. The test
+  runs the bind step (`BRANCH_BOUND`, `HEAD` on `milestone/wi-1`), then the plan-approval commit,
+  then the branch-side step that pushes and opens the Draft PR (`PR_OPEN`, PR #1 a draft, and the
+  origin branch at the approval commit). Every job record carries the package identity. The flow
+  runs inside the existing test method, as a helper, because the class-level clone can be removed
+  only once per class.
+- **Optional 3: fixed.** In `release_txn.publish`, a `GitOperationError` from reclassifying after a
+  rejected tag push is now reported as the named "pushing `<tag>` was rejected" refusal. This
+  happens when the tag names a commit this clone lacks. A new `test_release_txn` case covers it;
+  it fails without the fix.
+- **Optional 2: noted in the code.** A comment at `gh pr ready` in `milestone_branch._readiness`
+  states why it has no persisted intent: it is idempotent, and a restart re-reads the pull
+  request and converges.
+- **Optional 1: not applied.** Routing `repo_policy`'s committed-tree reads through
+  `gitrepo.show` means a refactor of CP2's reader and its tests, for no behaviour change. It is
+  left for a later cleanup.
+- **Optional 4: accepted as-is.** This is self-review observation 4, and it is plan-order
+  behaviour under the lifecycle lock.

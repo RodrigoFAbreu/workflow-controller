@@ -2263,7 +2263,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 7,
       "implementation_revision": null,
       "functional_review_round": null,
@@ -2274,7 +2274,7 @@
       "checkpoints": {},
       "current_bundle_id": null,
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "EXTERNAL_APPROVE",
         "reviewed_bundle_id": "7cb3d95da27e33d871f1b9e314eec7b37bbd91e9b50425483759d2d24aed3eda",
         "approved_review_content_id": "635bffec6bd618df19fc80c48b6931a5c7d4cfdadbf821d8a10b7eef435bb6be",
@@ -2323,8 +2323,52 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 23,
-      "last_transition": "2026-09-25T15:28:41Z"
+      "state_revision": 24,
+      "last_transition": "2026-09-25T16:15:37Z",
+      "amendment_history": [
+        {
+          "amendment_id": "0",
+          "requested_at": "2026-09-25T16:15:37Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "Amend the approved plan based on the mandatory CP1 harness-contract probe results.\n\nCP1's approved plan explicitly requires stopping and amending if the wakeup \"fire\" turn does not provide the planned distinguishing `result.origin` / `origin.kind` signal.\n\nThe probe disproved that assumption.\n\nMeasured harness behavior:\n1. Two wakeup-fire captures were taken with different prompt texts.\n2. Both wakeup-fire turns have no `origin` at all.\n3. Other streaming follow-up turns observed in the probe do carry:\n   `origin.kind = \"task-notification\"`\n   including task completion, Monitor events, and a subagent hand-back.\n4. Each wakeup fire is instead surrounded by a unique pair of `command_lifecycle` events:\n   - `command_lifecycle` started with `command_uuid = X`\n   - wakeup fire turn\n   - `command_lifecycle` completed with the same `command_uuid = X`\n5. That started/completed pair was not observed around the other captured follow-up turn types.\n6. The other approved CP1 probes behaved as the plan predicted.",
+          "superseded_plan_revision": 7,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "EXTERNAL_APPROVE",
+            "reviewed_bundle_id": "7cb3d95da27e33d871f1b9e314eec7b37bbd91e9b50425483759d2d24aed3eda",
+            "approved_review_content_id": "635bffec6bd618df19fc80c48b6931a5c7d4cfdadbf821d8a10b7eef435bb6be",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "967b76009ff8c32f80d9bdce818493ccd63a7cd5"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "6c24c95ed045eddf92cc5014c0d9e98c910cf97c"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "09941fd0645ade875890e1de950509e0df106a4e"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "I approve the plan stage for workflow-controller-worker-lifecycle-ownership.",
+            "waived_guarantees": [],
+            "recorded_at": "2026-09-25T15:28:41Z"
+          },
+          "checkpoints_snapshot": {},
+          "pre_amendment_approval_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d",
+          "resolved_at_plan_revision": null
+        }
+      ],
+      "amendment_base_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d"
     }
   }
 }

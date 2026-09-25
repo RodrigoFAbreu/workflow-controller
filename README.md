@@ -38,6 +38,13 @@ or stops and reports what a human must do:
 Which selected action is launched is decided by one rule, described under
 "Automatic dispatch" below.
 
+A repository that commits a `.workflow-controller/policy.json` also gets
+one short-lived `milestone/<work-item-id>` branch and one Draft pull
+request per milestone, and a release published from `main` whenever the
+version changes (see "Milestone branches and pull requests" and
+"Releasing"). A repository without that file behaves exactly as under
+1.1.1.
+
 Two invariants hold throughout: **the Controller never writes Workflow
 lifecycle state itself** (every durable transition is made by a worker
 running a real Workflow command), and **the Controller never crosses a
@@ -146,6 +153,8 @@ or `resume`, is gone.
 | `workflow-controller resume --abandon JOB_ID [--acknowledge-unverifiable-worker] <repo>` | mark one pending job file terminal instead of reconciling it (see "Job dispositions") |
 | `workflow-controller status` | Controller-owned view: the running Controller, pinned identity, job records, pending handoff, active runs and jobs; read-only |
 | `workflow-controller follow [--job JOB_ID \| --run RUN_ID] [--from-start] [<repo>]` | render a run's or job's events and worker output (see "Observing workers"); writes nothing |
+| `workflow-controller --work-item <id> milestone-binding --new-pr <repo>` | continue a milestone whose binding is in a refusal state on the same branch, with a new Draft PR (see "Milestone branches and pull requests"); launches no worker and touches no ref or pull request |
+| `workflow-controller --work-item <id> milestone-binding --abandon <repo>` | retire such a binding, under the preconditions stated there; exactly one of `--new-pr`/`--abandon` is required |
 | `workflow-controller --version` | the version, then the running runtime (see "Runtime identity") |
 
 Global options -- declared on the top-level parser, so they are accepted
@@ -494,7 +503,8 @@ name that manual step.
 The Controller keeps its own durable state under a runtime root: pinned
 source identity, job records (`jobs/`, with abandoned originals under
 `jobs/abandoned/`), per-job logs (`jobs/<job_id>/`), run records
-(`runs/`) and the pending handoff. The root is resolved by a ladder, and
+(`runs/`), milestone binding records (`repositories/`, below) and the
+pending handoff. The root is resolved by a ladder, and
 the first row that applies wins:
 
 1. `--runtime-dir`;
@@ -517,6 +527,23 @@ real Workflow command does that. The lifecycle lock is an `flock` on the
 target's existing git directory and creates nothing there. Deleting
 `runs/` or `jobs/<job_id>/` loses presentation history only: no
 lifecycle decision reads them.
+
+`repositories/<repo_key>/milestones/` holds one binding record per
+milestone of a policy-enabled target (`<work_item_id>.json`), its
+append-only `<work_item_id>/events.jsonl`, and any
+`<work_item_id>.abandoned-<n>.json` left by a re-planned id. `repo_key`
+is the SHA-256 of the target's canonical `git rev-parse --git-common-dir`,
+so every worktree of one repository shares it. Unlike `runs/`, these
+records **are** read by lifecycle decisions: they are the Controller's
+only memory of which branch and pull request belong to a milestone. Do
+not delete them while a milestone is in flight, and include them in any
+backup of the runtime root. If they are lost anyway (a new machine, for
+example), the next step with `HEAD` on the milestone branch re-adopts the
+binding and its one open pull request. A branch that exists only on the
+remote, or two merged pull requests for one branch, refuses: the
+Controller cannot tell which is its own, and the recovery is to restore
+`repositories/<repo_key>/` from the backup. A 1.1.1 runtime ignores the
+directory.
 
 ## Runtime identity
 
@@ -675,6 +702,177 @@ and killed mid-job, and requires identical durable results.
   mutates or reloads it; a newer approved generation triggers an
   intentional stop (a durable handoff record, exit 50), never an
   in-process update.
+- **Never merges, never rewrites.** No Controller code path merges a pull
+  request or pushes to the trunk ref, and the GitHub boundary
+  (`controller/forge.py`) has no merge operation. The Controller never
+  force-pushes, resets, rebases, amends, deletes a ref or moves a tag:
+  every branch push is a fast-forward and every tag push creates a new
+  ref. A human merges every pull request.
+
+## Milestone branches and pull requests
+
+This behaviour is **off** unless the target commits
+`.workflow-controller/policy.json` with `milestone_branches.enabled`. The
+policy is read from the committed tree at `HEAD`, never from the working
+tree, and an inadmissible policy (an unknown schema, key or adapter kind,
+or an invalid value) refuses every lifecycle command rather than being
+ignored. This repository's own policy is the reference configuration:
+trunk `main` on `origin`, forge `github`, branches
+`milestone/{work_item_id}`, Draft pull requests that become ready only
+with green checks.
+
+With the policy active, one milestone runs like this:
+
+```text
+main -- /milestone-plan -- bind milestone/<id> -- plan reviews -- plan approval (on the branch)
+     -- push, Draft PR -- implementation, reviews, acceptance (each step pushed)
+     -- readiness: PR marked ready -- HUMAN merges ("Create a merge commit")
+     -- close-out: switch to main, fast-forward -- next /milestone-plan on main
+```
+
+- **Trunk start.** Before a bare `/milestone-plan`, `HEAD` must be on
+  `main`, the tracked tree clean, and local `main` equal to
+  `origin/main`. A `main` behind the remote gates `fast_forward_trunk`
+  (the Controller does not fast-forward at start: you may have local
+  work), and a diverged one refuses.
+- **Bind.** After `/milestone-plan` has written the plan, and before
+  anything about it is committed, the Controller creates
+  `milestone/<id>` at `main`'s tip and switches to it, carrying the
+  uncommitted plan along. Workflow 2.5.1 derives the work-item id itself,
+  so the branch cannot be created earlier. A plan approval commit that
+  already sits on `main` refuses with manual-recovery guidance.
+- **Draft PR.** As soon as the branch has a commit beyond `origin/main`
+  (normally the plan approval commit), the Controller pushes it and
+  opens one Draft PR titled with the work-item id, whose body carries a
+  `<!-- workflow-controller: work_item=<id> -->` marker line. Every later
+  step first fast-forwards the remote branch to the local tip. A PR is
+  the milestone's only if its number, head, base and repository match and
+  it is not from a fork; zero matches create, exactly one open match is
+  adopted, anything else refuses.
+- **Drift.** Each step records whether `origin/main` is still an
+  ancestor of the branch and how far behind the branch is. Before
+  acceptance this is informational (`inspect`, `explain` and `status`
+  show it).
+- **Readiness.** Once the branch's own committed state records the work
+  item `MILESTONE_COMPLETE`, the PR is marked ready only when the local
+  and remote tips are exactly the acceptance commit (the
+  `/accept-milestone` commit, `Workflow-Work-Item` trailer included),
+  `origin/main` is an ancestor of it, and at least one check is reported
+  for that head with every check passing or skipped. Otherwise the step
+  gates:
+
+  | Gate | Meaning | What you do |
+  |---|---|---|
+  | `checks_pending` | no check reported yet, or one still running; the common case just after the final push | wait, then `run` again |
+  | `checks_failing` | a check failed | re-run it on GitHub if it is flaky; a fix committed on the branch follows the acceptance commit, so readiness then gates `post_acceptance_commits` |
+  | `checks_cancelled` | a check was cancelled, none pending or failing | re-run it on GitHub |
+  | `post_acceptance_commits` | commits follow the acceptance commit | merge anyway on GitHub ("Create a merge commit"), or leave the gate standing; the Controller never removes them |
+  | `integration_required` | `main` moved after the branch point | the manual merge procedure below |
+  | `pr_head_not_accepted` | GitHub does not show the pushed acceptance commit as the PR head yet | `run` again once it does |
+  | `merge_pull_request` | the PR is ready | merge it on GitHub with "Create a merge commit" |
+
+- **Merge and close-out.** You merge; the Controller never does. The
+  next step checks that the merged head contains the acceptance commit
+  and is itself on `origin/main`, then (with a clean tree, and the
+  branch tip equal to the merged head) switches to `main`, fast-forwards
+  it and records the binding `CLOSED`. The usual manual path, "merge on
+  GitHub, then `git switch main && git pull`", converges the same way
+  from `main`. Neither branch is deleted: GitHub's "automatically delete
+  head branches" setting is your choice. Close-out gates `dirty_tree` on
+  an unclean tree, and `unmerged_commits` on local branch commits that
+  were never merged (move them onto a new branch, then
+  `git reset --keep <merged-head>` on `milestone/<id>`). A squash or
+  rebase merge takes the reviewed commits off `main`: the Controller
+  records it (`merge_method_rewrote_history`, shown once), does not
+  switch, and blocks nothing afterwards. With `HEAD` still on a finished
+  milestone's branch, every step gates `switch_to_trunk`.
+
+**`integration_required` is the normal path, not an error.** Under
+Workflow 2.5.1 there is no Workflow transition that re-establishes review
+against a moved base, so the Controller never integrates `main` into a
+milestone branch. Whenever anything lands on `main` during a milestone --
+including this repository's own post-acceptance release commits -- the
+milestone ends at `integration_required`, and the supported procedure is:
+on GitHub, mark the PR ready and merge it with "Create a merge commit".
+Close-out then converges as for any merge. This stays the contract until
+the follow-up integration milestone binds integration to the released
+Workflow 2.6.x (`docs/ROADMAP.md`).
+
+**Do not press GitHub's "Update branch" button** while a milestone is in
+flight. It pushes a merge commit to the milestone branch on the server,
+which the next step refuses (the remote branch is no longer an ancestor
+of the local tip), and the refusal names the button as the likely cause.
+Use the `integration_required` procedure instead.
+
+While a binding is active, workers additionally run with `gh`,
+`git push`, `git rebase`, `git switch`, `git checkout -b` and
+`git reset --hard` disallowed. That is defence in depth only; the
+guarantee is that after every worker job `HEAD` must still be on the
+bound branch and the new tip must descend from the old one, or the job
+fails (`BranchInvariantViolated`).
+
+### When a milestone gets stuck: the refusal-state exits
+
+A binding can reach one of two refusal states, which block every step --
+from the branch and from `main` -- until one exit runs. The exits never
+touch a ref or a pull request:
+
+- **`pr_closed_unmerged`**: the Draft PR was closed without being merged.
+  The three exits are **exclusive** -- choose one:
+  1. **reopen** the PR on GitHub; the next step on the branch notices and
+     continues. GitHub cannot reopen a PR whose head branch was deleted
+     on GitHub: restore the branch there first, or take one of the other
+     exits;
+  2. `workflow-controller --work-item <id> milestone-binding --new-pr <repo>`:
+     continue on the same branch with a new Draft PR, opened with the
+     next branch commit. The old PR is recorded as superseded and is
+     never adopted again; do **not** reopen it afterwards (a reopened
+     superseded PR is refused by name until you close it again). If the
+     branch was already merged into `main` by hand, without a PR, this is
+     the exit to take: the next step finds nothing to open and records
+     the milestone `CLOSED`;
+  3. `workflow-controller --work-item <id> milestone-binding --abandon <repo>`:
+     retire the binding. Admitted only while `origin/main`'s committed
+     `WORKFLOW_STATE.json` has no unfinished entry for the work item:
+     Workflow 2.5.1 cannot retire a work item whose state already reached
+     trunk.
+- **`merged_before_acceptance`**: the PR was merged before the
+  `/accept-milestone` commit. Later branch commits would never reach
+  `main`. The exit is `--new-pr`, which continues the work item on the
+  same branch (its next PR will meet `integration_required`, because
+  `main` holds the merge commit). `--abandon` is named only when its
+  precondition holds. If `origin/main` already records the item
+  `MILESTONE_COMPLETE` without an acceptance commit (a phase set by
+  hand), `--new-pr` would only lead back here, so the gate names
+  `--abandon` alone and `milestone-binding --new-pr` refuses.
+
+Two more situations have their own exits:
+
+- **`bound_item_missing`**: the plan was discarded (or stashed) after the
+  bind, so the bound work item is gone from the branch's working tree.
+  The Controller will not plan a second milestone on the bound branch.
+  Restore the plan files (`git restore`, or `git stash pop`), or, when
+  nothing was committed or pushed on the branch yet, run `--abandon` and
+  then delete the leftover local `milestone/<id>` before planning the
+  same id again.
+- **A bind interrupted by a crash** leaves a `BRANCH_PLANNED` record. The
+  next step completes it when it can; otherwise the refusal names the
+  exit for what it observes: switch to a `milestone/<id>` the bind
+  created (at the recorded branch point or a descendant); remove or
+  rename one it did not create; when none exists, create
+  `milestone/<id>` at the current `main` tip (or at the recorded branch
+  point if `main` no longer descends from it) and switch to it; or
+  `--abandon` if the plan was discarded. Creating the branch after
+  `main` was rewound below the work item's `base_commit` opens a Draft
+  PR in the plan-stage window that carries the commits the rewind
+  removed from `main`.
+
+The Controller never deletes a branch. To plan an abandoned id again,
+first delete its old branches yourself: `git branch -d milestone/<id>`
+(`-D` only if you mean to discard commits on it) and
+`git push origin --delete milestone/<id>`. The bind then renames the old
+record to `<work_item_id>.abandoned-<n>.json`, and that binding's PR
+numbers stay excluded from every later binding of the id.
 
 ## Continuous integration
 
@@ -683,9 +881,9 @@ validation. It is called, never triggered directly, and has three jobs,
 each on `ubuntu-latest` with Python 3.12, read-only permissions and
 `fail-fast: false` for its matrix:
 
-- `controller`: the Controller suite in seven named shards (`identity`,
-  `job`, `resume`, `decision`, `cli`, `worker`, `docs`). A test requires
-  every `tests/test_*.py` module to be in exactly one shard, in
+- `controller`: the Controller suite in eight named shards (`identity`,
+  `job`, `resume`, `decision`, `cli`, `worker`, `docs`, `trunk`). A test
+  requires every `tests/test_*.py` module to be in exactly one shard, in
   `package`, or in the one named exclusion,
   `tests.test_integration_disposable_repo`, which needs the live
   `claude` binary and real spend;
@@ -696,61 +894,162 @@ each on `ubuntu-latest` with Python 3.12, read-only permissions and
   `tests.test_packaged_runtime`, then installs the wheel with pipx and
   checks `--version`'s first line.
 
-`ci.yml` runs it on every push to `main` and every pull request. A newer
-push to the same ref cancels the run in progress. Pushes to other
-branches are validated through their pull request.
+Two workflows call it:
+
+- `ci.yml` runs on every pull request, milestone branches included (they
+  are validated through their Draft PR). A newer push to the same ref
+  cancels the run in progress. Pushes to other branches without a pull
+  request are not validated.
+- `main.yml` runs on every push to `main` and on `workflow_dispatch`
+  (no inputs: it classifies the current tip of `main`). After `validate`,
+  its `release-plan` job classifies the commit, and its `build` and
+  `publish` jobs run only when a release is due or resumable (see
+  "Releasing"). Its runs never cancel one another (concurrency group
+  `main-release`). GitHub keeps one running and one pending run per
+  group, so a burst of merges can skip a middle commit's run; that loses
+  nothing, because classification compares with the last release tag in
+  the commit's history, not with the previous push. `publish` is the
+  only job with write permission, and every action outside `validate` is
+  pinned to a commit SHA.
+
 `workflow-conformance.yml` is managed by the Workflow Manager and is
-untouched.
+untouched. `release.yml` is gone: pushing a `v*` tag by hand triggers
+nothing.
 
 The three workflow files are generated. Edit the model in
 `tools/ci_workflows.py`, then run `python3 tools/ci_workflows.py --write`;
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
 committed file differs from the model.
 
-`ci.yml` and `validate.yml` replace `controller-tests.yml`. A
-branch-protection rule that required the old `controller-tests` check
+A branch-protection rule that required the old `controller-tests` check
 must now require the `validate / controller (...)` checks (and, if you
 want them, `validate / conformance (...)` and `validate / package`).
+Branch protection is not required by anything here.
 
 ## Releasing
 
+A release is **driven by a version change on `main`**. The repository
+policy's `release` section names the version source, the tag format,
+the build and verify commands, the artifacts and the publication target;
+for this repository that is `pyproject.toml`'s static
+`[project].version` (plain `MAJOR.MINOR.PATCH`, no pre-releases), tags
+`v{version}`, and a GitHub Release carrying the wheel and `SHA256SUMS`.
+The generic transaction is `controller/release_txn.py`;
+`tools/release.py` is this repository's thin CLI over it.
+
 For maintainers:
 
-1. Bump the static `[project].version` in `pyproject.toml` (plain
-   `MAJOR.MINOR.PATCH`, no pre-releases) in a pull request to `main`.
-2. After it merges, tag that `main` commit `v<version>` and push the tag:
-   `git tag v1.2.0 <commit>` then `git push origin v1.2.0`.
-3. `release.yml` runs on the tag. Its `validate` job is the same
-   `validate.yml` as CI. `build` then checks the tag against the version
-   (`tools/release.py verify-tag`), requires the tagged commit to be on
-   `origin/main`, builds the wheel with
-   `WORKFLOW_CONTROLLER_RELEASE_TAG` set, verifies it
-   (`verify-wheel --tag`), smoke-tests it with pipx and writes
-   `SHA256SUMS`. `publish` refuses a tag that already has a release
-   (`check-unpublished`), re-verifies the wheel, checks that the tag
-   still names the commit that was built (`verify-tag-commit`) and runs
-   `gh release create` with the wheel and `SHA256SUMS`.
-4. Once, enable the repository's **immutable releases** setting. It makes
-   a published release's assets and tag unchangeable, even by an admin,
-   and a workflow cannot turn it on for itself.
-5. A failed or bad release is fixed with a new PATCH version, never by
-   moving or re-pushing a tag. `publish` refuses a tag that already has a
-   release, so a re-pushed tag publishes nothing.
+1. Bump the version in `pyproject.toml` in a commit that reaches `main`
+   through a pull request (or, as for 1.1.1, a release-preparation
+   commit).
+2. The push to `main` runs `main.yml`. `release-plan` runs
+   `tools/release.py classify --commit <sha>`, which compares the
+   version with the release tags in the commit's history and prints one
+   state (`--commit` takes a full 40-hex SHA of a commit already on
+   `origin/main`):
 
-A tag moved while its release is running is refused by
-`verify-tag-commit`, and the run queued for the moved tag then releases
-the new commit. The one gap is the few seconds between that check and
-`gh release create`; once the release is published, immutable releases
-close it.
+   | State | Meaning | Outcome |
+   |---|---|---|
+   | `NO_CHANGE` | the version's tag is at an earlier commit and released | success, nothing published (the ordinary merge) |
+   | `RELEASE_DUE` | a new, higher version with no tag yet | build, verify, tag, publish |
+   | `RESUME` | the version's tag exists (here or at an earlier commit) with no release, or only a draft | build and verify **the tag's own commit**, then complete publication |
+   | `ALREADY_RELEASED` | the tag is at this commit and its published assets are consistent | success, no-op |
+   | `ABANDONED_VERSION` | the version's tag is acknowledged in `abandoned_tags` (today only `v1.1.0`) | success, nothing published |
+   | `BASELINE_UNRELEASED` | a lower tag in the history has no published release and is not acknowledged | fail, naming every such tag (resolutions below) |
+   | `INVALID_TRANSITION` | a new version that is not higher than the highest tag in the history | fail |
+   | `COLLISION_TAG_ELSEWHERE`, `COLLISION_RELEASE_WITHOUT_TAG`, `RELEASE_MISMATCH`, `ABANDONED_TAG_INCONSISTENT` | the tags, releases and policy contradict one another | fail, for a human |
+
+3. For `RELEASE_DUE`/`RESUME`, `build` checks out exactly the target
+   commit, runs the policy's build and verify commands (for this
+   repository `verify-wheel --tag --commit`), smoke-tests the wheel with
+   pipx and writes `SHA256SUMS`. `publish` reclassifies with fresh reads,
+   refuses a target that differs from what was built, re-verifies the
+   artifacts, and only then (for `RELEASE_DUE`) creates the annotated tag
+   at that commit and pushes it, then publishes the release and verifies
+   the published assets.
+
+The tag is created only after validation and artifact verification, and
+it is never moved or deleted. A run interrupted at any point -- before
+the tag push, or after it with no release or a half-uploaded draft -- is
+completed by the next push to `main` that still carries the version, or
+by running `main.yml` from the Actions tab (`workflow_dispatch`): both
+classify `RESUME` at the tag's own commit. A draft is completed from
+its present assets, which must verify; a draft that does not is left
+for a human, never deleted. A failed or bad *published* release is fixed
+with a new PATCH version.
 
 `build_origin: "release"` in a wheel's `BUILD_INFO.json` is not proof of
 origin (see "Runtime identity"): check the wheel against the release's
 `SHA256SUMS`.
 
-Release runs never cancel each other: a second run for the same tag
-queues behind the first, and runs for different tags are independent.
-Only `publish` has write permission, and every action in `release.yml`
-is pinned to a commit SHA.
+### An unreleased tag below a new version: `BASELINE_UNRELEASED`
+
+A tag without a published release is never skipped over. Suppose
+`v1.2.0` was pushed but its publication failed, and `main` then moved to
+1.2.1 (by a bump, or by a hand-pushed `v1.2.1`). Every later run fails
+`BASELINE_UNRELEASED`, naming `v1.2.0`, until one of two commits on
+`main` resolves it:
+
+- **resume** it: set the version back to `1.2.0`. That commit classifies
+  `RESUME` at `v1.2.0`'s own commit and publishes it; the bump to 1.2.1
+  is then `RELEASE_DUE` again;
+- **acknowledge** it: add `"v1.2.0"` to the policy's
+  `release.abandoned_tags`. It then counts as settled, and the run
+  proceeds with 1.2.1.
+
+**Acknowledging a tag settles only that tag.** Every lower unreleased
+tag in the history is checked, not just the highest: if `v1.1.5` is
+also unreleased, acknowledging `v1.2.0` still leaves the next run
+`BASELINE_UNRELEASED`, naming `v1.1.5`, until it too is resumed or
+acknowledged. A release published by hand, outside the transaction, is
+outside this guarantee.
+
+### Runbook: the first automatic release
+
+1.2.0 is the first release published by `main.yml`. The installed
+Controller stays 1.1.1 until then; before it, install a locally built
+wheel only for disposable trials.
+
+1. **One-time repository settings** (Settings, General; free, not branch
+   protection):
+   - turn on **immutable releases**. It makes a published release's
+     assets and tag unchangeable, even by an admin, and a workflow cannot
+     turn it on for itself;
+   - under "Pull Requests", turn **off** "Allow squash merging" and
+     "Allow rebase merging", leaving "Allow merge commits" on. Squash and
+     rebase merges take the reviewed Workflow commits off `main`; close-out
+     detects them (`merge_method_rewrote_history`), but cannot undo them.
+2. **Check the current state.** Once `origin/main` carries the policy
+   (`classify` reads `.workflow-controller/policy.json` committed at the
+   classified commit, and refuses a commit without one), on an
+   up-to-date `main`, before any bump:
+
+   ```bash
+   git fetch --tags origin
+   python3 tools/release.py classify --commit "$(git rev-parse origin/main)"
+   ```
+
+   This needs an authenticated `gh`. It must print `NO_CHANGE` (`v1.1.1`
+   released at an earlier commit; `v1.1.0` is acknowledged in
+   `abandoned_tags`). Anything else is resolved first.
+3. **Prepare the release commit** on `main`: set `version = "1.2.0"` in
+   `pyproject.toml`, and nothing else. `classify` only accepts a commit
+   already on `origin/main`, so step 2 is the pre-push check; the push
+   itself is the first `RELEASE_DUE` run.
+4. **Push**, then watch `main.yml`: `validate`, `release-plan`
+   (`RELEASE_DUE`), `build`, `publish`. Check that the release `v1.2.0`
+   exists with the wheel and `SHA256SUMS`, and that `v1.2.0` peels to the
+   release commit.
+5. **If a job fails**, fix the cause and re-run `main.yml` from the
+   Actions tab, or let the next push to `main` do it; never re-push or
+   move the tag.
+6. **Install it**: `pipx install` the released wheel (or
+   `pipx upgrade`), check `workflow-controller --version`, and verify the
+   wheel against `SHA256SUMS`.
+
+A release commit that lands on `main` while a milestone is in flight
+moves `main` under that milestone: it ends at `integration_required`
+(see "Milestone branches and pull requests"), which is expected.
 
 ## Development
 
@@ -772,7 +1071,10 @@ See `docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` for the full design record,
 for the implementation-stage automation, routing and concurrency design,
 `docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md` for
 the release, runtime-identity and observation design,
+`docs/ai-workflow/CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md` for the
+milestone-branch, pull-request and release-transaction design,
 `docs/adr/0001-controller-generation-1-architecture.md` for the
-decisions most likely to matter to a later generation, and
-`docs/adr/0002-release-runtime-identity-and-observability.md` for this
-release's.
+decisions most likely to matter to a later generation,
+`docs/adr/0002-release-runtime-identity-and-observability.md` for
+1.1's, and `docs/adr/0003-trunk-branch-pr-release-orchestration.md` for
+the trunk, pull-request and release decisions.

@@ -774,3 +774,50 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
       `test_release_tools`, `test_write_containment`, `test_no_rewrite_invariants`,
       `test_package_structure` and `test_plan_document_consistency`: 244 tests, OK;
     - `test_ci_workflows` OK, and `python3 tools/ci_workflows.py --check` passes.
+- **CP10 -- documentation and full verification under Workflow 2.5.1: complete.**
+  - `README.md`:
+    - the overview names the policy-gated branch/PR/release behaviour, and the command table gains
+      `milestone-binding --new-pr`/`--abandon`;
+    - "Controller-owned runtime state" gains `repositories/` (binding records are read by
+      lifecycle decisions, so they must be kept and backed up);
+    - "Invariants" gains "never merges, never rewrites";
+    - new "Milestone branches and pull requests": the lifecycle, the readiness gate table, merge
+      and close-out, `integration_required` as the **normal** path under Workflow 2.5.1 (release
+      commits included), the "Update branch" warning, the worker branch guard;
+    - its subsection "When a milestone gets stuck" covers the exclusive `pr_closed_unmerged` exits
+      (reopen, with the deleted-head-branch caveat; `--new-pr`, including a branch merged by hand;
+      `--abandon` and its precondition), `merged_before_acceptance`, `bound_item_missing`, the
+      `BRANCH_PLANNED` crash exits (including the rewound-trunk Draft PR), and deleting old
+      branches by hand before re-planning an abandoned id;
+    - "Continuous integration" describes the eight shards, `ci.yml` on pull requests and
+      `main.yml` on `main`, and the removal of `release.yml`;
+    - "Releasing" is rewritten around `tools/release.py classify` and its state table, with
+      `BASELINE_UNRELEASED` and its two resolutions (acknowledging settles only that tag), and
+      the first-automatic-release runbook (immutable releases on, squash/rebase merging off, the
+      pre-bump `classify`, the 1.2.0 commit, failure handling, install).
+  - New `docs/adr/0003-trunk-branch-pr-release-orchestration.md`.
+  - `docs/ROADMAP.md`: the user's own uncommitted roadmap revision, present in the working tree
+    before CP10 started, already held section 1.5 for this milestone (current) and 1.6 for the
+    follow-up Controller / Workflow 2.6.x integration milestone, plus later entries (1.7-1.9,
+    7.5, 7.6, the dependency diagram). CP10 adopts that revision as its ROADMAP change and edits
+    only 1.6's scope list, to name everything under the plan's "Follow-up milestone boundary"
+    (E1-E5, `VALIDATED_WORKFLOW_RELEASES` and the inventory/golden re-run, the in-flight bound
+    milestone migration, `gitrepo.merge_trunk`). The other entries are the user's text,
+    committed unchanged.
+  - Every README identifier (gate names, classification states, `BRANCH_GUARD_TOOLS`, the
+    `main-release` group, the CLI flags) was checked against the code.
+  - Verified (full, CP10's list):
+    - `python3 -m unittest discover -s tests -t .`: 1599 tests, OK (6 skipped), 166 s;
+    - the seven conformance suites from `scripts/`: fingerprint 218, state 853, harness 19,
+      integration 260 (1 skipped), acceptance matrix 146 (18 skipped), completion obligations 106,
+      fingerprint generalization 79, all OK;
+    - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime`: 9
+      tests, OK;
+    - `python3 tools/ci_workflows.py --check`: passes;
+    - `tools/release.py classify` of `HEAD` (`367a2fa`): `NO_CHANGE` (`v1.1.1` published at
+      `00c3b71`, an ancestor).
+  - **Deviation, for the reviewer.** `classify` only accepts a commit on `origin/main`, and
+    nothing of this milestone is pushed, so in this checkout it refuses `HEAD` (by design). The
+    classification ran in a throwaway clone whose `origin` is a local bare mirror of this
+    repository (tags `v1.1.0`, `v1.1.1` fetched from GitHub first, `main` = `HEAD`); releases were
+    read from the real GitHub repository through the policy's forge, read-only.

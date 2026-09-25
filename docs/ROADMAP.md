@@ -187,6 +187,207 @@ Requirements:
 
 ---
 
+# 1.5 Trunk Branch / PR / Release Orchestration
+
+**Priority:** Immediate / High
+
+**Status:** Current active Controller milestone (planned under Workflow 2.5.1).
+
+Milestone:
+
+`workflow-controller-trunk-branch-pr-release-orchestration`
+
+This milestone establishes the lightweight trunk-based repository lifecycle that later protocol and provider-neutral work will build on.
+
+Required end state:
+
+- one short-lived `milestone/<work-item-id>` branch per milestone;
+- Draft PR created/reused through a repository-host boundary;
+- human remains the only PR merger by policy;
+- no permanent `develop` branch;
+- fail closed when trunk moves in a way Workflow 2.5.1 cannot safely integrate;
+- generic repository release policy with Controller as the first reference adopter;
+- `pyproject.toml` is the single human-maintained Controller version authority;
+- version change on trunk drives one deterministic release transaction;
+- validate/build/verify before tag creation;
+- immutable tags;
+- resumable partial publication only when the tag identifies the expected validated commit;
+- no automatic PR merge;
+- generic Git / forge operations stay outside Workflow lifecycle semantics.
+
+This milestone must finish independently under Workflow 2.5.1. It must not wait for Workflow 2.6.x.
+
+## 1.6 Post-Workflow-2.6 compatibility integration
+
+**Priority:** Immediately after both parallel milestones complete.
+
+After:
+
+1. Workflow Manager ships the review-artifact/concurrency hardening release (2.6.x); and
+2. Controller finishes trunk/branch/PR/release orchestration under Workflow 2.5.1;
+
+run a small integration milestone rather than mixing the two efforts while either contract is still moving.
+
+Expected scope:
+
+- update the Controller repository to the released Workflow 2.6.x through Workflow Manager (never by hand), between milestones;
+- measure the released contract (phases, state fields, commands) and answer the trunk plan's open questions E1-E5 from it;
+- replace Controller's duplicated feedback-path resolver (`controller/evidence.py`, `resolve_feedback_dir`) with Workflow's authoritative resolver/query;
+- re-measure and re-anchor any expected-outcome/state-writer checks that still depend on Workflow internals, against the released 2.6 commands;
+- admit the release in `managed_repo.VALIDATED_WORKFLOW_RELEASES`, update the version fixtures, and re-run the inventory and golden decision suites against every admitted release;
+- test 2.5.1 -> 2.6.x migration, including an in-flight bound milestone;
+- any branch/base/worktree binding that genuinely belongs to the released Workflow contract, including wiring `gitrepo.merge_trunk` to a released base-moving transition if E2-E4 provide one, or naming the narrow Workflow follow-up if they do not;
+- preserve the current fail-closed behavior (`integration_required` plus the documented manual merge) until the actual released 2.6 contract has been measured.
+
+The scope is planned from the actually released 2.6.x implementation, not from this list.
+
+This should stay a compatibility/integration milestone, not become the full architectural decoupling project.
+
+## 1.7 Workflow/Controller orchestration protocol decoupling
+
+**Priority:** High after the 2.6 compatibility integration.
+
+Goal:
+
+> Controller should depend on a small, versioned public Workflow orchestration protocol, not on Workflow release numbers, artifact paths, internal helper names, or copied transition logic.
+
+Target public Workflow protocol operations:
+
+1. `describe`
+   - Workflow release;
+   - orchestration protocol version;
+   - supported governing protocol versions;
+   - declared capabilities.
+
+2. `verify`
+   - repository/Workflow installation health;
+   - state readability and consistency;
+   - protocol readiness.
+
+3. `next-action`
+   - normalized current state snapshot;
+   - semantic action id;
+   - arguments;
+   - disposition (`automatic`, `validation`, `human_gate`, `external_gate`, `blocked`, `complete`);
+   - generic worker requirements;
+   - broad allowed result classes;
+   - state revision / state identity used to make the decision.
+
+4. `reconcile`
+   - authoritatively classify the durable result of an action;
+   - recognize valid same-phase progress such as `IMPLEMENTING -> IMPLEMENTING` with one checkpoint completed;
+   - report progress, valid no-progress, human/external gate reached, completion, or invalid result;
+   - return the new durable state identity.
+
+5. `record-external-result`
+   - ingest semantically typed external/manual evidence;
+   - examples: manual external review verdict, PR-review result, functional evidence;
+   - Workflow resolves its own storage/binding rules.
+
+6. `resolve-artifact`
+   - narrow escape hatch when a Controller genuinely needs a Workflow-owned artifact path;
+   - semantic artifact kind rather than copied filesystem rules.
+
+Optional/read-only convenience:
+
+- `inspect`, primarily for CLI/UI/debugging; it should not be required on every orchestration loop if `next-action` already carries the relevant state snapshot.
+
+Protocol design rules:
+
+- stable semantic action ids, not internal Python function names;
+- literal Workflow command text may be supplied as a rendered invocation, but must not be the protocol identity;
+- protocol version is separate from:
+  - Workflow release version;
+  - work-item governing Workflow version;
+- exact Workflow releases may remain "tested with" metadata, but should stop being the fundamental compatibility gate;
+- unknown protocol major fails closed;
+- every response is schema-validated and bound to repository/work-item/state identity;
+- stale decisions are rejected if the state revision/identity changes before execution;
+- broad stable error codes are exposed alongside precise Workflow-native diagnostics;
+- Controller verifies generic execution facts, while Workflow owns lifecycle meaning.
+
+Desired compatibility model:
+
+```text
+Workflow 2.6.0 ─┐
+Workflow 2.7.0 ─┤
+Workflow 2.9.3 ─┤── Orchestration Protocol v1 ── Controller
+Workflow 3.x   ─┘
+```
+
+As long as the public protocol remains compatible, a new Workflow release should normally require no Controller lifecycle-code change.
+
+## 1.8 Policy-driven gates and automated validation
+
+The protocol must not hard-code today's human gates.
+
+Future policy should permit repositories to choose, for example:
+
+```text
+plan cross-model approval       -> automatic advance
+implementation technical review -> automatic advance
+functional validation           -> automatic or human by policy
+PR review / merge               -> external/human gate
+```
+
+Important separation:
+
+- Workflow defines whether evidence satisfies a lifecycle gate;
+- Controller executes the declared policy;
+- harness/model selection remains Controller policy;
+- PR merge remains human-only unless repository policy is deliberately changed later.
+
+Potential future direction:
+
+- remove ceremonial human plan approval once required local + cross-model review evidence is current and approved;
+- potentially remove separate human implementation approval when technical acceptance is already established and PR review/merge is the true product/integration acceptance boundary;
+- make functional review evidence-driven:
+  - Workflow Manager / Controller may use disposable-repo, migration, integration, and E2E suites as automated functional evidence;
+  - RepFlow may use emulator/device E2E, migration, UI and integration tests, while still requiring human visual/product acceptance for selected changes;
+- allow risk/repository policy to decide whether a validation result auto-advances or stops for a human.
+
+Automated validation proves that the configured evidence passed; it does not make the work item irreversible.
+
+## 1.9 PR-review defect loop and merge-readiness identity
+
+A technically accepted milestone must remain reopenable until the PR is actually merged.
+
+Required end-state semantics:
+
+```text
+implementation
+  -> technical review
+  -> functional validation
+  -> PR_READY
+  -> human PR review
+       -> merge
+       -> or CHANGES_REQUESTED -> remediation -> re-review/re-validation -> PR_READY
+```
+
+Merge readiness must be bound to an exact identity, including at minimum the current PR head SHA and the evidence produced against that head.
+
+A changed PR head makes previous merge-readiness evidence stale unless Workflow policy explicitly proves otherwise.
+
+External facts and lifecycle meaning stay separated:
+
+- forge adapter reports facts such as:
+  - PR head changed;
+  - review `CHANGES_REQUESTED`;
+  - review `APPROVED`;
+  - checks changed;
+  - PR closed/reopened/merged;
+- Workflow decides:
+  - which evidence is stale;
+  - whether implementation review must rerun;
+  - whether functional validation must rerun;
+  - whether targeted validation is sufficient;
+  - which lifecycle action is next;
+- Controller launches the required workers/actions.
+
+A PR-review defect normally reopens the same work item rather than creating a new milestone.
+
+---
+
 # 2. Workflow / Workflow Manager Migration Hardening
 
 **Priority:** High
@@ -338,14 +539,35 @@ Possible providers/harnesses:
 
 Required architecture:
 
+- a stable **Harness Adapter Protocol** between Controller lifecycle logic and provider-specific execution;
 - worker launcher abstraction;
 - capability detection;
 - normalized model/effort/permission semantics;
+- normalized worker event stream;
+- normalized usage/quota telemetry where providers expose it;
 - per-role harness routing;
 - provider-specific configuration outside lifecycle semantics;
-- durable job records include resolved harness/provider identity;
+- durable job records include resolved harness/provider/model/effort identity;
 - reviews remain fresh/single-agent where policy requires;
 - lifecycle correctness must not depend on provider-specific prompt behavior.
+
+The Workflow protocol should return generic worker requirements (for example `implementation`, `independent_reviewer`, fresh-session requirement, independence requirement, subagent policy). Controller routing chooses the concrete harness/model/effort.
+
+Examples:
+
+```text
+independent_reviewer
+  -> Claude Code + Opus
+  -> Codex + Sol
+  -> another future harness/model
+
+implementation
+  -> Codex + Terra
+  -> Claude Code + Sonnet
+  -> another future harness/model
+```
+
+Workflow must never encode provider/model names as lifecycle semantics.
 
 Do not weaken Workflow guarantees to accommodate a provider.
 
@@ -472,6 +694,116 @@ Provide direct commands for:
 
 ---
 
+## 7.5 Observation API, structured event store, and web dashboard
+
+The existing `follow` implementation is the first observation client, not the final architecture.
+
+Target data flow:
+
+```text
+Harness raw stream
+  -> Harness adapter
+  -> normalized Controller events
+  -> durable event/history store
+       -> CLI `follow`
+       -> local web dashboard
+       -> analytics / historical reports
+```
+
+Observation must be passive by default:
+
+- viewing/fetching the dashboard must not launch a model;
+- it must not append to worker context;
+- it must not change routing, Workflow state, retries, or lifecycle decisions;
+- chat viewing, metrics, live status and historical analytics should consume already-produced harness/Controller/Workflow/forge telemetry;
+- optional AI-powered summaries or semantic analysis must be explicit model-consuming features, separate from normal dashboard operation.
+
+Store both:
+
+- raw provider/harness payloads where useful for debugging;
+- normalized events for stable UI/analytics.
+
+Normalized event vocabulary should cover at least:
+
+- assistant message;
+- tool call;
+- tool result;
+- system event;
+- usage update;
+- quota/rate-limit event;
+- Workflow action/transition;
+- worker/job/run result;
+- forge/PR observation;
+- validation result.
+
+Stable identity hierarchy:
+
+```text
+repository_id
+  -> work_item_id
+      -> controller_run_id
+          -> job_id
+              -> worker_session_id
+```
+
+This must let the dashboard answer:
+
+- what is running in each repository;
+- current Workflow release/protocol/phase/checkpoint/action;
+- current harness/model/effort;
+- live worker chat/tool activity;
+- retries, failures, quota pauses and recovery;
+- plan/implementation review convergence;
+- time spent per lifecycle phase/checkpoint;
+- token/cache/cost/context metrics where available;
+- cost/tokens/time per successful checkpoint or approved review;
+- model + effort efficiency by lifecycle role;
+- harness efficiency independently from model efficiency;
+- Workflow release/protocol efficiency comparisons;
+- PR/readiness/check state;
+- historical milestone/run/job timelines.
+
+Metrics should be computed deterministically from stored telemetry whenever possible. Missing provider metrics should remain `unknown`, not be guessed by a model.
+
+## 7.6 Forge / repository-host adapter protocol
+
+Controller should be provider-neutral above a small repository-host adapter boundary.
+
+Initial provider:
+
+- GitHub, implemented with `gh` / GitHub APIs as appropriate.
+
+Future providers may include:
+
+- GitLab;
+- Bitbucket;
+- other compatible forges.
+
+Normalized operations should cover concepts such as:
+
+- describe provider/repository;
+- resolve/open/reuse PR/MR;
+- observe PR/MR;
+- mark Draft/Ready;
+- observe reviews;
+- observe required checks;
+- observe head/base identities;
+- observe merged/closed/reopened state.
+
+The Controller lifecycle must consume normalized forge facts, not GitHub-specific JSON shapes.
+
+Correctness model:
+
+- polling/query-on-demand is authoritative and sufficient for recovery;
+- future webhooks are fast notifications only;
+- after downtime, Controller re-queries the forge and reconstructs current truth;
+- PR/MR readiness is bound to the exact observed head SHA;
+- a head change is a deterministic stale-evidence trigger reported to Workflow;
+- review `CHANGES_REQUESTED` is distinct from "head changed";
+- Controller does not decide which Workflow evidence must be invalidated.
+
+Current policy remains human-only merge. The adapter may observe merge state but must not auto-merge unless a future repository policy explicitly changes that invariant.
+
 # 8. Routing and Cost/Efficiency Improvements
 
 **Priority:** Ongoing after routing foundation
@@ -490,7 +822,18 @@ Future improvements:
   - normal review at high;
   - difficult/final review at xhigh;
 - usage/cost recording per lifecycle role;
+- record model, harness, effort and Workflow/protocol dimensions separately so efficiency can be compared without conflating them;
+- support derived metrics such as cost/token/time per checkpoint, review round, accepted plan, accepted implementation and successful validation;
 - preserve user override precedence.
+- make routing configuration hot-reloadable between lifecycle steps within one long-running `run` invocation:
+  - re-read the effective routing policy immediately before each new worker is launched;
+  - edits to repo-local/user-global routing config should affect later stages without restarting Controller;
+  - a worker already running keeps the model/effort/harness it was launched with;
+  - routing changes must never mutate an active worker session;
+  - invalid routing edits should fail closed at the next dispatch boundary, before launching another worker;
+  - record the exact resolved routing snapshot used for each job so historical runs remain auditable;
+  - preserve deterministic precedence between CLI overrides, repo-local config, user-global config, and defaults;
+  - future web UI should be able to edit routing policy safely and have it take effect on the next worker boundary.
 
 Potential future integration:
 
@@ -537,28 +880,38 @@ Ongoing work:
 # Suggested Execution Order
 
 ```text
-0. Automatic lifecycle orchestration                    COMPLETE
+0. Automatic lifecycle orchestration                         COMPLETE
    |
-1. Release/runtime isolation + live observability       NEXT
+1. Release/runtime isolation + live observability            COMPLETE (1.1-1.3)
    |
-2. Workflow / Workflow Manager migration hardening
+1.5 Trunk/branch/PR/release orchestration                    CURRENT
+   |                    \
+   |                     \  Workflow Manager 2.6 hardening runs in parallel
+   |                      \
+1.6 Controller <-> released Workflow 2.6 integration         AFTER BOTH COMPLETE
    |
-3. RepFlow disposable migration re-run
+1.7 Workflow Orchestration Protocol decoupling
    |
-4. Real RepFlow migration + dogfooding
+2. RepFlow disposable migration / real migration validation
    |
-5. Harness / agent portability
+3. Harness Adapter Protocol + multi-harness/model portability
+   |
+4. Forge Adapter maturation + PR-review/remediation loop
+   |
+5. Structured Observation API + web dashboard + analytics
    |
 6. Concurrency / multi-worktree / worker leases
    |
-7. Operator UX + diagnostics
+7. Operator UX / diagnostics
    |
-8. Routing / cost-efficiency improvements
+8. Routing / cost-efficiency / usage-aware scheduling
    |
 9. Orchestrator / escalation layer
    |
 10. Ongoing quality / maintenance
 ```
+
+The exact numeric headings above remain historical roadmap sections; this execution order is the dependency-oriented target sequence.
 
 ---
 
@@ -576,11 +929,20 @@ Ongoing work:
 4. **One correctness model across runtimes.**
    Source execution, wheel installs, different agent harnesses, and observability modes must reconcile to the same lifecycle semantics.
 
-5. **Manual gates stay manual.**
-   External review, explicit approvals, functional acceptance, and other user-owned decisions are not automated away.
+5. **Gate ownership is explicit and policy-driven.**
+   Controller must not hard-code today's manual gates. Workflow declares whether the current requirement is automatic, validation-driven, external, or human-owned. Human-only actions such as PR merge remain human-owned unless repository policy is deliberately changed.
 
-6. **Dogfood continuously.**
+6. **Public protocols, not implementation details.**
+   Controller may depend on versioned Workflow, harness, forge and observation contracts, but not on copied artifact-path rules, internal Workflow helper names, provider-specific event formats, or forge-specific lifecycle semantics.
+
+7. **External systems report facts; Workflow owns lifecycle meaning; Controller owns orchestration.**
+   Harnesses report execution, forges report repository/PR facts, and Workflow decides what those facts mean for lifecycle validity and evidence freshness.
+
+8. **Observation is passive by default.**
+   CLI/web dashboards and metrics read durable events and telemetry without consuming model quota or changing execution.
+
+9. **Dogfood continuously.**
    Workflow Controller should operate on its own repository and on RepFlow as realistic integration targets.
 
-7. **Prefer bounded milestones.**
-   Correctness and migration safety are easier to review when changes are scoped and independently accepted.
+10. **Prefer bounded milestones.**
+    Correctness and migration safety are easier to review when changes are scoped and independently accepted.

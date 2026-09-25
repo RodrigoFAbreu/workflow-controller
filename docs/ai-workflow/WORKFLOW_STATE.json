@@ -2263,8 +2263,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 7,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 16,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "4280bb6081530c1e437273348035d28c92d69c5c",
@@ -2274,57 +2274,57 @@
       "checkpoints": {},
       "current_bundle_id": null,
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "7cb3d95da27e33d871f1b9e314eec7b37bbd91e9b50425483759d2d24aed3eda",
-        "approved_review_content_id": "635bffec6bd618df19fc80c48b6931a5c7d4cfdadbf821d8a10b7eef435bb6be",
+        "reviewed_bundle_id": "79fe019c66500e5229b8c8a77c40edd5bbbd960124cbdab74d2d08ec6ad690e1",
+        "approved_review_content_id": "0eebc91de39986415f0e5272a29b0b8271118b9517f462d6a5387fb88f378c82",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "967b76009ff8c32f80d9bdce818493ccd63a7cd5"
+            "blob": "84f6c1a1d9407d6259fad7fee1dc7089014b6452"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "6c24c95ed045eddf92cc5014c0d9e98c910cf97c"
+            "blob": "cfe895c7cfa6fbfcb15a66f241f5c2c0cc8db1e7"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
             "exists": true,
             "mode": "100644",
-            "blob": "09941fd0645ade875890e1de950509e0df106a4e"
+            "blob": "6479ee8476d25f2be85cdfb25167cb56fdb306ae"
           }
         ],
         "reviewed_content_commit": null,
         "legacy_evidence": null,
-        "user_confirmation": "I approve the plan stage for workflow-controller-worker-lifecycle-ownership.",
+        "user_confirmation": "approve workflow-controller-worker-lifecycle-ownership plan",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-25T15:28:41Z"
+        "recorded_at": "2026-09-25T18:55:03Z"
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "635bffec6bd618df19fc80c48b6931a5c7d4cfdadbf821d8a10b7eef435bb6be",
+        "review_content_id": "0eebc91de39986415f0e5272a29b0b8271118b9517f462d6a5387fb88f378c82",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "7cb3d95da27e33d871f1b9e314eec7b37bbd91e9b50425483759d2d24aed3eda",
+          "bundle_id": "79fe019c66500e5229b8c8a77c40edd5bbbd960124cbdab74d2d08ec6ad690e1",
           "verdict": "APPROVE",
-          "round": 7,
-          "completed_at": "2026-09-25T14:53:24Z"
+          "round": 16,
+          "completed_at": "2026-09-25T18:37:07Z"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "7cb3d95da27e33d871f1b9e314eec7b37bbd91e9b50425483759d2d24aed3eda",
+          "bundle_id": "79fe019c66500e5229b8c8a77c40edd5bbbd960124cbdab74d2d08ec6ad690e1",
           "verdict": "APPROVE",
-          "round": 7,
-          "completed_at": "2026-09-25T15:24:54Z"
+          "round": 16,
+          "completed_at": "2026-09-25T18:51:19Z"
         }
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 24,
-      "last_transition": "2026-09-25T16:15:37Z",
+      "state_revision": 56,
+      "last_transition": "2026-09-25T18:55:03Z",
       "amendment_history": [
         {
           "amendment_id": "0",
@@ -2365,7 +2365,17 @@
           },
           "checkpoints_snapshot": {},
           "pre_amendment_approval_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 16,
+          "reconciliation_outcome": {
+            "CP1": "needs_revalidation",
+            "CP2": "needs_revalidation",
+            "CP3": "needs_revalidation",
+            "CP4": "needs_revalidation",
+            "CP5": "needs_revalidation",
+            "CP6": "needs_revalidation",
+            "CP7": "needs_revalidation",
+            "CP8": "needs_revalidation"
+          }
         }
       ],
       "amendment_base_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d"

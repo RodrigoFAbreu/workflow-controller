@@ -28,7 +28,7 @@
       ]
     },
     "R4": {
-      "description": "Scheduled wakeups keep the job non-terminal; a wakeup that is never delivered fails closed (AC4)",
+      "description": "Scheduled wakeups keep the job non-terminal; a wakeup fire is recognised only by its measured, correlated command_lifecycle bracket, and a wakeup that is never delivered fails closed (AC4)",
       "checkpoint_ids": [
         "CP1",
         "CP2",
@@ -123,6 +123,16 @@
       "description": "Developed and proven against the installed Workflow 2.5.1 with no Workflow edits; operator documentation and full verification",
       "checkpoint_ids": [
         "CP8"
+      ]
+    },
+    "R18": {
+      "description": "The wakeup-fire recogniser is grounded in the captured harness fixtures: result origin is never evidence; a command_lifecycle started/completed pair is correlated by command_uuid around exactly one turn; missing, duplicated, reordered, delayed, overlapping, malformed or unmatched lifecycle events and stalled brackets fail closed, survive Controller restart by replay, and are exposed by the diagnostics; a matched wakeup stays owned work until a stop whose harness-reported count agrees, or a settle window sized by the overdue lateness bound, settles it, so an unrelated bracket cannot end the session before the real fire (amendment 0, round 9)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP5",
+        "CP7"
       ]
     }
   }

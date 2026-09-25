@@ -1,4 +1,4 @@
-# Controller worker lifecycle ownership: waiting workers, owned background work, and restart-safe supervision (Revision 7)
+# Controller worker lifecycle ownership: waiting workers, owned background work, and restart-safe supervision (Revision 16)
 
 Work item: `workflow-controller-worker-lifecycle-ownership`
 Governing workflow version: `2.2` (this repository's `docs/ai-workflow/WORKFLOW_CONFIG.json`
@@ -13,6 +13,84 @@ Roadmap slot: `docs/ROADMAP.md` section 1.4, the follow-up patch bucket. This mi
 slot with one urgent correctness hotfix. The four patches already listed there stay deferred (see
 "Non-goals").
 Measured against: Claude Code `2.1.282` (the installed `claude`).
+
+**Amendment 0 (revision 8).** Revision 7 was approved at `14205f3` and superseded by
+`/request-plan-amendment` at `6db4f6b` (`amendment_history[0]`). CP1's mandatory harness-contract
+probe disproved one assumption of revision 7: a `ScheduleWakeup` fire turn's `result` carries **no
+`origin`** at all, so revision 7's `origin.kind` wakeup-fire recogniser cannot exist. Revision 8
+replaces it with the correlated `command_lifecycle` bracket that the same probe measured around
+every fire turn, and only around fire turns (B, decision 12). Every other decision, invariant,
+checkpoint and its order, and the scope are revision 7's, unchanged unless this recogniser
+touches them. The measured evidence is the untracked `tests/harness_contract/` fixtures that CP1
+captured. They are preserved byte for byte and adopted by CP1 as they are; nothing is
+re-captured to fit this design. The amendment's own finding table is under "Plan review
+decisions".
+Revision 9 applies round 8's local review of the amendment. It corrects one misstated fixture
+fact (a fire turn has no *opening* `user` event, but can hold `tool_result`s for its own tool
+calls), re-words the CP1 contract test that pinned the misstatement, and lets the fake's fire
+turn carry tool steps. The recogniser is unchanged.
+Revision 10 applies round 9's manual external review. Its one Important finding (I1) is that a
+regular bracket around some *other* turn, opening after a pending wakeup's due time, could
+resolve that wakeup, let the worker quiesce and end the session before the real fire. Revision
+10 closes that path in B and C, not in reconciliation. A matched bracket no longer removes a
+wakeup from owned work. It makes the wakeup `fire_matched`, and a `fire_matched` wakeup stays
+owned until it *settles*: a successful `ScheduleWakeup {stop: true}` whose harness-reported
+`cancelledWakeups` agrees with the Controller's own count, or `WAKEUP_SETTLE_SECONDS` of
+supervisor time after the bracket's `completed(X)` with no contradicting bracket (decision 13).
+No new probe is needed, and the fixtures are unchanged.
+Revision 11 applies round 10's local review, two Important findings in those settlement rules.
+A stop issued from inside a fire turn now evaluates that bracket's match provisionally, so the
+wakeup whose fire is running is left out of the count compared with the harness's
+`cancelledWakeups` and the bracket's match is the wakeup the stop settled (I1). The settle
+timer now runs only under the overdue rule's own idleness predicate, so an open task pauses it
+too (I2). No probe, fixture, checkpoint or requirement changes.
+Revision 12 applies round 11's manual external review. Its one Important finding (I1) is that
+revision 11's expected count for a stop inside a fire turn rests on a harness fact no fixture
+measures, and that only CP8 had to measure it, after CP2-CP7 were built on it. CP1 now captures
+it before CP2 starts: a new probe, P12, captured into two new fixtures, one fire turn that
+stops its own wakeup and one that schedules a second wakeup first and then stops (CP1). Their
+`cancelledWakeups` must be `0` and `1`. Any other observation stops CP1 and triggers a plan
+amendment before CP2. The existing fixtures stay byte for byte. The settlement design is
+unchanged.
+Revision 13 applies round 12's local review. Its one Important finding (I1) is that
+revision 12's P12 shape test counted harness answers (a successful stop, exactly one bracket
+pair) as model shape, so an error or a later fire, both listed as amendment triggers, would
+have been discarded and recaptured instead. The shape test now judges only the model's own
+actions, and every harness answer goes to the gate. The `PROBE-DONE` marker's placement and
+the linger window's start are also stated (O1). The settlement design, the checkpoints and
+the requirements are unchanged.
+Revision 14 applies round 13's manual external review. Its one Important finding (I1) is that
+revision 13's shape test still required harness structure (a first bracket pair around one
+turn, a `tool_result` answering the stop), so a fire that never came, a missing `tool_result`
+or a multi-turn bracket failed the shape test and was recaptured instead of reaching the gate.
+Admission now reads only the model's own `ScheduleWakeup` calls, compared with the exact
+arguments each prompt names, and turn 1's reply. Everything the harness does after that is a
+gate observation. One new pure module, `tests/harness_contract/p12_admission.py`, holds both
+decisions, and the contract test covers a no-fire capture, a missing `tool_result` and a
+two-turn bracket (CP1). Both P12 probe definitions carry `"linger": 200` explicitly (O1), and
+the assertion after `completed(X)` now has the gate's scope (O2). The settlement design, the
+checkpoints and the requirements are unchanged.
+Revision 15 applies round 14's local review. Its one Important finding (I1) is that revision
+14's `admit` judged the model's whole call sequence. So a model reacting to a harness answer
+that the plan names as an observation (retrying after the exact named arguments were rejected,
+or stopping again in a later fire turn) made the capture a recapture, three times over, instead
+of reaching the amendment gate. Admission now stops at a cut point: the named sequence is
+complete, or an exact named call is answered with `is_error`. Every call after the cut goes to
+the gate. The prompts also tell the model never to retry and to call no tool in any other turn.
+The contract test gains the retry and later-fire cases (CP1). The user's options after three
+recaptures are stated (O1). The settlement design, the checkpoints and the requirements are
+unchanged.
+Revision 16 applies round 15's local review. Its one Important finding (I1) is that revision
+15's own `PROBE-EXTRA` instruction made the model's correct reply to a turn it cannot identify
+as ALPHA's fire (an unasked turn with no fire after it, or a fire whose prompt the model cannot
+see) count as a missing call, so the capture was recaptured instead of reaching the gate. With
+no cut point, admission now excuses a missing call when the model made no call after turn 1
+and every reply text it wrote after turn 1 is exactly `PROBE-EXTRA`; that capture is `ADOPT`
+and the gate reports the missing or unidentified fire. The gate also reports a turn before the
+bracket that the plan did not ask for. The contract test gains the `PROBE-EXTRA`-only case and
+its off-script counterpart (CP1). The line-number base of the P9 citation is stated (O1), and
+"completes the named sequence" is defined as exact equality (O2). The settlement design, the
+checkpoints and the requirements are unchanged.
 
 ## Goal
 
@@ -67,7 +145,12 @@ Also out of scope:
 - cgroup/systemd-scope process containment (see limitation H5);
 - rate-limit or session-limit handling. A worker that hits a usage limit stays a genuine
   `FAILURE` (observed in job `20260924T211904Z-73845184`);
-- version bumps. A patch release is a post-acceptance release-preparation commit, as for 1.1.1.
+- version bumps. A patch release is a post-acceptance release-preparation commit, as for 1.1.1;
+- the Workflow defect found while this plan was amended: `/request-plan-amendment` refuses while
+  a checkpoint is `IN_PROGRESS`, and no Workflow operation can abandon an `IN_PROGRESS`
+  checkpoint, so a checkpoint that must stop for an amendment deadlocks. It was cleared once, by
+  an operator-authorized reset. It is a Workflow Manager correctness follow-up, and nothing in
+  this milestone works around it (I10).
 
 ## Investigation
 
@@ -186,6 +269,8 @@ separate contributors:
 - **P5 -- ScheduleWakeup.** `ScheduleWakeup {delaySeconds: 60}` succeeds in streaming mode and
   fires about 86 s later as a new turn (`system/init`, turn, `result`). It emits **no** task
   event: the only trace of a pending wakeup is the tool's own `tool_use`/`tool_result` pair.
+  CP1's capture (`p5_p11_wakeup_fires.jsonl`) adds that every fire turn is enclosed in a
+  `command_lifecycle` pair (P11 below).
 - **P6 -- slash commands.** A project command sent as the stream-json user message
   (`/probecmd alpha-42`) expands exactly as a `-p` prompt argument does, `$ARGUMENTS` included.
   It still expands with `--disallowedTools Agent,Workflow,Skill`, the single-agent route.
@@ -207,40 +292,102 @@ separate contributors:
   unreadable are normal on a desktop session: measured here, `systemd --user` (pid 1345),
   `(sd-pam)`, `kwin_wayland` and `polkit-kde-auth`, all non-dumpable.
 
-Still to be measured, by CP1's capture script, before CP2 relies on them (a result that
-contradicts the expectation below is a plan-amendment trigger, not an implementation-time
-judgement):
-- **P8 -- worker-initiated stops.** A worker that `TaskStop`s its own background Bash task, and
-  a `Monitor` that reaches its own timeout, mid-session. The capture fixes the statuses they emit
-  and that the session continues.
-- **P9 -- wakeup cancellation.** `ScheduleWakeup {stop: true}` after a pending
-  `ScheduleWakeup {delaySeconds: 60}` produces no fire turn.
-- **P11 -- turn origins in streaming mode** (round 2's I2, widened by round 3's I2 and round
-  4's I1, re-scoped by round 5's I1, keyed by round 6's I1). The `result` `origin` (present or
-  absent, its `origin.kind`, and its full object verbatim) of four turn kinds, all in
-  streaming mode: P5's wakeup-fire turn, captured at least twice with different
-  `ScheduleWakeup` `prompt` texts, P3's task-completion turn, P4's per-event Monitor turns, and
-  the turn that follows a background subagent's hand-back (`Agent` with
-  `run_in_background: true`). B compares `origin.kind` only. The full objects show which other
-  fields vary per instance, and are input to a plan amendment should B need one. For the fire
-  turn it also records the turn's opening `user` event verbatim (its content, and whether it
-  carries the `ScheduleWakeup` `prompt` text). The three non-fire kinds set the fake's turn
-  origins (CP1). They are not a positive condition for accepting the fire recogniser; they
-  only trigger the collision amendment in B, when one shares the fire's `origin.kind`. No record in the runtime root holds a wakeup fire (print mode kills
-  the session first), and every `task-notification` and `peer` origin on record comes from a
-  print-mode stream (`aef056f0`, `5d4a976a`; `73845184`, `2857a730`, `bad842f1`), because every
-  Controller launch to date is `-p <task>` with stdin `DEVNULL` (`controller/worker.py:435`,
-  `:464`). So all four are measured fresh, and none is taken from the print-mode records. B's
-  wakeup recogniser is keyed on the fire turn's measurement. On record, and used only as context: across every
+Measured by CP1's capture script on 2026-09-25 (`claude` 2.1.282, the production argv of A with
+the model overridden to haiku, or to opus where haiku lacks `--permission-mode auto`). The
+fixtures are in `tests/harness_contract/`, one `<probe>.jsonl` (the redacted stream) and one
+`<probe>.meta.json` (argv, exit status, per-line arrival offsets) each. Revision 7 made these the
+preconditions of CP2. P8, P9 and P10 behaved as revision 7 predicted. P11's fire-turn result
+contradicted it, and that contradiction is this amendment:
+- **P8 -- worker-initiated stops** (`p8_task_stop`, `p8_monitor_timeout`). A `TaskStop` of the
+  worker's own background Bash task emits `background_tasks_changed []`,
+  `task_updated {status: killed}` and `task_notification {status: stopped}` mid-turn, and the
+  same turn goes on to its own `result`. A `Monitor` that reaches its own timeout emits the same
+  three events between turns, followed by a new turn (`system/init`, turn, `result` with
+  `origin.kind: task-notification`). The session continues in both cases.
+- **P9 -- wakeup cancellation** (`p9_wakeup_cancel`). `ScheduleWakeup {stop: true}` after a
+  pending `ScheduleWakeup {delaySeconds: 60}` (harness-stated "in 107s") answers
+  `{stopped: true, cancelledWakeups: 1}` in its `tool_use_result`, and its text says "cancelled
+  1 pending wakeup(s)". That count is the harness's own statement of how many wakeups it still
+  held, which revision 10 uses as a consistency check (B, decision 13). The capture held the
+  session open for 200 s past the last event, well beyond the due time. No fire turn came, and
+  no `command_lifecycle` event.
+- **P10 -- the Controller's system note** (`p6_p10_slash_command`). `--append-system-prompt
+  <text>` is accepted with `--input-format stream-json`. A slash command sent as the user
+  message still expands exactly as in P6, and emits no `command_lifecycle` event.
+- **P11 -- turn origins and the wakeup-fire bracket in streaming mode** (round 2's I2, widened
+  by round 3's I2 and round 4's I1, re-scoped by round 5's I1, keyed by round 6's I1; the
+  result that triggered amendment 0). Four follow-up turn kinds were captured in streaming
+  mode. For each, the table gives the `result` `origin` and the events around the turn:
+
+  | turn kind | fixture | `result.origin` | enclosing `command_lifecycle` pair |
+  | --- | --- | --- | --- |
+  | `ScheduleWakeup` fire, prompt `P11 fire ALPHA` | `p5_p11_wakeup_fires` lines 13-24 | **absent** | `started`/`completed`, `command_uuid` `2cde4b9e-...` |
+  | `ScheduleWakeup` fire, prompt `P11 fire BRAVO second` | `p5_p11_wakeup_fires` lines 25-32 | **absent** | `started`/`completed`, `command_uuid` `6ff491e4-...` |
+  | task completion (P3) | `p3_streaming_background_bash` lines 16-21 | `{"kind": "task-notification"}` | none |
+  | per-event Monitor turn (P4), three turns | `p4_monitor` lines 11-13, 14-16, 20-28 | `{"kind": "task-notification"}` | none |
+  | Monitor timeout (P8) | `p8_monitor_timeout` lines 21-27 | `{"kind": "task-notification"}` | none |
+  | background subagent hand-back (`Agent`, `run_in_background: true`) | `p11_subagent_handback` lines 18-22 | `{"kind": "task-notification"}` | none |
+
+  (Line numbers are 0-based stream lines.) What the fixtures show about the pair:
+  - **Shape.** Each event is one line `{"type": "command_lifecycle", "command_uuid": <uuid>,
+    "state": "started" | "completed", "uuid": <event uuid>, "session_id": <session>}`. It has
+    no `subtype` and no `timestamp`. `uuid` differs on every event, as on every other event
+    type. `command_uuid` is the one correlating field.
+  - **Order.** For each fire: `command_lifecycle started(X)`, then at once (5 ms later by
+    arrival) the fire turn's `system/init`, the fire turn, its `result`, and then
+    `command_lifecycle completed(X)` (under 1 s after the `result`). Exactly one turn lies
+    between the two. The next fire's `started(Y)` comes only after `completed(X)`, so the two
+    brackets never overlap. `X` and `Y` differ, and neither recurs.
+  - **The fire turn itself.** It opens with `system/init` and has **no opening `user` event**:
+    no user message delivers the wakeup's `prompt`, and the turn's first event after
+    `system/init` that is not `system/thinking_tokens` is an `assistant` event. Its only `user`
+    events are `tool_result`s for `tool_use`s the fire turn itself issues. ALPHA's fire turn
+    (lines 14-23) holds one, line 19, the `tool_result` for the `ScheduleWakeup` it issued at
+    line 18 to schedule BRAVO; BRAVO's (lines 26-31) holds none (round 8's I1). The
+    `ScheduleWakeup` `prompt` text appears in the stream only inside the scheduling `tool_use`
+    input (lines 5 and 18), never in a `user` event. So revision 7's candidate alternative
+    recogniser, "the fire turn's opening `user` event carrying the `prompt` text", does not
+    exist either. The fire turn's first timestamped event is an `assistant` event: 15:38:02.412
+    for ALPHA, due 15:38:00 (harness-stated "in 112s" from the 15:36:08.320 `tool_result`), and
+    15:40:01.522 for BRAVO, due 15:40:00 ("in 117s" from 15:38:03.127). The BRAVO wakeup was
+    scheduled *inside* the ALPHA bracket.
+  - **Where it never appears.** Across all 18 fixtures, `command_lifecycle` occurs only in
+    `p5_p11_wakeup_fires` (four events, two pairs). It is absent from the Controller-initiated
+    first turn of every stream (the task written to stdin, including P6's slash command), from
+    every `task-notification` turn above, from P8's mid-turn `TaskStop`, from P9's cancelled
+    wakeup, and from the seven imported print-mode job streams.
+  - **Origins.** Every non-fire follow-up turn measured in streaming mode carries
+    `{"kind": "task-notification"}`, with no other field. That includes the subagent hand-back,
+    which carried `peer` only in the print-mode records. Origins are recorded for diagnostics,
+    and B never reads them for recognition (below).
+
+  Context only, from before CP1: no record in the runtime root holds a wakeup fire (print mode
+  kills the session first). Every `task-notification` and `peer` origin on record comes from a
+  print-mode stream (`aef056f0`, `5d4a976a`; `73845184`, `2857a730`, `bad842f1`). Across every
   `worker.stdout` in the runtime root, `result.origin.kind` is absent on 73 results, `peer` on 3
-  and `task-notification` on 2, and the first `result` of every multi-result stream (the
-  Controller-initiated turn) has no `origin`. `73845184` shows the combination the hand-back
-  measurement guards: a background subagent and a pending `ScheduleWakeup {delaySeconds: 1800}`
-  in the same session, on a multi-agent route (`routing.worker_disallowed_tools` disallows
-  `Agent` only for single-agent routes, `controller/routing.py:343-345`).
-- **P10 -- the Controller's system note.** `--append-system-prompt <text>` is accepted with
-  `--input-format stream-json`, and a slash command sent as the user message still expands
-  exactly as in P6.
+  and `task-notification` on 2, and no `command_lifecycle` event occurs at all. `73845184` holds
+  a background subagent and a pending `ScheduleWakeup {delaySeconds: 1800}` in one session, on a
+  multi-agent route (`routing.worker_disallowed_tools` disallows `Agent` only for single-agent
+  routes, `controller/routing.py:343-345`).
+
+  Not measured, and handled fail-closed by B rather than assumed: two wakeups pending at once
+  (every measured fire had one pending wakeup that was due), including whether a second
+  `ScheduleWakeup` replaces the first ("Next wakeup scheduled" hints at one slot); a missing,
+  duplicated, reordered or overlapping `command_lifecycle` event; a `command_lifecycle` pair
+  around any turn kind other than a fire (for example an inbound `SendMessage`, or a background
+  `Workflow` or forked `Skill` completion on a multi-agent route); and a `ScheduleWakeup
+  {stop: true}` with no wakeup pending (whether it succeeds with `cancelledWakeups: 0` or is an
+  error). Nothing in the stream identifies *which* wakeup a fire belongs to: the fire turn
+  carries no `prompt` text, and neither the wakeup's scheduling `tool_use` id nor its
+  `scheduledFor` value occurs anywhere in its own fire bracket (ALPHA's occur only at lines 5-6,
+  BRAVO's only at lines 18-19). A fire is therefore recognised as *a* fire, and
+  matched to a wakeup by time, never identified exactly (round 9's I1, decision 13).
+
+  Also not measured by these fixtures: a `ScheduleWakeup {stop: true}` issued from inside a
+  fire turn, which is how a wakeup-driven worker normally finishes. B's settlement count
+  depends on it ("A stop inside a bracket"). CP1 captures it as P12, in two new fixtures,
+  before CP2 starts, and a result other than the one B assumes is a plan-amendment trigger
+  (round 11's I1).
 
 ### Baseline
 
@@ -277,7 +424,8 @@ files added. The packaged-runtime suite runs under
 - **I5 -- the Controller ends owned work only on an explicit operator decision**
   (`--timeout`, or ending processes before `resume --abandon`). It never ends it because of
   elapsed time or silence ("Time is not termination" stands). The one exception is a
-  harness-contract breach, the overdue wakeup (decision 5), and it fails closed. The drain
+  harness-contract breach, an overdue wakeup or an unterminated `command_lifecycle` bracket
+  (decision 5), and it fails closed. The drain
   bound (decision 9) ends nothing: it only stops *this Controller* waiting, and leaves the job
   held.
 - **I6 -- no later action while owned work is alive.** `execute_step` refuses to decide or launch
@@ -295,6 +443,17 @@ files added. The packaged-runtime suite runs under
   exactly as today.
 - **I10 -- no Workflow edits.** Everything here is Controller-side and proven against the
   installed Workflow 2.5.1.
+- **I11 -- a wakeup stops being owned work only on positive evidence** (amendment 0; round 9's
+  I1). A wakeup leaves owned work only when it *settles*: by a successful `ScheduleWakeup
+  {stop: true}` whose reported count agrees with the Controller's (B), or when a *regular*
+  `command_lifecycle` bracket that B matched to it has closed and `WAKEUP_SETTLE_SECONDS` of
+  idle time (no turn, bracket or task open) have passed with no bracket contradicting the
+  match (C). A matched bracket alone makes the wakeup
+  `fire_matched`, which is still owned work, so no single bracket, fire or not, can make the
+  worker quiescent. A `result`'s `origin`, present or absent, and whatever its `kind`, is never
+  evidence either way. Any `command_lifecycle` event B cannot fit into a regular bracket matches
+  nothing and makes the run's classification non-verifying (I7). An open bracket is owned work,
+  so the worker is never quiescent while the harness is still inside a command.
 
 ## Design
 
@@ -418,47 +577,210 @@ maintains:
   later list without it, whichever comes first. A task that reaches a terminal status
   (`completed`, `killed`, `stopped`, `failed`) is no longer open, wherever in the stream that
   happens; B's row 7 alone decides whether a kill counts against the run;
-- `pending_wakeups`: every successful `ScheduleWakeup` (a `tool_use` whose paired `tool_result`
-  is not `is_error`). Its time sources are fixed (round 1's I3), and they are the stream's own:
+- `wakeups`: every successful `ScheduleWakeup` (a `tool_use` whose paired `tool_result` is not
+  `is_error`), keyed by its `tool_use` id. Its time sources are fixed (round 1's I3), and they
+  are the stream's own:
   - `scheduled_at` is the paired `tool_result` event's `timestamp`;
   - the due time is `scheduled_at` plus the harness-stated `in Ns` from the `tool_result` text
     when present, else plus `clamp(delaySeconds, 60, 3600)`;
-  - a wakeup is resolved by the first **wakeup-fire turn** whose open time is at or after its
-    due time minus `WAKEUP_SKEW_SECONDS` (5 s). A wakeup-fire turn is recognised positively
-    (round 2's I2). **The comparison key is `origin.kind`, and only `origin.kind`** (round 6's
-    I1): a turn is a fire turn exactly when its `result`'s `origin.kind` is the value P11 (CP1)
-    records for a `ScheduleWakeup` fire. Every other `origin` field is per-instance (every
-    `peer` origin on record carries its own `from`, `senderTaskId`, `body` and `handback`), so
-    none is ever compared: they are recorded in `stream_diagnosis` only. "No `origin`" is
-    **never** a recogniser (round 3's I2, round 5's I1): the Controller-initiated first turn
-    carries none, and so may any non-initial turn kind the worker's allowed tools can produce,
-    measured or not (a background `Workflow` completion, a forked `Skill` hand-back, an inbound
-    `SendMessage` turn). A turn whose `result` carries no `origin` resolves no wakeup, whatever
-    it follows. Two P11 results contradict the plan, and each stops CP1 for a plan amendment,
-    as for any P8-P11 contradiction: the fire turn's `result` carries no `origin`, or its
-    `origin.kind` equals the `origin.kind` P11 measures for any of the other three turn kinds.
-    The amendment then picks a positive recogniser from what P11 captured, naming the field and
-    its measured value, for example a fixed prefix of the fire origin's `body`, or the fire
-    turn's opening `user` event carrying the `ScheduleWakeup` `prompt` text, and shows from the
-    captured fires that the named field does not vary between fires. So B keeps no list of
-    non-fire turn kinds that must be complete. A turn whose `result` carries any other
-    `origin.kind`, among them `task-notification` (a task completion) and `peer` (a subagent's
-    hand-back, in `2857a730`, `bad842f1` and `73845184`), or whose open time is still unknown,
-    resolves no wakeup. The Controller-initiated first turn
-    never resolves a wakeup. It is excluded by position, and its open time also precedes any due
-    time, because every wakeup it could resolve is scheduled inside it. An origin kind the harness
-    adds later therefore never resolves one early: the wakeup stays pending, and at worst the
-    overdue rule (C) fails the run closed;
-  - a later successful `ScheduleWakeup {stop: true}` resolves all of them (P9).
+  - the tool's structured `tool_use_result.scheduledFor` (epoch milliseconds, P5) is recorded in
+    `wakeups_seen` for diagnostics only. The due time keeps revision 7's sources above, so
+    replay and the fake need nothing new.
+
+  Each wakeup is in exactly one of three states (round 9's I1, decision 13), and only the last
+  one is not owned work:
+  - **`pending`**, from its successful `tool_result`. The "pending wakeups" below are these;
+  - **`fire_matched`**, once a **regular `command_lifecycle` bracket** has been matched to it
+    (below; amendment 0), at that bracket's `completed(X)`. A match is B's best judgement that
+    this wakeup fired, and it is not proof: the stream never says which wakeup a fire belongs
+    to (Investigation), and a regular bracket around some other turn kind would match in exactly
+    the same way. So a `fire_matched` wakeup is **still owned work**. It is no longer overdue
+    (C's overdue rule reads `pending` wakeups only), but it keeps the worker from being
+    quiescent until it settles;
+  - **`settled`**, and no longer owned, in exactly two ways:
+    1. a later successful `ScheduleWakeup {stop: true}` settles every wakeup, `pending` and
+       `fire_matched` alike (P9: the harness holds none after it). B compares the stop's
+       `tool_use_result.cancelledWakeups` with its own *expected count*: the number of
+       `pending` wakeups B holds at that moment, less the stop's provisional match, if any
+       (below, "A stop inside a bracket"). If an integer count differs from the expected
+       count, the harness and B disagree about what is still scheduled. That is the anomaly
+       `wakeup_count_mismatch` (below): the run is row 3 `AMBIGUOUS`, and the stop still
+       settles everything, since the harness now holds nothing. A higher harness count is
+       exactly the misattribution round 9's I1 describes (an unrelated bracket took a wakeup
+       whose real fire was still scheduled). A missing or non-integer count is recorded and
+       compared with nothing;
+    2. the supervisor fact `settled_wakeups` names it (C, "Settling matched wakeups"). The
+       supervisor declares a `fire_matched` wakeup settled only after the worker has been idle
+       (no turn, bracket or task open, the overdue rule's own predicate) for
+       `WAKEUP_SETTLE_SECONDS` since its bracket's `completed(X)`, with no bracket arriving.
+       If the match was wrong, the wakeup's real fire is owed inside that window by the same
+       lateness bound the overdue rule already relies on, and its bracket then arrives while the
+       session is still open, where B judges it (below).
   This is the only tool-specific recogniser (limitation H2);
-- `owned_work()`: open tasks, plus pending wakeups;
+- `command_lifecycles` (amendment 0, decision 12): the wakeup-fire bracket state, keyed by
+  `command_uuid`. It is defined only from what P11 measured:
+  - **Which events.** A line is a lifecycle event exactly when its `type` is
+    `"command_lifecycle"`. It is *well-formed* when `command_uuid` is a non-empty string and
+    `state` is exactly `"started"` or `"completed"`. No other field is read. `uuid` and
+    `session_id` are per-event, and are recorded only. A lifecycle event that is not
+    well-formed (missing or non-string `command_uuid`, a missing `state`, or a `state` other
+    than those two) is an **anomaly** (`malformed_lifecycle_event`). It opens and closes
+    nothing.
+  - **Correlation.** `started(X)` opens bracket `X`. The next `completed(X)` closes it. The
+    `command_uuid` is the only correlation key, and a uuid is used once: brackets are never
+    matched by position, by content or across uuids.
+  - **The bracketed turn.** The turn inside bracket `X` is the turn whose opening event (its
+    `system/init`, or B's other turn-opening rule) comes after `started(X)` and whose `result`
+    comes before `completed(X)`. Its open time is B's usual one: the `timestamp` of its first
+    timestamped event. P11 measured an `assistant` event there in both fires. The turn's
+    `result` `origin` is recorded in the bracket's diagnosis and never read (I11).
+  - **Regular bracket.** Bracket `X` is *regular* exactly when all of these hold:
+    1. `X` was never seen before `started(X)`;
+    2. no turn was open at `started(X)`;
+    3. no other bracket was open at `started(X)`, and none opens before `completed(X)`, so
+       brackets are sequential, as measured;
+    4. exactly one turn opens and closes between `started(X)` and `completed(X)`, and it is
+       not the Controller-initiated first turn;
+    5. that turn's open time is known;
+    6. at `completed(X)` some wakeup is `pending` whose due time minus `WAKEUP_SKEW_SECONDS`
+       (5 s) is at or before that open time.
+    A regular bracket matches exactly one wakeup, the one with the earliest due time among
+    those condition 6 admits, and it does so at `completed(X)`, never earlier (a stop inside
+    the bracket fixes the candidate earlier, but the match is still decided at `completed(X)`;
+    below). It moves that
+    wakeup from `pending` to `fire_matched`, and nothing further: the wakeup stays owned work
+    until it settles (above), so a match never by itself makes the worker quiescent (round 9's
+    I1). Each measured fire meets all six conditions. For ALPHA, `started` at line 13, one turn at lines 14-23 opening at
+    15:38:02.412 against a due time of 15:38:00.320, and `completed` at line 24. BRAVO, lines
+    25-32, is the same.
+  - **A stop inside a bracket** (round 10's I1). A worker whose wakeup has fired often has
+    nothing left to wait for, and `WORKER_LIFECYCLE_NOTE` tells it to cancel what it no longer
+    needs before its final turn ends. So a successful `ScheduleWakeup {stop: true}` inside a
+    fire turn is the expected case, not an edge. By then the harness has already fired the
+    wakeup it is running, but B has not matched it yet (the match waits for `completed(X)`).
+    So B would count that wakeup as `pending` against a harness count that no longer holds it,
+    and at `completed(X)` it would find nothing `pending` for condition 6. Without a rule, a
+    correct worker would get two spurious anomalies. The rule:
+    1. When a successful stop's `tool_result` arrives while bracket `X` is open, `X`'s
+       bracketed turn is open, `X` has broken none of conditions 1-5 so far (it is the only
+       open bracket, it has held only this one turn, and that turn's open time is known), and
+       `X` has no provisional match yet, B fixes `X`'s *provisional match*. That is
+       condition 6 evaluated at that moment, against that turn's open time: the earliest-due
+       `pending` wakeup whose due time minus `WAKEUP_SKEW_SECONDS` is at or before it. There may
+       be none.
+    2. The stop's expected count leaves the provisional match out, because the harness has
+       already fired it. Every other `pending` wakeup, including one scheduled earlier in the
+       same fire turn (ALPHA's fire scheduled BRAVO, P5 lines 18-19), is counted. The stop
+       then settles every wakeup as usual, the provisional match included.
+    3. At `completed(X)`, conditions 1-5 are judged as usual. If they hold, condition 6 is
+       met by the provisional match, and `X` is `closed_regular` with it as its match. The
+       wakeup is already `settled` by `stop`, so it never passes through `fire_matched`.
+       `wakeups_seen` records both the stop and `X`'s `command_uuid`. If conditions 1-5 fail,
+       `X` is irregular with that condition's anomaly (row 3 already), and the provisional
+       match changes nothing else.
+    4. If there is no provisional candidate, nothing changes: the expected count is every
+       `pending` wakeup, and at `completed(X)` condition 6 is judged as usual, so a bracket
+       with nothing `pending` is still `unmatched_bracket`. A later stop inside the same
+       bracket fixes nothing new: `X`'s provisional match, if any, is already `settled` and so
+       no longer counted.
+    Round 9's fail-closed argument is unchanged, because a provisional match is only a match
+    made earlier. If `X` is the real fire of a wakeup `W` that an earlier bracket wrongly
+    matched, `W` is `fire_matched`, not `pending`, so step 1 finds no candidate (or finds
+    another due wakeup, which moves the argument there, as in "A wrong match cannot end the
+    session"). The harness has fired `W`, and it reports `0` against B's `0`, so no count
+    mismatch arises. But `completed(X)` is still `unmatched_bracket`, row 3. If instead `X` is
+    a spurious bracket whose turn opened after `W`'s due time, and the stop comes from inside
+    it, step 1 takes `W` as the provisional match. The harness still holds `W`, since `W` has
+    not fired, so it reports one more than B expects: `wakeup_count_mismatch`, row 3. The stop
+    has cancelled `W` at the harness too, so no real fire is lost.
+    What the harness reports for a stop inside a fire turn is **not measured** by the
+    amendment-0 fixtures: P9's stop ran in an ordinary turn. The rule assumes it reports the
+    wakeups scheduled and not yet fired, which excludes the one whose fire is running, as P9's
+    count was. CP1 measures this before CP2 starts, with the two P12 fixtures (round 11's
+    I1): a fire turn that stops its own wakeup must report `cancelledWakeups: 0`, and a fire
+    turn that schedules a second wakeup and then stops must report `1`. Any other
+    observation stops CP1 and triggers a plan amendment before CP2, so CP2-CP7 are never
+    built on an unmeasured count. If a later harness changes it, every such stop is
+    `wakeup_count_mismatch`. The run then fails closed (row 3), never open, and the live
+    probe (CP8) re-measures it. A difference is a plan-amendment trigger, like any other
+    change in the bracket contract;
+  - **Irregular bracket.** A bracket that breaks any condition is *irregular*. It matches
+    nothing. The break is an anomaly named after the condition: `duplicate_started` (1),
+    `started_mid_turn` (2), `overlapping_brackets` (3, for both brackets), `no_bracketed_turn`
+    or `multiple_bracketed_turns` or `bracketed_first_turn` (4), `bracketed_turn_open_time_unknown`
+    (5), `unmatched_bracket` (6). Further anomalies: `completed_without_started`, for a
+    `completed(X)` with no open bracket `X`, which covers a missing `started`, a duplicated
+    `completed` and a `completed` reordered before its `started` (the late `started` is then a
+    `duplicate_started`). A `completed(X)` delayed past the next turn's opening is condition 4's
+    `multiple_bracketed_turns`. A `duplicate_started(X)` while `X` is open opens nothing, and `X`
+    stays open until its `completed(X)`. Once `X` is closed, or was seen only in a
+    `completed_without_started`, a `duplicate_started(X)` opens a new bracket under the same
+    uuid that is irregular from the start. Its `completed(X)` is then expected, and closes it
+    without a further anomaly. **Every
+    anomaly is sticky.** It is recorded in `stream_diagnosis.command_lifecycle_anomalies`
+    (kind, `command_uuid` when known, stream offset), and it makes the terminal classification
+    `AMBIGUOUS` (row 3, `command_lifecycle_irregular`), whatever happens later in the stream.
+    Matching is the unsafe direction, because a matched wakeup can go on to settle and let the
+    worker be declared quiescent and ended. So an irregular bracket never matches. A wakeup
+    left pending as a result either still fires in a later regular bracket or reaches C's
+    overdue rule. The same stickiness applies to `wakeup_count_mismatch`, the one anomaly that
+    comes from a `ScheduleWakeup {stop: true}` rather than from a lifecycle event; it is
+    recorded in the same list.
+  - **Open brackets are owned work.** A bracket from `started(X)` until `completed(X)` is open,
+    whether regular so far or not, and `owned_work()` includes it. So the worker is never
+    quiescent between a fire turn's `result` and its `completed(X)` (under 1 s in P11), and
+    never while a `started(X)` has no turn yet (5 ms in P11). A bracket that stays open with no
+    turn open is bounded by C's lifecycle grace, not by the stream.
+  - **Delayed events.** A late event is harmless while order holds. A late `started(X)` still
+    precedes its turn, and a late `completed(X)` still precedes the next turn, so the bracket
+    is regular and only holds `WAITING` longer, up to C's grace. A late event that crosses a
+    turn boundary is a reordering, and is irregular as above. Print mode can reorder `result`
+    events (H7), but no print-mode stream has ever held a lifecycle event, because print mode
+    kills the session before any wakeup can fire. The same rules apply in both modes, so a
+    lifecycle event in a print-mode stream is judged exactly as in streaming mode.
+  - **Several uuids.** The map holds any number of `command_uuid`s, each with its own state:
+    `open`, `closed_regular` (with the wakeup it matched), or `irregular` (with its
+    anomalies). Two brackets open at once are both irregular (condition 3). They still count
+    as owned work until each one's `completed` arrives.
+  - **Nothing else matches a wakeup.** A turn with no bracket matches nothing, whatever its
+    `origin`, its open time or its content. That includes a `task-notification` turn after the
+    due time, and a turn that looks like P11's fire in every other respect. A bracket around
+    any turn kind other than a fire is not assumed away. It is irregular when it matches no due
+    `pending` wakeup (condition 6), which is how an unmeasured bracket source announces itself.
+  - **A wrong match cannot end the session** (round 9's I1). The case B cannot tell apart is a
+    regular bracket around some other turn that opens after a `pending` wakeup `W`'s due time:
+    it matches `W`. Under revision 9 that emptied owned work, so the worker could quiesce and
+    the Controller could close stdin before `W`'s real fire, which was then lost with nothing
+    left to fail the run. Now `W` is only `fire_matched`, still owned, so the worker stays
+    `WAITING`. `W`'s real fire is still scheduled at the harness and already due, so it
+    arrives inside `W`'s settle window. Its bracket finds no `pending` wakeup that condition 6
+    admits (`W` is no longer `pending`), so it is `unmatched_bracket`, row 3, and the run fails
+    closed. If another due wakeup `W2` is `pending`, the real fire matches `W2` instead, and the
+    same argument moves to `W2`, which settles no earlier than its own window. A worker that
+    cancels in the meantime (`ScheduleWakeup {stop: true}`), whether after the spurious bracket
+    or from inside it ("A stop inside a bracket"), exposes the wrong match through the
+    harness's count (`wakeup_count_mismatch`). Either way a wrong match ends `AMBIGUOUS`, never
+    in a session ended early. What remains is H2's double-breach residue;
+- `owned_work()`: open tasks, `pending` and `fire_matched` wakeups, and open
+  `command_lifecycle` brackets;
 - `quiescent()`: no turn open, at least one `result`, `owned_work()` empty, and the last
   `result`'s `queued_turn_count` absent or `0` (round 1's O4: a turn already queued is never
   declared quiescent).
 
-The state is a pure function of the lines alone. No wall clock enters it. The one supervisor
-fact that depends on time, "a wakeup was declared overdue" (C), is persisted in the record and
-passed back in as a supervisor fact, so a replay (E) reaches the same state.
+The state is a pure function of the lines and the supervisor facts. No wall clock enters it.
+`command_lifecycle` events carry no `timestamp` (P11), so nothing about a bracket's timing is
+read from the stream beyond its bracketed turn's open time. The three supervisor facts that
+depend on time, "a wakeup was declared overdue", "a `command_lifecycle` bracket was declared
+unterminated" and "these `fire_matched` wakeups were declared settled" (`settled_wakeups`, C),
+are passed in as supervisor facts. All three are persisted with `ENDING`. A supervisor reaches
+a *quiescent* `ENDING` only once every `fire_matched` wakeup has settled, so a settlement
+declared earlier and lost with its Controller is simply declared again after a re-attach (E).
+The breach paths (an overdue wakeup, an unterminated bracket; C) end the session "as in
+`ENDING`" without waiting for settlement, so there a `fire_matched` wakeup may still be
+unsettled at exit. The run is already row 4, and that wakeup adds row 7 to `secondary_reasons`
+(round 10's O1). A re-attach after such an `ENDING` replays the same flushed facts and reaches
+the same classification. A replay with
+those facts reaches the same state.
 
 The supervisor (C) asks one question after each batch of lines: is the worker quiescent? Unknown
 event types and subtypes are tolerated *mid-stream* (the harness adds event kinds over time)
@@ -473,7 +795,9 @@ a `mode`, the supervisor's own facts, and the exit status when it is known:
   before CP3 switches `launch` (round 1's I6). The mode is an explicit input, never guessed from
   the stream;
 - the supervisor's facts, which only it knows and the stream cannot show: whether its
-  `--timeout` fired, whether it declared a wakeup overdue, and the stream offset at which it
+  `--timeout` fired, whether it declared a wakeup overdue or a `command_lifecycle` bracket
+  unterminated (C), which `fire_matched` wakeups it declared settled (`settled_wakeups`, C),
+  and the stream offset at which it
   ended the session (`ending_offset`), if it did. `ending_offset` is persisted with
   `worker_state: ENDING`, so a re-attaching supervisor has it too. In `print` mode there is no
   `ending_offset`; the last `result`'s offset stands in for it.
@@ -488,17 +812,23 @@ ones (6-7), because they name the cause, and the kill they provoke is only its c
 | --- | --- | --- | --- |
 | 1 | the supervisor's `--timeout` fired, or the exit status is known and negative (a signal) | `INTERRUPTED` | `timeout` / `signal` |
 | 2 | the exit status is known and non-zero | `FAILURE` | `exit_status` |
-| 3 | a line is not one JSON object, or there is no `result` at all | `AMBIGUOUS` | `malformed_line` / `no_result` |
-| 4 | the supervisor declared a pending wakeup overdue (C) | `AMBIGUOUS` | `wakeup_not_delivered` |
+| 3 | a line is not one JSON object, or there is no `result` at all, or the stream holds any `command_lifecycle` anomaly or `wakeup_count_mismatch` (B) | `AMBIGUOUS` | `malformed_line` / `no_result` / `command_lifecycle_irregular` |
+| 4 | the supervisor declared a pending wakeup overdue, or a `command_lifecycle` bracket unterminated (C) | `AMBIGUOUS` | `wakeup_not_delivered` / `command_lifecycle_unterminated` |
 | 5 | `streaming` mode only: the process exited, or the stream reached EOF, with no `ending_offset` (the supervisor never ended the session: the anchor was lost) | `AMBIGUOUS` | `stdin_closed_while_waiting` |
 | 6 | the stream ended with a turn open | `AMBIGUOUS` | `exited_mid_turn` |
-| 7 | a task reached `killed`/`stopped` **after** `ending_offset`, or `owned_work()` is non-empty at exit | `AMBIGUOUS` | `owned_work_killed_at_exit` |
+| 7 | a task reached `killed`/`stopped` **after** `ending_offset`, or `owned_work()` is non-empty at exit (an open task, a `pending` or unsettled `fire_matched` wakeup, or an open `command_lifecycle` bracket) | `AMBIGUOUS` | `owned_work_killed_at_exit` |
 | 8 | the last `result` has `is_error: true`, or lacks `session_id`/`is_error` | `FAILURE` / `AMBIGUOUS` | `result_is_error` / `result_incomplete` |
 | 9 | otherwise: a quiescent terminal turn, then an exit after the supervisor ended the session (`streaming`), or after the last `result` (`print`) | `SUCCESS` | `quiescent_terminal_turn` |
 
 `stream_diagnosis.secondary_reasons` lists, in row order, every later row that also matched, so
 an overdue wakeup whose session end then killed a task records `wakeup_not_delivered` with
-`owned_work_killed_at_exit` beside it. Row 7 is positional (round 1's I2): a task the worker
+`owned_work_killed_at_exit` beside it. Row 3's `command_lifecycle_irregular` sits with the other
+malformed-stream reasons, because an anomaly is a break in the measured protocol and not a
+consequence of anything the supervisor did. A worker whose session ended with a bracket still
+open, whether through the anchor's loss or after `ENDING`, is row 5 or row 7, and is not an
+anomaly. A bracket that opens after `ENDING` has no pending wakeup to match, because `ENDING`
+required none (`quiescent()`). If it closes, it is `unmatched_bracket` (row 3). If it stays open,
+it is row 7. Row 7 is positional (round 1's I2): a task the worker
 stopped itself mid-session (`TaskStop`, a `Monitor` timeout, P8) reaches a terminal status
 before `ending_offset`, stops being open, and never counts. In `print` mode, a kill after the
 last `result` counts, which is exactly the observed failure shape.
@@ -511,7 +841,14 @@ Several `result` events are legitimate (D2, `2857a730`). Because print mode can 
 turn. It uses only the last `result` and the final task and wakeup state. `stream_diagnosis` also
 carries `mode`, `turns`, `result_count`, `tasks_seen` (id, type, description, final status and
 whether it ended before or after `ending_offset`), `wakeups_seen` (scheduled, due, due source
-`harness_stated`/`clamp`, resolution), `unknown_events`, and, per `result`, its
+`harness_stated`/`clamp`, the harness's `scheduledFor` when present, its final state, and how
+it got there: the matching bracket's `command_uuid` for `fire_matched`, and for `settled` either
+`settle_window` (with that `command_uuid`) or `stop` (with the stop's reported
+`cancelledWakeups` and B's expected count, and, when the stop came from inside a bracket that
+matched this wakeup provisionally, that bracket's `command_uuid`); or `pending`), `command_lifecycles` (per
+`command_uuid`: its `started`/`completed` offsets, its state `open`/`closed_regular`/`irregular`,
+the bracketed turn's index, open time and `origin` as recorded, and the wakeup it matched),
+`command_lifecycle_anomalies` (B), `unknown_events`, and, per `result`, its
 `queued_turn_count`, `terminal_reason` and `origin` when present (round 1's O4). It is written into the job record's `worker` block and read
 by the diagnostics (G).
 
@@ -532,7 +869,11 @@ defaults (A). "Returning control" becomes this loop:
    `worker_state` changes:
    - `RUNNING` while a turn is open;
    - `WAITING` while no turn is open and `owned_work()` is non-empty. `details` names the tasks,
-     the pending wakeups and their due times;
+     the `pending` wakeups and their due times, each `fire_matched` wakeup still settling (the
+     matching bracket's `command_uuid` and the time left in its settle window, by this
+     supervisor's clock), and each open `command_lifecycle` bracket (its `command_uuid`,
+     whether its turn has been seen, and since when, by this supervisor's clock, no turn has
+     been open inside it);
    - at a quiescent turn, `ENDING`: flush it together with `ending_offset` (the byte offset of
      the stream consumed so far), then signal the anchor to release stdin, which gives the
      worker EOF, and wait for the `claude` process to exit. A turn that opens after that (a
@@ -630,10 +971,75 @@ defaults (A). "Returning control" becomes this loop:
    the stream (B), and return the `WorkerResult`,
    which now also carries `stream_diagnosis` and `owned_processes_seen`.
 
-**Overdue wakeups.** A pending wakeup that is `WAKEUP_GRACE_SECONDS` (300) past due, while no
-turn opens and nothing else is owned, is a harness-contract breach (P5 measured a 26 s lateness
-at 60 s). The supervisor flushes `wakeup_overdue_declared_at` with `ENDING`, ends the session as
-in `ENDING`, and row 4 of B classifies the run `AMBIGUOUS`. This is decision 5.
+**Overdue wakeups.** A `pending` wakeup that is `WAKEUP_GRACE_SECONDS` (300) past due, while no
+turn opens and no task is open, is a harness-contract breach (P5 measured a 26 s lateness at
+60 s). Other wakeups, `pending` or `fire_matched`, do not defer it. The supervisor flushes
+`wakeup_overdue_declared_at` with `ENDING`, ends the session as in `ENDING`, and row 4 of B
+classifies the run `AMBIGUOUS`. This is decision 5. The fire of a wakeup whose bracket B found
+irregular does not match it (I11), so that wakeup reaches this rule in the same way. The run is
+already `AMBIGUOUS` by row 3, and this rule only bounds how long it waits.
+
+**Settling matched wakeups** (round 9's I1, decision 13). A `fire_matched` wakeup is owned work
+until it settles (B). The supervisor keeps one *settle timer* per `fire_matched` wakeup, by its
+own clock. It starts when the supervisor consumes the matching bracket's `completed(X)`, and it
+runs only while the worker is idle by the overdue rule's own predicate, plus brackets: no turn
+open, no task open and no bracket open (round 10's I2). A turn or a bracket that opens
+restarts it from zero when it closes, because that turn or bracket may be the one that decides
+the match (the real fire of a wrongly matched wakeup). A task that opens restarts it too, from
+zero once no task is open. That costs nothing: an open task already keeps the worker from
+being quiescent. It matters because the overdue rule declares nothing while a task is open,
+so the harness's lateness bound, which the window is sized from, is only ever enforced over
+task-free idle time. A timer that ran during a long task could settle a wrongly matched
+wakeup whose real fire the harness is still entitled to defer. The fire could then follow the
+task's completion turn as a turn not yet queued, after the worker had already gone quiescent. When a timer reaches
+`WAKEUP_SETTLE_SECONDS`, the supervisor declares that wakeup settled: it adds the wakeup's
+`tool_use` id to its `settled_wakeups` fact and feeds the fact to B. Nothing is flushed then.
+`settled_wakeups` is flushed with `ENDING`, like the other two time facts. A supervisor
+reaches a quiescent `ENDING` only once every `fire_matched` wakeup has settled, by its window
+or by a stop. On the breach paths (the overdue rule, an unterminated bracket) it ends the
+session without waiting, and an unsettled `fire_matched` wakeup is then row 7, secondary to
+row 4 (B; round 10's O1).
+
+`WAKEUP_SETTLE_SECONDS` is `WAKEUP_GRACE_SECONDS + WAKEUP_SKEW_SECONDS` (305 s). That makes the
+window exactly as long as the lateness the overdue rule already accepts. Condition 6 admits a
+match only when the matched wakeup's due time is at most `WAKEUP_SKEW_SECONDS` after the
+bracketed turn opened, which is before `completed(X)`. If the match was wrong, the wakeup is
+still scheduled at the harness and already due, and the harness owes its fire within
+`WAKEUP_GRACE_SECONDS` of idleness past that due time, the bound whose breach the overdue rule
+declares. Idleness means the same thing in both rules: no turn and no task open (the settle
+timer also waits out open brackets, which only lengthens it). The timer measures one
+unbroken idle stretch of 305 s starting after `completed(X)`, which is after the due time
+minus the skew, so it holds at least `WAKEUP_GRACE_SECONDS` of idleness past the due time. So
+the real fire, and with it B's `unmatched_bracket` (or, if another due wakeup is
+`pending`, the next match, which gets its own window), always arrives inside the window, while
+the session is still open. The window ends the session on no time of its own: it only decides
+when a match counts as settled, and the session still ends only at a quiescent turn.
+
+A worker that follows `WORKER_LIFECYCLE_NOTE` cancels any wakeup it no longer needs with
+`ScheduleWakeup {stop: true}` before ending, and a successful stop settles every wakeup at
+once, so it never waits for a window. That includes a stop from inside the fire turn itself
+(B, "A stop inside a bracket"). A worker that lets a wakeup fire and then ends with no
+stop is correct and pays `WAKEUP_SETTLE_SECONDS` of idle time before `ENDING`. This is the
+same kind of accepted delay as decision 11's, and README documents it (CP8).
+
+**Unterminated `command_lifecycle` brackets** (amendment 0, decision 5). The stream cannot time
+a bracket, because its events carry no `timestamp`. So the supervisor times it by its own clock,
+as it does the overdue rule. A bracket is *stalled* while it is open and no turn is open: before
+its turn's `system/init`, or after its turn's `result`, still waiting for `completed(X)`. The
+bracketed turn itself is never timed, since a fire turn may run as long as any other turn. P11
+measured both stalled gaps at 5 ms and under 1 s. A bracket stalled for
+`COMMAND_LIFECYCLE_GRACE_SECONDS` (300), while no task is open, is a harness-contract breach,
+like an overdue wakeup. A pending wakeup does not defer it, because the bracket that should
+match that wakeup is the one that stalled. The supervisor flushes `command_lifecycle_overdue_declared_at` and the
+bracket's `command_uuid` with `ENDING`, ends the session as in `ENDING`, and row 4 classifies the
+run `AMBIGUOUS` (`command_lifecycle_unterminated`). While a task is open, a stalled bracket only
+keeps the worker `WAITING`, as a pending wakeup does. The stall timer starts afresh whenever the
+bracket's state changes (its turn opens or closes), and at a re-attach (E). It is never carried
+across Controllers, so a re-attaching supervisor may wait longer than the grace, and never
+shorter. That keeps the stream state pure and the declaration a supervisor fact. Settle timers
+follow the same rule: a re-attaching supervisor starts one afresh for each `fire_matched`
+wakeup it finds after replay, so it may settle later than the lost Controller would have, never
+earlier.
 
 **`--timeout`** keeps its meaning of an explicit operator budget, now over the whole owned
 lifetime. When it expires, the supervisor ends the worker's process group, every tagged or
@@ -680,7 +1086,16 @@ through `on_group_drain`. So every existing group-drain test stays green unchang
 - `validate_record` case 3 gains a check: a `LAUNCHED`/`COMPLETED` record that carries
   `worker_state` must name a member of the closed `WORKER_STATES`, a `COMPLETED` one must say
   `ENDED`, and a record carrying `ending_offset` must be at `ENDING`, `DRAINING` or `ENDED` (a
-  worker whose anchor was lost reaches `DRAINING`/`ENDED` without one). A violation is `StaleJobRecordError`, like every other case-3 breach.
+  worker whose anchor was lost reaches `DRAINING`/`ENDED` without one). A record carrying
+  `wakeup_overdue_declared_at`, `command_lifecycle_overdue_declared_at` or a non-empty
+  `settled_wakeups` must also carry `ending_offset`, because all three are flushed with
+  `ENDING` (C). The second must name its `command_uuid` as a non-empty string (amendment 0), and
+  `settled_wakeups` must be a list of distinct non-empty strings (round 9's I1). A violation is `StaleJobRecordError`, like every other case-3 breach.
+- `worker_state.waiting_on` carries `tasks`, `wakeups` and `command_lifecycles`, the open
+  brackets of C's `details` (amendment 0). Each `wakeups` entry names its state, `pending` (with
+  its due time) or `fire_matched` (with the matching `command_uuid` and the settle time left,
+  round 9's I1). It is presentation data, rewritten at each state
+  change, and never an input to the stream state, which replay rebuilds (E).
 - `execute_step` still wraps the whole step in the lifecycle lock. Because `worker.launch` now
   returns only after owned work has drained, the lock is held for the whole owned lifetime by the
   Controller, and by the worker and the anchor if the Controller dies (I4). `run`'s
@@ -767,8 +1182,19 @@ whose supervisor lock is `unattached`:
 
 1. take the job's supervisor lock (above);
 2. rebuild the state machine by replaying `worker.stdout` from the start, with the persisted
-   supervisor facts (`ending_offset`, `wakeup_overdue_declared_at`). Replay is deterministic,
-   because the state is a pure function of the lines and those facts (B);
+   supervisor facts (`ending_offset`, `wakeup_overdue_declared_at`,
+   `command_lifecycle_overdue_declared_at`, `settled_wakeups`). Replay is deterministic, because the state is a
+   pure function of the lines and those facts (B). That includes every `command_lifecycle`
+   bracket (amendment 0). A bracket `started` before the Controller was lost is open again after
+   replay, with the same `command_uuid`, and is completed by the `completed(X)` the live stream
+   later brings. A bracket both opened and closed while no Controller was attached is judged
+   from the stream alone, exactly as live supervision would have judged it: regular brackets
+   match their wakeups, and anomalies stay anomalies. Replay reads only complete lines, so a
+   Controller lost mid-line never splits a lifecycle event. The only things re-attach cannot
+   recover are the lost Controller's timers, so each open bracket's stall timer, and each
+   unsettled `fire_matched` wakeup's settle timer (round 9's I1), starts at re-attach (C). A
+   `fire_matched` wakeup that the lost Controller had already settled, but had not yet flushed
+   with `ENDING`, is therefore settled again one full window later, never earlier;
 3. decide:
    - **the worker is alive**: continue supervision exactly as C does from the replayed state.
      `resume` is not the worker's parent, so it follows the worker's liveness through the
@@ -787,6 +1213,10 @@ whose supervisor lock is `unattached`:
      alive. This includes the window where `ENDED` was persisted and the anchor ended but the
      Controller died before the `COMPLETED` flush (round 1's O2): the stream proves a
      supervisor-ended quiescent session, so it is classified, not failed;
+   - an open bracket at re-attach is owned work like any other (B). With the worker alive,
+     supervision continues and the bracket completes or stalls (C). With the worker gone, it is
+     classified by B's rows as for any exit with owned work (row 5 with no `ending_offset`, else
+     row 7), never assumed to have completed;
    - **the worker is gone and there is no `ending_offset`** (the session was not ended by a
      supervisor): no re-attach. Wait for owned work (C step 3's set, recorded entries included)
      to drain, with the same bound and detach as C. Then end the anchor if
@@ -853,7 +1283,7 @@ from the record, the supervisor probe and a fresh owned-work scan:
 | activity | when | example line (`status`, `follow` heartbeat, `explain`) |
 | --- | --- | --- |
 | `active` | `LAUNCHED`, `worker_state` `RUNNING`/`STARTING` | `worker pid P running (turn 3), elapsed 12:04, last event 4s ago` |
-| `waiting` | `WAITING` | `worker pid P waiting on 1 background task (b1b5d6hjp "Run the full test suite", 6:10) and 0 wakeups` |
+| `waiting` | `WAITING` | `worker pid P waiting on 1 background task (b1b5d6hjp "Run the full test suite", 6:10) and 0 wakeups`; with an open bracket (amendment 0) also `and 1 harness command (command_uuid 6ff491e4, no turn yet \| turn ended, awaiting completion; stalled 0:04 of 5:00)`; with a `fire_matched` wakeup (round 9's I1) also `and 1 wakeup presumed fired, not yet settled (matched by harness command 2cde4b9e; settles in 4:12 unless another harness command contradicts it; ScheduleWakeup stop:true settles it now)` |
 | `draining` | `ENDING`/`DRAINING` | `worker ended; 2 owned processes still running (pids 4101, 4107)`; after a drain detach (C step 3) also `detached after 10:00 -- end them, then workflow-controller resume <repo>`; recognised daemons left running are listed as `not owned` |
 | `unsupervised` | any of the above with the supervisor lock `unattached` | the line above plus `no Controller attached -- workflow-controller resume <repo> re-attaches` |
 | `pending reconciliation` | `COMPLETED`, or `LAUNCHED` with no owned work | `worker ended (SUCCESS); pending reconciliation -- workflow-controller resume <repo>` |
@@ -863,12 +1293,32 @@ from the record, the supervisor probe and a fresh owned-work scan:
 - `inspect`: gains a `jobs:` block, one line per non-terminal job for the target, beside
   `lifecycle lock:`. It stays read-only.
 - `explain`: `_print_pending_jobs` appends the activity to each pending job. `--json` gains
-  `pending_jobs[].activity`, `worker_state`, `waiting_on` and `owned_processes`.
+  `pending_jobs[].activity`, `worker_state`, `waiting_on` (including `command_lifecycles`) and
+  `owned_processes`.
+- **Unresolved lifecycle pairs** (amendment 0). Each surface shows an open bracket as above. A
+  bracket's stall time is known only to an attached supervisor, so an `unsupervised` record shows
+  the bracket with `stall time unknown (no Controller attached)`, never a number. The same holds
+  for a `fire_matched` wakeup's settle time, shown as `settle time unknown (no Controller
+  attached; restarts on resume)`. A worker held only by a `fire_matched` wakeup is never
+  presented as quiescent or finished: the `waiting` line says the wakeup is presumed fired and
+  not yet settled, because the harness does not say which wakeup a fire belongs to (round 9's
+  I1). `explain` also prints `wakeup_count_mismatch` with both counts. For a
+  terminal or `COMPLETED` record, `explain` (text and `--json`) prints
+  `stream_diagnosis.command_lifecycle_anomalies` as one line per anomaly (kind, `command_uuid`,
+  stream offset), and each wakeup's final state and how it got there (`fire_matched` with its
+  `command_uuid`; `settled` by `settle_window` or by `stop` with both counts, and with the
+  bracket's `command_uuid` when a stop inside a fire turn settled its own match; `pending`). It also
+  renders `command_lifecycle_irregular` and `command_lifecycle_unterminated` beside the
+  existing reasons, with the offending `command_uuid`. An operator can therefore tell "the
+  harness never closed this command", "the harness produced a pair the Controller could not
+  match" and "the harness still held a wakeup the Controller had matched" from a wakeup that
+  simply never fired.
 - `follow`: the job loop ends only at a terminal record. While `WAITING`, it keeps following and
   prints the waiting heartbeat. When the supervisor is gone, it says so and names `resume`
   (replacing "worker exited; job X awaits resume" for records that carry `worker_state`).
   `normalise` renders `task_started`/`task_notification`/`background_tasks_changed` as compact
-  `background task` lines, and the new job events through `_job_text`.
+  `background task` lines, `command_lifecycle` events as `harness command <uuid8> started` /
+  `completed` lines, and the new job events through `_job_text`.
 - Every presenter is read-only. `follow` stays presentation-only (roadmap 1.3 rule).
 
 ## Harness limitations (documented, not solved here)
@@ -881,16 +1331,50 @@ a silent behaviour change.
   `--input-format stream-json` with stdin held open keeps a session alive across background
   work (P1 vs P3). This behaviour is measured, not documented by the harness. The opt-in live
   probe (CP1/CP8) re-measures it against the installed `claude`.
-- **H2 -- scheduled wakeups are invisible to the task stream** (P5). They are recognised by tool
-  name from `tool_use`/`tool_result`, the one tool-specific rule in `worker_stream`. A renamed
-  tool, or a wakeup scheduled some other way, would be missed: the worker would look quiescent,
-  the Controller would end it at its idle turn, and the wakeup would be lost. That path is
-  fail-closed, not always judged (round 5's O1). Where F's same-phase predicate verifies
-  (`IMPLEMENTING -> IMPLEMENTING`), the job is judged on durable state, as any other quiescent
-  worker is. The `SELF_REVIEWING_IMPLEMENTATION` and `APPLYING_REVIEW_FEEDBACK` self-loops stay
-  non-verifying (`phase_not_in_to_any_of`, F), so a worker ended early there fails the job. A
-  missed or mis-recognised wakeup is therefore never a false success, but it can be a failed
-  job, and the recogniser's precision still matters.
+- **H2 -- scheduled wakeups are invisible to the task stream** (P5). Scheduling is recognised by
+  tool name from `tool_use`/`tool_result`, the one tool-specific rule in `worker_stream`. A fire
+  is recognised only by its `command_lifecycle` bracket (P11, amendment 0), an event the harness
+  does not document. Its name, fields, values and placement are pinned by the P5/P11 fixture and
+  re-measured by the opt-in live probe. The stream never says *which* wakeup a fire belongs to,
+  so a fire is recognised as a fire and matched to a wakeup by time; that match is never
+  treated as proof (B's `fire_matched`, round 9's I1). The bracket's failure modes are not
+  symmetric:
+  - if the harness drops, renames or reshapes the pair, fires stop matching wakeups, each
+    pending wakeup reaches the overdue rule, and the run fails closed (`AMBIGUOUS`). A
+    lifecycle event with a changed `state` vocabulary or a missing `command_uuid` is an anomaly,
+    and fails the run closed at once (row 3);
+  - if the harness starts bracketing some *other* turn kind, a bracket that matches no due
+    wakeup is `unmatched_bracket` (row 3). A non-fire bracket whose turn opens after a pending
+    wakeup's due time does match that wakeup, which B cannot prevent. It cannot end the
+    session, though: the wakeup is only `fire_matched` and stays owned work until it settles
+    (C, decision 13). Its real fire is already due, so it arrives inside the settle window,
+    while the session is open, and its bracket is `unmatched_bracket` (row 3). A stop in the
+    meantime exposes the wrong match through the harness's own count
+    (`wakeup_count_mismatch`, row 3). Either way the run fails closed, and never through a
+    session ended before the fire;
+  - **the double-breach residue.** The settle window is sized by the lateness the overdue rule
+    accepts (`WAKEUP_GRACE_SECONDS`, plus the match skew), and it is measured over the same
+    idle time: no turn and no task open (round 10's I2). A fire the harness defers while a task
+    runs therefore never counts against the window. A wrong match is missed only when
+    the harness *both* brackets a non-fire turn after a due wakeup *and* then delays that
+    wakeup's real fire past the grace of task-free idle time, with no stop issued in between. The second is the very
+    breach the overdue rule declares; here nothing is left pending to declare it on. Both are
+    unmeasured, and the live probe re-measures the first (CP1). This is the only way an
+    unrelated bracket can still lead to `ENDING` before a real fire, and CP3 pins it as a
+    documented residue rather than leaving it implicit;
+  - two wakeups pending at once were not measured. If the harness fires only the later one
+    (for example, because a second schedule replaced the first), that fire matches the earlier
+    (earliest-due rule, B), the later one reaches the overdue rule and fails closed, and a stop
+    in the meantime reports a count that disagrees (`wakeup_count_mismatch`).
+  A renamed scheduling tool, or a wakeup scheduled some other way, would be missed entirely:
+  nothing would be owned, the worker would look quiescent, the Controller would end it at its
+  idle turn, and the wakeup would be lost. Ownership cannot close that gap, because nothing in
+  the stream says a wakeup exists. It is guarded only by the pinned tool name (P5, P7's
+  inventory) and the live probe, which fails when `ScheduleWakeup` changes. Workflow
+  reconciliation is not a substitute for it (round 9's I1): where F's same-phase predicate
+  verifies (`IMPLEMENTING -> IMPLEMENTING`), a worker ended before such an unseen wakeup would
+  be judged on durable state like any quiescent worker. That is why the recogniser's own
+  guarantee, not reconciliation, is what this plan relies on for every wakeup it *can* see.
 - **H3 -- recurring and remote schedules (`CronCreate`, `RemoteTrigger`) cannot be owned to
   termination**, so they are disallowed for every worker.
 - **H4 -- the harness's `killed` status does not mean the processes are gone** (P2). The
@@ -911,7 +1395,14 @@ a silent behaviour change.
   ownership cannot follow descendants. The anchor carries the lock instead (I4).
 - **H7 -- ordering.** Print mode can write one turn's `result` after the next turn's events
   (`2857a730`). Streaming mode was in order in every probe. The classification never depends on
-  per-turn `result` placement (B).
+  per-turn `result` placement (B). The one ordering B does rely on is the `command_lifecycle`
+  bracket's (`started`, one turn, `completed`), which was in order in both captured fires. A
+  bracket out of that order is irregular and fails closed (B). One known false-`AMBIGUOUS`
+  source follows (round 8's O3): a `task-notification` turn that the harness opens between a
+  fire's `result` and its `completed(X)` puts two turns in the bracket, which is
+  `multiple_bracketed_turns`. P11 measured that gap at 0 ms, so it is unlikely, but an operator
+  who sees `command_lifecycle_irregular` next to a background task that ended at the same
+  moment should suspect it before suspecting the harness.
 - **H8 -- non-dumpable descendants** (round 1's I5). A tagged descendant whose `environ` is
   unreadable (`prctl(PR_SET_DUMPABLE, 0)`) is not owned by tag. It is still owned while it stays
   in the worker's process group or is adopted by the supervising Controller.
@@ -925,8 +1416,8 @@ a silent behaviour change.
 <!-- generated by workflow_state.render_registry_markdown(registry) -- do not edit by hand -->
 | id | name | depends_on | complexity | session_target |
 | --- | --- | --- | --- | --- |
-| CP1 | Harness contract evidence and fake harness: the measured claude 2.1.282 stream-json-input contract recorded as redacted fixtures (the real failing jobs' stream tails, background Bash, Monitor, ScheduleWakeup, slash-command and escaped-descendant probes), tests/fake_claude.py streaming-input mode (scripted turns, background tasks as real tagged processes with task events, wakeups, kill-at-EOF, escaped descendants, no descriptor inheritance by tool processes), and the opt-in live contract probe | - | 3 | 1 |
-| CP2 | Worker stream state machine: controller/worker_stream.py, a pure incremental reader tracking turns, owned background tasks, pending wakeups and quiescence, with terminal classification into the closed four outcomes plus a structured stream_diagnosis (several results accepted, owned work killed at exit, exit while waiting, overdue wakeup, malformed stream); replaces worker._parse_worker_stream | CP1 | 3 | 1 |
+| CP1 | Harness contract evidence and fake harness: the measured claude 2.1.282 stream-json-input contract recorded as redacted fixtures (the real failing jobs' stream tails, background Bash, Monitor, ScheduleWakeup, slash-command and escaped-descendant probes), adopted byte for byte from the CP1 capture, with the wakeup fire's command_lifecycle started/completed bracket pinned as the fire's only recogniser evidence, tests/fake_claude.py streaming-input mode (scripted turns, background tasks as real tagged processes with task events, wakeups whose fires are enclosed in the measured command_lifecycle bracket with injectable bracket faults, kill-at-EOF, escaped descendants, no descriptor inheritance by tool processes), the stop-inside-a-fire probe (P12) captured into two new fixtures whose cancelledWakeups counts must match the settlement rule before CP2 starts (any other count is a plan-amendment trigger), and the opt-in live contract probe | - | 3 | 1 |
+| CP2 | Worker stream state machine: controller/worker_stream.py, a pure incremental reader tracking turns, owned background tasks, pending wakeups, command_lifecycle brackets correlated by command_uuid (a wakeup matched only by a regular bracket whose turn opens at or after its due time, never by result origin, and still owned until a count-checked stop or a settle window with no contradicting bracket settles it) and quiescence, with terminal classification into the closed four outcomes plus a structured stream_diagnosis (several results accepted, owned work killed at exit, exit while waiting, overdue wakeup, irregular or unterminated command lifecycle, malformed stream); replaces worker._parse_worker_stream | CP1 | 3 | 1 |
 | CP3 | Streaming-input worker launch and supervision: worker.launch sends the task as one stream-json user message on a pipe whose write end is held by a Controller-spawned stdin anchor that also holds the lifecycle lock and ends itself once nothing it can see is owned and no supervisor is attached; it supervises RUNNING, WAITING, ENDING and DRAINING from the stream, ends the session only at a quiescent terminal turn, owns descendants through an environment ownership tag and a child subreaper, excludes recognised tool daemons, drains tagged descendants and the process group up to a drain bound and then detaches without ending anything, ends all owned work on an explicit timeout, adds the Controller's worker lifecycle system note, and disallows CronCreate, CronDelete and RemoteTrigger for every worker | CP2 | 4 | 1 |
 | CP4 | Job lifecycle integration: execute_step persists worker_state transitions, the anchor and owned-process snapshots while the record stays LAUNCHED, reconciles only after the worker has ENDED and its owned work has drained, keeps the lifecycle lock for the whole owned lifetime, and run cannot start the next action early; regressions for the observed IMPLEMENTING, SELF_REVIEWING_IMPLEMENTATION and APPLYING_REVIEW_FEEDBACK failures, for checkpoint N+1 blocked by checkpoint N's background verification, and for a waiting worker that resumes and finishes | CP3 | 4 | 1 |
 | CP5 | Restart recovery: a per-job supervisor lock; resume and abandon run supervision and anchor disposal first, under the supervisor lock and before the lifecycle lock, then reconcile under the lifecycle lock; resume re-attaches to a live unsupervised job without launching a worker, rebuilds its state by replaying the stream, ends it and reconciles; the ownership hold over the worker and its tagged descendants applies to LAUNCHED and COMPLETED records in resume, the pending-job refusal and abandon; regressions for Controller loss during WAITING and DRAINING, for a lost anchor and for an orphaned anchor | CP4 | 4 | 1 |
@@ -939,11 +1430,25 @@ tests -t .`) and is committed by `/milestone-implement` in the usual per-checkpo
 checkpoint that changes behaviour an existing test pins rewrites that test in the same
 checkpoint and names it in the commit message. It never deletes such a test silently.
 
+<!-- CP1 -->
 ### CP1 -- harness contract evidence and fake harness
 
-Files: `tests/harness_contract/` (new: redacted `.jsonl` fixtures and a `README` naming each
-fixture's source), `tests/fake_claude.py`, `tests/test_fake_claude_contract.py` (new),
+Files: `tests/harness_contract/` (new: redacted `.jsonl` fixtures, a `README` naming each
+fixture's source, and `p12_admission.py`), `tests/fake_claude.py`, `tests/test_fake_claude_contract.py` (new),
 `tests/test_integration_disposable_repo.py` (the opt-in live probe).
+
+**The measured fixtures already exist** (amendment 0). CP1's first run captured them into the
+still-untracked `tests/harness_contract/`: `capture.py`, the seven imported job streams and
+P1-P6 and P8-P11, 18 `.jsonl` and 18 `.meta.json` files. CP1 adopts them byte for byte, and
+commits them as its evidence. It never re-captures, regenerates, edits or deletes one to fit
+this design. The one exception is a later, separate re-measurement for a new `claude` version,
+which is out of this milestone. CP1 adds the `README`, and records each fixture's SHA-256 in it.
+A contract test checks those digests, so any later change to a fixture is a visible test
+failure, not a silent re-baseline. `capture.py` may change only in its `pins` descriptions and
+its `README` cross-references. Its probe definitions stay as they were when the fixtures were
+captured. The one addition is P12's two new probe definitions (round 11's I1, below); no
+existing definition changes. P12's admission and gate rules live in a new module beside it,
+`tests/harness_contract/p12_admission.py`, not in `capture.py` (round 13's I1). The fixture list and every bullet below are otherwise revision 7's.
 
 - **Fixtures.**
   - The six observed failing jobs' streams and `2857a730`'s. Structural events are kept
@@ -956,18 +1461,145 @@ fixture's source), `tests/fake_claude.py`, `tests/test_fake_claude_contract.py` 
     `--append-system-prompt` with `WORKER_LIFECYCLE_NOTE`, the full disallow list), overriding
     only the model to haiku. CP3 extracts `launch`'s argv construction into
     `worker.build_worker_argv(...)`, and from then on the capture script and the live probe call
-    it, so H1's measurement covers the argv the Controller actually sends (round 1's O7). P8-P11 are the preconditions the Investigation lists; a
-    result that contradicts one stops the checkpoint for a plan amendment. P11 records the
-    streaming-mode `result` `origin` of four turn kinds: the wakeup fire, P3's task completion,
-    P4's per-event Monitor turns (round 3's I2) and the turn after a background subagent's
-    hand-back (round 4's I1, captured with `Agent` `run_in_background: true`), each as its full
-    `origin` object, with at least two fires under different `prompt` texts, and the fire
-    turn's opening `user` event verbatim (round 5's I1). The comparison key is `origin.kind`
-    (B, round 6's I1). A fire turn whose `result` carries no `origin`, or whose `origin.kind`
-    equals the `origin.kind` measured for any of the other three kinds, is such a
-    contradiction (B): CP1 stops, and the plan amendment names the distinguishing field and its
-    measured value, stable across the captured fires. The print-mode `peer` records are not a
-    substitute for the hand-back capture.
+    it, so H1's measurement covers the argv the Controller actually sends (round 1's O7). P8-P11 were the preconditions the Investigation lists. They are
+    now measured (Investigation), and P11's fire-turn result is what amendment 0 resolves. The
+    contract that CP2 relies on from P11 is the `command_lifecycle` bracket (B), not an
+    `origin`. **The amendment's stop trigger stays**, re-keyed on the bracket. If the live
+    probe (below), or any re-measurement, finds a fire turn that is not enclosed in exactly one
+    `started`/`completed` pair with one shared `command_uuid`, or finds a pair around a
+    non-fire turn kind, that is a new plan-amendment trigger, not an implementation-time
+    judgement.
+- **P12 -- a stop inside a fire turn, captured before CP2** (round 11's I1). This is the one
+  harness fact B's settlement count relies on that the amendment-0 fixtures do not hold (B,
+  "A stop inside a bracket"). CP1 captures it itself, with the capture script and argv above,
+  into two **new** fixtures beside the existing ones, never by editing one:
+  - `p12_stop_inside_fire_single`: schedule wakeup ALPHA (`delaySeconds` 60) and end the turn;
+    when ALPHA fires, call `ScheduleWakeup {stop: true}` in that fire turn, then end it. B's
+    assumption: `cancelledWakeups: 0`, because the harness has already fired ALPHA and holds
+    nothing else. This also measures a stop with no wakeup pending, which the Investigation
+    lists as unmeasured;
+  - `p12_stop_inside_fire_nested`: the P5 shape. Schedule ALPHA and end the turn; when ALPHA
+    fires, schedule BRAVO (`delaySeconds` 60) and then call `ScheduleWakeup {stop: true}` in
+    that same fire turn, then end it. B's assumption: `cancelledWakeups: 1` (BRAVO, not ALPHA).
+  **Probe definitions** (round 13's O1). Each prompt names every `ScheduleWakeup` argument the
+  model is to pass, exactly: ALPHA `{delaySeconds: 60, prompt: "P12 fire ALPHA", reason:
+  "contract probe alpha", noop: false}`, BRAVO `{delaySeconds: 60, prompt: "P12 fire BRAVO",
+  reason: "contract probe bravo", noop: false}`, and the stop `{stop: true}`. `noop` is named
+  because the harness rejected P9's first call for leaving it out (`p9_wakeup_cancel.jsonl`
+  0-based line 8, the `tool_result` answering line 7's call); P5's model added `noop: false` unasked, and P9's accepted stop was `{stop: true}`.
+  Both definitions carry `"linger": 200` as an explicit key. `run_probe` reads
+  `float(probe.get("linger", 0))`, and P5's definition has no `linger` key, so a P12 definition
+  copied from P5 without it would close stdin at `PROBE-DONE` and see no later fire by
+  construction.
+  Each prompt also tells the model to make each named call exactly once, and never to retry or
+  change its arguments, whatever a tool returns. In any turn other than the two named ones, the
+  model replies with exactly `PROBE-EXTRA` and calls no tool (round 14's I1). This makes a
+  reaction to a harness answer unlikely. What keeps such a reaction out of admission is the cut
+  point below, not the prompt.
+  Each probe's prompt puts `PROBE-DONE` in the final reply of the fire turn, and in no other
+  reply: the first turn ends with `WAITING-ALPHA`, as P5's prompt does. `capture.py`'s
+  watchdog starts its `linger` (200 s) from the first `result` whose text holds `PROBE-DONE`
+  (`done_at`), so the window runs 200 s from the fire turn's `PROBE-DONE` `result` (round 12's
+  O1). A marker in the first turn would start the window before ALPHA fires, and no marker at
+  all would run the probe to `max_seconds` (600 s), a longer window. 200 s is well past
+  BRAVO's 60 s delay, so the capture also shows whether any later fire or `command_lifecycle`
+  event arrives.
+  **Admission reads the model's actions only, up to the cut point** (round 12's I1, round
+  13's I1, round 14's I1).
+  `p12_admission.admit(probe_name, events)` returns `RECAPTURE` with its reasons, or `ADOPT`.
+  It reads what the model controls: the model's `tool_use` events with their names and inputs,
+  the text of turn 1's reply (turn 1 is every event up to the first `result`), and, after turn
+  1, only whether each `text` block of the model's `assistant` events is exactly `PROBE-EXTRA`
+  (surrounding whitespace ignored; round 15's I1). It reads one
+  harness fact, and only to find the cut point: the `is_error` flag of a `tool_result` whose
+  `tool_use_id` answers an *exact named* call. It never reads a `command_lifecycle` event, any
+  other `user` event, a `tool_result`'s content or `tool_use_result`, a `cancelledWakeups`, an
+  exit status, or where the harness put a turn boundary after turn 1.
+  The **named sequence** is `[ALPHA, stop]` in the single probe and `[ALPHA, BRAVO, stop]` in
+  the nested one, each with the prompt's exact arguments. The **cut point** is the first of:
+  the model's call that completes the named sequence, meaning the call after which the model's
+  calls so far, in stream order, *equal* the named sequence exactly (not merely contain it as
+  a subsequence; round 15's O2); or an exact named call that a
+  `tool_result` answers with `is_error: true`. The model's actions up to and including the
+  cut-point call are admission input. Everything after it, calls and reply text alike, is not:
+  from there on the model is reacting to a harness answer (a rejection, or a turn the plan did
+  not ask for), and `gate_deviations` reports it. With no cut point, every model action in the
+  capture is admission input. A capture is `RECAPTURE` exactly when the model's admission
+  input does not do what the prompt asked:
+  - turn 1's calls are not exactly one `ScheduleWakeup` call with ALPHA's named arguments, or
+    turn 1's reply holds `PROBE-DONE`. Either is judged only if it lies before the cut point:
+    after ALPHA's exact call is rejected, a retried ALPHA or a changed reply is a reaction;
+  - the harness produced at least one `assistant` event after turn 1, and the model's calls
+    after turn 1 and up to the cut point, in stream order and whichever turns the harness put
+    them in, are not a prefix of the rest of the named sequence ending at the cut point. With
+    no cut point, they are not the whole rest, except in the `PROBE-EXTRA`-only case below. An
+    extra, missing, reordered or differently argued call before the cut point, or a call to any
+    other tool there, is the model's failure. A missing call is a failure only when there is no
+    cut point: after the exact BRAVO is rejected, a missing stop is the harness's doing.
+    **The `PROBE-EXTRA`-only case** (round 15's I1). With no cut point, if the model made no
+    call at all after turn 1, and it wrote at least one `text` block after turn 1 and every
+    such block is exactly `PROBE-EXTRA`, the missing calls are not the model's failure. The
+    model did what the prompt says for a turn that is not a named one. The turn it answered was
+    either not a fire (an unasked turn, with ALPHA never firing after it) or a fire it could
+    not identify as ALPHA's (for example, a `claude` that no longer shows the wakeup's `prompt`
+    to the model; P11 already shows that text is absent from the stream). Both are harness
+    behaviour, so the capture is `ADOPT`, and `gate_deviations` reports the missing bracket, or
+    the bracketed turn with no stop in it. Any other reply after turn 1 with no call, whether
+    free text (including `PROBE-DONE`), an empty reply with no `text` block, or a call to
+    another tool, stays the model's failure. So a delivered fire turn answered without the stop
+    is still `RECAPTURE`. Admission reads no turn boundary after turn 1, so it judges the
+    replies after turn 1 together: a fire turn with an empty reply followed by a `PROBE-EXTRA`
+    turn is `ADOPT`. That is the stated trade's direction below: the error is sent to the
+    amendment, where it is visible, never to a recapture.
+  **The trade this cut takes, stated** (round 14's I1). A spontaneous extra call *after* the
+  named sequence completes, for example a second stop in the same fire turn with no rejection
+  in between, is past the cut point. It is therefore reported by `gate_deviations` and goes to
+  the amendment, not to a recapture. Admission could only tell that call from a reaction to a
+  harness answer by reading more of the harness's output (the stop's result content, turn
+  boundaries after turn 1), which is what rounds 12 and 13 removed. The two errors are not
+  equal. A model call sent to the amendment by mistake is visible and recorded, and the user
+  sees it at the amendment gate as a model call. A harness answer sent to a recapture by
+  mistake is hidden, and a transient one is replaced by a clean run. The cut takes the first
+  error and never the second. The alternative, judging only the shortest prefix that completes
+  the named sequence without reading any `is_error`, makes the same trade after completion.
+  But it leaves a retry *before* completion (a rejected BRAVO retried, then the stop) to be
+  judged against the named sequence, which is the defect itself. So it is not taken.
+  Everything else is harness behaviour, and the capture is `ADOPT` whatever it shows. That
+  includes: ALPHA never firing, with no `command_lifecycle` event at all (no `assistant` event
+  after turn 1, so the model had no turn to act in); a turn after turn 1 that the model
+  answered `PROBE-EXTRA` with no call, whether or not a fire follows it (the
+  `PROBE-EXTRA`-only case above); no pair, or a pair enclosing zero, two or
+  more turns, around the model's later calls; malformed, unmatched, duplicated or reordered
+  lifecycle events; a stop or BRAVO `tool_use` that no `tool_result` answers; any `is_error`
+  `tool_result` on an exact named call, including the rejection itself (those arguments are
+  this plan's contract, so the harness refusing them is a contract observation, not a model
+  mistake), and whatever the model does after it; a missing, non-integer or unexpected
+  `cancelledWakeups`; any later event or turn, and whatever the model does in it; and a
+  non-zero exit of `claude`. A `RECAPTURE` capture is discarded, its reasons go in the
+  `README`, and the probe is run again. After three consecutive `RECAPTURE`s of one probe, CP1
+  stops and reports the prompt, the three captures' reasons and the model's calls to the user
+  instead of running it a fourth time. **The user's options there** (round 14's O1): reword the
+  prompt without changing anything the plan names (the exact arguments, the named sequence,
+  the markers `WAITING-ALPHA`/`PROBE-DONE`/`PROBE-EXTRA`, the `"linger": 200` key and the argv).
+  That is a CP1 implementation change, and the count of consecutive recaptures restarts at zero
+  for the reworded prompt. Or change any of those named items, which is a change to this plan's
+  contract and goes to `/request-plan-amendment` first. Either way, the `README` keeps every
+  discarded attempt with its reasons and the prompt text it ran under, across every rewrite.
+  An `ADOPT` capture is committed as that probe's fixture, its SHA-256 goes in the `README`
+  like every other fixture's, and that probe is not run again in CP1. So nothing the harness
+  did, and nothing the model did in reaction to it, can make a capture be re-run. A transient
+  harness fault cannot be replaced by a later clean run.
+  **The gate.** `p12_admission.gate_deviations(probe_name, events)` returns every way an
+  adopted capture differs from the contract the P12 contract-test sub-bullet (below) pins, and
+  an empty list is the only pass. CP1 is complete only when both P12 fixtures are adopted and
+  committed and both lists are empty. A non-empty list stops CP1 there: the deviations, and
+  the bracket and turn each came from, are recorded in the `README`, and the work item goes to
+  `/request-plan-amendment` before CP2 starts. That is the same trigger as the bracket
+  contract's, and it is not an implementation-time judgement. The `README` keeps the two
+  outcomes apart: a recaptured model mistake, with its reasons, and an adopted harness
+  observation, with its deviations.
+  The opt-in live probe re-runs both P12 probes at CP8 as a final re-measurement. It is not
+  the first measurement.
 - **Fake harness.** `tests/fake_claude.py` gains a streaming-input mode, used whenever
   `--input-format stream-json` is on its argv. It reads the task line from stdin (and records it
   in the diagnostic file). `_task()` returns the `-p` prompt argument when argv carries one, and
@@ -984,16 +1616,48 @@ fixture's source), `tests/fake_claude.py`, `tests/test_fake_claude_contract.py` 
       grandchild, optionally under the `argv0` given (for the daemon-policy tests);
     - `task_stop {id}`, a worker-initiated stop, emitting P8's measured statuses;
     - `monitor {id, ticks, interval, timeout}`;
-    - `wakeup {delay}` and `wakeup_stop`, which emit the `ScheduleWakeup` `tool_use`/`tool_result`
-      pair with a `timestamp` and the harness-stated `in Ns` text. The fire turn's `result`
-      carries P11's measured `origin.kind`, and the fake varies every other `origin` field
-      between fire turns (a per-turn counter in each), so a whole-object match cannot pass
-      (round 6's I1);
+    - `wakeup {delay, fire_turn}` and `wakeup_stop`, which emit the `ScheduleWakeup`
+      `tool_use`/`tool_result` pair with a `timestamp`, the harness-stated `in Ns` text and a
+      `tool_use_result` (`scheduledFor`, `clampedDelaySeconds`, `wasClamped`; `{stopped: true,
+      cancelledWakeups: n}` for a stop), as P5 and P9 measured. The fake's `n` is its own count
+      of wakeups scheduled and not yet fired, the truth the harness reports, never the
+      Controller's view, so a test can make the two disagree (round 9's I1). A wakeup counts
+      as fired from the moment the fake emits its `started(X)`, so a `wakeup_stop` inside a
+      fire turn does not count the wakeup being fired (B's assumption for a stop inside a
+      bracket, which CP1's P12 fixtures measure; round 10's and round 11's I1). The **fire** (amendment 0) is
+      played exactly as P11 measured it: `{"type": "command_lifecycle", "command_uuid": <fresh
+      uuid4>, "state": "started", "uuid": ..., "session_id": ...}`, then the fire turn, then
+      the matching `completed` event with the same `command_uuid`. The fire turn opens with
+      `system/init` and no opening `user` event; its first non-`system` event is a timestamped
+      `assistant` event, and it ends with a `result` with **no `origin`**. Its body is the optional
+      `fire_turn`, a list of the same steps as any scripted turn (default: one `text` step),
+      played *inside* the bracket, so a fire turn can call tools. A tool step there emits its
+      `tool_use` and its `user` `tool_result` inside the bracket, exactly as ALPHA's fire turn
+      did when it scheduled BRAVO (P5, lines 18-19; round 8's I1). A nested `wakeup` in
+      `fire_turn` schedules the next wakeup from within the fire, which is how the fake
+      reproduces `p5_p11_wakeup_fires`. Every fire gets its own `command_uuid`, which is never
+      reused;
+    - `lifecycle_fault {kind, ...}` (amendment 0), which perturbs the *next* wakeup fire's
+      bracket, for CP2-CP5's fail-closed tests: `omit_started`, `omit_completed`,
+      `duplicate_started`, `duplicate_completed`, `completed_before_started`,
+      `delay_completed {seconds}` (still in order), `delay_completed_past_next_turn`,
+      `reuse_uuid` (the previous fire's `command_uuid`), `overlap` (the next fire's `started`
+      before this one's `completed`), `empty` (a pair with no turn), `malformed {field}`, and
+      `bracket_turn {kind}`, which brackets a task-completion, Monitor or hand-back turn
+      instead, to model an unmeasured bracket source. Round 9's I1 adds two more.
+      `spurious_bracket {turn}` wraps the next task-completion, Monitor or hand-back turn in a
+      regular-shaped pair with a fresh `command_uuid` *and leaves the wakeup's own fire in
+      place*, so the real fire, in its own measured bracket, still comes afterwards; the
+      scripted turn's timing decides whether it opens before or after the wakeup's due time.
+      `delay_fire {seconds}` holds the next fire that many seconds past its due time, to model
+      a late fire. A fault is never the default. The unfaulted fire is the measured one;
     - `subagent_handback {after}`, a hand-back turn (round 2's I2);
     - the task-completion turn (after a `bash_bg` completes), each `monitor` tick turn and the
-      `subagent_handback` turn carry the `origin` P11 measured for that turn kind in streaming
-      mode, or none if P11 measured none (round 3's I2, round 4's I1). A test may still override
-      a turn's origin explicitly, for example to `origin.kind: peer` as in the print-mode records;
+      `subagent_handback` turn carry `origin: {"kind": "task-notification"}`, which P11 measured
+      for all three in streaming mode, and no `command_lifecycle` event (round 3's I2, round 4's
+      I1, amendment 0). A test may still override a turn's origin explicitly, for example to
+      `origin.kind: peer` as in the print-mode records, or give a fire an `origin`. B ignores
+      origins, so neither changes a recognition, and CP2 asserts that;
     - `commit {message}` / `write {path, text}`;
     - `end_turn`, which emits `result` (with `queued_turn_count: 0`).
     `user`/`assistant` events carry a `timestamp`; `system/init` and `result` do not, as
@@ -1015,9 +1679,125 @@ fixture's source), `tests/fake_claude.py`, `tests/test_fake_claude_contract.py` 
     lifecycle-lock descriptor (H6). Print mode keeps today's descriptor inheritance for the
     print-mode tests until CP3.
 - **Contract tests.** Replaying each fixture through the fake's own event writer reproduces the
-  fixture's event-type sequence. This keeps the fake honest against the measured harness. The
-  opt-in live probe (`CONTROLLER_LIVE_WORKER=1`, haiku, the production argv as above) re-runs
-  P3-P6 and P8-P11 and checks the same sequences against the installed `claude`.
+  fixture's event-type sequence, with `command_lifecycle` events and their `state`s in place.
+  The comparison is structural, and its projection is fixed (round 9's O2): each event maps to
+  `(type, subtype)`, plus `state` for `command_lifecycle`, and `is_error` for a `user`
+  `tool_result`. Before comparing, **both** sequences drop the non-structural event kinds the
+  fixtures hold, `system/thinking_tokens`, `rate_limit_event`, `system/task_progress`,
+  `tool_progress`, `system/commands_changed` and `system/vcs_state_changed`. They depend on the
+  model, the account and the machine, B never reads them, and the fake does not emit them. Any
+  other kind is compared exactly, so a fixture event outside both lists that the fake cannot
+  produce fails the test rather than being ignored. A separate assertion runs B over each
+  fixture with and without the dropped kinds and checks identical states and classifications,
+  which is what makes dropping them safe.
+  For `p5_p11_wakeup_fires` that includes ALPHA's fire turn scheduling BRAVO inside its bracket
+  (a `wakeup` step in `fire_turn`, its `tool_use` and `user` `tool_result` between `started`
+  and `completed`; round 8's I1). This keeps the fake honest against the measured harness. The opt-in live probe
+  (`CONTROLLER_LIVE_WORKER=1`, haiku, the production argv as above) re-runs P3-P6 and P8-P11
+  and checks the same sequences against the installed `claude`, including the bracket facts
+  below.
+- **The recogniser's evidence, pinned from the fixtures** (amendment 0).
+  `tests/test_fake_claude_contract.py` asserts, from the committed fixture files alone, each
+  fact decision 12 rests on:
+  - `p5_p11_wakeup_fires` holds exactly two `command_lifecycle` pairs. Each pair has one
+    `command_uuid`, `started` before `completed`, and exactly one turn between them, and the
+    two uuids differ. Each fire turn's `result` has no `origin` key. No `user` event occurs
+    between `started(X)` and the bracketed turn's first `assistant` event (the fire turn has no
+    opening `user` event). Every `user` event inside a bracket is a `tool_result` whose
+    `tool_use_id` matches a `tool_use` issued earlier in the same turn; in the fixture that is
+    exactly line 19, answering ALPHA's own line-18 `ScheduleWakeup` (round 8's I1). Neither
+    `prompt` text (`P11 fire ALPHA`, `P11 fire BRAVO second`) occurs in any `user` event, or
+    anywhere in `p5_p11_wakeup_fires.jsonl` outside its scheduling `tool_use` input. The
+    assertion reads the `.jsonl` event stream only: the matching `.meta.json` is capture
+    metadata, and legitimately holds both texts in its recorded `prompt` (round 9's O1). Each
+    wakeup's scheduling `tool_use` id and its `tool_use_result.scheduledFor` value occur only
+    in its own scheduling pair (ALPHA's at lines 5-6, BRAVO's at lines 18-19) and on no line of
+    its own fire bracket (13-24 and 25-32 respectively). That is the fact decision 13 rests on:
+    a fire does not identify its wakeup;
+  - no fixture other than `p5_p11_wakeup_fires` and the two P12 fixtures holds a
+    `command_lifecycle` event. That covers the other ten probes and the seven job streams. Every non-first `result` of `p3_streaming_background_bash`,
+    `p4_monitor`, `p8_monitor_timeout` and `p11_subagent_handback` carries
+    `origin == {"kind": "task-notification"}` and lies inside no bracket;
+  - `p9_wakeup_cancel` holds no fire turn and no `command_lifecycle` event;
+  - each P12 fixture is `ADOPT` under `admit` and passes the gate's assertions, which are
+    exactly what `gate_deviations` checks. These are gate assertions, not admission criteria:
+    the fixture was admitted on the model's actions alone, so a failure here is the
+    plan-amendment trigger, never a reason to recapture (round 12's and round 13's I1). The fixture
+    holds exactly one `command_lifecycle` pair with one `command_uuid`, and one turn between
+    `started(X)` and `completed(X)`. Before `started(X)` it holds no turn event (`system/init`,
+    `assistant`, `user`, `result`) outside turn 1, so an unasked turn before the fire, even one
+    the model answered `PROBE-EXTRA`, is a deviation (round 15's I1). That turn has no opening `user` event, and its `result`
+    has no `origin`, as in P11. The stop's `ScheduleWakeup` `tool_use` (`stop: true`) and its
+    `user` `tool_result`, with a matching `tool_use_id`, both lie inside that turn. The
+    `tool_result` is not `is_error`, and its `tool_use_result` has `stopped: true` and an
+    integer `cancelledWakeups`: `0` in `p12_stop_inside_fire_single`, and `1` in
+    `p12_stop_inside_fire_nested`. In the nested fixture, BRAVO's scheduling pair lies inside
+    the same turn, before the stop, and BRAVO's `tool_result` is not `is_error`. The model's
+    `tool_use` calls in the whole fixture are exactly the named sequence with the named
+    arguments and nothing else, so any call past `admit`'s cut point (a retry after a
+    rejection, a second stop, a call in a later turn) is a deviation that names the call and
+    the answer it followed (round 14's I1). After
+    `completed(X)` the fixture holds no `command_lifecycle` event and no turn event
+    (`system/init`, `assistant`, `user`, `result`), so no later fire and no later bracket
+    (round 13's O2). The six non-structural kinds the replay comparison drops are ignored
+    there, and an event of any kind outside both lists is a deviation, as it is in the replay
+    comparison. A failure of any of these is fixed by the amendment, not by editing the test or
+    the fixture;
+  - `admit` and `gate_deviations` separate the model's mistakes from harness observations
+    (round 13's I1). The cases are synthetic event lists built in memory from
+    `p5_p11_wakeup_fires.jsonl`'s own events (turn 1 with ALPHA's call, and ALPHA's bracketed
+    fire turn), with the P12 arguments and the stop spliced in; no fixture file is written.
+    Harness observations, each `ADOPT` with a non-empty `gate_deviations` naming it, which is
+    the amendment trigger and never a recapture: ALPHA correctly scheduled and turn 1 ended,
+    then no fire, no bracket and no later turn; the stop's `tool_use` inside the bracket with
+    no `tool_result` answering it; a bracket enclosing two turns, the stop in the second; the
+    stop's `tool_result` `is_error` on the exact named arguments; `cancelledWakeups` missing,
+    and `1` in the single probe; a second `command_lifecycle` pair after `completed(X)`. A
+    `rate_limit_event` or `system/thinking_tokens` after `completed(X)` adds no deviation.
+    Harness observations followed by the model's reaction, each also `ADOPT` with a non-empty
+    `gate_deviations` naming both the answer and the reaction, never `RECAPTURE` (round 14's
+    I1): ALPHA's exact call rejected with `is_error`, then retried in turn 1 with different
+    arguments (the `p9_wakeup_cancel.jsonl` shape, 0-based lines 7, 8 and 13); ALPHA's exact
+    call rejected and turn 1's reply then holding `PROBE-DONE`; the single probe's exact stop
+    rejected, then retried; in the nested probe, the exact BRAVO rejected, then retried, then
+    the stop; in the nested probe, the exact BRAVO rejected and no stop at all; ALPHA's
+    bracket, then a second fire turn in which the model calls the stop again; the same second
+    fire turn with the reply `PROBE-EXTRA` and no call; and, pinning the stated trade, a
+    second stop in the same fire turn after the named sequence completed, with no rejection in
+    between.
+    The `PROBE-EXTRA`-only case (round 15's I1), each `ADOPT` with a non-empty
+    `gate_deviations`: ALPHA correctly scheduled, then one unbracketed turn after turn 1 whose
+    reply is `PROBE-EXTRA` with no call, and nothing after it (the deviations name the unasked
+    turn and the missing bracket); ALPHA's bracketed fire turn answered `PROBE-EXTRA` with no
+    call (the fire the model could not identify; the deviations name the bracketed turn with
+    no stop); an unasked `PROBE-EXTRA` turn, then ALPHA's fire and the stop (the deviation
+    names the turn before `started(X)`).
+    Model mistakes, each `RECAPTURE` with its reason: turn 1 without ALPHA's call; ALPHA
+    called with `delaySeconds` 30; ALPHA called with `delaySeconds` 30 and that call rejected
+    (a rejection of arguments the prompt did not name is no cut point); a stop in turn 1 with
+    ALPHA not rejected; `PROBE-DONE` in turn 1's reply with ALPHA not rejected; a delivered
+    fire turn with no stop and no rejection, whose reply is off-script free text; the same
+    fire turn with the reply `PROBE-DONE` and no call; the same with an empty reply (no `text`
+    block) and no call; one unbracketed turn after turn 1 with an off-script reply and no call,
+    and nothing after it (the off-script counterpart of the first `PROBE-EXTRA`-only case); in
+    the single probe, a fire turn with the reply `PROBE-EXTRA` and a call to another tool; in
+    the nested probe, BRAVO called in the fire turn, no stop, and then a `PROBE-EXTRA` turn
+    (the model did act after turn 1, so the missing stop is its failure); in the nested probe, the stop before BRAVO; in the
+    nested probe, BRAVO called twice with no rejection between (an extra call before the
+    sequence completes). A further case shows that a model mistake before the cut point and a
+    harness fault in the same capture are `RECAPTURE`. `admit`'s independence is tested in
+    its narrowed form: its verdict is unchanged when every `command_lifecycle` event, and every
+    `user` event other than the `tool_result`s answering exact named calls, is removed; when
+    those `tool_result`s' content and `tool_use_result` are replaced, keeping `is_error`; and
+    when the `is_error` of a `tool_result` answering a call that is not an exact named call is
+    flipped. That shows it reads nothing of the harness except the one flag that sets the cut
+    point. Its verdict is also unchanged when an off-script `text` block after turn 1 is
+    replaced by different off-script text, so after turn 1 it reads only whether a block is
+    exactly `PROBE-EXTRA` (round 15's I1);
+  - every fixture's SHA-256 equals the one its `README` records.
+  The live probe asserts the first three facts against the installed `claude`, and at CP8 it
+  re-runs both P12 probes and asserts the same counts. A mismatch is reported as the
+  plan-amendment trigger above. CP2 runs B itself over the same fixtures.
 - **Test-teardown guarantee** (round 1's I7). `tests/process_fixtures.py` gains
   `reap_recorded_workers(runtime_root)`: it reads every job record under a test's runtime root
   and identity-checked-`SIGKILL`s any recorded worker, anchor and tagged process still alive.
@@ -1025,6 +1805,9 @@ fixture's source), `tests/fake_claude.py`, `tests/test_fake_claude_contract.py` 
   shared mixin, so a test that SIGKILLs its Controller never leaks an anchor onto the machine or
   into an outer lifecycle job.
 
+<!-- /CP1 -->
+
+<!-- CP2 -->
 ### CP2 -- worker stream state machine
 
 Files: `controller/worker_stream.py` (new), `controller/worker.py`
@@ -1042,34 +1825,134 @@ Tests:
   - `5d4a976a`'s mid-session Monitor stop (lines 276-277) is recorded as ending before the last
     `result`; the run is still `AMBIGUOUS` only because of the later kill after that `result`;
   - P3 and P4 give `SUCCESS` after a `WAITING` phase;
-  - P5 is `WAITING` on one wakeup until the fire turn;
+  - P5's ALPHA wakeup is `pending` until `completed(2cde4b9e-...)` (line 24), not merely until
+    the fire turn's `result` (line 23), and `fire_matched` from there. BRAVO is `pending` until
+    `completed(6ff491e4-...)` (line 32), and `fire_matched` from there. Both brackets are
+    `closed_regular`, each matching its own wakeup, and there are no anomalies (amendment 0).
+    After line 32 the worker is still `WAITING`, never quiescent, with no supervisor facts; with
+    `settled_wakeups` naming ALPHA only it is still `WAITING`; naming both, it is quiescent
+    (round 9's I1);
 - row precedence (round 1's I1): a supervisor-declared overdue wakeup whose session end also
   killed a task gives `wakeup_not_delivered`, with `owned_work_killed_at_exit` in
   `secondary_reasons`; a streaming stream with no `ending_offset` whose EOF killed open tasks,
   or left a wakeup pending, gives `stdin_closed_while_waiting`, with the kill as secondary;
+  a supervisor-declared overdue wakeup `W2` while an earlier wakeup `W` is still
+  `fire_matched` and unsettled (the breach path ends the session without waiting for `W`'s
+  window) gives `wakeup_not_delivered`, with `owned_work_killed_at_exit` in
+  `secondary_reasons` for `W` (round 10's O1);
 - positional kills (round 1's I2): a streaming session in which the worker `TaskStop`s a
   background task, and separately a `Monitor` reaches its timeout (P8's statuses), then ends
   with a clean quiescent turn and a supervisor end is `SUCCESS`; the same stop recorded after
   `ending_offset` is `owned_work_killed_at_exit`;
 - wakeup time sources (round 1's I3): the due time is the harness-stated `in 1257s` when the
-  `tool_result` carries it and the clamp otherwise (`due_source` recorded); a turn whose `result`
-  has `origin.kind: task-notification`, or which opens 30 s before the due time, does not
-  resolve the wakeup; a turn with no timestamped event resolves nothing; the state never reads a
-  clock (the classifier is run under a patched `time` that raises);
-- wakeup-fire recognition (round 2's I2): a `peer`-origin turn, and separately a
-  `task-notification`-origin turn, that opens **after** a pending wakeup's due time leaves the
-  wakeup pending (the worker is `WAITING`, never quiescent), and the later turn carrying P11's
-  fire `origin.kind` resolves it; a turn with an unknown `origin.kind` resolves nothing;
-- the comparison key (round 6's I1): two fire turns, each after its own wakeup's due time,
-  whose `origin`s share P11's fire `origin.kind` but differ in every other field, both resolve
-  their wakeups; a turn whose `origin` copies every other field of P11's fire capture but
-  carries a non-fire `origin.kind` resolves nothing;
-- no `origin` resolves nothing (round 3's I2, round 5's I1): a fire-like turn with no `origin`
-  (no `result` `origin`, opening after the wakeup's due time, with an opening `user` event
-  shaped like P11's fire capture) leaves the wakeup pending, and so do a task-completion
-  turn, a Monitor-event turn and a subagent hand-back turn each forced to carry no `origin`;
-  the Controller-initiated first turn, even with a patched timestamp after the due time,
-  never resolves one;
+  `tool_result` carries it and the clamp otherwise (`due_source` recorded, `scheduledFor`
+  recorded beside it); a regular-shaped bracket whose turn opens 30 s before the due time is
+  `unmatched_bracket` and matches nothing; a bracketed turn with no timestamped event is
+  `bracketed_turn_open_time_unknown`; the state never reads a clock (the classifier is run
+  under a patched `time` that raises);
+- origins are never evidence (amendment 0, replacing revision 7's origin-keyed tests; I11):
+  - a turn with no bracket that opens **after** a pending wakeup's due time leaves the wakeup
+    `pending`, whatever its `result` `origin`. The cases are no `origin` (shaped exactly like
+    P11's fire turn: `system/init`, no opening `user` event, a `result` without `origin`),
+    `task-notification`, `peer`, and an unknown `kind`. The worker is `WAITING`, never
+    quiescent;
+  - the P5 fixture with an `origin` of each of those kinds injected into both fire `result`s
+    gives exactly the same bracket states, resolutions and outcome as the unmodified fixture;
+  - the Controller-initiated first turn, even with a patched timestamp after the due time,
+    never matches a wakeup, and a bracket around it is `bracketed_first_turn`;
+- bracket correlation and ordering (amendment 0), each case built from the P5 fixture by
+  editing lines, and each checked for its bracket state, its anomaly kind, and its final
+  classification (row 3 `AMBIGUOUS` for every anomaly, whatever the rest of the stream):
+  - missing `started`: `completed_without_started`, the wakeup stays pending;
+  - missing `completed`: the bracket stays `open`, the worker stays `WAITING` (never
+    quiescent), and at EOF it is row 5 or row 7 (not an anomaly);
+  - duplicated `started(X)` (while open, and after `completed(X)`): `duplicate_started`;
+    duplicated `completed(X)`: `completed_without_started` for the second; a `command_uuid`
+    reused by a later fire: `duplicate_started`, and the later wakeup stays pending;
+  - `completed(X)` before `started(X)`: `completed_without_started`, then `duplicate_started`;
+  - `completed(X)` delayed past the next turn's opening: `multiple_bracketed_turns`;
+    `completed(X)` delayed but still in order (other lines, no turn, in between): regular,
+    and the wakeup is matched only at `completed(X)`;
+  - `started(X)` inside an open turn: `started_mid_turn`;
+  - two overlapping brackets: both `overlapping_brackets`, neither matches, and both count
+    as owned work until their `completed`;
+  - a pair with no turn: `no_bracketed_turn`; a pair around two turns:
+    `multiple_bracketed_turns`;
+  - a bracket around a task-completion turn with no wakeup pending: `unmatched_bracket`;
+  - **the wrong match, round 9's I1** (replacing round 8's O2 residue test). The dangerous
+    sequence, built from the P5 fixture: wakeup `W` scheduled; `W` due; a regular-shaped
+    bracket around a task-completion turn that opens *after* `W`'s due time; that task was the
+    only other owned work. At the spurious bracket's `completed`, `W` is `fire_matched`, not
+    settled, and `owned_work()` still holds it, so `quiescent()` is **false** at that line
+    and at every line after it until a settlement, at every chunking. Then:
+    - the real fire's bracket arrives. It is `unmatched_bracket` (no `pending` wakeup left),
+      and the stream classifies row 3 `AMBIGUOUS`/`command_lifecycle_irregular`;
+    - the same prefix, followed instead by a successful `ScheduleWakeup {stop: true}` whose
+      `cancelledWakeups` is 1 (the harness still held `W`): `wakeup_count_mismatch`, row 3
+      `AMBIGUOUS`, and `W` settled by `stop`, with both counts in `wakeups_seen`;
+    - the same prefix with `settled_wakeups` naming `W` and nothing after it: quiescent. This
+      is the double-breach residue (H2), which only a supervisor fact can reach; C decides
+      when that fact may be declared, and CP3 pins it;
+    - with a second wakeup `W2` pending and due, the real fire of `W` matches `W2`; both are
+      `fire_matched`, and the worker is quiescent only once `settled_wakeups` names both.
+    The twin with the task-completion turn opening before the due time minus
+    `WAKEUP_SKEW_SECONDS` is `unmatched_bracket` at its own `completed`, `W` stays `pending`,
+    the real fire's later regular bracket matches it, and the stream is still row 3 (sticky);
+- settlement (round 9's I1):
+  - a successful stop after a clean fire, with `cancelledWakeups: 0` and no wakeup `pending`,
+    settles the `fire_matched` wakeup with no anomaly; with `cancelledWakeups: 1` and one
+    wakeup `pending` (P9's own fixture), it settles it with no anomaly; the P9 fixture itself
+    classifies with no anomaly;
+  - **a stop inside a fire turn** (round 10's I1), built from the P5 fixture by an edit made
+    in the test (the committed fixture is untouched): a successful `ScheduleWakeup {stop:
+    true}` pair inserted inside ALPHA's bracket, after BRAVO's nested schedule (lines 18-19)
+    and before ALPHA's `result`, reporting `cancelledWakeups: 1` (BRAVO), with BRAVO's fire
+    bracket removed. No anomaly: ALPHA's provisional match is ALPHA, the expected count is 1,
+    ALPHA's bracket is `closed_regular` with ALPHA as its match, ALPHA is `settled` by `stop`
+    with that bracket's `command_uuid`, BRAVO is `settled` by `stop`, and the stream is
+    quiescent after ALPHA's `completed` with no supervisor fact;
+  - its single-wakeup twin (ALPHA's fire turn without BRAVO's schedule, the stop reporting
+    `0`): the same, with no anomaly;
+  - the two committed P12 fixtures (round 11's I1), unedited: each classifies with no
+    anomaly. ALPHA is the provisional match and ALPHA's bracket is `closed_regular` with ALPHA
+    as its match. The expected count is `0` (single) or `1` (nested, BRAVO), and it equals
+    the recorded `cancelledWakeups`. Every wakeup is `settled` by `stop`, and the stream is
+    quiescent after `completed(X)` with no supervisor fact. These are the measured
+    counterparts of the two edited-P5 cases above, which stay as they are;
+  - the same stop reporting `cancelledWakeups: 1` in the single-wakeup twin (a harness that
+    still counts the running wakeup): `wakeup_count_mismatch`, row 3, and ALPHA's bracket still
+    `closed_regular`;
+  - **the wrong-match variant**: the round 9 dangerous sequence (above: `W` `fire_matched`
+    by the spurious bracket), then `W`'s real fire bracket, whose turn issues
+    the stop reporting `0`. No provisional candidate (`W` is not `pending`), so the expected
+    count is 0 and there is no count mismatch, and at `completed` the bracket is still
+    `unmatched_bracket`: row 3 `AMBIGUOUS`/`command_lifecycle_irregular`;
+  - the spurious-bracket variant: the stop issued from inside the spurious bracket's turn,
+    reporting `1` (the harness still holds `W`). `W` is the provisional match, so the expected
+    count is 0: `wakeup_count_mismatch`, row 3;
+  - a stop inside a bracket that has already broken a condition (a second turn inside it, or
+    a second open bracket) fixes no provisional match, and compares every `pending` wakeup;
+  - `cancelledWakeups` higher, or lower, than B's expected count is `wakeup_count_mismatch`;
+    a stop whose `tool_use_result` has no `cancelledWakeups`, or a non-integer one, settles
+    everything and compares nothing; an `is_error` stop settles nothing;
+  - `settled_wakeups` naming a `pending` wakeup, or an unknown id, settles nothing (only a
+    `fire_matched` wakeup can settle by the window); the fact is recorded in
+    `stream_diagnosis` as ignored;
+  - at exit, a `fire_matched` wakeup that no fact or stop settled makes row 7 match
+    (`owned_work_killed_at_exit`), with `ending_offset` set and without it (row 5 primary);
+  - a malformed lifecycle event (no `command_uuid`, a non-string one, `state: "running"`, no
+    `state`): `malformed_lifecycle_event`, which opens and closes nothing;
+  - an anomaly early in a stream that otherwise ends cleanly and quiescently is still
+    `AMBIGUOUS`/`command_lifecycle_irregular` (sticky), with the later rows in
+    `secondary_reasons`;
+- several `command_uuid`s: three sequential regular brackets match three wakeups in due
+  order. With two wakeups pending and one bracket whose turn opens after both due times, the
+  earliest-due one is matched, and the other stays `pending` (H2's unmeasured case);
+- open brackets are owned work: `quiescent()` is false between a fire turn's `result` and its
+  `completed(X)`, and between `started(X)` and the turn's `system/init`, at every chunking;
+- the supervisor fact `command_lifecycle_overdue_declared_at` gives row 4's
+  `command_lifecycle_unterminated`, with `owned_work_killed_at_exit` secondary when the ending
+  killed a task;
 - task openness (round 2's O1): `2857a730`'s stream, whose 20 foreground `task_started`/
   `task_notification` pairs are never listed in a `background_tasks_changed`, never makes the
   worker `WAITING` because of them, and a task that is listed stays open until its terminal
@@ -1078,14 +1961,19 @@ Tests:
   `queued_turn_count`, `terminal_reason` and `origin` are carried into `stream_diagnosis`;
 - incremental and whole-stream parsing agree: feeding a stream line by line, in any chunking,
   gives the same states as feeding it all at once. A partial trailing line is never consumed;
-- `quiescent()` is false while a turn is open, while any task is open, and while a wakeup is
-  pending. An unknown event type never makes it true;
-- a `ScheduleWakeup` whose `tool_result` is an error is not pending. `stop: true` resolves all
-  pending wakeups. Without a harness-stated time, a wakeup's due time uses the clamp (60 s to
-  3600 s);
+- `quiescent()` is false while a turn is open, while any task is open, while a wakeup is
+  `pending` or `fire_matched` and unsettled, and while a `command_lifecycle` bracket is open. An
+  unknown event type never makes it true;
+- a `ScheduleWakeup` whose `tool_result` is an error is not pending. A successful `stop: true`
+  settles every `pending` and `fire_matched` wakeup. Without a harness-stated time, a wakeup's
+  due time uses the clamp (60 s to 3600 s);
 - the old single-result streams (legacy fixtures in `tests/test_worker.py`), classified with
-  `mode="print"`, still give exactly today's outcomes; row 5 never applies to them.
+  `mode="print"`, still give exactly today's outcomes; row 5 never applies to them. Neither they
+  nor the seven job fixtures hold a lifecycle event, so no anomaly arises in any of them.
 
+<!-- /CP2 -->
+
+<!-- CP3 -->
 ### CP3 -- streaming-input launch and supervision
 
 Files: `controller/worker.py`, `controller/anchor.py` (new), `controller/routing.py`
@@ -1149,7 +2037,17 @@ Tests (against the CP1 fake):
   (round 2's O4);
 - a background task keeps `launch` from returning until it completes. The fake's next turn runs.
   The result is `SUCCESS`, and `on_state_change` saw `RUNNING, WAITING, RUNNING, ENDING, ENDED`.
-  Covered for `bash_bg`, `monitor` (three ticks, one turn each) and `wakeup`;
+  Covered for `bash_bg`, `monitor` (three ticks, one turn each) and `wakeup`. For `wakeup` the
+  fire turn ends with a `wakeup_stop`, so it settles at once: the fake reports
+  `cancelledWakeups: 0` (the wakeup has fired), B's expected count leaves out the provisional
+  match and is 0, and `wakeups_seen` records the wakeup `settled` by `stop` with the fire's
+  `command_uuid`, with no anomaly (round 10's I1). A second variant also schedules a fallback
+  `wakeup {delay: 1200}` before the first fires and cancels it from the fire turn: the fake
+  reports `1`, the expected count is 1, and the result is still `SUCCESS`. The variant without
+  the stop, with
+  `WAKEUP_SETTLE_SECONDS` patched to 1 s, sees `RUNNING, WAITING, RUNNING, WAITING, ENDING,
+  ENDED`, the second `WAITING`'s `details` naming the `fire_matched` wakeup and its settle time,
+  and `ENDING` no earlier than 1 s after the fire's `completed(X)` (round 9's I1);
 - an escaped descendant (`orphan: setsid` and `orphan: reparent`) keeps `launch` in `DRAINING`
   until it exits. It is found by tag, and while supervising, adopted as a child. A subreaper-less
   run (prctl forced unavailable) still finds it by tag;
@@ -1187,6 +2085,60 @@ Tests (against the CP1 fake):
   (the fake emits the kill sequence);
 - an overdue wakeup (fake never fires, grace patched to 1 s) gives `AMBIGUOUS`/
   `wakeup_not_delivered`;
+- `command_lifecycle` supervision (amendment 0), with the fake's measured bracket:
+  - a `wakeup` fire does not let `launch` reach `ENDING` before the fake's `completed(X)`.
+    With `lifecycle_fault {kind: delay_completed, seconds: 2}` and `WAKEUP_SETTLE_SECONDS`
+    patched to 1 s, `on_state_change` shows `WAITING` with the open bracket in `details` for
+    those 2 s, then `WAITING` on the `fire_matched` wakeup for the settle window, and then
+    `ENDING`. The result is `SUCCESS`, and `wakeups_seen` says `settled` by `settle_window`;
+  - `omit_completed`, with `COMMAND_LIFECYCLE_GRACE_SECONDS` patched to 1 s: the stalled
+    bracket is declared, `command_lifecycle_overdue_declared_at` and its `command_uuid` are
+    flushed with `ENDING`, and the result is `AMBIGUOUS`/`command_lifecycle_unterminated`.
+    The same fault with a `bash_bg` task still open is not declared until the task ends;
+  - a bracketed turn that runs longer than the patched grace (a long `text` step inside the
+    fire turn) is never declared, because only a stalled bracket is timed;
+  - `omit_started`, and separately `reuse_uuid`, `overlap` and `bracket_turn {kind:
+    task_completion}` (its bracketed task-completion turn scripted to open before the pending
+    wakeup's due time minus `WAKEUP_SKEW_SECONDS`, so condition 6 rejects it; opening after is
+    the wrong match below; round 8's O2): the wakeup is not matched, the overdue rule (patched to 1 s) ends the
+    session, and the result is `AMBIGUOUS` with `command_lifecycle_irregular` primary and
+    `wakeup_not_delivered` secondary. `bracket_turn` with no wakeup ever scheduled still ends
+    normally at quiescence, and is `AMBIGUOUS`/`command_lifecycle_irregular`;
+- **a wrong match never ends the session** (round 9's I1, the reviewer's dangerous sequence),
+  with `WAKEUP_SETTLE_SECONDS` patched to 3 s and every other grace left long. The script
+  schedules `wakeup {delay: 1}` (the fake states `in 1s`, which B prefers to the clamp) and a
+  `bash_bg` that completes after the due time, then ends its turn; `lifecycle_fault {kind: spurious_bracket,
+  turn: task_completion}` wraps the task-completion turn, which ends with nothing else owned:
+  - with the fake's real fire following 1 s after the spurious `completed` (inside the window):
+    `on_state_change` never reports `ENDING` between the spurious bracket's `completed` and
+    the real fire's `completed` (asserted on the ordered state log against the stream offsets
+    of both events), stdin is not closed in that interval (`FAKE_CLAUDE_DIAG_FILE`'s
+    `stdin_at_eof` stays false until after the real fire's turn), the real fire's turn is
+    consumed, and the result is `AMBIGUOUS`/`command_lifecycle_irregular` with
+    `unmatched_bracket` naming the real fire's `command_uuid`;
+  - the same, with the task-completion turn ending in `wakeup_stop` instead: the fake reports
+    `cancelledWakeups: 1` (it still holds the wakeup), while B's expected count is 0 (the stop
+    comes from inside the spurious bracket, whose provisional match is `W`), the result is
+    `AMBIGUOUS`/`command_lifecycle_irregular` with `wakeup_count_mismatch`, and the session
+    then ends at quiescence without waiting for the window;
+  - a Monitor tick turn inside the window restarts the settle timer: `ENDING` comes no
+    earlier than 3 s after that turn's `result`;
+  - **an open task pauses the window** (round 10's I2): the spurious bracket's turn also
+    starts a second `bash_bg` of 6 s, longer than the patched window, and ends; the fake's
+    real fire is delayed (`delay_fire {seconds: 8}`, past the second task's end at about 7 s
+    past due) so that it arrives within about 1 s of that task's completion turn ending, well
+    inside the window as the corrected rule measures it. `on_state_change` never reports `ENDING` before the real fire's `completed`, the
+    settle timer never fires while the task is open (`settled_wakeups` stays empty until
+    then), and the result is `AMBIGUOUS`/`command_lifecycle_irregular` with
+    `unmatched_bracket` naming the real fire's `command_uuid`. Under revision 10's predicate
+    this test would have ended the session at the task's completion turn;
+  - **the double-breach residue, pinned** (H2): the same spurious bracket with
+    `lifecycle_fault {kind: delay_fire, seconds: 30}`, so the real fire is later than the
+    patched window. The worker is `WAITING` for the full window after the spurious
+    `completed`, then `ENDING`; the result is `SUCCESS` with `W` `settled` by
+    `settle_window` and the spurious bracket's `command_uuid` recorded as its match. The test's
+    docstring names this as the one documented path by which an unrelated bracket can precede
+    `ENDING`: it needs the fire to breach the lateness bound the window is sized from;
 - `CronCreate,CronDelete,RemoteTrigger` are in every route's disallow list, after the
   single-agent and branch-guard entries, still one argv element placed last, and
   `--append-system-prompt WORKER_LIFECYCLE_NOTE` precedes it;
@@ -1200,6 +2152,9 @@ Tests (against the CP1 fake):
   is SIGKILLed after its worker ends; the outer `launch` owns the inner anchor only by adoption,
   and returns once the inner anchor ends itself (patched `ANCHOR_ORPHAN_SECONDS`).
 
+<!-- /CP3 -->
+
+<!-- CP4 -->
 ### CP4 -- job lifecycle integration
 
 Files: `controller/job.py`, `controller/lock.py` (module docstring only, O3), `controller/errors.py`
@@ -1256,12 +2211,44 @@ existing lifecycle tests use):
 - **R14.** A worker `WAITING` on `bash_bg`, and separately on `wakeup`, resumes on the
   completion turn, commits and finishes. The job is `FINISHED`, with `worker_state` history
   `RUNNING -> WAITING -> RUNNING -> ENDING -> ENDED`, and the event log carries the matching
-  events;
+  events. In the `wakeup` variant the fire is the fake's measured bracket, and the job's
+  `stream_diagnosis.wakeups_seen` names the matching `command_uuid` (amendment 0) and the
+  settlement: `stop` when the continuation turn ends with `wakeup_stop` (the fire turn itself,
+  so the stop is inside the bracket and B's expected count leaves the fired wakeup out; the
+  result is `SUCCESS` with no anomaly, round 10's I1), `settle_window` in a
+  second variant without it (`WAKEUP_SETTLE_SECONDS` patched to 1 s), whose history holds a
+  second `WAITING` before `ENDING` (round 9's I1). Its fail-closed twin, the same script with `lifecycle_fault {kind: omit_started}` and the overdue
+  grace patched short, ends `FAILED` with `worker_outcome` evidence
+  `command_lifecycle_irregular`, even though the continuation turn committed. That holds for
+  `IMPLEMENTING` too, because the outcome is non-verifying before any predicate runs (I7);
+- **R14b, a wrong wakeup match cannot finish a job** (round 9's I1). The dangerous sequence of
+  CP3, driven through `execute_step` in a disposable managed repository, with
+  `WAKEUP_SETTLE_SECONDS` patched to 3 s. The `IMPLEMENTING` worker completes and commits the
+  checkpoint on its first turn, so the durable state already satisfies F's
+  `IMPLEMENTING -> IMPLEMENTING` predicate. It schedules a wakeup `W` and a `bash_bg`, and ends
+  its turn. `W` becomes due, the task-completion turn is wrapped in a `spurious_bracket` and
+  ends with nothing else owned, and the fake then delivers `W`'s real fire inside the window:
+  - between the spurious bracket's `completed` and the real fire's `completed`, the record
+    stays `LAUNCHED` with `worker_state` `WAITING` (its `waiting_on.wakeups` naming `W` as
+    `fire_matched`), no `worker_ending` event is appended, no `COMPLETED` record is written,
+    and the predicate is never evaluated (spied: `_row_clauses_failure` is not called before
+    `worker.launch` returns);
+  - the job ends `FAILED` with `worker_outcome` evidence `command_lifecycle_irregular`
+    (`unmatched_bracket`), although the checkpoint is committed and the predicate would pass.
+    Ownership, not reconciliation, decided it (I7);
+  - the same script in `SELF_REVIEWING_IMPLEMENTATION` ends `FAILED` in the same way;
+  - the same script in which the continuation instead issues `wakeup_stop` ends `FAILED` with
+    `wakeup_count_mismatch`;
+  - a concurrent `step` from a second process during the settle window exits 45 (the lock is
+    held and the job is not terminal), so no later action starts while `W` is still owned;
 - **lock lifetime.** While a job is `WAITING`, `lock.probe_lifecycle_lock` reports `held`. After
   the Controller process is SIGKILLed mid-wait (subprocess Controller), it still reports `held`,
   and `fuser`-style evidence names the anchor. The test's cleanup ends the worker and the
   anchor through `reap_recorded_workers` (CP1).
 
+<!-- /CP4 -->
+
+<!-- CP5 -->
 ### CP5 -- restart recovery
 
 Files: `controller/job.py` (two-phase `resume`/`abandon`, re-attach, the generalised hold,
@@ -1299,7 +2286,40 @@ Tests:
 - replay determinism: re-attach from a stream truncated at every line boundary of R14's fixture
   reaches the same state as live supervision, including a variant **with a pending wakeup**
   whose due time is the harness-stated one (round 1's I3), where replay gives the same due time
-  and the same resolution as live supervision;
+  and the same resolution as live supervision. For the `wakeup` variant the truncation points
+  include the two that fall inside the fire's bracket: after `started(X)` and before its turn,
+  and after the fire turn's `result` and before `completed(X)`. At each, the replayed bracket is
+  `open` with the same `command_uuid`, the worker is `WAITING`, and the resolution happens only
+  at the live `completed(X)`. The P5 fixture itself, truncated at every line boundary, gives
+  the same bracket states as whole-stream parsing (amendment 0);
+- **Controller loss with a lifecycle pair incomplete** (amendment 0). A subprocess Controller
+  is SIGKILLed while the fake holds a fire's bracket open, first before the fire turn and then
+  after its `result` (`delay_completed {seconds: 5}`):
+  - `resume` re-attaches without a new `FAKE_CLAUDE_INVOCATIONS_FILE` line, sees the open
+    bracket after replay, and reconciles `FINISHED` once `completed(X)` arrives;
+  - with `omit_completed` and the grace patched to 1 s, the re-attached supervisor's own stall
+    timer, started at re-attach, declares the bracket. `command_lifecycle_overdue_declared_at`
+    is flushed with `ENDING`, and the job ends `FAILED` with `command_lifecycle_unterminated`;
+  - a bracket opened and closed entirely while no Controller was attached is judged by replay
+    alone: regular, the job reconciles `FINISHED`; `duplicate_started` injected, the job ends
+    `FAILED` with `command_lifecycle_irregular`;
+  - a Controller SIGKILLed after flushing `ENDING` with `command_lifecycle_overdue_declared_at`
+    re-attaches with that fact, and the classification is the same `AMBIGUOUS` as the live
+    run's;
+- **Controller loss while a matched wakeup settles** (round 9's I1), `WAKEUP_SETTLE_SECONDS`
+  patched to 3 s:
+  - SIGKILLed 2 s into a `fire_matched` wakeup's window: `resume` re-attaches, replay shows the
+    wakeup `fire_matched`, the record's `waiting_on` names it, and `ENDING` comes no earlier
+    than 3 s after the re-attach (the timer restarted, never carried); the job reconciles
+    `FINISHED`;
+  - the same, with the wrong-match script of CP4's R14b and the real fire arriving after the
+    re-attach: `FAILED` with `unmatched_bracket`, exactly as the live run;
+  - SIGKILLed after flushing `ENDING` with `settled_wakeups`, before the worker exits:
+    replay with that fact classifies `SUCCESS` (`exit_status_known: false`), and the same
+    replay without the fact would be row 7, which the test also asserts, so the fact is
+    shown to be load-bearing;
+  - `validate_record` refuses a record whose `settled_wakeups` is non-empty without
+    `ending_offset` (`StaleJobRecordError`);
 - a Controller SIGKILLed after flushing `ENDING` but before the worker exits: `resume`
   re-attaches, sees the persisted `ENDING` and `ending_offset`, drains and reconciles
   `FINISHED` with `exit_status_known: false`;
@@ -1338,6 +2358,9 @@ Tests:
   `unsupervised`; a `resume` racing that hold re-attaches through the retried acquisition;
 - a record without `worker_state` (a 1.2.x-shape fixture) takes today's paths unchanged (I9).
 
+<!-- /CP5 -->
+
+<!-- CP6 -->
 ### CP6 -- same-phase durable progress
 
 Files: `controller/job.py`, `tests/test_job_validation.py`, `tests/test_resume.py`.
@@ -1356,6 +2379,9 @@ Tests:
 - a property test: every `EXPECTED_OUTCOMES` row with a self-loop has a predicate, and it is
   evaluated only through `_row_clauses_failure` (both call sites).
 
+<!-- /CP6 -->
+
+<!-- CP7 -->
 ### CP7 -- operator diagnostics
 
 Files: `controller/observe.py`, `controller/cli.py`, `tests/test_observe.py`, `tests/test_cli.py`,
@@ -1366,26 +2392,47 @@ Tests:
   test on a record fixture, plus live ones for `waiting` and `unsupervised` on the R14 and R15
   runs, and for a drain-detached `draining` record (CP4) listing its pids and a recognised daemon
   as `not owned`;
+- unresolved lifecycle pairs (amendment 0): a `waiting` record whose `waiting_on` holds an open
+  bracket shows the `harness command` clause in `status`, `follow`, `inspect` and `explain`
+  (text and `--json` `waiting_on.command_lifecycles`). The stall time is shown with a supervisor
+  attached, and `stall time unknown (no Controller attached)` without one. A `waiting` record
+  held only by a `fire_matched` wakeup shows the "presumed fired, not yet settled" clause with
+  its `command_uuid`, the settle time left (or `settle time unknown` when `unsupervised`), and
+  never a quiescent or finished label (round 9's I1); a terminal record with
+  `wakeup_count_mismatch` shows both counts in `explain`. A terminal record
+  with `command_lifecycle_irregular` or `command_lifecycle_unterminated` shows the reason,
+  the `command_uuid` and every anomaly line in `explain`. `follow` renders `command_lifecycle`
+  stream events as `harness command <uuid8> started`/`completed`;
 - presenter strings for records without `worker_state` are unchanged, pinned by the existing
   tests;
 - following stays presentation-only: the observation-equivalence suite (`step` with and without
   `--follow`) still produces identical records and decisions, now including a `WAITING` run.
 
+<!-- /CP7 -->
+
+<!-- CP8 -->
 ### CP8 -- documentation and full verification (terminal checkpoint)
 
 Files: `README.md` ("Concurrency and worker lifecycle" rewritten, including L343/L362's
 descendant-inherits-the-lock text, the recognised-daemon list, the drain bound and the
-fallback-wakeup delay of decision 11; "Job dispositions" and the command table updated), `docs/adr/0004-worker-lifecycle-ownership.md` (new: the ownership model,
-I1-I10, H1-H9 (H5 with both windows, including re-attached supervision), the daemon policy and
-the drain bound), `docs/ROADMAP.md` (section 1.4: the hotfix recorded; the four existing patches
+fallback-wakeup delay of decision 11, the wakeup-fire bracket with its fail-closed cases, and
+decision 13's settle window, its cost for a worker that ends without a stop, and H2's
+double-breach residue;
+"Job dispositions" and the command table updated), `docs/adr/0004-worker-lifecycle-ownership.md` (new: the ownership model,
+I1-I11, H1-H9 (H5 with both windows, including re-attached supervision; H2 with the bracket's
+failure modes and double-breach residue), the daemon policy, the drain bound, decision 12's
+measured evidence and rejected alternatives, and decision 13), `docs/ROADMAP.md` (section 1.4: the hotfix recorded; the four existing patches
 stay listed as open), `docs/ACTIVE_MILESTONE.md`.
 
 Verification:
 - the full suite;
 - the packaged-runtime suite under `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`;
 - `tools/ci_workflows.py --check`;
-- the opt-in live contract probe against the installed `claude`, with its output recorded for
-  the functional review.
+- the opt-in live contract probe against the installed `claude`, including its re-run of
+  CP1's two P12 probes (a final re-measurement; CP1's fixtures were the first), with its output
+  recorded for the functional review.
+
+<!-- /CP8 -->
 
 ## Decisions for the reviewer and the user
 
@@ -1409,9 +2456,14 @@ finalised:
    unchanged. `run`/`step` never re-attach and stay lock-first.
 4. **`CronCreate`, `CronDelete` and `RemoteTrigger` are disallowed for every worker** (H3). No
    lifecycle command uses them.
-5. **An overdue wakeup (300 s past due) ends the session and fails closed.** This is the one
-   place the Controller ends a session on time. It is justified as a harness-contract breach, not
-   a budget. The alternative is to wait forever on a wakeup that is never delivered.
+5. **An overdue wakeup (300 s past due) ends the session and fails closed.** So does an
+   unterminated `command_lifecycle` bracket, one stalled 300 s with no turn open (C, amendment 0).
+   These are the only places the Controller ends a session on time. Both are justified as
+   harness-contract breaches, not budgets, and both are the same class (I5's one exception,
+   widened by one case). The settle window (decision 13) is not a third: it ends nothing, and
+   only decides when a matched wakeup stops being owned work, after which the session still
+   ends only at a quiescent turn. The alternative is to wait forever on a wakeup, or a harness command,
+   that never finishes.
 6. **A re-attached supervisor cannot read the worker's exit status**, because it is not the
    parent. A worker that reaches a quiescent terminal turn and exits after a supervisor released
    the anchor's stdin (a persisted `ending_offset`) is classified from the stream alone (row 9), with
@@ -1452,6 +2504,88 @@ finalised:
     quiescent turn. That residual delay is accepted and documented in README. Rejected: a
     `task_addendum`, which would change the task string that slash-command expansion and every
     task-keyed test depend on.
+12. **The wakeup-fire recogniser is the correlated `command_lifecycle` bracket** (amendment 0,
+    replacing revision 7's `origin.kind` key). The question the amendment had to answer is
+    whether the pair is stable enough to be a positive recogniser. The answer is **yes, as a
+    conjunctive and fail-closed recogniser, not on its own**. The evidence, all from the
+    committed fixtures (P11):
+    - **Positive and distinguishing.** Both captured fires, under different `prompt` texts, are
+      enclosed in a pair. No other turn in the 18 fixtures is: no task completion, Monitor event,
+      Monitor timeout, subagent hand-back, Controller-initiated first turn or slash command.
+      Nor is P9's cancelled wakeup, and none of the 80 `worker.stdout` files among the 176
+      print-mode job directories in the runtime root holds a lifecycle event (counted at
+      `6db4f6b`, round 8's O1);
+    - **Stable fields.** `type` and the two `state` values are identical across both fires. The
+      per-instance fields (`command_uuid`, `uuid`, `session_id`) are used only as the
+      correlation key, or not at all. Nothing that varied between the two fires is compared;
+    - **Correlatable.** The pair shares one `command_uuid`, that uuid is unique per fire, and
+      brackets were sequential and never overlapped.
+    Evidence from two fires on one `claude` version is thin, so the recogniser does not stand
+    alone. A bracket matches a wakeup only when it is regular *and* its turn opens at or after a
+    pending wakeup's due time, the revision 7 time condition, kept. Everything else is an
+    anomaly that fails the run closed (row 3), or a stall that the supervisor declares (row 4).
+    A match is not the end of ownership (decision 13): it makes the wakeup `fire_matched`, and
+    the unsafe direction, letting a wakeup that has not fired stop being owned work, needs the
+    settle window to pass without the real fire, which is H2's double-breach residue. The safe
+    direction, not matching one that did fire, always ends `AMBIGUOUS`.
+    Rejected, each against the fixtures:
+    - `result.origin` / `origin.kind`, revision 7's key: both fire `result`s have no `origin`.
+      Absence is not positive (round 3's I2, round 5's I1), because the Controller-initiated
+      first turn also has none;
+    - the fire turn's opening `user` event carrying the `prompt` text, revision 7's named
+      fallback: the fire turn has no opening `user` event (no user message delivers the
+      `prompt`). Its only `user` events are `tool_result`s for its own `tool_use`s (ALPHA's
+      line 19), and the `prompt` text occurs only in the scheduling `tool_use`;
+    - "any turn after the due time with no `task-notification` origin": inference from absence
+      again, and it would accept an unmeasured turn kind (`SendMessage`, `Workflow`, forked
+      `Skill`);
+    - the bracket as a sole recogniser, with no due-time condition: it would match a wakeup on
+      any future non-fire bracket, silently.
+    The live probe (CP1, CP8) re-measures the pair. A change is a plan-amendment trigger, not a
+    silent re-baseline (CP1).
+13. **A matched wakeup stays owned until it settles** (round 9's I1, revision 10). Revision 9
+    let a regular bracket remove its matched wakeup from owned work at `completed(X)`. Because
+    the stream does not identify which wakeup a fire belongs to (Investigation), a regular
+    bracket around some other turn opening after a wakeup's due time could empty owned work,
+    let the worker quiesce, and close stdin before the real fire. The real fire's
+    `unmatched_bracket` could then never be observed, and in `IMPLEMENTING -> IMPLEMENTING` a
+    durable checkpoint could still let reconciliation verify. Revision 10 fixes the ownership
+    rule itself, so reconciliation is never the guard:
+    - a match makes the wakeup `fire_matched`, which is still owned work (B, I11);
+    - it settles only by a successful `ScheduleWakeup {stop: true}`, whose harness-reported
+      `cancelledWakeups` (measured in P9) must agree with B's expected count or the run is
+      `AMBIGUOUS` (`wakeup_count_mismatch`), or by `WAKEUP_SETTLE_SECONDS` (305 s) of idle
+      supervisor time after `completed(X)` with no bracket arriving (C). The expected count is
+      the `pending` wakeups, less the provisional match of a stop issued inside a fire turn,
+      whose wakeup the harness has already fired (B, "A stop inside a bracket"; round 10's I1).
+      So a worker that cancels from its fire turn, as `WORKER_LIFECYCLE_NOTE` asks, settles
+      at once with no anomaly;
+    - idle means the overdue rule's own predicate, no turn and no task open, and also no
+      bracket open (round 10's I2). The window equals the lateness the overdue rule already
+      accepts plus the match skew, measured over the same idle time, so a wrongly matched
+      wakeup's real fire arrives inside it, while the session is open, and is judged
+      `unmatched_bracket`.
+    This is the reviewer's option 2 (conservative ownership), bounded by option 3's argument.
+    The settle window's timing needs no new harness evidence. The stop-inside-a-fire count
+    does: it is the one fact the expected count assumes that no amendment-0 fixture measures.
+    So CP1 captures P12 into two new fixtures before CP2 starts, and a different count is a
+    plan-amendment trigger (round 11's I1). The existing fixtures stay byte for byte.
+    Its cost is latency, not correctness: a worker that lets a wakeup fire and ends without a
+    stop waits up to 305 s of idle time before `ENDING`. `WORKER_LIFECYCLE_NOTE` already tells
+    workers to cancel wakeups they no longer need, and its text is unchanged (it is part of the
+    captured production argv). Rejected:
+    - option 1, a stronger positive correlation: no field in the captured fire identifies its
+      wakeup (the fire turn carries no `prompt` text, and neither the scheduling `tool_use` id
+      nor `scheduledFor` occurs in the wakeup's own bracket; `command_uuid` is fresh per fire,
+      CP1 pins all three). A new probe could
+      only look for a field the capture already shows is absent;
+    - settling a match only by a stop (no window): every worker that lets a wakeup fire and
+      ends without a stop would then wait for the overdue rule and fail `AMBIGUOUS`, turning
+      decision 11's "correct, only slower" into a failed job;
+    - failing closed on every match that no stop confirms: the same outcome, stated differently;
+    - having the Controller write a message to the worker's stdin to make it issue a stop: it
+      would add a Controller-authored turn to the worker's conversation. The task line and the
+      system note (A) are the Controller's only inputs to a worker, by design.
 
 ## Artifact declaration
 
@@ -1477,9 +2611,10 @@ footprint, as the previous Controller milestones' were:
 
 ## Verification
 
-Per checkpoint: the full Controller suite, plus the checkpoint's own new tests. At CP8: the full
-suite, the packaged-runtime suite, `tools/ci_workflows.py --check`, and the opt-in live contract
-probe. Nothing in the default suite needs network or the real `claude`: every worker is the CP1
+Per checkpoint: the full Controller suite, plus the checkpoint's own new tests. At CP1, before
+CP2 starts: the P12 capture against the installed `claude`, run by hand with the capture script,
+and its contract-test gate (round 11's I1). At CP8: the full suite, the packaged-runtime suite,
+`tools/ci_workflows.py --check`, and the opt-in live contract probe. Nothing in the default suite needs network or the real `claude`: every worker is the CP1
 fake, driven by real processes, pipes and `/proc`.
 
 ## Migration / data-integrity notes
@@ -1608,3 +2743,205 @@ are accepted.
 
 Consequential changes beyond the findings: none. No checkpoint was added, removed or reordered,
 and no checkpoint's name or dependencies changed, so the registry's checkpoint set is unchanged.
+
+### Amendment 0 (`/request-plan-amendment` at `6db4f6b`, from `IMPLEMENTING` at CP1) -- applied in revision 8
+
+Trigger: CP1's P11 capture measured a wakeup-fire `result` with no `origin`. That is the
+contradiction revision 7's B and CP1 named as a plan-amendment trigger. Revision 7's approval
+(`14205f3`) is `SUPERSEDED`. No checkpoint had completed (`checkpoints_snapshot: {}`).
+
+| finding (measured) | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| A1 the fire turn's `result` has no `origin`, in both captures under different `prompt` texts | accepted: every `origin`-based recognition is removed, and `origin` is never evidence, present or absent (I11) | `tests/harness_contract/p5_p11_wakeup_fires.jsonl` lines 23 and 31: no `origin` key; the first `result` (line 12) also has none | Investigation (P11 table); I11; B (`pending_wakeups`, `command_lifecycles`); decision 12 (rejected alternatives); CP2 tests ("origins are never evidence") |
+| A2 each fire is enclosed in `command_lifecycle started(X)` ... `completed(X)` with one shared, unique `command_uuid` | accepted as the recogniser, conjunctive with revision 7's due-time condition | same fixture, lines 13/24 (`2cde4b9e-...`) and 25/32 (`6ff491e4-...`); exactly one turn in each; no overlap; per-line arrival offsets in the `.meta.json` (5 ms before the turn, under 1 s after its `result`) | B (`command_lifecycles`: fields, correlation, the bracketed turn, the six regularity conditions); decision 12 |
+| A3 no other turn kind is bracketed | accepted as the evidence for "distinguishing", not as a completeness claim | `grep -c command_lifecycle` over all 18 fixtures: only `p5_p11_wakeup_fires` (4); 0 of the 80 `worker.stdout` files in the runtime root's 176 job directories (corrected in round 8, O1); P3, P4, P8 and the hand-back turns carry `origin: {"kind": "task-notification"}` and no bracket; P9 holds no fire and no bracket over 200 s past due | Investigation (P11); B ("Nothing else resolves a wakeup", `unmatched_bracket`); H2; CP1 fixture-pinned contract tests |
+| A4 revision 7's named fallback (the fire turn's opening `user` event carrying the `prompt` text) does not exist | accepted: rejected as a recogniser | the fire turns (lines 14-23, 26-31) hold no opening `user` event; their only `user` event is line 19, the `tool_result` for ALPHA's own line-18 `ScheduleWakeup` (corrected in round 8, I1); the `prompt` texts occur only in the scheduling `tool_use` inputs (lines 5 and 18) | decision 12; CP1 contract test |
+| A5 missing, duplicated, reordered, delayed, overlapping or malformed pairs, and several uuids, were not measured | accepted: each is specified fail-closed rather than assumed | none in the fixtures (by A2/A3) | B (anomaly kinds, sticky row 3, open brackets as owned work, delay rule); C (stall grace); CP1 `lifecycle_fault`; CP2 correlation tests; CP3 supervision tests |
+| A6 lifecycle events carry no `timestamp` | accepted: bracket timing is a supervisor fact | fixture lines 13, 24, 25, 32 | B (purity note); C ("Unterminated `command_lifecycle` brackets"); D (`command_lifecycle_overdue_declared_at`); E (replay; stall timer restarts at re-attach) |
+| A7 a Controller lost inside an incomplete pair | accepted | E's replay already rebuilds B from the stream | E ("Re-attach" step 2 and the open-bracket bullet); CP5 tests |
+| A8 operators cannot see an unresolved pair | accepted | G's revision 7 table had no such row | D (`waiting_on.command_lifecycles`); G (waiting line, "Unresolved lifecycle pairs", `follow` rendering); CP7 tests |
+| A9 the streaming hand-back turn carries `task-notification`, not `peer` | accepted: the fake follows the measurement | `p11_subagent_handback.jsonl` line 22 | CP1 (fake turn origins) |
+| A10 P8, P9 and P10 matched revision 7's expectations | no change | `p8_task_stop`, `p8_monitor_timeout`, `p9_wakeup_cancel`, `p6_p10_slash_command` | Investigation (recorded as measured) |
+
+Preserved unchanged: Goal; Non-goals (one entry added, the Workflow checkpoint-abandon deadlock,
+out of scope); invariants I1-I10 (I5's exception names the bracket stall); A; B's task, turn,
+quiescence and classification structure (row 3 and row 4 each gain one reason, and row 7's
+owned work includes open brackets); C, D and E other than the bracket additions; F in full,
+including the `SELF_REVIEWING_IMPLEMENTATION`/`APPLYING_REVIEW_FEEDBACK` self-loops staying
+`phase_not_in_to_any_of`; decisions 1-4 and 6-11; the eight checkpoints, their ids, order and
+dependencies. Per-checkpoint HTML comment anchor pairs are added for the amendment's
+reconciliation. The registry names of CP1 and CP2 now mention the bracket. Requirement R4's
+description names it, and requirement R18 is new (the recogniser, measured and fail-closed). The
+fixtures in `tests/harness_contract/` were not re-captured, edited or deleted.
+
+### Round 8 (`LOCAL_MODEL_PLAN_REVIEW`, plan revision 8 (amendment 0), `REVISE`) -- applied in revision 9
+
+No blocking findings. The reviewer re-derived the amendment's measured facts from the untracked
+fixtures and agreed with decision 12's design; the findings are one misstated fact and three
+refinements.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 the plan says in five places that a fire turn holds no `user` event, and CP1 pins that as a contract test that would fail against the byte-pinned fixture | accepted: the fact is restated as "no *opening* `user` event; its only `user` events are `tool_result`s for its own `tool_use`s" | `tests/harness_contract/p5_p11_wakeup_fires.jsonl` (0-based) line 19 is a `user` `tool_result` for `toolu_01THbmXUTbAcfJKqyCRVcAYc`, the `ScheduleWakeup` `tool_use` at line 18, inside ALPHA's bracket (13-24) and fire turn (14-23); BRAVO's fire turn (26-31) holds no `user` event; both fire turns' first non-`system` event is `assistant` (lines 17, 29); the `prompt` texts occur only at lines 5 and 18. The recogniser (B) never reads `user` events, so the design is unaffected | Investigation (P11, "The fire turn itself"); CP1 fake harness (`wakeup {delay, fire_turn}`: the fire turn runs scripted steps inside the bracket, including a nested `wakeup`); CP1 contract tests (replay reproduces ALPHA scheduling BRAVO in its bracket; no `user` event before the bracketed turn's first `assistant` event; every bracketed `user` event is a `tool_result` answering a `tool_use` earlier in the same turn; no `prompt` text in any `user` event); CP2 test wording ("no opening `user` event"); decision 12 (rejected alternatives); amendment row A4's evidence cell |
+| O1 the runtime-root count is wrong in two places | accepted | `~/.local/state/workflow-controller/jobs/` held 176 job directories and 80 `worker.stdout` files at `6db4f6b`; none contains `command_lifecycle`. (Re-counted during this round: 178 and 81; the one newer file is this apply session's own stream, whose only `command_lifecycle` occurrences are quoted text inside `tool_use`/`tool_result` content, not lifecycle events) | decision 12 ("Positive and distinguishing"); amendment row A3's evidence cell |
+| O2 CP3's `bracket_turn {kind: task_completion}` case needs its timing pinned, and H2's residue needs a CP2 test | accepted | B condition 6 admits a bracketed turn opening at or after a pending wakeup's due time minus `WAKEUP_SKEW_SECONDS`, so the CP3 outcome depends on the turn's open time; H2 documented the residue in prose only | CP3 test (the bracketed task-completion turn opens before the due time minus 5 s); CP2 test ("H2's residue, pinned", with its before-due twin) |
+| O3 a `task-notification` turn queued between a fire's `result` and its `completed(X)` becomes `multiple_bracketed_turns` | accepted: documented as a known false-`AMBIGUOUS` source | B condition 4; P11's `result`-to-`completed` gap is 0 ms by arrival offset (119.473/119.473, 236.926/236.926) | H7 |
+
+Answers to the review request's questions are taken as given: two fires suffice for CP2 under
+the conjunctive recogniser; sticky row 3 stays; the 300 s supervisor-timed stall grace stays;
+H2's residue is now also test-pinned (O2).
+
+Consequential changes beyond the findings: none. No checkpoint was added, removed, renamed or
+reordered, and no requirement changed, so the registry and mapping are regenerated at revision 9
+with the same checkpoint and requirement sets. The fixtures in `tests/harness_contract/` were not
+modified.
+
+### Round 9 (`MANUAL_EXTERNAL_PLAN_REVIEW`, plan revision 9 (amendment 0), `REVISE`) -- applied in revision 10
+
+Revision 9 had passed local review (round 9, `APPROVE`). The manual external review
+of the same bundle (`925016fd...`) found no blocking finding, one Important and two Optional.
+Every finding was checked against the fixtures and the plan text before it was applied. All
+are accepted.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 a regular bracket around an unrelated turn, opening after a pending wakeup's due time, resolves that wakeup; if that empties owned work the worker quiesces, stdin is closed and the real fire is lost, and in `IMPLEMENTING -> IMPLEMENTING` durable state could still verify | accepted; the reviewer's option 2 (conservative ownership) with option 3's bound: a match makes the wakeup `fire_matched`, still owned; it settles only by a count-checked stop or by `WAKEUP_SETTLE_SECONDS` of idle time with no bracket arriving; the window equals the overdue rule's accepted lateness plus the match skew, so a wrongly matched wakeup's real fire arrives while the session is open and is `unmatched_bracket`. Option 1 is rejected: no field identifies a fire's wakeup | `p5_p11_wakeup_fires.jsonl`: ALPHA's scheduling id `toolu_01MmH8...` and `scheduledFor` `1790350680000` occur only at lines 5-6, BRAVO's (`toolu_01THbm...`, `1790350800000`) only at 18-19, none on any line of the wakeup's own bracket (13-24, 25-32); neither `prompt` text occurs in the stream outside the scheduling `tool_use`. `p9_wakeup_cancel.jsonl`: the stop's `tool_use_result` is `{stopped: true, cancelledWakeups: 1}` with one wakeup pending, so the harness's own count is measured. Revision 9's H2 named the lost-fire path itself, and its closing "never a false success" rested on reconciliation | I11; B (`wakeups`: `pending`/`fire_matched`/`settled`; condition 6 and the match; "A wrong match cannot end the session"; `owned_work()`; purity note; row 3 and row 7; `wakeups_seen`; `wakeup_count_mismatch`); C (`WAITING` details; overdue rule reads `pending` only; "Settling matched wakeups"; settle timers restart at re-attach); D (`settled_wakeups` validation, `waiting_on.wakeups` state); E (replay facts, timers); G (the "presumed fired, not yet settled" clause, `explain`); H2 rewritten (no reconciliation argument; the double-breach residue stated); decision 5 (the window is not a time-based end); decision 12 (match, not resolution); decision 13 (new); CP1 (fake `spurious_bracket`, `delay_fire`, truthful `cancelledWakeups`; a contract test pinning that no field identifies a fire's wakeup); CP2 (the wrong-match sequence, settlement tests, quiescence); CP3 (the dangerous sequence through `launch`, count mismatch, timer restart, the pinned residue); CP4 (R14 settlement variants; R14b through `execute_step`, including the committed `IMPLEMENTING` checkpoint whose predicate would pass); CP5 (Controller loss while settling); CP7 (diagnostics); CP8 (README, ADR) |
+| O1 the prompt-text assertion should be scoped to the `.jsonl` | accepted | `p5_p11_wakeup_fires.meta.json`'s `prompt` holds both texts, as capture metadata | CP1 contract tests (the assertion reads `p5_p11_wakeup_fires.jsonl` only) |
+| O2 the replay comparator's treatment of non-structural events is unspecified | accepted: filtered from both sequences before comparison, by a fixed list, with a guard test | event kinds across the 18 fixtures: `system/thinking_tokens` (1285), `rate_limit_event` (84), `system/task_progress` (134), `tool_progress` (19), `system/commands_changed` (1), `system/vcs_state_changed` (1), none read by B | CP1 contract tests (projection, drop list, exact comparison of every other kind, B run with and without the dropped kinds) |
+
+The reviewer's required acceptance property is now stated as I11 and B's "A wrong match cannot
+end the session": a regular, time-compatible bracket is, by itself, never enough to remove a
+wakeup from owned work. The reviewer's other acceptance criteria are kept: the fixtures in
+`tests/harness_contract/` were not modified and no probe was added; the core invariants are
+unchanged; and revision 10 goes back through local plan review first.
+
+Consequential changes beyond the findings: CP2's registry name now says a matched wakeup stays
+owned until it settles, and requirement R18's description names the settle rule. No checkpoint
+was added, removed, reordered or re-dependent, so the registry and mapping are regenerated at
+revision 10 with the same checkpoint and requirement sets.
+
+### Round 10 (`LOCAL_MODEL_PLAN_REVIEW`, plan revision 10 (amendment 0), `REVISE`) -- applied in revision 11
+
+The local review of revision 10's bundle (`5014a575...`) found no blocking finding, two
+Important and one Optional. Every finding was checked against the plan text and the fixtures
+before it was applied. All are accepted.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 a successful `ScheduleWakeup {stop: true}` inside a fire turn is always `AMBIGUOUS`: B still counts the running wakeup as `pending` against a harness count that no longer holds it (`wakeup_count_mismatch`), and the stop settles it before `completed(X)`, so the bracket is `unmatched_bracket`; CP3's and CP4's `wakeup` variants expect `SUCCESS` for exactly that script | accepted, with the reviewer's provisional-match rule: a stop inside an open bracket whose turn is open, which has broken none of conditions 1-5 and has a known open time, fixes that bracket's provisional match (condition 6 at that moment) and leaves it out of the expected count; at `completed(X)` the provisional match is the bracket's match. With no candidate, the count and the bracket are exactly revision 10's, so a stop in the real fire of a wrongly matched wakeup is still `unmatched_bracket`, and a stop inside a spurious bracket is still `wakeup_count_mismatch`. The harness's count for a stop inside a fire turn is stated as unmeasured, assumed to be the not-yet-fired count, and checked by the live probe; a disagreement fails closed | revision 10's B: a match only at `completed(X)`, the stop compared with "the number of `pending` wakeups B holds at that moment" and settling every wakeup; CP3's `wakeup` variant ("the fire turn ends with a `wakeup_stop`, so it settles at once"); CP4's R14 (`stop` when the continuation turn ends with `wakeup_stop`); the fake's `n` ("scheduled and not yet fired"). `p5_p11_wakeup_fires.jsonl`: BRAVO is scheduled at lines 18-19, inside ALPHA's bracket (13-24), so a fire turn scheduling and cancelling is the measured shape. `p9_wakeup_cancel.jsonl`'s stop ran in an ordinary turn, so no fixture measures a stop inside a fire | B (settlement way 1's expected count; the match rule; "A stop inside a bracket", new; "A wrong match cannot end the session"; `wakeups_seen`); C ("a stop from inside the fire turn itself"); G (`explain`); decision 13; CP1 (the fake counts a wakeup fired from its `started(X)`; the live probe's stop-inside-a-fire check); CP2 (stop inside a fire, with and without a nested schedule; the count-mismatch twin; the wrong-match and spurious-bracket variants; a bracket already irregular); CP3 (`wakeup` variant `SUCCESS` with counts stated, plus a fallback-cancelling variant; the spurious-bracket stop's expected count); CP4 (R14) |
+| I2 the settle timer runs while a task is open, but the lateness bound it is sized from (the overdue rule) is enforced only while no task is open; a spurious match followed by a long background task could settle the wakeup, and a fire the harness deferred until after the task's completion turn would then arrive after `ENDING` | accepted: the settle timer runs only under the overdue rule's idleness predicate plus brackets (no turn, no task, no bracket open), and an opened task restarts it from zero once no task is open. The sizing argument now states the shared predicate and shows the unbroken 305 s idle stretch after `completed(X)` holds at least `WAKEUP_GRACE_SECONDS` of idleness past the due time | revision 10's C: overdue "while no turn opens and no task is open"; settle timer "only while the worker is idle: no turn open and no bracket open"; the sizing argument's "within `WAKEUP_GRACE_SECONDS` of idleness past that due time". An open task already keeps `quiescent()` false (B), so the change delays no `ENDING` | I11; B (settlement way 2); C ("Settling matched wakeups" and the sizing argument); H2's double-breach residue; decision 13; CP3 (an open task pauses the window) |
+| O1 "a supervisor reaches `ENDING` only once every `fire_matched` wakeup has settled" is false on the breach paths, which end the session "as in `ENDING`" without waiting | accepted: qualified as a *quiescent* `ENDING`; on the breach paths an unsettled `fire_matched` wakeup is row 7 in `secondary_reasons`, behind row 4. The replay argument is unchanged, since the breach path's facts are flushed with its `ENDING` | revision 10's B purity note and C's closing sentence; C's overdue rule ("other wakeups, `pending` or `fire_matched`, do not defer it") and unterminated-bracket rule (both "end the session as in `ENDING`") | B (purity note); C ("Settling matched wakeups"); CP2 (row precedence) |
+
+The reviewer's acceptance criteria are kept: the fixtures in `tests/harness_contract/` were not
+modified (the CP2 stop-inside-a-fire cases edit a copy of the P5 stream inside the test), and
+revision 11 goes back through local plan review first.
+
+Consequential changes beyond the findings: the opt-in live probe gains one check (a stop from
+inside a fire turn), which extends CP1's and CP8's existing live probe and adds no fixture. No
+checkpoint was added, removed, renamed, reordered or re-dependent, and no requirement changed,
+so the registry and mapping are regenerated at revision 11 with the same checkpoint and
+requirement sets.
+
+### Round 11 (`MANUAL_EXTERNAL_PLAN_REVIEW`, plan revision 11 (amendment 0), `REVISE`) -- applied in revision 12
+
+The manual external review of revision 11's bundle (`ca11563e...`) found no blocking finding,
+one Important and two Optional. Every finding was checked against the plan text and the
+fixtures before it was applied.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 the stop-inside-fire `cancelledWakeups` contract is unmeasured, and only CP8 had to measure it, after CP2-CP7 were built on it. CP3's and CP4's `SUCCESS` paths rest on it | accepted. CP1 captures a new probe, P12, into two new fixtures. In one, a fire turn stops its own wakeup, and B expects `cancelledWakeups: 0`. In the other, a fire turn schedules a second wakeup and then stops, and B expects `1`. The contract test pins both counts, with the stop and its `tool_result` inside the one bracketed turn. CP1 is complete only when both pass. Any other observation stops CP1 and goes to `/request-plan-amendment` before CP2. A capture is discarded only for shape (the stop was not inside the fire), never for its count. CP8's live probe re-runs P12 as a final re-measurement. Decision 13 no longer says the whole settlement rule needs no new evidence | revision 11's CP1: the stop-inside-fire check was only in the opt-in live probe (`CONTROLLER_LIVE_WORKER=1`), and "Verification" required that probe only at CP8. Decision 13: "It needs no new harness evidence, so CP1 adds no probe". B: "What the harness reports for a stop inside a fire turn is **not measured**". `p9_wakeup_cancel.jsonl` line 18: the stop ran in an ordinary turn (`cancelledWakeups: 1`, one wakeup pending). `p5_p11_wakeup_fires.jsonl` holds no stop. `capture.py`'s `PROBES` has no stop-inside-fire definition | revision header; Investigation (the unmeasured list); B ("A stop inside a bracket"); CP1 (the `capture.py` exception, the new P12 bullet and gate, the fake's `n`, the contract-test facts, the live probe); CP2 (the P12 fixtures replayed unedited); CP8 (verification); decision 13; "Verification" |
+| O1 scope the "appears nowhere else" prompt-text assertion to the `.jsonl` event stream | no change needed: revision 10 already does this. CP1's recogniser-evidence bullet says the assertion "reads the `.jsonl` event stream only: the matching `.meta.json` is capture metadata, and legitimately holds both texts in its recorded `prompt` (round 9's O1)" | CP1, "The recogniser's evidence, pinned from the fixtures", first sub-bullet | none |
+| O2 define how replay treats the non-structural event kinds | no change needed: revision 10 already does this. CP1's contract-test bullet names the six dropped kinds (`system/thinking_tokens`, `rate_limit_event`, `system/task_progress`, `tool_progress`, `system/commands_changed`, `system/vcs_state_changed`). **Both** sequences drop them before comparing, and every other kind is compared exactly. A separate assertion shows that B's states are the same with and without them. The ALPHA-schedules-BRAVO replay uses that same comparison, so it has one pass condition | CP1, "Contract tests" (round 9's O2) | none |
+
+The reviewer's acceptance criteria are kept. The existing fixtures in `tests/harness_contract/`
+are not modified. P12 adds two separately named fixture pairs, and `capture.py` gains only
+their two probe definitions. Revision 12 goes back through local plan review first.
+
+Consequential changes beyond the findings: CP1's registry name now mentions the P12 capture and
+its gate. No checkpoint was added, removed, reordered or re-dependent, and no requirement
+changed. The registry and mapping are regenerated at revision 12 with the same checkpoint and
+requirement sets.
+
+### Round 12 (`LOCAL_MODEL_PLAN_REVIEW`, plan revision 12 (amendment 0), `REVISE`) -- applied in revision 13
+
+The local review of revision 12's bundle (`fe270ed7...`) found no blocking finding, one
+Important and two Optional. Every finding was checked against the plan text and `capture.py`
+before it was applied.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 the P12 shape test is written partly in terms of the harness's answers (a "successful" stop `tool_result`, "exactly one `command_lifecycle` pair"), so an `is_error` stop or a later fire, both listed as gate triggers, fails the shape test and is recaptured, possibly forever, and a capture could be re-run until the harness gives the expected answer | accepted, with the reviewer's split. Shape covers only the model's actions: the first pair encloses one turn holding the stop's `tool_use` and a `tool_result` answering it (any `is_error`); in the nested probe BRAVO's schedule comes first in that turn; the model did not stop elsewhere or skip a step. The only `is_error` that is a shape failure is an input-validation error on the model's own arguments, quoted in the `README`. Any other error, a missing or non-integer `cancelledWakeups`, an unexpected count, any later `command_lifecycle` event or turn, and a fire that never came are gate observations that trigger `/request-plan-amendment`. The contract test keeps "exactly one pair" and "not `is_error`" as gate assertions, not admission criteria | revision 12's CP1: "exactly one `command_lifecycle` pair; the stop's `tool_use` and its successful `user` `tool_result`" in the shape test, against "an error, or no `cancelledWakeups`, or a successful stop that is followed by a later fire" in the gate. `p9_wakeup_cancel.jsonl`'s first `ScheduleWakeup` call was rejected on its own arguments ("`noop` is required when `stop` is not true"), which is the one error a model can cause | CP1 (P12 "Shape before count", "The gate", the P12 contract-test sub-bullet) |
+| O1 the 200 s window starts from the `PROBE-DONE` `result`, not from "its last event", so the marker must be in the fire turn's reply only | accepted | `tests/harness_contract/capture.py`: `DONE = "PROBE-DONE"` (line 83); `done_at` is set by the first `result` holding it (line 354), and stdin closes `linger` seconds after `done_at` with no task open (line 339); `max_seconds` defaults to 600 (line 321). P5's prompt ends its first turn with `WAITING-ALPHA` | CP1 (P12 bullet: marker placement and the window's start) |
+| O2 `TEST_RESULTS.md` still says `plan_revision` 11 | accepted | the round-12 bundle's `TEST_RESULTS.md`, "Workflow state"; `WORKFLOW_STATE.json` held 12 | the revision-13 bundle's `TEST_RESULTS.md` |
+
+The reviewer's acceptance criteria are kept. The existing fixtures in `tests/harness_contract/`
+are not modified, and revision 13 goes back through local plan review first.
+
+Consequential changes beyond the findings: none. No checkpoint was added, removed, renamed,
+reordered or re-dependent, and no requirement changed. The registry and mapping are
+regenerated at revision 13 with the same checkpoint and requirement sets.
+
+### Round 13 (`MANUAL_EXTERNAL_PLAN_REVIEW`, plan revision 13 (amendment 0), `REVISE`) -- applied in revision 14
+
+The manual external review of revision 13's bundle (`1db1769f...`) found no blocking finding,
+one Important and two Optional. Every finding was checked against the plan text, `capture.py`
+and the captured fixtures before it was applied.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 P12's shape test still requires harness structure (the first `command_lifecycle` pair exists and encloses exactly one turn, and a `tool_result` answers the stop), so ALPHA never firing, a missing `tool_result`, a multi-turn bracket or malformed bracket evidence fails the shape test and is discarded and re-run, although the gate names "ALPHA never fires" as an amendment trigger | accepted, with the reviewer's split. Admission (`p12_admission.admit`) reads only the model's `tool_use` calls with their inputs, compared with the exact arguments the prompt names, and turn 1's reply text. It never reads a `command_lifecycle` event, a `tool_result`, a count, an exit status or a turn boundary after turn 1. A missing stop is a model mistake only when the harness delivered a later turn. Everything else is `ADOPT`, and `gate_deviations` decides the amendment trigger. A rejection of the exact named arguments is an observation, because those arguments are the plan's contract; only arguments that differ from the named ones are the model's mistake, which replaces revision 13's error-text judgement. An adopted probe is not run again in CP1, and three consecutive recaptures stop CP1 for the user, so neither side can loop. A capture with both a model mistake and a harness fault is recaptured: its harness answer was given to calls the plan did not ask for, and a persistent fault recurs in the next capture, where it is adopted. (Corrected in revision 15 by round 14's I1: this holds only for a model mistake *before* the cut point. A model action that reacts to a rejection of an exact named call, or that comes after the named sequence completed, is past the cut point and goes to the gate, so a persistent fault cannot be hidden behind the model's reaction to it.) The contract test covers no fire, a missing `tool_result`, a two-turn bracket and the other harness cases as `ADOPT` with deviations, the model cases as `RECAPTURE`, and `admit`'s independence from lifecycle and `user` events | revision 13's CP1 "Shape before count": "the first `command_lifecycle` pair encloses exactly one turn, and that turn holds [...] a `user` `tool_result` answering it", followed by "A capture that fails the shape test is discarded and the probe is run again", against "The gate": "If ALPHA never fires at all and the model did not stop it, that is an observation too". `p9_wakeup_cancel.jsonl` 1-based line 9 (the `noop` rejection of arguments the prompt had named; 0-based line 8) and 1-based line 8's input without `noop` (0-based line 7) | revision header; CP1 (Files, the `capture.py` exception, P12 "Probe definitions", "Admission reads the model's actions only", "The gate", the P12 contract-test sub-bullets) |
+| O1 the 200 s linger is described, but `capture.py` defaults `linger` to 0 and P5's definition sets none | accepted: both P12 definitions carry `"linger": 200` explicitly, and the prompts name `noop: false` | `tests/harness_contract/capture.py`: `linger = float(probe.get("linger", 0))` (line 322); `p9_wakeup_cancel` sets `"linger": 200` (line 202); `p5_p11_wakeup_fires` (lines 204-215) sets none | CP1 (P12 "Probe definitions") |
+| O2 the contract test forbids any event after `completed(X)`, while the gate names only a later `command_lifecycle` event or turn | accepted, matching the gate: no later `command_lifecycle` event and no later turn event; the six dropped non-structural kinds are ignored; any kind outside both lists is a deviation, as in the replay comparison | revision 13's contract-test wording "No event follows `completed(X)` except the session's own end"; the drop list in CP1's "Contract tests" (round 9's O2) | CP1 (the P12 contract-test sub-bullet) |
+
+The reviewer's acceptance criteria are kept. The existing fixtures in `tests/harness_contract/`
+are not modified; P12 adds only its two separately named fixture pairs and the new
+`p12_admission.py`. Revision 14 goes back through local plan review first.
+
+Consequential changes beyond the findings: the prompts name `noop: false` on both scheduling
+calls (so the exact-argument comparison has a complete argument set), and the three-recapture
+stop. No checkpoint was added, removed, renamed, reordered or re-dependent, and no requirement
+changed. The registry and mapping are regenerated at revision 14 with the same checkpoint and
+requirement sets.
+
+### Round 14 (`LOCAL_MODEL_PLAN_REVIEW`, plan revision 14 (amendment 0), `REVISE`) -- applied in revision 15
+
+The local review of revision 14's bundle (`46895b25...`) found no blocking finding, one
+Important and one Optional. Every finding was checked against the plan text and the captured
+fixtures before it was applied.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 `admit` judges the model's whole call sequence, so a model action that reacts to a harness answer the plan names as an observation is judged as a model mistake. Examples are a retry after the exact named arguments are rejected, or a second stop in a later fire turn that the prompt's own "when ALPHA fires, call stop" invites. Such a capture is recaptured, three times over, and CP1 stops with a "prompt problem" instead of reaching `/request-plan-amendment`. A transient version is replaced by a later clean run | accepted, with the reviewer's first mechanism. `admit` judges the model's actions only up to the **cut point**: the call that completes the named sequence (`[ALPHA, stop]` or `[ALPHA, BRAVO, stop]`), or the first exact named call answered with `is_error: true`, whichever comes first. Everything after the cut point, calls and reply text alike, is `gate_deviations` input. `admit` reads one harness fact, the `is_error` flag of `tool_result`s answering exact named calls, and the independence test is narrowed to match. A rejection of arguments the prompt did not name is no cut point, so the model's own argument mistake stays a recapture. The trade is stated in the plan: a spontaneous extra call after the sequence completes goes to the amendment, not to a recapture. That error is visible and recorded, and the opposite error hides a harness answer. The shortest-prefix alternative is rejected because it still judges a retry that comes before completion. The prompts also say to make each call once, never retry, and in any other turn reply `PROBE-EXTRA` with no call. New contract cases: ALPHA rejected then retried, or then `PROBE-DONE`; the single stop rejected then retried; BRAVO rejected then retried, or then no stop; a second fire turn with a stop, or with `PROBE-EXTRA`; a same-turn second stop after completion. All are `ADOPT` with deviations. "An extra stop in a later turn" is replaced by a pre-completion extra call (BRAVO twice, no rejection between), which stays `RECAPTURE` | `tests/harness_contract/p9_wakeup_cancel.jsonl` 0-based line 7 (the `ScheduleWakeup` call without `noop`), line 8 (its `is_error` rejection, "`noop` is required when `stop` is not true.") and line 13 (the same call retried at once, in the same turn, with `noop: false`). This is a measured model reacting to a rejection. Revision 14's CP1 "Admission reads the model's actions only": "the model's tool calls after turn 1, in stream order [...] are not exactly the probe's sequence"; the model-mistake case "an extra stop in a later turn"; the Investigation's list of a stop with nothing pending as unmeasured | revision header; CP1 (P12 prompt instructions, "Admission reads the model's actions only, up to the cut point", the stated trade, the gate sub-bullet's "exactly the named sequence" assertion, the `admit`/`gate_deviations` contract-test cases and the narrowed independence test); round 13's disposition sentence on mixed captures, corrected in place |
+| O1 the three-recapture stop does not say what the user may do next, or whether the count resets after a prompt rewrite | accepted. A rewording that changes nothing the plan names (the exact arguments, the named sequence, the three markers, `"linger": 200`, the argv) is a CP1 implementation change, and the count restarts at zero for the reworded prompt. Changing any named item is a plan change and goes to `/request-plan-amendment` first. The `README` keeps every discarded attempt, its reasons and its prompt text across every rewrite | revision 14's CP1: "After three consecutive `RECAPTURE`s of one probe, CP1 stops and reports the prompt to the user", with nothing following | CP1 ("The user's options there") |
+
+The reviewer's acceptance criteria are kept. The existing fixtures in `tests/harness_contract/`
+are not modified, and the settlement design (B, C, decision 13) is unchanged. Revision 15 goes
+back through local plan review first.
+
+Consequential changes beyond the findings: the `PROBE-EXTRA` marker. It holds no `PROBE-DONE`,
+so `capture.py`'s `done_at` and the 200 s window are unaffected. The gate now also asserts that
+the fixture's calls are exactly the named sequence. No checkpoint was added, removed, renamed,
+reordered or re-dependent, and no requirement changed. The registry and mapping are
+regenerated at revision 15 with the same checkpoint and requirement sets.
+
+### Round 15 (`LOCAL_MODEL_PLAN_REVIEW`, plan revision 15 (amendment 0), `REVISE`) -- applied in revision 16
+
+The local review of revision 15's bundle (`2e0dc1f3...`) found no blocking finding, one
+Important and two Optional. Every finding was checked against the plan text and the captured
+fixtures before it was applied.
+
+| finding | disposition | evidence checked | where it is resolved |
+| --- | --- | --- | --- |
+| I1 a turn after turn 1 that the model correctly answers `PROBE-EXTRA` with no call, with no recognisable fire after it (an unasked turn and ALPHA never firing, or a fire whose prompt the model cannot see), has no cut point, so its calls after turn 1 (`[]`) are not the whole rest and the capture is `RECAPTURE`. That contradicts the plan's own `ADOPT` list ("ALPHA never firing", "any later event or turn") and its claim that nothing the harness did can make a capture be re-run | accepted, with the reviewer's direction. With no cut point, a missing call is excused when the model made no call after turn 1 and wrote at least one `text` block after turn 1, every one exactly `PROBE-EXTRA`. That text is model-controlled, so admission reads no more harness output, and the narrowed independence property is kept (with one added case: replacing off-script text by other off-script text does not change the verdict). Free text (including `PROBE-DONE`), an empty reply, a call to another tool, or a partial named sequence followed by `PROBE-EXTRA` stays `RECAPTURE`, so "a delivered fire turn with no stop and no rejection" is still a model mistake. Because admission reads no turn boundary after turn 1, a fire turn with an empty reply followed by a `PROBE-EXTRA` turn is `ADOPT`, which is the stated trade's direction (amendment, visible) rather than a recapture. The alternative of reading lifecycle events to locate the fire turn is not taken: it reopens round 13's I1, since a malformed or missing bracket would again decide admission. The gate gains one assertion: no turn event before `started(X)` outside turn 1, so an unasked turn before the fire is a deviation. New contract cases: `ADOPT` for a lone unbracketed `PROBE-EXTRA` turn with nothing after it, a bracketed fire answered `PROBE-EXTRA`, and a `PROBE-EXTRA` turn before the fire and stop (with the new gate deviation); `RECAPTURE` for the same lone turn with an off-script reply, a fire turn answered `PROBE-DONE` or with an empty reply, a `PROBE-EXTRA` reply with a call to another tool, and BRAVO with no stop followed by a `PROBE-EXTRA` turn | revision 15's CP1 second `RECAPTURE` bullet ("With no cut point, they are not the whole rest"), its prompt instruction ("In any turn other than the two named ones, the model replies with exactly `PROBE-EXTRA` and calls no tool"), its `ADOPT` list and its "nothing the harness did [...] can make a capture be re-run". `tests/harness_contract/p5_p11_wakeup_fires.jsonl` 0-based lines 12-14: turn 1's `result` is followed directly by `started(X)` and the fire's `system/init`, with no turn event between, so the new gate assertion holds on the measured shape | revision header; CP1 (what `admit` reads, "The `PROBE-EXTRA`-only case", the `ADOPT` list, the gate sub-bullet's pre-bracket assertion, the `admit`/`gate_deviations` contract cases and the independence test) |
+| O1 the P12 "Probe definitions" bullet cites `p9_wakeup_cancel.jsonl` "line 9" (1-based) while round 14's disposition and the contract case cite the same event as 0-based line 8 | accepted. The bullet now reads "0-based line 8, the `tool_result` answering line 7's call", and round 13's disposition row is annotated in place with both bases | `tests/harness_contract/p9_wakeup_cancel.jsonl`: 0-based line 7 is the `ScheduleWakeup` call without `noop`, 0-based line 8 its `is_error` `tool_result` ("`noop` is required when `stop` is not true.") | CP1 ("Probe definitions"); round 13's disposition row |
+| O2 "the model's call that completes the named sequence" could be read as containing it as a subsequence | accepted. The cut-point definition now says the model's calls so far, in stream order, equal the named sequence exactly | revision 15's CP1 cut-point definition and the gate's "exactly the named sequence" assertion | CP1 (the cut-point definition) |
+
+The reviewer's acceptance criteria are kept. The existing fixtures in `tests/harness_contract/`
+are not modified, and the settlement design (B, C, decision 13) is unchanged. Revision 16 goes
+back through local plan review first.
+
+Consequential changes beyond the findings: the gate's pre-bracket assertion above. No
+checkpoint was added, removed, renamed, reordered or re-dependent, and no requirement changed.
+The registry and mapping are regenerated at revision 16 with the same checkpoint and
+requirement sets.

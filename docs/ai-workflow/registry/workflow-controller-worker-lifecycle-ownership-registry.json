@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-worker-lifecycle-ownership",
-  "plan_revision": 7,
+  "plan_revision": 16,
   "checkpoints": [
     {
       "id": "CP1",
-      "name": "Harness contract evidence and fake harness: the measured claude 2.1.282 stream-json-input contract recorded as redacted fixtures (the real failing jobs' stream tails, background Bash, Monitor, ScheduleWakeup, slash-command and escaped-descendant probes), tests/fake_claude.py streaming-input mode (scripted turns, background tasks as real tagged processes with task events, wakeups, kill-at-EOF, escaped descendants, no descriptor inheritance by tool processes), and the opt-in live contract probe",
+      "name": "Harness contract evidence and fake harness: the measured claude 2.1.282 stream-json-input contract recorded as redacted fixtures (the real failing jobs' stream tails, background Bash, Monitor, ScheduleWakeup, slash-command and escaped-descendant probes), adopted byte for byte from the CP1 capture, with the wakeup fire's command_lifecycle started/completed bracket pinned as the fire's only recogniser evidence, tests/fake_claude.py streaming-input mode (scripted turns, background tasks as real tagged processes with task events, wakeups whose fires are enclosed in the measured command_lifecycle bracket with injectable bracket faults, kill-at-EOF, escaped descendants, no descriptor inheritance by tool processes), the stop-inside-a-fire probe (P12) captured into two new fixtures whose cancelledWakeups counts must match the settlement rule before CP2 starts (any other count is a plan-amendment trigger), and the opt-in live contract probe",
       "depends_on": [],
       "complexity": 3,
       "session_target": 1
     },
     {
       "id": "CP2",
-      "name": "Worker stream state machine: controller/worker_stream.py, a pure incremental reader tracking turns, owned background tasks, pending wakeups and quiescence, with terminal classification into the closed four outcomes plus a structured stream_diagnosis (several results accepted, owned work killed at exit, exit while waiting, overdue wakeup, malformed stream); replaces worker._parse_worker_stream",
+      "name": "Worker stream state machine: controller/worker_stream.py, a pure incremental reader tracking turns, owned background tasks, pending wakeups, command_lifecycle brackets correlated by command_uuid (a wakeup matched only by a regular bracket whose turn opens at or after its due time, never by result origin, and still owned until a count-checked stop or a settle window with no contradicting bracket settles it) and quiescence, with terminal classification into the closed four outcomes plus a structured stream_diagnosis (several results accepted, owned work killed at exit, exit while waiting, overdue wakeup, irregular or unterminated command lifecycle, malformed stream); replaces worker._parse_worker_stream",
       "depends_on": [
         "CP1"
       ],

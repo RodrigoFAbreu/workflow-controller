@@ -1159,6 +1159,8 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
             return gate
     forge = ctx.forge(record["repository"]["forge_repository"])
     if pr.is_draft:
+        # The one forge mutation with no persisted intent (I5): it is idempotent, and a
+        # restart re-reads the pull request, skips it for a non-draft and writes READY.
         forge.mark_ready(number)
         pr = _verified_pr(ctx, record, number)
         if pr.is_draft or pr.state != "OPEN":

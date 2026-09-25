@@ -26,6 +26,11 @@ btrfs subvolumes and overlayfs. It answers ``free`` only when read from the
 init pid namespace, because ``/proc/locks`` omits an entry whose taker is
 not visible in the reading namespace.
 
+:func:`probe_file_lock` (``workflow-controller-worker-lifecycle-ownership``
+CP5) is the same read-only probe for a regular file -- a job's supervisor
+lock -- and also names the holders' pids, so a ``resume`` refused by an
+attached Controller can say which one.
+
 Imports nothing from the package beyond ``controller.errors``.
 """
 
@@ -223,11 +228,12 @@ def _mount_device(mountinfo: str, mnt_id: int) -> tuple[int, int]:
     return found
 
 
-def _lock_entries(locks: str) -> list[tuple[bool, str, tuple[int, int] | None, int | None]]:
+def _lock_entries(locks: str) -> list[tuple[bool, str, tuple[int, int] | None, int | None, int]]:
     """Each ``/proc/locks`` line as ``(is_waiter, type, (major, minor),
-    inode)`` -- hexadecimal ``MAJ:MIN``, decimal inode. A line whose device
-    field is ``<none>`` has no inode (``None``, never a match). Any other
-    line that does not parse makes the whole read ``unknown``."""
+    inode, pid)`` -- hexadecimal ``MAJ:MIN``, decimal inode, the taker's
+    pid as the reading namespace sees it. A line whose device field is
+    ``<none>`` has no inode (``None``, never a match). Any other line that
+    does not parse makes the whole read ``unknown``."""
     entries = []
     for line in locks.splitlines():
         if not line.strip():
@@ -243,15 +249,45 @@ def _lock_entries(locks: str) -> list[tuple[bool, str, tuple[int, int] | None, i
         if len(rest) < 7:
             raise _Unparseable(f"/proc/locks line does not parse: {line!r}")
         lock_type, devino = rest[0], rest[4]
-        _int(rest[3], 10)
+        pid = _int(rest[3], 10)
         if devino.startswith("<none>"):
-            entries.append((is_waiter, lock_type, None, None))
+            entries.append((is_waiter, lock_type, None, None, pid))
             continue
         parts = devino.split(":")
         if len(parts) != 3:
             raise _Unparseable(f"/proc/locks device field does not parse: {devino!r}")
-        entries.append((is_waiter, lock_type, (_int(parts[0], 16), _int(parts[1], 16)), _int(parts[2], 10)))
+        entries.append((is_waiter, lock_type, (_int(parts[0], 16), _int(parts[1], 16)), _int(parts[2], 10), pid))
     return entries
+
+
+def _probe_open_path(path: Path, *, directory: bool) -> tuple[str, tuple[int, ...]]:
+    """The non-acquiring probe of the ``FLOCK`` on the directory (or the
+    regular file) at ``path``, opened read-only: ``(answer, holder pids)``.
+    See :func:`probe_lifecycle_lock` for the three answers."""
+    try:
+        if directory:
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+        else:
+            fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    except OSError:
+        return UNKNOWN, ()
+    try:
+        try:
+            fdinfo = _read_proc_text(f"self/fdinfo/{fd}")
+        finally:
+            os.close(fd)
+        mnt_id, ino = _fdinfo_ids(fdinfo)
+        device = _mount_device(_read_proc_text("self/mountinfo"), mnt_id)
+        entries = _lock_entries(_read_proc_text("locks"))
+    except (OSError, _Unparseable):
+        return UNKNOWN, ()
+    holders = tuple(pid for is_waiter, lock_type, entry_device, entry_ino, pid in entries
+                    if not is_waiter and lock_type == "FLOCK" and entry_device == device and entry_ino == ino)
+    if holders:
+        return HELD, holders
+    if read_pid_namespace() != INIT_PID_NAMESPACE:
+        return UNKNOWN, ()
+    return FREE, ()
 
 
 def probe_lifecycle_lock(target_root: str | os.PathLike) -> str:
@@ -273,22 +309,18 @@ def probe_lifecycle_lock(target_root: str | os.PathLike) -> str:
     """
     try:
         path = resolve_git_dir(target_root)
-        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-    except (GitDirectoryUnresolvableError, OSError):
+    except GitDirectoryUnresolvableError:
         return UNKNOWN
-    try:
-        try:
-            fdinfo = _read_proc_text(f"self/fdinfo/{fd}")
-        finally:
-            os.close(fd)
-        mnt_id, ino = _fdinfo_ids(fdinfo)
-        device = _mount_device(_read_proc_text("self/mountinfo"), mnt_id)
-        entries = _lock_entries(_read_proc_text("locks"))
-    except (OSError, _Unparseable):
-        return UNKNOWN
-    for is_waiter, lock_type, entry_device, entry_ino in entries:
-        if not is_waiter and lock_type == "FLOCK" and entry_device == device and entry_ino == ino:
-            return HELD
-    if read_pid_namespace() != INIT_PID_NAMESPACE:
-        return UNKNOWN
-    return FREE
+    return _probe_open_path(path, directory=True)[0]
+
+
+def probe_file_lock(path: str | os.PathLike) -> tuple[str, tuple[int, ...]]:
+    """The same non-acquiring probe for the ``flock`` on a regular file
+    (``workflow-controller-worker-lifecycle-ownership`` CP5: a job's
+    supervisor lock, ``jobs/<job_id>/supervisor.lock``): ``(answer, holder
+    pids)``, the pids being the lock takers ``/proc/locks`` names. A
+    missing file is ``free`` -- nothing can hold it -- when read from the
+    init pid namespace. It never creates the file."""
+    if not os.path.lexists(path):
+        return (FREE if read_pid_namespace() == INIT_PID_NAMESPACE else UNKNOWN), ()
+    return _probe_open_path(Path(path), directory=False)

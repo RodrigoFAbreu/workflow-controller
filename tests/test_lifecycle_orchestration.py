@@ -530,12 +530,24 @@ class _LifecycleTestCase(unittest.TestCase):
     def rewrite_as(lc: Lifecycle, record: dict, status: str) -> dict:
         """The same job's record as a Controller that died before its
         verification (``COMPLETED``) or before the worker result
-        (``LAUNCHED``) left it on disk."""
+        (``LAUNCHED``) left it on disk.
+
+        Worker-lifecycle-ownership CP5: the ``LAUNCHED`` shape is a
+        Controller lost *before it ended the session* -- ``worker_state``
+        ``RUNNING``, no ``ending_offset`` or other ``ENDING`` fact -- so
+        ``resume`` does not re-attach (plan E) and takes the fail-closed
+        ``_reconcile_launched`` path these scenarios pin. A record lost
+        after ``ENDING``/``ENDED`` is re-attached and classified from the
+        stream instead (``tests/test_resume.py``'s CP5 tests)."""
         dropped = {"observed_phase_after", "transition_verified", "reconciliation_evidence", "reconciled_at"}
         if status == job.STATUS_LAUNCHED:
-            dropped |= {"worker", "worker_outcome"}
+            dropped |= {"worker", "worker_outcome", "ending_offset", "wakeup_overdue_declared_at",
+                        "command_lifecycle_overdue_declared_at", "command_lifecycle_overdue_command_uuid",
+                        "settled_wakeups"}
         rewritten = {k: v for k, v in record.items() if k not in dropped}
         rewritten["status"] = status
+        if status == job.STATUS_LAUNCHED and isinstance(rewritten.get("worker_state"), dict):
+            rewritten["worker_state"] = {**rewritten["worker_state"], "state": worker.RUNNING}
         runtime.write_json(lc.runtime, f"jobs/{record['job_id']}.json", rewritten)
         return rewritten
 
@@ -1319,9 +1331,10 @@ class ResumeReconciliationTest(_LifecycleTestCase):
         self.assertTrue(process_fixtures.wait_until(lambda: self.processes(lc) == 1),
                         "the orphaned worker never started")
 
-        # Active: while the orphan runs, step and resume both exit 45 and
-        # nothing is reconciled or launched.
-        for command in ("step", "resume"):
+        # Active: while the orphan runs, step exits 45 and nothing is
+        # reconciled or launched. (Worker-lifecycle-ownership CP5: `resume`
+        # would re-attach to the unsupervised worker instead -- plan E.)
+        for command in ("step",):
             with self.subTest(active=command):
                 held = self.cli(lc, command, fail_if_invoked=True)
                 self.assertEqual(held.code, cli.EXIT_WORKER_ACTIVE, held.stderr)
@@ -1334,8 +1347,9 @@ class ResumeReconciliationTest(_LifecycleTestCase):
         head_before = fixtures.current_head(lc.root)
         release.touch()
         # Worker-lifecycle-ownership CP3: the lost Controller's anchor holds
-        # the orphan's stdin; ending it ends the session (until CP5's
-        # re-attach), and the worker exits once its work is done.
+        # the orphan's stdin; ending it ends the session with no supervisor
+        # (so CP5's `resume` does not re-attach), and the worker exits once
+        # its work is done.
         process_fixtures.end_recorded_anchor(record)
         pgid = record["worker_process"]["pgid"]
 

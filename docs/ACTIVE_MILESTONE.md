@@ -31,8 +31,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 | CP1 -- harness contract evidence and fake harness | complete | `ef07f28` |
 | CP2 -- worker stream state machine | complete | `ed02157` |
 | CP3 -- streaming-input launch and supervision | complete | `e8364eb` |
-| CP4 -- job lifecycle integration | complete | this checkpoint's commit |
-| CP5 -- restart recovery | not started | |
+| CP4 -- job lifecycle integration | complete | `e354f10` |
+| CP5 -- restart recovery | complete | this checkpoint's commit |
 | CP6 -- same-phase durable progress | not started | |
 | CP7 -- operator diagnostics | not started | |
 | CP8 -- documentation and full verification | not started | |
@@ -225,6 +225,63 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   are unchanged).
 - **Verification.** See the checkpoint commit for the exact commands and results.
 
+### CP5 -- restart recovery (complete)
+
+- **Two-phase `resume` (E).** Phase 1 (`job._supervise_records`) takes no lifecycle lock: for
+  each valid, non-terminal (`LAUNCHED`/`COMPLETED`) record of the target that carries
+  `worker_state`, it takes the job's supervisor lock (retried `SUPERVISOR_LOCK_RETRY_SECONDS`;
+  held -> exit 45 naming the attached Controller's pid from the probe, nothing touched). A
+  `COMPLETED` record is left to phase 2. A `LAUNCHED` one: no recorded worker (`STARTING`) ->
+  tag scan, a live tagged process is exit 45 naming its pid, command line and `kill`, else phase
+  2 fails it closed; an `unverifiable` worker -> phase 2 holds it; worker alive, or gone with
+  `ending_offset` -> re-attach and flush `ENDED` + `COMPLETED` (the `completed` event carries
+  `reattached: true`); worker gone without `ending_offset` -> no re-attach, drain with the same
+  bound, end the anchor, phase 2's `_reconcile_launched`. A re-attached drain that outlives the
+  bound writes `drain_detached_at` + `worker_drain_detached` (the shared
+  `_record_drain_detached`, also `execute_step`'s) and exits 45. Phase 2 is today's path under
+  the lifecycle lock with `_owned_work_hold` (worker verdict, then the recorded group, tag and
+  recorded `owned_processes`; recognised daemons excluded) on `LAUNCHED` and `COMPLETED` (D7)
+  records; a live owned process is `resume_marked.outcome: owned_work_active` (exit 45).
+  Records without `worker_state` take today's paths (I9).
+- **Re-attach (`worker.reattach`).** `_ReattachedSupervision` is CP3's `_Supervision` over
+  `_FollowedProcess` (the recorded worker and anchor followed by `(pid, start_ticks)`; exit
+  status unknown), started from `worker.replay_stream` (the stream replayed from byte 0, then
+  the persisted `settled_wakeups`) and the persisted facts; the stall and settle timers start at
+  re-attach. It never ends owned work on a failed flush, re-sends the anchor's `SIGUSR1` when
+  `ending_offset` is already recorded, and ends the anchor identity-checked. Its ownership has
+  no adoption (`scan_recorded_owned_processes`).
+- **`abandon`.** Phase 1 (`_abandon_supervision`), for a record with `worker_state`, under its
+  supervisor lock: refuses while the worker or an owned process is active (pids, `kill`), or
+  unverifiable without the flag; then ends a leftover anchor (`worker.end_recorded_process`)
+  before the lifecycle lock.
+- **Presentation.** `lock.probe_file_lock` (holder pids); `job.supervisor_probe` (`attached` /
+  `unattached` / `unknown`, discounting the record's own anchor); the exit-45 lock text names
+  "Job <id>'s stdin anchor (pid A) holds the lock" and `resume` (or its orphan lifetime);
+  `pending_reconciliation_jobs` reports the hold; the Ctrl-C announcement names the anchor and
+  `resume`.
+- **Fake.** `lifecycle_fault` `delay_turn {seconds}` holds a fire's bracket open before its turn.
+- **Tests.** `tests/test_resume.py` gains the CP5 list (26 tests): R15 (`WAITING`, with `step`/
+  `run` 45 and the anchor text, the probe, the pending report, a second `resume` 45 naming the
+  first, and an unrelated `COMPLETED` record untouched mid-supervision and reconciled in phase
+  2), `DRAINING`, anchor also lost (`INTERRUPTED`; `FAILED`/`UnreconcilableJobError`), D7,
+  abandon with an orphaned anchor, every incomplete-lifecycle-pair case, the settle-window cases
+  (restart, wrong match, the load-bearing `settled_wakeups`, validation), loss after `ENDING`
+  and after `ENDED`, drain detach (tagged, and the untagged adopted escapee outliving the
+  anchor), Ctrl-C, both supervisor-lock-scope windows, the `STARTING` record, the probe and
+  the racing acquisition, a legacy record, and replay determinism (R14's two live streams and
+  P5 at every line boundary, and mid-line). Rewritten because `resume` now re-attaches instead
+  of refusing while an orphan runs: `tests/test_resume.py`'s interruption/orphan tests and
+  `tests/test_lifecycle_orchestration.py`'s orphaned apply worker assert `step`'s refusal
+  instead; `Lifecycle.rewrite_as(LAUNCHED)` now models a Controller lost before it ended the
+  session (`worker_state` `RUNNING`, no `ENDING` facts), since a record lost after `ENDED` is
+  re-attached and classified (round 1's O2).
+- **Interpretations.** R15's "`status` shows `waiting` and `unsupervised`" and the momentary
+  hold's "`status` still shows `unsupervised`" need CP7's presenter; CP5 asserts the facts it
+  presents (`worker_state` and `supervisor_probe` `unattached`). In the anchor-also-lost case the
+  record is persisted terminal (`INTERRUPTED`, or `FAILED` with `UnreconcilableJobError`), so no
+  `resume --abandon` is needed and none is advised. A `resume` whose records end `FAILED` still exits 0, as today.
+- **Verification.** See the checkpoint commit for the exact commands and results.
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP5.
+`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP6.

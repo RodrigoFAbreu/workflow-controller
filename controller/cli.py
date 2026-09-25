@@ -977,7 +977,10 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     instead marks that one pending job file terminal
     (:func:`controller.job.abandon`) and reconciles nothing else. Exit 45
     when ``resume`` left a record alone because its recorded worker is
-    ``active`` or ``unverifiable``."""
+    ``active`` or ``unverifiable``, or (worker-lifecycle-ownership CP5) a
+    process its job owns is still running; also when another Controller is
+    attached to a job (its supervisor lock is held), or a re-attached drain
+    detached again (``OwnedWorkDetachedError``)."""
     require_pinned_execution()
     target = _inspect_target(args)
     abandon_job_id = getattr(args, "abandon", None)
@@ -1043,8 +1046,7 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     # or `unverifiable` -- nothing about it was reconciled, and a worker may
     # still hold the worktree -- takes precedence over exit 40.
     any_worker_held = any(
-        (record.get("resume_marked") or {}).get("outcome")
-        in (job.RESUME_WORKER_ACTIVE, job.RESUME_WORKER_UNVERIFIABLE)
+        (record.get("resume_marked") or {}).get("outcome") in job.RESUME_HELD_OUTCOMES
         for record in records
     )
     if any_worker_held:

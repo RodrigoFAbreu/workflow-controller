@@ -82,6 +82,15 @@ child subreaper, and the record of what was already seen owned; recognised
 tool daemons (:data:`RECOGNISED_DAEMONS`) never are. The drain is bounded by
 :data:`DRAIN_DETACH_SECONDS`, after which ``launch`` returns
 :class:`DrainDetached` and ends nothing.
+
+CP5 adds :func:`reattach` (plan E): the same supervision, resumed by a
+``resume`` that did not launch the worker, from the job record -- the
+stream state rebuilt by replaying the stream (:func:`replay_stream`) with
+the persisted supervisor facts, the worker and the anchor followed by their
+recorded identities (:func:`identity_alive`), the exit status unknown. It
+never launches anything. :func:`scan_recorded_owned_processes` is the
+ownership scan a Controller that is not supervising a job makes for its
+ownership hold.
 """
 
 from __future__ import annotations
@@ -1326,6 +1335,11 @@ class _Supervision:
         the anchor to release stdin."""
         self.ending_offset = self.stream.offset
         self._transition(ENDING)
+        self._release_stdin()
+
+    def _release_stdin(self) -> None:
+        """Ask the anchor (``SIGUSR1``) to close the worker's stdin, once
+        it has installed its handler."""
         deadline = time.monotonic() + _ANCHOR_READY_SECONDS
         while self.anchor.poll() is None and not _catches_sigusr1(self.anchor.pid) \
                 and time.monotonic() < deadline:
@@ -1419,6 +1433,259 @@ class _Supervision:
                                   "sample": [dict(entry) for entry in self.ownership.sample]},
             **_extract_fields(terminal_result),
         )
+
+
+# ---------------------------------------------------------------------------
+# Re-attach (worker-lifecycle-ownership CP5, plan E): supervision of a
+# worker a lost Controller launched, resumed by `resume` from the record.
+# ---------------------------------------------------------------------------
+
+
+def identity_alive(pid: object, start_ticks: object) -> bool | None:
+    """Whether the recorded process ``(pid, start_ticks)`` still runs:
+    ``False`` when it is gone, a zombie, or the pid now names another
+    process (its start ticks differ); ``None`` when ``/proc`` cannot answer
+    (never read as gone). A ``start_ticks`` of ``None`` matches any start."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        stat = _read_stat(_proc_root() / str(pid) / "stat")
+    except _NoAnswer:
+        return None
+    if stat is None or stat.state in _GONE_STATES:
+        return False
+    return start_ticks is None or stat.start_ticks == start_ticks
+
+
+def end_recorded_process(identity: Mapping | None, *, settle_seconds: float = _DRAIN_KILL_SETTLE_SECONDS) -> bool:
+    """Identity-checked ``SIGKILL`` of a recorded process this Controller
+    did not spawn (a lost Controller's stdin anchor), then wait up to
+    ``settle_seconds`` until it is gone (a zombie counts as gone: its
+    descriptors, the lifecycle lock's included, are closed by then).
+    Returns whether it is gone."""
+    if not isinstance(identity, Mapping):
+        return True
+    pid, start_ticks = identity.get("pid"), identity.get("start_ticks")
+    if identity_alive(pid, start_ticks):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+    deadline = time.monotonic() + settle_seconds
+    while identity_alive(pid, start_ticks) is not False:
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(_DRAIN_KILL_POLL_SECONDS)
+    return True
+
+
+class _FollowedProcess:
+    """A recorded process a re-attaching supervisor follows but did not
+    spawn (the worker, the anchor): the ``subprocess.Popen`` surface
+    :class:`_Supervision` uses, answered from the recorded ``(pid,
+    start_ticks)``. Its exit status cannot be read, so ``returncode`` is
+    always ``None`` (an unknown exit status, B's note under the table);
+    ``poll()`` answers ``None`` while it runs and :data:`_FOLLOWED_GONE`
+    once it is gone. An unanswerable ``/proc`` read keeps it running (I7)."""
+
+    returncode = None
+
+    def __init__(self, identity: Mapping | None) -> None:
+        identity = identity if isinstance(identity, Mapping) else {}
+        pid = identity.get("pid")
+        self.pid = pid if isinstance(pid, int) and not isinstance(pid, bool) else -1
+        self.start_ticks = identity.get("start_ticks")
+
+    def _running(self) -> bool:
+        return identity_alive(self.pid, self.start_ticks) is not False
+
+    def poll(self):
+        return None if self._running() else _FOLLOWED_GONE
+
+    def wait(self, timeout: float | None = None):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self._running():
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(f"pid {self.pid}", timeout)
+            time.sleep(_DRAIN_KILL_POLL_SECONDS if deadline is None
+                       else max(0.0, min(_DRAIN_KILL_POLL_SECONDS, deadline - time.monotonic())))
+        return None
+
+    def send_signal(self, sig: int) -> None:
+        if identity_alive(self.pid, self.start_ticks):
+            os.kill(self.pid, sig)
+
+    def kill(self) -> None:
+        self.send_signal(signal.SIGKILL)
+
+
+#: What :meth:`_FollowedProcess.poll` answers for a followed process that is
+#: gone (anything but ``None``; its exit status is unknown).
+_FOLLOWED_GONE = "gone"
+
+
+def replay_stream(data: bytes, settled_wakeups: Iterable[str] = ()) -> worker_stream.WorkerStream:
+    """The stream state a re-attaching supervisor starts from (plan E,
+    step 2): every complete line of ``data`` fed to a fresh
+    ``worker_stream.WorkerStream``, then the persisted ``settled_wakeups``
+    fact applied. A pure function of the lines and the fact, so it is the
+    state live supervision reached at the same byte, bracket by bracket;
+    a trailing partial line stays buffered until the rest arrives."""
+    stream = worker_stream.WorkerStream()
+    stream.feed(data)
+    settled = [tool_use_id for tool_use_id in settled_wakeups if tool_use_id]
+    if settled:
+        stream.settle_wakeups(settled)
+    return stream
+
+
+def _recorded_worker_process(identity: Mapping | None) -> "WorkerProcess":
+    identity = identity if isinstance(identity, Mapping) else {}
+    fields = {field.name: identity.get(field.name) for field in dataclasses.fields(WorkerProcess)}
+    if not isinstance(fields["pid"], int) or isinstance(fields["pid"], bool):
+        fields["pid"] = -1
+    return WorkerProcess(**fields)
+
+
+def _recorded_ownership(*, tag: str | None, worker_process: "WorkerProcess", anchor_pid: int | None,
+                        owned_processes: Iterable[Mapping] = (), seen_count: int | None = None) -> _Ownership:
+    """The owned-process set a Controller that did not launch the worker
+    scans (plan C step 3, E): the worker's recorded group, the tag, and the
+    record's ``owned_processes`` entries whose identity still matches --
+    never adoption, which only the original supervisor had."""
+    ownership = _Ownership(tag=tag or "", worker_process=worker_process, anchor_pid=anchor_pid,
+                           baseline=set(), adopting=False)
+    for entry in owned_processes:
+        if not isinstance(entry, Mapping):
+            continue
+        pid = entry.get("pid")
+        if not isinstance(pid, int) or isinstance(pid, bool):
+            continue
+        recorded = {"pid": pid, "start_ticks": entry.get("start_ticks"), "source": entry.get("source") or "recorded",
+                    "cmdline": entry.get("cmdline") or ""}
+        ownership.owned[pid] = recorded
+        ownership.seen.add((pid, recorded["start_ticks"]))
+        if len(ownership.sample) < OWNED_PROCESS_SAMPLE:
+            ownership.sample.append(dict(recorded))
+    ownership.seen_count = seen_count if isinstance(seen_count, int) and not isinstance(seen_count, bool) \
+        else len(ownership.seen)
+    return ownership
+
+
+def scan_recorded_owned_processes(*, ownership_tag: str | None, worker_process: Mapping | None,
+                                  anchor: Mapping | None, owned_processes: Iterable[Mapping] = ()
+                                  ) -> tuple[list[dict], bool]:
+    """One ownership scan for a job record, by a Controller that is not
+    supervising it (``resume``'s and ``--abandon``'s ownership hold, and
+    ``pending_reconciliation_jobs``' report; plan E): ``(live owned
+    entries, verifiable)``. The owned set is C step 3's without adoption:
+    the worker's recorded process group (its leader excluded), the job's
+    tag, and every recorded entry whose ``(pid, start_ticks)`` still
+    matches; recognised daemons and the anchor are never owned. ``verifiable``
+    is ``False`` when ``/proc`` could not be listed or a same-uid ``stat``
+    could not be read -- never "none alive" (I7)."""
+    anchor_pid = anchor.get("pid") if isinstance(anchor, Mapping) else None
+    ownership = _recorded_ownership(
+        tag=ownership_tag, worker_process=_recorded_worker_process(worker_process),
+        anchor_pid=anchor_pid if isinstance(anchor_pid, int) else None, owned_processes=owned_processes,
+    )
+    ownership.scan()
+    return ownership.entries(), ownership.verifiable
+
+
+class _ReattachedSupervision(_Supervision):
+    """:class:`_Supervision` resumed by a Controller that did not launch
+    the worker (plan E). It follows the recorded worker and anchor by
+    identity, never ends owned work on a failed flush (the record already
+    names every identity, I3, and the anchor keeps the lifecycle lock), and
+    -- with ``classify`` false, for a session no supervisor ended -- only
+    drains and ends the anchor, leaving the classification to ``resume``'s
+    fail-closed reconciliation."""
+
+    def __init__(self, *, classify: bool, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.classify = classify
+
+    def _end_everything(self) -> None:
+        """Nothing is ended: see the class docstring."""
+
+    def _finish(self):
+        if self.classify:
+            return super()._finish()
+        _end_anchor(self.anchor)
+        return None
+
+
+def reattach(
+    *,
+    stdout_path: str | Path,
+    stderr_path: str | Path,
+    worker_process: Mapping,
+    anchor: Mapping | None,
+    ownership_tag: str | None,
+    state: str | None = None,
+    owned_processes: Iterable[Mapping] = (),
+    owned_processes_seen_count: int | None = None,
+    ending_offset: int | None = None,
+    wakeup_overdue_declared_at: str | None = None,
+    command_lifecycle_overdue_declared_at: str | None = None,
+    command_lifecycle_overdue_command_uuid: str | None = None,
+    settled_wakeups: Iterable[str] = (),
+    on_state_change: Callable[[str, dict], None] | None = None,
+    classify: bool = True,
+) -> "WorkerResult | DrainDetached | None":
+    """Resume supervision of a worker a lost Controller launched (plan E,
+    "Re-attach"), from its job record. Never launches anything (I1).
+
+    The stream state is rebuilt by replaying ``stdout_path`` from the start
+    with the persisted supervisor facts (:func:`replay_stream`); every
+    ``command_lifecycle`` bracket open at the end of the replay is open
+    again, with its ``command_uuid``. Only the lost Controller's timers are
+    not recovered: each open bracket's stall timer and each ``fire_matched``
+    wakeup's settle timer start now, so a re-attached supervisor may settle
+    or declare later than the lost one would have, never earlier.
+
+    Then, as :func:`launch` does from the same state (design C): while the
+    recorded worker (``worker_process``, followed by its ``pid`` and
+    ``start_ticks``: its exit status is unknown) runs, supervise it --
+    ``RUNNING``/``WAITING``/``ENDING``, the recorded anchor signalled to
+    release stdin at a quiescent turn or a breach; with ``ending_offset``
+    already recorded (a supervisor ended the session), follow the worker to
+    its exit, re-sending the release in case the lost Controller died
+    before sending it. Once it is gone, drain the owned processes (the
+    recorded group, the tag, and the recorded ``owned_processes``; this
+    Controller adopted nothing) for at most :data:`DRAIN_DETACH_SECONDS`,
+    returning :class:`DrainDetached` and ending nothing if any outlives the
+    bound. Otherwise end the recorded anchor (identity-checked) and, with
+    ``classify``, publish ``ENDED`` and return the stream's classification
+    with an unknown exit status; without it (a session no supervisor ended:
+    plan E's "no re-attach"), return ``None``.
+
+    ``on_state_change`` is :func:`launch`'s; if it raises, nothing is ended
+    and the exception propagates."""
+    worker = _recorded_worker_process(worker_process)
+    anchor_proc = _FollowedProcess(anchor)
+    ownership = _recorded_ownership(
+        tag=ownership_tag, worker_process=worker, anchor_pid=anchor_proc.pid if anchor_proc.pid > 0 else None,
+        owned_processes=owned_processes, seen_count=owned_processes_seen_count,
+    )
+    with open(stdout_path, "rb") as reader:
+        supervision = _ReattachedSupervision(
+            classify=classify, proc=_FollowedProcess(worker_process), anchor=anchor_proc, worker_process=worker,
+            reader=reader, stdout_path=stdout_path, stderr_path=stderr_path, timeout=None,
+            on_state_change=on_state_change, on_group_drain=None, ownership=ownership,
+        )
+        settled = [item for item in settled_wakeups if isinstance(item, str) and item]
+        supervision.stream = replay_stream(reader.read(), settled)
+        supervision.settled = list(settled)
+        supervision.ending_offset = ending_offset
+        supervision.wakeup_overdue_declared_at = wakeup_overdue_declared_at
+        supervision.lifecycle_overdue_declared_at = command_lifecycle_overdue_declared_at
+        supervision.lifecycle_overdue_command_uuid = command_lifecycle_overdue_command_uuid
+        stream = supervision.stream
+        supervision.turns_reported = len(stream.turns) - (1 if stream.turn_open else 0)
+        supervision.state = state if state in (STARTING, RUNNING, WAITING, ENDING, DRAINING, ENDED) else STARTING
+        if ending_offset is not None and supervision.proc.poll() is None:
+            supervision._release_stdin()
+        return supervision.run()
 
 
 # ---------------------------------------------------------------------------

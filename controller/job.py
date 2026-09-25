@@ -2415,9 +2415,28 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
     (``cli.cmd_resume`` exits 45). A job file that is not a regular file
     is never opened (round 1's O2 of the manual external plan review): it is
     :class:`~controller.errors.StaleJobRecordError`, naming its manual
-    removal."""
+    removal.
+
+    **Two phases** (``workflow-controller-worker-lifecycle-ownership`` CP5,
+    plan E). Phase 1 (:func:`_supervise_records`) takes no lifecycle lock:
+    for each non-terminal record of this target that carries
+    ``worker_state`` it takes that job's supervisor lock (held by another
+    Controller -> exit 45, naming it) and, for a ``LAUNCHED`` one,
+    re-attaches to the unsupervised worker (:func:`worker.reattach`),
+    follows it to its end, drains its owned work, ends the anchor and
+    flushes ``COMPLETED`` -- or, for a session no supervisor ended, only
+    drains and ends the anchor. It never reconciles and never launches.
+    Phase 2 is today's path under the lifecycle lock, with the ownership
+    hold generalised (:func:`_owned_work_hold`): a ``LAUNCHED`` or
+    ``COMPLETED`` record whose worker or any owned process is alive, or
+    whose ownership scan is unverifiable, is never reconciled."""
     if not managed_repo.root.is_dir():
         return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
+    # Worker-lifecycle-ownership CP5 (plan E): phase 1, the supervision
+    # pre-pass, runs before the lifecycle lock -- the recorded anchor holds
+    # that lock for as long as the worker or its owned work lives -- and
+    # only then phase 2, today's reconciliation under the lock.
+    _supervise_records(managed_repo, identity=identity, runtime_root=runtime)
     with _acquire_lifecycle_lock(runtime, managed_repo):
         return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
 
@@ -2482,7 +2501,7 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
         elif status == STATUS_PLANNED:
             results.append({**_reconcile_planned(record, runtime_root=runtime), "reconciled_this_call": True})
         elif status == STATUS_LAUNCHED:
-            marked = _worker_liveness_hold(record, root)
+            marked = _owned_work_hold(record, root)
             if marked is not None:
                 results.append(marked)  # left LAUNCHED on disk; nothing reconciled.
                 continue
@@ -2491,6 +2510,10 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
                 "reconciled_this_call": True,
             })
         elif status == STATUS_COMPLETED:
+            marked = _owned_work_hold(record, root)
+            if marked is not None:
+                results.append(marked)  # D7: left COMPLETED on disk; nothing reconciled.
+                continue
             results.append({
                 **_reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime),
                 "reconciled_this_call": True,
@@ -2622,6 +2645,13 @@ UNRECONCILABLE_JOB_CODE = "UnreconcilableJobError"
 #: because its recorded worker may still run (`cli.cmd_resume` exits 45).
 RESUME_WORKER_ACTIVE = "worker_active"
 RESUME_WORKER_UNVERIFIABLE = "worker_unverifiable"
+#: ``resume_marked.outcome`` for a record `resume` left alone because a
+#: process its job owns is still running (plan E, worker-lifecycle-ownership
+#: CP5; ``cli.cmd_resume`` exits 45).
+RESUME_OWNED_WORK_ACTIVE = "owned_work_active"
+#: Every ``resume_marked.outcome`` of a record held for a live (or
+#: undecidable) worker or owned process.
+RESUME_HELD_OUTCOMES = (RESUME_WORKER_ACTIVE, RESUME_WORKER_UNVERIFIABLE, RESUME_OWNED_WORK_ACTIVE)
 
 _JOB_ENTRY_REGULAR = "regular"
 _JOB_ENTRY_VANISHED = "vanished"
@@ -2750,6 +2780,9 @@ def _pending_record(record: dict, stem: str, managed_repo: Any, identity: Any) -
     if status_str not in NON_TERMINAL_STATUSES:
         return PendingJob(stem, status_str, _abandon_command(stem, root),
                           f"its status {status!r} is outside the job-status enumeration")
+    if "worker_state" in record and status_str in (STATUS_LAUNCHED, STATUS_COMPLETED):
+        # Worker-lifecycle-ownership CP5: what the pending job is doing.
+        return PendingJob(stem, status_str, _resume_command(root), _pending_activity(record, root))
     return PendingJob(stem, status_str, _resume_command(root), "not yet reconciled")
 
 
@@ -2929,8 +2962,34 @@ def _recorded_worker_detail(runtime_root: Path, root: Path) -> tuple[str, list[d
                 f"liveness verdict is {assessment.verdict} ({assessment.reason}), so its number may "
                 f"name an unrelated process group here (for example after a reboot)."
             )
+        anchor_sentence = _recorded_anchor_sentence(record, assessment, root, runtime_root)
+        if anchor_sentence is not None:
+            parts.append(anchor_sentence)
     parts.append(_OTHER_HOLDER_SENTENCE)
     return " ".join(parts), recorded
+
+
+def _recorded_anchor_sentence(record: Mapping, assessment: worker.LivenessAssessment, root: Path,
+                              runtime_root: Path) -> str | None:
+    """The exit-45 text for a live recorded stdin anchor (worker-lifecycle-
+    ownership CP5, plan E): it holds the lock, and what clears it -- ``resume``
+    re-attaches while its worker or owned work lives; otherwise it ends
+    itself within the orphan lifetime of its last owned process."""
+    anchor = record.get("worker_anchor")
+    if not isinstance(anchor, Mapping) or worker.identity_alive(anchor.get("pid"), anchor.get("start_ticks")) is False:
+        return None
+    job_id = record.get("job_id")
+    head = f"Job {job_id}'s stdin anchor (pid {anchor.get('pid')}) holds the lock"
+    supervisor, holders = supervisor_probe(runtime_root, record)
+    if supervisor == SUPERVISOR_ATTACHED:
+        return (f"{head}, and a Controller (pid {', '.join(str(pid) for pid in holders)}) is attached to "
+                f"the job, supervising it.")
+    entries, _verifiable = _scan_record_owned(record) if "worker_state" in record else ([], True)
+    if assessment.verdict != worker.INACTIVE or entries:
+        return (f"{head} for the job's owned lifetime, and no Controller is attached: "
+                f"`{_resume_command(root)}` re-attaches to it.")
+    return (f"{head}; its worker and owned work have ended, so it ends itself within "
+            f"{int(anchor_orphan_seconds())} s of its last owned process, or `{_resume_command(root)}` ends it now.")
 
 
 def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.LifecycleLock:
@@ -2968,6 +3027,344 @@ def _worker_liveness_hold(record: JobRecord, root: Path) -> JobRecord | None:
     else:
         outcome, reason = RESUME_WORKER_UNVERIFIABLE, _unverifiable_guidance(job_id, assessment, root)
     return {**record, "resume_marked": {"outcome": outcome, "reason": reason, "liveness": assessment.to_dict()}}
+
+
+def _owned_guidance(job_id: Any, entries: list[dict], root: Path, *, then: str | None = None) -> str:
+    """What to do about a job whose owned processes still run (plan E):
+    each pid with its command line, and the two ways on (``then``, the
+    command to run afterwards: ``resume`` by default)."""
+    listed = ", ".join(f"pid {entry.get('pid')} ({entry.get('cmdline') or 'command line unreadable'})"
+                       for entry in entries)
+    pids = " ".join(str(entry.get("pid")) for entry in entries)
+    return (
+        f"Job {job_id}'s worker has ended, but {len(entries)} process(es) it owns are still running: "
+        f"{listed}. Wait for them, or end them (`kill {pids}`); then run `{then or _resume_command(root)}`."
+    )
+
+
+def _scan_record_owned(record: Mapping) -> tuple[list[dict], bool]:
+    """:func:`worker.scan_recorded_owned_processes` for ``record``."""
+    worker_state = record.get("worker_state") if isinstance(record.get("worker_state"), Mapping) else {}
+    owned = worker_state.get("owned_processes")
+    tag = record.get("ownership_tag")
+    return worker.scan_recorded_owned_processes(
+        ownership_tag=tag if isinstance(tag, str) and tag else None,
+        worker_process=record.get("worker_process") if isinstance(record.get("worker_process"), Mapping) else None,
+        anchor=record.get("worker_anchor") if isinstance(record.get("worker_anchor"), Mapping) else None,
+        owned_processes=owned if isinstance(owned, list) else (),
+    )
+
+
+def _owned_work_hold(record: JobRecord, root: Path) -> JobRecord | None:
+    """``resume``'s ownership hold (worker-lifecycle-ownership CP5, plan E;
+    ``_worker_liveness_hold`` generalised): ``None`` when the record may be
+    reconciled, else the record, unchanged on disk, with ``resume_marked``
+    naming why not.
+
+    A record without ``worker_state`` (1.2.x or earlier, I9) is judged
+    exactly as before: a ``LAUNCHED`` one by its recorded worker's liveness
+    verdict, a ``COMPLETED`` one not at all. A record with it -- ``LAUNCHED``
+    or ``COMPLETED`` (D7) -- is held while its recorded worker is ``active``
+    or ``unverifiable``, while any process its job owns is alive (the
+    worker's recorded group, the ownership tag, the recorded
+    ``owned_processes`` whose identity still matches; recognised daemons
+    excluded), or while that scan is unverifiable. A live anchor alone is
+    not owned work: ``resume``'s phase 1 disposes of it."""
+    if "worker_state" not in record:
+        return _worker_liveness_hold(record, root) if record.get("status") == STATUS_LAUNCHED else None
+    held = _worker_liveness_hold(record, root)
+    if held is not None:
+        return held
+    job_id = record.get("job_id")
+    entries, verifiable = _scan_record_owned(record)
+    if entries:
+        return {**record, "resume_marked": {"outcome": RESUME_OWNED_WORK_ACTIVE,
+                                            "reason": _owned_guidance(job_id, entries, root),
+                                            "owned_processes": entries}}
+    if not verifiable:
+        return {**record, "resume_marked": {
+            "outcome": RESUME_WORKER_UNVERIFIABLE,
+            "reason": (f"Job {job_id}'s owned processes cannot be verified from here: /proc could not be "
+                       f"listed, or a same-uid process's stat could not be read, so none is assumed gone. "
+                       f"Run `{_resume_command(root)}` again once /proc is readable."),
+        }}
+    return None
+
+
+def _pending_activity(record: JobRecord, root: Path) -> str:
+    """``pending_reconciliation_jobs``' reason for a record carrying
+    ``worker_state`` (plan E): what its worker or owned work is doing."""
+    held = _owned_work_hold(record, root)
+    if held is not None:
+        return f"not yet reconciled, and held: {held['resume_marked']['reason']}"
+    state = (record.get("worker_state") or {}).get("state") if isinstance(record.get("worker_state"), Mapping) \
+        else None
+    return f"not yet reconciled (worker_state {state}; no worker or owned process is running)"
+
+
+# ---------------------------------------------------------------------------
+# `resume`'s and `--abandon`'s phase 1: supervision before the lifecycle
+# lock (worker-lifecycle-ownership CP5, plan E).
+# ---------------------------------------------------------------------------
+
+
+def _read_job_record(path: Path) -> dict | None:
+    """A regular job file's record, or ``None`` when it is not a regular
+    file, cannot be read, or is not a JSON object (phase 2 reports those)."""
+    if not _is_regular_job_file(path):
+        return None
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def _supervision_candidate(path: Path, managed_repo: Any, identity: Any, *, valid: bool = True) -> dict | None:
+    """The record at ``path`` when phase 1 considers it: this target's,
+    named by its own file, ``LAUNCHED`` or ``COMPLETED`` (non-terminal
+    for ``--abandon``, ``valid=False``), carrying ``worker_state`` (I9:
+    a legacy record goes straight to phase 2), and -- for ``resume`` --
+    passing :func:`validate_record` (phase 2 raises on one that does not)."""
+    record = _read_job_record(path)
+    if record is None or record.get("target_repo") != str(managed_repo.root) or record.get("job_id") != path.stem \
+            or "worker_state" not in record:
+        return None
+    status = record.get("status")
+    if valid:
+        if status not in (STATUS_LAUNCHED, STATUS_COMPLETED):
+            return None
+        validity = _validity_or_none(record, managed_repo, identity)
+        if validity is None or not validity.valid:
+            return None
+    elif record.get("schema_version") != SCHEMA_VERSION or not isinstance(status, str) \
+            or status in TERMINAL_STATUSES or _newer_generation(record, identity) is not None:
+        return None
+    return record
+
+
+def _supervise_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> None:
+    """Phase 1 of :func:`resume`: under each candidate job's supervisor lock
+    (never the lifecycle lock), :func:`_supervise_record`. Only one job per
+    target can have held the lifecycle lock at a time, so at most one is
+    actually re-attached to."""
+    for path in _job_file_paths(runtime_root):
+        if _supervision_candidate(path, managed_repo, identity) is not None:
+            _supervise_record(managed_repo, identity=identity, runtime_root=runtime_root, path=path)
+
+
+def _supervise_record(managed_repo: Any, *, identity: Any, runtime_root: Path, path: Path) -> None:
+    """One phase-1 record, under its supervisor lock (plan E, "Re-attach").
+    Another Controller attached -> exit 45 naming it, nothing touched. A
+    ``COMPLETED`` record is left to phase 2. A ``LAUNCHED`` one:
+
+    - with no recorded worker (a Controller lost between spawn and the
+      ``on_spawn`` flush): a live process carrying the job's tag is exit 45,
+      naming it and the by-hand remedy; with none, phase 2 fails it closed;
+    - a recorded worker whose liveness is ``unverifiable``: phase 2 holds it;
+    - the worker alive, or gone with ``ending_offset`` recorded (a
+      supervisor ended the session): re-attach, follow it to its end, drain,
+      end the anchor, flush ``ENDED`` and ``COMPLETED`` with the stream's
+      classification (exit status unknown);
+    - the worker gone with no ``ending_offset``: no re-attach -- drain its
+      owned work with the same bound, end the anchor, and leave the record
+      to phase 2's fail-closed ``_reconcile_launched`` (I7).
+
+    A drain that outlives :data:`worker.DRAIN_DETACH_SECONDS` detaches as
+    ``execute_step`` does: ``drain_detached_at`` and
+    ``worker_drain_detached`` are written, the supervisor lock released and
+    :class:`~controller.errors.OwnedWorkDetachedError` raised (exit 45)."""
+    root = managed_repo.root
+    job_id = path.stem
+    candidate = _supervision_candidate(path, managed_repo, identity) or {}
+    with _supervisor_lock(runtime_root, job_id, record=candidate, nothing_done="nothing was reconciled"):
+        record = _supervision_candidate(path, managed_repo, identity)
+        if record is None or record.get("status") != STATUS_LAUNCHED:
+            return
+        worker_process = record.get("worker_process")
+        if not isinstance(worker_process, Mapping):
+            _refuse_unrecorded_worker(record, root)
+            return
+        streams = record.get("worker_streams") if isinstance(record.get("worker_streams"), Mapping) else {}
+        if not isinstance(streams.get("stdout_path"), str) or not isinstance(streams.get("stderr_path"), str):
+            return
+        assessment = worker.assess_worker_liveness(worker_process)
+        if assessment.verdict == worker.UNVERIFIABLE:
+            return
+        leader = worker.identity_alive(worker_process.get("pid"), worker_process.get("start_ticks"))
+        if leader is None:
+            return
+        alive = assessment.verdict == worker.ACTIVE and leader
+        _reattach(runtime_root, root, record, streams, classify=alive or record.get("ending_offset") is not None)
+
+
+def _refuse_unrecorded_worker(record: JobRecord, root: Path) -> None:
+    """A ``STARTING`` record with no recorded worker (plan E, round 2's
+    O2): nothing to re-attach to. A live process carrying its tag is exit
+    45, naming it; with none, phase 2 fails the record closed."""
+    tag = record.get("ownership_tag")
+    if not isinstance(tag, str) or not tag:
+        return
+    entries, _verifiable = worker.scan_recorded_owned_processes(
+        ownership_tag=tag, worker_process=None, anchor=None, owned_processes=(),
+    )
+    if not entries:
+        return
+    listed = ", ".join(f"pid {entry['pid']} ({entry.get('cmdline') or 'command line unreadable'})"
+                       for entry in entries)
+    pids = " ".join(str(entry["pid"]) for entry in entries)
+    job_id = record.get("job_id")
+    raise LifecycleWorkerActiveError(
+        f"job {job_id}'s Controller was lost between spawning its worker and recording it, so there is "
+        f"nothing to re-attach to, but process(es) carrying its ownership tag are running: {listed}. End "
+        f"that worker by hand (`kill {pids}`); its stdin anchor then ends itself within "
+        f"{int(anchor_orphan_seconds())} s, and a later `{_resume_command(root)}` reconciles the record "
+        f"(fail-closed) -- nothing was reconciled",
+        evidence={"job_id": job_id, "tagged_processes": entries},
+    )
+
+
+def anchor_orphan_seconds() -> float:
+    """The stdin anchor's orphan lifetime (``controller.anchor``), read at
+    call time."""
+    return worker.anchor_module.ANCHOR_ORPHAN_SECONDS
+
+
+def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mapping, *, classify: bool) -> None:
+    """Run :func:`worker.reattach` for ``record``, persisting each
+    ``on_state_change`` exactly as ``execute_step`` does (the record stays
+    ``LAUNCHED``), then the drain detach, or ``COMPLETED`` (after
+    ``ENDED``) when the stream was classified."""
+    job_id = record["job_id"]
+    current = {"record": record}
+
+    def on_state_change(state: str, details: Mapping) -> None:
+        before = current["record"]
+        state_changed = (before.get("worker_state") or {}).get("state") != state
+        updated = _with_worker_state(before, state, details)
+        current["record"] = _persist(runtime_root, job_id, updated, event=_worker_state_event(state),
+                                     details=_worker_state_event_details(updated, details,
+                                                                         state_changed=state_changed))
+
+    worker_state = record.get("worker_state") if isinstance(record.get("worker_state"), Mapping) else {}
+    owned = worker_state.get("owned_processes")
+    settled = record.get("settled_wakeups")
+    result = worker.reattach(
+        stdout_path=streams["stdout_path"], stderr_path=streams["stderr_path"],
+        worker_process=record["worker_process"], anchor=record.get("worker_anchor"),
+        ownership_tag=record.get("ownership_tag"), state=worker_state.get("state"),
+        owned_processes=owned if isinstance(owned, list) else (),
+        owned_processes_seen_count=worker_state.get("owned_processes_seen_count"),
+        ending_offset=record.get("ending_offset"),
+        wakeup_overdue_declared_at=record.get("wakeup_overdue_declared_at"),
+        command_lifecycle_overdue_declared_at=record.get("command_lifecycle_overdue_declared_at"),
+        command_lifecycle_overdue_command_uuid=record.get("command_lifecycle_overdue_command_uuid"),
+        settled_wakeups=settled if isinstance(settled, list) else (),
+        on_state_change=on_state_change, classify=classify,
+    )
+    record = current["record"]
+    if isinstance(result, worker.DrainDetached):
+        _record_drain_detached(runtime_root, root, job_id, record, result,
+                               worker_pid=record["worker_process"].get("pid"))
+    if result is None:
+        return
+    if (record.get("worker_state") or {}).get("state") != worker.ENDED:
+        record = _with_worker_state(record, worker.ENDED, {})
+    record = {
+        **record,
+        "status": STATUS_COMPLETED,
+        "worker": _worker_dict(result, stdout_path=streams["stdout_path"], stderr_path=streams["stderr_path"]),
+        "worker_outcome": result.outcome,
+        "updated_at": _now(),
+    }
+    _persist(runtime_root, job_id, record, event="completed",
+             details={"outcome": result.outcome, "exit_code": result.returncode, "reattached": True})
+
+
+def _record_drain_detached(runtime_root: Path, root: Path, job_id: str, record: JobRecord,
+                           result: worker.DrainDetached, *, worker_pid: Any) -> None:
+    """A :class:`worker.DrainDetached` (plan C step 3, D): the record stays
+    ``LAUNCHED`` at ``DRAINING`` with ``drain_detached_at``, the
+    ``worker_drain_detached`` event follows it -- both while the caller
+    still holds the job's supervisor lock -- then
+    :class:`~controller.errors.OwnedWorkDetachedError` (exit 45), whose
+    unwinding releases that lock. The anchor keeps the lifecycle lock."""
+    record = _with_worker_state(record, worker.DRAINING, {
+        **result.worker_state, "supervisor_facts": result.supervisor_facts,
+    })
+    record = {**record, "drain_detached_at": result.drain_detached_at}
+    remaining = [{"pid": entry.get("pid"), "cmdline": entry.get("cmdline")} for entry in result.remaining]
+    _persist(runtime_root, job_id, record, event="worker_drain_detached", details={
+        "drain_detached_at": result.drain_detached_at, "remaining": remaining,
+    })
+    raise OwnedWorkDetachedError(
+        f"worker pid {worker_pid} exited, but {len(remaining)} owned "
+        f"process(es) are still running after {worker.DRAIN_DETACH_SECONDS} s: "
+        + ", ".join(f"{entry['pid']} ({entry['cmdline']})" for entry in remaining)
+        + f" -- job {job_id} stays held (LAUNCHED, DRAINING); either run "
+        f"`{_resume_command(root)}` to re-attach and keep draining, or end them, "
+        f"then run it",
+        evidence={"job_id": job_id, "drain_detached_at": result.drain_detached_at,
+                  "remaining": list(result.remaining)},
+    )
+
+
+def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path, path: Path,
+                         acknowledge: bool) -> None:
+    """Phase 1 of ``resume --abandon`` (plan E), for the named record only,
+    when it carries ``worker_state``: under its supervisor lock, refuse
+    while its worker or any owned process is ``active`` (exit 45, naming
+    the pids and how to end them), or ``unverifiable`` without
+    ``acknowledge``; once both are verified gone, end a leftover stdin
+    anchor (identity-checked ``SIGKILL``: Controller infrastructure, not
+    work), before any lifecycle-lock attempt."""
+    root = managed_repo.root
+    job_id = path.stem
+    candidate = _supervision_candidate(path, managed_repo, identity, valid=False)
+    if candidate is None:
+        return
+    with _supervisor_lock(runtime_root, job_id, record=candidate, nothing_done="nothing was abandoned"):
+        record = _supervision_candidate(path, managed_repo, identity, valid=False)
+        if record is None:
+            return
+        worker_process = record.get("worker_process")
+        if worker_process is not None:
+            assessment = worker.assess_worker_liveness(worker_process if isinstance(worker_process, Mapping) else {})
+            if assessment.verdict == worker.ACTIVE:
+                raise LifecycleWorkerActiveError(
+                    f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
+                    f"{_active_guidance(job_id, assessment, root)} Follow it: "
+                    f"`{follow_command(runtime_root, root)}`",
+                    evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
+                )
+            if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
+                raise LifecycleWorkerUnverifiableError(
+                    f"`resume --abandon {job_id!r}` refused without --acknowledge-unverifiable-worker: "
+                    f"{_unverifiable_guidance(job_id, assessment, root)}",
+                    evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
+                )
+        entries, verifiable = _scan_record_owned(record)
+        if entries:
+            raise LifecycleWorkerActiveError(
+                f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
+                f"{_owned_guidance(job_id, entries, root, then=_abandon_command(job_id, root))}",
+                evidence={"job_id": job_id, "owned_processes": entries},
+            )
+        if not verifiable and not acknowledge:
+            raise LifecycleWorkerUnverifiableError(
+                f"`resume --abandon {job_id!r}` refused without --acknowledge-unverifiable-worker: job "
+                f"{job_id}'s owned processes cannot be verified from here (/proc could not be listed, or a "
+                f"same-uid process's stat could not be read). If they are gone, state so with "
+                f"`{_abandon_command(job_id, root, acknowledge=True)}`.",
+                evidence={"job_id": job_id},
+            )
+        anchor = record.get("worker_anchor")
+        if isinstance(anchor, Mapping) and not worker.end_recorded_process(anchor):
+            raise LifecycleWorkerActiveError(
+                f"`resume --abandon {job_id!r}` could not end job {job_id}'s stdin anchor (pid "
+                f"{anchor.get('pid')}), which holds the lifecycle lock -- nothing was abandoned",
+                evidence={"job_id": job_id, "worker_anchor": dict(anchor)},
+            )
 
 
 _JOB_ID_CONSTRAINT = (
@@ -3040,11 +3437,22 @@ def abandon(
       no flag overrides it); or one that is ``unverifiable`` without
       ``acknowledge_unverifiable_worker``
       (:class:`~controller.errors.LifecycleWorkerUnverifiableError`, exit
-      45)."""
+      45).
+
+    **Phase 1** (worker-lifecycle-ownership CP5, plan E): for a record
+    carrying ``worker_state``, :func:`_abandon_supervision` runs first,
+    under the job's supervisor lock and before the lifecycle lock -- it
+    refuses while the worker or any owned process lives and ends a leftover
+    anchor, so ``abandon`` with only an orphaned anchor left succeeds at
+    once."""
     path = _abandon_path(runtime, managed_repo, identity, job_id)
     if not managed_repo.root.is_dir():
         return _abandon_locked(managed_repo, identity=identity, runtime_root=runtime, path=path,
                                acknowledge=acknowledge_unverifiable_worker)
+    # Worker-lifecycle-ownership CP5 (plan E): phase 1 before the lifecycle
+    # lock, which a leftover anchor may still hold.
+    _abandon_supervision(managed_repo, identity=identity, runtime_root=runtime, path=path,
+                         acknowledge=acknowledge_unverifiable_worker)
     with _acquire_lifecycle_lock(runtime, managed_repo):
         return _abandon_locked(managed_repo, identity=identity, runtime_root=runtime, path=path,
                                acknowledge=acknowledge_unverifiable_worker)
@@ -3740,7 +4148,7 @@ def acknowledge_milestone_binding(managed_repo: Any, *, runtime: Path, work_item
 
 
 def _announce_orphaned_worker(worker_process: worker.WorkerProcess, root: Path, runtime_root: Path, *,
-                              drained: bool = False) -> None:
+                              drained: bool = False, anchor: worker.WorkerProcess | None = None) -> None:
     """The Ctrl-C line: the Controller does not forward the interrupt to the
     worker, which runs in its own session and keeps running headless,
     holding the worktree. Ending it is the operator's decision.
@@ -3759,6 +4167,13 @@ def _announce_orphaned_worker(worker_process: worker.WorkerProcess, root: Path, 
                 f"running in its own session and holds the worktree {root}; wait for it, or end the group "
                 f"(`kill -TERM -- -{pgid}`), then run `{_resume_command(root)}`")
     print(line, file=sys.stderr)
+    if anchor is not None:
+        # Worker-lifecycle-ownership CP5 (plan C, "Interruption"): nothing
+        # was killed; the anchor keeps the worker's stdin and the lifecycle
+        # lock, and `resume` re-attaches.
+        print(f"workflow-controller: its stdin anchor (pid {anchor.pid}) keeps the session open and holds "
+              f"the lifecycle lock; `{_resume_command(root)}` re-attaches to the job and supervises it to "
+              f"its end", file=sys.stderr)
     print(f"workflow-controller: follow it: `{follow_command(runtime_root, root)}`", file=sys.stderr)
 
 
@@ -3945,13 +4360,51 @@ def supervisor_lock_rel_path(job_id: str) -> str:
     return f"jobs/{job_id}/supervisor.lock"
 
 
+#: The supervisor-lock probe's three answers (plan E): a Controller holds
+#: the job's supervisor lock, none does, or ``/proc/locks`` cannot tell.
+SUPERVISOR_ATTACHED = "attached"
+SUPERVISOR_UNATTACHED = "unattached"
+SUPERVISOR_UNKNOWN = "unknown"
+
+
+def _is_recorded_anchor(pid: int, record: Mapping) -> bool:
+    """Whether ``pid`` is the record's own ``worker_anchor`` (its pid, with
+    the start ticks still matching)."""
+    anchor = record.get("worker_anchor")
+    if not isinstance(anchor, Mapping) or anchor.get("pid") != pid:
+        return False
+    return worker.identity_alive(pid, anchor.get("start_ticks")) is True
+
+
+def supervisor_probe(runtime_root: Path, record: Mapping) -> tuple[str, list[int]]:
+    """Whether a Controller is attached to ``record``'s job (plan E): the
+    read-only ``/proc/locks`` probe of ``jobs/<job_id>/supervisor.lock``
+    (``lock.probe_file_lock``), as ``(answer, holder pids)``. A holder that
+    is the record's own ``worker_anchor`` -- its momentary orphan-lifetime
+    check -- is discounted, so it reads ``unattached``, never as an attached
+    Controller. For presentation and for naming a holder only: whether
+    ``resume``/``--abandon`` may act is decided by the retried acquisition
+    (:func:`_supervisor_lock`), never by this probe."""
+    job_id = record.get("job_id")
+    if not isinstance(job_id, str) or not job_id or "/" in job_id or job_id in (".", ".."):
+        return SUPERVISOR_UNKNOWN, []
+    answer, holders = lock.probe_file_lock(Path(runtime_root) / supervisor_lock_rel_path(job_id))
+    if answer == lock.UNKNOWN:
+        return SUPERVISOR_UNKNOWN, []
+    controllers = [pid for pid in holders if not _is_recorded_anchor(pid, record)]
+    return (SUPERVISOR_ATTACHED, controllers) if controllers else (SUPERVISOR_UNATTACHED, [])
+
+
 @contextlib.contextmanager
-def _supervisor_lock(runtime_root: Path, job_id: str):
+def _supervisor_lock(runtime_root: Path, job_id: str, *, record: Mapping | None = None,
+                     nothing_done: str = "nothing was launched"):
     """Hold the job's supervisor lock (plan E) and yield its path. The
     descriptor is ``O_CLOEXEC`` and never passed on, so the lock dies with
     this Controller. Held by another process for longer than
     :data:`SUPERVISOR_LOCK_RETRY_SECONDS`, it is
-    :class:`~controller.errors.LifecycleWorkerActiveError` (exit 45)."""
+    :class:`~controller.errors.LifecycleWorkerActiveError` (exit 45), naming
+    the attached Controller's pid from :func:`supervisor_probe` (``record``,
+    when given, lets it discount the job's own anchor)."""
     rel_path = supervisor_lock_rel_path(job_id)
     fd = runtime.open_lock_file(runtime_root, rel_path)
     try:
@@ -3962,10 +4415,15 @@ def _supervisor_lock(runtime_root: Path, job_id: str):
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
+                    answer, holders = supervisor_probe(runtime_root, {**(record or {}), "job_id": job_id})
+                    named = (f" (pid {', '.join(str(pid) for pid in holders)})" if holders
+                             else " (its pid could not be read from /proc/locks)")
                     raise LifecycleWorkerActiveError(
                         f"job {job_id}'s supervisor lock {runtime_root / rel_path} is held by another "
-                        f"Controller -- nothing was launched",
-                        evidence={"job_id": job_id, "supervisor_lock": str(runtime_root / rel_path)},
+                        f"Controller{named}, which is attached to the job and supervising it -- "
+                        f"{nothing_done}",
+                        evidence={"job_id": job_id, "supervisor_lock": str(runtime_root / rel_path),
+                                  "supervisor": answer, "supervisor_pids": holders},
                     ) from None
                 time.sleep(0.05)
         yield runtime_root / rel_path
@@ -4052,6 +4510,7 @@ def _launch_job(
                  ownership_tag: str | None = None) -> None:
         nonlocal record
         spawned["worker_process"] = worker_process
+        spawned["anchor"] = anchor
         record = {**record, "worker_process": worker_process.to_dict(), "updated_at": _now()}
         # CP3 (worker-lifecycle-ownership): the stdin anchor, which holds
         # the lifecycle lock for the owned lifetime, is recorded in the same
@@ -4124,7 +4583,7 @@ def _launch_job(
         # liveness verdict later; the interrupt propagates unchanged.
         if spawned.get("flushed"):
             _announce_orphaned_worker(spawned["worker_process"], managed_repo.root, runtime,
-                                      drained=spawned.get("drained", False))
+                                      drained=spawned.get("drained", False), anchor=spawned.get("anchor"))
         raise
 
     if isinstance(result, worker.DrainDetached):
@@ -4133,26 +4592,10 @@ def _launch_job(
         # stays LAUNCHED at DRAINING with `drain_detached_at`, and the
         # `worker_drain_detached` event follows it -- both while this
         # Controller still holds the job's supervisor lock, which the
-        # raise below releases as it unwinds `_supervisor_lock`. The anchor
-        # keeps the lifecycle lock, so the job stays held until `resume`.
-        record = _with_worker_state(record, worker.DRAINING, {
-            **result.worker_state, "supervisor_facts": result.supervisor_facts,
-        })
-        record = {**record, "drain_detached_at": result.drain_detached_at}
-        remaining = [{"pid": entry.get("pid"), "cmdline": entry.get("cmdline")} for entry in result.remaining]
-        record = _persist(runtime, job_id, record, event="worker_drain_detached", details={
-            "drain_detached_at": result.drain_detached_at, "remaining": remaining,
-        })
-        raise OwnedWorkDetachedError(
-            f"worker pid {spawned['worker_process'].pid} exited, but {len(remaining)} owned "
-            f"process(es) are still running after {worker.DRAIN_DETACH_SECONDS} s: "
-            + ", ".join(f"{entry['pid']} ({entry['cmdline']})" for entry in remaining)
-            + f" -- job {job_id} stays held (LAUNCHED, DRAINING); either run "
-            f"`{_resume_command(managed_repo.root)}` to re-attach and keep draining, or end them, "
-            f"then run it",
-            evidence={"job_id": job_id, "drain_detached_at": result.drain_detached_at,
-                      "remaining": list(result.remaining)},
-        )
+        # raise releases as it unwinds `_supervisor_lock`. The anchor keeps
+        # the lifecycle lock, so the job stays held until `resume`.
+        _record_drain_detached(runtime, managed_repo.root, job_id, record, result,
+                               worker_pid=spawned["worker_process"].pid)
 
     # Step 6: record the worker result. The streams are already on disk --
     # the worker wrote them itself.

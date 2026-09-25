@@ -698,7 +698,7 @@ def _children_tree(pid: int) -> list[int]:
 LIFECYCLE_FAULTS = (
     "omit_started", "omit_completed", "duplicate_started", "duplicate_completed",
     "completed_before_started", "delay_completed", "delay_completed_past_next_turn", "reuse_uuid",
-    "overlap", "empty", "malformed", "bracket_turn", "spurious_bracket", "delay_fire",
+    "overlap", "empty", "malformed", "bracket_turn", "spurious_bracket", "delay_fire", "delay_turn",
 )
 _NOTIFICATION_FAULTS = ("bracket_turn", "spurious_bracket")
 
@@ -1127,6 +1127,10 @@ class StreamingSession:
             self.lifecycle(command_uuid, "started", drop=fault.get("field") if kind == "malformed" else None)
         if kind == "duplicate_started":
             self.lifecycle(command_uuid, "started")
+        if kind == "delay_turn":
+            # Worker-lifecycle-ownership CP5: the bracket stays open, with no
+            # turn yet, for ``seconds`` (a Controller lost in that window).
+            time.sleep(float(fault.get("seconds", 1)))
         self.play_turn(wakeup["fire_turn"])
         if kind == "omit_completed":
             return

@@ -26,6 +26,8 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -1120,7 +1122,9 @@ class _OrphanWorkerCase(_ResumeTestCase):
     def _await_worker_gone(self, record: dict, root: Path) -> None:
         # Worker-lifecycle-ownership CP3: the orphan's lost Controller left
         # its anchor holding stdin, so the released worker ends only once
-        # that session is ended (until CP5's re-attach).
+        # that session is ended. Ending the anchor ends it with no
+        # supervisor (no `ending_offset`), so CP5's `resume` does not
+        # re-attach and reconciles fail-closed.
         process_fixtures.end_recorded_anchor(record)
         pgid = record["worker_process"]["pgid"]
 
@@ -1166,9 +1170,13 @@ class EndToEndInterruptionTest(_OrphanWorkerCase):
         self.assertIn("lifecycle_lock", on_disk)
         self.assertIn("worker_process", on_disk)
 
-        # The orphaned worker still holds the inherited lock: resume refuses.
+        # The orphaned worker still holds the inherited lock: step refuses.
+        # (Worker-lifecycle-ownership CP5: `resume` would now re-attach to
+        # the unsupervised worker instead -- plan E, pinned by the R15
+        # tests below -- so the refusal asserted here is `step`'s.)
         with self.assertRaises(LifecycleWorkerActiveError) as ctx:
-            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+            job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                             claude_bin=str(FAKE_CLAUDE))
         self.assertIn(f"process group {record['worker_process']['pgid']}", ctx.exception.message)
         still = runtime_module.read_json(job_files[0])
         self.assertEqual(still["status"], job.STATUS_LAUNCHED)
@@ -1217,8 +1225,11 @@ class BootstrapEndToEndInterruptionTest(_OrphanWorkerCase):
         self.assertIn("lifecycle_lock", on_disk)
         self.assertIn("worker_process", on_disk)
 
+        # Worker-lifecycle-ownership CP5: `resume` would re-attach (plan E);
+        # `step` refuses.
         with self.assertRaises(LifecycleWorkerActiveError):
-            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+            job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
+                             claude_bin=str(FAKE_CLAUDE))
         still = runtime_module.read_json(job_files[0])
         self.assertEqual(still["status"], job.STATUS_LAUNCHED)
         self.assertIsNone(still["work_item_id"])
@@ -1232,12 +1243,14 @@ class BootstrapEndToEndInterruptionTest(_OrphanWorkerCase):
 
 
 class OrphanWorkerTest(_OrphanWorkerCase):
-    """The orphan case: while the orphaned worker lives, ``step`` and
-    ``resume`` both refuse (exit 45) and the record stays ``LAUNCHED`` with
-    both fields; once it is released and gone, ``resume`` reconciles it
-    ``INTERRUPTED``, and the next ``step`` launches exactly one worker."""
+    """The orphan case: while the orphaned worker lives, ``step`` refuses
+    (exit 45) and the record stays ``LAUNCHED`` with both fields; once it is
+    released and its session ended without a supervisor, ``resume``
+    reconciles it ``INTERRUPTED``, and the next ``step`` launches exactly one
+    worker. (Worker-lifecycle-ownership CP5: ``resume`` during the orphan's
+    life re-attaches to it instead of refusing -- plan E, the R15 tests.)"""
 
-    def test_step_and_resume_refuse_until_the_orphan_ends(self) -> None:
+    def test_step_refuses_until_the_orphan_ends(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
         record = self._orphan_worker(managed_repo.root)
         self.assertEqual(self._invocation_count(), 1)
@@ -1245,8 +1258,6 @@ class OrphanWorkerTest(_OrphanWorkerCase):
         with self.assertRaises(LifecycleWorkerActiveError):
             job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
                              claude_bin=str(FAKE_CLAUDE))
-        with self.assertRaises(LifecycleWorkerActiveError):
-            job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
         on_disk = _read_record(self.runtime_root, record["job_id"])
         self.assertEqual(on_disk["status"], job.STATUS_LAUNCHED)
         self.assertEqual(on_disk["worker_process"], record["worker_process"])
@@ -2469,3 +2480,954 @@ class ObservationPathsNeverReadTest(_DispositionCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-worker-lifecycle-ownership` CP5: restart recovery.
+# A real `step` Controller (a child process, with the lifecycle suite's
+# pinned identity) is SIGKILLed at a named point of a scripted streaming
+# session; `resume` then re-attaches to the unsupervised worker (plan E).
+# ---------------------------------------------------------------------------
+
+from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
+
+#: A Controller process whose `cli.main` runs with the lifecycle suite's
+#: pinned identity and a JSON configuration: ``worker``/``anchor`` module
+#: attributes to set (patched bounds), and where to stop dead so the test
+#: can SIGKILL it at a named point -- ``hang_after_state`` (right after the
+#: ``LAUNCHED`` record write at that ``worker_state``) or ``hang_on_spawn``
+#: (in ``on_spawn``, before the flush). It writes ``marker`` when it stops.
+_LOST_CONTROLLER = r'''
+import json, os, sys, time, unittest.mock
+sys.path.insert(0, sys.argv[1])
+from pathlib import Path
+from controller import anchor, cli, identity, job, worker
+from controller.identity import ControllerIdentity
+fields = json.loads(sys.argv[2])
+fields.update(source_root=Path(fields["source_root"]), origin_source_root=Path(fields["origin_source_root"]))
+ident = ControllerIdentity(**fields)
+unittest.mock.patch.object(identity, "pin", return_value=ident).start()
+unittest.mock.patch.object(identity, "current", return_value=ident).start()
+config = json.loads(sys.argv[3])
+for name, value in config.get("worker", {}).items():
+    setattr(worker, name, value)
+for name, value in config.get("anchor", {}).items():
+    setattr(anchor, name, value)
+
+
+def hang():
+    Path(config["marker"]).write_text(str(os.getpid()))
+    while True:
+        time.sleep(60)
+
+
+if config.get("hang_after_state"):
+    real_write = job.runtime.write_json
+
+    def write_json(runtime_root, rel_path, obj):
+        written = real_write(runtime_root, rel_path, obj)
+        if str(rel_path).startswith("jobs/") and isinstance(obj, dict) and obj.get("status") == "LAUNCHED" \
+                and (obj.get("worker_state") or {}).get("state") == config["hang_after_state"]:
+            hang()
+        return written
+
+    job.runtime.write_json = write_json
+if config.get("hang_on_spawn"):
+    real_launch = worker.launch
+
+    def launch(*args, **kwargs):
+        kwargs["on_spawn"] = lambda *a, **k: hang()
+        return real_launch(*args, **kwargs)
+
+    job.worker.launch = launch
+sys.exit(cli.main(sys.argv[4:]))
+'''
+
+MILESTONE_IMPLEMENT = lifecycle.MILESTONE_IMPLEMENT
+IMPLEMENTING = lifecycle.IMPLEMENTING
+RUNNING, WAITING, ENDING, DRAINING, ENDED = (worker.RUNNING, worker.WAITING, worker.ENDING, worker.DRAINING,
+                                             worker.ENDED)
+
+
+def _stream_events(record: dict) -> list[dict]:
+    """The worker's stream so far (complete lines only)."""
+    events = []
+    text = Path(record["worker_streams"]["stdout_path"]).read_text()
+    for line in text.split("\n")[:-1]:
+        with contextlib.suppress(ValueError):
+            events.append(json.loads(line))
+    return events
+
+
+def _lifecycle_events(record: dict) -> list[tuple[str, str]]:
+    return [(e["state"], e["command_uuid"]) for e in _stream_events(record) if e.get("type") == "command_lifecycle"]
+
+
+def _results(record: dict) -> int:
+    return sum(1 for e in _stream_events(record) if e.get("type") == "result")
+
+
+class _LostControllerCase(lifecycle._WaitingWorkerCase):
+    """Child Controllers lost at a named point, and the helpers every CP5
+    scenario shares. Every worker, anchor and tagged process a record names
+    is reaped at cleanup (``seed``), as is every child Controller."""
+
+    def child(self, lc: lifecycle.Lifecycle, command: str, *args: str, config: dict | None = None,
+              env: dict | None = None) -> subprocess.Popen:
+        fixtures.write_worker_script(lc.script_path, lc.script)
+        lc.runtime.mkdir(parents=True, exist_ok=True)
+        config = {"marker": str(lc.case_dir / "controller-stopped"), **(config or {})}
+        fields = json.dumps(dataclasses_asdict(self.ident), default=str)
+        argv = ["--runtime-dir", str(lc.runtime), "--workflow-manager", str(self.stub_manager),
+                "--claude-binary", str(lifecycle.FAKE_CLAUDE), command, *args, str(lc.root)]
+        stderr = open(lc.case_dir / f"{command}-{len(list(lc.case_dir.glob('*.stderr')))}.stderr", "w+")
+        self.addCleanup(stderr.close)
+        child = subprocess.Popen(
+            [sys.executable, "-c", _LOST_CONTROLLER, str(fixtures.REPO_ROOT), fields, json.dumps(config), *argv],
+            env={**os.environ, "FAKE_CLAUDE_SCRIPT": str(lc.script_path),
+                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file), **(env or {})},
+            stdout=subprocess.DEVNULL, stderr=stderr,
+        )
+        child.stderr_file = stderr  # type: ignore[attr-defined]
+        self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait()))
+        return child
+
+    @staticmethod
+    def child_stderr(child: subprocess.Popen) -> str:
+        child.stderr_file.flush()  # type: ignore[attr-defined]
+        child.stderr_file.seek(0)  # type: ignore[attr-defined]
+        return child.stderr_file.read()  # type: ignore[attr-defined]
+
+    @staticmethod
+    def job_record(lc: lifecycle.Lifecycle, job_id: str | None = None) -> dict | None:
+        """The (newest) job record carrying ``ownership_tag``, or ``job_id``'s."""
+        found = None
+        for path in sorted((lc.runtime / "jobs").glob("*.json")) if (lc.runtime / "jobs").is_dir() else []:
+            with contextlib.suppress(OSError, ValueError):
+                record = json.loads(path.read_text())
+                if job_id is not None:
+                    if record.get("job_id") == job_id:
+                        return record
+                elif "ownership_tag" in record:
+                    found = record
+        return found
+
+    def lose_controller(self, lc: lifecycle.Lifecycle, turns: list, *, until=None, config: dict | None = None,
+                        timeout: float = 60) -> dict:
+        """Run ``step`` in a child Controller whose worker plays ``turns``,
+        and SIGKILL it once ``until(record)`` holds (or once it stopped at
+        its configured point). Returns the record as the loss left it."""
+        lc.add(MILESTONE_IMPLEMENT, {"turns": turns})
+        child = self.child(lc, "step", config=config)
+        marker = lc.case_dir / "controller-stopped"
+
+        def ready() -> bool:
+            if marker.exists():
+                return True
+            record = self.job_record(lc)
+            return record is not None and until is not None and until(record)
+
+        self.assertTrue(process_fixtures.wait_until(lambda: ready() or child.poll() is not None, timeout=timeout),
+                        "the Controller never reached the loss point")
+        self.assertIsNone(child.poll(), f"the Controller ended first: {self.child_stderr(child)}")
+        child.send_signal(signal.SIGKILL)
+        child.wait(timeout=10)
+        return self.job_record(lc)
+
+    @staticmethod
+    def at_state(state: str):
+        return lambda record: (record.get("worker_state") or {}).get("state") == state \
+            and record.get("status") == job.STATUS_LAUNCHED
+
+    def resume(self, lc: lifecycle.Lifecycle, *args: str) -> tuple[lifecycle.Run, list[tuple[float, dict]]]:
+        return self.cli_spied(lc, "resume", *args)
+
+    def assert_reattached_finished(self, lc: lifecycle.Lifecycle, job_id: str, *, processes: int = 1) -> dict:
+        record = self.job_record(lc, job_id)
+        self.assert_finished(record, IMPLEMENTING)
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertFalse(record["worker"]["stream_diagnosis"]["exit_status_known"])
+        self.assertIsNone(record["worker"]["exit_code"])
+        self.assertEqual(self.processes(lc), processes, "resume launched a worker")
+        completed = [e for e in self.events(lc, job_id) if e["event"] == "completed"]
+        self.assertEqual([e.get("reattached") for e in completed], [True])
+        return record
+
+
+def dataclasses_asdict(value) -> dict:
+    import dataclasses
+    return dataclasses.asdict(value)
+
+
+def _verification(release: Path) -> dict:
+    return lifecycle.verification(release.parent / "verification-done", release=release)
+
+
+class ReattachAfterControllerLossTest(_LostControllerCase):
+    """R15 and its variants: the Controller is lost while its job is
+    ``WAITING``, ``DRAINING``, or with its anchor gone too."""
+
+    def test_r15_resume_re_attaches_to_a_waiting_worker_and_reconciles_it(self) -> None:
+        lc = self.seed("r15", IMPLEMENTING)
+        release = lc.case_dir / "release"
+        self.addCleanup(release.touch)
+        record = self.lose_controller(lc, [
+            [_verification(release), lifecycle.SAYS_IT_WILL_CONTINUE],
+            [{"step": "actions", "actions": lc.implement("CP1")}],
+        ], until=self.at_state(WAITING))
+        job_id = record["job_id"]
+        self.assertEqual(job.supervisor_probe(lc.runtime, record), (job.SUPERVISOR_UNATTACHED, []))
+
+        # step and run exit 45 at the lock the anchor holds, naming it and
+        # `resume` (the exit-45 text of plan E).
+        for command in ("step", "run"):
+            with self.subTest(command=command):
+                held = self.cli(lc, command, fail_if_invoked=True)
+                self.assertEqual(held.code, cli.EXIT_WORKER_ACTIVE, held.stderr)
+                self.assertIn(f"Job {job_id}'s stdin anchor (pid {record['worker_anchor']['pid']}) holds the lock",
+                              held.stderr)
+                self.assertIn(f"`workflow-controller resume {lc.root}` re-attaches", held.stderr)
+        # pending_reconciliation_jobs reports the activity.
+        managed_repo = fixtures.build_target_managed_repository(lc.root)
+        [pending] = job.pending_reconciliation_jobs(lc.runtime, managed_repo, self.ident)
+        self.assertIn("held", pending.reason)
+        self.assertIn(f"pid {record['worker_process']['pid']}", pending.reason)
+
+        # A second pending record of the same target, which phase 1 must not
+        # touch: a COMPLETED record with no worker_state.
+        fixture = {key: value for key, value in record.items()
+                   if key not in ("worker_state", "worker_anchor", "worker_process", "ownership_tag",
+                                  "worker_streams")}
+        fixture.update(job_id="fixture-completed", status=job.STATUS_COMPLETED, worker_outcome="FAILURE")
+        runtime_module.write_json(lc.runtime, "jobs/fixture-completed.json", fixture)
+        fixture_path = lc.runtime / "jobs" / "fixture-completed.json"
+        fixture_bytes = fixture_path.read_bytes()
+
+        first = self.child(lc, "resume")
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: job.supervisor_probe(lc.runtime, record)[0] == job.SUPERVISOR_ATTACHED, timeout=30),
+            "the first resume never attached")
+        self.assertEqual(job.supervisor_probe(lc.runtime, record), (job.SUPERVISOR_ATTACHED, [first.pid]))
+        # Mid-supervision: the other record is untouched.
+        self.assertEqual(fixture_path.read_bytes(), fixture_bytes)
+        second = self.cli(lc, "resume")
+        self.assertEqual(second.code, cli.EXIT_WORKER_ACTIVE, second.stderr)
+        self.assertIn(f"held by another Controller (pid {first.pid})", second.stderr)
+        self.assertEqual(fixture_path.read_bytes(), fixture_bytes)
+
+        release.touch()
+        self.assertEqual(first.wait(timeout=60), cli.EXIT_OK, self.child_stderr(first))
+        finished = self.assert_reattached_finished(lc, job_id)
+        self.assertIn(RUNNING, self.history(lc, job_id)[2:])
+        self.assertEqual(self.history(lc, job_id)[-2:], [ENDING, ENDED])
+        self.assertLess(float((lc.case_dir / "verification-done").read_text()),
+                        os.stat(lc.runtime / "jobs" / f"{job_id}.json").st_mtime)
+        self.assertEqual(finished["worker"]["stream_diagnosis"]["turns"], 2)
+        # Reconciled in phase 2 of the same call.
+        self.assertEqual(json.loads(fixture_path.read_text())["status"], job.STATUS_FAILED)
+        self.assertFalse(job.worker.identity_alive(record["worker_anchor"]["pid"],
+                                                   record["worker_anchor"]["start_ticks"]))
+
+    def test_resume_re_attaches_while_draining_and_waits_for_the_orphan(self) -> None:
+        lc = self.seed("r15-draining", IMPLEMENTING)
+        orphan_done = lc.case_dir / "orphan-done"
+        record = self.lose_controller(lc, [
+            [{"step": "bash_bg", "seconds": 0.2, "orphan": "reparent", "orphan_seconds": 4,
+              "orphan_write_file": str(orphan_done)}, lifecycle.SAYS_IT_WILL_CONTINUE],
+            [{"step": "actions", "actions": lc.implement("CP1")}],
+        ], until=self.at_state(DRAINING))
+        self.assertIsNotNone(record["ending_offset"])
+        self.assertFalse(orphan_done.exists())
+        result, writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_reattached_finished(lc, record["job_id"])
+        completed_at = next(t for t, w in writes if w.get("status") == job.STATUS_COMPLETED)
+        self.assertLess(float(orphan_done.read_text()), completed_at)
+
+    def test_with_the_anchor_also_lost_there_is_no_re_attach_and_the_job_fails_closed(self) -> None:
+        for name, first_turn, expected in (
+            ("r15-anchor-unchanged", [], job.STATUS_INTERRUPTED),
+            ("r15-anchor-moved", [{"step": "write", "path": "unrelated.txt", "text": "unrelated\n"},
+                                  {"step": "commit", "message": "an unrelated commit"}], job.STATUS_FAILED),
+        ):
+            with self.subTest(expected=expected):
+                lc = self.seed(name, IMPLEMENTING)
+                release = lc.case_dir / "release"
+                self.addCleanup(release.touch)
+                record = self.lose_controller(lc, [
+                    [*first_turn, _verification(release), lifecycle.SAYS_IT_WILL_CONTINUE],
+                    [{"step": "text", "text": "never reached"}],
+                ], until=self.at_state(WAITING))
+                self.assertTrue(process_fixtures.end_recorded_anchor(record))
+                worker_process = record["worker_process"]
+                self.assertTrue(process_fixtures.wait_until(
+                    lambda: not process_fixtures.group_has_running_member(worker_process["pgid"]), timeout=30))
+                # The stream shows the harness's kill sequence at stdin EOF.
+                self.assertIn("stopped", {e.get("status") for e in _stream_events(record)
+                                          if e.get("subtype") == "task_notification"})
+                result, _writes = self.resume(lc)
+                on_disk = self.job_record(lc, record["job_id"])
+                self.assertEqual(on_disk["status"], expected, result.stderr)
+                if expected == job.STATUS_INTERRUPTED:
+                    self.assertEqual(result.code, cli.EXIT_INTERRUPTED, result.stderr)
+                else:
+                    self.assertEqual(result.code, cli.EXIT_FAIL_CLOSED, result.stderr)
+                    self.assertEqual(on_disk["reconciliation_evidence"]["code"], job.UNRECONCILABLE_JOB_CODE)
+                # No re-attach: nothing classified the stream, no COMPLETED.
+                events = [e["event"] for e in self.events(lc, record["job_id"])]
+                self.assertNotIn("completed", events)
+                self.assertNotIn("worker_ending", events)
+                self.assertNotIn("worker", on_disk)
+
+    def test_a_completed_record_with_a_live_tagged_orphan_is_held(self) -> None:
+        """D7: ``COMPLETED`` is never reconciled while a process its job
+        owns runs."""
+        lc = self.seed("d7", IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}]]})
+        [record] = self.cli(lc, "step").records
+        self.assert_finished(record, IMPLEMENTING)
+        self.rewrite_as(lc, record, job.STATUS_COMPLETED)
+        path = lc.runtime / "jobs" / f"{record['job_id']}.json"
+        before = path.read_bytes()
+        orphan = subprocess.Popen(["sleep", "60"], start_new_session=True,
+                                  env={**os.environ, worker.OWNERSHIP_VAR: f"outer:{record['job_id']}"})
+        self.addCleanup(lambda: orphan.poll() is None and (orphan.kill(), orphan.wait()))
+        held = self.cli(lc, "resume")
+        self.assertEqual(held.code, cli.EXIT_WORKER_ACTIVE, held.stderr + held.stdout)
+        self.assertIn(f"pid {orphan.pid} (sleep 60)", held.stdout)
+        self.assertIn(job.RESUME_OWNED_WORK_ACTIVE, held.stdout)
+        self.assertEqual(path.read_bytes(), before)
+        orphan.kill()
+        orphan.wait()
+        resumed = self.cli(lc, "resume")
+        self.assertEqual(resumed.code, cli.EXIT_OK, resumed.stderr)
+        self.assert_finished(self.job_record(lc, record["job_id"]), IMPLEMENTING)
+
+
+class AbandonWithAnOrphanedAnchorTest(_LostControllerCase):
+    def test_abandon_ends_a_leftover_anchor_and_refuses_while_owned_work_lives(self) -> None:
+        lc = self.seed("abandon-anchor", IMPLEMENTING)
+        release = lc.case_dir / "release"
+        self.addCleanup(release.touch)
+        record = self.lose_controller(lc, [
+            [_verification(release), lifecycle.SAYS_IT_WILL_CONTINUE],
+            [{"step": "text", "text": "never reached"}],
+        ], until=self.at_state(WAITING), config={"anchor": {"ANCHOR_ORPHAN_SECONDS": 600}})
+        job_id, worker_process, anchor = record["job_id"], record["worker_process"], record["worker_anchor"]
+        # The worker itself is gone; its background verification is not.
+        os.kill(worker_process["pid"], signal.SIGKILL)
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: worker.identity_alive(worker_process["pid"], worker_process["start_ticks"]) is False))
+        members: list[int] = []
+
+        def group_scanned() -> bool:
+            members[:] = worker.process_test(worker_process["pid"], worker_process["pgid"],
+                                             worker_process["start_ticks"]).members
+            return bool(members)
+
+        self.assertTrue(process_fixtures.wait_until(group_scanned), "the verification left the group")
+        refused = self.cli(lc, "resume", "--abandon", job_id)
+        self.assertEqual(refused.code, cli.EXIT_WORKER_ACTIVE, refused.stderr)
+        for pid in members:
+            self.assertIn(str(pid), refused.stderr)
+        self.assertEqual(self.job_record(lc, job_id)["status"], job.STATUS_LAUNCHED)
+        self.assertTrue(worker.identity_alive(anchor["pid"], anchor["start_ticks"]))
+
+        process_fixtures.kill_group(worker_process["pgid"])
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: not process_fixtures.group_has_running_member(worker_process["pgid"])))
+        self.assertTrue(worker.identity_alive(anchor["pid"], anchor["start_ticks"]))
+        abandoned = self.cli(lc, "resume", "--abandon", job_id)
+        self.assertEqual(abandoned.code, cli.EXIT_OK, abandoned.stderr)
+        on_disk = self.job_record(lc, job_id)
+        self.assertEqual(on_disk["status"], job.STATUS_FAILED)
+        self.assertEqual(on_disk["reconciliation_evidence"]["code"], job.OPERATOR_ABANDONED_CODE)
+        self.assertFalse(worker.identity_alive(anchor["pid"], anchor["start_ticks"]))
+
+
+def _fire_turn_seen(record: dict) -> bool:
+    """The fire's ``started(X)`` and its turn's ``result`` are in the
+    stream, and ``completed(X)`` is not."""
+    events = _stream_events(record)
+    started = [i for i, e in enumerate(events) if e.get("type") == "command_lifecycle" and e["state"] == "started"]
+    if not started:
+        return False
+    uuid = events[started[-1]]["command_uuid"]
+    after = events[started[-1] + 1:]
+    return any(e.get("type") == "result" for e in after) and not any(
+        e.get("type") == "command_lifecycle" and e["command_uuid"] == uuid and e["state"] == "completed" for e in after)
+
+
+def _bracket_open_before_turn(record: dict) -> bool:
+    events = _stream_events(record)
+    return bool(events) and events[-1].get("type") == "command_lifecycle" and events[-1]["state"] == "started"
+
+
+def _bracket_closed(record: dict) -> bool:
+    return any(state == "completed" for state, _uuid in _lifecycle_events(record))
+
+
+class IncompleteLifecyclePairTest(_LostControllerCase):
+    """Controller loss with a ``command_lifecycle`` pair incomplete
+    (amendment 0): replay reopens the bracket, and the re-attached
+    supervisor resolves it -- or times it -- by its own clock."""
+
+    def _fire(self, lc: lifecycle.Lifecycle, *faults: dict, stop: bool = True) -> list:
+        fire_turn = [{"step": "actions", "actions": lc.implement("CP1")}]
+        if stop:
+            fire_turn.append({"step": "wakeup_stop"})
+        return [[*({"step": "lifecycle_fault", **fault} for fault in faults),
+                 {"step": "wakeup", "delay": 1, "fire_turn": fire_turn},
+                 {"step": "text", "text": "I will continue when the wakeup fires."}]]
+
+    def _first_resume_flush(self, lc: lifecycle.Lifecycle, job_id: str, lost: dict) -> dict:
+        return next(e for e in self.events(lc, job_id) if e["seq"] > lost["event_seq"])
+
+    def test_a_bracket_open_at_re_attach_is_completed_by_the_live_stream(self) -> None:
+        for name, fault, until in (
+            ("pair-before-turn", {"kind": "delay_turn", "seconds": 4}, _bracket_open_before_turn),
+            ("pair-after-result", {"kind": "delay_completed", "seconds": 5}, _fire_turn_seen),
+        ):
+            with self.subTest(fault=fault["kind"]):
+                lc = self.seed(name, IMPLEMENTING)
+                lost = self.lose_controller(lc, self._fire(lc, fault), until=until)
+                [(state, uuid)] = _lifecycle_events(lost)
+                self.assertEqual(state, "started")
+                result, _writes = self.resume(lc)
+                self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+                record = self.assert_reattached_finished(lc, lost["job_id"])
+                flush = self._first_resume_flush(lc, lost["job_id"], lost)
+                self.assertEqual(flush["command_lifecycles"], [uuid], flush)
+                [bracket] = record["worker"]["stream_diagnosis"]["command_lifecycles"]
+                self.assertEqual((bracket["command_uuid"], bracket["state"]), (uuid, "closed_regular"))
+
+    def test_an_unterminated_bracket_is_declared_by_the_re_attached_supervisor(self) -> None:
+        lc = self.seed("pair-omitted", IMPLEMENTING)
+        lost = self.lose_controller(lc, self._fire(lc, {"kind": "omit_completed"}, stop=False), until=_fire_turn_seen)
+        reattached_at = time.time()
+        with unittest.mock.patch.object(worker, "COMMAND_LIFECYCLE_GRACE_SECONDS", 1):
+            result, writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)  # resume reports; FAILED is on disk
+        record = self.job_record(lc, lost["job_id"])
+        [(_state, uuid)] = _lifecycle_events(lost)
+        self.assertEqual(record["command_lifecycle_overdue_command_uuid"], uuid)
+        self.assertIsNotNone(record["command_lifecycle_overdue_declared_at"])
+        self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_unterminated")
+        ending_at = next(t for t, w in writes if (w.get("worker_state") or {}).get("state") == ENDING)
+        self.assertGreaterEqual(ending_at - reattached_at, 1.0, "the stall timer was carried, not restarted")
+
+    def test_a_bracket_opened_and_closed_while_unattached_is_judged_by_replay(self) -> None:
+        for name, faults, expected in (
+            ("pair-unattached-regular", (), None),
+            ("pair-unattached-duplicate", ({"kind": "duplicate_started"},), "command_lifecycle_irregular"),
+        ):
+            with self.subTest(expected=expected):
+                lc = self.seed(name, IMPLEMENTING)
+                lost = self.lose_controller(lc, self._fire(lc, *faults), until=self.at_state(WAITING))
+                self.assertFalse(_lifecycle_events(lost))
+                self.assertTrue(process_fixtures.wait_until(lambda: _bracket_closed(lost), timeout=30))
+                result, _writes = self.resume(lc)
+                if expected is None:
+                    self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+                    self.assert_reattached_finished(lc, lost["job_id"])
+                else:
+                    self.assertEqual(result.code, cli.EXIT_OK, result.stderr)  # resume reports; FAILED is on disk
+                    self.assert_worker_outcome_failure(self.job_record(lc, lost["job_id"]), "AMBIGUOUS", expected)
+
+    def test_a_persisted_bracket_declaration_classifies_as_the_live_run_would(self) -> None:
+        lc = self.seed("pair-declared", IMPLEMENTING)
+        lost = self.lose_controller(lc, self._fire(lc, {"kind": "omit_completed"}, stop=False), config={
+            "worker": {"COMMAND_LIFECYCLE_GRACE_SECONDS": 1}, "hang_after_state": ENDING})
+        self.assertEqual(lost["worker_state"]["state"], ENDING)
+        self.assertIsNotNone(lost["command_lifecycle_overdue_declared_at"])
+        self.assertTrue(worker.identity_alive(lost["worker_process"]["pid"], lost["worker_process"]["start_ticks"]))
+        result, _writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)  # resume reports; FAILED is on disk
+        record = self.job_record(lc, lost["job_id"])
+        diagnosis = self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_unterminated")
+        self.assertEqual(record["command_lifecycle_overdue_declared_at"], lost["command_lifecycle_overdue_declared_at"])
+        self.assertFalse(diagnosis["exit_status_known"])
+
+
+class SettleWindowLossTest(_LostControllerCase):
+    """Controller loss while a matched wakeup settles (round 9's I1), with
+    ``WAKEUP_SETTLE_SECONDS`` patched to 3 s in both Controllers."""
+
+    SETTLE = {"worker": {"WAKEUP_SETTLE_SECONDS": 3}}
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = unittest.mock.patch.object(worker, "WAKEUP_SETTLE_SECONDS", 3)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def fire_matched(record: dict) -> bool:
+        waiting_on = (record.get("worker_state") or {}).get("waiting_on") or {}
+        return record.get("status") == job.STATUS_LAUNCHED and any(
+            w.get("state") == "fire_matched" for w in waiting_on.get("wakeups") or [])
+
+    def test_the_settle_timer_restarts_at_re_attach(self) -> None:
+        lc = self.seed("settle-restart", IMPLEMENTING)
+        matched_at: list[float] = []
+
+        def two_seconds_in(record: dict) -> bool:
+            if not self.fire_matched(record):
+                return False
+            matched_at.append(time.time()) if not matched_at else None
+            return time.time() - matched_at[0] >= 2
+
+        lost = self.lose_controller(lc, [[
+            {"step": "wakeup", "delay": 1, "fire_turn": [{"step": "actions", "actions": lc.implement("CP1")}]},
+            {"step": "text", "text": "I will continue when the wakeup fires."}]],
+            until=two_seconds_in, config=self.SETTLE)
+        self.assertTrue(self.fire_matched(lost))
+        reattached_at = time.time()
+        result, writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_reattached_finished(lc, lost["job_id"])
+        first = next(w for _t, w in writes if w.get("status") == job.STATUS_LAUNCHED)
+        [wakeup] = first["worker_state"]["waiting_on"]["wakeups"]
+        self.assertEqual(wakeup["state"], "fire_matched")
+        ending_at = next(t for t, w in writes if (w.get("worker_state") or {}).get("state") == ENDING)
+        self.assertGreaterEqual(ending_at - reattached_at, 3.0, "the settle timer was carried, not restarted")
+
+    def test_a_wrong_match_whose_real_fire_follows_the_re_attach_fails_closed(self) -> None:
+        lc = self.seed("settle-wrong-match", IMPLEMENTING)
+        turns = lifecycle.WrongWakeupMatchTest._turns([{"step": "actions", "actions": lc.implement("CP1")}],
+                                                      [{"step": "text", "text": "task done"}])
+        lost = self.lose_controller(lc, turns, until=self.fire_matched, config=self.SETTLE)
+        self.assertEqual(len(_lifecycle_events(lost)), 2, "the real fire came before the loss")
+        result, _writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)  # resume reports; FAILED is on disk
+        record = self.job_record(lc, lost["job_id"])
+        diagnosis = self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_irregular")
+        self.assertEqual([a["kind"] for a in diagnosis["command_lifecycle_anomalies"]], ["unmatched_bracket"])
+
+    def test_a_persisted_settlement_is_load_bearing(self) -> None:
+        lc = self.seed("settle-persisted", IMPLEMENTING)
+        lost = self.lose_controller(lc, [[
+            {"step": "wakeup", "delay": 1, "fire_turn": [{"step": "actions", "actions": lc.implement("CP1")}]},
+            {"step": "text", "text": "I will continue when the wakeup fires."}]],
+            config={"worker": {"WAKEUP_SETTLE_SECONDS": 1}, "hang_after_state": ENDING})
+        self.assertEqual(lost["worker_state"]["state"], ENDING)
+        self.assertEqual(len(lost["settled_wakeups"]), 1)
+        result, _writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        record = self.assert_reattached_finished(lc, lost["job_id"])
+        # The same stream without the fact is row 7: the fact is load-bearing.
+        data = Path(record["worker_streams"]["stdout_path"]).read_bytes()
+        facts = worker.worker_stream.SupervisorFacts(ending_offset=record["ending_offset"],
+                                                     settled_wakeups=tuple(record["settled_wakeups"]))
+        with_fact = worker.worker_stream.classify(data, mode="streaming", facts=facts, returncode=None)
+        without = worker.worker_stream.classify(
+            data, mode="streaming", facts=worker.worker_stream.SupervisorFacts(ending_offset=record["ending_offset"]),
+            returncode=None)
+        self.assertEqual(with_fact[0], "SUCCESS")
+        self.assertEqual((without[0], without[2]["reason"]), ("AMBIGUOUS", "owned_work_killed_at_exit"))
+
+    def test_settled_wakeups_without_ending_offset_is_stale(self) -> None:
+        lc = self.seed("settle-invalid", IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}]]})
+        [record] = self.cli(lc, "step").records
+        broken = self.rewrite_as(lc, record, job.STATUS_LAUNCHED)
+        broken = {**broken, "worker_state": {**broken["worker_state"], "state": WAITING}, "settled_wakeups": ["t1"]}
+        broken.pop("ending_offset", None)
+        runtime_module.write_json(lc.runtime, f"jobs/{record['job_id']}.json", broken)
+        result = self.cli(lc, "resume")
+        self.assertEqual(result.code, cli.EXIT_FAIL_CLOSED, result.stderr)
+        self.assertIn("settled_wakeups without ending_offset", result.stderr)
+
+
+class EndedSessionLossTest(_LostControllerCase):
+    """A Controller lost after it ended the session: after the ``ENDING``
+    flush, before the worker exits; and after ``ENDED`` (anchor ended),
+    before the ``COMPLETED`` flush (round 1's O2)."""
+
+    def test_lost_after_ending_or_ended_the_stream_is_classified_not_failed(self) -> None:
+        for state in (ENDING, ENDED):
+            with self.subTest(state=state):
+                lc = self.seed(f"lost-at-{state.lower()}", IMPLEMENTING)
+                lost = self.lose_controller(lc, [[{"step": "actions", "actions": lc.implement("CP1")}]],
+                                            config={"hang_after_state": state})
+                self.assertEqual(lost["worker_state"]["state"], state)
+                self.assertIsNotNone(lost["ending_offset"])
+                result, _writes = self.resume(lc)
+                self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+                self.assert_reattached_finished(lc, lost["job_id"])
+
+
+class DrainDetachedReattachTest(_LostControllerCase):
+    """A drain-detached job (CP4) and ``resume``: re-attached at
+    ``DRAINING``, it detaches again after the bound while the escapee runs,
+    and reconciles once it is gone. Then an untagged escapee owned only by
+    adoption, recorded at the detach, which outlives the anchor (round 2's
+    O3, round 3's I1)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 1)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _detached(self, name: str, escapee: dict) -> tuple[lifecycle.Lifecycle, dict, dict]:
+        lc = self.seed(name, IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}, escapee]]})
+        result = self.cli(lc, "step")
+        self.assertEqual(result.code, cli.EXIT_WORKER_ACTIVE, result.stderr)
+        [record] = result.records
+        self.assertEqual((record["status"], record["worker_state"]["state"]), (job.STATUS_LAUNCHED, DRAINING))
+        [entry] = record["worker_state"]["owned_processes"]
+        self.addCleanup(lambda: worker.identity_alive(entry["pid"], entry["start_ticks"])
+                        and os.kill(entry["pid"], signal.SIGKILL))
+        return lc, record, entry
+
+    def _end(self, entry: dict) -> None:
+        os.kill(entry["pid"], signal.SIGKILL)
+        with contextlib.suppress(ChildProcessError):
+            os.waitpid(entry["pid"], 0)  # adopted by this (test) Controller: reap it
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: worker.identity_alive(entry["pid"], entry["start_ticks"]) is False))
+
+    def test_resume_re_attaches_at_draining_detaches_again_then_reconciles(self) -> None:
+        lc, record, entry = self._detached("detached-tagged", {
+            "step": "bash_bg", "seconds": 0.2, "orphan": "setsid", "orphan_seconds": 120})
+        self.assertEqual(entry["source"], "tag")
+        again, _writes = self.resume(lc)
+        self.assertEqual(again.code, cli.EXIT_WORKER_ACTIVE, again.stderr)
+        self.assertIn(str(entry["pid"]), again.stderr)
+        on_disk = self.job_record(lc, record["job_id"])
+        self.assertEqual((on_disk["status"], on_disk["worker_state"]["state"]), (job.STATUS_LAUNCHED, DRAINING))
+        self.assertGreater(on_disk["event_seq"], record["event_seq"])
+        self.assertEqual([e["event"] for e in self.events(lc, record["job_id"])].count("worker_drain_detached"), 2)
+        self._end(entry)
+        result, _writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_reattached_finished(lc, record["job_id"])
+
+    def test_a_recorded_untagged_escapee_holds_the_job_after_the_anchor_ends(self) -> None:
+        with unittest.mock.patch.object(worker.anchor_module, "ANCHOR_ORPHAN_SECONDS", 1), \
+                unittest.mock.patch.object(worker.anchor_module, "ANCHOR_POLL_SECONDS", 0.2):
+            lc, record, entry = self._detached("detached-untagged", {
+                "step": "bash_bg", "command": "(env -i setsid sleep 120 </dev/null >/dev/null 2>&1 &); sleep 0.2"})
+        self.assertEqual(entry["source"], "adopted")
+        anchor = record["worker_anchor"]
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: worker.identity_alive(anchor["pid"], anchor["start_ticks"]) is False, timeout=30),
+            "the anchor never ended itself")
+        self.assertTrue(process_fixtures.wait_until(lambda: lock.probe_lifecycle_lock(lc.root) != lock.HELD))
+        # step: the pending, held job, naming the escapee.
+        held = self.cli(lc, "step", fail_if_invoked=True)
+        self.assertEqual(held.code, cli.EXIT_FAIL_CLOSED, held.stderr)
+        self.assertIn(f"pid {entry['pid']}", held.stderr)
+        # resume re-attaches, stays DRAINING and detaches again.
+        detached_at = record["drain_detached_at"]
+        again, _writes = self.resume(lc)
+        self.assertEqual(again.code, cli.EXIT_WORKER_ACTIVE, again.stderr)
+        self.assertIn(str(entry["pid"]), again.stderr)
+        on_disk = self.job_record(lc, record["job_id"])
+        self.assertEqual((on_disk["status"], on_disk["worker_state"]["state"]), (job.STATUS_LAUNCHED, DRAINING))
+        self.assertGreaterEqual(on_disk["drain_detached_at"], detached_at)
+        self.assertGreater(on_disk["event_seq"], record["event_seq"])
+        events = [e["event"] for e in self.events(lc, record["job_id"])]
+        self.assertNotIn("worker_ended", events)
+        self.assertNotIn("completed", events)
+        self._end(entry)
+        result, _writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_reattached_finished(lc, record["job_id"])
+
+
+class InterruptWhileWaitingTest(_LostControllerCase):
+    def test_ctrl_c_during_waiting_leaves_the_worker_and_the_anchor_running(self) -> None:
+        lc = self.seed("ctrl-c", IMPLEMENTING)
+        release = lc.case_dir / "release"
+        self.addCleanup(release.touch)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[_verification(release), lifecycle.SAYS_IT_WILL_CONTINUE],
+                                               [{"step": "text", "text": "done"}]]})
+        child = self.child(lc, "step")
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: (self.job_record(lc) or {}).get("worker_state", {}).get("state") == WAITING, timeout=30))
+        record = self.job_record(lc)
+        child.send_signal(signal.SIGINT)
+        # The interrupt propagates unchanged (plan C, "Interruption").
+        self.assertEqual(child.wait(timeout=30), -signal.SIGINT)
+        stderr = self.child_stderr(child)
+        worker_process, anchor = record["worker_process"], record["worker_anchor"]
+        self.assertIn(f"worker (pid {worker_process['pid']}", stderr)
+        self.assertIn(f"stdin anchor (pid {anchor['pid']})", stderr)
+        self.assertIn(f"workflow-controller resume {lc.root}", stderr)
+        self.assertTrue(worker.identity_alive(worker_process["pid"], worker_process["start_ticks"]))
+        self.assertTrue(worker.identity_alive(anchor["pid"], anchor["start_ticks"]))
+        [run] = [json.loads(p.read_text()) for p in (lc.runtime / "runs").glob("*.json")]
+        self.assertEqual(run["state"], job.RUN_STATE_INTERRUPTED)
+        self.assertEqual(self.job_record(lc, record["job_id"])["status"], job.STATUS_LAUNCHED)
+
+
+class SupervisorLockScopeTest(_LostControllerCase):
+    """Round 2's I1: a ``resume`` while ``execute_step`` still makes writes
+    to its record -- between ``ENDED`` and the terminal flush, and between
+    a ``DrainDetached`` return and its record write -- exits 45 and leaves
+    the record byte-identical."""
+
+    def _step_in_thread(self, lc: lifecycle.Lifecycle) -> tuple[threading.Thread, dict]:
+        fixtures.write_worker_script(lc.script_path, lc.script)
+        outcome: dict = {}
+        managed_repo = fixtures.build_target_managed_repository(lc.root)
+
+        def run() -> None:
+            try:
+                outcome["record"] = job.execute_step(managed_repo, identity=self.ident, runtime=lc.runtime,
+                                                     claude_bin=str(lifecycle.FAKE_CLAUDE), timeout=60)
+            except Exception as exc:  # noqa: BLE001 -- asserted by the test
+                outcome["error"] = exc
+
+        env = unittest.mock.patch.dict(os.environ, {"FAKE_CLAUDE_SCRIPT": str(lc.script_path),
+                                                    "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file)})
+        env.start()
+        self.addCleanup(env.stop)
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        return thread, outcome
+
+    def _assert_resume_refused(self, lc: lifecycle.Lifecycle, record: dict) -> None:
+        path = lc.runtime / "jobs" / f"{record['job_id']}.json"
+        before = path.read_bytes()
+        managed_repo = fixtures.build_target_managed_repository(lc.root)
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            job.resume(managed_repo, identity=self.ident, runtime=lc.runtime)
+        self.assertIn(f"held by another Controller (pid {os.getpid()})", ctx.exception.message)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_between_ended_and_the_terminal_flush(self) -> None:
+        lc = self.seed("scope-verification", IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}]]})
+        entered, release = threading.Event(), threading.Event()
+        real = job._row_clauses_failure
+
+        def blocking(*args, **kwargs):
+            entered.set()
+            release.wait(60)
+            return real(*args, **kwargs)
+
+        with unittest.mock.patch.object(job, "_row_clauses_failure", blocking):
+            thread, outcome = self._step_in_thread(lc)
+            self.addCleanup(release.set)
+            self.assertTrue(entered.wait(60), "verification never started")
+            record = self.job_record(lc)
+            self.assertEqual((record["status"], record["worker_state"]["state"]), (job.STATUS_COMPLETED, ENDED))
+            self._assert_resume_refused(lc, record)
+            release.set()
+            thread.join(60)
+        self.assertEqual(outcome["record"]["status"], job.STATUS_FINISHED, outcome)
+
+    def test_between_a_drain_detach_and_its_record_write(self) -> None:
+        lc = self.seed("scope-detach", IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")},
+                                                {"step": "bash_bg", "seconds": 0.2, "orphan": "setsid",
+                                                 "orphan_seconds": 120}]]})
+        entered, release = threading.Event(), threading.Event()
+        real = job._persist
+
+        def blocking(runtime_root, job_id, record, *, event, details=None):
+            if event == "worker_drain_detached":
+                entered.set()
+                release.wait(60)
+            return real(runtime_root, job_id, record, event=event, details=details)
+
+        with unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 1), \
+                unittest.mock.patch.object(job, "_persist", blocking):
+            thread, outcome = self._step_in_thread(lc)
+            self.addCleanup(release.set)
+            self.assertTrue(entered.wait(60), "the drain never detached")
+            record = self.job_record(lc)
+            self._assert_resume_refused(lc, record)
+            release.set()
+            thread.join(60)
+        self.assertIsInstance(outcome.get("error"), job.OwnedWorkDetachedError, outcome)
+        # After the write and the release, a resume re-attaches at DRAINING.
+        record = self.job_record(lc, record["job_id"])
+        self.assertEqual((record["status"], record["worker_state"]["state"]), (job.STATUS_LAUNCHED, DRAINING))
+        self.assertIn("drain_detached_at", record)
+        [entry] = record["worker_state"]["owned_processes"]
+        os.kill(entry["pid"], signal.SIGKILL)
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: worker.identity_alive(entry["pid"], entry["start_ticks"]) is False))
+        result, _writes = self.resume(lc)
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_reattached_finished(lc, record["job_id"])
+
+
+class StartingRecordTest(_LostControllerCase):
+    """Round 2's O2: a Controller lost between spawn and the ``on_spawn``
+    flush leaves a ``STARTING`` record with no recorded worker."""
+
+    def test_a_starting_record_names_the_tagged_worker_then_fails_closed(self) -> None:
+        lc = self.seed("starting", IMPLEMENTING)
+        lost = self.lose_controller(lc, [[{"step": "text", "text": "hello"}]], config={
+            "hang_on_spawn": True, "anchor": {"ANCHOR_ORPHAN_SECONDS": 1, "ANCHOR_POLL_SECONDS": 0.2}})
+        self.assertEqual(lost["worker_state"]["state"], worker.STARTING)
+        self.assertNotIn("worker_process", lost)
+        self.assertNotIn("worker_anchor", lost)
+        self.assertTrue(process_fixtures.wait_until(lambda: self.processes(lc) == 1))
+        worker_pid = int(lc.processes_file.read_text().split()[0])
+        held = self.cli(lc, "resume")
+        self.assertEqual(held.code, cli.EXIT_WORKER_ACTIVE, held.stderr)
+        self.assertIn(f"pid {worker_pid}", held.stderr)
+        self.assertIn(f"kill {worker_pid}", held.stderr)
+        self.assertEqual(self.job_record(lc, lost["job_id"])["status"], job.STATUS_LAUNCHED)
+
+        os.kill(worker_pid, signal.SIGKILL)
+        self.assertTrue(process_fixtures.wait_until(lambda: lock.probe_lifecycle_lock(lc.root) != lock.HELD,
+                                                    timeout=30), "the anchor never ended itself")
+        result = self.cli(lc, "resume")
+        self.assertEqual(result.code, cli.EXIT_INTERRUPTED, result.stderr)
+        self.assertEqual(self.job_record(lc, lost["job_id"])["status"], job.STATUS_INTERRUPTED)
+
+
+class SupervisorProbeTest(_LostControllerCase):
+    """Round 3's O1: the anchor's momentary hold of the supervisor lock
+    (its orphan-lifetime check) never reads as an attached Controller, and
+    a ``resume`` racing it gets the lock through the retried acquisition."""
+
+    _HOLDER = ("import fcntl, os, sys, time; fd = os.open(sys.argv[1], os.O_RDONLY); "
+               "fcntl.flock(fd, fcntl.LOCK_EX); open(sys.argv[2], 'w').close(); time.sleep(float(sys.argv[3]))")
+
+    def _holder(self, lock_path: Path, seconds: float) -> subprocess.Popen:
+        ready = lock_path.parent / f"held-{seconds}"
+        holder = subprocess.Popen([sys.executable, "-c", self._HOLDER, str(lock_path), str(ready), str(seconds)])
+        self.addCleanup(lambda: holder.poll() is None and (holder.kill(), holder.wait()))
+        self.assertTrue(process_fixtures.wait_until(ready.exists))
+        return holder
+
+    def test_the_recorded_anchor_holding_the_lock_reads_unattached(self) -> None:
+        runtime_root = self.tmp_root / "probe-runtime"
+        fd = runtime_module.open_lock_file(runtime_root, job.supervisor_lock_rel_path("j1"))
+        os.close(fd)
+        lock_path = runtime_root / job.supervisor_lock_rel_path("j1")
+        holder = self._holder(lock_path, 30)
+        identity = worker.capture_worker_process(holder.pid).to_dict()
+        as_anchor = {"job_id": "j1", "worker_anchor": identity}
+        self.assertEqual(job.supervisor_probe(runtime_root, as_anchor), (job.SUPERVISOR_UNATTACHED, []))
+        other = {"job_id": "j1", "worker_anchor": {**identity, "pid": holder.pid + 100000}}
+        self.assertEqual(job.supervisor_probe(runtime_root, other), (job.SUPERVISOR_ATTACHED, [holder.pid]))
+        holder.kill()
+        holder.wait()
+        self.assertEqual(job.supervisor_probe(runtime_root, as_anchor), (job.SUPERVISOR_UNATTACHED, []))
+
+    def test_an_acquisition_racing_the_momentary_hold_retries_and_succeeds(self) -> None:
+        runtime_root = self.tmp_root / "race-runtime"
+        fd = runtime_module.open_lock_file(runtime_root, job.supervisor_lock_rel_path("j1"))
+        os.close(fd)
+        self._holder(runtime_root / job.supervisor_lock_rel_path("j1"), 0.3)
+        with job._supervisor_lock(runtime_root, "j1", nothing_done="nothing was reconciled") as path:
+            self.assertEqual(path, runtime_root / job.supervisor_lock_rel_path("j1"))
+
+    def test_a_record_without_worker_state_takes_today_s_paths(self) -> None:
+        """I9: phase 1 never considers a 1.2.x-shape record -- no supervisor
+        lock is taken -- and it is held on its recorded worker as before."""
+        lc = self.seed("legacy", IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}]]})
+        [record] = self.cli(lc, "step").records
+        legacy = {key: value for key, value in self.rewrite_as(lc, record, job.STATUS_LAUNCHED).items()
+                  if key not in ("worker_state", "worker_anchor", "ownership_tag")}
+        sleeper = process_fixtures.spawn_sleeper(self)
+        legacy["worker_process"] = process_fixtures.worker_process_dict(sleeper.pid)
+        runtime_module.write_json(lc.runtime, f"jobs/{record['job_id']}.json", legacy)
+        lock_file = lc.runtime / job.supervisor_lock_rel_path(record["job_id"])
+        lock_file.unlink()
+        held = self.cli(lc, "resume")
+        self.assertEqual(held.code, cli.EXIT_WORKER_ACTIVE, held.stderr)
+        self.assertIn(job.RESUME_WORKER_ACTIVE, held.stdout)
+        self.assertFalse(lock_file.exists(), "phase 1 took a legacy record's supervisor lock")
+
+
+def _stream_snapshot(stream: worker.worker_stream.WorkerStream) -> tuple:
+    """Everything a supervisor decides from: turns, tasks, wakeups (with due
+    times and resolutions), brackets (with their turns and anomalies)."""
+    return (
+        stream.offset, stream.turn_open, [(t.open_offset, t.open_time, t.close_offset) for t in stream.turns],
+        sorted(stream.open_tasks()),
+        sorted((w.tool_use_id, w.state, w.due, w.due_source, w.matched_by, w.settled_by)
+               for w in stream.wakeups.values()),
+        [(b.command_uuid, b.state, tuple(b.turns_opened), tuple(b.anomalies), b.matched_wakeup, b.provisional)
+         for b in stream.brackets],
+        [dict(a) for a in stream.anomalies], stream.quiescent(), stream.has_owned_work(),
+    )
+
+
+class ReplayDeterminismTest(unittest.TestCase):
+    """Plan E, step 2: the state a re-attaching supervisor rebuilds by
+    replaying the stream (``worker.replay_stream``) from any line boundary
+    is the state live supervision reached there, and re-attaching there and
+    consuming the rest reaches the whole stream's state. R14's two streams
+    (a background task; a wakeup with its harness-stated due time) come from
+    a real supervised launch of the fake; P5's fixture is replayed as
+    captured."""
+
+    def _live_stream(self, turns: list) -> bytes:
+        with TemporaryDirectory(prefix="controller-replay-") as tmp:
+            stdout, stderr = Path(tmp) / "worker.stdout", Path(tmp) / "worker.stderr"
+            stdout.touch()
+            stderr.touch()
+            with unittest.mock.patch.dict(os.environ, {"FAKE_CLAUDE_TURNS": json.dumps(turns)}):
+                result = worker.launch("/milestone-implement wi-1", cwd=tmp, permission_mode="bypassPermissions",
+                                       timeout=60, stdout_path=stdout, stderr_path=stderr,
+                                       claude_bin=str(FAKE_CLAUDE))
+            self.assertEqual(result.outcome, "SUCCESS", result.stream_diagnosis)
+            return stdout.read_bytes()
+
+    def _assert_replay_matches_live(self, data: bytes) -> list[tuple[int, worker.worker_stream.WorkerStream]]:
+        whole = worker.worker_stream.read_stream(data)
+        live = worker.worker_stream.WorkerStream()
+        points: list[tuple[int, worker.worker_stream.WorkerStream]] = []
+        end = 0
+        for line in data.split(b"\n")[:-1]:
+            end += len(line) + 1
+            live.feed(line + b"\n")
+            replayed = worker.replay_stream(data[:end])
+            self.assertEqual(_stream_snapshot(replayed), _stream_snapshot(live), f"at byte {end}")
+            # A Controller lost mid-line: the partial line waits for the rest.
+            half = end + max(1, len(data[end:].split(b"\n")[0]) // 2) if end < len(data) else end
+            self.assertEqual(_stream_snapshot(worker.replay_stream(data[:half])), _stream_snapshot(live))
+            points.append((end, replayed))
+            reattached = worker.replay_stream(data[:end])
+            reattached.feed(data[end:])
+            self.assertEqual(_stream_snapshot(reattached), _stream_snapshot(whole), f"re-attached at byte {end}")
+        return points
+
+    def test_r14_task_stream(self) -> None:
+        data = self._live_stream([[{"step": "bash_bg", "id": "suite", "seconds": 1}, {"step": "text", "text": "wait"}],
+                                  [{"step": "text", "text": "done"}]])
+        self._assert_replay_matches_live(data)
+
+    def test_r14_wakeup_stream_with_a_pending_wakeup_and_its_bracket(self) -> None:
+        data = self._live_stream([[{"step": "wakeup", "delay": 1, "fire_turn": [{"step": "wakeup_stop"}]},
+                                   {"step": "text", "text": "I will continue when the wakeup fires."}]])
+        points = self._assert_replay_matches_live(data)
+        events = [json.loads(line) for line in data.split(b"\n")[:-1]]
+        started = next(i for i, e in enumerate(events) if e.get("type") == "command_lifecycle" and e["state"] == "started")
+        completed = next(i for i, e in enumerate(events)
+                         if e.get("type") == "command_lifecycle" and e["state"] == "completed")
+        fire_result = max(i for i, e in enumerate(events[:completed]) if e.get("type") == "result")
+        uuid = events[started]["command_uuid"]
+        whole = worker.worker_stream.read_stream(data)
+        [wakeup] = whole.wakeups.values()
+        self.assertEqual(wakeup.due_source, "harness_stated")
+        for index in (started, fire_result):
+            with self.subTest(after=events[index]["type"]):
+                _end, replayed = points[index]
+                [bracket] = replayed.brackets
+                self.assertEqual((bracket.command_uuid, bracket.state), (uuid, worker.worker_stream.OPEN))
+                self.assertIsNone(bracket.matched_wakeup)
+                self.assertFalse(replayed.turn_open)
+                self.assertTrue(replayed.has_owned_work())  # WAITING, never quiescent
+                [replayed_wakeup] = replayed.wakeups.values()
+                self.assertEqual(replayed_wakeup.due, wakeup.due)
+        _end, resolved = points[completed]
+        self.assertEqual(resolved.brackets[0].matched_wakeup, wakeup.tool_use_id)
+        self.assertEqual(_stream_snapshot(resolved)[4], _stream_snapshot(whole)[4])
+
+    def test_the_p5_fixture_replays_to_the_same_bracket_states(self) -> None:
+        data = (Path(__file__).resolve().parent / "harness_contract" / "p5_p11_wakeup_fires.jsonl").read_bytes()
+        self._assert_replay_matches_live(data)

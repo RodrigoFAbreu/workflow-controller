@@ -2269,6 +2269,98 @@ def _proc_cmdline(pid: int) -> str | None:
         return None
 
 
+@_LIVE
+class LiveHarnessContractProbeTest(unittest.TestCase):
+    """`workflow-controller-worker-lifecycle-ownership` CP1: the opt-in live
+    contract probe. It re-runs P3-P6 and P8-P11 against the installed
+    ``claude`` with ``tests/harness_contract/capture.py``'s own probe
+    definitions and argv (haiku, the production argv of plan A), writing the
+    captures to a scratch directory -- never over the committed fixtures --
+    and checks the same harness sequences and the recogniser's evidence.
+    CP8 re-runs both P12 probes through it as the final re-measurement.
+
+    A bracket fact that does not hold here (a fire not enclosed in exactly
+    one ``started``/``completed`` pair with one ``command_uuid``, a pair
+    around a non-fire turn, or a P12 count other than 0 and 1) is the plan's
+    amendment trigger, not an implementation-time judgement."""
+
+    STREAMING_PROBES = ("p3_streaming_background_bash", "p4_monitor", "p5_p11_wakeup_fires",
+                        "p6_p10_slash_command", "p8_task_stop", "p8_monitor_timeout", "p9_wakeup_cancel",
+                        "p11_subagent_handback")
+    P12_PROBES = ("p12_stop_inside_fire_single", "p12_stop_inside_fire_nested")
+
+    def _capture(self, names) -> dict[str, list[dict]]:
+        from concurrent.futures import ThreadPoolExecutor
+
+        self.assertIsNotNone(CLAUDE_BIN, "a live claude binary is required for this test")
+        sys.path.insert(0, str(REPO_ROOT / "tests" / "harness_contract"))
+        import capture
+
+        out = Path(tempfile.mkdtemp(prefix="wlo-live-probe-"))
+        self.addCleanup(shutil.rmtree, out, True)
+        capture.HERE = out  # every write_fixture goes here, never over the committed fixtures
+        with ThreadPoolExecutor(max_workers=len(names)) as pool:
+            metas = dict(zip(names, pool.map(lambda n: capture.run_probe(n, out), names)))
+        streams = {}
+        for name in names:
+            print(f"[live-probe] {name}: exit {metas[name]['returncode']}, done_at {metas[name]['done_at']}",
+                  file=sys.stderr)
+            with open(out / f"{name}.jsonl") as fh:
+                streams[name] = [json.loads(line) for line in fh if line.strip()]
+        return streams
+
+    def test_streaming_contract_against_the_installed_claude(self) -> None:
+        from tests import test_fake_claude_contract as contract
+
+        def harness_sequence(events):
+            return [item for item in contract.projection(events) if item[0] not in ("assistant", "user")]
+
+        streams = self._capture(self.STREAMING_PROBES)
+        for name, events in streams.items():
+            with self.subTest(probe=name):
+                self.assertEqual(harness_sequence(events), harness_sequence(contract.load(name)))
+        # Fact 1: each wakeup fire is enclosed in exactly one pair around one turn.
+        p5 = streams["p5_p11_wakeup_fires"]
+        pairs = contract.brackets(p5)
+        self.assertEqual(len(pairs), 2)
+        self.assertEqual(sum(1 for e in p5 if e.get("type") == "command_lifecycle"), 4)
+        self.assertNotEqual(pairs[0][2], pairs[1][2])
+        for start, end, _ in pairs:
+            inside = p5[start + 1:end]
+            self.assertEqual(sum(1 for e in inside if e.get("type") == "result"), 1)
+            self.assertNotIn("origin", next(e for e in inside if e.get("type") == "result"))
+            first = next(i for i, e in enumerate(inside) if e.get("type") != "system")
+            self.assertEqual(inside[first]["type"], "assistant")
+        for event in p5:
+            if event.get("type") == "user":
+                self.assertNotIn("P11 fire", json.dumps(event))
+        # Fact 2: no other probe holds a pair; notification turns carry
+        # task-notification and lie in no bracket.
+        for name, events in streams.items():
+            if name != "p5_p11_wakeup_fires":
+                self.assertFalse([e for e in events if e.get("type") == "command_lifecycle"], name)
+        for name in ("p3_streaming_background_bash", "p4_monitor", "p8_monitor_timeout", "p11_subagent_handback"):
+            for result in [e for e in streams[name] if e.get("type") == "result"][1:]:
+                self.assertEqual(result.get("origin"), {"kind": "task-notification"}, name)
+        # Fact 3: a cancelled wakeup never fires.
+        p9 = streams["p9_wakeup_cancel"]
+        self.assertEqual(sum(1 for e in p9 if e.get("type") == "result"), 1)
+
+    def test_p12_stop_inside_fire_counts(self) -> None:
+        sys.path.insert(0, str(REPO_ROOT / "tests" / "harness_contract"))
+        import p12_admission
+
+        streams = self._capture(self.P12_PROBES)
+        for name, events in streams.items():
+            with self.subTest(probe=name):
+                admission = p12_admission.admit(name, events)
+                if admission.verdict != p12_admission.ADOPT:
+                    self.fail(f"{name}: the model did not follow the prompt (a recapture, not a harness "
+                              f"observation): {admission.reasons}")
+                self.assertEqual(p12_admission.gate_deviations(name, events), [],
+                                 "a P12 deviation is the plan-amendment trigger")
+
+
 def _proc_ancestry(pid: int) -> list[int]:
     chain = []
     current = pid

@@ -94,7 +94,7 @@ CONTROLLER_SHARDS = {
     "decision": ["test_evidence", "test_decision", "test_golden_plan_stage_decisions",
                  "test_target_state", "test_managed_repo", "test_routing"],
     "cli": ["test_cli", "test_lifecycle_orchestration"],
-    "worker": ["test_worker", "test_observe", "test_observation_equivalence"],
+    "worker": ["test_worker", "test_observe", "test_observation_equivalence", "test_fake_claude_contract"],
     "docs": ["test_plan_document_consistency", "test_checklist_corrections",
              "test_ci_workflows", "test_release_tools", "test_buildinfo"],
     "trunk": ["test_version_authority", "test_repo_policy", "test_gitrepo", "test_forge", "test_milestone_branch",

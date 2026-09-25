@@ -1,0 +1,7 @@
+{
+  "source": "job 20260925T100548Z-8b244f42",
+  "source_file": "worker.stdout",
+  "mode": "print",
+  "lines": 279,
+  "redaction": "structural events verbatim; texts, tool inputs' strings and tool outputs replaced by placeholders"
+}

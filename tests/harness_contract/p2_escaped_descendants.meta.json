@@ -1,0 +1,63 @@
+{
+  "probe": "p2_escaped_descendants",
+  "pins": "P2: an orphaned setsid descendant survives the harness's kill, keeps the ownership tag in its environ and does not hold the descriptor passed to claude",
+  "claude_version": "2.1.282 (Claude Code)",
+  "captured_at": "2026-09-25T15:40:43Z",
+  "argv": [
+    "-p",
+    "Use the Bash tool with run_in_background set to true to run exactly this command: `(setsid bash -c 'exec -a wlo-p2_escaped_descendants-escaped sleep 90' </dev/null >/dev/null 2>&1 &); bash -c 'exec -a wlo-p2_escaped_descendants-attached sleep 90' & sleep 60`. Do not wait for it. Immediately after starting it, reply with exactly: PROBE-DONE",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-mode",
+    "auto",
+    "--model",
+    "claude-opus-5-5",
+    "--effort",
+    "xhigh",
+    "--disallowedTools",
+    "Agent,Workflow,Skill,CronCreate,CronDelete,RemoteTrigger"
+  ],
+  "stdin": "/dev/null",
+  "prompt": "Use the Bash tool with run_in_background set to true to run exactly this command: `(setsid bash -c 'exec -a wlo-p2_escaped_descendants-escaped sleep 90' </dev/null >/dev/null 2>&1 &); bash -c 'exec -a wlo-p2_escaped_descendants-attached sleep 90' & sleep 60`. Do not wait for it. Immediately after starting it, reply with exactly: PROBE-DONE",
+  "returncode": 0,
+  "stderr": "",
+  "done_at": 8.141,
+  "stdin_closed_at": null,
+  "exited_at": 13.169,
+  "line_arrival_seconds": [
+    1.39,
+    2.816,
+    3.361,
+    3.362,
+    4.58,
+    4.592,
+    6.065,
+    6.065,
+    6.069,
+    8.137,
+    8.141,
+    13.161,
+    13.161,
+    13.161
+  ],
+  "observations": {
+    "escaped": [
+      {
+        "alive": true,
+        "stat": {
+          "state": "S",
+          "ppid": 1345,
+          "pgid": 3363124,
+          "sid": 3363124,
+          "start_ticks": 27386125
+        },
+        "environ_has_tag": true,
+        "holds_lock_descriptor": false
+      }
+    ],
+    "attached": "none alive",
+    "capture_pid": 3357623,
+    "capture_is_subreaper": false
+  }
+}

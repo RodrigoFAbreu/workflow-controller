@@ -1,0 +1,41 @@
+{
+  "probe": "p6_p10_slash_command",
+  "pins": "P6/P10: a slash command sent as the stream-json user message expands as the -p prompt did, with --append-system-prompt and the single-agent disallow list",
+  "claude_version": "2.1.282 (Claude Code)",
+  "captured_at": "2026-09-25T15:35:59Z",
+  "argv": [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-mode",
+    "auto",
+    "--model",
+    "haiku",
+    "--effort",
+    "xhigh",
+    "--append-system-prompt",
+    "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
+    "--disallowedTools",
+    "Agent,Workflow,Skill,CronCreate,CronDelete,RemoteTrigger"
+  ],
+  "stdin": "stream-json user message, held open",
+  "prompt": "/probecmd alpha-42",
+  "returncode": 0,
+  "stderr": "",
+  "done_at": 2.097,
+  "stdin_closed_at": 2.201,
+  "exited_at": 2.865,
+  "line_arrival_seconds": [
+    0.608,
+    1.792,
+    2.001,
+    2.003,
+    2.086,
+    2.093,
+    2.097
+  ],
+  "observations": {}
+}

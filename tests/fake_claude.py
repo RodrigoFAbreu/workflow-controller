@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""A hermetic, offline stand-in for the real ``claude`` binary, used only
-by ``tests/test_worker.py``.
+"""A hermetic, offline stand-in for the real ``claude`` binary, used by
+the worker, job and lifecycle tests.
 
 ``controller.worker.launch`` always invokes its subprocess with the exact,
 fixed argv shape ``-p <task> --output-format stream-json --verbose
@@ -155,6 +155,91 @@ The scripted actions (:func:`perform_actions`), each a JSON object with an
 
 A failing action (a commit with nothing staged, a missing path to delete)
 raises, so the worker exits non-zero -- a script error is never silent.
+
+**Streaming-input mode** (`workflow-controller-worker-lifecycle-ownership`
+CP1), used whenever ``--input-format stream-json`` is on the argv: the task
+is the ``content`` of the first stream-json ``user`` line read from stdin
+(:func:`_task` returns the ``-p`` argument when argv carries one, and
+otherwise that content, read once), and ``FAKE_CLAUDE_DIAG_FILE`` records
+it as ``task_message``. Every existing variable (``FAKE_CLAUDE_STDOUT``,
+``FAKE_CLAUDE_HANG``, ``FAKE_CLAUDE_DESCENDANT``, ``FAKE_CLAUDE_SCRIPT``)
+is played as one turn, exactly as in print mode; then, if that output held
+a ``result`` line, the fake waits for stdin EOF and exits with its
+configured status, and if it did not (a malformed or truncated stream) it
+exits at once, as a crashed harness would. Tool processes, including
+``FAKE_CLAUDE_DESCENDANT``'s, inherit no descriptor beyond 0-2 in this
+mode (the lifecycle lock's included).
+
+``FAKE_CLAUDE_TURNS``
+    Streaming mode only: a JSON list of scripted turns, each a list of
+    steps (:class:`StreamingSession`). Turn 0 answers the task; each later
+    scripted turn is played, in order, as the turn a task-notification
+    (a task's completion, a Monitor event or timeout, a subagent's
+    hand-back) starts, with ``origin: {"kind": "task-notification"}``. A
+    wakeup's fire turn is its own ``wakeup`` step's ``fire_turn``, played
+    inside the measured ``command_lifecycle`` bracket (P11), never taken
+    from this list. The steps:
+
+    - ``{"step": "text", "text"}`` / ``{"step": "thinking"}``: one
+      ``assistant`` event;
+    - ``{"step": "tool", "name", "input", "is_error", "content",
+      "fg_task"}``: a foreground call (``tool_use`` then its ``user``
+      ``tool_result``; ``fg_task`` puts a foreground ``task_started`` /
+      ``task_notification`` pair between them, as real Bash calls do);
+    - ``{"step": "tools", "calls": [...], "result_order": [...]}``:
+      parallel calls, every ``tool_use`` first, then the results in
+      ``result_order`` (indices; default call order). A call is a ``tool``
+      step's fields, or ``{"bash_bg": {...}}``;
+    - ``{"step": "bash_bg", "id", "seconds", "orphan":
+      "none|setsid|reparent|daemon", "argv0", "orphan_seconds",
+      "write_file", "description"}``: a *real* background process carrying
+      the inherited environment (``background_tasks_changed`` /
+      ``task_started``); ``orphan`` leaves a descendant behind (``setsid``
+      in its own session, ``reparent`` double-forked in the group,
+      ``daemon`` double-forked into its own session and long-lived, under
+      ``argv0``);
+    - ``{"step": "task_stop", "id"}``: a worker-initiated stop, P8's
+      statuses (``killed``/``stopped``) mid-turn, and no notification turn;
+    - ``{"step": "await", "id", "notify"}``: wait, mid-turn, for task
+      ``id`` to end and emit its completion there (a completion the harness
+      delivers while a turn is still running); ``notify`` (default true)
+      queues its notification turn;
+    - ``{"step": "monitor", "id", "ticks", "interval", "timeout"}``: a
+      Monitor, a ``local_bash`` task whose every tick starts a turn and
+      whose end (``completed``, or ``killed``/``stopped`` at ``timeout``
+      seconds) starts one more;
+    - ``{"step": "wakeup", "delay", "fire_turn", "prompt", "reason",
+      "noop"}`` / ``{"step": "wakeup_stop"}``: the ``ScheduleWakeup`` pair
+      as P5/P9 measured (``timestamp``, the harness-stated ``in Ns``,
+      ``tool_use_result`` ``scheduledFor``/``clampedDelaySeconds``/
+      ``wasClamped``; ``{stopped: true, cancelledWakeups: n}`` for a stop,
+      ``n`` the fake's own count of wakeups scheduled and not yet fired --
+      a wakeup counts as fired from its ``started(X)``). The fire is
+      ``command_lifecycle started(X)``, the fire turn (``system/init``, no
+      opening ``user`` event, a ``result`` with no ``origin``), then
+      ``completed(X)``, with a fresh ``command_uuid`` per fire;
+      ``fire_turn`` (default one ``text`` step) may call tools, nested
+      ``wakeup`` included;
+    - ``{"step": "lifecycle_fault", "kind", ...}``: perturbs the *next*
+      fire's bracket (:data:`LIFECYCLE_FAULTS`);
+    - ``{"step": "subagent_handback", "after", "id", "events"}``: a
+      background ``Agent`` (``local_agent`` task) whose hand-back, ``after``
+      seconds later, completes the task and starts a turn; ``events``
+      subagent ``assistant`` texts are emitted with its
+      ``parent_tool_use_id`` before the completion;
+    - ``{"step": "commit", "message"}`` / ``{"step": "write", "path",
+      "text"}``: a Bash / Write call with that side effect;
+    - ``{"step": "end_turn", ...overrides}``: the turn's ``result``
+      (``queued_turn_count: 0``); implied at the end of every turn.
+
+    On stdin EOF with tasks open, the fake plays the P1 kill sequence
+    (``background_tasks_changed`` without the task, ``task_updated
+    {killed}``, ``task_notification {stopped}``) for each open task --
+    Monitors first, then the rest in start order, a killed Monitor's
+    notification playing the next scripted turn if one remains, as
+    ``job_5d4a976a`` measured -- ends its own task processes (never an
+    ``orphan`` descendant) and exits 0. ``user``/``assistant`` events carry
+    a ``timestamp``; ``system/init`` and ``result`` do not.
 """
 
 from __future__ import annotations
@@ -166,14 +251,20 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
+import uuid as uuid_module
 
 
 def _write_diagnostics() -> None:
     diag_file = os.environ.get("FAKE_CLAUDE_DIAG_FILE")
     if not diag_file:
         return
-    stdin_at_eof = sys.stdin.read(1) == ""
+    if _streaming():
+        # The task line was already read; whether anything was sent at all.
+        stdin_at_eof = _TASK_MESSAGE is None
+    else:
+        stdin_at_eof = sys.stdin.read(1) == ""
     try:
         fds = sorted(int(name) for name in os.listdir("/proc/self/fd"))
     except OSError:
@@ -187,6 +278,8 @@ def _write_diagnostics() -> None:
         "pgid": os.getpgid(0),
         "fds": fds,
     }
+    if _streaming():
+        diag["task_message"] = _TASK_MESSAGE
     with open(diag_file, "w") as fh:
         json.dump(diag, fh)
 
@@ -274,12 +367,12 @@ def _pause_after() -> tuple[int, str] | None:
     return int(count), path
 
 
-def _write_stdout() -> None:
+def _write_stdout() -> str:
     exact = os.environ.get("FAKE_CLAUDE_STDOUT")
     if exact is not None:
         sys.stdout.write(exact)
         sys.stdout.flush()
-        return
+        return exact
     delay = float(os.environ.get("FAKE_CLAUDE_EVENT_DELAY") or 0)
     pause = _pause_after()
     for index, event in enumerate(default_events()):
@@ -290,6 +383,7 @@ def _write_stdout() -> None:
             time.sleep(delay)
         sys.stdout.write(stream_text([event]))
         sys.stdout.flush()
+    return stream_text(default_events())
 
 
 def _write_descendant_file(path: str | None, record: dict) -> None:
@@ -319,6 +413,10 @@ def _fork_descendant() -> None:
                 time.sleep(0.01)
         return
     try:
+        if _streaming():
+            # Streaming mode: a tool process inherits no descriptor beyond
+            # 0-2 (``close_fds=True``), so never the lifecycle lock (H6).
+            os.closerange(3, _max_fd())
         if mode == "setsid":
             os.setsid()
         elif mode == "group-closed":
@@ -432,9 +530,19 @@ def script_invocations_path(script_path: "str | os.PathLike") -> str:
 
 
 def _task() -> str | None:
+    """The ``-p`` prompt argument when argv carries one; otherwise, in
+    streaming mode, the first stream-json user message's content (read
+    once, by :func:`_read_task_message`)."""
     argv = sys.argv[1:]
     if "-p" in argv and argv.index("-p") + 1 < len(argv):
-        return argv[argv.index("-p") + 1]
+        value = argv[argv.index("-p") + 1]
+        if not value.startswith("--"):
+            return value
+    if _streaming() and isinstance(_TASK_MESSAGE, dict):
+        content = (_TASK_MESSAGE.get("message") or {}).get("content")
+        if isinstance(content, list):
+            content = "".join(item.get("text", "") for item in content if isinstance(item, dict))
+        return content
     return None
 
 
@@ -459,9 +567,605 @@ def _run_script() -> None:
     perform_actions(invocations[prior])
 
 
+# ---------------------------------------------------------------------------
+# Streaming-input mode (worker-lifecycle-ownership CP1).
+# ---------------------------------------------------------------------------
+
+#: The first stream-json line read from stdin in streaming mode (a parsed
+#: object, the raw text when it is not JSON, or ``None`` at immediate EOF).
+_TASK_MESSAGE: "dict | str | None" = None
+
+
+def _streaming() -> bool:
+    argv = sys.argv[1:]
+    return any(
+        (arg == "--input-format" and argv[index + 1:index + 2] == ["stream-json"])
+        or arg == "--input-format=stream-json"
+        for index, arg in enumerate(argv)
+    )
+
+
+def _read_task_message() -> None:
+    """Read the one task line a streaming-input launch sends, once."""
+    global _TASK_MESSAGE
+    line = sys.stdin.readline()
+    if not line:
+        _TASK_MESSAGE = None
+        return
+    try:
+        _TASK_MESSAGE = json.loads(line)
+    except ValueError:
+        _TASK_MESSAGE = line
+
+
+def _max_fd() -> int:
+    try:
+        return os.sysconf("SC_OPEN_MAX")
+    except (ValueError, OSError):
+        return 4096
+
+
+def _has_result_line(text: str | None) -> bool:
+    for line in (text or "").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            return True
+    return False
+
+
+def _wait_for_stdin_eof() -> None:
+    while sys.stdin.readline():
+        pass
+
+
+def _now_timestamp() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + f".{int(time.time() * 1000) % 1000:03d}Z"
+
+
+def _children_tree(pid: int) -> list[int]:
+    """``pid``'s live descendants still attached to it, from ``/proc``."""
+    parents: dict[int, list[int]] = {}
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        try:
+            text = open(f"/proc/{name}/stat").read()
+        except OSError:
+            continue
+        ppid = int(text[text.rfind(")") + 1:].split()[1])
+        parents.setdefault(ppid, []).append(int(name))
+    found, stack = [], [pid]
+    while stack:
+        for child in parents.get(stack.pop(), []):
+            found.append(child)
+            stack.append(child)
+    return found
+
+
+#: The ``lifecycle_fault`` kinds (plan CP1). Each perturbs the *next* fire's
+#: bracket, except ``bracket_turn`` and ``spurious_bracket``, which bracket
+#: the next task-completion, Monitor or hand-back turn.
+LIFECYCLE_FAULTS = (
+    "omit_started", "omit_completed", "duplicate_started", "duplicate_completed",
+    "completed_before_started", "delay_completed", "delay_completed_past_next_turn", "reuse_uuid",
+    "overlap", "empty", "malformed", "bracket_turn", "spurious_bracket", "delay_fire",
+)
+_NOTIFICATION_FAULTS = ("bracket_turn", "spurious_bracket")
+
+_WAKEUP_SCHEDULED_TAIL = (" Nothing more to do this turn — the harness re-invokes you when the wakeup fires "
+                          "or a task-notification arrives.")
+
+
+class _Task:
+    def __init__(self, task_id: str, tool_use_id: str, kind: str, description: str, *,
+                 proc: "subprocess.Popen | None" = None, task_type: str = "local_bash") -> None:
+        self.task_id = task_id
+        self.tool_use_id = tool_use_id
+        self.kind = kind  # "bash" | "monitor" | "agent"
+        self.description = description
+        self.proc = proc
+        self.task_type = task_type
+        self.started = time.monotonic()
+        self.open = True
+        self.ticks = 0
+        self.ticks_done = 0
+        self.interval = 0.0
+        self.timeout: float | None = None
+        self.handback_at: float | None = None
+        self.handback_events: list = []
+
+    def finished(self) -> bool:
+        """Whether the task's own work is over (not whether it was reported)."""
+        if self.kind == "bash":
+            return self.proc is not None and self.proc.poll() is not None
+        if self.kind == "agent":
+            return self.handback_at is not None and time.monotonic() >= self.handback_at
+        # A Monitor ends one interval after its last tick.
+        return self.ticks_done >= self.ticks and time.monotonic() >= self.started + (self.ticks + 1) * self.interval
+
+
+class StreamingSession:
+    """The streaming-input harness the fake plays for ``FAKE_CLAUDE_TURNS``
+    (the module docstring lists the steps). Every event shape is the one the
+    ``tests/harness_contract/`` fixtures measured."""
+
+    def __init__(self, turns: list) -> None:
+        self.turns = list(turns) or [[{"step": "text", "text": "ok"}]]
+        self.next_turn = 1
+        self.session_id = FAKE_SESSION_ID
+        self.tasks: dict[str, _Task] = {}
+        self.wakeups: list[dict] = []
+        self.fire_faults: list[dict] = []
+        self.notification_faults: list[dict] = []
+        self.notifications: list[str] = []
+        self.last_command_uuid: str | None = None
+        self.held_completed: list[dict] = []  # completed(X) events owed after the next turn
+        self.overlap_completed: dict | None = None
+        self.moved_bracket = False
+        self.counter = 0
+        self.eof = threading.Event()
+
+    # -- emission -----------------------------------------------------------
+
+    def _id(self, prefix: str) -> str:
+        self.counter += 1
+        return f"{prefix}{self.counter:04d}"
+
+    def emit(self, event: dict) -> None:
+        event = dict(event)
+        event.setdefault("session_id", self.session_id)
+        event.setdefault("uuid", str(uuid_module.uuid4()))
+        if event.get("type") in ("user", "assistant"):
+            event.setdefault("timestamp", _now_timestamp())
+        sys.stdout.write(json.dumps(event, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+
+    def assistant(self, item: dict, parent: str | None = None) -> None:
+        self.emit({"type": "assistant", "message": {"role": "assistant", "model": "fake-model",
+                                                    "content": [item]},
+                   "parent_tool_use_id": parent})
+
+    def tool_use(self, name: str, tool_input: dict) -> str:
+        tool_use_id = self._id("toolu_fake_")
+        self.assistant({"type": "tool_use", "id": tool_use_id, "name": name, "input": tool_input})
+        return tool_use_id
+
+    def tool_result(self, tool_use_id: str, content, *, is_error=None, tool_use_result=None) -> None:
+        item = {"type": "tool_result", "tool_use_id": tool_use_id, "content": content}
+        if is_error is not None:
+            item["is_error"] = is_error
+        event = {"type": "user", "message": {"role": "user", "content": [item]}, "parent_tool_use_id": None}
+        if tool_use_result is not None:
+            event["tool_use_result"] = tool_use_result
+        self.emit(event)
+
+    def system(self, subtype: str, **fields) -> None:
+        self.emit({"type": "system", "subtype": subtype, **fields})
+
+    def init(self) -> None:
+        self.system("init", cwd=os.getcwd(), model="fake-model", permissionMode="auto",
+                    claude_code_version="fake",
+                    tools=["Agent", "Bash", "Monitor", "Read", "ScheduleWakeup", "TaskStop", "Write"])
+
+    def lifecycle(self, command_uuid: str, state: str, drop: str | None = None) -> None:
+        event = {"type": "command_lifecycle", "command_uuid": command_uuid, "state": state,
+                 "uuid": str(uuid_module.uuid4()), "session_id": self.session_id}
+        if drop:
+            event.pop(drop, None)
+            sys.stdout.write(json.dumps(event, separators=(",", ":")) + "\n")
+            sys.stdout.flush()
+            return
+        self.emit(event)
+
+    def open_tasks(self) -> list[_Task]:
+        return [task for task in self.tasks.values() if task.open]
+
+    def tasks_changed(self) -> None:
+        self.system("background_tasks_changed", tasks=[
+            {"task_id": t.task_id, "task_type": t.task_type, "description": t.description}
+            for t in self.open_tasks()])
+
+    def task_started(self, task: _Task, **extra) -> None:
+        self.system("task_started", task_id=task.task_id, tool_use_id=task.tool_use_id,
+                    description=task.description, is_backgrounded=True, task_type=task.task_type, **extra)
+
+    def end_task(self, task: _Task, updated: str, notified: str) -> None:
+        """The P3 (``completed``) or P1/P8 (``killed``/``stopped``) sequence."""
+        task.open = False
+        self.tasks_changed()
+        self.system("task_updated", task_id=task.task_id,
+                    patch={"status": updated, "end_time": int(time.time() * 1000)})
+        self.system("task_notification", task_id=task.task_id, tool_use_id=task.tool_use_id, status=notified,
+                    summary=f"Background task \"{task.description}\" {notified}")
+
+    def kill_task(self, task: _Task) -> None:
+        """End the task's own process tree (never an escaped orphan)."""
+        if task.proc is None or task.proc.poll() is not None:
+            return
+        for pid in [task.proc.pid] + _children_tree(task.proc.pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        task.proc.wait()
+
+    # -- turns --------------------------------------------------------------
+
+    def end_turn(self, origin: dict | None, overrides: dict) -> None:
+        fields = {k: v for k, v in overrides.items() if k != "step"}
+        event = result_event(**{"terminal_reason": "completed", "stop_reason": "end_turn", "result": "done",
+                                "queued_turn_count": 0, **fields})
+        if origin is not None and "origin" not in fields:
+            event["origin"] = origin
+        event["uuid"] = str(uuid_module.uuid4())
+        self.emit(event)
+
+    def play_turn(self, steps: list, origin: dict | None = None) -> None:
+        self.init()
+        for step in steps:
+            if step.get("step") == "end_turn":
+                self.end_turn(origin, step)
+                break
+            self.play_step(step)
+        else:
+            self.end_turn(origin, {})
+        while self.held_completed:
+            self.emit(self.held_completed.pop(0))
+
+    def next_scripted_turn(self) -> list:
+        if self.next_turn < len(self.turns):
+            turn = self.turns[self.next_turn]
+            self.next_turn += 1
+            return turn
+        return [{"step": "text", "text": "ok"}]
+
+    def play_notification_turn(self, source: str) -> None:
+        turn = self.next_scripted_turn()
+        origin = {"kind": "task-notification"}
+        fault = next((f for f in self.notification_faults
+                      if f.get("turn", f.get("kind_of_turn")) in (None, source)), None)
+        if fault is None:
+            self.play_turn(turn, origin)
+            return
+        self.notification_faults.remove(fault)
+        if fault["kind"] == "bracket_turn":
+            self.moved_bracket = True
+        command_uuid = str(uuid_module.uuid4())
+        self.lifecycle(command_uuid, "started")
+        self.play_turn(turn, origin)
+        self.lifecycle(command_uuid, "completed")
+
+    # -- steps --------------------------------------------------------------
+
+    def play_step(self, step: dict) -> None:
+        kind = step.get("step")
+        handler = getattr(self, f"step_{kind}", None)
+        if handler is None:
+            raise ValueError(f"unknown FAKE_CLAUDE_TURNS step {kind!r}")
+        handler(step)
+
+    def step_text(self, step: dict) -> None:
+        self.assistant({"type": "text", "text": step.get("text", "ok")})
+
+    def step_thinking(self, step: dict) -> None:
+        self.assistant({"type": "thinking", "thinking": step.get("thinking", "")})
+
+    def _foreground_default_error(self, name: str):
+        return False if name == "Bash" else None
+
+    def _fg_result(self, call: dict, tool_use_id: str) -> None:
+        if call.get("fg_task"):
+            task_id = self._id("bfg")
+            self.system("task_started", task_id=task_id, tool_use_id=tool_use_id, description=call.get("name"),
+                        is_backgrounded=False, task_type="local_bash")
+            self.system("task_notification", task_id=task_id, tool_use_id=tool_use_id, status="completed")
+        name = call.get("name", "Bash")
+        self.tool_result(tool_use_id, call.get("content", "ok"),
+                         is_error=call.get("is_error", self._foreground_default_error(name)),
+                         tool_use_result=call.get("tool_use_result"))
+
+    def step_tool(self, step: dict) -> None:
+        tool_use_id = self.tool_use(step.get("name", "Bash"), step.get("input") or {})
+        self._fg_result(step, tool_use_id)
+
+    def step_tools(self, step: dict) -> None:
+        calls = step["calls"]
+        ids = []
+        for call in calls:
+            if "bash_bg" in call:
+                ids.append(self.tool_use("Bash", {"command": "background", "run_in_background": True}))
+            else:
+                ids.append(self.tool_use(call.get("name", "Bash"), call.get("input") or {}))
+        for index in step.get("result_order") or range(len(calls)):
+            call = calls[index]
+            if "bash_bg" in call:
+                self._start_bash(call["bash_bg"], ids[index])
+            else:
+                self._fg_result(call, ids[index])
+
+    def _bash_command(self, step: dict) -> str:
+        import shlex
+        seconds = step.get("seconds", 1)
+        command = f"sleep {seconds}"
+        if step.get("write_file"):
+            command += f"; echo done > {shlex.quote(step['write_file'])}"
+        orphan = step.get("orphan", "none")
+        if orphan == "none":
+            return command
+        argv0 = step.get("argv0") or ("fake-claude-daemon" if orphan == "daemon" else "fake-claude-orphan")
+        lifetime = step.get("orphan_seconds", 3600 if orphan == "daemon" else 60)
+        inner = shlex.quote(f"exec -a {shlex.quote(argv0)} sleep {lifetime}")
+        if orphan == "setsid":
+            spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &)"
+        elif orphan == "reparent":
+            spawn = f"(bash -c {inner} </dev/null >/dev/null 2>&1 &)"
+        elif orphan == "daemon":
+            spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 & disown)"
+        else:
+            raise ValueError(f"unknown bash_bg orphan mode {orphan!r}")
+        return f"{spawn}; {command}"
+
+    def _start_bash(self, step: dict, tool_use_id: str) -> _Task:
+        proc = subprocess.Popen(["bash", "-c", self._bash_command(step)], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        task = _Task(step.get("id") or self._id("bfake"), tool_use_id, "bash",
+                     step.get("description", f"sleep {step.get('seconds', 1)}"), proc=proc)
+        self.tasks[task.task_id] = task
+        self.tasks_changed()
+        self.task_started(task)
+        self.tool_result(tool_use_id, f"Command running in background with ID: {task.task_id}.", is_error=False,
+                         tool_use_result={"stdout": "", "stderr": "", "interrupted": False,
+                                          "backgroundTaskId": task.task_id})
+        return task
+
+    def step_bash_bg(self, step: dict) -> None:
+        tool_use_id = self.tool_use("Bash", {"command": self._bash_command(step), "run_in_background": True})
+        self._start_bash(step, tool_use_id)
+
+    def step_task_stop(self, step: dict) -> None:
+        task = self.tasks[step["id"]]
+        tool_use_id = self.tool_use("TaskStop", {"task_id": task.task_id})
+        self.kill_task(task)
+        self.end_task(task, "killed", "stopped")
+        self.tool_result(tool_use_id, f"Successfully stopped task: {task.task_id}")
+
+    def step_await(self, step: dict) -> None:
+        task = self.tasks[step["id"]]
+        while not task.finished():
+            time.sleep(0.01)
+        if task.kind == "agent":
+            self._agent_events(task)
+        self.end_task(task, "completed", "completed")
+        if step.get("notify", True):
+            self.notifications.append({"bash": "task", "agent": "handback"}.get(task.kind, "monitor"))
+
+    def step_monitor(self, step: dict) -> None:
+        tool_use_id = self.tool_use("Monitor", {"command": "fake monitor", "description": step.get("id", "monitor")})
+        ticks, interval = int(step.get("ticks", 1)), float(step.get("interval", 0.1))
+        timeout = step.get("timeout")
+        lifetime = 3600 if timeout is not None else ticks * interval + 1
+        proc = subprocess.Popen(["sleep", str(lifetime)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, close_fds=True)
+        task = _Task(step.get("id") or self._id("bmon"), tool_use_id, "monitor", step.get("id", "monitor"),
+                     proc=proc)
+        task.ticks, task.interval = ticks, interval
+        task.timeout = float(timeout) if timeout is not None else None
+        self.tasks[task.task_id] = task
+        self.tasks_changed()
+        self.task_started(task)
+        self.tool_result(tool_use_id, f"Monitor started (task {task.task_id}).")
+
+    def step_wakeup(self, step: dict) -> None:
+        delay = step.get("delay", 60)
+        tool_input = {"delaySeconds": delay, "prompt": step.get("prompt", "fake wakeup"),
+                      "reason": step.get("reason", "fake"), "noop": step.get("noop", False)}
+        tool_use_id = self.tool_use("ScheduleWakeup", tool_input)
+        due = time.time() + float(delay)
+        stated = max(1, int(round(float(delay))))
+        self.wakeups.append({"due": due, "fire_turn": step.get("fire_turn") or [{"step": "text", "text": "woken"}],
+                             "fired": False, "cancelled": False, "tool_use_id": tool_use_id})
+        self.tool_result(
+            tool_use_id,
+            f"Next wakeup scheduled for {time.strftime('%H:%M:%S', time.localtime(due))} (in {stated}s)."
+            + _WAKEUP_SCHEDULED_TAIL,
+            tool_use_result={"scheduledFor": int(due * 1000), "clampedDelaySeconds": delay, "wasClamped": False})
+
+    def pending_wakeups(self) -> list[dict]:
+        return [w for w in self.wakeups if not w["fired"] and not w["cancelled"]]
+
+    def step_wakeup_stop(self, step: dict) -> None:
+        tool_use_id = self.tool_use("ScheduleWakeup", {"stop": True})
+        pending = self.pending_wakeups()
+        for wakeup in pending:
+            wakeup["cancelled"] = True
+        count = len(pending)
+        text = (f"Loop stopped — cancelled {count} pending wakeup(s); no further dynamic-loop wakeups "
+                "scheduled." if count else
+                "Loop stopped — any dynamic loop in this session is ended; there was no pending wakeup "
+                "to cancel.")
+        self.tool_result(tool_use_id, text, tool_use_result={
+            "scheduledFor": 0, "clampedDelaySeconds": 0, "wasClamped": False, "stopped": True,
+            "cancelledWakeups": count})
+
+    def step_lifecycle_fault(self, step: dict) -> None:
+        if step.get("kind") not in LIFECYCLE_FAULTS:
+            raise ValueError(f"unknown lifecycle_fault kind {step.get('kind')!r}")
+        (self.notification_faults if step["kind"] in _NOTIFICATION_FAULTS else self.fire_faults).append(dict(step))
+
+    def step_subagent_handback(self, step: dict) -> None:
+        tool_use_id = self.tool_use("Agent", {"description": "fake subagent", "prompt": "fake",
+                                              "subagent_type": "general-purpose", "run_in_background": True})
+        task = _Task(step.get("id") or self._id("afake"), tool_use_id, "agent", "fake subagent",
+                     task_type="local_agent")
+        task.handback_at = time.monotonic() + float(step.get("after", 0.1))
+        task.handback_events = step.get("events", [{"step": "text", "text": "HANDBACK"}])
+        self.tasks[task.task_id] = task
+        self.tasks_changed()
+        self.task_started(task, subagent_type="general-purpose", spawn_depth=1)
+        self.tool_result(tool_use_id, f"Async agent launched successfully. agentId: {task.task_id}")
+
+    def _agent_events(self, task: _Task) -> None:
+        for event in task.handback_events:
+            if event.get("step") == "thinking":
+                self.assistant({"type": "thinking", "thinking": ""}, parent=task.tool_use_id)
+            else:
+                self.assistant({"type": "text", "text": event.get("text", "HANDBACK")}, parent=task.tool_use_id)
+
+    def step_commit(self, step: dict) -> None:
+        tool_use_id = self.tool_use("Bash", {"command": "git commit"})
+        subprocess.run(["git", "add", "-A"], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(["git", "commit", "-q", "-m", step["message"]], check=True, stdout=subprocess.DEVNULL)
+        self.tool_result(tool_use_id, "committed", is_error=False)
+
+    def step_write(self, step: dict) -> None:
+        tool_use_id = self.tool_use("Write", {"file_path": step["path"]})
+        directory = os.path.dirname(step["path"])
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(step["path"], "w") as fh:
+            fh.write(step.get("text", ""))
+        self.tool_result(tool_use_id, "written")
+
+    # -- the fire -----------------------------------------------------------
+
+    def fire(self, wakeup: dict) -> None:
+        fault = self.fire_faults[0] if self.fire_faults else None
+        if fault is not None and fault["kind"] == "delay_fire" and not fault.get("applied"):
+            fault["applied"] = True
+            wakeup["due"] += float(fault.get("seconds", 1))
+            self.fire_faults.pop(0)
+            return
+        if fault is not None:
+            self.fire_faults.pop(0)
+        kind = fault["kind"] if fault else None
+        wakeup["fired"] = True  # counts as fired from started(X) on
+        if self.moved_bracket:
+            self.moved_bracket = False
+            self.play_turn(wakeup["fire_turn"])
+            return
+        if kind == "reuse_uuid" and self.last_command_uuid:
+            command_uuid = self.last_command_uuid
+        else:
+            command_uuid = str(uuid_module.uuid4())
+        self.last_command_uuid = command_uuid
+        if self.overlap_completed is not None:
+            held, self.overlap_completed = self.overlap_completed, None
+            self.lifecycle(command_uuid, "started")
+            self.lifecycle(held["command_uuid"], "completed")
+            self.play_turn(wakeup["fire_turn"])
+            self.lifecycle(command_uuid, "completed")
+            return
+        if kind == "completed_before_started":
+            self.lifecycle(command_uuid, "completed")
+            self.lifecycle(command_uuid, "started")
+            self.play_turn(wakeup["fire_turn"])
+            return
+        if kind == "empty":
+            self.lifecycle(command_uuid, "started")
+            self.lifecycle(command_uuid, "completed")
+            return
+        if kind != "omit_started":
+            self.lifecycle(command_uuid, "started", drop=fault.get("field") if kind == "malformed" else None)
+        if kind == "duplicate_started":
+            self.lifecycle(command_uuid, "started")
+        self.play_turn(wakeup["fire_turn"])
+        if kind == "omit_completed":
+            return
+        if kind == "delay_completed":
+            time.sleep(float(fault.get("seconds", 1)))
+        if kind == "delay_completed_past_next_turn":
+            self._owe_completed_after_next_turn(command_uuid)
+            return
+        if kind == "overlap":
+            self.overlap_completed = {"command_uuid": command_uuid}
+            return
+        self.lifecycle(command_uuid, "completed")
+        if kind == "duplicate_completed":
+            self.lifecycle(command_uuid, "completed")
+
+    def _owe_completed_after_next_turn(self, command_uuid: str) -> None:
+        self.held_completed.append({"type": "command_lifecycle", "command_uuid": command_uuid,
+                                    "state": "completed", "uuid": str(uuid_module.uuid4()),
+                                    "session_id": self.session_id})
+        # ``play_turn`` flushes it after the *next* turn's result: this
+        # fire turn's own ``play_turn`` has already returned.
+
+    # -- the session --------------------------------------------------------
+
+    def _read_stdin(self) -> None:
+        _wait_for_stdin_eof()
+        self.eof.set()
+
+    def poll_once(self) -> bool:
+        """Report one thing that happened while idle; ``False`` if nothing did."""
+        now = time.monotonic()
+        for task in self.open_tasks():
+            if task.kind == "monitor":
+                if task.timeout is not None and now >= task.started + task.timeout:
+                    # P8: a Monitor reaching its own timeout is killed/stopped
+                    # between turns, and a turn follows.
+                    self.kill_task(task)
+                    self.end_task(task, "killed", "stopped")
+                    self.notifications.append("monitor")
+                    return True
+                if task.ticks_done < task.ticks and now >= task.started + (task.ticks_done + 1) * task.interval:
+                    task.ticks_done += 1
+                    self.notifications.append("monitor")
+                    return True
+                if task.timeout is None and task.finished():
+                    self.kill_task(task)
+                    self.end_task(task, "completed", "completed")
+                    self.notifications.append("monitor")
+                    return True
+            elif task.finished():
+                if task.kind == "agent":
+                    self._agent_events(task)
+                self.end_task(task, "completed", "completed")
+                self.notifications.append("handback" if task.kind == "agent" else "task")
+                return True
+        due = [w for w in self.pending_wakeups() if w["due"] <= time.time()]
+        if due:
+            self.fire(min(due, key=lambda w: w["due"]))
+            return True
+        return False
+
+    def exit_at_eof(self) -> None:
+        """The P1 kill sequence for every open task (Monitors first), a
+        killed Monitor's notification playing the next scripted turn if one
+        remains (``job_5d4a976a``)."""
+        order = [t for t in self.open_tasks() if t.kind == "monitor"] + \
+                [t for t in self.open_tasks() if t.kind != "monitor"]
+        for task in order:
+            self.kill_task(task)
+            self.end_task(task, "killed", "stopped")
+            if task.kind == "monitor" and self.next_turn < len(self.turns):
+                self.play_turn(self.next_scripted_turn(), {"kind": "task-notification"})
+
+    def run(self) -> None:
+        self.play_turn(self.turns[0])
+        threading.Thread(target=self._read_stdin, daemon=True).start()
+        while True:
+            if self.eof.is_set():
+                self.exit_at_eof()
+                return
+            if self.notifications:
+                self.play_notification_turn(self.notifications.pop(0))
+                continue
+            if not self.open_tasks() and not self.pending_wakeups():
+                self.eof.wait()
+                continue
+            if not self.poll_once():
+                self.eof.wait(0.01)
+
+
 def main() -> None:
     _refuse_stream_json_without_verbose()
     _count_invocation()
+    if _streaming():
+        _read_task_message()
     _write_diagnostics()
     _append_diagnostics_log()
     _check_required_file()
@@ -486,12 +1190,21 @@ def main() -> None:
                 fh.write(str(child.pid))
         time.sleep(3600)
 
-    _write_stdout()
+    if _streaming() and os.environ.get("FAKE_CLAUDE_TURNS") is not None:
+        StreamingSession(json.loads(os.environ["FAKE_CLAUDE_TURNS"])).run()
+        sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
+
+    written = _write_stdout()
     stderr = os.environ.get("FAKE_CLAUDE_STDERR", "")
     if stderr:
         sys.stderr.write(stderr)
         sys.stderr.flush()
     _fork_descendant()
+    if _streaming() and _has_result_line(written):
+        # One turn played; like the harness, the session stays open until
+        # stdin is closed. A stream without a ``result`` is a crashed
+        # harness, which exits at once.
+        _wait_for_stdin_eof()
     sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
 
 

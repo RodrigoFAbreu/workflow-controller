@@ -14,6 +14,8 @@ orchestration` CP5's lifecycle-lock and worker-liveness tests.
 - :func:`unshare_available` / :func:`run_in_child_pid_namespace`: the
   ``unshare -Urpf --mount-proc`` probe runner (round 4, I2), where
   unprivileged user namespaces exist.
+- :func:`reap_recorded_workers` / :class:`ReapRecordedWorkersMixin`: the
+  streaming-worker teardown guarantee (worker-lifecycle-ownership CP1).
 - :func:`scratch_git_repo`: a git repository under the checkout's
   gitignored ``build/``, not ``/tmp`` -- on the development machine ``/tmp``
   is tmpfs, where ``st_dev`` equals the mount device, while the checkout is
@@ -111,6 +113,106 @@ def worker_process_dict(pid: int, *, pgid: int | None = None, start_ticks: int |
         "pid": pid, "pgid": pid if pgid is None else pgid, "start_ticks": start_ticks,
         **(worker.read_process_context() if context is None else context),
     }
+
+
+# ---------------------------------------------------------------------------
+# Test teardown for streaming workers (worker-lifecycle-ownership CP1,
+# round 1's I7).
+# ---------------------------------------------------------------------------
+
+#: The environment variable carrying a worker's ownership tags, a
+#: ``:``-separated list (plan C, step 1).
+OWNERSHIP_VAR = "WORKFLOW_CONTROLLER_OWNERSHIP"
+
+
+def _identity_matches(identity: dict) -> bool:
+    """Whether ``identity`` (a ``WorkerProcess``-shaped dict) is still the
+    same live process: its pid alive, not a zombie, with the recorded start
+    ticks and, where recorded, this boot."""
+    pid = identity.get("pid")
+    if not isinstance(pid, int) or pid <= 1 or pid == os.getpid():
+        return False
+    stat = read_stat(pid)
+    if stat is None or stat[0] in ("Z", "X", "x"):
+        return False
+    if identity.get("start_ticks") is not None and stat[2] != identity["start_ticks"]:
+        return False
+    boot_id = identity.get("boot_id")
+    if boot_id is not None:
+        try:
+            if Path("/proc/sys/kernel/random/boot_id").read_text().strip() != boot_id:
+                return False
+        except OSError:
+            return False
+    return True
+
+
+def tagged_pids(tag: str) -> list[int]:
+    """Every live same-uid process whose readable ``environ`` carries
+    ``tag`` in ``WORKFLOW_CONTROLLER_OWNERSHIP`` (never this process)."""
+    found = []
+    prefix = f"{OWNERSHIP_VAR}=".encode()
+    for name in os.listdir("/proc"):
+        if not name.isdigit() or int(name) == os.getpid():
+            continue
+        try:
+            environ = Path(f"/proc/{name}/environ").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        for item in environ:
+            if item.startswith(prefix) and tag.encode() in item[len(prefix):].split(b":"):
+                stat = read_stat(int(name))
+                if stat is not None and stat[0] not in ("Z", "X", "x"):
+                    found.append(int(name))
+                break
+    return found
+
+
+def reap_recorded_workers(runtime_root: "str | os.PathLike") -> list[int]:
+    """Identity-checked ``SIGKILL`` of every worker, anchor and tagged
+    process that a job record under ``runtime_root`` still names, and that is
+    still alive; returns the pids signalled.
+
+    Reads ``jobs/*.json``: ``worker_process``, ``worker_anchor``,
+    ``worker_state.owned_processes`` (each a ``(pid, start_ticks, ...)``
+    identity, killed only while it still matches) and ``ownership_tag`` (a
+    tag scan). So a test that SIGKILLs its Controller never leaks an anchor
+    onto the machine or into an outer lifecycle job."""
+    killed: list[int] = []
+    jobs = Path(runtime_root) / "jobs"
+    if not jobs.is_dir():
+        return killed
+    for path in sorted(jobs.glob("*.json")):
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        identities = [record.get("worker_process"), record.get("worker_anchor")]
+        worker_state = record.get("worker_state")
+        if isinstance(worker_state, dict):
+            identities += list(worker_state.get("owned_processes") or [])
+        pids = [i["pid"] for i in identities if isinstance(i, dict) and _identity_matches(i)]
+        tag = record.get("ownership_tag")
+        if isinstance(tag, str) and tag:
+            pids += tagged_pids(tag)
+        for pid in dict.fromkeys(pids):
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except (ProcessLookupError, PermissionError):
+                pass
+    return killed
+
+
+class ReapRecordedWorkersMixin:
+    """Registers :func:`reap_recorded_workers` as a cleanup of the test for
+    each runtime root it launches streaming workers under. Every test class
+    that launches a streaming worker uses it."""
+
+    def reap_workers_under(self, runtime_root: "str | os.PathLike") -> None:
+        self.addCleanup(reap_recorded_workers, runtime_root)
 
 
 # ---------------------------------------------------------------------------

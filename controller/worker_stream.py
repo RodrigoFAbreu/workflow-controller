@@ -132,7 +132,8 @@ class SupervisorFacts:
 
     ``ending_offset`` is the byte offset of the stream consumed when the
     supervisor ended the session (``ENDING``). The two ``*_declared_at``
-    facts are the supervisor's own breach declarations (C), and
+    facts are the supervisor's own breach declarations (C), with the
+    stalled bracket's ``command_uuid`` beside the second, and
     ``settled_wakeups`` names the ``fire_matched`` wakeups (by ``tool_use``
     id) whose settle window ran out."""
 
@@ -141,6 +142,7 @@ class SupervisorFacts:
     wakeup_overdue_declared_at: str | None = None
     command_lifecycle_overdue_declared_at: str | None = None
     settled_wakeups: tuple[str, ...] = ()
+    command_lifecycle_overdue_command_uuid: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -148,6 +150,7 @@ class SupervisorFacts:
             "ending_offset": self.ending_offset,
             "wakeup_overdue_declared_at": self.wakeup_overdue_declared_at,
             "command_lifecycle_overdue_declared_at": self.command_lifecycle_overdue_declared_at,
+            "command_lifecycle_overdue_command_uuid": self.command_lifecycle_overdue_command_uuid,
             "settled_wakeups": list(self.settled_wakeups),
         }
 

@@ -244,6 +244,21 @@ def create_log_file(runtime_root: Path, rel_path: str | os.PathLike) -> Path:
     return full_path
 
 
+def open_lock_file(root: Path, rel_path: str | os.PathLike) -> int:
+    """Open ``<root>/<rel_path>`` for an ``flock``, creating it (mode
+    ``0o600``, parent directories as needed) when absent, and return the
+    descriptor. Containment-checked like every runtime write. The
+    descriptor is ``O_CLOEXEC`` and never passed on, so a lock taken on it
+    dies with this process (``workflow-controller-worker-lifecycle-
+    ownership`` CP3: a job's supervisor lock, ``jobs/<job_id>/
+    supervisor.lock``)."""
+    full_path = root / rel_path
+    _assert_contained(root, full_path)
+    full_path = full_path.resolve()
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    return os.open(full_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+
+
 def append_jsonl(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
     """Append ``obj`` as one JSON line to ``<runtime_root>/<rel_path>``
     (``workflow-controller-release-runtime-observability`` CP5's lifecycle

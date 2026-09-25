@@ -12,6 +12,14 @@ preflight, the worker tool restrictions, the post-step verification and the
 observation blocks change nothing at all without a policy -- not even a new
 ``null`` key.
 
+It was rewritten once since, deliberately, by
+``workflow-controller-worker-lifecycle-ownership`` CP3, whose streaming
+launch changes every job, policy or not: each record gains
+``ownership_tag``, ``worker_anchor`` and ``worker_state`` (``STARTING``),
+and each worker argv is the streaming-input form. Nothing else moved: every
+status, outcome, exit code and ``inspect``/``explain`` document is as
+generated at ``86801f6``.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

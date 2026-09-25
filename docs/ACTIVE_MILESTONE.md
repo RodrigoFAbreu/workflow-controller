@@ -29,8 +29,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 | id | status | commit |
 | --- | --- | --- |
 | CP1 -- harness contract evidence and fake harness | complete | `ef07f28` |
-| CP2 -- worker stream state machine | complete | this checkpoint's commit |
-| CP3 -- streaming-input launch and supervision | not started | |
+| CP2 -- worker stream state machine | complete | `ed02157` |
+| CP3 -- streaming-input launch and supervision | complete | this checkpoint's commit |
 | CP4 -- job lifecycle integration | not started | |
 | CP5 -- restart recovery | not started | |
 | CP6 -- same-phase durable progress | not started | |
@@ -123,6 +123,57 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   regenerated).
 - **Verification.** See the checkpoint commit for the exact commands and results.
 
+### CP3 -- streaming-input launch and supervision (complete)
+
+- **Streaming launch (A).** `worker.launch` runs `claude -p --input-format stream-json
+  --output-format stream-json --verbose --permission-mode <m> [--model] [--effort]
+  --append-system-prompt WORKER_LIFECYCLE_NOTE [--disallowedTools <list>]` (`worker_argv`, equal
+  to CP1's captured production argv) and writes the task as one stream-json user line. The pipe's
+  write end belongs to the new stdin anchor, `controller/anchor.py` (stdlib only, run from its
+  source text read once at import, `-I -c`, own session, empty environment, only the pipe and
+  `pass_fds`): `SIGUSR1` closes stdin; it ends itself once the worker is gone, no same-uid
+  process carries the tag and no supervisor holds the supervisor lock, for
+  `ANCHOR_ORPHAN_SECONDS`. `on_spawn(worker, anchor=, ownership_tag=)`; the tag is appended to
+  `WORKFLOW_CONTROLLER_OWNERSHIP`; `routing.ASYNC_UNOWNABLE_TOOLS` (`CronCreate`, `CronDelete`,
+  `RemoteTrigger`) ends every route's disallow list.
+- **Supervision (C).** `RUNNING`/`WAITING`/`ENDING`/`DRAINING`/`ENDED` through
+  `on_state_change(state, details)` (tasks, wakeups with due or settle time, open brackets, the
+  pruned `owned_processes`, `owned_processes_seen_count`, `excluded_processes`, scan status;
+  `ending_offset` and the supervisor facts at `ENDING`). `ENDING` only at a quiescent turn that
+  stays quiescent with no new bytes for 0.1 s, or 1.0 s when a background task ended during or
+  after the last turn (in the CP1 fixtures the harness opens that task's already-queued
+  notification turn 4-52 ms after a `queued_turn_count: 0` result), or at a breach: an overdue `pending`
+  wakeup over task-free idle time, or a bracket stalled with no task open (the stalled
+  bracket's `command_uuid` is a new `SupervisorFacts` field). `fire_matched` wakeups settle
+  after `WAKEUP_SETTLE_SECONDS` of idle time (no turn, task or bracket), restarted by any turn,
+  task or bracket. Ownership: the worker's group, the tag, adoption as a child subreaper
+  (`prctl`, restored after), and every process already seen owned while its start ticks
+  match; recognised daemons (`RECOGNISED_DAEMONS`) are excluded. Only adopted zombies are
+  reaped, by pid. The drain is bounded by `DRAIN_DETACH_SECONDS` and returns `DrainDetached`,
+  ending nothing; `--timeout` ends the group, the owned processes and the anchor.
+- **Job (CP3's share).** `execute_step` takes `jobs/<job_id>/supervisor.lock`
+  (`runtime.open_lock_file`) before the pre-spawn `LAUNCHED` write and releases it after the
+  record's last write; that write now carries `ownership_tag` (the job id) and
+  `worker_state: STARTING`, and the `on_spawn` flush adds `worker_anchor`. A `DrainDetached`
+  return is exit 45 (`LifecycleWorkerActiveError`) with the record `LAUNCHED`, until CP4.
+- **Fake.** `tests/fake_claude.py`: a `bash_bg` step may name its own `command`, and at stdin
+  EOF the diagnostic file gains `stdin_eof_at`/`stdin_lines_after_task` (`stdin_at_eof` keeps its
+  CP1 meaning).
+- **Tests.** `tests/test_worker.py` gains 41 CP3 tests (the anchor; every supervision, wakeup,
+  bracket, wrong-match and ownership case of CP3's list, the double-breach residue pinned; the
+  quiescence windows pinned to the fixtures' measured gaps) and
+  rewrites the argv, `stdin_at_eof` and `setsid` tests; `tests/test_job.py` gains the
+  supervisor-lock scope test and rewrites the argv/disallow-list, schema-field and setsid-lock
+  tests. Rewritten beyond the plan's list, because they pinned the same behaviour: the task in
+  `argv[1]` (`tests/test_cli.py`, `tests/test_integration_disposable_repo.py`), the no-policy
+  golden (`tests/golden/no_policy_lifecycle.json`: only the three additive record fields and the
+  streaming argv moved), and five Controller-loss tests whose released orphan was expected to
+  exit by itself (`tests/test_resume.py`'s interruption and orphan tests,
+  `tests/test_lifecycle_orchestration.py`'s orphaned apply worker): the orphan's anchor keeps
+  stdin open until CP5's re-attach, so each now ends the recorded anchor
+  (`process_fixtures.end_recorded_anchor`) and keeps its reconciliation assertions.
+- **Verification.** See the checkpoint commit for the exact commands and results.
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP3.
+`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP4.

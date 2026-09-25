@@ -1118,6 +1118,10 @@ class _OrphanWorkerCase(_ResumeTestCase):
         return record
 
     def _await_worker_gone(self, record: dict, root: Path) -> None:
+        # Worker-lifecycle-ownership CP3: the orphan's lost Controller left
+        # its anchor holding stdin, so the released worker ends only once
+        # that session is ended (until CP5's re-attach).
+        process_fixtures.end_recorded_anchor(record)
         pgid = record["worker_process"]["pgid"]
 
         def gone() -> bool:

@@ -161,7 +161,8 @@ CP1), used whenever ``--input-format stream-json`` is on the argv: the task
 is the ``content`` of the first stream-json ``user`` line read from stdin
 (:func:`_task` returns the ``-p`` argument when argv carries one, and
 otherwise that content, read once), and ``FAKE_CLAUDE_DIAG_FILE`` records
-it as ``task_message``. Every existing variable (``FAKE_CLAUDE_STDOUT``,
+it as ``task_message``; at stdin EOF the record gains ``stdin_eof_at``
+and ``stdin_lines_after_task`` (:func:`_record_eof`). Every existing variable (``FAKE_CLAUDE_STDOUT``,
 ``FAKE_CLAUDE_HANG``, ``FAKE_CLAUDE_DESCENDANT``, ``FAKE_CLAUDE_SCRIPT``)
 is played as one turn, exactly as in print mode; then, if that output held
 a ``result`` line, the fake waits for stdin EOF and exits with its
@@ -192,9 +193,11 @@ mode (the lifecycle lock's included).
       step's fields, or ``{"bash_bg": {...}}``;
     - ``{"step": "bash_bg", "id", "seconds", "orphan":
       "none|setsid|reparent|daemon", "argv0", "orphan_seconds",
-      "write_file", "description"}``: a *real* background process carrying
-      the inherited environment (``background_tasks_changed`` /
-      ``task_started``); ``orphan`` leaves a descendant behind (``setsid``
+      "write_file", "description", "command"}``: a *real* background process
+      carrying the inherited environment (``background_tasks_changed`` /
+      ``task_started``), running ``command`` (a ``bash -c`` string) instead
+      of ``sleep <seconds>`` when given; ``orphan`` leaves a descendant
+      behind (``setsid``
       in its own session, ``reparent`` double-forked in the group,
       ``daemon`` double-forked into its own session and long-lived, under
       ``argv0``);
@@ -617,8 +620,31 @@ def _has_result_line(text: str | None) -> bool:
 
 
 def _wait_for_stdin_eof() -> None:
+    extra = 0
     while sys.stdin.readline():
-        pass
+        extra += 1
+    _record_eof(extra)
+
+
+def _record_eof(extra_lines: int) -> None:
+    """Streaming mode: rewrite ``FAKE_CLAUDE_DIAG_FILE`` at stdin EOF,
+    adding ``stdin_eof_at`` (``time.time()``) and ``stdin_lines_after_task``
+    (lines read after the task line), so a test can see when, and after
+    what, the Controller closed stdin. ``stdin_at_eof`` keeps its meaning
+    (stdin was at EOF when the task was read)."""
+    diag_file = os.environ.get("FAKE_CLAUDE_DIAG_FILE")
+    if not diag_file:
+        return
+    try:
+        with open(diag_file) as fh:
+            diag = json.load(fh)
+    except (OSError, ValueError):
+        diag = {}
+    diag.update({"stdin_eof_at": time.time(), "stdin_lines_after_task": extra_lines})
+    tmp = f"{diag_file}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        json.dump(diag, fh)
+    os.replace(tmp, diag_file)
 
 
 def _now_timestamp() -> str:
@@ -889,7 +915,7 @@ class StreamingSession:
     def _bash_command(self, step: dict) -> str:
         import shlex
         seconds = step.get("seconds", 1)
-        command = f"sleep {seconds}"
+        command = step.get("command") or f"sleep {seconds}"
         if step.get("write_file"):
             command += f"; echo done > {shlex.quote(step['write_file'])}"
         orphan = step.get("orphan", "none")

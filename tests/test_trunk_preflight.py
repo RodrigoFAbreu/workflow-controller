@@ -72,7 +72,8 @@ def _probe_argv(root: Path) -> list[list[str]]:
 class NoPolicyGoldenTest(unittest.TestCase):
     """Job records, worker argv, ``inspect``/``explain`` JSON and exit codes,
     re-derived from the code as it stands, equal the golden captured from
-    commit ``86801f6``, before CP8."""
+    commit ``86801f6``, before CP8 (with worker-lifecycle-ownership CP3's
+    additive record fields and streaming argv, the generator's docstring)."""
 
     def test_the_no_policy_lifecycle_is_byte_identical_to_the_pre_cp8_golden(self) -> None:
         derived = golden.render(golden.derive())
@@ -164,13 +165,18 @@ class DisallowedToolsTest(unittest.TestCase):
             self.assertFalse(any(tool.startswith(f"Bash(git {absent}") for tool in routing.BRANCH_GUARD_TOOLS))
 
     def test_the_union_with_the_subagent_tools(self) -> None:
+        # Worker-lifecycle-ownership CP3: every list ends with the unownable
+        # tools, including a route that disallowed nothing before.
         single = routing.NO_OVERRIDES.resolve(routing.REVIEW_IMPLEMENTATION)
         multi = routing.NO_OVERRIDES.resolve(routing.MILESTONE_PLAN)
-        self.assertEqual(routing.worker_disallowed_tools(single, branch_bound=False), routing.SUBAGENT_TOOLS)
-        self.assertEqual(routing.worker_disallowed_tools(multi, branch_bound=False), ())
+        unownable = routing.ASYNC_UNOWNABLE_TOOLS
+        self.assertEqual(unownable, ("CronCreate", "CronDelete", "RemoteTrigger"))
+        self.assertEqual(routing.worker_disallowed_tools(single, branch_bound=False),
+                         routing.SUBAGENT_TOOLS + unownable)
+        self.assertEqual(routing.worker_disallowed_tools(multi, branch_bound=False), unownable)
         self.assertEqual(routing.worker_disallowed_tools(single, branch_bound=True),
-                         routing.SUBAGENT_TOOLS + self.EXPECTED)
-        self.assertEqual(routing.worker_disallowed_tools(multi, branch_bound=True), self.EXPECTED)
+                         routing.SUBAGENT_TOOLS + self.EXPECTED + unownable)
+        self.assertEqual(routing.worker_disallowed_tools(multi, branch_bound=True), self.EXPECTED + unownable)
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +321,8 @@ class PolicyStepTest(_PolicyCase):
         self.assertEqual(record["branch_binding"], {"work_item_id": WI, "branch": BRANCH,
                                                     "pre_step_tip": self.trunk_tip})
         [argv] = self.worker_argv()
-        self.assertEqual(argv[-2:], ["--disallowedTools", ",".join(routing.BRANCH_GUARD_TOOLS)])
+        self.assertEqual(argv[-2:], ["--disallowedTools",
+                                     ",".join(routing.BRANCH_GUARD_TOOLS + routing.ASYNC_UNOWNABLE_TOOLS)])
 
     def test_a_single_agent_worker_gets_the_union(self) -> None:
         self.assertEqual(self.open_pr_step(lambda: self.lc.implement("CP1")).code, cli.EXIT_OK)
@@ -324,7 +331,8 @@ class PolicyStepTest(_PolicyCase):
         self.lc.add(MILESTONE_IMPLEMENT, self.lc.generate())
         result = self.cli("step")
         self.assertEqual(result.records[-1]["worker_route"]["single_agent"], True, result.stderr)
-        self.assertEqual(self.worker_argv()[-1][-1], ",".join(routing.SUBAGENT_TOOLS + routing.BRANCH_GUARD_TOOLS))
+        self.assertEqual(self.worker_argv()[-1][-1], ",".join(
+            routing.SUBAGENT_TOOLS + routing.BRANCH_GUARD_TOOLS + routing.ASYNC_UNOWNABLE_TOOLS))
 
     def test_a_step_on_the_wrong_branch_refuses(self) -> None:
         self.git("switch", "-q", "-c", "feature-x")

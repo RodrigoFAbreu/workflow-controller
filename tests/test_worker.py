@@ -24,8 +24,12 @@ from __future__ import annotations
 import ast
 import contextlib
 import errno
+import fcntl
 import json
 import os
+import secrets
+import select
+import shlex
 import shutil
 import signal
 import subprocess
@@ -39,7 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import lock, routing, worker, worker_stream  # noqa: E402
+from controller import anchor, lock, routing, worker, worker_stream  # noqa: E402
 from controller.errors import UserOnlyCommandError, WorkerLaunchError  # noqa: E402
 from tests import fake_claude, process_fixtures  # noqa: E402
 
@@ -254,12 +258,27 @@ class LaunchMechanicsTest(unittest.TestCase):
             diag = json.loads(marker.read_text())
             self.assertEqual(Path(diag["cwd"]).resolve(), target)
 
-    def test_stdin_is_closed(self) -> None:
+    def test_stdin_carries_exactly_the_task_line_then_eof_only_at_ending(self) -> None:
+        """Worker-lifecycle-ownership CP3 (rewritten from "stdin is
+        closed"): stdin holds one stream-json user message carrying the
+        task, and reaches EOF only after the supervisor's ``ENDING``."""
         with tempfile.TemporaryDirectory() as td:
             marker = Path(td) / "diag.json"
-            _launch(cwd=td, env_overrides={"FAKE_CLAUDE_DIAG_FILE": str(marker)})
+            states: list = []
+            with _environment({"FAKE_CLAUDE_DIAG_FILE": str(marker)}):
+                result = worker.launch(
+                    "do the bounded thing", cwd=td, permission_mode="acceptEdits", timeout=10,
+                    claude_bin=str(FAKE_CLAUDE), **_stream_paths(td),
+                    on_state_change=lambda state, details: states.append((time.time(), state)),
+                )
+            self.assertEqual(result.outcome, worker.SUCCESS)
             diag = json.loads(marker.read_text())
-            self.assertTrue(diag["stdin_at_eof"])
+            self.assertEqual(diag["task_message"], {"type": "user", "message": {
+                "role": "user", "content": "do the bounded thing"}})
+            self.assertFalse(diag["stdin_at_eof"])  # the task line was there
+            self.assertEqual(diag["stdin_lines_after_task"], 0)
+            ending_at = next(at for at, state in states if state == worker.ENDING)
+            self.assertGreaterEqual(diag["stdin_eof_at"], ending_at)
 
     def test_environment_carries_no_pythonpath(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -298,33 +317,62 @@ class RouteArgvTest(unittest.TestCase):
             self.assertEqual(result.outcome, worker.SUCCESS)
             return json.loads(marker.read_text())["argv"]
 
-    def test_without_a_route_the_argv_is_unchanged(self) -> None:
-        self.assertEqual(self._argv(), ["-p", "/review-plan wi-1", "--output-format", "stream-json",
-                                        "--verbose", "--permission-mode", "auto"])
-        self.assertEqual(self._argv(model=None, effort=None, disallowed_tools=()), self._argv())
+    #: The streaming-input prefix every worker argv starts with, and the
+    #: system note that precedes the disallow list (worker-lifecycle-
+    #: ownership CP3, rewritten from the ``-p <task>`` form).
+    PREFIX = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+              "--permission-mode", "auto"]
+    NOTE = ["--append-system-prompt", worker.WORKER_LIFECYCLE_NOTE]
 
-    def test_model_effort_and_the_disallow_list_last(self) -> None:
+    def test_without_a_route_the_argv_is_the_streaming_form_with_no_prompt_argument(self) -> None:
+        self.assertEqual(self._argv(), self.PREFIX + self.NOTE)
+        self.assertEqual(self._argv(model=None, effort=None, disallowed_tools=()), self._argv())
+        self.assertNotIn("/review-plan wi-1", self._argv())
+
+    def test_model_effort_the_note_and_the_disallow_list_last(self) -> None:
         argv = self._argv(model="claude-opus-5-5", effort="xhigh", disallowed_tools=routing.SUBAGENT_TOOLS)
-        self.assertEqual(argv, [
-            "-p", "/review-plan wi-1", "--output-format", "stream-json", "--verbose",
-            "--permission-mode", "auto", "--model", "claude-opus-5-5", "--effort", "xhigh", "--disallowedTools", "Agent,Workflow,Skill",
-        ])
+        self.assertEqual(argv, self.PREFIX + ["--model", "claude-opus-5-5", "--effort", "xhigh"] + self.NOTE
+                         + ["--disallowedTools", "Agent,Workflow,Skill"])
+
+    def test_the_argv_is_the_production_argv_cp1_captured(self) -> None:
+        from tests.harness_contract import capture
+
+        route = routing.NO_OVERRIDES.resolve(routing.REVIEW_PLAN)
+        argv = self._argv(model=capture.PROBE_MODEL, effort=capture.PROBE_EFFORT,
+                          disallowed_tools=routing.worker_disallowed_tools(route, branch_bound=False))
+        self.assertEqual(argv, capture.production_argv("claude", single_agent=True)[1:])
+        self.assertEqual(worker.WORKER_LIFECYCLE_NOTE, capture.WORKER_LIFECYCLE_NOTE)
 
     def test_each_flag_is_independent(self) -> None:
-        self.assertEqual(self._argv(model="m")[-2:], ["--model", "m"])
+        self.assertEqual(self._argv(model="m")[-4:-2], ["--model", "m"])
         self.assertNotIn("--effort", self._argv(model="m"))
-        self.assertEqual(self._argv(effort="high")[-2:], ["--effort", "high"])
+        self.assertEqual(self._argv(effort="high")[-4:-2], ["--effort", "high"])
         self.assertNotIn("--model", self._argv(effort="high"))
         self.assertEqual(self._argv(disallowed_tools=["Agent"])[-2:], ["--disallowedTools", "Agent"])
 
     def test_the_branch_guard_rules_stay_one_last_element(self) -> None:
         # trunk-branch-pr-release-orchestration CP8: Bash rules with a space
         # inside (`Bash(git reset --hard:*)`) are joined like any other name.
+        # Worker-lifecycle-ownership CP3: the unownable tools come last, and
+        # the system note precedes the list.
         route = routing.NO_OVERRIDES.resolve(routing.REVIEW_IMPLEMENTATION)
         argv = self._argv(disallowed_tools=routing.worker_disallowed_tools(route, branch_bound=True))
-        self.assertEqual(argv[-2:], ["--disallowedTools", "Agent,Workflow,Skill,Bash(gh:*),Bash(git push:*),"
-                                     "Bash(git rebase:*),Bash(git switch:*),Bash(git checkout -b:*),"
-                                     "Bash(git reset --hard:*)"])
+        self.assertEqual(argv[-4:], self.NOTE + [
+            "--disallowedTools", "Agent,Workflow,Skill,Bash(gh:*),Bash(git push:*),"
+            "Bash(git rebase:*),Bash(git switch:*),Bash(git checkout -b:*),"
+            "Bash(git reset --hard:*),CronCreate,CronDelete,RemoteTrigger"])
+
+    def test_every_routes_disallow_list_ends_with_the_unownable_tools(self) -> None:
+        for role in sorted(routing.ROLES):
+            for branch_bound in (False, True):
+                with self.subTest(role=role, branch_bound=branch_bound):
+                    route = routing.NO_OVERRIDES.resolve(role)
+                    tools = routing.worker_disallowed_tools(route, branch_bound=branch_bound)
+                    self.assertEqual(tools[-3:], ("CronCreate", "CronDelete", "RemoteTrigger"))
+                    self.assertEqual(tools[:-3], route.disallowed_tools
+                                     + (routing.BRANCH_GUARD_TOOLS if branch_bound else ()))
+                    argv = self._argv(disallowed_tools=tools)
+                    self.assertEqual(argv[-4:], self.NOTE + ["--disallowedTools", ",".join(tools)])
 
     def test_every_resolved_route_reaches_the_argv_with_no_session_reuse_flag(self) -> None:
         option_sets = (
@@ -350,6 +398,7 @@ class RouteArgvTest(unittest.TestCase):
                         self.assertEqual(argv[-2:], ["--disallowedTools", ",".join(routing.SUBAGENT_TOOLS)])
                     else:
                         self.assertNotIn("--disallowedTools", argv)
+                    self.assertEqual(argv[:len(self.PREFIX)], self.PREFIX)
 
     def test_the_launch_source_passes_no_session_reuse_flag(self) -> None:
         """No literal in ``worker.py`` names a session-reuse flag, so no code
@@ -424,7 +473,10 @@ class _SpawnedWorkerCase(unittest.TestCase):
             **(env or {}),
         }
 
-        def recording_on_spawn(worker_process: worker.WorkerProcess) -> None:
+        def recording_on_spawn(worker_process: worker.WorkerProcess, **_new_keywords) -> None:
+            # Worker-lifecycle-ownership CP3: `launch` also passes `anchor`
+            # and `ownership_tag`; each test's own `on_spawn` sees the
+            # process alone.
             self.spawned_groups.append(worker_process.pgid or worker_process.pid)
             if on_spawn is not None:
                 on_spawn(worker_process)
@@ -849,14 +901,19 @@ class GroupDrainTest(_SpawnedWorkerCase):
         self.assertEqual(result.outcome, worker.SUCCESS)
         self.assertEqual([remaining for _pid, remaining in drains], [[record["pid"]]])
 
-    def test_a_setsid_descendant_is_not_waited_for(self) -> None:
+    def test_a_setsid_descendant_is_owned_and_waited_for(self) -> None:
+        """Worker-lifecycle-ownership CP3 (rewritten from "is not waited
+        for", D4): a descendant that left the group is owned by the tag and
+        waited for. ``on_group_drain`` is still never called: the group
+        itself is empty."""
         drains: list = []
-        started = time.monotonic()
-        result = self._launch(env=self._env("setsid:5"), on_group_drain=lambda *a: drains.append(a))
-        self.assertLess(time.monotonic() - started, 4)
+        result = self._launch(env=self._env("setsid:3"), on_group_drain=lambda *a: drains.append(a))
+        returned_at = time.time()
+        record = self._descendant()
+        self.assertIn("exited_at", record, "launch returned before the setsid descendant exited")
+        self.assertLessEqual(record["exited_at"], returned_at)
         self.assertEqual(result.outcome, worker.SUCCESS)
         self.assertEqual(drains, [])
-        self.assertNotIn("exited_at", self._descendant())
 
     def test_with_no_descendant_on_group_drain_is_never_called(self) -> None:
         drains: list = []
@@ -1524,6 +1581,836 @@ class LivenessBootKeyedVerdictTest(unittest.TestCase):
         self.assertIsNone(other_host["process_basis"])
         self.assertEqual(other_host["members"], [])
         self.assertEqual(other_host["current"]["hostname"], "host-b")
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-worker-lifecycle-ownership CP3: streaming-input launch
+# and supervision (docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md,
+# designs A and C, and CP3's Tests list), against the CP1 fake.
+# ---------------------------------------------------------------------------
+
+
+def _running(pid: int) -> bool:
+    stat = process_fixtures.read_stat(pid)
+    return stat is not None and stat[0] not in ("Z", "X", "x")
+
+
+def _fd_targets(pid: int) -> set[str]:
+    targets = set()
+    try:
+        names = os.listdir(f"/proc/{pid}/fd")
+    except OSError:
+        return targets
+    for name in names:
+        with contextlib.suppress(OSError):
+            targets.add(os.readlink(f"/proc/{pid}/fd/{name}"))
+    return targets
+
+
+def _environ(pid: int) -> bytes:
+    with open(f"/proc/{pid}/environ", "rb") as fh:
+        return fh.read()
+
+
+def _ownership_tags(environ: bytes) -> list[str]:
+    prefix = f"{worker.OWNERSHIP_VAR}=".encode()
+    return [item[len(prefix):].decode() for item in environ.split(b"\0") if item.startswith(prefix)]
+
+
+class _SupervisedCase(unittest.TestCase):
+    """A scratch directory, a ``launch`` wrapper that records every
+    ``on_state_change`` as ``(time.time(), state, details)``, and a cleanup
+    that ends whatever the launch left: its tagged processes, the worker and
+    the anchor (identity-checked), and any extra pid a test registers."""
+
+    def setUp(self) -> None:
+        self.dir = Path(tempfile.mkdtemp(prefix="cp3-supervise-"))
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.diag = self.dir / "diag.json"
+        self.log: list[tuple[float, str, dict]] = []
+        self.spawn: dict = {}
+        self.spawns: list[dict] = []
+        self.extra_pids: list[int] = []
+        self.addCleanup(self._end_leftovers)
+
+    def _end_leftovers(self) -> None:
+        pids = list(self.extra_pids)
+        for spawn in self.spawns:
+            if spawn.get("tag"):
+                pids += process_fixtures.tagged_pids(spawn["tag"])
+            for key in ("worker", "anchor"):
+                process = spawn.get(key)
+                if process is not None and process_fixtures._identity_matches(process.to_dict()):
+                    pids.append(process.pid)
+        for pid in dict.fromkeys(pids):
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signal.SIGKILL)
+        for pid in dict.fromkeys(pids):
+            # Reaps a pid that is this process's child (a detached anchor,
+            # an adopted escapee); any other pid is ChildProcessError.
+            with contextlib.suppress(ChildProcessError, OSError):
+                os.waitpid(pid, 0)
+
+    def patch(self, target, name: str, value) -> None:
+        self.enterContext(unittest.mock.patch.object(target, name, value))
+
+    def launch(self, turns=None, *, env=None, timeout=60, on_state=None, **kwargs):
+        overrides = {"FAKE_CLAUDE_DIAG_FILE": str(self.diag)}
+        if turns is not None:
+            overrides["FAKE_CLAUDE_TURNS"] = json.dumps(turns)
+        overrides.update(env or {})
+
+        def on_spawn(worker_process, *, anchor=None, ownership_tag=None) -> None:
+            self.spawn = {"worker": worker_process, "anchor": anchor, "tag": ownership_tag}
+            self.spawns.append(self.spawn)
+
+        def on_state_change(state: str, details: dict) -> None:
+            self.log.append((time.time(), state, json.loads(json.dumps(details))))
+            if on_state is not None:
+                on_state(state, details)
+
+        self.started = time.time()
+        with _environment(overrides):
+            result = worker.launch(
+                "do the bounded thing", cwd=self.dir, permission_mode="acceptEdits", timeout=timeout,
+                claude_bin=str(FAKE_CLAUDE), on_spawn=on_spawn, on_state_change=on_state_change,
+                **_stream_paths(self.dir), **kwargs,
+            )
+        self.returned = time.time()
+        return result
+
+    def states(self) -> list[str]:
+        states: list[str] = []
+        for _at, state, _details in self.log:
+            if not states or states[-1] != state:
+                states.append(state)
+        return states
+
+    def at(self, state: str) -> float:
+        return next(at for at, logged, _details in self.log if logged == state)
+
+    def details(self, state: str) -> list[dict]:
+        return [details for _at, logged, details in self.log if logged == state]
+
+    def ending(self) -> dict:
+        [details] = self.details(worker.ENDING)
+        return details
+
+    def diagnosis(self, result) -> dict:
+        self.assertIsInstance(result, worker.WorkerResult)
+        return result.stream_diagnosis
+
+    def anomalies(self, result) -> list[str]:
+        return [a["kind"] for a in self.diagnosis(result)["command_lifecycle_anomalies"]]
+
+
+class AnchorTest(_SupervisedCase):
+    """The stdin anchor (plan A): it holds the pipe and the lock, releases
+    stdin at ``ENDING``, keeps the lock through ``DRAINING``, is ended and
+    reaped at ``ENDED`` and on a timeout, runs with an empty environment,
+    and ends itself only as an orphan with nothing left to hold for."""
+
+    def test_the_anchor_holds_the_pipe_and_the_lock_and_releases_only_stdin_at_ending(self) -> None:
+        repo = process_fixtures.scratch_git_repo(self)
+        held = lock.acquire_lifecycle_lock(repo)
+        self.addCleanup(held.release)
+        seen: dict = {}
+
+        def on_state(state: str, details: dict) -> None:
+            fds = _fd_targets(self.spawn["anchor"].pid)
+            seen.setdefault(state, fds)
+            if state == worker.DRAINING and "probe" not in seen:
+                # The Controller's own copy goes; the worker has exited and
+                # the descendant inherited no descriptor (H6), so only the
+                # anchor can still hold the lock.
+                held.release()
+                seen["probe"] = lock.probe_lifecycle_lock(repo)
+
+        descendant = self.dir / "descendant.json"
+        result = self.launch(env={"FAKE_CLAUDE_DESCENDANT": "group-closed:2",
+                                  "FAKE_CLAUDE_DESCENDANT_FILE": str(descendant)},
+                             pass_fds=(held.fd,), on_state=on_state)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(self.states(), [worker.RUNNING, worker.ENDING, worker.DRAINING, worker.ENDED])
+        self.assertTrue(any(target.startswith("pipe:") for target in seen[worker.RUNNING]))
+        self.assertIn(str(held.path), seen[worker.RUNNING])
+        self.assertFalse(any(target.startswith("pipe:") for target in seen[worker.DRAINING]),
+                         "the anchor still holds stdin after ENDING")
+        self.assertIn(str(held.path), seen[worker.DRAINING])
+        self.assertEqual(seen["probe"], lock.HELD)
+        anchor_process = self.spawn["anchor"]
+        self.assertIsNone(process_fixtures.read_stat(anchor_process.pid), "the anchor is alive or a zombie")
+        lock.acquire_lifecycle_lock(repo).release()  # nothing holds it any more
+        self.assertIn("exited_at", json.loads(descendant.read_text()))
+
+    def test_after_a_timeout_the_anchor_is_neither_alive_nor_a_zombie(self) -> None:
+        result = self.launch(env={"FAKE_CLAUDE_HANG": "1"}, timeout=1)
+        self.assertEqual(result.outcome, worker.INTERRUPTED)
+        self.assertIsNone(process_fixtures.read_stat(self.spawn["anchor"].pid))
+
+    def test_the_anchor_environment_is_empty_under_an_inherited_ownership_tag(self) -> None:
+        seen: dict = {}
+
+        def on_state(state: str, details: dict) -> None:
+            if "anchor" not in seen:
+                seen["anchor"] = _environ(self.spawn["anchor"].pid)
+                seen["worker"] = _environ(self.spawn["worker"].pid)
+
+        result = self.launch(env={worker.OWNERSHIP_VAR: "outer-job"}, on_state=on_state)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(seen["anchor"], b"")
+        self.assertEqual(_ownership_tags(seen["worker"]), [f"outer-job:{self.spawn['tag']}"])
+        self.assertTrue(self.spawn["tag"].startswith("launch-"))
+
+    def test_an_orphaned_anchor_ends_itself_only_with_nothing_owned_and_no_supervisor(self) -> None:
+        gone = subprocess.Popen(["true"])
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: (process_fixtures.read_stat(gone.pid) or ("",))[0] == "Z"))
+        gone_ticks = process_fixtures.read_stat(gone.pid)[2]  # read while it is an unreaped zombie
+        gone.wait()
+        lock_path = self.dir / "supervisor.lock"
+        supervisor = os.open(lock_path, os.O_RDWR | os.O_CREAT)
+        self.addCleanup(os.close, supervisor)
+        fcntl.flock(supervisor, fcntl.LOCK_EX)
+        read_end, write_end = os.pipe()
+        self.addCleanup(os.close, read_end)
+        tag = f"cp3-orphan-{secrets.token_hex(4)}"
+        proc = subprocess.Popen(
+            anchor.command(write_end, gone.pid, gone_ticks, tag, str(lock_path), poll=0.1, orphan_seconds=1.0),
+            pass_fds=(write_end,), env={}, start_new_session=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        os.close(write_end)
+        self.extra_pids.append(proc.pid)
+        self.addCleanup(lambda: proc.poll() is None and (proc.kill(), proc.wait()))
+
+        # SIGUSR1 releases stdin, and only stdin: the reader sees EOF.
+        self.assertTrue(process_fixtures.wait_until(lambda: worker._catches_sigusr1(proc.pid)))
+        proc.send_signal(signal.SIGUSR1)
+        ready, _, _ = select.select([read_end], [], [], 10)
+        self.assertEqual(ready, [read_end])
+        self.assertEqual(os.read(read_end, 1), b"")
+
+        time.sleep(2.0)
+        self.assertIsNone(proc.poll(), "the anchor ended while a supervisor was attached")
+        sleeper = subprocess.Popen(["sleep", "60"], env={**os.environ, worker.OWNERSHIP_VAR: f"other:{tag}"})
+        self.extra_pids.append(sleeper.pid)
+        fcntl.flock(supervisor, fcntl.LOCK_UN)
+        time.sleep(2.0)
+        self.assertIsNone(proc.poll(), "the anchor ended while a tagged process lived")
+        sleeper.kill()
+        sleeper.wait()
+        released_at = time.monotonic()
+        self.assertTrue(process_fixtures.wait_until(lambda: proc.poll() is not None, timeout=10))
+        self.assertGreaterEqual(time.monotonic() - released_at, 0.9)
+        self.assertEqual(proc.returncode, 0)
+
+
+class SupervisionTest(_SupervisedCase):
+    """``RUNNING``/``WAITING``/``ENDING``/``ENDED`` from the stream (plan C,
+    step 2), wakeup settlement, the anchor's loss and the overdue rule."""
+
+    def test_a_background_task_keeps_the_worker_waiting_until_its_completion_turn(self) -> None:
+        result = self.launch([[{"step": "bash_bg", "id": "b1", "seconds": 1, "description": "suite"}],
+                              [{"step": "text", "text": "finished"}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(self.states(), [worker.RUNNING, worker.WAITING, worker.RUNNING, worker.ENDING,
+                                         worker.ENDED])
+        waiting = self.details(worker.WAITING)[0]["waiting_on"]
+        self.assertEqual(waiting["tasks"], [{"task_id": "b1", "description": "suite"}])
+        self.assertEqual(self.diagnosis(result)["turns"], 2)
+        self.assertEqual(self.diagnosis(result)["reason"], "quiescent_terminal_turn")
+
+    def test_a_monitor_runs_one_turn_per_tick_and_one_at_its_end(self) -> None:
+        result = self.launch([[{"step": "monitor", "id": "m1", "ticks": 3, "interval": 0.4}],
+                              *[[{"step": "text", "text": f"tick {n}"}] for n in range(4)]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(self.states(), [worker.RUNNING, worker.WAITING] * 4
+                         + [worker.RUNNING, worker.ENDING, worker.ENDED])
+
+    def test_a_wakeup_whose_fire_turn_stops_it_settles_by_the_stop_with_no_anomaly(self) -> None:
+        result = self.launch([[{"step": "wakeup", "delay": 1, "fire_turn": [
+            {"step": "text", "text": "woken"}, {"step": "wakeup_stop"}]}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(self.states(), [worker.RUNNING, worker.WAITING, worker.RUNNING, worker.ENDING,
+                                         worker.ENDED])
+        diagnosis = self.diagnosis(result)
+        [bracket] = diagnosis["command_lifecycles"]
+        [wakeup] = diagnosis["wakeups_seen"]
+        self.assertEqual((wakeup["state"], wakeup["settled_by"]), ("settled", "stop"))
+        self.assertEqual((wakeup["cancelled_wakeups"], wakeup["expected_count"]), (0, 0))
+        self.assertEqual(wakeup["command_uuid"], bracket["command_uuid"])
+        self.assertEqual(diagnosis["command_lifecycle_anomalies"], [])
+
+    def test_a_fallback_wakeup_cancelled_from_the_fire_turn_counts_one(self) -> None:
+        result = self.launch([[
+            {"step": "wakeup", "delay": 1200},
+            {"step": "wakeup", "delay": 1, "fire_turn": [{"step": "text"}, {"step": "wakeup_stop"}]},
+        ]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        diagnosis = self.diagnosis(result)
+        [stop] = diagnosis["wakeup_stops"]
+        self.assertEqual((stop["cancelled_wakeups"], stop["expected_count"]), (1, 1))
+        self.assertEqual(diagnosis["command_lifecycle_anomalies"], [])
+
+    def test_a_matched_wakeup_with_no_stop_settles_after_the_window(self) -> None:
+        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 1)
+        result = self.launch([[{"step": "wakeup", "delay": 1}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(self.states(), [worker.RUNNING, worker.WAITING, worker.RUNNING, worker.WAITING,
+                                         worker.ENDING, worker.ENDED])
+        diagnosis = self.diagnosis(result)
+        [bracket] = diagnosis["command_lifecycles"]
+        matched = [(at, details) for at, state, details in self.log if state == worker.WAITING
+                   and any(w["state"] == "fire_matched" for w in details["waiting_on"]["wakeups"])]
+        self.assertTrue(matched, "no WAITING flush named the fire_matched wakeup")
+        matched_at, details = matched[0]
+        [entry] = details["waiting_on"]["wakeups"]
+        self.assertEqual(entry["command_uuid"], bracket["command_uuid"])
+        self.assertIsNotNone(entry["settle_seconds_left"])
+        self.assertGreaterEqual(self.at(worker.ENDING) - matched_at, 0.9)
+        [wakeup] = diagnosis["wakeups_seen"]
+        self.assertEqual((wakeup["settled_by"], wakeup["command_uuid"]), ("settle_window", bracket["command_uuid"]))
+        self.assertEqual(self.ending()["supervisor_facts"]["settled_wakeups"], [wakeup["tool_use_id"]])
+
+    def test_a_fallback_wakeup_cancelled_before_the_final_turn_ends_the_session_promptly(self) -> None:
+        result = self.launch([[{"step": "wakeup", "delay": 1200}, {"step": "bash_bg", "seconds": 0.5}],
+                              [{"step": "wakeup_stop"}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertLess(self.returned - self.started, 10)
+
+    def test_without_the_stop_the_worker_waits_for_the_wakeup(self) -> None:
+        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 0.3)
+        result = self.launch([[{"step": "wakeup", "delay": 2}, {"step": "bash_bg", "seconds": 0.3}],
+                              [{"step": "text", "text": "task done"}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        after_task = self.details(worker.WAITING)[-1]["waiting_on"]["wakeups"]
+        self.assertTrue(after_task)
+        self.assertGreaterEqual(self.at(worker.ENDING) - self.started, 2.0)
+
+    def test_an_anchor_killed_while_waiting_is_stdin_closed_while_waiting(self) -> None:
+        def on_state(state: str, details: dict) -> None:
+            if state == worker.WAITING:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(self.spawn["anchor"].pid, signal.SIGKILL)
+
+        result = self.launch([[{"step": "bash_bg", "seconds": 5}], [{"step": "text"}]], on_state=on_state)
+        self.assertEqual(result.outcome, worker.AMBIGUOUS)
+        self.assertEqual(self.diagnosis(result)["reason"], "stdin_closed_while_waiting")
+        self.assertNotIn(worker.ENDING, self.states())
+
+    def test_an_overdue_wakeup_ends_the_session_as_not_delivered(self) -> None:
+        self.patch(worker, "WAKEUP_GRACE_SECONDS", 1)
+        result = self.launch([[{"step": "lifecycle_fault", "kind": "delay_fire", "seconds": 30},
+                               {"step": "wakeup", "delay": 1}]])
+        self.assertEqual(result.outcome, worker.AMBIGUOUS)
+        self.assertEqual(self.diagnosis(result)["reason"], "wakeup_not_delivered")
+        self.assertIsNotNone(self.ending()["supervisor_facts"]["wakeup_overdue_declared_at"])
+        self.assertLess(self.returned - self.started, 15)
+
+
+class QuiescenceConfirmationTest(unittest.TestCase):
+    """The harness opens an already-queued notification turn a few
+    milliseconds after a ``queued_turn_count: 0`` ``result`` (CP1's
+    fixtures), so ``ENDING`` waits out a confirmation window: the longer
+    one exactly where the fixtures show that gap."""
+
+    CONTRACT = Path(__file__).resolve().parent / "harness_contract"
+
+    def _stream_through(self, fixture: str, line: int) -> worker_stream.WorkerStream:
+        lines = (self.CONTRACT / f"{fixture}.jsonl").read_text().splitlines(keepends=True)
+        stream = worker_stream.WorkerStream()
+        stream.feed("".join(lines[:line + 1]).encode())
+        return stream
+
+    def test_the_measured_gaps_get_the_notification_window(self) -> None:
+        # (fixture, the last line before the queued turn's system/init, that init's line)
+        for fixture, before, init in (("p3_streaming_background_bash", 15, 16),
+                                      ("p11_subagent_handback", 17, 18),
+                                      ("p8_monitor_timeout", 20, 21)):
+            with self.subTest(fixture=fixture):
+                gap = self._stream_through(fixture, before)
+                self.assertTrue(gap.quiescent(), "the gap is not quiescent: nothing to confirm")
+                self.assertEqual(worker.quiescence_confirm_seconds(gap), worker._NOTIFICATION_CONFIRM_SECONDS)
+                arrivals = json.loads((self.CONTRACT / f"{fixture}.meta.json").read_text())["line_arrival_seconds"]
+                self.assertLess(arrivals[init] - arrivals[before], worker._QUIESCENCE_CONFIRM_SECONDS)
+                self.assertFalse(self._stream_through(fixture, init).quiescent())
+
+    def test_a_quiescent_turn_with_no_task_just_ended_gets_the_short_window(self) -> None:
+        stream = self._stream_through("p3_streaming_background_bash", 21)  # the continuation's result
+        self.assertTrue(stream.quiescent())
+        self.assertEqual(worker.quiescence_confirm_seconds(stream), worker._QUIESCENCE_CONFIRM_SECONDS)
+        self.assertLessEqual(worker._QUIESCENCE_CONFIRM_SECONDS, worker._NOTIFICATION_CONFIRM_SECONDS)
+
+
+class LifecycleBracketSupervisionTest(_SupervisedCase):
+    """``command_lifecycle`` supervision (amendment 0): an open bracket is
+    owned work, a stalled one is timed and declared, and an irregular one
+    matches nothing."""
+
+    def test_a_fire_does_not_end_the_session_before_its_completed(self) -> None:
+        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 1)
+        result = self.launch([[{"step": "lifecycle_fault", "kind": "delay_completed", "seconds": 2},
+                               {"step": "wakeup", "delay": 1}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        open_bracket = [at for at, state, details in self.log if state == worker.WAITING
+                        and details["waiting_on"]["command_lifecycles"]
+                        and details["waiting_on"]["command_lifecycles"][0]["turn_seen"]]
+        matched = [at for at, state, details in self.log if state == worker.WAITING
+                   and any(w["state"] == "fire_matched" for w in details["waiting_on"]["wakeups"])]
+        self.assertTrue(open_bracket and matched)
+        self.assertGreaterEqual(matched[0] - open_bracket[0], 1.5)
+        self.assertGreater(self.at(worker.ENDING), matched[0])
+        [wakeup] = self.diagnosis(result)["wakeups_seen"]
+        self.assertEqual(wakeup["settled_by"], "settle_window")
+
+    def test_an_unterminated_bracket_is_declared_and_flushed_with_ending(self) -> None:
+        self.patch(worker, "COMMAND_LIFECYCLE_GRACE_SECONDS", 1)
+        result = self.launch([[{"step": "lifecycle_fault", "kind": "omit_completed"}, {"step": "wakeup", "delay": 1}]])
+        self.assertEqual(result.outcome, worker.AMBIGUOUS)
+        diagnosis = self.diagnosis(result)
+        self.assertEqual(diagnosis["reason"], "command_lifecycle_unterminated")
+        facts = self.ending()["supervisor_facts"]
+        self.assertIsNotNone(facts["command_lifecycle_overdue_declared_at"])
+        self.assertEqual(facts["command_lifecycle_overdue_command_uuid"],
+                         diagnosis["command_lifecycles"][0]["command_uuid"])
+
+    def test_a_stalled_bracket_is_not_declared_while_a_task_is_open(self) -> None:
+        self.patch(worker, "COMMAND_LIFECYCLE_GRACE_SECONDS", 1)
+        done = self.dir / "task-done"
+        result = self.launch([[{"step": "lifecycle_fault", "kind": "omit_completed"},
+                               {"step": "wakeup", "delay": 1, "fire_turn": [
+                                   {"step": "bash_bg", "seconds": 2, "write_file": str(done)}]}],
+                              [{"step": "text", "text": "task done"}]])
+        self.assertEqual(self.diagnosis(result)["reason"], "command_lifecycle_unterminated")
+        self.assertGreaterEqual(self.at(worker.ENDING), done.stat().st_mtime)
+
+    def test_a_long_bracketed_turn_is_never_declared(self) -> None:
+        self.patch(worker, "COMMAND_LIFECYCLE_GRACE_SECONDS", 1)
+        result = self.launch([[{"step": "wakeup", "delay": 1, "fire_turn": [
+            {"step": "bash_bg", "id": "long", "seconds": 2.5},
+            {"step": "await", "id": "long", "notify": False},
+            {"step": "wakeup_stop"}]}]])
+        self.assertEqual(result.outcome, worker.SUCCESS, self.diagnosis(result))
+        self.assertIsNone(self.ending()["supervisor_facts"]["command_lifecycle_overdue_declared_at"])
+
+    def test_an_irregular_bracket_matches_nothing_and_the_wakeup_becomes_overdue(self) -> None:
+        cases = {
+            "omit_started": (1, [[{"step": "lifecycle_fault", "kind": "omit_started"},
+                                  {"step": "wakeup", "delay": 1}]]),
+            "reuse_uuid": (2, [[{"step": "wakeup", "delay": 1, "fire_turn": [
+                {"step": "lifecycle_fault", "kind": "reuse_uuid"}, {"step": "wakeup", "delay": 1}]}]]),
+            "overlap": (2, [[{"step": "lifecycle_fault", "kind": "overlap"},
+                             {"step": "wakeup", "delay": 1, "fire_turn": [{"step": "wakeup", "delay": 1}]}]]),
+            "bracket_turn": (1, [[{"step": "wakeup", "delay": 6.5}, {"step": "bash_bg", "seconds": 0.5},
+                                  {"step": "lifecycle_fault", "kind": "bracket_turn", "turn": "task"}],
+                                 [{"step": "text", "text": "task done"}]]),
+        }
+        for name, (grace, turns) in cases.items():
+            with self.subTest(fault=name):
+                self.log.clear()
+                with unittest.mock.patch.object(worker, "WAKEUP_GRACE_SECONDS", grace):
+                    result = self.launch(turns)
+                diagnosis = self.diagnosis(result)
+                self.assertEqual(result.outcome, worker.AMBIGUOUS)
+                self.assertEqual(diagnosis["reason"], "command_lifecycle_irregular")
+                self.assertIn("wakeup_not_delivered", diagnosis["secondary_reasons"])
+                self.assertTrue(diagnosis["command_lifecycle_anomalies"])
+
+    def test_a_bracketed_task_turn_with_no_wakeup_ends_at_quiescence_irregular(self) -> None:
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.3},
+                               {"step": "lifecycle_fault", "kind": "bracket_turn", "turn": "task"}],
+                              [{"step": "text"}]])
+        self.assertEqual(result.outcome, worker.AMBIGUOUS)
+        self.assertEqual(self.diagnosis(result)["reason"], "command_lifecycle_irregular")
+        self.assertEqual(self.anomalies(result), ["unmatched_bracket"])
+        self.assertIsNone(self.ending()["supervisor_facts"]["wakeup_overdue_declared_at"])
+
+
+class WrongMatchTest(_SupervisedCase):
+    """A wrong match never ends the session (round 9's I1): a spurious
+    bracket around the task-completion turn matches the due wakeup ``W``,
+    which stays owned (``fire_matched``) until it settles, so ``W``'s real
+    fire is still observed. ``WAKEUP_SETTLE_SECONDS`` is patched to 3 s."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 3)
+
+    @staticmethod
+    def _turns(*, fire_delay: float, task_turn: list, task_seconds: float = 2, extra_turns=()) -> list:
+        return [[{"step": "wakeup", "delay": 1},
+                 {"step": "bash_bg", "id": "A", "seconds": task_seconds},
+                 {"step": "lifecycle_fault", "kind": "spurious_bracket", "turn": "task"},
+                 {"step": "lifecycle_fault", "kind": "delay_fire", "seconds": fire_delay}],
+                task_turn, *extra_turns]
+
+    def test_the_real_fire_inside_the_window_is_observed_and_fails_the_run_closed(self) -> None:
+        result = self.launch(self._turns(fire_delay=2, task_turn=[{"step": "text", "text": "task done"}]))
+        diagnosis = self.diagnosis(result)
+        self.assertEqual(result.outcome, worker.AMBIGUOUS)
+        self.assertEqual(diagnosis["reason"], "command_lifecycle_irregular")
+        spurious, real = diagnosis["command_lifecycles"]
+        self.assertEqual(spurious["state"], "closed_regular")
+        self.assertEqual(diagnosis["command_lifecycle_anomalies"],
+                         [{"kind": "unmatched_bracket", "command_uuid": real["command_uuid"],
+                           "offset": real["completed_offset"]}])
+        # ENDING, and so stdin's EOF, came only after the real fire's
+        # completed(X): never between the spurious bracket and it.
+        self.assertGreater(self.ending()["ending_offset"], real["completed_offset"])
+        self.assertGreaterEqual(json.loads(self.diag.read_text())["stdin_eof_at"], self.at(worker.ENDING))
+        self.assertEqual(diagnosis["turns"], 3)
+
+    def test_a_stop_inside_the_spurious_bracket_exposes_the_wrong_match_through_the_count(self) -> None:
+        result = self.launch(self._turns(fire_delay=2, task_turn=[{"step": "wakeup_stop"}]))
+        diagnosis = self.diagnosis(result)
+        self.assertEqual(result.outcome, worker.AMBIGUOUS)
+        self.assertEqual(diagnosis["reason"], "command_lifecycle_irregular")
+        self.assertIn("wakeup_count_mismatch", self.anomalies(result))
+        [stop] = diagnosis["wakeup_stops"]
+        self.assertEqual((stop["cancelled_wakeups"], stop["expected_count"]), (1, 0))
+        # Ended at quiescence, without waiting for the window.
+        self.assertLess(self.returned - self.started, 4.5)
+
+    def test_a_turn_inside_the_window_restarts_it(self) -> None:
+        result = self.launch([[{"step": "wakeup", "delay": 1},
+                               {"step": "monitor", "id": "m", "ticks": 2, "interval": 1.5}],
+                              *[[{"step": "text", "text": f"monitor {n}"}] for n in range(3)]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        last_turn = max(at for at, state, _details in self.log if state == worker.RUNNING)
+        self.assertGreaterEqual(self.at(worker.ENDING) - last_turn, 2.9)
+
+    def test_an_open_task_pauses_the_window(self) -> None:
+        """Under revision 10's predicate this run would have ended the
+        session at the second task's completion turn, before the real fire."""
+        result = self.launch(self._turns(fire_delay=8, task_turn=[{"step": "bash_bg", "id": "B", "seconds": 6}],
+                                         extra_turns=[[{"step": "text", "text": "B done"}]]))
+        diagnosis = self.diagnosis(result)
+        self.assertEqual(diagnosis["reason"], "command_lifecycle_irregular")
+        spurious, real = diagnosis["command_lifecycles"]
+        self.assertEqual(self.anomalies(result), ["unmatched_bracket"])
+        self.assertEqual(diagnosis["command_lifecycle_anomalies"][0]["command_uuid"], real["command_uuid"])
+        self.assertGreater(self.ending()["ending_offset"], real["completed_offset"])
+
+    def test_the_double_breach_residue(self) -> None:
+        """The one documented path by which an unrelated bracket can
+        precede ``ENDING`` (H2): the harness brackets a non-fire turn after
+        ``W``'s due time *and* delays ``W``'s real fire past the lateness
+        bound the settle window is sized from."""
+        result = self.launch(self._turns(fire_delay=30, task_turn=[{"step": "text", "text": "task done"}]))
+        diagnosis = self.diagnosis(result)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        [spurious] = diagnosis["command_lifecycles"]
+        [wakeup] = diagnosis["wakeups_seen"]
+        self.assertEqual((wakeup["settled_by"], wakeup["command_uuid"]), ("settle_window", spurious["command_uuid"]))
+        self.assertLess(self.returned - self.started, 20)
+
+
+_INNER_CONTROLLER = r'''
+import json, os, signal, sys, tempfile
+sys.path.insert(0, sys.argv[1])
+from controller import anchor, worker
+
+out_dir, mode, fake = sys.argv[2], sys.argv[3], sys.argv[4]
+for key in [k for k in os.environ if k.startswith("FAKE_CLAUDE_")]:
+    del os.environ[key]
+os.environ["FAKE_CLAUDE_DESCENDANT"] = "setsid:2"
+os.environ["FAKE_CLAUDE_DESCENDANT_FILE"] = os.path.join(out_dir, "grandchild.json")
+anchor.ANCHOR_POLL_SECONDS, anchor.ANCHOR_ORPHAN_SECONDS = 0.2, 2.0
+paths = {}
+for key in ("stdout_path", "stderr_path"):
+    fd, paths[key] = tempfile.mkstemp(dir=out_dir)
+    os.close(fd)
+
+
+def dump(name, value):
+    with open(os.path.join(out_dir, name + ".tmp"), "w") as fh:
+        json.dump(value, fh)
+    os.replace(os.path.join(out_dir, name + ".tmp"), os.path.join(out_dir, name))
+
+
+def on_spawn(process, *, anchor=None, ownership_tag=None):
+    dump("inner.json", {"anchor": anchor.pid, "tag": ownership_tag})
+
+
+def on_state_change(state, details):
+    if state != worker.DRAINING:
+        return
+    with open(os.environ["FAKE_CLAUDE_DESCENDANT_FILE"]) as fh:
+        grandchild = json.load(fh)["pid"]
+    with open(f"/proc/{grandchild}/environ", "rb") as fh:
+        environ = fh.read().split(b"\0")
+    prefix = b"WORKFLOW_CONTROLLER_OWNERSHIP="
+    dump("tags.json", {"grandchild": grandchild,
+                       "tags": [item[len(prefix):].decode() for item in environ if item.startswith(prefix)]})
+    if mode == "die":
+        os.kill(os.getpid(), signal.SIGKILL)
+
+
+worker.launch("inner task", cwd=out_dir, permission_mode="auto", timeout=60, claude_bin=fake,
+              on_spawn=on_spawn, on_state_change=on_state_change, **paths)
+'''
+
+
+class OwnershipTest(_SupervisedCase):
+    """Owned descendants (plan C, step 3): by the process group, the tag,
+    adoption and the record of what was seen owned; recognised daemons
+    excluded; the drain bound; ``--timeout`` over the whole owned lifetime;
+    and nested Controllers."""
+
+    def _orphan(self, details_list: list[dict], name: str = "fake-claude-orphan") -> dict:
+        for details in details_list:
+            for entry in details["owned_processes"]:
+                if entry["cmdline"].startswith(name):
+                    return entry
+        self.fail(f"no owned process named {name!r} was flushed")
+
+    def _escaped(self, orphan: str, **patches) -> tuple[worker.WorkerResult, dict, dict]:
+        seen: dict = {}
+
+        def on_state(state: str, details: dict) -> None:
+            for entry in details["owned_processes"]:
+                stat = Path(f"/proc/{entry['pid']}/stat")
+                with contextlib.suppress(OSError):
+                    seen.setdefault(entry["pid"], int(stat.read_text().rsplit(")", 1)[1].split()[1]))
+
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": orphan, "orphan_seconds": 2}],
+                              [{"step": "text"}]], on_state=on_state)
+        entry = self._orphan(self.details(worker.DRAINING))
+        return result, entry, seen
+
+    def test_a_setsid_escapee_is_owned_by_tag_and_adopted_and_waited_for(self) -> None:
+        result, entry, ppids = self._escaped("setsid")
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(entry["source"], "tag")
+        self.assertEqual(ppids[entry["pid"]], os.getpid(), "the escapee was not adopted by the supervisor")
+        self.assertIsNone(process_fixtures.read_stat(entry["pid"]), "launch returned before the escapee ended")
+
+    def test_a_reparented_group_escapee_is_owned_and_adopted(self) -> None:
+        result, entry, ppids = self._escaped("reparent")
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(entry["source"], "group")
+        self.assertEqual(ppids[entry["pid"]], os.getpid())
+        self.assertIsNone(process_fixtures.read_stat(entry["pid"]))
+
+    def test_without_a_subreaper_the_tag_still_finds_the_escapee(self) -> None:
+        self.patch(worker, "_prctl", lambda *args: None)
+        result, entry, ppids = self._escaped("setsid")
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual(entry["source"], "tag")
+        self.assertNotEqual(ppids[entry["pid"]], os.getpid())
+        self.assertTrue(process_fixtures.wait_until(lambda: not _running(entry["pid"]), timeout=5))
+
+    def test_a_recorded_process_stays_owned_after_it_passes_no_other_test(self) -> None:
+        self.patch(worker, "_prctl", lambda *args: None)
+        recorded: set[int] = set()
+        real_read_environ = worker._read_environ
+
+        def read_environ(root, pid):
+            if pid in recorded:
+                raise PermissionError(errno.EACCES, "scrubbed for the test")
+            return real_read_environ(root, pid)
+
+        def on_state(state: str, details: dict) -> None:
+            recorded.update(entry["pid"] for entry in details["owned_processes"]
+                            if entry["cmdline"].startswith("fake-claude-orphan"))
+
+        self.patch(worker, "_read_environ", read_environ)
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": "setsid", "orphan_seconds": 3}],
+                              [{"step": "text"}]], on_state=on_state)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        [pid] = recorded
+        draining = self.details(worker.DRAINING)
+        self.assertTrue(draining)
+        self.assertTrue(all(any(e["pid"] == pid for e in d["owned_processes"]) for d in draining[:-1]))
+        self.assertTrue(process_fixtures.wait_until(lambda: not _running(pid), timeout=5))
+        self.assertGreaterEqual(self.returned - self.started, 3)
+
+    def test_a_reused_pid_is_not_owned_and_a_dead_entry_is_pruned(self) -> None:
+        leader, other = process_fixtures.spawn_sleeper(self), process_fixtures.spawn_sleeper(self)
+        dead = subprocess.Popen(["true"])
+        dead.wait()
+        ticks = process_fixtures.read_stat(other.pid)[2]
+        ownership = worker._Ownership(tag="cp3-no-such-tag", worker_process=worker.capture_worker_process(leader.pid),
+                                      anchor_pid=None, baseline=set(), adopting=False)
+        entry = {"pid": other.pid, "start_ticks": ticks, "source": "tag", "cmdline": "sleeper"}
+        ownership.owned = {other.pid: dict(entry),
+                           dead.pid: {"pid": dead.pid, "start_ticks": 1, "source": "tag", "cmdline": "gone"}}
+        ownership.scan()
+        self.assertEqual(ownership.entries(), [entry])  # recorded and still matching: kept
+        ownership.owned = {other.pid: {**entry, "start_ticks": ticks + 1}}
+        ownership.scan()
+        self.assertEqual(ownership.entries(), [])  # the same pid, another process
+
+    def test_the_record_stays_bounded_over_many_short_lived_children(self) -> None:
+        scans: list[int] = []
+        real_scan = worker._Ownership.scan
+
+        def counting_scan(ownership) -> None:
+            scans.append(1)
+            real_scan(ownership)
+
+        self.patch(worker._Ownership, "scan", counting_scan)
+        command = "for i in $(seq 500); do sleep 0.02 & if [ $((i % 4)) -eq 0 ]; then wait; fi; done; wait"
+        result = self.launch([[{"step": "bash_bg", "command": command}], [{"step": "text"}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertLessEqual(len(self.log), len(scans))
+        flushed = set()
+        for _at, _state, details in self.log:
+            self.assertLessEqual(len(details["owned_processes"]), 8)
+            flushed.update((e["pid"], e["start_ticks"]) for e in details["owned_processes"])
+            self.assertLessEqual(len(flushed), details["owned_processes_seen_count"])
+        seen = result.owned_processes_seen
+        self.assertGreaterEqual(seen["count"], len(flushed))
+        self.assertLessEqual(seen["count"], 505)
+        self.assertLessEqual(len(seen["sample"]), worker.OWNED_PROCESS_SAMPLE)
+        self.assertEqual(len({e["pid"] for e in seen["sample"]}), len(seen["sample"]))
+
+    def test_the_adopted_zombie_reaper_never_reaps_the_worker(self) -> None:
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "reparent", "orphan_seconds": 1}],
+                              [{"step": "text"}]], env={"FAKE_CLAUDE_EXIT": "3"})
+        self.assertEqual(result.returncode, 3)
+        self.assertEqual(result.outcome, worker.FAILURE)
+
+    def test_an_unreadable_proc_keeps_draining_and_is_reported_unverifiable(self) -> None:
+        blocked = threading.Event()
+        real_list = worker._list_proc
+
+        def list_proc(root):
+            if blocked.is_set():
+                raise PermissionError(errno.EACCES, "unreadable /proc (patched)")
+            return real_list(root)
+
+        def on_state(state: str, details: dict) -> None:
+            if state == worker.DRAINING and not blocked.is_set():
+                blocked.set()
+                timer = threading.Timer(3.0, blocked.clear)
+                timer.daemon = True
+                timer.start()
+                self.addCleanup(timer.cancel)
+
+        self.patch(worker, "_list_proc", list_proc)
+        descendant = self.dir / "descendant.json"
+        result = self.launch(env={"FAKE_CLAUDE_DESCENDANT": "group-closed:1",
+                                  "FAKE_CLAUDE_DESCENDANT_FILE": str(descendant)}, on_state=on_state)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertIn("unverifiable", [details["scan"] for details in self.details(worker.DRAINING)])
+        exited_at = json.loads(descendant.read_text())["exited_at"]
+        self.assertGreaterEqual(self.returned - exited_at, 1.0, "the drain ended on an unverifiable scan")
+
+    def test_an_unreadable_environ_is_not_unverifiable_and_the_group_still_owns(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        real_read_environ = worker._read_environ
+
+        def unrelated_unreadable(root, pid):
+            if pid == sleeper.pid:
+                raise PermissionError(errno.EACCES, "non-dumpable (patched)")
+            return real_read_environ(root, pid)
+
+        with unittest.mock.patch.object(worker, "_read_environ", unrelated_unreadable):
+            result = self.launch([[{"step": "bash_bg", "seconds": 0.5}], [{"step": "text"}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertEqual({details["scan"] for _at, _state, details in self.log}, {"verified"})
+
+        self.log.clear()
+
+        def everything_unreadable(root, pid):
+            raise PermissionError(errno.EACCES, "non-dumpable (patched)")
+
+        descendant = self.dir / "descendant.json"
+        with unittest.mock.patch.object(worker, "_read_environ", everything_unreadable):
+            result = self.launch(env={"FAKE_CLAUDE_DESCENDANT": "group:1",
+                                      "FAKE_CLAUDE_DESCENDANT_FILE": str(descendant)})
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        pid = json.loads(descendant.read_text())["pid"]
+        entries = [e for d in self.details(worker.DRAINING) for e in d["owned_processes"] if e["pid"] == pid]
+        self.assertTrue(entries)
+        self.assertEqual({e["source"] for e in entries}, {"group"})
+
+    def test_a_recognised_daemon_is_excluded_and_left_running(self) -> None:
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.5, "orphan": "daemon", "argv0": "gpg-agent"}],
+                              [{"step": "text"}]])
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertLess(self.returned - self.started, 15)
+        [excluded] = self.details(worker.ENDED)[0]["excluded_processes"]
+        self.assertEqual(excluded["pattern"], "gpg-agent")
+        self.extra_pids.append(excluded["pid"])
+        self.assertTrue(_running(excluded["pid"]), "the recognised daemon was ended")
+
+    def test_an_unrecognised_daemon_detaches_after_the_drain_bound_and_ends_nothing(self) -> None:
+        self.patch(worker, "DRAIN_DETACH_SECONDS", 2)
+        lock_file = self.dir / "lock"
+        lock_file.touch()
+        lock_fd = os.open(lock_file, os.O_RDONLY)
+        self.addCleanup(os.close, lock_fd)
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon"}], [{"step": "text"}]],
+                             pass_fds=(lock_fd,))
+        self.assertIsInstance(result, worker.DrainDetached)
+        [remaining] = result.remaining
+        self.extra_pids.append(remaining["pid"])
+        self.assertTrue(remaining["cmdline"].startswith("fake-claude-daemon"))
+        self.assertEqual(result.remaining_pids, [remaining["pid"]])
+        self.assertTrue(_running(remaining["pid"]), "the drain bound ended the escapee")
+        anchor_pid = self.spawn["anchor"].pid
+        self.assertTrue(_running(anchor_pid), "the anchor was ended at the detach")
+        self.assertIn(str(lock_file), _fd_targets(anchor_pid))
+        self.assertEqual(self.states()[-1], worker.DRAINING)
+        self.assertGreaterEqual(self.returned - self.at(worker.DRAINING), 1.9)
+
+    def test_a_timeout_while_waiting_ends_the_group_the_tagged_processes_and_the_anchor(self) -> None:
+        result = self.launch([[{"step": "bash_bg", "seconds": 30, "orphan": "setsid", "orphan_seconds": 60}]],
+                             timeout=2)
+        self.assertEqual(result.outcome, worker.INTERRUPTED)
+        self.assertTrue(process_fixtures.wait_until(lambda: not process_fixtures.tagged_pids(self.spawn["tag"]),
+                                                    timeout=5))
+        self.assertIsNone(process_fixtures.read_stat(self.spawn["anchor"].pid))
+
+    def test_a_timeout_while_draining_ends_the_escapee_and_the_anchor(self) -> None:
+        descendant = self.dir / "descendant.json"
+        result = self.launch(env={"FAKE_CLAUDE_DESCENDANT": "setsid:30",
+                                  "FAKE_CLAUDE_DESCENDANT_FILE": str(descendant)}, timeout=3)
+        self.assertEqual(result.outcome, worker.INTERRUPTED)
+        self.assertEqual(result.returncode, 0)
+        pid = json.loads(descendant.read_text())["pid"]
+        self.assertTrue(process_fixtures.wait_until(lambda: not _running(pid), timeout=5))
+        self.assertNotIn("exited_at", json.loads(descendant.read_text()))
+        self.assertIsNone(process_fixtures.read_stat(self.spawn["anchor"].pid))
+
+    def _nested(self, mode: str) -> worker.WorkerResult:
+        script = self.dir / "inner_controller.py"
+        script.write_text(_INNER_CONTROLLER)
+        inner = self.dir / "inner"
+        inner.mkdir()
+        command = " ".join(shlex.quote(part) for part in (
+            sys.executable, str(script), str(Path(__file__).resolve().parent.parent), str(inner), mode,
+            str(FAKE_CLAUDE)))
+        self.inner = inner
+        return self.launch([[{"step": "bash_bg", "command": command, "description": "inner controller"}],
+                            [{"step": "text", "text": "inner done"}]])
+
+    def test_a_nested_worker_carries_both_tags_and_the_outer_launch_waits_for_it(self) -> None:
+        result = self._nested("keep")
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        tags = json.loads((self.inner / "tags.json").read_text())
+        inner_tag = json.loads((self.inner / "inner.json").read_text())["tag"]
+        [tag_list] = tags["tags"]
+        self.assertEqual(tag_list.split(":")[-2:], [self.spawn["tag"], inner_tag])
+        grandchild = json.loads((self.inner / "grandchild.json").read_text())
+        self.assertLessEqual(grandchild["exited_at"], self.returned)
+
+    def test_a_leaked_inner_anchor_holds_the_outer_job_only_until_it_ends_itself(self) -> None:
+        """The inner Controller is SIGKILLed while draining: its anchor
+        passes to the outer supervisor by adoption (the anchor carries no
+        tag), and ends itself once its worker and every tagged process are
+        gone and no supervisor is attached."""
+        result = self._nested("die")
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        inner_anchor = json.loads((self.inner / "inner.json").read_text())["anchor"]
+        self.assertIsNone(process_fixtures.read_stat(inner_anchor), "the inner anchor outlived the outer launch")
+        entries = [e for d in self.details(worker.DRAINING) for e in d["owned_processes"] if e["pid"] == inner_anchor]
+        self.assertTrue(entries, "the outer supervisor never owned the leaked inner anchor")
+        self.assertEqual({e["source"] for e in entries}, {"adopted"})
+        self.assertLess(self.returned - self.started, 45)
 
 
 if __name__ == "__main__":

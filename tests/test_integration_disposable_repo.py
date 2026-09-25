@@ -609,7 +609,9 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                     # when the decision carried one (CP4B).
                     addendum = result["selected_action"]["task_addendum"]
                     command = result["selected_action"]["command"]
-                    self.assertEqual(json.loads(diag.read_text())["argv"][1],
+                    # Worker-lifecycle-ownership CP3: the task is the
+                    # stream-json user message, not argv[1].
+                    self.assertEqual(json.loads(diag.read_text())["task_message"]["message"]["content"],
                                      command if addendum is None else f"{command}\n\n{addendum}")
                     # A no-op worker changes nothing, so nothing transitions.
                     self.assertEqual(result["status"], job.STATUS_FAILED)
@@ -753,8 +755,9 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                 self.assertIn("Controller note (pending review-stage state write)", addendum_6)
                 self.assertIn("`HEAD` records `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`", addendum_6)
                 self.assertIn(f"`Workflow-Work-Item: {work_item_id}`", addendum_6)
-                self.assertEqual(json.loads((tmp_root / "diag-6.json").read_text())["argv"][1],
-                                 f"/apply-implementation-review {work_item_id}\n\n{addendum_6}")
+                self.assertEqual(
+                    json.loads((tmp_root / "diag-6.json").read_text())["task_message"]["message"]["content"],
+                    f"/apply-implementation-review {work_item_id}\n\n{addendum_6}")
                 self.assertEqual(record_6["pre_state"]["bundle_manifest_bundle_id"], "b" * 64)
 
             # 7. The same state after state 6's unverified job: the relaunch
@@ -2199,7 +2202,9 @@ class LiveConcurrencyDrillTest(unittest.TestCase):
                 outcome["result"] = worker.launch(
                     task, cwd=repo, permission_mode=job.DEFAULT_PERMISSION_MODE, timeout=900,
                     claude_bin=CLAUDE_BIN, pass_fds=(held.fd,),
-                    on_spawn=lambda process: spawned.setdefault("process", process),
+                    # Worker-lifecycle-ownership CP3: `launch` also passes
+                    # `anchor` and `ownership_tag`, ignored here.
+                    on_spawn=lambda process, **_keywords: spawned.setdefault("process", process),
                     model=routing.DEFAULT_MODEL, effort="low", **streams,
                 )
             thread = threading.Thread(target=_launch)

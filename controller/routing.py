@@ -133,15 +133,24 @@ BRANCH_GUARD_TOOLS: tuple[str, ...] = (
 )
 
 
+#: The Claude Code tools disallowed for every worker, whatever its route
+#: (``workflow-controller-worker-lifecycle-ownership`` CP3, limitation H3):
+#: a recurring or remote schedule has no point at which the owned work is
+#: finished, so it cannot be owned to termination. ``Monitor``,
+#: ``ScheduleWakeup``, background Bash and background subagents stay
+#: allowed: the Controller keeps them owned.
+ASYNC_UNOWNABLE_TOOLS: tuple[str, ...] = ("CronCreate", "CronDelete", "RemoteTrigger")
+
+
 def worker_disallowed_tools(route: "ResolvedRoute", *, branch_bound: bool) -> tuple[str, ...]:
     """The launched worker's ``--disallowedTools``: the route's own
     (:data:`SUBAGENT_TOOLS` for a single-agent route), plus
     :data:`BRANCH_GUARD_TOOLS` when a milestone-branch binding governs the
-    step. Without a binding it is exactly the route's own list."""
+    step, plus :data:`ASYNC_UNOWNABLE_TOOLS` for every worker, last."""
     tools = route.disallowed_tools
-    if not branch_bound:
-        return tools
-    return tools + tuple(tool for tool in BRANCH_GUARD_TOOLS if tool not in tools)
+    if branch_bound:
+        tools = tools + tuple(tool for tool in BRANCH_GUARD_TOOLS if tool not in tools)
+    return tools + tuple(tool for tool in ASYNC_UNOWNABLE_TOOLS if tool not in tools)
 
 # ---------------------------------------------------------------------------
 # Role derivation.

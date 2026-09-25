@@ -1330,6 +1330,10 @@ class ResumeReconciliationTest(_LifecycleTestCase):
         # its generator fails.
         head_before = fixtures.current_head(lc.root)
         release.touch()
+        # Worker-lifecycle-ownership CP3: the lost Controller's anchor holds
+        # the orphan's stdin; ending it ends the session (until CP5's
+        # re-attach), and the worker exits once its work is done.
+        process_fixtures.end_recorded_anchor(record)
         pgid = record["worker_process"]["pgid"]
 
         def gone() -> bool:

@@ -888,7 +888,9 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
             "fresh_session": True, "sources": {"model": "config-role", "effort": "config-default"},
         })
         argv = json.loads(diag.read_text())["argv"]
-        self.assertEqual(argv[-4:], ["--model", "claude-sonnet-5", "--effort", "low"])
+        # Worker-lifecycle-ownership CP3: the system note and the unownable
+        # tools now follow the route's flags.
+        self.assertEqual(argv[-8:-4], ["--model", "claude-sonnet-5", "--effort", "low"])
 
 
 class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):

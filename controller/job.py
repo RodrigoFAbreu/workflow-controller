@@ -73,8 +73,10 @@ if one needs it.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import datetime
+import fcntl
 import hashlib
 import json
 import os
@@ -83,6 +85,7 @@ import secrets
 import stat
 import subprocess
 import sys
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
@@ -3789,11 +3792,92 @@ def _execute_step_locked(
     record = _persist(runtime, job_id, record, event="planned",
                       details={"command": decision.action.command})
 
+    # Worker-lifecycle-ownership CP3: the job's supervisor lock, taken
+    # before the pre-spawn LAUNCHED write and held until `_launch_job` has
+    # made its last write to this record (the terminal flush, or the exit-45
+    # path after a drain detach); an exception releases it as it unwinds.
+    with _supervisor_lock(runtime, job_id) as supervisor_lock_path:
+        return _launch_job(
+            managed_repo, runtime=runtime, run_id=run_id, job_id=job_id, record=record,
+            decision=decision, route=route, binding=binding, pre_state=pre_state,
+            resolved_work_item_id=resolved_work_item_id, governing_workflow_version=governing_workflow_version,
+            permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
+            lifecycle_lock=lifecycle_lock, supervisor_lock_path=supervisor_lock_path,
+        )
+
+
+#: How long a Controller retries a job's supervisor lock before it reports
+#: another holder (plan E): the anchor's orphan-lifetime check holds it for
+#: an instant, and must never read as an attached Controller.
+SUPERVISOR_LOCK_RETRY_SECONDS = 1.0
+
+
+def supervisor_lock_rel_path(job_id: str) -> str:
+    """``jobs/<job_id>/supervisor.lock``, relative to the runtime root."""
+    return f"jobs/{job_id}/supervisor.lock"
+
+
+@contextlib.contextmanager
+def _supervisor_lock(runtime_root: Path, job_id: str):
+    """Hold the job's supervisor lock (plan E) and yield its path. The
+    descriptor is ``O_CLOEXEC`` and never passed on, so the lock dies with
+    this Controller. Held by another process for longer than
+    :data:`SUPERVISOR_LOCK_RETRY_SECONDS`, it is
+    :class:`~controller.errors.LifecycleWorkerActiveError` (exit 45)."""
+    rel_path = supervisor_lock_rel_path(job_id)
+    fd = runtime.open_lock_file(runtime_root, rel_path)
+    try:
+        deadline = time.monotonic() + SUPERVISOR_LOCK_RETRY_SECONDS
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise LifecycleWorkerActiveError(
+                        f"job {job_id}'s supervisor lock {runtime_root / rel_path} is held by another "
+                        f"Controller -- nothing was launched",
+                        evidence={"job_id": job_id, "supervisor_lock": str(runtime_root / rel_path)},
+                    ) from None
+                time.sleep(0.05)
+        yield runtime_root / rel_path
+    finally:
+        os.close(fd)
+
+
+def _launch_job(
+    managed_repo: Any,
+    *,
+    runtime: Path,
+    run_id: str | None,
+    job_id: str,
+    record: JobRecord,
+    decision: Decision,
+    route: routing.ResolvedRoute,
+    binding: Mapping | None,
+    pre_state: dict,
+    resolved_work_item_id: str | None,
+    governing_workflow_version: str | None,
+    permission_mode: str,
+    timeout: float | None,
+    claude_bin: str | None,
+    lifecycle_lock: lock.LifecycleLock,
+    supervisor_lock_path: Path,
+) -> JobRecord:
+    """Steps 4 (from the LAUNCHED flush) to 9 of :func:`execute_step`,
+    under the job's supervisor lock."""
     expected_transition = _expected_transition(decision.observed_phase, governing_workflow_version, decision)
     record = {
         **record,
         "expected_transition": expected_transition,
         "status": STATUS_LAUNCHED,
+        # Worker-lifecycle-ownership CP3: a new-shape job from the first
+        # LAUNCHED write on (plan A, round 1's O1). The tag is the job id,
+        # known before `Popen`, so a Controller lost between spawn and
+        # `on_spawn` still leaves a record whose tagged processes can be
+        # found.
+        "ownership_tag": job_id,
+        "worker_state": {"state": worker.STARTING, "since": _now()},
     }
 
     def worker_not_started(exc: ControllerError) -> None:
@@ -3836,10 +3920,19 @@ def _execute_step_locked(
     resolved_timeout = DEFAULT_WORKER_TIMEOUT if timeout is None else timeout
     spawned: dict[str, Any] = {}
 
-    def on_spawn(worker_process: worker.WorkerProcess) -> None:
+    def on_spawn(worker_process: worker.WorkerProcess, *, anchor: worker.WorkerProcess | None = None,
+                 ownership_tag: str | None = None) -> None:
         nonlocal record
         spawned["worker_process"] = worker_process
         record = {**record, "worker_process": worker_process.to_dict(), "updated_at": _now()}
+        # CP3 (worker-lifecycle-ownership): the stdin anchor, which holds
+        # the lifecycle lock for the owned lifetime, is recorded in the same
+        # flush (I3). The `None` defaults keep a `launch` double that passes
+        # the process alone working.
+        if anchor is not None:
+            record["worker_anchor"] = anchor.to_dict()
+        if ownership_tag is not None:
+            record["ownership_tag"] = ownership_tag
         # The record write may raise (`launch` then ends the group); the
         # `worker_spawned` append after it never does -- it is best-effort.
         record = _persist(runtime, job_id, record, event="worker_spawned",
@@ -3876,6 +3969,8 @@ def _execute_step_locked(
             model=route.model,
             effort=route.effort,
             disallowed_tools=_worker_disallowed_tools(route, binding),
+            ownership_tag=job_id,
+            supervisor_lock_path=supervisor_lock_path,
         )
     except (UserOnlyCommandError, WorkerLaunchError) as exc:
         if "worker_process" not in spawned:
@@ -3889,6 +3984,21 @@ def _execute_step_locked(
             _announce_orphaned_worker(spawned["worker_process"], managed_repo.root, runtime,
                                       drained=spawned.get("drained", False))
         raise
+
+    if isinstance(result, worker.DrainDetached):
+        # CP3 (worker-lifecycle-ownership): owned processes outlived the
+        # worker past the drain bound, and nothing was ended. Until CP4
+        # records the detach, this is today's exit 45 after a still-live
+        # worker: the record stays LAUNCHED, and the anchor keeps the
+        # lifecycle lock.
+        raise LifecycleWorkerActiveError(
+            f"worker pid {spawned['worker_process'].pid} exited, but {len(result.remaining)} owned "
+            f"process(es) are still running after {worker.DRAIN_DETACH_SECONDS} s: "
+            + ", ".join(f"{entry['pid']} ({entry['cmdline']})" for entry in result.remaining)
+            + f" -- end them, then run `{_resume_command(managed_repo.root)}`",
+            evidence={"job_id": job_id, "drain_detached_at": result.drain_detached_at,
+                      "remaining": list(result.remaining)},
+        )
 
     # Step 6: record the worker result. The streams are already on disk --
     # the worker wrote them itself.

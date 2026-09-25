@@ -21,6 +21,7 @@ import contextlib
 import copy
 import dataclasses
 import errno
+import fcntl
 import io
 import json
 import os
@@ -498,7 +499,10 @@ class LaunchPathTest(unittest.TestCase):
                 self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
                 claude_bin=str(FAKE_CLAUDE), timeout=10,
             )
-        self.assertEqual(json.loads(diag.read_text())["argv"][1], "/milestone-plan wi-1")
+        # Worker-lifecycle-ownership CP3: the task is the stream-json user
+        # message, not a prompt argument.
+        self.assertEqual(_launched_task(diag), "/milestone-plan wi-1")
+        self.assertNotIn("/milestone-plan wi-1", json.loads(diag.read_text())["argv"])
         self.assertIn("task_addendum", record["selected_action"])
         self.assertIsNone(record["selected_action"]["task_addendum"])
 
@@ -517,8 +521,11 @@ class LaunchPathTest(unittest.TestCase):
 
     def test_the_second_launched_write_adds_only_the_worker_process(self) -> None:
         """CP5: the two LAUNCHED writes differ only by ``worker_process``
-        (the spawn-time process identity), ``updated_at`` and
-        (release-runtime-observability CP5) the incremented ``event_seq``."""
+        (the spawn-time process identity), ``updated_at``,
+        (release-runtime-observability CP5) the incremented ``event_seq`` and
+        (worker-lifecycle-ownership CP3) the stdin anchor, ``worker_anchor``,
+        in the same shape. ``ownership_tag`` (the job id) and
+        ``worker_state: STARTING`` are already in the first."""
         with _WriteSpy() as spy:
             job.execute_step(
                 self.managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root,
@@ -530,8 +537,12 @@ class LaunchPathTest(unittest.TestCase):
         self.assertNotIn("worker_process", first)
         self.assertEqual(
             {key for key in set(first) | set(second) if first.get(key) != second.get(key)} - {"updated_at"},
-            {"worker_process", "event_seq"},
+            {"worker_process", "event_seq", "worker_anchor"},
         )
+        self.assertEqual(first["ownership_tag"], first["job_id"])
+        self.assertEqual(first["worker_state"]["state"], worker.STARTING)
+        self.assertEqual(set(second["worker_anchor"]), set(second["worker_process"]))
+        self.assertNotEqual(second["worker_anchor"]["pid"], second["worker_process"]["pid"])
         self.assertEqual(second["event_seq"], first["event_seq"] + 1)
         worker_process = second["worker_process"]
         self.assertEqual(
@@ -612,6 +623,8 @@ class LaunchPathTest(unittest.TestCase):
             "worker_streams",
             # Release-runtime-observability CP5.
             "event_seq",
+            # Worker-lifecycle-ownership CP3.
+            "ownership_tag", "worker_state", "worker_anchor",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -946,10 +959,10 @@ class WorkerRouteTest(unittest.TestCase):
                 self.assertNotIn(flag, argv)
             else:
                 self.assertEqual(argv[argv.index(flag) + 1], value)
-        if route["single_agent"]:
-            self.assertEqual(argv[-2:], ["--disallowedTools", ",".join(routing.SUBAGENT_TOOLS)])
-        else:
-            self.assertNotIn("--disallowedTools", argv)
+        # Worker-lifecycle-ownership CP3: every route disallows the
+        # unownable tools, after the single-agent list.
+        expected = (routing.SUBAGENT_TOOLS if route["single_agent"] else ()) + routing.ASYNC_UNOWNABLE_TOOLS
+        self.assertEqual(argv[-2:], ["--disallowedTools", ",".join(expected)])
 
     def test_the_planned_flush_records_the_route_and_every_later_write_keeps_it(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
@@ -962,9 +975,13 @@ class WorkerRouteTest(unittest.TestCase):
         for write in writes:
             self.assertEqual(write["worker_route"], expected, write["status"])
         self.assertEqual(record["worker_route"], expected)
-        # An inherit role passes neither flag, and no disallow list.
-        self.assertEqual(argv, ["-p", "/milestone-plan wi-1", "--output-format", "stream-json",
-                                "--verbose", "--permission-mode", "auto"])
+        # An inherit role passes neither flag; worker-lifecycle-ownership
+        # CP3: the streaming form, with no prompt argument, the system note,
+        # and exactly the unownable tools disallowed.
+        self.assertEqual(argv, ["-p", "--input-format", "stream-json", "--output-format", "stream-json",
+                                "--verbose", "--permission-mode", "auto",
+                                "--append-system-prompt", worker.WORKER_LIFECYCLE_NOTE,
+                                "--disallowedTools", ",".join(routing.ASYNC_UNOWNABLE_TOOLS)])
 
     def test_each_role_reaches_the_record_and_the_worker_argv(self) -> None:
         opus = ("claude-opus-5-5", "xhigh")
@@ -1000,7 +1017,7 @@ class WorkerRouteTest(unittest.TestCase):
                 source = "default" if model is not None else "inherit"
                 self.assertEqual(route["sources"], {"model": source, "effort": source})
                 self.assertEqual(record["worker_route"], route)
-                self.assertEqual(argv[1], f"{command} wi-1")
+                self.assertEqual(_launched_task(self.tmp_root / f"diag-{self._runs}.json"), f"{command} wi-1")
                 self._assert_argv_carries(argv, route)
 
     def test_the_sources_name_the_winning_level(self) -> None:
@@ -1387,8 +1404,7 @@ class ApplyingReviewFeedbackExecuteTest(unittest.TestCase):
 
     def test_the_pending_write_addendum_is_in_the_launched_task_and_recorded(self) -> None:
         record, diag, _runtime = self._execute(launches=True)
-        argv = json.loads(diag.read_text())["argv"]
-        self.assertEqual(argv[1], f"/apply-implementation-review wi-1\n\n{self.addendum}")
+        self.assertEqual(_launched_task(diag), f"/apply-implementation-review wi-1\n\n{self.addendum}")
         self.assertEqual(record["selected_action"]["command"], "/apply-implementation-review wi-1")
         self.assertEqual(record["selected_action"]["task_addendum"], self.addendum)
         self.assertEqual(record["expected_transition"]["from"], _APPLY_PHASE)
@@ -1398,7 +1414,7 @@ class ApplyingReviewFeedbackExecuteTest(unittest.TestCase):
     def test_head_recording_the_phase_launches_the_bare_command(self) -> None:
         fixtures.commit_paths(self.root, "Record the review-stage state write", "docs/ai-workflow/WORKFLOW_STATE.json")
         record, diag, _runtime = self._execute(launches=True)
-        self.assertEqual(json.loads(diag.read_text())["argv"][1], "/apply-implementation-review wi-1")
+        self.assertEqual(_launched_task(diag), "/apply-implementation-review wi-1")
         self.assertIsNone(record["selected_action"]["task_addendum"])
 
     def test_an_unverified_earlier_attempt_is_the_relaunch_bound_and_nothing_launches(self) -> None:
@@ -2162,19 +2178,57 @@ class StreamingJobTest(_StreamingCase):
         self.assertEqual(record["worker_outcome"], "SUCCESS")
         self.assertIn("worker_group_drain", record)
 
-    def test_a_setsid_descendant_holding_the_lock_is_not_waited_for_and_the_next_step_exits_45(self) -> None:
-        started = time.monotonic()
-        record, _writes = self._spied_step(env=self._descendant_env("setsid:5"), timeout=30)
-        self.assertLess(time.monotonic() - started, 4)
+    def test_the_supervisor_lock_is_held_from_the_launched_write_to_the_terminal_flush(self) -> None:
+        """Worker-lifecycle-ownership CP3 (plan E's scope): the job's
+        ``jobs/<job_id>/supervisor.lock`` is held by the step's Controller at
+        every record write from the first ``LAUNCHED`` one through the
+        terminal flush, and released once ``execute_step`` returns."""
+        probes: list[tuple[str, bool]] = []
+        real_write_json = job.runtime.write_json
+
+        def free(path: Path) -> bool:
+            fd = os.open(path, os.O_RDONLY)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
+            finally:
+                os.close(fd)
+            return True
+
+        def spy(runtime_root, rel_path, obj):
+            written = real_write_json(runtime_root, rel_path, obj)
+            if str(rel_path).startswith("jobs/") and obj.get("status") != job.STATUS_PLANNED:
+                path = runtime_root / job.supervisor_lock_rel_path(obj["job_id"])
+                probes.append((obj["status"], free(path)))
+            return written
+
+        with unittest.mock.patch.object(job.runtime, "write_json", spy):
+            record = self._step(timeout=10)
+        self.assertEqual([status for status, _free in probes][:3],
+                         [job.STATUS_LAUNCHED, job.STATUS_LAUNCHED, job.STATUS_COMPLETED])
+        self.assertIn(probes[-1][0], job.TERMINAL_STATUSES)
+        self.assertEqual({is_free for _status, is_free in probes}, {False})
+        self.assertTrue(free(self.runtime_root / job.supervisor_lock_rel_path(record["job_id"])))
+
+    def test_a_setsid_descendant_is_owned_and_waited_for_and_the_next_step_proceeds(self) -> None:
+        """Worker-lifecycle-ownership CP3 (rewritten from "is not waited for
+        and the next step exits 45", D4/D5): a ``setsid`` descendant is owned
+        through the ownership tag, so the job reaches ``COMPLETED`` only
+        after it exits. It never held the lock (a tool process inherits no
+        descriptor, H6), and nothing it did outlives the job, so the next
+        ``step`` is not refused. ``worker_group_drain`` stays absent: the
+        worker's own group was empty."""
+        record, writes = self._spied_step(env=self._descendant_env("setsid:3"), timeout=30)
+        descendant = json.loads(self.descendant.read_text())
+        self.assertIn("exited_at", descendant, "the job ended before the setsid descendant did")
+        completed_at = next(t for t, w in writes if w.get("status") == job.STATUS_COMPLETED)
+        self.assertGreater(completed_at, descendant["exited_at"])
         self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertIn(record["status"], job.TERMINAL_STATUSES)
         self.assertNotIn("worker_group_drain", record)
-        self.assertNotIn("exited_at", json.loads(self.descendant.read_text()))
-        with self.assertRaises(LifecycleWorkerActiveError):
-            self._step(timeout=10)
-        stderr = io.StringIO()
-        with unittest.mock.patch.object(cli, "_dispatch", lambda args, argv: self._step(timeout=10)), \
-                contextlib.redirect_stderr(stderr):
-            self.assertEqual(cli.main(["step", str(self.root)]), cli.EXIT_WORKER_ACTIVE)
+        second = self._step(timeout=10)
+        self.assertIn(second["status"], job.TERMINAL_STATUSES)
 
 
 
@@ -2188,6 +2242,13 @@ class StreamingJobTest(_StreamingCase):
 def _job_events(runtime_root: Path, job_id: str) -> list[dict]:
     path = runtime_root / "jobs" / job_id / "events.jsonl"
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def _launched_task(diag: Path) -> str:
+    """The task a streaming-input worker received (worker-lifecycle-
+    ownership CP3): the ``content`` of the stream-json user message the fake
+    recorded as ``task_message`` -- no longer ``argv[1]``."""
+    return json.loads(diag.read_text())["task_message"]["message"]["content"]
 
 
 class _EventLogAssertions:

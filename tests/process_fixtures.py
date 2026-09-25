@@ -206,6 +206,27 @@ def reap_recorded_workers(runtime_root: "str | os.PathLike") -> list[int]:
     return killed
 
 
+def end_recorded_anchor(record: dict) -> bool:
+    """Identity-checked ``SIGKILL`` of the stdin anchor ``record`` names
+    (``worker_anchor``); whether it was signalled.
+
+    Worker-lifecycle-ownership CP3: once its Controller is lost, a
+    streaming worker that ends its turn keeps waiting on stdin, because its
+    anchor keeps the pipe open (plan I4), until ``resume`` re-attaches
+    (CP5). A test that releases an orphaned worker and waits for it to end
+    ends its session the way an operator would, by ending the anchor: the
+    worker then sees EOF and exits, and the anchor's copy of the lifecycle
+    lock goes with it."""
+    anchor = record.get("worker_anchor")
+    if not isinstance(anchor, dict) or not _identity_matches(anchor):
+        return False
+    try:
+        os.kill(anchor["pid"], signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
+
+
 class ReapRecordedWorkersMixin:
     """Registers :func:`reap_recorded_workers` as a cleanup of the test for
     each runtime root it launches streaming workers under. Every test class

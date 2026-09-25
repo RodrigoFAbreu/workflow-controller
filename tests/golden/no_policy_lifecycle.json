@@ -140,6 +140,7 @@
           },
           "observed_phase_after": "__NO_PHASE__",
           "observed_phase_before": "__NO_PHASE__",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -201,6 +202,15 @@
             "terminal_reason": null,
             "total_cost_usd": null
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "FAILURE",
           "worker_process": {
             "boot_id": "<V>",
@@ -222,6 +232,10 @@
               "model": "inherit"
             }
           },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
+          },
           "worker_streams": {
             "events_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/events.jsonl",
             "format": "stream-json",
@@ -234,12 +248,17 @@
     "worker_argv": [
       [
         "-p",
-        "/milestone-plan",
+        "--input-format",
+        "stream-json",
         "--output-format",
         "stream-json",
         "--verbose",
         "--permission-mode",
-        "auto"
+        "auto",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
+        "--disallowedTools",
+        "CronCreate,CronDelete,RemoteTrigger"
       ]
     ]
   },
@@ -419,6 +438,7 @@
           },
           "observed_phase_after": "IMPLEMENTING",
           "observed_phase_before": "IMPLEMENTING",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -473,6 +493,15 @@
             "terminal_reason": null,
             "total_cost_usd": 0.0
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "SUCCESS",
           "worker_process": {
             "boot_id": "<V>",
@@ -493,6 +522,10 @@
               "effort": "default",
               "model": "default"
             }
+          },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -534,6 +567,7 @@
           },
           "observed_phase_after": "SELF_REVIEWING_IMPLEMENTATION",
           "observed_phase_before": "IMPLEMENTING",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -593,6 +627,15 @@
             "terminal_reason": null,
             "total_cost_usd": 0.0
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "SUCCESS",
           "worker_process": {
             "boot_id": "<V>",
@@ -613,6 +656,10 @@
               "effort": "default",
               "model": "default"
             }
+          },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -652,6 +699,7 @@
           },
           "observed_phase_after": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
           "observed_phase_before": "SELF_REVIEWING_IMPLEMENTATION",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -715,6 +763,15 @@
             "terminal_reason": null,
             "total_cost_usd": 0.0
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "SUCCESS",
           "worker_process": {
             "boot_id": "<V>",
@@ -735,6 +792,10 @@
               "effort": "default",
               "model": "default"
             }
+          },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -776,6 +837,7 @@
           },
           "observed_phase_after": "APPLYING_REVIEW_FEEDBACK",
           "observed_phase_before": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -839,6 +901,15 @@
             "terminal_reason": null,
             "total_cost_usd": 0.0
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "SUCCESS",
           "worker_process": {
             "boot_id": "<V>",
@@ -859,6 +930,10 @@
               "effort": "default",
               "model": "default"
             }
+          },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -898,6 +973,7 @@
           },
           "observed_phase_after": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
           "observed_phase_before": "APPLYING_REVIEW_FEEDBACK",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -964,6 +1040,15 @@
             "terminal_reason": null,
             "total_cost_usd": 0.0
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "SUCCESS",
           "worker_process": {
             "boot_id": "<V>",
@@ -984,6 +1069,10 @@
               "effort": "default",
               "model": "default"
             }
+          },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -1025,6 +1114,7 @@
           },
           "observed_phase_after": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
           "observed_phase_before": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -1088,6 +1178,15 @@
             "terminal_reason": null,
             "total_cost_usd": 0.0
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "SUCCESS",
           "worker_process": {
             "boot_id": "<V>",
@@ -1108,6 +1207,10 @@
               "effort": "default",
               "model": "default"
             }
+          },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -1197,33 +1300,8 @@
     "worker_argv": [
       [
         "-p",
-        "/milestone-implement wi-1",
-        "--output-format",
+        "--input-format",
         "stream-json",
-        "--verbose",
-        "--permission-mode",
-        "auto",
-        "--model",
-        "claude-opus-5-5",
-        "--effort",
-        "xhigh"
-      ],
-      [
-        "-p",
-        "/milestone-implement wi-1",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--permission-mode",
-        "auto",
-        "--model",
-        "claude-opus-5-5",
-        "--effort",
-        "xhigh"
-      ],
-      [
-        "-p",
-        "/milestone-implement wi-1",
         "--output-format",
         "stream-json",
         "--verbose",
@@ -1233,12 +1311,15 @@
         "claude-opus-5-5",
         "--effort",
         "xhigh",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
         "--disallowedTools",
-        "Agent,Workflow,Skill"
+        "CronCreate,CronDelete,RemoteTrigger"
       ],
       [
         "-p",
-        "/review-implementation wi-1",
+        "--input-format",
+        "stream-json",
         "--output-format",
         "stream-json",
         "--verbose",
@@ -1248,25 +1329,15 @@
         "claude-opus-5-5",
         "--effort",
         "xhigh",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
         "--disallowedTools",
-        "Agent,Workflow,Skill"
+        "CronCreate,CronDelete,RemoteTrigger"
       ],
       [
         "-p",
-        "/apply-implementation-review wi-1\n\nController note (pending review-stage state write): `docs/ai-workflow/WORKFLOW_STATE.json` carries this work item's uncommitted review-stage write (working-tree phase `APPLYING_REVIEW_FEEDBACK`; `HEAD` records `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`). Before any other commit this command makes, commit that pending change alone: stage exactly `docs/ai-workflow/WORKFLOW_STATE.json`, unmodified from what the review-stage writer produced, with a message whose final paragraph is the single trailer `Workflow-Work-Item: wi-1` and no other Workflow trailer. This is the same shape `/milestone-implement` step 2 uses for its state-only transition commit. Without it, step 7's generation-record commit has no phase change in its own diff, and `validate_bundle_generation_record_commit` rejects it (`OPUS-R101-001`).",
-        "--output-format",
+        "--input-format",
         "stream-json",
-        "--verbose",
-        "--permission-mode",
-        "auto",
-        "--model",
-        "claude-opus-5-5",
-        "--effort",
-        "xhigh"
-      ],
-      [
-        "-p",
-        "/review-implementation wi-1",
         "--output-format",
         "stream-json",
         "--verbose",
@@ -1276,8 +1347,64 @@
         "claude-opus-5-5",
         "--effort",
         "xhigh",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
         "--disallowedTools",
-        "Agent,Workflow,Skill"
+        "Agent,Workflow,Skill,CronCreate,CronDelete,RemoteTrigger"
+      ],
+      [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
+        "--disallowedTools",
+        "Agent,Workflow,Skill,CronCreate,CronDelete,RemoteTrigger"
+      ],
+      [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
+        "--disallowedTools",
+        "CronCreate,CronDelete,RemoteTrigger"
+      ],
+      [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "auto",
+        "--model",
+        "claude-opus-5-5",
+        "--effort",
+        "xhigh",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
+        "--disallowedTools",
+        "Agent,Workflow,Skill,CronCreate,CronDelete,RemoteTrigger"
       ]
     ]
   },
@@ -1422,6 +1549,7 @@
           },
           "observed_phase_after": "__NO_PHASE__",
           "observed_phase_before": "__NO_PHASE__",
+          "ownership_tag": "<ID>",
           "pre_state": {
             "bundle_generated_digest": null,
             "bundle_id": null,
@@ -1483,6 +1611,15 @@
             "terminal_reason": null,
             "total_cost_usd": null
           },
+          "worker_anchor": {
+            "boot_id": "<V>",
+            "hostname": "<V>",
+            "machine_id": "<V>",
+            "pgid": "<V>",
+            "pid": "<V>",
+            "pid_namespace": "<V>",
+            "start_ticks": "<V>"
+          },
           "worker_outcome": "FAILURE",
           "worker_process": {
             "boot_id": "<V>",
@@ -1504,6 +1641,10 @@
               "model": "inherit"
             }
           },
+          "worker_state": {
+            "since": "<TS>",
+            "state": "STARTING"
+          },
           "worker_streams": {
             "events_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/events.jsonl",
             "format": "stream-json",
@@ -1516,12 +1657,17 @@
     "worker_argv": [
       [
         "-p",
-        "/milestone-plan",
+        "--input-format",
+        "stream-json",
         "--output-format",
         "stream-json",
         "--verbose",
         "--permission-mode",
-        "auto"
+        "auto",
+        "--append-system-prompt",
+        "Workflow Controller worker lifecycle: the Controller keeps this session open while you own background work and delivers every background-task, Monitor and subagent notification to you as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before ending your final turn.",
+        "--disallowedTools",
+        "CronCreate,CronDelete,RemoteTrigger"
       ]
     ]
   }

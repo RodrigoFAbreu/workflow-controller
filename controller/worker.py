@@ -61,21 +61,49 @@ into the same fields the single JSON body carried before.
 design B): the terminal classification accepts several ``result`` events,
 uses the last one, and names why a run is not ``SUCCESS`` in
 ``WorkerResult.stream_diagnosis`` (owned work killed at exit, exit mid-turn,
-a malformed stream). Every launch is ``mode="print"`` until CP3.
+a malformed stream).
+
+CP3 of the same milestone makes every launch a streaming-input session
+(design A): the argv is
+
+    claude -p --input-format stream-json --output-format stream-json --verbose \\
+        --permission-mode <mode> [--model <m>] [--effort <e>] \\
+        --append-system-prompt <WORKER_LIFECYCLE_NOTE> [--disallowedTools <list>]
+
+with no prompt argument; the task is one stream-json ``user`` line on a pipe
+whose write end is held by the stdin anchor (``controller.anchor``), which
+also holds the lifecycle lock. ``launch`` supervises the stream (design C):
+``RUNNING`` while a turn is open, ``WAITING`` while the worker owns
+background work, ``ENDING`` at a quiescent terminal turn (only then is
+stdin closed), ``DRAINING`` while owned processes outlive the worker, and
+``ENDED``. Descendants are owned through the ownership tag in
+:data:`OWNERSHIP_VAR`, the process group, adoption by the Controller as a
+child subreaper, and the record of what was already seen owned; recognised
+tool daemons (:data:`RECOGNISED_DAEMONS`) never are. The drain is bounded by
+:data:`DRAIN_DETACH_SECONDS`, after which ``launch`` returns
+:class:`DrainDetached` and ends nothing.
 """
 
 from __future__ import annotations
 
+import contextlib
+import ctypes
 import dataclasses
+import datetime
+import fcntl
+import json
 import os
+import secrets
 import signal
 import socket
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
-from controller import lock, worker_stream
+from controller import anchor as anchor_module
+from controller import lock, runtime, worker_stream
 from controller.errors import UserOnlyCommandError, WorkerLaunchError
 
 #: The four outcomes :func:`launch` classifies a completed (or interrupted)
@@ -192,7 +220,10 @@ class WorkerResult:
     own fields, extracted for convenience and ``None`` wherever there was
     no ``result`` or the field was absent. ``stream_diagnosis`` is
     ``controller.worker_stream.classify``'s structured account of the
-    stream (why the outcome is what it is).
+    stream (why the outcome is what it is). ``owned_processes_seen`` is
+    ``{"count", "sample"}``: how many distinct processes the supervisor
+    ever recorded as owned, and the first :data:`OWNED_PROCESS_SAMPLE` of
+    them.
     """
 
     outcome: str
@@ -211,6 +242,7 @@ class WorkerResult:
     stderr: str
     raw_json: dict | None
     stream_diagnosis: dict | None = None
+    owned_processes_seen: dict | None = None
 
 
 def _extract_fields(parsed: dict | None) -> dict:
@@ -289,6 +321,541 @@ def _read_stream(path: str | Path) -> str:
         return fh.read().decode("utf-8", errors="replace")
 
 
+# ---------------------------------------------------------------------------
+# Streaming-input launch and supervision (worker-lifecycle-ownership CP3).
+# ---------------------------------------------------------------------------
+
+#: The environment variable carrying a worker's ownership tags, a
+#: ``:``-separated list: ``launch`` appends the job's tag to whatever the
+#: Controller itself inherited, so a worker that runs a nested Controller
+#: stays owned by the outer job too (design C, step 1).
+OWNERSHIP_VAR = anchor_module.OWNERSHIP_VAR
+
+#: The Controller's worker lifecycle system note (plan decision 11), passed
+#: with ``--append-system-prompt``. Its text is part of the production argv
+#: CP1 captured (``tests/harness_contract/capture.py``), and is unchanged.
+WORKER_LIFECYCLE_NOTE = (
+    "Workflow Controller worker lifecycle: the Controller keeps this session open while you own "
+    "background work and delivers every background-task, Monitor and subagent notification to you "
+    "as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never "
+    "arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before "
+    "ending your final turn."
+)
+
+#: The closed ``worker_state`` enumeration (invariant I8). ``STARTING`` is
+#: written by the caller before the spawn; ``launch`` reports the rest
+#: through ``on_state_change``.
+STARTING = "STARTING"
+RUNNING = "RUNNING"
+WAITING = "WAITING"
+ENDING = "ENDING"
+DRAINING = "DRAINING"
+ENDED = "ENDED"
+WORKER_STATES = (STARTING, RUNNING, WAITING, ENDING, DRAINING, ENDED)
+
+#: Long-lived tool daemons a worker may start, which later jobs reuse:
+#: shared infrastructure, never owned (plan decision 9, limitation H9). A
+#: closed tuple of ``(kind, value)`` patterns over ``/proc/<pid>/cmdline``:
+#: ``argv0`` matches the basename of ``argv[0]``, ``argv`` any element.
+RECOGNISED_DAEMONS: tuple[tuple[str, str], ...] = (
+    ("argv0", "gpg-agent"),
+    ("argv0", "keyboxd"),
+    ("argv0", "dirmngr"),
+    ("argv0", "scdaemon"),
+    ("argv0", "ssh-agent"),
+    ("argv", "fsmonitor--daemon"),
+    ("argv", "org.gradle.launcher.daemon.bootstrap.GradleDaemon"),
+    ("argv", "org.jetbrains.kotlin.daemon.KotlinCompileDaemon"),
+)
+
+#: How often the supervisor reads the stream (every
+#: :data:`_ACTIVE_POLL_SECONDS` while bytes arrived within the last
+#: :data:`_ACTIVE_STREAM_SECONDS`), and how often it scans for owned
+#: processes while ``WAITING`` or ``DRAINING``. The worker's exit is
+#: noticed at once: the supervisor waits on the process between reads.
+_SUPERVISE_POLL_SECONDS = 0.2
+_ACTIVE_POLL_SECONDS = 0.05
+_ACTIVE_STREAM_SECONDS = 1.0
+_OWNERSHIP_SCAN_SECONDS = 1.0
+
+#: How long a quiescent stream must stay quiescent, with no new bytes,
+#: before the supervisor ends the session. The harness writes a turn's
+#: ``result`` with ``queued_turn_count: 0`` and still opens an already
+#: queued notification turn a few milliseconds later, so B's
+#: ``quiescent()`` is momentarily true between the two. In CP1's fixtures
+#: that gap follows a background task that ended during or after the last
+#: turn (4 ms in ``p11_subagent_handback``, 21-52 ms in ``p3``, ``p4``,
+#: ``p8_monitor_timeout``): then the longer window applies, otherwise the
+#: shorter one. Either only ever delays ``ENDING``; neither makes a
+#: non-quiescent worker end.
+_QUIESCENCE_CONFIRM_SECONDS = 0.1
+_NOTIFICATION_CONFIRM_SECONDS = 1.0
+
+#: How long the supervisor waits for the anchor to install its ``SIGUSR1``
+#: handler before it signals it anyway.
+_ANCHOR_READY_SECONDS = 10.0
+
+#: The harness-contract bounds (plan C, decision 5): a ``pending`` wakeup
+#: this far past due over task-free idle time, or a ``command_lifecycle``
+#: bracket stalled this long with no task open, ends the session and fails
+#: closed.
+WAKEUP_GRACE_SECONDS = 300
+COMMAND_LIFECYCLE_GRACE_SECONDS = 300
+
+#: The idle time after a ``fire_matched`` wakeup's bracket closed before
+#: the supervisor declares it settled (plan decision 13).
+WAKEUP_SETTLE_SECONDS = WAKEUP_GRACE_SECONDS + worker_stream.WAKEUP_SKEW_SECONDS
+
+#: How long, after the worker exited, the supervisor waits for owned
+#: processes before it detaches (plan decision 9). It ends nothing.
+DRAIN_DETACH_SECONDS = 600
+
+#: How many owned processes ``WorkerResult.owned_processes_seen`` lists.
+OWNED_PROCESS_SAMPLE = 20
+
+_PR_SET_CHILD_SUBREAPER = 36
+_PR_GET_CHILD_SUBREAPER = 37
+
+#: ``stat`` states that are not running (zombie, dead).
+_GONE_STATES = frozenset({"Z", "X", "x"})
+
+
+def quiescence_confirm_seconds(stream: worker_stream.WorkerStream) -> float:
+    """How long a quiescent ``stream`` must stay without new bytes before
+    ``ENDING``: :data:`_NOTIFICATION_CONFIRM_SECONDS` while a background
+    task ended during or after the last turn (its notification turn may
+    already be queued), else :data:`_QUIESCENCE_CONFIRM_SECONDS`."""
+    last_open = stream.turns[-1].open_offset if stream.turns else 0
+    owed = any(task.listed and task.status_offset is not None and task.status_offset >= last_open
+               for task in stream.tasks.values())
+    return _NOTIFICATION_CONFIRM_SECONDS if owed else _QUIESCENCE_CONFIRM_SECONDS
+
+
+@dataclasses.dataclass(frozen=True)
+class DrainDetached:
+    """What :func:`launch` returns when owned processes outlived the worker
+    by :data:`DRAIN_DETACH_SECONDS` (plan C, step 3). Nothing was ended: the
+    anchor still holds the lifecycle lock, and the caller keeps the job
+    held. ``remaining`` lists each live owned process (``pid``,
+    ``start_ticks``, ``source``, ``cmdline``); ``worker_state`` is the last
+    ``DRAINING`` details; ``supervisor_facts`` the facts a later classifier
+    needs."""
+
+    drain_detached_at: str
+    remaining: tuple[dict, ...]
+    returncode: int | None
+    worker_state: dict
+    supervisor_facts: dict
+
+    @property
+    def remaining_pids(self) -> list[int]:
+        return [entry["pid"] for entry in self.remaining]
+
+
+def worker_argv(
+    claude_bin: str,
+    *,
+    permission_mode: str,
+    model: str | None = None,
+    effort: str | None = None,
+    disallowed_tools: Iterable[str] | None = None,
+) -> list[str]:
+    """The streaming-input argv (design A): no prompt argument, the system
+    note, and the disallow list as one comma-joined element placed last --
+    the CLI's ``--disallowedTools`` is variadic, so nothing may follow it."""
+    # `stream-json` in print mode requires `--verbose` (the CLI refuses it
+    # otherwise, before any request).
+    args = [claude_bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json",
+            "--verbose", "--permission-mode", permission_mode]
+    if model is not None:
+        args += ["--model", model]
+    if effort is not None:
+        args += ["--effort", effort]
+    args += ["--append-system-prompt", WORKER_LIFECYCLE_NOTE]
+    tools = tuple(disallowed_tools or ())
+    if tools:
+        args += ["--disallowedTools", ",".join(tools)]
+    return args
+
+
+def task_line(task: str) -> bytes:
+    """The one stream-json ``user`` message that carries ``task``."""
+    return (json.dumps({"type": "user", "message": {"role": "user", "content": task}}) + "\n").encode("utf-8")
+
+
+def _utc_now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# -- the child subreaper -------------------------------------------------------
+
+
+def _prctl(option: int, argument) -> int | None:
+    """``prctl(option, argument, 0, 0, 0)`` through ``libc``, or ``None``
+    where it cannot be called (a patchable seam: "prctl unavailable")."""
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        return libc.prctl(option, argument, 0, 0, 0)
+    except (OSError, AttributeError):
+        return None
+
+
+def _get_child_subreaper() -> int | None:
+    value = ctypes.c_int(0)
+    if _prctl(_PR_GET_CHILD_SUBREAPER, ctypes.byref(value)) != 0:
+        return None
+    return value.value
+
+
+def _set_child_subreaper(value: int) -> bool:
+    return _prctl(_PR_SET_CHILD_SUBREAPER, value) == 0
+
+
+#: How many launches in this process currently want the subreaper, and the
+#: value it had before the first of them.
+_subreaper_users = 0
+_subreaper_previous: int | None = None
+
+
+@contextlib.contextmanager
+def _child_subreaper():
+    """Mark this process ``PR_SET_CHILD_SUBREAPER`` for the duration, then
+    restore the previous value; yields whether it is a subreaper. Where
+    ``prctl`` is unavailable the launch goes on without it: the tag scan is
+    the authority, the subreaper a best-effort helper."""
+    global _subreaper_users, _subreaper_previous
+    if _subreaper_users == 0:
+        _subreaper_previous = _get_child_subreaper()
+        enabled = _subreaper_previous is not None and _set_child_subreaper(1)
+    else:
+        enabled = _subreaper_previous is not None
+    _subreaper_users += 1
+    try:
+        yield enabled
+    finally:
+        _subreaper_users -= 1
+        if _subreaper_users == 0 and _subreaper_previous is not None:
+            _set_child_subreaper(_subreaper_previous)
+
+
+#: Processes this Controller adopted as a subreaper, by pid (with their
+#: start ticks): each one is reaped, by its own pid, whenever it is found a
+#: zombie, in this launch or a later one in the same process.
+_ADOPTED: dict[int, int | None] = {}
+
+
+def _reap_adopted() -> None:
+    """``waitpid(pid, WNOHANG)`` for every adopted pid -- never
+    ``waitpid(-1)``, so the worker's own exit status is never stolen from
+    ``Popen``."""
+    for pid in list(_ADOPTED):
+        try:
+            reaped, _status = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            _ADOPTED.pop(pid, None)
+            continue
+        if reaped:
+            _ADOPTED.pop(pid, None)
+
+
+def _reap_killed_children(baseline: set[int], pgid: int, others: Iterable[int] = ()) -> None:
+    """After a kill: reap, each by its own pid, every zombie child this
+    Controller adopted (not in the launch's ``baseline``), until no
+    adopted child of the killed group ``pgid`` (or of ``others``) is still
+    running, for at most :data:`_DRAIN_KILL_SETTLE_SECONDS`. As a subreaper
+    the Controller inherits the killed descendants, and an unreaped zombie
+    would look alive to every later check."""
+    me = os.getpid()
+    others = set(others)
+    root = _proc_root()
+    deadline = time.monotonic() + _DRAIN_KILL_SETTLE_SECONDS
+    while True:
+        running = False
+        try:
+            names = _list_proc(root)
+        except OSError:
+            return
+        for name in names:
+            if not name.isdigit() or int(name) in baseline:
+                continue
+            try:
+                stat = _read_stat(root / name / "stat")
+            except _NoAnswer:
+                continue
+            if stat is None or stat.ppid != me:
+                continue
+            pid = int(name)
+            if stat.state in _GONE_STATES:
+                _ADOPTED.setdefault(pid, stat.start_ticks)
+            elif stat.pgrp == pgid or pid in others:
+                running = True
+        _reap_adopted()
+        if not running or time.monotonic() >= deadline:
+            return
+        time.sleep(_DRAIN_KILL_POLL_SECONDS)
+
+
+def _own_children() -> set[int]:
+    """This process's current children, by ``ppid`` (the launch's baseline:
+    anything that becomes a child later, other than the worker and the
+    anchor, was adopted)."""
+    me = os.getpid()
+    children = set()
+    root = _proc_root()
+    try:
+        names = _list_proc(root)
+    except OSError:
+        return children
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            stat = _read_stat(root / name / "stat")
+        except _NoAnswer:
+            continue
+        if stat is not None and stat.ppid == me:
+            children.add(int(name))
+    return children
+
+
+# -- the ownership scan --------------------------------------------------------
+
+
+def _list_proc(root: Path) -> list[str]:
+    """``os.listdir`` of ``/proc`` (a patchable seam: an unreadable
+    ``/proc``)."""
+    return os.listdir(root)
+
+
+def _read_environ(root: Path, pid: int) -> bytes:
+    """``/proc/<pid>/environ`` (a patchable seam: ``EACCES``, a scrubbed
+    tag)."""
+    with open(f"{root}/{pid}/environ", "rb") as fh:
+        return fh.read()
+
+
+def _read_cmdline(root: Path, pid: int) -> list[str]:
+    try:
+        with open(f"{root}/{pid}/cmdline", "rb") as fh:
+            raw = fh.read()
+    except OSError:
+        return []
+    return [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+
+
+def _carries_tag(root: Path, pid: int, tag: str) -> bool:
+    """Whether ``pid``'s ``environ`` lists ``tag``. An unreadable
+    ``environ`` (the non-dumpable processes the plan measured) is not owned
+    by tag; group membership and adoption still apply to it."""
+    try:
+        environ = _read_environ(root, pid)
+    except OSError:
+        return False
+    prefix = f"{OWNERSHIP_VAR}=".encode()
+    for item in environ.split(b"\0"):
+        if item.startswith(prefix):
+            return tag.encode() in item[len(prefix):].split(b":")
+    return False
+
+
+def daemon_pattern(cmdline: list[str]) -> str | None:
+    """The :data:`RECOGNISED_DAEMONS` pattern ``cmdline`` matches, or
+    ``None``."""
+    if not cmdline:
+        return None
+    argv0 = os.path.basename(cmdline[0])
+    for kind, value in RECOGNISED_DAEMONS:
+        if (kind == "argv0" and argv0 == value) or (kind == "argv" and value in cmdline):
+            return value
+    return None
+
+
+class _Ownership:
+    """The owned-process set of one launch (plan C, step 3): members of the
+    worker's process group, same-uid processes carrying the job's tag,
+    children this Controller adopted as a subreaper, and every process
+    already seen owned whose ``(pid, start_ticks)`` still matches -- minus
+    the worker, the anchor and recognised daemons."""
+
+    def __init__(self, *, tag: str, worker_process: WorkerProcess, anchor_pid: int | None,
+                 baseline: set[int], adopting: bool) -> None:
+        self.tag = tag
+        self.worker_process = worker_process
+        self.pgid = worker_process.pgid or worker_process.pid
+        self.anchor_pid = anchor_pid
+        self.baseline = baseline
+        self.adopting = adopting
+        self.owned: dict[int, dict] = {}
+        self.outside_group: list[int] = []
+        self.excluded: dict[int, dict] = {}
+        self.seen: set[tuple[int, int | None]] = set()
+        self.seen_count = 0
+        self.sample: list[dict] = []
+        self.verifiable = True
+        self.scans = 0
+
+    def scan(self) -> None:
+        self.scans += 1
+        root = _proc_root()
+        try:
+            names = _list_proc(root)
+        except OSError:
+            # Never "none alive": the owned set is kept as it was (I7).
+            self.verifiable = False
+            return
+        me, uid = os.getpid(), os.getuid()
+        worker = self.worker_process
+        found: dict[int, dict] = {}
+        outside: list[int] = []
+        verifiable = True
+        for name in names:
+            if not name.isdigit():
+                continue
+            pid = int(name)
+            if pid in (me, self.anchor_pid):
+                continue
+            try:
+                if os.stat(f"{root}/{name}").st_uid != uid:
+                    continue
+                stat = _read_stat(f"{root}/{name}/stat")
+            except (FileNotFoundError, ProcessLookupError):
+                continue  # it exited during the scan
+            except (OSError, _NoAnswer):
+                # A same-uid pid whose stat cannot be read: undecidable. A
+                # recorded entry for it is kept.
+                verifiable = False
+                if pid in self.owned:
+                    found[pid] = self.owned[pid]
+                continue
+            if stat is None:
+                continue
+            if pid == worker.pid and (worker.start_ticks is None or stat.start_ticks == worker.start_ticks):
+                continue
+            adopted = self.adopting and stat.ppid == me and pid not in self.baseline
+            if adopted:
+                _ADOPTED.setdefault(pid, stat.start_ticks)
+            if stat.state in _GONE_STATES:
+                continue
+            recorded = self.owned.get(pid)
+            if recorded is not None and recorded["start_ticks"] != stat.start_ticks:
+                recorded = None  # the pid was reused: the new process is not owned
+            if stat.pgrp == self.pgid:
+                source = "group"
+            elif _carries_tag(root, pid, self.tag):
+                source = "tag"
+            elif adopted:
+                source = "adopted"
+            elif recorded is not None:
+                source = recorded["source"]
+            else:
+                continue
+            cmdline = _read_cmdline(root, pid)
+            pattern = daemon_pattern(cmdline)
+            if pattern is not None:
+                self.excluded.setdefault(pid, {"pid": pid, "start_ticks": stat.start_ticks, "pattern": pattern})
+                continue
+            entry = recorded or {"pid": pid, "start_ticks": stat.start_ticks, "source": source,
+                                 "cmdline": " ".join(cmdline)[:200]}
+            found[pid] = entry
+            if stat.pgrp != self.pgid:
+                outside.append(pid)
+            identity = (pid, stat.start_ticks)
+            if identity not in self.seen:
+                self.seen.add(identity)
+                self.seen_count += 1
+                if len(self.sample) < OWNED_PROCESS_SAMPLE:
+                    self.sample.append(dict(entry))
+        self.owned = found
+        self.outside_group = sorted(outside)
+        self.verifiable = verifiable
+
+    def entries(self) -> list[dict]:
+        return [dict(self.owned[pid]) for pid in sorted(self.owned)]
+
+    def excluded_entries(self) -> list[dict]:
+        return [dict(self.excluded[pid]) for pid in sorted(self.excluded)]
+
+    def end_outside_group(self) -> None:
+        """Identity-checked ``SIGKILL`` of every owned process outside the
+        worker's group (the group itself is ended by ``killpg``)."""
+        root = _proc_root()
+        for pid in list(self.outside_group):
+            entry = self.owned.get(pid)
+            try:
+                stat = _read_stat(root / str(pid) / "stat")
+            except _NoAnswer:
+                continue
+            if entry is None or stat is None or stat.start_ticks != entry["start_ticks"]:
+                continue
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signal.SIGKILL)
+
+
+# -- the supervisor lock -------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _private_supervisor_lock():
+    """A supervisor lock for a direct caller that holds none (plan A): held
+    in a temporary directory for the launch's duration, so the anchor's
+    orphan-lifetime rule works the same way."""
+    with tempfile.TemporaryDirectory(prefix="workflow-controller-supervisor-") as directory:
+        fd = runtime.open_lock_file(Path(directory), "supervisor.lock")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield Path(directory) / "supervisor.lock"
+        finally:
+            os.close(fd)
+
+
+# -- spawning ------------------------------------------------------------------
+
+
+def _write_task(fd: int, task: str) -> None:
+    """Write the task line in full. A worker that exited before reading it
+    is not a launch error: its stream says what happened."""
+    data = task_line(task)
+    with contextlib.suppress(BrokenPipeError):
+        while data:
+            data = data[os.write(fd, data):]
+
+
+def _spawn_anchor(write_end: int, worker_process: WorkerProcess, tag: str, supervisor_lock_path: Path,
+                  pass_fds: tuple[int, ...]) -> subprocess.Popen:
+    """The anchor (``controller.anchor.command``) in its own session, with
+    an empty environment and only the stdin write end and ``pass_fds`` (the
+    lifecycle lock's descriptor)."""
+    return subprocess.Popen(
+        anchor_module.command(write_end, worker_process.pid, worker_process.start_ticks, tag,
+                              str(supervisor_lock_path)),
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True, env={}, cwd="/", pass_fds=(write_end, *pass_fds),
+    )
+
+
+def _end_anchor(anchor: subprocess.Popen) -> None:
+    """``SIGKILL`` and reap the anchor. It is this Controller's own child,
+    so its pid cannot have been reused while it is unreaped, and an
+    unreaped zombie anchor would look live to every later check."""
+    if anchor.poll() is None:
+        with contextlib.suppress(ProcessLookupError):
+            anchor.kill()
+    anchor.wait()
+
+
+def _catches_sigusr1(pid: int) -> bool:
+    """Whether ``pid`` has a ``SIGUSR1`` handler installed (``SigCgt`` in
+    ``/proc/<pid>/status``); ``True`` when that cannot be read."""
+    try:
+        with open(_proc_root() / str(pid) / "status") as fh:
+            for line in fh:
+                if line.startswith("SigCgt:"):
+                    return bool(int(line.split()[1], 16) & (1 << (signal.SIGUSR1 - 1)))
+    except (OSError, ValueError, IndexError):
+        return True
+    return True
+
+
 def launch(
     task: str,
     *,
@@ -299,14 +866,17 @@ def launch(
     stderr_path: str | Path,
     claude_bin: str | None = None,
     pass_fds: Iterable[int] = (),
-    on_spawn: Callable[["WorkerProcess"], None] | None = None,
+    on_spawn: Callable[..., None] | None = None,
     on_group_drain: Callable[[int, list[int]], None] | None = None,
     model: str | None = None,
     effort: str | None = None,
     disallowed_tools: Iterable[str] | None = None,
-) -> WorkerResult:
-    """Launch one fresh ``claude -p`` worker against ``cwd`` and wait
-    synchronously for it to return control.
+    on_state_change: Callable[[str, dict], None] | None = None,
+    ownership_tag: str | None = None,
+    supervisor_lock_path: str | Path | None = None,
+) -> WorkerResult | DrainDetached:
+    """Launch one fresh streaming-input ``claude`` worker against ``cwd``
+    and supervise it until it and every process it owns have ended.
 
     ``permission_mode`` has no default: ``auto`` (the lifecycle-worker
     default, ``controller.job.DEFAULT_PERMISSION_MODE``) against a real
@@ -316,85 +886,70 @@ def launch(
 
     ``stdout_path``/``stderr_path`` are files the caller has already
     created, empty. Each is opened ``O_WRONLY | O_APPEND`` and handed to
-    the worker as its stdout/stderr; ``launch`` closes its own copies once
-    the worker is spawned. The worker writes its ``stream-json`` events
-    there itself, so the file is the durable log as it is produced, and
-    nothing the Controller does can block or signal the worker through it.
-    After the wait both files are read back (UTF-8, ``errors="replace"``)
-    into ``WorkerResult.stdout``/``.stderr``.
+    the worker as its stdout/stderr. The worker writes its ``stream-json``
+    events there itself, so the file is the durable log as it is produced;
+    the supervisor only reads it.
 
-    **Returning control** is two phases under one ``timeout`` budget:
-    ``proc.wait()`` for the direct child, then a group drain that rescans
-    the worker's process group every :data:`_DRAIN_POLL_SECONDS` until
-    :func:`process_test` reports it ``not live`` (a zombie counts as gone;
-    under the ``killpg`` form ``possibly live`` keeps waiting). A
-    descendant that stays in the group keeps the Controller waiting; one
-    that left it (``setsid``) does not.
+    **Spawn** (plan C, step 1). The argv is :func:`worker_argv`'s. The
+    worker's stdin is a pipe: the task goes in as one stream-json line
+    (:func:`task_line`), and the write end then belongs to the anchor
+    (``controller.anchor``), which also inherits ``pass_fds`` (the
+    lifecycle lock's descriptor, as the worker does). The worker's
+    environment is the Controller's own without ``PYTHONPATH``, with
+    ``ownership_tag`` (default: a fresh ``launch-<hex>``) appended to
+    :data:`OWNERSHIP_VAR`. For the launch's duration the Controller is a
+    child subreaper where ``prctl`` allows. ``supervisor_lock_path`` is the
+    job's supervisor lock, which the caller holds; ``None`` makes
+    ``launch`` hold a private one. ``on_spawn`` is called as
+    ``on_spawn(worker_process, anchor=anchor_process,
+    ownership_tag=tag)`` before supervision begins; if it raises
+    (``KeyboardInterrupt`` included), the worker's group and the anchor are
+    killed and reaped, and the exception propagates unchanged.
 
-    ``timeout`` is ``None`` for no limit: the wait lasts until the worker
-    returns control, however long or silent it is. A number is the
-    operator's explicit opt-in; when it expires in phase 1 the whole
-    process group is killed and the direct child reaped; when it expires in
-    phase 2 the group is killed through :func:`_kill_drained_group` (the
-    leader is already reaped, so ``os.getpgid`` would find nothing). Either
-    way the result is ``INTERRUPTED``, and ``returncode`` stays the direct
-    child's real exit status -- ``INTERRUPTED`` with ``returncode == 0`` is
-    a worker that exited cleanly but whose group outlived the budget.
+    **Supervise** (step 2). ``on_state_change(state, details)`` is called
+    whenever ``worker_state`` changes, or the owned processes or what the
+    worker waits on change (at most once per scan): ``RUNNING`` while a turn
+    is open; ``WAITING`` while none is and ``worker_stream`` reports owned
+    work; ``ENDING`` at a quiescent terminal turn (confirmed by a short
+    stretch without new bytes, :func:`quiescence_confirm_seconds`), or at a
+    harness-contract breach (an overdue wakeup, an unterminated
+    ``command_lifecycle`` bracket), with ``ending_offset`` and the
+    supervisor facts in ``details``; only then is the anchor asked
+    (``SIGUSR1``) to close stdin. ``fire_matched`` wakeups settle after
+    :data:`WAKEUP_SETTLE_SECONDS` of idle time. If ``on_state_change``
+    raises an ``Exception``, every owned process and the anchor are ended
+    and it propagates.
 
-    ``pass_fds`` are descriptors the worker inherits (``controller.job``
-    passes the lifecycle lock's, so an orphaned worker keeps the lock until
-    it really exits). ``on_spawn``, when given, is called with the
-    worker's :class:`WorkerProcess` after ``Popen`` returns and before the
-    wait begins -- outside the ``try`` that converts ``Popen``'s own
-    ``OSError`` into ``WorkerLaunchError``, because a process exists by
-    then. If it raises anything (``KeyboardInterrupt`` included), the
-    worker's process group is killed and reaped, and then the original
-    exception propagates unchanged, so no untracked worker survives.
+    **Drain** (step 3). Once the worker has exited, ``DRAINING`` lasts while
+    an owned process lives, for at most :data:`DRAIN_DETACH_SECONDS`, after
+    which ``launch`` returns :class:`DrainDetached` and ends nothing.
+    ``on_group_drain(pid, remaining_pids)`` keeps its contract: called once
+    when the worker exited and members of its process group remain; if it
+    raises, the group is ended and the exception propagates.
 
-    ``on_group_drain``, when given, is called once, as
-    ``on_group_drain(pid, remaining_pids)``, when phase 1 ends and the
-    group still has live members: ``remaining_pids`` is the ``/proc``
-    member scan's list, or ``[]`` under the ``killpg`` form, which has
-    none. It has ``on_spawn``'s contract: if it raises, the group is ended
-    by the phase-2 kill and the exception propagates.
+    **End** (step 4). ``ENDED``: the anchor is killed and reaped, and the
+    stream is classified (``worker_stream.classify``, ``streaming`` mode).
 
-    ``model``/``effort`` add ``--model``/``--effort`` when not ``None``,
-    passed through unvalidated (the ``claude`` CLI is the authority, as for
-    ``permission_mode``). A non-empty ``disallowed_tools`` adds
-    ``--disallowedTools`` with the names comma-joined into one argv
-    element, placed last. No session-reuse flag is ever passed, so every
-    worker is a fresh session.
+    ``timeout`` ``None`` waits however long the owned lifetime lasts. A
+    number is the operator's explicit budget over the whole owned lifetime:
+    when it expires the worker's group, every owned process (never a
+    recognised daemon) and the anchor are ended, and the result is
+    ``INTERRUPTED`` with the worker's real exit status. A
+    ``KeyboardInterrupt`` during supervision propagates and ends nothing.
 
-    Raises :class:`~controller.errors.UserOnlyCommandError` before
-    spawning anything if ``task`` names one of :data:`USER_ONLY_COMMANDS`
-    (the second denylist layer -- CP4's ``decision.decide`` already never
-    *selects* such a command; this makes it impossible to *execute* one
-    even through a hand-written task string). Raises
-    :class:`~controller.errors.WorkerLaunchError` if the worker process
-    itself could not be started at all (an ``OSError`` from opening the
-    stream files or from ``subprocess.Popen``, e.g. ``claude_bin`` does not
-    exist). Every other outcome -- including a non-zero exit, a malformed
-    stream, or a timeout/signal interruption -- is not a raised exception
-    but the returned :class:`WorkerResult`'s own ``outcome``.
+    Raises :class:`~controller.errors.UserOnlyCommandError` before spawning
+    anything if ``task`` names one of :data:`USER_ONLY_COMMANDS`, and
+    :class:`~controller.errors.WorkerLaunchError` if the worker or its
+    anchor could not be started (no worker is left running). Every other
+    outcome is the returned :class:`WorkerResult`'s own ``outcome``, or
+    :class:`DrainDetached`.
     """
     _assert_not_user_only(task)
 
     resolved_claude_bin = claude_bin or "claude"
-    # `stream-json` in print mode requires `--verbose` (the CLI refuses it
-    # otherwise, before any request).
-    args = [
-        resolved_claude_bin, "-p", task, "--output-format", "stream-json", "--verbose",
-        "--permission-mode", permission_mode,
-    ]
-    # CP6: the worker's route. The disallow list goes last -- the CLI's
-    # `--disallowedTools <tools...>` is variadic, so nothing may follow it.
-    if model is not None:
-        args += ["--model", model]
-    if effort is not None:
-        args += ["--effort", effort]
-    tools = tuple(disallowed_tools or ())
-    if tools:
-        args += ["--disallowedTools", ",".join(tools)]
+    args = worker_argv(resolved_claude_bin, permission_mode=permission_mode, model=model, effort=effort,
+                       disallowed_tools=disallowed_tools)
+    tag = ownership_tag or f"launch-{secrets.token_hex(8)}"
 
     # The worker's environment is the Controller's own, with PYTHONPATH
     # removed (revision 35, local round 34's OPUS-R34-O1): CP1's re-exec
@@ -404,100 +959,466 @@ def launch(
     # with the Controller's own code first on sys.path.
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    inherited_tags = env.get(OWNERSHIP_VAR)
+    env[OWNERSHIP_VAR] = f"{inherited_tags}:{tag}" if inherited_tags else tag
+    pass_fds = tuple(pass_fds)
 
-    stream_fds: list[int] = []
-    try:
-        for path in (stdout_path, stderr_path):
-            stream_fds.append(os.open(path, os.O_WRONLY | os.O_APPEND))
-        proc = subprocess.Popen(
-            args,
-            cwd=cwd,
-            stdin=subprocess.DEVNULL,
-            stdout=stream_fds[0],
-            stderr=stream_fds[1],
-            start_new_session=True,
-            env=env,
-            pass_fds=tuple(pass_fds),
-        )
-    except OSError as exc:
-        raise WorkerLaunchError(
-            f"could not launch the Claude worker ({resolved_claude_bin!r}): {exc}",
-            evidence={"claude_bin": resolved_claude_bin, "os_error": str(exc)},
-        ) from exc
-    finally:
-        for fd in stream_fds:
-            os.close(fd)
+    with contextlib.ExitStack() as stack:
+        if supervisor_lock_path is None:
+            supervisor_lock_path = stack.enter_context(_private_supervisor_lock())
+        adopting = stack.enter_context(_child_subreaper())
+        _reap_adopted()
+        baseline = _own_children()
 
-    worker_process = capture_worker_process(proc.pid)
-    if on_spawn is not None:
+        read_end, write_end = os.pipe()
+        stream_fds: list[int] = []
         try:
-            on_spawn(worker_process)
-        except BaseException:
-            # A process exists, so this is never "the worker never
-            # started": end the whole group and reap it before the
-            # original error propagates, so no untracked worker survives.
+            for path in (stdout_path, stderr_path):
+                stream_fds.append(os.open(path, os.O_WRONLY | os.O_APPEND))
+            proc = subprocess.Popen(
+                args, cwd=cwd, stdin=read_end, stdout=stream_fds[0], stderr=stream_fds[1],
+                start_new_session=True, env=env, pass_fds=pass_fds,
+            )
+        except OSError as exc:
+            os.close(write_end)
+            raise WorkerLaunchError(
+                f"could not launch the Claude worker ({resolved_claude_bin!r}): {exc}",
+                evidence={"claude_bin": resolved_claude_bin, "os_error": str(exc)},
+            ) from exc
+        finally:
+            os.close(read_end)
+            for fd in stream_fds:
+                os.close(fd)
+
+        worker_process = capture_worker_process(proc.pid)
+        try:
+            _write_task(write_end, task)
+            anchor = _spawn_anchor(write_end, worker_process, tag, Path(supervisor_lock_path), pass_fds)
+        except BaseException as exc:
             _kill_process_group(proc.pid)
             proc.wait()
+            _reap_killed_children(baseline, worker_process.pgid or proc.pid)
+            if isinstance(exc, OSError):
+                raise WorkerLaunchError(
+                    f"could not start the worker's stdin anchor: {exc}",
+                    evidence={"claude_bin": resolved_claude_bin, "os_error": str(exc)},
+                ) from exc
+            raise
+        finally:
+            os.close(write_end)
+
+        anchor_process = capture_worker_process(anchor.pid)
+        if on_spawn is not None:
+            try:
+                on_spawn(worker_process, anchor=anchor_process, ownership_tag=tag)
+            except BaseException:
+                # A process exists, so this is never "the worker never
+                # started": end the whole group and the anchor, and reap
+                # both, before the original error propagates.
+                _kill_process_group(proc.pid)
+                proc.wait()
+                _end_anchor(anchor)
+                _reap_killed_children(baseline | {anchor.pid}, worker_process.pgid or proc.pid)
+                raise
+
+        reader = stack.enter_context(open(stdout_path, "rb"))
+        supervision = _Supervision(
+            proc=proc, anchor=anchor, worker_process=worker_process, reader=reader,
+            stdout_path=stdout_path, stderr_path=stderr_path, timeout=timeout,
+            on_state_change=on_state_change, on_group_drain=on_group_drain,
+            ownership=_Ownership(tag=tag, worker_process=worker_process, anchor_pid=anchor.pid,
+                                 baseline=baseline | {anchor.pid}, adopting=adopting),
+        )
+        return supervision.run()
+
+
+class _Supervision:
+    """One launch's supervision loop (plan C, steps 2-4)."""
+
+    def __init__(self, *, proc: subprocess.Popen, anchor: subprocess.Popen, worker_process: WorkerProcess,
+                 reader, stdout_path, stderr_path, timeout: float | None,
+                 on_state_change, on_group_drain, ownership: _Ownership) -> None:
+        self.proc = proc
+        self.anchor = anchor
+        self.worker_process = worker_process
+        self.reader = reader
+        self.stdout_path = stdout_path
+        self.stderr_path = stderr_path
+        self.deadline = None if timeout is None else time.monotonic() + timeout
+        self.on_state_change = on_state_change
+        self.on_group_drain = on_group_drain
+        self.ownership = ownership
+        self.stream = worker_stream.WorkerStream()
+        self.state = STARTING
+        self.turns_reported = 0
+        self.waiting_key: object = None
+        self.published: object = None
+        self.last_bytes_at = time.monotonic()
+        self.next_scan = 0.0
+        # Supervisor facts (B): only this supervisor knows them.
+        self.timed_out = False
+        self.ending_offset: int | None = None
+        self.wakeup_overdue_declared_at: str | None = None
+        self.lifecycle_overdue_declared_at: str | None = None
+        self.lifecycle_overdue_command_uuid: str | None = None
+        self.settled: list[str] = []
+        # Timers, by this supervisor's clock.
+        self.idle_task_free: tuple[float, float] | None = None  # (monotonic, wall): no turn, no task
+        self.idle_full: float | None = None  # no turn, no task, no bracket
+        self.marks_task_free: object = None
+        self.marks_full: object = None
+        self.stall: dict[str, tuple[object, float]] = {}
+        self.matched_at: dict[str, float] = {}
+        self.first_seen_wall: dict[str, float] = {}
+
+    # -- the loop ------------------------------------------------------------
+
+    def run(self) -> WorkerResult | DrainDetached:
+        while True:
+            self._consume()
+            if self.proc.poll() is not None:
+                break
+            if self._expired():
+                return self._interrupt()
+            now = time.monotonic()
+            self._decide(now)
+            self._wait_for_exit(self._poll_interval(now))
+        self.proc.wait()
+        self._consume()
+        return self._drain()
+
+    def _poll_interval(self, now: float) -> float:
+        """The next read: sooner while the stream is active, and exactly at
+        the end of a quiescence confirmation that is under way."""
+        interval = _ACTIVE_POLL_SECONDS if now - self.last_bytes_at < _ACTIVE_STREAM_SECONDS \
+            else _SUPERVISE_POLL_SECONDS
+        if self.ending_offset is None and self.stream.quiescent():
+            interval = min(interval, max(0.01, self.last_bytes_at + quiescence_confirm_seconds(self.stream) - now))
+        return interval
+
+    def _wait_for_exit(self, seconds: float) -> None:
+        if self.deadline is not None:
+            seconds = max(0.0, min(seconds, self.deadline - time.monotonic()))
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            self.proc.wait(timeout=seconds)
+
+    def _consume(self) -> None:
+        chunk = self.reader.read()
+        if chunk:
+            self.stream.feed(chunk)
+            self.last_bytes_at = time.monotonic()
+
+    def _expired(self) -> bool:
+        return self.deadline is not None and time.monotonic() >= self.deadline
+
+    def _sleep(self, seconds: float) -> None:
+        if self.deadline is not None:
+            seconds = max(0.0, min(seconds, self.deadline - time.monotonic()))
+        time.sleep(seconds)
+
+    def _decide(self, now: float) -> None:
+        stream = self.stream
+        self._track(now)
+        if self.ending_offset is not None:
+            return  # ENDING: follow the worker to its exit
+        if len(stream.turns) > self.turns_reported:
+            # A turn opened since the last look -- one that also closed
+            # between two reads included -- is reported.
+            self.turns_reported = len(stream.turns)
+            self._transition(RUNNING)
+        if stream.turn_open:
+            return
+        self._settle(now)
+        if stream.quiescent():
+            if now - self.last_bytes_at >= quiescence_confirm_seconds(stream):
+                self._end_session()
+            return
+        if self._breached(now):
+            self._end_session()
+            return
+        if stream.has_owned_work():
+            self._transition(WAITING)
+            if now >= self.next_scan or self._waiting_key() != self.waiting_key:
+                self._scan_and_publish()
+
+    # -- timers --------------------------------------------------------------
+
+    def _open_brackets(self) -> list:
+        return [b for b in self.stream.brackets if b.state == worker_stream.OPEN]
+
+    def _track(self, now: float) -> None:
+        """Restart the idle stretches whenever a turn, task or bracket was
+        seen since the last look -- one that opened and closed between two
+        polls included -- and each open bracket's stall timer whenever its
+        own state changed."""
+        stream = self.stream
+        tasks_open = bool(stream.open_tasks())
+        listed = sum(1 for task in stream.tasks.values() if task.listed)
+        marks = (len(stream.turns), listed)
+        if stream.turn_open or tasks_open:
+            self.idle_task_free = None
+        elif marks != self.marks_task_free or self.idle_task_free is None:
+            self.idle_task_free = (now, time.time())
+        self.marks_task_free = marks
+
+        open_brackets = self._open_brackets()
+        full_marks = (marks, len(stream.brackets), len(open_brackets))
+        if stream.turn_open or tasks_open or open_brackets:
+            self.idle_full = None
+        elif full_marks != self.marks_full or self.idle_full is None:
+            self.idle_full = now
+        self.marks_full = full_marks
+
+        stall = {}
+        for bracket in open_brackets:
+            turns = bracket.turns_opened
+            key = (len(turns), turns and stream.turns[turns[-1]].close_offset is not None)
+            previous = self.stall.get(bracket.command_uuid)
+            stall[bracket.command_uuid] = previous if previous is not None and previous[0] == key else (key, now)
+        self.stall = stall
+
+        for wakeup in stream.wakeups.values():
+            self.first_seen_wall.setdefault(wakeup.tool_use_id, time.time())
+            if wakeup.state == worker_stream.FIRE_MATCHED:
+                self.matched_at.setdefault(wakeup.tool_use_id, now)
+
+    def _settle_left(self, tool_use_id: str, now: float) -> float | None:
+        """Seconds left in a ``fire_matched`` wakeup's settle window, or
+        ``None`` while its timer is paused (not idle)."""
+        if self.idle_full is None:
+            return None
+        start = max(self.matched_at.get(tool_use_id, now), self.idle_full)
+        return max(0.0, WAKEUP_SETTLE_SECONDS - (now - start))
+
+    def _settle(self, now: float) -> None:
+        for wakeup in list(self.stream.wakeups.values()):
+            if wakeup.state != worker_stream.FIRE_MATCHED:
+                continue
+            left = self._settle_left(wakeup.tool_use_id, now)
+            if left is not None and left <= 0:
+                self.settled.append(wakeup.tool_use_id)
+                self.stream.settle_wakeups([wakeup.tool_use_id])
+
+    def _breached(self, now: float) -> bool:
+        """The two harness-contract breaches (decision 5)."""
+        stream = self.stream
+        if self.idle_task_free is not None:
+            idle_wall = self.idle_task_free[1]
+            for wakeup in stream.wakeups.values():
+                if wakeup.state != worker_stream.PENDING:
+                    continue
+                due = wakeup.due
+                if due is None:
+                    # No stated time to measure from: the latest the harness
+                    # could have scheduled it for, from when it was seen.
+                    due = self.first_seen_wall[wakeup.tool_use_id] + worker_stream.WAKEUP_MAX_DELAY_SECONDS
+                if time.time() - max(due, idle_wall) >= WAKEUP_GRACE_SECONDS:
+                    self.wakeup_overdue_declared_at = _utc_now()
+                    return True
+        if not stream.turn_open and not stream.open_tasks():
+            for command_uuid, (_key, since) in self.stall.items():
+                if now - since >= COMMAND_LIFECYCLE_GRACE_SECONDS:
+                    self.lifecycle_overdue_declared_at = _utc_now()
+                    self.lifecycle_overdue_command_uuid = command_uuid
+                    return True
+        return False
+
+    # -- publishing ----------------------------------------------------------
+
+    def facts(self) -> worker_stream.SupervisorFacts:
+        return worker_stream.SupervisorFacts(
+            timed_out=self.timed_out, ending_offset=self.ending_offset,
+            wakeup_overdue_declared_at=self.wakeup_overdue_declared_at,
+            command_lifecycle_overdue_declared_at=self.lifecycle_overdue_declared_at,
+            command_lifecycle_overdue_command_uuid=self.lifecycle_overdue_command_uuid,
+            settled_wakeups=tuple(self.settled),
+        )
+
+    def _waiting_on(self, now: float) -> dict:
+        stream = self.stream
+        wakeups = []
+        for wakeup in stream.wakeups.values():
+            if wakeup.state == worker_stream.PENDING:
+                wakeups.append({"tool_use_id": wakeup.tool_use_id, "state": wakeup.state,
+                                "due_at": worker_stream._iso(wakeup.due)})
+            elif wakeup.state == worker_stream.FIRE_MATCHED:
+                wakeups.append({"tool_use_id": wakeup.tool_use_id, "state": wakeup.state,
+                                "command_uuid": wakeup.matched_by,
+                                "settle_seconds_left": self._settle_left(wakeup.tool_use_id, now)})
+        brackets = []
+        for bracket in self._open_brackets():
+            key, since = self.stall.get(bracket.command_uuid, ((0, False), now))
+            brackets.append({"command_uuid": bracket.command_uuid, "turn_seen": bool(key[0]),
+                             "stalled_seconds": 0.0 if stream.turn_open else round(now - since, 3)})
+        return {
+            "tasks": [{"task_id": task_id, "description": stream.tasks[task_id].description}
+                      for task_id in stream.open_tasks()],
+            "wakeups": wakeups,
+            "command_lifecycles": brackets,
+        }
+
+    def details(self) -> dict:
+        now = time.monotonic()
+        details = {
+            "turns": len(self.stream.turns),
+            "waiting_on": self._waiting_on(now),
+            "owned_processes": self.ownership.entries(),
+            "owned_processes_seen_count": self.ownership.seen_count,
+            "excluded_processes": self.ownership.excluded_entries(),
+            "scan": "verified" if self.ownership.verifiable else "unverifiable",
+        }
+        if self.ending_offset is not None:
+            details["ending_offset"] = self.ending_offset
+            details["supervisor_facts"] = self.facts().to_dict()
+        return details
+
+    def _signature(self, details: dict) -> object:
+        waiting_on = details["waiting_on"]
+        return json.dumps([
+            self.state,
+            [(p["pid"], p["start_ticks"]) for p in details["owned_processes"]],
+            [p["pid"] for p in details["excluded_processes"]],
+            details["scan"],
+            [t["task_id"] for t in waiting_on["tasks"]],
+            [(w["tool_use_id"], w["state"]) for w in waiting_on["wakeups"]],
+            [(b["command_uuid"], b["turn_seen"]) for b in waiting_on["command_lifecycles"]],
+            details.get("supervisor_facts"),
+        ], sort_keys=True, default=str)
+
+    def _publish(self) -> None:
+        details = self.details()
+        signature = self._signature(details)
+        if signature == self.published:
+            return
+        self.published = signature
+        if self.on_state_change is None:
+            return
+        try:
+            self.on_state_change(self.state, details)
+        except Exception:
+            self._end_everything()
             raise
 
-    deadline = None if timeout is None else time.monotonic() + timeout
-    timed_out = False
+    def _waiting_key(self) -> tuple:
+        """What the worker waits on, as membership only (no timers)."""
+        stream = self.stream
+        return (
+            tuple(stream.open_tasks()),
+            tuple((w.tool_use_id, w.state) for w in stream.wakeups.values()),
+            tuple((b.command_uuid, len(b.turns_opened)) for b in self._open_brackets()),
+        )
 
-    def remaining() -> float | None:
-        return None if deadline is None else max(0.0, deadline - time.monotonic())
+    def _scan_and_publish(self) -> None:
+        self.ownership.scan()
+        self.next_scan = time.monotonic() + _OWNERSHIP_SCAN_SECONDS
+        self.waiting_key = self._waiting_key()
+        self._publish()
 
-    # Phase 1: the direct child.
-    try:
-        proc.wait(timeout=remaining())
-    except subprocess.TimeoutExpired:
-        # Kill the whole group, not only the direct child, so no
-        # process-group sibling the worker spawned keeps running and
-        # holding the target repository; then reap the child.
-        timed_out = True
-        _kill_process_group(proc.pid)
-        proc.wait()
+    def _transition(self, state: str) -> None:
+        if state != self.state:
+            self.state = state
+            self._scan_and_publish()
 
-    # Phase 2: the group drain. The leader is reaped from here on, so
-    # only `_kill_drained_group` can end the group.
-    if not timed_out:
+    # -- ending ----------------------------------------------------------------
+
+    def _end_session(self) -> None:
+        """``ENDING``: flush it with ``ending_offset`` first (I3), then ask
+        the anchor to release stdin."""
+        self.ending_offset = self.stream.offset
+        self._transition(ENDING)
+        deadline = time.monotonic() + _ANCHOR_READY_SECONDS
+        while self.anchor.poll() is None and not _catches_sigusr1(self.anchor.pid) \
+                and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if self.anchor.poll() is None:
+            with contextlib.suppress(ProcessLookupError):
+                self.anchor.send_signal(signal.SIGUSR1)
+
+    def _end_everything(self) -> None:
+        """End the worker's group, every owned process outside it and the
+        anchor, and reap what can be reaped (a timeout, or a failed flush)."""
+        if self.proc.poll() is None:
+            _kill_process_group(self.proc.pid)
+            self.proc.wait()
+        else:
+            _end_drained_group(self.worker_process)
+        self.ownership.end_outside_group()
+        _end_anchor(self.anchor)
+        _reap_killed_children(self.ownership.baseline, self.ownership.pgid, self.ownership.outside_group)
+
+    def _interrupt(self) -> WorkerResult:
+        self.timed_out = True
+        self.ownership.scan()
+        self._end_everything()
+        return self._finish()
+
+    def _drain(self) -> WorkerResult | DrainDetached:
+        worker_process = self.worker_process
         empty, members = _group_members(worker_process)
-        if not empty and on_group_drain is not None:
+        if not empty and self.on_group_drain is not None:
             try:
-                on_group_drain(proc.pid, members)
+                self.on_group_drain(self.proc.pid, members)
             except BaseException:
                 _end_drained_group(worker_process)
+                self.ownership.scan()
+                self.ownership.end_outside_group()
+                _end_anchor(self.anchor)
+                _reap_killed_children(self.ownership.baseline, self.ownership.pgid,
+                                      self.ownership.outside_group)
                 raise
-        while not empty:
-            wait = _DRAIN_POLL_SECONDS
-            left = remaining()
-            if left is not None:
-                if left <= 0:
-                    timed_out = True
-                    _end_drained_group(worker_process)
-                    break
-                wait = min(wait, left)
-            time.sleep(wait)
+        self.ownership.scan()
+        self.next_scan = time.monotonic() + _OWNERSHIP_SCAN_SECONDS
+        if empty and not self.ownership.outside_group and self.ownership.verifiable:
+            return self._finish()
+        self.state = DRAINING
+        self._publish()
+        started = time.monotonic()
+        while True:
+            if self._expired():
+                return self._interrupt()
+            if time.monotonic() - started >= DRAIN_DETACH_SECONDS:
+                return self._detach()
+            self._sleep(_DRAIN_POLL_SECONDS)
+            _reap_adopted()
             empty = _group_members(worker_process)[0]
+            if empty or time.monotonic() >= self.next_scan:
+                self._scan_and_publish()
+            if empty and not self.ownership.outside_group and self.ownership.verifiable:
+                return self._finish()
 
-    returncode = proc.returncode
-    with open(stdout_path, "rb") as fh:
-        stdout_bytes = fh.read()
-    stdout = stdout_bytes.decode("utf-8", errors="replace")
-    stderr = _read_stream(stderr_path)
-    outcome, terminal_result, diagnosis = worker_stream.classify(
-        stdout_bytes, mode=worker_stream.PRINT,
-        facts=worker_stream.SupervisorFacts(timed_out=timed_out), returncode=returncode,
-    )
+    def _detach(self) -> DrainDetached:
+        """Stop waiting and end nothing: the anchor keeps the lifecycle lock
+        (plan C, step 3)."""
+        self.ownership.scan()
+        return DrainDetached(
+            drain_detached_at=_utc_now(),
+            remaining=tuple(self.ownership.entries()),
+            returncode=self.proc.returncode,
+            worker_state=self.details(),
+            supervisor_facts=self.facts().to_dict(),
+        )
 
-    return WorkerResult(
-        outcome=outcome,
-        returncode=returncode,
-        stdout=stdout,
-        stderr=stderr,
-        raw_json=terminal_result,
-        stream_diagnosis=diagnosis,
-        **_extract_fields(terminal_result),
-    )
+    def _finish(self) -> WorkerResult:
+        _end_anchor(self.anchor)
+        _reap_adopted()
+        self.state = ENDED
+        self._publish()
+        with open(self.stdout_path, "rb") as fh:
+            stdout_bytes = fh.read()
+        outcome, terminal_result, diagnosis = worker_stream.classify(
+            stdout_bytes, mode=worker_stream.STREAMING, facts=self.facts(), returncode=self.proc.returncode,
+        )
+        return WorkerResult(
+            outcome=outcome,
+            returncode=self.proc.returncode,
+            stdout=stdout_bytes.decode("utf-8", errors="replace"),
+            stderr=_read_stream(self.stderr_path),
+            raw_json=terminal_result,
+            stream_diagnosis=diagnosis,
+            owned_processes_seen={"count": self.ownership.seen_count,
+                                  "sample": [dict(entry) for entry in self.ownership.sample]},
+            **_extract_fields(terminal_result),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -588,12 +1509,13 @@ class _ProcStat:
     state: str
     pgrp: int
     start_ticks: int
+    ppid: int = 0
 
 
 def _parse_stat(text: str) -> _ProcStat:
     """Fields are counted after the line's **last** ``)``: ``comm`` (field
     2) may itself contain spaces and parentheses. Field 3 is the state,
-    field 5 ``pgrp``, field 22 ``starttime``."""
+    field 4 ``ppid``, field 5 ``pgrp``, field 22 ``starttime``."""
     close = text.rfind(")")
     if close < 0:
         raise _NoAnswer(f"stat line does not parse: {text!r}")
@@ -601,7 +1523,7 @@ def _parse_stat(text: str) -> _ProcStat:
     if len(rest) < 20:
         raise _NoAnswer(f"stat line has too few fields: {text!r}")
     try:
-        return _ProcStat(state=rest[0], pgrp=int(rest[2]), start_ticks=int(rest[19]))
+        return _ProcStat(state=rest[0], pgrp=int(rest[2]), start_ticks=int(rest[19]), ppid=int(rest[1]))
     except ValueError:
         raise _NoAnswer(f"stat line does not parse: {text!r}") from None
 

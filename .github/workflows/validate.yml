@@ -26,7 +26,7 @@ jobs:
           - shard: cli
             modules: "tests.test_cli tests.test_lifecycle_orchestration"
           - shard: worker
-            modules: "tests.test_worker tests.test_observe tests.test_observation_equivalence tests.test_fake_claude_contract"
+            modules: "tests.test_worker tests.test_observe tests.test_observation_equivalence tests.test_fake_claude_contract tests.test_worker_stream"
           - shard: docs
             modules: "tests.test_plan_document_consistency tests.test_checklist_corrections tests.test_ci_workflows tests.test_release_tools tests.test_buildinfo"
           - shard: trunk

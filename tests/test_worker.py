@@ -39,7 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import lock, routing, worker  # noqa: E402
+from controller import lock, routing, worker, worker_stream  # noqa: E402
 from controller.errors import UserOnlyCommandError, WorkerLaunchError  # noqa: E402
 from tests import fake_claude, process_fixtures  # noqa: E402
 
@@ -605,16 +605,26 @@ def _lines(*events) -> str:
 
 
 class StreamParseTest(unittest.TestCase):
-    """``_parse_worker_stream`` and ``_classify``, over stream text."""
+    """The print-mode terminal classification (``controller.worker_stream``,
+    which replaced ``_parse_worker_stream``/``_classify`` in
+    workflow-controller-worker-lifecycle-ownership CP2), over stream text."""
 
-    def _classified(self, stdout: str, returncode: int = 0, *, timed_out: bool = False) -> str:
-        return worker._classify(returncode, worker._parse_worker_stream(stdout), timed_out=timed_out)
+    def _classify(self, stdout: str, returncode: int | None = 0, *, timed_out: bool = False):
+        return worker_stream.classify(
+            stdout, mode=worker_stream.PRINT,
+            facts=worker_stream.SupervisorFacts(timed_out=timed_out), returncode=returncode,
+        )
+
+    def _classified(self, stdout: str, returncode: int | None = 0, *, timed_out: bool = False) -> str:
+        return self._classify(stdout, returncode, timed_out=timed_out)[0]
 
     def test_a_well_formed_stream_returns_its_result_event_and_is_success(self) -> None:
         result = fake_claude.result_event()
         stdout = fake_claude.stream_text([*fake_claude.default_events()[:-1], result])
-        self.assertEqual(worker._parse_worker_stream(stdout), result)
-        self.assertEqual(self._classified(stdout), worker.SUCCESS)
+        outcome, terminal, diagnosis = self._classify(stdout)
+        self.assertEqual(terminal, result)
+        self.assertEqual(outcome, worker.SUCCESS)
+        self.assertEqual(diagnosis["reason"], "quiescent_terminal_turn")
 
     def test_is_error_true_is_failure(self) -> None:
         self.assertEqual(self._classified(_lines(fake_claude.result_event(is_error=True))), worker.FAILURE)
@@ -628,24 +638,39 @@ class StreamParseTest(unittest.TestCase):
         no_session = fake_claude.result_event()
         del no_session["session_id"]
         cases = {
-            "no result event": _lines(init),
-            "two result events": _lines(init, result, result),
-            "a result that is not last": _lines(init, result, init),
-            "a non-JSON line": _lines(init, "not json", result),
-            "a blank interior line": _lines(init, "", result),
-            "a non-object line": _lines(init, "[1, 2]", result),
-            "a result missing session_id": _lines(init, no_session),
-            "an empty stream": "",
-            "two final empty segments": _lines(init, result) + "\n",
+            "no result event": (_lines(init), "no_result"),
+            "a result that is not last (the stream ends mid-turn)": (_lines(init, result, init), "exited_mid_turn"),
+            "a non-JSON line": (_lines(init, "not json", result), "malformed_line"),
+            "a blank interior line": (_lines(init, "", result), "malformed_line"),
+            "a non-object line": (_lines(init, "[1, 2]", result), "malformed_line"),
+            "a result missing session_id": (_lines(init, no_session), "result_incomplete"),
+            "an empty stream": ("", "no_result"),
+            "two final empty segments": (_lines(init, result) + "\n", "malformed_line"),
         }
-        for name, stdout in cases.items():
+        for name, (stdout, reason) in cases.items():
             with self.subTest(name):
-                self.assertEqual(self._classified(stdout), worker.AMBIGUOUS)
+                outcome, _, diagnosis = self._classify(stdout)
+                self.assertEqual(outcome, worker.AMBIGUOUS)
+                self.assertEqual(diagnosis["reason"], reason)
+
+    def test_several_result_events_are_accepted_and_the_last_one_is_used(self) -> None:
+        """Formerly pinned ``AMBIGUOUS`` ("exactly one result"); a
+        multi-turn session is legitimate (D2, job ``2857a730``)."""
+        init = fake_claude.default_events()[0]
+        first, last = fake_claude.result_event(result="one"), fake_claude.result_event(result="two")
+        outcome, terminal, diagnosis = self._classify(_lines(init, first, last))
+        self.assertEqual(outcome, worker.SUCCESS)
+        self.assertEqual(terminal, last)
+        self.assertEqual(diagnosis["result_count"], 2)
 
     def test_crlf_lines_and_a_missing_final_newline_are_accepted(self) -> None:
         init, result = fake_claude.default_events()[0], fake_claude.result_event()
-        self.assertEqual(worker._parse_worker_stream(json.dumps(init) + "\r\n" + json.dumps(result) + "\r\n"), result)
-        self.assertEqual(worker._parse_worker_stream(json.dumps(init) + "\n" + json.dumps(result)), result)
+        for stdout in (json.dumps(init) + "\r\n" + json.dumps(result) + "\r\n",
+                       json.dumps(init) + "\n" + json.dumps(result)):
+            with self.subTest(stdout=stdout[-3:]):
+                outcome, terminal, _ = self._classify(stdout)
+                self.assertEqual(terminal, result)
+                self.assertEqual(outcome, worker.SUCCESS)
 
     def test_a_signal_is_interrupted(self) -> None:
         self.assertEqual(self._classified(_lines(fake_claude.result_event()), -9), worker.INTERRUPTED)
@@ -656,18 +681,22 @@ class StreamParseTest(unittest.TestCase):
         self.assertEqual(self._classified(stdout, 1, timed_out=True), worker.INTERRUPTED)
 
     def test_timed_out_false_leaves_the_table_unchanged(self) -> None:
+        """An unknown exit status (``None``, a re-attach only) skips the
+        exit-status rows; it no longer reads as a signal."""
+        clean = _lines(fake_claude.result_event())
         rows = [
-            (0, fake_claude.result_event(), worker.SUCCESS),
-            (0, fake_claude.result_event(is_error=True), worker.FAILURE),
-            (2, fake_claude.result_event(), worker.FAILURE),
-            (0, None, worker.AMBIGUOUS),
-            (0, {"is_error": False}, worker.AMBIGUOUS),
-            (-15, None, worker.INTERRUPTED),
-            (None, None, worker.INTERRUPTED),
+            (0, clean, worker.SUCCESS),
+            (0, _lines(fake_claude.result_event(is_error=True)), worker.FAILURE),
+            (2, clean, worker.FAILURE),
+            (0, "", worker.AMBIGUOUS),
+            (0, _lines({"type": "result", "is_error": False}), worker.AMBIGUOUS),
+            (-15, "", worker.INTERRUPTED),
+            (None, "", worker.AMBIGUOUS),
+            (None, clean, worker.SUCCESS),
         ]
-        for returncode, parsed, expected in rows:
-            with self.subTest(returncode=returncode, parsed=parsed):
-                self.assertEqual(worker._classify(returncode, parsed, timed_out=False), expected)
+        for returncode, stdout, expected in rows:
+            with self.subTest(returncode=returncode, stdout=stdout):
+                self.assertEqual(self._classified(stdout, returncode), expected)
 
     def test_the_result_fields_equal_the_former_single_json_bodys(self) -> None:
         """``raw_json`` is the result event, and ``_worker_dict`` reads the
@@ -682,12 +711,12 @@ class StreamParseTest(unittest.TestCase):
 
         def worker_dict(parsed: dict) -> dict:
             result = worker.WorkerResult(
-                outcome=worker._classify(0, parsed, timed_out=False), returncode=0, stdout="", stderr="",
+                outcome=worker.SUCCESS, returncode=0, stdout="", stderr="",
                 raw_json=parsed, **worker._extract_fields(parsed),
             )
             return job._worker_dict(result, stdout_path="o", stderr_path="e")
 
-        parsed = worker._parse_worker_stream(_lines(fake_claude.default_events()[0], event))
+        _, parsed, _ = self._classify(_lines(fake_claude.default_events()[0], event))
         self.assertEqual(parsed, event)
         self.assertEqual(worker_dict(parsed), worker_dict(former_body))
 
@@ -699,10 +728,10 @@ class GoldenTranscriptTest(unittest.TestCase):
     def test_the_real_cli_transcript_parses_to_its_result_event_and_is_success(self) -> None:
         text = GOLDEN_STREAM.read_text()
         last = json.loads(text.splitlines()[-1])
-        parsed = worker._parse_worker_stream(text)
+        outcome, parsed, _ = worker_stream.classify(text, mode=worker_stream.PRINT, returncode=0)
         self.assertEqual(parsed, last)
         self.assertEqual(parsed["type"], "result")
-        self.assertEqual(worker._classify(0, parsed, timed_out=False), worker.SUCCESS)
+        self.assertEqual(outcome, worker.SUCCESS)
         fields = worker._extract_fields(parsed)
         self.assertEqual(fields["session_id"], "00000000-0000-4000-8000-000000000001")
         self.assertIs(fields["is_error"], False)

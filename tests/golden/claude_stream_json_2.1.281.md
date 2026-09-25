@@ -4,7 +4,7 @@ A real `claude -p --output-format stream-json --verbose` transcript, captured on
 `workflow-controller-release-runtime-observability`
 (`docs/ai-workflow/CONTROLLER_RELEASE_RUNTIME_OBSERVABILITY_PLAN.md`, "CP4 -- streaming worker
 output"). `tests/test_worker.py`'s real-CLI golden test parses it with
-`controller.worker._parse_worker_stream` and classifies it with `_classify`.
+`controller.worker_stream.classify` (print mode).
 
 - **CLI version:** `claude --version` reported `2.1.281 (Claude Code)`.
 - **Captured:** 2026-09-24, from an empty scratch directory, stdin closed. Exit code `0`, empty

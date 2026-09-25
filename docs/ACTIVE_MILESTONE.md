@@ -28,8 +28,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 
 | id | status | commit |
 | --- | --- | --- |
-| CP1 -- harness contract evidence and fake harness | complete | this checkpoint's commit |
-| CP2 -- worker stream state machine | not started | |
+| CP1 -- harness contract evidence and fake harness | complete | `ef07f28` |
+| CP2 -- worker stream state machine | complete | this checkpoint's commit |
 | CP3 -- streaming-input launch and supervision | not started | |
 | CP4 -- job lifecycle integration | not started | |
 | CP5 -- restart recovery | not started | |
@@ -84,6 +84,45 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   Full suite `python3 -m unittest discover -s tests -t .`: 1667 tests, `OK (skipped=8)`, 181 s
   (baseline 1600, `skipped=6`; the two new skips are the opt-in live probe).
 
+### CP2 -- worker stream state machine (complete)
+
+- **`controller/worker_stream.py` (new, pure).** `WorkerStream` consumes stdout bytes in any
+  chunking (complete lines only; `finish()` takes a final unterminated line at EOF) and tracks
+  turns and their open times, every `result`, owned tasks (listed and not terminal), wakeups
+  (`pending` -> `fire_matched` -> `settled`, due time harness-stated `in Ns` or the 60-3600 s
+  clamp), and `command_lifecycle` brackets correlated by `command_uuid` only: conditions 1-6,
+  the provisional match for a stop inside a bracket, and the eleven sticky anomaly kinds
+  (including `wakeup_count_mismatch`). `settle_wakeups` applies the `settled_wakeups` fact
+  (only a `fire_matched` wakeup settles; anything else is recorded as ignored).
+  `owned_work()`/`quiescent()` are as B defines them. No clock is read and no `origin` is
+  consulted.
+- **Terminal classification.** `classify(data, mode=, facts=SupervisorFacts(...), returncode=)`
+  applies B's nine ordered rows and returns `(outcome, terminal_result, stream_diagnosis)`
+  (reason, `secondary_reasons`, results with `queued_turn_count`/`terminal_reason`/`origin`,
+  `tasks_seen` with before/after-the-end, `wakeups_seen` with how each settled, `wakeup_stops`,
+  `command_lifecycles`, `command_lifecycle_anomalies`, malformed lines, unknown events, ignored
+  settlements). `returncode=None` is an unknown exit status (a re-attach) and skips rows 1-2.
+- **`controller/worker.py`.** `_parse_worker_stream`/`_classify` are removed; `launch` classifies
+  with `mode="print"` (until CP3), fills `WorkerResult` from the last `result`, and carries the
+  new optional `WorkerResult.stream_diagnosis`. Behaviour changes for print-mode launches, by
+  design: several `result` events are accepted (the last is used), and non-structural events
+  after the final `result` no longer make a clean run `AMBIGUOUS`. `controller/__init__.py` and
+  the package's dependency order place `worker_stream` before `worker`.
+- **Tests.** `tests/test_worker_stream.py` (new, 68 tests) covers CP2's list: every CP1 fixture
+  classifies as B's table says (the six failures `owned_work_killed_at_exit` with their killed
+  tasks, `2857a730` `SUCCESS` with two results, `5d4a976a`'s Monitor stop before the end, P3/P4
+  `SUCCESS` after waiting, P5's wakeups matched only at `completed(X)` and still owned, P9 and
+  both P12 fixtures settled by stop with agreeing counts), and CP1's deferred assertion (B's
+  state and classification are identical with and without the six dropped kinds, over every
+  fixture). It also covers row precedence, positional kills, wakeup time sources, no clock,
+  origins never evidence, the bracket edits of P5, round 9's wrong match and its variants,
+  settlement and counts, task openness, `queued_turn_count`, and incremental parsing at any
+  chunking. `tests/test_worker.py`'s stream tests are rewritten against `worker_stream`: "two
+  result events" is now `SUCCESS`, and an unknown exit status is no longer read as a signal.
+  `tools/ci_workflows.py` places the new module in the `worker` shard (`validate.yml`
+  regenerated).
+- **Verification.** See the checkpoint commit for the exact commands and results.
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP2.
+`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP3.

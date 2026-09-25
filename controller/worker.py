@@ -54,14 +54,19 @@ files as the worker produces them, with no pipe the Controller or a
 follower could apply back-pressure through. Control returns when the
 direct child has exited **and** its process group is empty (the group
 drain). The final ``result`` event is parsed strictly
-(:func:`_parse_worker_stream`) into the same fields the single JSON body
-carried before.
+into the same fields the single JSON body carried before.
+
+``workflow-controller-worker-lifecycle-ownership`` CP2 hands the stream to
+``controller.worker_stream`` (``docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md``,
+design B): the terminal classification accepts several ``result`` events,
+uses the last one, and names why a run is not ``SUCCESS`` in
+``WorkerResult.stream_diagnosis`` (owned work killed at exit, exit mid-turn,
+a malformed stream). Every launch is ``mode="print"`` until CP3.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import json
 import os
 import signal
 import socket
@@ -70,20 +75,20 @@ import time
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
-from controller import lock
+from controller import lock, worker_stream
 from controller.errors import UserOnlyCommandError, WorkerLaunchError
 
 #: The four outcomes :func:`launch` classifies a completed (or interrupted)
-#: worker run into. Fixed classification order, per the plan's table:
-#: ``INTERRUPTED`` is checked first (a timeout, or termination by signal --
-#: a negative return code), then ``FAILURE`` (non-zero exit, or exit 0 with
-#: parsed ``is_error: true``), then ``AMBIGUOUS`` (exit 0 but stdout is not
-#: a well-formed event stream ending in one ``result`` event carrying the
-#: fields the Controller needs), and only then ``SUCCESS``.
-SUCCESS = "SUCCESS"
-FAILURE = "FAILURE"
-AMBIGUOUS = "AMBIGUOUS"
-INTERRUPTED = "INTERRUPTED"
+#: worker run into, by ``controller.worker_stream.classify``'s ordered rows:
+#: ``INTERRUPTED`` (a timeout, or termination by signal), ``FAILURE`` (a
+#: non-zero exit), ``AMBIGUOUS`` (a malformed stream, no ``result``, an
+#: exit mid-turn or with owned work still open or killed after the end),
+#: ``FAILURE``/``AMBIGUOUS`` for an ``is_error`` or incomplete last
+#: ``result``, and only then ``SUCCESS``.
+SUCCESS = worker_stream.SUCCESS
+FAILURE = worker_stream.FAILURE
+AMBIGUOUS = worker_stream.AMBIGUOUS
+INTERRUPTED = worker_stream.INTERRUPTED
 
 #: The four Workflow commands CP4's ``controller.decision.
 #: derive_user_only_commands`` derives fresh from the installed
@@ -125,10 +130,9 @@ _TRAILING_PUNCTUATION = "`'\",.;:)]}"
 #: until the backtick is stripped first.
 _LEADING_MARKERS = "`/"
 
-#: The two required fields the parsed ``result`` event must carry
-#: for its result to be decidable at all (``docs/ACTIVE_MILESTONE.md``'s
-#: own field list; every other field is optional and defaults to
-#: ``None`` when absent).
+#: The two required fields the last ``result`` event must carry for its
+#: result to be decidable at all (every other field is optional and
+#: defaults to ``None`` when absent).
 _REQUIRED_FIELDS = ("session_id", "is_error")
 
 #: The remaining fields ``docs/ACTIVE_MILESTONE.md`` names as what the
@@ -183,10 +187,12 @@ class WorkerResult:
     wrote itself (``launch``'s ``stdout_path``/``stderr_path``), decoded as
     UTF-8 with ``errors="replace"`` and preserved verbatim so a human can
     read exactly what the worker said; this module never writes those
-    files. ``raw_json`` is the stream's final ``result`` event when the
-    stream was decidable (``None`` otherwise); the eight named fields below
-    are that same event's own fields, extracted for convenience and
-    ``None`` wherever the stream was undecidable or the field was absent.
+    files. ``raw_json`` is the stream's last ``result`` event (``None``
+    when it has none); the eight named fields below are that same event's
+    own fields, extracted for convenience and ``None`` wherever there was
+    no ``result`` or the field was absent. ``stream_diagnosis`` is
+    ``controller.worker_stream.classify``'s structured account of the
+    stream (why the outcome is what it is).
     """
 
     outcome: str
@@ -204,62 +210,7 @@ class WorkerResult:
     stdout: str
     stderr: str
     raw_json: dict | None
-
-
-def _parse_worker_stream(stdout: str) -> dict | None:
-    """The worker's final ``result`` event, parsed strictly from its
-    ``--output-format stream-json`` stdout, or ``None`` when the stream is
-    undecidable (which the caller classifies :data:`AMBIGUOUS`).
-
-    - ``stdout`` is already decoded with ``errors="replace"``, so a
-      non-UTF-8 byte degrades to U+FFFD and then fails to parse below,
-      like any other malformed content, rather than raising.
-    - The text is split on ``\\n``, with one trailing ``\\r`` stripped per
-      line. Only a single final empty segment (the terminator of the last
-      line) is ignored.
-    - Every other line must parse, by itself, as exactly one JSON
-      **object**. An empty line, a non-JSON line (``json.loads`` refuses
-      trailing extra data, so two documents on one line fail too) or a
-      non-object line makes the whole stream undecidable -- no line is
-      ever skipped to reach a result.
-    - Exactly one event must have ``"type": "result"``, and it must be
-      the last line. That event is returned.
-    """
-    lines = stdout.split("\n")
-    if lines[-1] == "":
-        lines.pop()
-    events = []
-    for line in lines:
-        if line.endswith("\r"):
-            line = line[:-1]
-        try:
-            event = json.loads(line)
-        except (json.JSONDecodeError, ValueError):
-            return None
-        if not isinstance(event, dict):
-            return None
-        events.append(event)
-    results = [index for index, event in enumerate(events) if event.get("type") == "result"]
-    if results != [len(events) - 1]:
-        return None
-    return events[-1]
-
-
-def _classify(returncode: int | None, parsed: dict | None, *, timed_out: bool) -> str:
-    """The fixed classification order the plan's table states, applied to
-    an already-completed (or already-reaped-after-timeout) process.
-    ``timed_out`` is checked first: a worker whose process group outlived
-    the ``timeout`` budget is ``INTERRUPTED`` even when the direct child
-    itself exited ``0`` with a well-formed stream."""
-    if timed_out or returncode is None or returncode < 0:
-        return INTERRUPTED
-    if returncode != 0:
-        return FAILURE
-    if parsed is None or not all(field in parsed for field in _REQUIRED_FIELDS):
-        return AMBIGUOUS
-    if parsed["is_error"]:
-        return FAILURE
-    return SUCCESS
+    stream_diagnosis: dict | None = None
 
 
 def _extract_fields(parsed: dict | None) -> dict:
@@ -529,19 +480,23 @@ def launch(
             empty = _group_members(worker_process)[0]
 
     returncode = proc.returncode
-    stdout = _read_stream(stdout_path)
+    with open(stdout_path, "rb") as fh:
+        stdout_bytes = fh.read()
+    stdout = stdout_bytes.decode("utf-8", errors="replace")
     stderr = _read_stream(stderr_path)
-    parsed = _parse_worker_stream(stdout)
-    outcome = _classify(returncode, parsed, timed_out=timed_out)
-    fields = _extract_fields(parsed)
+    outcome, terminal_result, diagnosis = worker_stream.classify(
+        stdout_bytes, mode=worker_stream.PRINT,
+        facts=worker_stream.SupervisorFacts(timed_out=timed_out), returncode=returncode,
+    )
 
     return WorkerResult(
         outcome=outcome,
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
-        raw_json=parsed,
-        **fields,
+        raw_json=terminal_result,
+        stream_diagnosis=diagnosis,
+        **_extract_fields(terminal_result),
     )
 
 

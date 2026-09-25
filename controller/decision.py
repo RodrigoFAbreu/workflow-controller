@@ -534,6 +534,54 @@ class HumanGate:
     safe_resume_command: str
 
 
+#: The phase a milestone-branch gate reports: the gate comes from the
+#: repository preflight (``controller.milestone_branch``), ahead of any
+#: Workflow phase handler.
+BRANCH_GATE_PHASE = "MILESTONE_BRANCH"
+
+#: ``controller.milestone_branch``'s gate codes (``GATE_CODES``) -> what the
+#: human has to do, in plain language (trunk-branch-pr-release CP7). The
+#: preflight's own message and exits carry the specifics.
+BRANCH_GATE_TEXTS = {
+    "switch_to_trunk": "the milestone branch's binding is finished; switch to the trunk",
+    "bound_item_missing": "restore the bound work item's plan files, or abandon the binding",
+    "pr_closed_unmerged": "the milestone's pull request was closed without merge; reopen it, "
+                          "or run milestone-binding --new-pr or --abandon",
+    "merged_before_acceptance": "the milestone branch was merged before acceptance; run "
+                                "milestone-binding with the disposition the gate names",
+    "fast_forward_trunk": "fast-forward the trunk to its remote before a milestone starts",
+    "post_acceptance_commits": "commits follow the acceptance commit; merge anyway on GitHub, or leave "
+                               "the pull request unready",
+    "integration_required": "the trunk moved past the milestone's base; mark the pull request ready and "
+                            "merge it on GitHub with \"Create a merge commit\"",
+    "checks_pending": "wait for the pull request's checks to finish",
+    "checks_failing": "fix the pull request's failing checks",
+    "checks_cancelled": "re-run the pull request's cancelled checks on GitHub",
+    "pr_head_not_accepted": "wait until the pull request shows the acceptance commit",
+    "merge_pull_request": "merge the pull request on GitHub with \"Create a merge commit\"",
+    "merge_method_rewrote_history": "a squash or rebase merge rewrote the reviewed history; switch to the "
+                                    "trunk by hand, and disable squash and rebase merging",
+    "unmerged_commits": "move the unmerged commits off the milestone branch",
+    "dirty_tree": "commit, stash or discard the tracked changes",
+}
+
+
+def branch_human_gate(repository: str, gate: Any, *, phase: str = BRANCH_GATE_PHASE) -> HumanGate:
+    """The :class:`HumanGate` for a milestone-branch preflight gate (a
+    duck-typed ``controller.milestone_branch.Gate``: ``code``,
+    ``work_item_id``, ``message``, ``exits``)."""
+    if gate.code not in BRANCH_GATE_TEXTS:
+        raise ValueError(f"unknown milestone-branch gate {gate.code!r}")
+    return HumanGate(
+        repository=repository,
+        work_item_id=gate.work_item_id or "",
+        phase=phase,
+        what_is_required=f"{BRANCH_GATE_TEXTS[gate.code]} ({gate.code}): {gate.message}",
+        artifact_path=None,
+        safe_resume_command=gate.exits[0] if gate.exits else "workflow-controller step",
+    )
+
+
 @dataclasses.dataclass(frozen=True)
 class Decision:
     """The whole, explainable output of :func:`decide`. Every field is

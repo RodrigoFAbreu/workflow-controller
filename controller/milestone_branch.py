@@ -14,19 +14,23 @@ under the runtime root:
   ``ABANDONED`` records, renamed aside by the bind of a re-planned id.
 
 :func:`preflight` resolves which binding governs a lifecycle step (the plan's
-"Work-item resolution", rules 1-4) and performs this checkpoint's writers:
-the bind step, the adopt row and the ``BRANCH_PLANNED`` adopt/collision rows,
-the trunk-start preflight, the per-preflight no-rewrite and remote checks,
-and branch sync. :func:`acknowledge` is the operator acknowledgement
-(``milestone-binding --new-pr`` / ``--abandon``). The pull-request lifecycle,
-readiness and close-out build on these in CP7; the lifecycle wiring is CP8.
+"Work-item resolution", rules 1-4) and performs its writers: the bind step,
+the adopt row and the ``BRANCH_PLANNED`` adopt/collision rows, the
+trunk-start preflight, the per-preflight no-rewrite and remote checks, and
+branch sync (CP6); then the Draft PR lifecycle (creation, discovery, reuse,
+re-verification), drift, readiness, the merge gate, the merged-PR handling
+and close-out, from the branch and from trunk, and the PR-less close-out
+(CP7). :func:`acknowledge` is the operator acknowledgement
+(``milestone-binding --new-pr`` / ``--abandon``). The lifecycle wiring is
+CP8.
 
 Every Git call goes through :mod:`controller.gitrepo`, every record write
 through :mod:`controller.runtime`. Every record write is checked against
 :data:`TRANSITIONS`; any other write raises :class:`BranchBindingError` and
 writes nothing. Nothing here deletes a ref, forces anything, or merges (I2,
-I3), and ``HEAD`` moves only in the bind step and when adopting a
-crash-interrupted bind whose branch sits at ``HEAD``'s own commit (I4).
+I3), and ``HEAD`` moves only in the bind step, when adopting a
+crash-interrupted bind whose branch sits at ``HEAD``'s own commit, and at
+close-out after a verified merge (I4).
 """
 
 from __future__ import annotations
@@ -111,12 +115,34 @@ MILESTONE_COMPLETE = "MILESTONE_COMPLETE"
 TRAILER_WORK_ITEM = "Workflow-Work-Item"
 TRAILER_PLAN_APPROVAL = "Workflow-Plan-Approval"
 
-# Gate codes (CP7 gives each its ``HumanGate`` text in ``decision.py``).
+# Gate codes (``decision.BRANCH_GATE_TEXTS`` gives each its ``HumanGate`` text).
 GATE_SWITCH_TO_TRUNK = "switch_to_trunk"
 GATE_BOUND_ITEM_MISSING = "bound_item_missing"
 GATE_PR_CLOSED_UNMERGED = "pr_closed_unmerged"
 GATE_MERGED_BEFORE_ACCEPTANCE = "merged_before_acceptance"
 GATE_FAST_FORWARD_TRUNK = "fast_forward_trunk"
+GATE_POST_ACCEPTANCE_COMMITS = "post_acceptance_commits"
+GATE_INTEGRATION_REQUIRED = "integration_required"
+GATE_CHECKS_PENDING = "checks_pending"
+GATE_CHECKS_FAILING = "checks_failing"
+GATE_CHECKS_CANCELLED = "checks_cancelled"
+GATE_PR_HEAD_NOT_ACCEPTED = "pr_head_not_accepted"
+GATE_MERGE_PULL_REQUEST = "merge_pull_request"
+GATE_MERGE_METHOD_REWROTE_HISTORY = "merge_method_rewrote_history"
+GATE_UNMERGED_COMMITS = "unmerged_commits"
+GATE_DIRTY_TREE = "dirty_tree"
+
+#: Every gate a preflight can return.
+GATE_CODES = frozenset({
+    GATE_SWITCH_TO_TRUNK, GATE_BOUND_ITEM_MISSING, GATE_PR_CLOSED_UNMERGED, GATE_MERGED_BEFORE_ACCEPTANCE,
+    GATE_FAST_FORWARD_TRUNK, GATE_POST_ACCEPTANCE_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_CHECKS_PENDING,
+    GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_PR_HEAD_NOT_ACCEPTED, GATE_MERGE_PULL_REQUEST,
+    GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE,
+})
+
+#: The marker line of every Draft PR body the Controller creates.
+PR_MARKER = "<!-- workflow-controller: work_item={work_item_id} -->"
+_PR_URL_RE = re.compile(r"^https://[^/\s]+/(?P<repo>[^/\s]+/[^/\s]+)/pull/(?P<number>[0-9]+)/?$")
 
 # ``milestone-binding`` dispositions.
 NEW_PR = "new-pr"
@@ -162,7 +188,8 @@ class Proceed:
     selection (only after acceptance, and only with the bound work item);
     ``binding`` is the governing record, or ``None`` when no binding governs
     the step; ``action`` names what this preflight did (``none``, ``bound``,
-    ``adopted``, ``completed``, ``observed``, ``trunk_start``)."""
+    ``adopted``, ``completed``, ``observed``, ``trunk_start``, ``pr_created``,
+    ``closed_out``)."""
 
     work_item_override: str | None = None
     binding: Mapping[str, Any] | None = None
@@ -557,15 +584,14 @@ def _on_bound_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadSta
         record = _reconcile_planned(ctx, key, record, head)
         head = gitrepo.head_state(ctx.repo_root, runner=ctx.runner)
         action = "completed"
+    # The terminal and refusal cases. The reopen re-read of a
+    # PR_CLOSED_UNMERGED record may leave a non-terminal state, which then
+    # meets the bound_item_missing case below in this same preflight.
+    if record["state"] == PR_CLOSED_UNMERGED:
+        record = _reopen_reread(ctx, key, record)
     state = record["state"]
-    if state in TERMINAL_STATES:
-        return Gate(GATE_SWITCH_TO_TRUNK, work_item_id, branch,
-                    f"the {branch} binding of {work_item_id} is {state}; switch to the trunk "
-                    f"(`git switch {record['trunk']}`)", (f"git switch {record['trunk']}",))
-    if state == PR_CLOSED_UNMERGED:
-        return _gate_pr_closed_unmerged(ctx, record)
-    if state == MERGED_BEFORE_ACCEPTANCE:
-        return _gate_merged_before_acceptance(ctx, record, head)
+    if state in TERMINAL_STATES or state in REFUSAL_STATES:
+        return _stopped_on_branch(ctx, key, record, head)
 
     wt = worktree_state(ctx)
     items = _work_items(wt, "the working tree's state") if wt else {}
@@ -576,51 +602,133 @@ def _on_bound_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadSta
             and (items.get(selected) or {}).get("parent_work_item_id") != work_item_id:
         raise _refuse(f"{selected} is neither {work_item_id}, which {branch} is bound to, nor one of its "
                       f"remediation children", work_item_id=work_item_id, branch=branch, selected=selected)
-
-    record = _observe_branch(ctx, key, record, head)
     override = work_item_id if items[work_item_id].get("phase") == MILESTONE_COMPLETE else None
-    return Proceed(work_item_override=override, binding=record, action=action)
+    return _branch_cells(ctx, key, record, head, override, action)
 
 
-def _observe_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> dict:
+def _stopped_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate:
+    """Rule 1's gate for a record in a terminal or refusal state."""
+    work_item_id, branch, state = record["work_item_id"], record["branch"], record["state"]
+    if state == MERGED_REWRITTEN and not record.get("rewrite_gate_shown"):
+        return _report_rewrite(ctx, key, record)
+    if state in TERMINAL_STATES:
+        return Gate(GATE_SWITCH_TO_TRUNK, work_item_id, branch,
+                    f"the {branch} binding of {work_item_id} is {state}; switch to the trunk "
+                    f"(`git switch {record['trunk']}`)", (f"git switch {record['trunk']}",))
+    if state == PR_CLOSED_UNMERGED:
+        return _gate_pr_closed_unmerged(ctx, record)
+    return _gate_merged_before_acceptance(ctx, record, head)
+
+
+def _branch_cells(ctx: Context, key: str, record: dict, head: gitrepo.HeadState, override: str | None,
+                  action: str) -> Proceed | Gate:
+    """The branch column of the outcome matrix for a non-terminal record,
+    state after state, until one cell returns an outcome."""
+    observed = False
+    while True:
+        state = record["state"]
+        if state in TERMINAL_STATES or state in REFUSAL_STATES:
+            return _stopped_on_branch(ctx, key, record, head)
+        if state == MERGED:
+            return _close_out_on_branch(ctx, key, record, head)
+        if state in (PR_OPEN, READY):
+            pr = _verified_pr(ctx, record, record["pr"]["number"])
+            if pr.state != "OPEN":
+                record = _pr_left_open(ctx, key, record, pr)
+                continue
+            if not observed:
+                # A readied pull request stays at the accepted head (I7):
+                # nothing past it is pushed while the record is READY.
+                record, observed = _observe_branch(ctx, key, record, head, sync=state != READY), True
+            record = _write(ctx, key, dict(record, pr=_pr_ref(pr)))
+            if state == READY:
+                return _merge_gate(record, tip=head.commit)
+            if _phase(committed_state(ctx, "HEAD"), record["work_item_id"]) != MILESTONE_COMPLETE:
+                return Proceed(work_item_override=override, binding=record, action=action)
+            return _readiness(ctx, key, record, head)
+        if not observed:
+            record, observed = _observe_branch(ctx, key, record, head), True
+        if state == BRANCH_BOUND:
+            observation = record["last_observation"]
+            if _ancestor(ctx, head.commit, observation["remote_trunk"]):
+                # The PR creation condition is false: nothing to create yet.
+                if _phase(committed_state(ctx, head.commit), record["work_item_id"]) != MILESTONE_COMPLETE:
+                    return Proceed(work_item_override=override, binding=record, action=action)
+                record = _merged_handling(ctx, key, record, None, head.commit)  # the PR-less close-out
+                continue
+            record = _ensure_pushed(ctx, key, record, head.commit)
+            record = _write(ctx, key, dict(record, state=PR_PLANNED), "pr_planned", tip=head.commit)
+            state = PR_PLANNED
+        if state == PR_PLANNED:
+            outcome = _discover_on_branch(ctx, key, record, head)
+            if not isinstance(outcome, dict):
+                return outcome
+            if outcome["state"] == BRANCH_BOUND:
+                return Proceed(work_item_override=override, binding=outcome, action=action)
+            if outcome["state"] == PR_OPEN and outcome["pr"].get("created") and action == "observed":
+                action = "pr_created"
+            record = outcome
+            continue
+        raise _refuse(f"no branch-side cell for the {state} binding of {record['work_item_id']}",
+                      work_item_id=record["work_item_id"], branch=record["branch"], state=state)
+
+
+def _observe_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadState, *, sync: bool = True) -> dict:
     """Every later preflight for a bound, non-terminal item: no rewrite of
     the branch, the remote branch absent or an ancestor of the tip, then
-    sync (fast-forward the remote branch when it exists and is behind)."""
+    sync (fast-forward the remote branch when it exists and is behind;
+    skipped when ``sync`` is false) and the drift observation."""
     remote, trunk, branch = record["repository"]["remote"], record["trunk"], record["branch"]
     tip = head.commit
     refs = _remote_refs(ctx, remote, [trunk, branch])
     if refs[trunk] is None:
         raise _refuse(f"{remote} has no {trunk} branch", work_item_id=record["work_item_id"], branch=branch)
     remote_branch = refs[branch]
-    observation: dict[str, Any] = {}
-    if record["state"] != MERGED:
-        last = (record.get("last_observation") or {}).get("tip") or record["branch_point"]
-        if not _ancestor(ctx, last, tip):
-            raise _refuse(f"{branch} was rewritten: its tip {tip} does not descend from the last observed "
-                          f"tip {last}", work_item_id=record["work_item_id"], branch=branch,
-                          exits=[f"restore {branch} to a descendant of {last}"], last_tip=last, tip=tip)
-        if remote_branch is not None and not _ancestor(ctx, remote_branch, tip):
-            raise _refuse(f"{remote}/{branch} ({remote_branch}) is not an ancestor of the local tip {tip}. "
-                          f"The likely cause is GitHub's \"Update branch\" button, which pushes a merge "
-                          f"commit to the milestone branch on the server",
-                          work_item_id=record["work_item_id"], branch=branch,
-                          exits=[f"bring {branch} and {remote}/{branch} back into a fast-forward relation"],
-                          remote_commit=remote_branch, tip=tip)
-        if remote_branch is not None and remote_branch != tip:
-            pending = dict(record.get("last_observation") or {}, push={"intent": tip, "outcome": None})
-            record = _write(ctx, key, dict(record, last_observation=pending), "push_intent", commit=tip)
-            gitrepo.push_branch(ctx.repo_root, remote, branch, runner=ctx.runner)
-            remote_branch = gitrepo.ls_remote(ctx.repo_root, remote, [f"refs/heads/{branch}"],
-                                              runner=ctx.runner).get(f"refs/heads/{branch}")
-            if remote_branch != tip:
-                raise _refuse(f"pushing {branch} did not leave {remote}/{branch} at {tip} "
-                              f"(it is at {remote_branch})", work_item_id=record["work_item_id"], branch=branch)
-            observation["push"] = {"intent": tip, "outcome": remote_branch}
+    last = (record.get("last_observation") or {}).get("tip") or record["branch_point"]
+    if not _ancestor(ctx, last, tip):
+        raise _refuse(f"{branch} was rewritten: its tip {tip} does not descend from the last observed "
+                      f"tip {last}", work_item_id=record["work_item_id"], branch=branch,
+                      exits=[f"restore {branch} to a descendant of {last}"], last_tip=last, tip=tip)
+    if remote_branch is not None and not _ancestor(ctx, remote_branch, tip):
+        raise _refuse(f"{remote}/{branch} ({remote_branch}) is not an ancestor of the local tip {tip}. "
+                      f"The likely cause is GitHub's \"Update branch\" button, which pushes a merge "
+                      f"commit to the milestone branch on the server",
+                      work_item_id=record["work_item_id"], branch=branch,
+                      exits=[f"bring {branch} and {remote}/{branch} back into a fast-forward relation"],
+                      remote_commit=remote_branch, tip=tip)
+    push = None
+    if sync and remote_branch is not None and remote_branch != tip:
+        record = _push(ctx, key, record, tip)
+        remote_branch, push = tip, {"intent": tip, "outcome": tip}
     fresh = _ancestor(ctx, refs[trunk], tip)
     behind = gitrepo.ahead_behind(ctx.repo_root, tip, refs[trunk], runner=ctx.runner)[1]
+    observation: dict[str, Any] = {} if push is None else {"push": push}
     observation.update({"tip": tip, "remote_branch": remote_branch, "remote_trunk": refs[trunk],
                         "fresh": fresh, "behind": behind, "observed_at": ctx.clock()})
     return _write(ctx, key, dict(record, last_observation=observation))
+
+
+def _push(ctx: Context, key: str, record: dict, tip: str) -> dict:
+    """Push the bound branch as a fast-forward, persisted as an intent first
+    and re-read with ``ls_remote`` after (I5)."""
+    remote, branch = record["repository"]["remote"], record["branch"]
+    pending = dict(record.get("last_observation") or {}, push={"intent": tip, "outcome": None})
+    record = _write(ctx, key, dict(record, last_observation=pending), "push_intent", commit=tip)
+    gitrepo.push_branch(ctx.repo_root, remote, branch, runner=ctx.runner)
+    pushed = gitrepo.ls_remote(ctx.repo_root, remote, [f"refs/heads/{branch}"],
+                               runner=ctx.runner).get(f"refs/heads/{branch}")
+    if pushed != tip:
+        raise _refuse(f"pushing {branch} did not leave {remote}/{branch} at {tip} (it is at {pushed})",
+                      work_item_id=record["work_item_id"], branch=branch)
+    done = dict(record["last_observation"], push={"intent": tip, "outcome": pushed}, remote_branch=pushed)
+    return _write(ctx, key, dict(record, last_observation=done), "pushed", commit=tip)
+
+
+def _ensure_pushed(ctx: Context, key: str, record: dict, tip: str) -> dict:
+    """PR creation step 1: the remote branch at the local tip."""
+    if (record.get("last_observation") or {}).get("remote_branch") == tip:
+        return record
+    return _push(ctx, key, record, tip)
 
 
 # -- gates of rule 1 ------------------------------------------------------------
@@ -665,6 +773,10 @@ def _gate_merged_before_acceptance(ctx: Context, record: Mapping[str, Any], head
         exits = (_cli(work_item_id, NEW_PR, ctx.repo_root),) + (
             (_cli(work_item_id, ABANDON, ctx.repo_root),) if abandon_ok else ())
         why = "exits: " + "; or ".join(exits)
+    untrailered = record.get("untrailered_completion")
+    if untrailered:
+        why = (f"{untrailered} records {work_item_id} as {MILESTONE_COMPLETE} without the "
+               f"`{TRAILER_WORK_ITEM}: {work_item_id}` trailer, so it is not an acceptance commit; {why}")
     return Gate(GATE_MERGED_BEFORE_ACCEPTANCE, work_item_id, branch,
                 f"{branch} was merged into {record['trunk']} before {work_item_id} was accepted; {why}", exits)
 
@@ -679,6 +791,400 @@ def _gate_bound_item_missing(ctx: Context, record: Mapping[str, Any], head: gitr
     return Gate(GATE_BOUND_ITEM_MISSING, work_item_id, branch,
                 f"{branch} is bound to {work_item_id}, but the working tree's {STATE_REL_PATH} has no entry "
                 f"for it; no worker is launched. Exits: " + "; or ".join(exits), exits)
+
+
+# ---------------------------------------------------------------------------
+# The Draft PR lifecycle (CP7).
+# ---------------------------------------------------------------------------
+
+
+def _pr_ref(pr: forge_mod.PullRequest) -> dict:
+    return {"number": pr.number, "url": pr.url, "is_draft": pr.is_draft, "head_oid": pr.head_oid}
+
+
+def _identity_problems(record: Mapping[str, Any], pr: forge_mod.PullRequest) -> list[str]:
+    """I6: a pull request is this binding's only if its head ref, base ref,
+    repository and non-cross-repository flag all match."""
+    problems = []
+    if pr.head_ref != record["branch"]:
+        problems.append(f"its head is {pr.head_ref}, not {record['branch']}")
+    if pr.base_ref != record["trunk"]:
+        problems.append(f"its base is {pr.base_ref}, not {record['trunk']}")
+    if pr.is_cross_repository:
+        problems.append("it comes from another repository (a fork)")
+    match = _PR_URL_RE.match(pr.url)
+    expected = record["repository"]["forge_repository"]
+    if match is None or match["repo"].lower() != expected.lower() or int(match["number"]) != pr.number:
+        problems.append(f"its URL {pr.url} is not pull request #{pr.number} of {expected}")
+    return problems
+
+
+def _verified_pr(ctx: Context, record: Mapping[str, Any], number: int) -> forge_mod.PullRequest:
+    """A fresh ``view_pr`` of the recorded number, refusing unless it is
+    still this binding's pull request (I6). Undecidable reads refuse (I9)."""
+    pr = ctx.forge(record["repository"]["forge_repository"]).view_pr(int(number))
+    problems = _identity_problems(record, pr)
+    if problems:
+        raise _refuse(f"pull request #{number} is no longer {record['work_item_id']}'s: " + "; ".join(problems)
+                      + ".", work_item_id=record["work_item_id"], branch=record["branch"], pr=number,
+                      exits=[f"restore pull request #{number}'s head and base on GitHub, or "
+                             f"{_cli(record['work_item_id'], NEW_PR, ctx.repo_root)} once it is closed"])
+    return pr
+
+
+def _reopen_reread(ctx: Context, key: str, record: dict) -> dict:
+    """The reopen exit: a ``PR_CLOSED_UNMERGED`` record re-reads its pull
+    request. Open again with its identity intact returns it to ``PR_OPEN``;
+    merged goes to the merged-PR handling; still closed leaves it."""
+    pr = _verified_pr(ctx, record, record["pr"]["number"])
+    if pr.state == "OPEN":
+        return _write(ctx, key, dict(record, state=PR_OPEN, pr=_pr_ref(pr)), "reopened", pr=pr.number)
+    if pr.state == "MERGED":
+        return _merged_handling(ctx, key, record, pr, pr.head_oid)
+    return record
+
+
+def _pr_left_open(ctx: Context, key: str, record: dict, pr: forge_mod.PullRequest) -> dict:
+    """Per-preflight re-verification of a ``PR_OPEN``/``READY`` pull request
+    that is no longer open: closed without merge is ``PR_CLOSED_UNMERGED``
+    (never recreated automatically); merged goes to the merged-PR
+    handling."""
+    if pr.state == "MERGED":
+        return _merged_handling(ctx, key, record, pr, pr.head_oid)
+    return _write(ctx, key, dict(record, state=PR_CLOSED_UNMERGED, pr=_pr_ref(pr)), "pr_closed_unmerged",
+                  pr=pr.number)
+
+
+def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
+    pr, accepted = record["pr"], record.get("accepted_head")
+    later = (f". Local commits after the acceptance commit {accepted} (the tip is {tip}) are not pushed to a "
+             f"ready pull request" if tip is not None and accepted is not None and tip != accepted else "")
+    return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
+                f"pull request #{pr['number']} ({pr['url']}) is ready; a human merges it on GitHub with "
+                f"\"Create a merge commit\". Squash and rebase merges take the reviewed commits off "
+                f"{record['trunk']}. The Controller never merges{later}",
+                (f"merge pull request #{pr['number']} on GitHub with \"Create a merge commit\"",))
+
+
+def _report_rewrite(ctx: Context, key: str, record: dict) -> Gate:
+    """``MERGED_REWRITTEN``'s one-time gate: shown once, then the record
+    never blocks (a same-state rewrite of its flag)."""
+    record = _write(ctx, key, dict(record, rewrite_gate_shown=True))
+    pr = record.get("pr") or {}
+    return Gate(GATE_MERGE_METHOD_REWROTE_HISTORY, record["work_item_id"], record["branch"],
+                f"pull request #{pr.get('number')} was merged, but its head {record['merged_head']} is not on "
+                f"{record['repository']['remote']}/{record['trunk']} (merge commit "
+                f"{record.get('merge_commit')}): a squash or rebase merge rewrote the reviewed history, and "
+                f"the Workflow provenance on {record['trunk']} is unreachable. The Controller cannot undo this "
+                f"and does not switch; switch to the trunk by hand. Disable squash and rebase merging in the "
+                f"repository's settings",
+                (f"git switch {record['trunk']}",))
+
+
+def _merged_handling(ctx: Context, key: str, record: dict, pr: forge_mod.PullRequest | None, h: str) -> dict:
+    """Steps 1 and 2 of the merged-PR handling, for a merged pull request
+    ``pr`` with final head ``h``, or (``pr is None``) the PR-less close-out
+    with ``h`` the branch tip. Reads only the first-parent path
+    ``branch_point..h``, its committed states and trailers, and the fetched
+    ``<remote>/<trunk>`` -- never the working tree -- and writes
+    ``MERGED_BEFORE_ACCEPTANCE``, ``MERGED_REWRITTEN`` or ``MERGED``."""
+    work_item_id, remote, trunk = record["work_item_id"], record["repository"]["remote"], record["trunk"]
+    if pr is not None and gitrepo.ref_commit(ctx.repo_root, h, runner=ctx.runner) is None:
+        # The head branch was deleted on GitHub after the merge.
+        gitrepo.fetch(ctx.repo_root, remote, [f"refs/pull/{pr.number}/head:refs/remotes/{remote}/pull/{pr.number}"],
+                      runner=ctx.runner)
+        if gitrepo.ref_commit(ctx.repo_root, h, runner=ctx.runner) is None:
+            raise _refuse(f"the merged head {h} of pull request #{pr.number} cannot be fetched",
+                          work_item_id=work_item_id, branch=record["branch"], merged_head=h)
+    fields: dict[str, Any] = {} if pr is None else {"pr": _pr_ref(pr)}
+    search = find_acceptance_commit(ctx, work_item_id, record["branch_point"], h)
+    if search.commit is None:
+        return _write(ctx, key, dict(record, state=MERGED_BEFORE_ACCEPTANCE, untrailered_completion=search.untrailered,
+                                     **fields),
+                      "merged_before_acceptance", head=h, untrailered=search.untrailered)
+    remote_trunk = _remote_trunk(ctx, remote, trunk)
+    if not _ancestor(ctx, h, remote_trunk):
+        return _write(ctx, key, dict(record, state=MERGED_REWRITTEN, merged_head=h, accepted_head=search.commit,
+                                     merge_commit=None if pr is None else pr.merge_commit, rewrite_gate_shown=False,
+                                     **fields),
+                      "merged_rewritten", head=h, remote_trunk=remote_trunk)
+    return _write(ctx, key, dict(record, state=MERGED, merged_head=h, accepted_head=search.commit, **fields),
+                  "merged", head=h, pr=None if pr is None else pr.number)
+
+
+def _unmerged_commits_gate(ctx: Context, record: Mapping[str, Any], tip: str, *, from_trunk: bool) -> Gate:
+    h, branch = record["merged_head"], record["branch"]
+    commits = gitrepo.first_parent_log(ctx.repo_root, h, tip, runner=ctx.runner)
+    exits = [f"move them off {branch} (for example `git branch <new-branch> {branch}`, then "
+             f"`git reset --keep {h}` on {branch})"]
+    if from_trunk:
+        exits.append(f"delete the local {branch} (`git branch -D {branch}`)")
+    return Gate(GATE_UNMERGED_COMMITS, record["work_item_id"], branch,
+                f"{branch} has commits that were never merged: {', '.join(commits)}. They are never left "
+                f"behind silently. Exits: " + "; or ".join(exits), tuple(exits))
+
+
+def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Proceed | Gate:
+    """Close-out step 3 from the branch: a clean tree and the tip at
+    ``merged_head``, then switch to the trunk, fast-forward it to
+    ``<remote>/<trunk>``, write ``CLOSED``, and continue to the trunk start
+    (step 4)."""
+    work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
+    remote, h = record["repository"]["remote"], record["merged_head"]
+    changes = gitrepo.tracked_changes(ctx.repo_root, runner=ctx.runner)
+    if changes:
+        return Gate(GATE_DIRTY_TREE, work_item_id, branch,
+                    f"{branch} was merged, but the tracked tree has changes; close-out switches to {trunk} only "
+                    f"from a clean tree: {', '.join(changes)}", ("commit, stash or discard them",))
+    if head.commit != h:
+        if _ancestor(ctx, h, head.commit):
+            return _unmerged_commits_gate(ctx, record, head.commit, from_trunk=False)
+        raise _refuse(f"the tip of {branch} ({head.commit}) is not the merged head {h}",
+                      work_item_id=work_item_id, branch=branch,
+                      exits=[f"fast-forward {branch} to {h} (`git merge --ff-only {h}`)"])
+    remote_trunk = _remote_trunk(ctx, remote, trunk)
+    local_trunk = _local_branch(ctx, trunk)
+    if not _ancestor(ctx, h, remote_trunk):
+        raise _refuse(f"the merged head {h} is not on {remote}/{trunk}", work_item_id=work_item_id, branch=branch)
+    if local_trunk is None or not _ancestor(ctx, local_trunk, remote_trunk):
+        raise _refuse(f"the local {trunk} ({local_trunk}) cannot fast-forward to {remote}/{trunk} ({remote_trunk})",
+                      work_item_id=work_item_id, branch=branch,
+                      exits=[f"reconcile {trunk} with {remote}/{trunk} by hand"])
+    gitrepo.switch(ctx.repo_root, trunk, runner=ctx.runner)
+    gitrepo.fast_forward(ctx.repo_root, trunk, f"refs/remotes/{remote}/{trunk}", runner=ctx.runner)
+    _verify_on(ctx, trunk, remote_trunk)
+    _write(ctx, key, dict(record, state=CLOSED), "closed", side="branch")
+    return _after_close(ctx, key)
+
+
+def _after_close(ctx: Context, key: str) -> Proceed | Gate:
+    """Close-out step 4: continue to the trunk start, exactly as for a
+    repository with no active work item."""
+    head = gitrepo.head_state(ctx.repo_root, runner=ctx.runner)
+    policy = None if head.commit is None else repo_policy.read_committed_policy(ctx.repo_root, "HEAD")
+    outcome = _on_trunk(ctx, key, live_records(ctx.runtime_root, key), head, policy, None)
+    if isinstance(outcome, Proceed) and outcome.action in ("none", "trunk_start"):
+        return Proceed(action="closed_out")
+    return outcome
+
+
+# -- PR discovery ---------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class Discovery:
+    """PR creation steps 3 and 4: ``row`` is the first matching row
+    (``excluded_open``, ``many_open``, ``many_merged``, ``merged``,
+    ``open``, ``closed_unmerged`` or ``none``); ``prs`` the pull requests it
+    names; ``closed`` the other non-excluded closed-unmerged numbers."""
+
+    row: str
+    prs: tuple[forge_mod.PullRequest, ...] = ()
+    closed: tuple[int, ...] = ()
+    excluded: Mapping[int, str] = dataclasses.field(default_factory=dict)
+
+
+def excluded_prs(runtime_root: Path, key: str, record: Mapping[str, Any]) -> dict[int, str]:
+    """``{number: why}``: the live record's ``superseded_prs``, plus the
+    ``pr.number`` and every ``superseded_prs`` number of each renamed
+    ``<work_item_id>.abandoned-<n>.json`` record (their only reader)."""
+    excluded = {int(n): "superseded (milestone-binding --new-pr)" for n in record.get("superseded_prs") or []}
+    for _, old in abandoned_records(runtime_root, key, record["work_item_id"]):
+        numbers = [(old.get("pr") or {}).get("number"), *(old.get("superseded_prs") or [])]
+        for n in numbers:
+            if n is not None:
+                excluded.setdefault(int(n), "of an abandoned binding")
+    return excluded
+
+
+def discover(ctx: Context, key: str, record: Mapping[str, Any]) -> Discovery:
+    """``list_prs`` for the bound branch, filtered to this binding's
+    identity (head ref, base ref, repository, not cross-repository), minus
+    the excluded set, classified into the first matching row. Read-only."""
+    listed = ctx.forge(record["repository"]["forge_repository"]).list_prs(record["branch"])
+    matches = [pr for pr in listed if not _identity_problems(record, pr)]
+    excluded = excluded_prs(ctx.runtime_root, key, record)
+    excluded_open = tuple(pr for pr in matches if pr.number in excluded and pr.state == "OPEN")
+    live = [pr for pr in matches if pr.number not in excluded]
+    by_state = {state: sorted((pr for pr in live if pr.state == state), key=lambda pr: pr.number)
+                for state in ("OPEN", "MERGED", "CLOSED")}
+    closed = tuple(pr.number for pr in by_state["CLOSED"])
+    if excluded_open:
+        return Discovery("excluded_open", excluded_open, excluded=excluded)
+    if len(by_state["OPEN"]) >= 2:
+        return Discovery("many_open", tuple(by_state["OPEN"]))
+    if len(by_state["MERGED"]) >= 2:
+        return Discovery("many_merged", tuple(by_state["MERGED"]))
+    if by_state["MERGED"]:
+        return Discovery("merged", tuple(by_state["MERGED"]), closed)
+    if by_state["OPEN"]:
+        return Discovery("open", tuple(by_state["OPEN"]), closed)
+    if by_state["CLOSED"]:
+        return Discovery("closed_unmerged", (by_state["CLOSED"][-1],), closed[:-1])
+    return Discovery("none")
+
+
+def _discovery_refusal(ctx: Context, record: Mapping[str, Any], found: Discovery) -> BranchBindingError | None:
+    """The three refusal rows, identical from the branch and from trunk."""
+    work_item_id, branch = record["work_item_id"], record["branch"]
+    numbers = [pr.number for pr in found.prs]
+    if found.row == "excluded_open":
+        named = ", ".join(f"#{pr.number} ({found.excluded[pr.number]})" for pr in found.prs)
+        return _refuse(f"pull request(s) {named} for {branch} are open again. They are never adopted, and no new "
+                       f"pull request can be created while one is open for the same head and base.",
+                       work_item_id=work_item_id, branch=branch, prs=numbers,
+                       exits=[f"close {', '.join('#' + str(n) for n in numbers)} on GitHub"])
+    if found.row == "many_open":
+        return _refuse(f"{len(numbers)} open pull requests match {branch}: "
+                       f"{', '.join('#' + str(n) for n in numbers)}.", work_item_id=work_item_id, branch=branch,
+                       prs=numbers, exits=["close the extras on GitHub"])
+    if found.row == "many_merged":
+        return _refuse(f"{len(numbers)} merged pull requests match {branch}: "
+                       f"{', '.join('#' + str(n) for n in numbers)}. The records that excluded the older ones "
+                       f"were lost with the runtime root, and the Controller cannot tell which is this binding's.",
+                       work_item_id=work_item_id, branch=branch, prs=numbers,
+                       exits=[f"the lost-runtime-root recovery: restore "
+                              f"<runtime_root>/{milestones_rel('<repo_key>').parent} from a backup"])
+    return None
+
+
+def _discover_on_branch(ctx: Context, key: str, record: dict,
+                        head: gitrepo.HeadState) -> Proceed | Gate | dict:
+    """PR creation steps 3 to 5 from the branch, for a ``PR_PLANNED``
+    record. Returns the next record to continue with (``PR_OPEN``,
+    ``BRANCH_BOUND``, ``MERGED``, ...) or an outcome."""
+    work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
+    found = discover(ctx, key, record)
+    refusal = _discovery_refusal(ctx, record, found)
+    if refusal is not None:
+        raise refusal
+    superseded = sorted({*(record.get("superseded_prs") or []), *found.closed})
+    if found.row == "merged":
+        pr = found.prs[0]
+        return _merged_handling(ctx, key, dict(record, superseded_prs=superseded), pr, pr.head_oid)
+    if found.row == "open":
+        pr = found.prs[0]
+        return _write(ctx, key, dict(record, state=PR_OPEN, pr=_pr_ref(pr), superseded_prs=superseded),
+                      "pr_adopted", pr=pr.number)
+    if found.row == "closed_unmerged":
+        pr = found.prs[0]
+        return _write(ctx, key, dict(record, state=PR_CLOSED_UNMERGED, pr=_pr_ref(pr), superseded_prs=superseded),
+                      "pr_closed_unmerged", pr=pr.number)
+    # 0 matches: re-check the creation condition against the same fetch.
+    if _ancestor(ctx, head.commit, record["last_observation"]["remote_trunk"]):
+        if _phase(committed_state(ctx, head.commit), work_item_id) == MILESTONE_COMPLETE:
+            return _merged_handling(ctx, key, record, None, head.commit)  # the PR-less close-out
+        return _write(ctx, key, dict(record, state=BRANCH_BOUND), "pr_not_needed", tip=head.commit)
+    record = _ensure_pushed(ctx, key, record, head.commit)
+    item = _work_items(worktree_state(ctx), "the working tree's state").get(work_item_id) or {}
+    body = (f"Milestone `{work_item_id}` (plan: `{item.get('plan_path') or 'unrecorded'}`), driven by "
+            f"workflow-controller. A human merges it with \"Create a merge commit\".\n\n"
+            + PR_MARKER.format(work_item_id=work_item_id) + "\n")
+    forge = ctx.forge(record["repository"]["forge_repository"])
+    pr = forge.create_draft_pr(branch, trunk, work_item_id, body)
+    problems = _identity_problems(record, pr)
+    if problems or pr.state != "OPEN":
+        raise _refuse(f"the pull request #{pr.number} just created for {branch} does not verify: "
+                      + "; ".join(problems or [f"it is {pr.state}"]) + ".",
+                      work_item_id=work_item_id, branch=branch, pr=pr.number)
+    return _write(ctx, key, dict(record, state=PR_OPEN, pr=dict(_pr_ref(pr), created=True)),
+                  "pr_created", pr=pr.number)
+
+
+# -- readiness --------------------------------------------------------------------------
+
+
+def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate:
+    """Readiness of a ``PR_OPEN`` record whose work item is
+    ``MILESTONE_COMPLETE`` in the branch's own committed state: every
+    condition, then ``gh pr ready`` (skipped when already ready), a re-read,
+    ``READY`` with ``accepted_head``, and the merge gate. A failed condition
+    is a gate."""
+    work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
+    remote, number = record["repository"]["remote"], record["pr"]["number"]
+    tip = head.commit
+    # 2. a clean tracked tree.
+    changes = gitrepo.tracked_changes(ctx.repo_root, runner=ctx.runner)
+    if changes:
+        return Gate(GATE_DIRTY_TREE, work_item_id, branch,
+                    f"{work_item_id} is accepted, but the tracked tree has changes: {', '.join(changes)}",
+                    ("commit, stash or discard them",))
+    # 3. the tip is exactly the acceptance commit A.
+    search = find_acceptance_commit(ctx, work_item_id, record["branch_point"], tip)
+    if search.commit is None:
+        found = (f"{search.untrailered} records it {MILESTONE_COMPLETE} without the "
+                 f"`{TRAILER_WORK_ITEM}: {work_item_id}` trailer, so the phase changed outside /accept-milestone"
+                 if search.untrailered else f"no commit on {record['branch_point']}..{tip} records the change")
+        raise _refuse(f"{work_item_id} has no acceptance commit: {found}.", work_item_id=work_item_id,
+                      branch=branch, untrailered=search.untrailered,
+                      exits=["accept the milestone with /accept-milestone"])
+    a = search.commit
+    if tip != a:
+        after = gitrepo.first_parent_log(ctx.repo_root, a, tip, runner=ctx.runner)
+        return Gate(GATE_POST_ACCEPTANCE_COMMITS, work_item_id, branch,
+                    f"{branch} has commits after the acceptance commit {a}: {', '.join(after)}. A pull request is "
+                    f"marked ready only at the accepted head, and the Controller never removes commits. A human "
+                    f"decides: merge anyway on GitHub (mark it ready, \"Create a merge commit\"), after which the "
+                    f"merged-PR handling converges; otherwise this gate persists",
+                    (f"merge pull request #{number} on GitHub anyway with \"Create a merge commit\"",))
+    # 4. and 5. pushed, and the pull request shows exactly A.
+    observation = record["last_observation"]
+    pr = _verified_pr(ctx, record, number)
+    if observation.get("remote_branch") != a or pr.state != "OPEN" or pr.head_oid != a:
+        return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
+                    f"pull request #{number} does not show the acceptance commit {a} yet ({remote}/{branch} is "
+                    f"{observation.get('remote_branch')}; the pull request is {pr.state} at {pr.head_oid})",
+                    ("re-run the step once GitHub shows the pushed head",))
+    # 6. fresh: <remote>/<trunk> is an ancestor of A (I7).
+    remote_trunk = observation["remote_trunk"]
+    if not _ancestor(ctx, remote_trunk, a):
+        behind = observation["behind"]
+        return Gate(GATE_INTEGRATION_REQUIRED, work_item_id, branch,
+                    f"{remote}/{trunk} has moved {behind} commit(s) past {branch}'s base. Workflow 2.5.1 has no "
+                    f"transition that re-establishes review against an integrated base, so the Controller does "
+                    f"not integrate. The manual procedure: on GitHub, mark pull request #{number} ready and merge "
+                    f"it with \"Create a merge commit\"",
+                    (f"mark pull request #{number} ready and merge it on GitHub with \"Create a merge commit\"",))
+    # 7. green checks, when the binding's policy requires them.
+    if binding_policy(record).milestone_branches.ready_requires_green_checks:
+        gate = _checks_gate(ctx, record, number)
+        if gate is not None:
+            return gate
+    forge = ctx.forge(record["repository"]["forge_repository"])
+    if pr.is_draft:
+        forge.mark_ready(number)
+        pr = _verified_pr(ctx, record, number)
+        if pr.is_draft or pr.state != "OPEN":
+            raise _refuse(f"pull request #{number} is still {'a draft' if pr.is_draft else pr.state} after "
+                          f"`gh pr ready`", work_item_id=work_item_id, branch=branch, pr=number)
+    record = _write(ctx, key, dict(record, state=READY, pr=_pr_ref(pr), accepted_head=a), "ready", pr=number,
+                    accepted_head=a)
+    return _merge_gate(record, tip=tip)
+
+
+def _checks_gate(ctx: Context, record: Mapping[str, Any], number: int) -> Gate | None:
+    """Readiness condition 7: at least one check, each ``pass`` or
+    ``skipping``. Precedence: failing, then pending (including none
+    reported), then cancelled."""
+    work_item_id, branch = record["work_item_id"], record["branch"]
+    checks = ctx.forge(record["repository"]["forge_repository"]).pr_checks(number)
+    by_bucket: dict[str, list[str]] = {}
+    for check in checks.checks:
+        by_bucket.setdefault(check.bucket, []).append(check.name)
+    if by_bucket.get("fail"):
+        return Gate(GATE_CHECKS_FAILING, work_item_id, branch,
+                    f"pull request #{number} has failing checks: {', '.join(by_bucket['fail'])}",
+                    ("fix the failures on the branch, or re-run the checks on GitHub",))
+    if checks.outcome == "no_checks" or not checks.checks or by_bucket.get("pending"):
+        what = (f"pending checks: {', '.join(by_bucket['pending'])}" if by_bucket.get("pending")
+                else "no checks reported yet")
+        return Gate(GATE_CHECKS_PENDING, work_item_id, branch,
+                    f"pull request #{number} has {what}", ("re-run the step once the checks finish",))
+    if by_bucket.get("cancel"):
+        return Gate(GATE_CHECKS_CANCELLED, work_item_id, branch,
+                    f"pull request #{number} has cancelled checks: {', '.join(by_bucket['cancel'])}",
+                    ("re-run the cancelled checks on GitHub",))
+    return None
 
 
 # -- the BRANCH_PLANNED adopt/collision rows ---------------------------------------
@@ -808,10 +1314,17 @@ def _switch_and_bind(ctx: Context, key: str, record: dict) -> dict:
 
 def _on_trunk(ctx: Context, key: str, records: dict[str, dict], head: gitrepo.HeadState,
               policy: repo_policy.RepositoryPolicy | None, requested: str | None) -> Proceed | Gate:
+    for record in records.values():
+        if record["state"] == BRANCH_PLANNED:
+            continue
+        if record["state"] == MERGED_REWRITTEN and not record.get("rewrite_gate_shown"):
+            return _report_rewrite(ctx, key, record)
+        if record["state"] not in TERMINAL_STATES:
+            gate = _reconcile_from_trunk(ctx, key, record, head)
+            if gate is not None:
+                return gate
+    records = live_records(ctx.runtime_root, key)
     blocking = [r for r in records.values() if r["state"] not in TERMINAL_STATES]
-    for record in blocking:
-        if record["state"] != BRANCH_PLANNED:
-            raise _trunk_block(ctx, record, head)
     for record in blocking:
         bound = _reconcile_planned(ctx, key, record, head)
         return _on_bound_branch(ctx, key, bound, gitrepo.head_state(ctx.repo_root, runner=ctx.runner), requested)
@@ -830,6 +1343,122 @@ def _on_trunk(ctx: Context, key: str, records: dict[str, dict], head: gitrepo.He
     if candidates:
         return _bind(ctx, key, policy, head, candidates[0], items[candidates[0]], records.get(candidates[0]))
     return _trunk_start(ctx, policy, head)
+
+
+def _reconcile_from_trunk(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | None:
+    """Rule 3.1 for one non-terminal or refusal record other than
+    ``BRANCH_PLANNED``, with ``HEAD`` on the trunk: the stated
+    reconciliations (close-out from trunk, its PR-less form, and PR
+    discovery read from the trunk), each converging to ``CLOSED``
+    (``None``), a gate, or a refusal naming the record's exits. Never
+    switches (I4); never creates a pull request."""
+    state = record["state"]
+    if state in (PR_OPEN, READY, MERGED, PR_CLOSED_UNMERGED):
+        return _close_out_from_trunk(ctx, key, record, head)
+    if state == BRANCH_BOUND:
+        h = _branch_tip_for_trunk_side(ctx, record)
+        if not _prless_applies(ctx, record, h):
+            raise _trunk_block(ctx, record, head)
+        _require_not_checked_out_elsewhere(ctx, record)
+        return _trunk_merged(ctx, key, _merged_handling(ctx, key, record, None, h), head)
+    if state == PR_PLANNED:
+        return _discover_from_trunk(ctx, key, record, head)
+    raise _trunk_block(ctx, record, head)
+
+
+def _prless_applies(ctx: Context, record: Mapping[str, Any], h: str) -> bool:
+    """The PR-less close-out's condition: after ``fetch``, ``h`` is on
+    ``<remote>/<trunk>`` and the bound item is ``MILESTONE_COMPLETE`` in
+    ``h``'s committed state."""
+    remote_trunk = _remote_trunk(ctx, record["repository"]["remote"], record["trunk"])
+    return (_ancestor(ctx, h, remote_trunk)
+            and _phase(committed_state(ctx, h), record["work_item_id"]) == MILESTONE_COMPLETE)
+
+
+def _trunk_merged(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | None:
+    """The trunk side of a merged-PR handling outcome: refuse on
+    ``MERGED_BEFORE_ACCEPTANCE``, gate once on ``MERGED_REWRITTEN``, and
+    run close-out-from-trunk step 3 on ``MERGED``."""
+    if record["state"] == MERGED_BEFORE_ACCEPTANCE:
+        raise _trunk_block(ctx, record, head)
+    if record["state"] == MERGED_REWRITTEN:
+        return _report_rewrite(ctx, key, record)
+    return _close_trunk_step3(ctx, key, record)
+
+
+def _close_out_from_trunk(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | None:
+    """Close-out from trunk, steps 0 to 3, for a ``PR_OPEN``, ``READY``,
+    ``MERGED`` or ``PR_CLOSED_UNMERGED`` record."""
+    work_item_id, branch = record["work_item_id"], record["branch"]
+    # 0. the bound branch is not checked out in another worktree.
+    _require_not_checked_out_elsewhere(ctx, record)
+    if record["state"] == MERGED:
+        return _close_trunk_step3(ctx, key, record)
+    # 1. the pull request must show merged.
+    pr = _verified_pr(ctx, record, record["pr"]["number"])
+    if pr.state == "OPEN":
+        exits = [f"switch to it (`git switch {branch}`)"
+                 + (", where the reopened pull request is taken up again" if record["state"] == PR_CLOSED_UNMERGED
+                    else "")]
+        raise _refuse(f"{work_item_id} is bound to {branch} (binding state {record['state']}), and its pull "
+                      f"request #{pr.number} is open, so the trunk cannot start a milestone.",
+                      work_item_id=work_item_id, branch=branch, exits=exits, state=record["state"])
+    if pr.state == "CLOSED":
+        if record["state"] != PR_CLOSED_UNMERGED:
+            record = _write(ctx, key, dict(record, state=PR_CLOSED_UNMERGED, pr=_pr_ref(pr)), "pr_closed_unmerged",
+                            pr=pr.number, side="trunk")
+        raise _trunk_block(ctx, record, head)
+    # 2. steps 1 and 2 of the merged-PR handling.
+    return _trunk_merged(ctx, key, _merged_handling(ctx, key, record, pr, pr.head_oid), head)
+
+
+def _close_trunk_step3(ctx: Context, key: str, record: dict) -> Gate | None:
+    """Close-out from trunk step 3: the local bound branch, if any, holds
+    nothing beyond ``merged_head``, and ``merged_head`` is on
+    ``<remote>/<trunk>``; then ``CLOSED``. Local trunk is not
+    fast-forwarded here: the trunk start that follows gates a behind
+    trunk."""
+    work_item_id, branch, h = record["work_item_id"], record["branch"], record["merged_head"]
+    remote, trunk = record["repository"]["remote"], record["trunk"]
+    local = _local_branch(ctx, branch)
+    if local is not None and not _ancestor(ctx, local, h):
+        return _unmerged_commits_gate(ctx, record, local, from_trunk=True)
+    remote_trunk = _remote_trunk(ctx, remote, trunk)
+    if not _ancestor(ctx, h, remote_trunk):
+        raise _refuse(f"the merged head {h} of {branch} is not on {remote}/{trunk}", work_item_id=work_item_id,
+                      branch=branch, exits=[f"fetch {remote}/{trunk} once the merge is visible"])
+    _write(ctx, key, dict(record, state=CLOSED), "closed", side="trunk")
+    return None
+
+
+def _discover_from_trunk(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | None:
+    """A ``PR_PLANNED`` record from trunk: step 0, then PR creation steps 3
+    and 4 read-only, row by row. Nothing is ever created from trunk."""
+    work_item_id, branch = record["work_item_id"], record["branch"]
+    _require_not_checked_out_elsewhere(ctx, record)
+    found = discover(ctx, key, record)
+    refusal = _discovery_refusal(ctx, record, found)
+    if refusal is not None:
+        raise refusal
+    superseded = sorted({*(record.get("superseded_prs") or []), *found.closed})
+    if found.row == "merged":
+        pr = found.prs[0]
+        record = _merged_handling(ctx, key, dict(record, superseded_prs=superseded), pr, pr.head_oid)
+        return _trunk_merged(ctx, key, record, head)
+    if found.row == "closed_unmerged":
+        pr = found.prs[0]
+        record = _write(ctx, key, dict(record, state=PR_CLOSED_UNMERGED, pr=_pr_ref(pr), superseded_prs=superseded),
+                        "pr_closed_unmerged", pr=pr.number, side="trunk")
+        raise _trunk_block(ctx, record, head)
+    if found.row == "none":
+        h = _branch_tip_for_trunk_side(ctx, record)
+        if _prless_applies(ctx, record, h):
+            return _trunk_merged(ctx, key, _merged_handling(ctx, key, record, None, h), head)
+    # 1 open (adoption is branch-side), or 0 matches without the PR-less close-out.
+    what = f"its pull request #{found.prs[0].number} is open" if found.row == "open" else "no pull request exists yet"
+    raise _refuse(f"{work_item_id} is bound to {branch} (binding state {PR_PLANNED}), and {what}, so the trunk "
+                  f"cannot start a milestone.", work_item_id=work_item_id, branch=branch, state=PR_PLANNED,
+                  exits=[f"switch to it (`git switch {branch}`)"])
 
 
 def _branch_tip_for_trunk_side(ctx: Context, record: Mapping[str, Any]) -> str:
@@ -859,8 +1488,11 @@ def _trunk_block(ctx: Context, record: Mapping[str, Any], head: gitrepo.HeadStat
                        branch=branch, exits=list(gate.exits), state=state)
     if state == MERGED_BEFORE_ACCEPTANCE:
         gate = _gate_merged_before_acceptance(ctx, record, head)
-        return _refuse(f"{where} It was merged before acceptance.", work_item_id=work_item_id, branch=branch,
-                       exits=list(gate.exits), state=state)
+        untrailered = record.get("untrailered_completion")
+        note = (f" {untrailered} records it {MILESTONE_COMPLETE} without the `{TRAILER_WORK_ITEM}` trailer."
+                if untrailered else "")
+        return _refuse(f"{where} It was merged before acceptance.{note}", work_item_id=work_item_id,
+                       branch=branch, exits=list(gate.exits), state=state)
     remote = record["repository"]["remote"]
     exists = _local_branch(ctx, branch) is not None or _remote_refs(ctx, remote, [branch])[branch] is not None
     if not exists:

@@ -15,10 +15,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import gitrepo, milestone_branch as mb, repo_policy, runtime  # noqa: E402
+from controller import forge as forge_mod, gitrepo, milestone_branch as mb, repo_policy, runtime  # noqa: E402
 from controller.errors import BranchBindingError  # noqa: E402
+from tests import fake_gh  # noqa: E402
 from tests.fixtures import (  # noqa: E402
-    FAKE_GH_REPOSITORY, build_origin_pair, commit_all, current_head, run, trailer_message,
+    FAKE_GH_REPOSITORY, build_origin_pair, commit_all, current_head, fake_gh_env, run, trailer_message,
 )
 
 WID = "wi-alpha"
@@ -46,16 +47,6 @@ def policy(*, enabled: bool = True, branch_format: str = "milestone/{work_item_i
     }
 
 
-class _StubForge:
-    """A forge whose ``view_pr`` answers from a dict; nothing else is used."""
-
-    def __init__(self, prs: dict[int, str]) -> None:
-        self.prs, self.repository = prs, FAKE_GH_REPOSITORY
-
-    def view_pr(self, number: int):
-        return mock.Mock(number=number, state=self.prs[number])
-
-
 class _Case(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -67,8 +58,10 @@ class _Case(unittest.TestCase):
         self.t = commit_all(self.clone, "Add the policy and the Workflow state")
         self.push("main")
         self.rt = self.tmp / "runtime"
-        self.forge = _StubForge({})
-        self.ctx = mb.Context(repo_root=self.clone, runtime_root=self.rt, forge_factory=lambda repo: self.forge,
+        self.gh_env = fake_gh_env(self.tmp, origin=self.origin)
+        self.gh_state = Path(self.gh_env["FAKE_GH_STATE"])
+        self.ctx = mb.Context(repo_root=self.clone, runtime_root=self.rt,
+                              forge_factory=lambda repo: forge_mod.GhForge(repo, gitrepo.subprocess_runner(self.gh_env)),
                               clock=lambda: "2026-09-25T00:00:00Z")
         self.key = mb.repo_key(gitrepo.common_dir(self.clone))
 
@@ -136,6 +129,30 @@ class _Case(unittest.TestCase):
 
     def head(self) -> gitrepo.HeadState:
         return gitrepo.head_state(self.clone)
+
+    # -- fake gh helpers --------------------------------------------------------------------
+
+    def gh(self) -> dict:
+        return fake_gh.read_state(self.gh_state)
+
+    def gh_calls(self) -> list[list[str]]:
+        return fake_gh.invocations(Path(self.gh_env["FAKE_GH_LOG"]))
+
+    def gh_pr(self, number: int, *, state: str = "OPEN", head: str = BRANCH, base: str = "main",
+              head_oid: str | None = None, draft: bool = True, cross: bool = False, **fields) -> dict:
+        """Put pull request ``number`` into the fake forge's state directly
+        (a human action on GitHub, or a fixture), replacing any stored one."""
+        data = self.gh()
+        pr = {"number": number, "state": state, "isDraft": draft, "headRefName": head,
+              "headRefOid": head_oid or current_head(self.clone), "baseRefName": base,
+              "isCrossRepository": cross, "url": f"{data['url']}/pull/{number}",
+              "mergedAt": "2026-09-25T00:00:00Z" if state == "MERGED" else None, "mergeCommit": None,
+              "title": head, "body": "", "checks": None}
+        pr.update(fields)
+        data["prs"] = [p for p in data["prs"] if p["number"] != number] + [pr]
+        data["next_number"] = max(data["next_number"], number + 1)
+        fake_gh.write_state(self.gh_state, data)
+        return pr
 
     # -- binding helpers -------------------------------------------------------------------
 
@@ -435,6 +452,7 @@ class CrashTest(_Case):
         run(["git", "add", "later.txt"], cwd=self.clone)
         run(["git", "commit", "-q", "-m", "later"], cwd=self.clone)
         later = current_head(self.clone)
+        self.push("main")
         self.preflight()
         self.assertBoundOn(branch_point=later)
         self.assertIn("rebind", [e["event"] for e in self.events()])
@@ -446,6 +464,7 @@ class CrashTest(_Case):
         (self.clone / POLICY).write_text((self.clone / POLICY).read_text() + "\n")
         run(["git", "add", POLICY], cwd=self.clone)
         run(["git", "commit", "-q", "-m", "reformat the policy"], cwd=self.clone)
+        self.push("main")
         self.preflight()
         record = self.assertBoundOn(branch_point=current_head(self.clone))
         self.assertNotEqual(record["policy"]["sha256"], recorded)
@@ -469,7 +488,9 @@ class PlannedExitsTest(_Case):
         self.assertNotIn("--abandon", error.message)
         self.git("switch", "-q", BRANCH)
         self.assertEqual(self.preflight().action, "completed")
-        self.assertEqual(self.record()["state"], mb.BRANCH_BOUND)
+        # completed to BRANCH_BOUND, then on to the Draft PR its commit calls for (CP7)
+        self.assertIn(("bound", "from_branch"), [(e["event"], e.get("completed")) for e in self.events()])
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
         self.assertEqual(self.head().commit, tip)
 
     def test_exit_b_a_branch_not_descending_from_t(self) -> None:
@@ -496,7 +517,9 @@ class PlannedExitsTest(_Case):
         self.assertNotIn("--abandon", error.message)
         self.git("switch", "-q", "-c", BRANCH)
         self.assertEqual(self.preflight().action, "completed")
-        self.assertEqual(self.record()["state"], mb.BRANCH_BOUND)
+        # the approval is on local trunk only, so the branch is ahead of origin/main: a Draft PR (CP7)
+        self.assertIn(("bound", "from_branch"), [(e["event"], e.get("completed")) for e in self.events()])
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
 
     def test_exit_c_trunk_rewound_below_base_commit(self) -> None:
         base = self.commit_file("base.txt")
@@ -563,9 +586,9 @@ class LaterPreflightTest(_Case):
 
     def test_no_push_while_the_remote_branch_is_absent(self) -> None:
         self.bind()
-        self.commit_file("one.txt")
-        self.preflight()
+        self.preflight()  # the plan-stage window: nothing beyond the trunk, so no pull request either
         self.assertEqual(self.git("ls-remote", "origin", f"refs/heads/{BRANCH}"), "")
+        self.assertEqual(self.gh_calls(), [])
 
     def test_a_remote_ahead_and_diverged_branch_refuses(self) -> None:
         self.bind()
@@ -600,14 +623,15 @@ class LaterPreflightTest(_Case):
     def test_after_acceptance_the_bound_item_overrides_the_selection(self) -> None:
         self.bind()
         self.approve()
-        self.accept()
+        self.preflight()
+        self.set_item(phase="MILESTONE_COMPLETE")  # accepted in the working tree, not yet committed
         self.assertEqual(self.preflight().work_item_override, WID)
 
     def test_terminal_bindings_gate_switch_to_trunk(self) -> None:
         self.bind()
         for state in (mb.CLOSED, mb.MERGED_REWRITTEN, mb.ABANDONED):
             with self.subTest(state=state):
-                self.seed(state)
+                self.seed(state, rewrite_gate_shown=True)  # MERGED_REWRITTEN after its one-time gate
                 gate = self.assertGate(self.preflight(), mb.GATE_SWITCH_TO_TRUNK)
                 self.assertIn("git switch main", gate.exits)
 
@@ -627,9 +651,10 @@ class TrunkBlockTest(_Case):
 
     def test_a_bound_record_blocks_the_trunk_naming_its_branch(self) -> None:
         self.bound_past_the_plan_stage()
+        pr = self.record()["pr"]  # the open Draft PR the approval commit led to
         for state in (mb.BRANCH_BOUND, mb.PR_OPEN, mb.READY):
             with self.subTest(state=state):
-                self.seed(state, pr=None if state == mb.BRANCH_BOUND else {"number": 7})
+                self.seed(state, pr=None if state == mb.BRANCH_BOUND else pr)
                 error = self.assertRefuses(BRANCH, f"git switch {BRANCH}")
                 self.assertNotIn("--abandon", error.message)
                 self.assertEqual(self.head().branch, "main")
@@ -637,15 +662,18 @@ class TrunkBlockTest(_Case):
     def test_a_missing_branch_names_the_last_observed_tip(self) -> None:
         self.bound_past_the_plan_stage()
         tip = self.record()["last_observation"]["tip"]
+        self.seed(mb.BRANCH_BOUND, pr=None)
         self.git("branch", "-D", BRANCH)
+        self.git("push", "-q", "origin", "--delete", BRANCH)
         self.assertRefuses(f"git branch {BRANCH} {tip}")
 
     def test_refusal_states_block_with_their_exits_and_terminal_ones_do_not(self) -> None:
         self.bound_past_the_plan_stage()
         for state in (mb.CLOSED, mb.ABANDONED, mb.MERGED_REWRITTEN):
             with self.subTest(state=state):
-                self.seed(state)
+                self.seed(state, rewrite_gate_shown=True)  # MERGED_REWRITTEN after its one-time gate
                 self.assertEqual(self.preflight().action, "trunk_start")
+        self.gh_pr(7, state="CLOSED")
         self.seed(mb.PR_CLOSED_UNMERGED, pr={"number": 7})
         self.assertRefuses(BRANCH, "reopen pull request #7", "--new-pr", "--abandon")
         self.git("push", "-q", "origin", f"{BRANCH}:main")  # a merge before acceptance
@@ -789,7 +817,9 @@ class AdoptTest(_Case):
         outcome = self.preflight()
         self.assertEqual(outcome.action, "adopted")
         record = self.record()
-        self.assertEqual((record["state"], record["branch_point"]), (mb.BRANCH_BOUND, self.t))
+        # adopted at the branch point, then on to PR creation (CP7): the branch has commits
+        self.assertEqual((record["state"], record["branch_point"]), (mb.PR_OPEN, self.t))
+        self.assertIn("adopted", [e["event"] for e in self.events()])
         self.assertEqual(record["policy"], main_policy)
 
     def test_adopt_mid_implementation_after_a_lost_runtime_root(self) -> None:
@@ -815,8 +845,10 @@ class AdoptTest(_Case):
         self.approve()
         self.accept()
         self.lose_runtime_root()
-        outcome = self.preflight()
-        self.assertEqual((outcome.action, outcome.work_item_override), ("adopted", WID))
+        # adopted, then PR discovery and readiness (CP7), whose first gate is the checks
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertIn("adopted", [e["event"] for e in self.events()])
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
 
     def test_adopt_after_acceptance_refuses_an_untrailered_or_trunk_acceptance(self) -> None:
         self.bind()
@@ -858,7 +890,7 @@ class AcknowledgeTest(_Case):
 
     def test_new_pr_supersedes_a_closed_pull_request(self) -> None:
         self.seed(mb.PR_CLOSED_UNMERGED, pr={"number": 7})
-        self.forge.prs[7] = "CLOSED"
+        self.gh_pr(7, state="CLOSED")
         record = mb.acknowledge(self.ctx, WID, mb.NEW_PR)
         self.assertEqual((record["state"], record["pr"], record["superseded_prs"]), (mb.BRANCH_BOUND, None, [7]))
         event = self.events()[-1]
@@ -867,7 +899,7 @@ class AcknowledgeTest(_Case):
 
     def test_a_reopened_pull_request_refuses_and_writes_nothing(self) -> None:
         before = self.seed(mb.PR_CLOSED_UNMERGED, pr={"number": 7})
-        self.forge.prs[7] = "OPEN"
+        self.gh_pr(7)
         for disposition in mb.DISPOSITIONS:
             with self.assertRaises(BranchBindingError):
                 mb.acknowledge(self.ctx, WID, disposition)
@@ -883,7 +915,7 @@ class AcknowledgeTest(_Case):
 
     def test_abandon_of_a_refusal_state_needs_the_item_off_remote_trunk(self) -> None:
         self.seed(mb.PR_CLOSED_UNMERGED, pr={"number": 7})
-        self.forge.prs[7] = "CLOSED"
+        self.gh_pr(7, state="CLOSED")
         mb.acknowledge(self.ctx, WID, mb.ABANDON)
         self.assertEqual(self.record()["state"], mb.ABANDONED)
 
@@ -909,7 +941,7 @@ class AcknowledgeTest(_Case):
 
     def test_a_branch_checked_out_in_another_worktree_refuses(self) -> None:
         self.seed(mb.PR_CLOSED_UNMERGED, pr={"number": 7})
-        self.forge.prs[7] = "CLOSED"
+        self.gh_pr(7, state="CLOSED")
         self.git("switch", "-q", "main")
         self.git("worktree", "add", "-q", str(self.tmp / "second"), BRANCH)
         with self.assertRaises(BranchBindingError) as caught:

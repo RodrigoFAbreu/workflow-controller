@@ -505,3 +505,92 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     `test_package_structure`, `test_write_containment`, `test_ci_workflows`,
     `test_plan_document_consistency`, `test_runtime` and `test_identity` (367 tests), OK;
     `python3 tools/ci_workflows.py --check` passes.
+- **CP7 -- Draft PR lifecycle and completion: complete.**
+  - `controller/milestone_branch.py` gains the plan's CP7 writers. Rule 1 now runs the branch
+    column of the outcome matrix state after state (`_branch_cells`) until a cell returns:
+    - `BRANCH_BOUND`: the PR creation condition is "the local tip is not an ancestor of the
+      fetched `<remote>/<trunk>`". When it holds, the branch is pushed (an intent, then an
+      `ls_remote` re-read), `PR_PLANNED` is written, and discovery runs. When it does not, the
+      worker proceeds, unless the tip's committed state is `MILESTONE_COMPLETE`, in which case
+      the PR-less close-out applies;
+    - `PR_PLANNED`: `discover()` filters `list_prs` to this binding's identity (head, base,
+      repository from the PR URL, not cross-repository) minus the excluded set (the live
+      `superseded_prs`, plus each `<id>.abandoned-<n>.json`'s `pr` and `superseded_prs`). The
+      first matching row decides: excluded-open, 2+ open and 2+ merged refuse with their own
+      exits; 1 merged goes to the merged-PR handling; 1 open is adopted (closed matches go to
+      `superseded_prs`); closed-unmerged writes `PR_CLOSED_UNMERGED` with the highest number;
+      0 matches re-checks the condition (the PR-less close-out, or back to `BRANCH_BOUND`), else
+      `create_draft_pr` (title the id, body naming the plan path and the marker line), verified,
+      then `PR_OPEN`;
+    - `PR_OPEN`/`READY`: a fresh `view_pr` re-verifies I6 first. Closed becomes
+      `PR_CLOSED_UNMERGED`; merged goes to the merged-PR handling; a human-set non-draft is kept.
+      Open `PR_OPEN` proceeds, or runs readiness once the branch's committed state is
+      `MILESTONE_COMPLETE`. `READY` returns the merge gate;
+    - readiness: a clean tree (`dirty_tree`); the tip exactly the acceptance commit `A`
+      (`post_acceptance_commits`; an untrailered completion refuses); the remote branch and the
+      PR head at `A` (`pr_head_not_accepted`); `<remote>/<trunk>` an ancestor of `A`
+      (`integration_required`, with the drift count and the manual "Create a merge commit"
+      procedure); green checks when the snapshot requires them (`checks_failing`, then
+      `checks_pending` including no checks reported, then `checks_cancelled`). Then
+      `gh pr ready` (skipped when already ready), a re-read, `READY` with `accepted_head`, and
+      the merge gate;
+    - `MERGED`: close-out step 3. The tracked tree must be clean (`dirty_tree`). The tip must be
+      `merged_head`: `unmerged_commits` names the commits beyond it, and the exit is to move
+      them off. Then the Controller switches to trunk, fast-forwards it, writes `CLOSED`, and
+      continues to the trunk start (`action == "closed_out"`);
+    - the reopen re-read of `PR_CLOSED_UNMERGED` runs before the `bound_item_missing` case, so a
+      reopened PR with the bound item gone writes `PR_OPEN` and then gates.
+  - `_merged_handling` implements merged-PR handling steps 1 and 2, with the PR-less close-out
+    as the `pr is None` case. If `H` is missing locally, it is fetched from
+    `refs/pull/<n>/head`. With no acceptance commit on `branch_point..H`, it writes
+    `MERGED_BEFORE_ACCEPTANCE` and records `untrailered_completion`, which the gate and the
+    trunk refusal name. When `H` is not on the fetched `<remote>/<trunk>`, it writes
+    `MERGED_REWRITTEN` with `rewrite_gate_shown: false`. Otherwise it writes `MERGED` with
+    `merged_head` and `accepted_head`. The one-time `merge_method_rewrote_history` gate flips
+    the flag, from either side.
+  - Rule 3.1 now reconciles instead of refusing outright:
+    - close-out from trunk (step 0, the other-worktree check; step 1, `view_pr`, where open
+      refuses naming the branch and closed writes `PR_CLOSED_UNMERGED` and refuses; step 2, the
+      merged-PR handling; step 3, `CLOSED` without a switch, or `unmerged_commits`, with an
+      extra exit to delete the local branch);
+    - the PR-less form for `BRANCH_BOUND`;
+    - `PR_PLANNED` discovery read-only, row by row. Nothing is ever created from trunk.
+  - `decision.py` gains `BRANCH_GATE_TEXTS` (one text per `milestone_branch.GATE_CODES` entry,
+    pinned equal by a test) and `branch_human_gate()`, which turns a preflight `Gate` into a
+    `HumanGate` with phase `MILESTONE_BRANCH`. `SELECTED_COMMANDS` and the dispatch table are
+    unchanged. CP8 wires the call.
+  - **Deviations, for the reviewer.**
+    - Two gate codes the plan does not name: `dirty_tree` (readiness condition 2 and close-out's
+      "a dirty tree gates") and `pr_head_not_accepted` (readiness conditions 4 and 5: the pushed
+      branch or the PR does not show `A` yet). The plan says a failed readiness condition is a
+      gate, not an error, but gives these two no name.
+    - While a record is `READY`, the preflight does not push. A local commit after `A` would
+      otherwise move a ready PR's head past the accepted head, against I7. The merge gate names
+      the unpushed commits instead.
+    - The CP6 tests' stub forge is replaced by the executable fake `gh`. An approval commit now
+      leads to PR creation, so the CP6 assertions that expected a record to stay `BRANCH_BOUND`
+      past the first branch commit, or a bare `Proceed` after acceptance, now assert the CP7
+      continuation (PR creation, the checks gate) with the same intent. `MERGED_REWRITTEN`
+      fixtures seed the post-gate flag. Two rebind fixtures push the moved trunk, as a real
+      moved trunk would be.
+  - Tests: new `tests/test_pull_request_lifecycle.py` (89), in the `trunk` shard
+    (`validate.yml` regenerated):
+    - the outcome matrix is pinned: 36 cells, from the branch, from trunk, and from trunk with
+      the branch gone. Shape tests assert that every state has a row from each side, that the
+      `BRANCH_BOUND` split and the `PR_PLANNED` discovery rows partition their state, and that
+      every cell has a fixture;
+    - PR creation, discovery and reuse: creation only after the first branch commit, the
+      create/record-write crash, duplicates, identity changes, a reopened superseded PR, and a
+      re-bind through to the first PR (including the rename/create crash);
+    - readiness: every gate and the checks precedence, `gh pr ready` exactly once, the merge
+      gate without a merge call, post-acceptance and untrailered cases, and a child acceptance;
+    - close-out: from the branch, from trunk, and PR-less, plus the squash, dirty-tree,
+      unmerged-commit and second-worktree cases, and `H` fetched through `refs/pull/<n>/head`;
+    - every refusal-state exit, including the spies showing that neither disposition pushes,
+      switches or mutates a PR.
+    Mutating five rules (the post-acceptance gate, PR exclusion, rewrite detection, I6 identity,
+    the drift gate) each fails the module.
+  - Verified (narrow): the `trunk` shard plus `test_decision`, `test_golden_plan_stage_decisions`,
+    `test_package_structure`, `test_write_containment`, `test_ci_workflows` and
+    `test_plan_document_consistency` (475 tests), OK; `python3 tools/ci_workflows.py --check`
+    passes.

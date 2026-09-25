@@ -97,7 +97,7 @@ CONTROLLER_SHARDS = {
     "worker": ["test_worker", "test_observe", "test_observation_equivalence"],
     "docs": ["test_plan_document_consistency", "test_checklist_corrections",
              "test_ci_workflows", "test_release_tools", "test_buildinfo"],
-    "trunk": ["test_version_authority", "test_repo_policy", "test_gitrepo", "test_forge",
+    "trunk": ["test_version_authority", "test_repo_policy", "test_gitrepo", "test_forge", "test_milestone_branch",
               "test_release_txn", "test_no_rewrite_invariants"],
 }
 PACKAGE_TEST_MODULES = ["test_packaged_runtime"]

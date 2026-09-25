@@ -654,3 +654,32 @@ class ReleaseTransactionError(ControllerError):
     """
 
     code = "RELEASE_TRANSACTION_REFUSED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-trunk-branch-pr-release-orchestration CP6 -- milestone
+# branch binding (``controller.milestone_branch``).
+# ---------------------------------------------------------------------------
+
+
+class BranchBindingError(ControllerError):
+    """A milestone-branch preflight or binding write refused: ``HEAD`` is on
+    a branch the resolution order does not admit, a binding record blocks
+    the trunk start, a bind or adopt precondition fails, a branch was
+    rewritten or diverged on the remote, a binding record is malformed, or a
+    record write is not in the transition table (and wrote nothing).
+
+    The refusal names the observation and its exit. ``evidence`` carries
+    ``work_item_id``, ``branch`` and ``exits`` where they apply.
+    """
+
+    code = "BRANCH_BINDING_REFUSED"
+
+
+class BranchInvariantViolatedError(ControllerError):
+    """A branch invariant the Controller relies on did not hold after an
+    action that should have established it: after ``git switch -c``,
+    ``HEAD`` is not attached to the new branch at the bind commit. The
+    Controller does not repair it; a human inspects."""
+
+    code = "BRANCH_INVARIANT_VIOLATED"

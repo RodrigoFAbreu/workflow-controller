@@ -421,3 +421,87 @@ Recorded at CP1 start, before the first edit, on a detached worktree at `bb7839a
     tag-triggered `release.yml`. The plan rewrites them in CP10.
   - Verified (narrow): the `docs` and `trunk` shards (292 tests), OK;
     `python3 tools/ci_workflows.py --check` passes.
+- **CP6 -- milestone branch binding: complete.**
+  - New `controller/milestone_branch.py`, after `release_txn` in the dependency order (it imports
+    `errors`, `repo_policy`, `gitrepo`, `forge` and `runtime`). New errors `BranchBindingError`
+    (`BRANCH_BINDING_REFUSED`) and `BranchInvariantViolatedError` (`BRANCH_INVARIANT_VIOLATED`).
+  - Durable records under `<runtime_root>/repositories/<repo_key>/milestones/`: `<id>.json`, the
+    append-only `<id>/events.jsonl` (every line carries `binding_generation`), and retired
+    `<id>.abandoned-<n>.json`. `repo_key` is the SHA-256 of the resolved Git common directory.
+    `write_record` checks every write against `TRANSITIONS` (the plan's table, row by row; a
+    same-state rewrite is always legal) from the state on disk read fresh, and creates a missing
+    record with `O_EXCL` semantics. The eleven states are split into `NON_TERMINAL_STATES`,
+    `REFUSAL_STATES` and `TERMINAL_STATES`.
+  - `preflight(ctx, requested_work_item_id=..., head_policy=...)` returns `Proceed` (with
+    `work_item_override`, the governing `binding` and the `action` taken) or `Gate` (a code,
+    message and exits), or raises. It follows the plan's resolution order:
+    - no binding record and no enabled policy at `HEAD`: `Proceed()`, nothing written (I1);
+    - rule 1 (`HEAD` on a record's branch): `BRANCH_PLANNED` is first completed by its
+      adopt/collision rows. Terminal records gate `switch_to_trunk`. `PR_CLOSED_UNMERGED` gates
+      `pr_closed_unmerged` (CP7 adds the reopen re-read). `MERGED_BEFORE_ACCEPTANCE` gates
+      `merged_before_acceptance`, naming `--new-pr` and `--abandon` only when its precondition
+      holds, or `--abandon` alone when `<remote>/<trunk>` records the item complete with no
+      acceptance commit on `branch_point..H`. A bound item missing from the working tree gates
+      `bound_item_missing` (restore, plus `--abandon` when it applies). An explicit or active
+      work item that is neither the bound item nor its remediation child refuses, naming both.
+      Otherwise the later-preflight checks run (no rewrite against the last observed tip; the
+      remote branch absent or an ancestor, the refusal naming GitHub's "Update branch"), then
+      sync, then `last_observation` (tip, remote branch, remote trunk, `fresh`, `behind`). After
+      acceptance the override is the bound item;
+    - rule 3 (`HEAD` on trunk): non-terminal and refusal records block, naming the branch and
+      the cell's exits (the missing-branch "restore at the last observed tip" variant, and for a
+      plan-stage `BRANCH_BOUND` both `--abandon` and "switch back and restore the stash").
+      `BRANCH_PLANNED` records are reconciled. Then a single unbound (or only-`ABANDONED`)
+      top-level non-terminal item is the bind candidate, two or more refuse, and none runs the
+      trunk-start preflight (clean tracked tree, local trunk equal to the fetched remote trunk;
+      behind gates `fast_forward_trunk`, ahead or diverged refuses);
+    - rule 2 (`HEAD` on an unbound branch that inverts `branch_format`): adopt, with every adopt
+      precondition, and the snapshot and branch point `P = merge-base(<remote>/<trunk>, HEAD)`;
+    - rule 4: anything else refuses.
+  - The bind step checks the plan-stage phase set (`PLAN_STAGE_PHASES`, `AMENDING_PLAN`
+    excluded), `plan_approval == null`, `base_commit` reachable from `T`, and no local or
+    remote branch (the collision rows, or the `git branch -d` / `git push <remote> --delete`
+    exits for an abandoned id). It renames an `ABANDONED` record aside, writes `BRANCH_PLANNED`
+    (generation `1 + #abandoned`), runs `git switch -c`, verifies `HEAD`, and writes
+    `BRANCH_BOUND`. The `BRANCH_PLANNED` rows run in table order: forge/common-dir mismatch,
+    re-bind at `T` or a descendant trunk tip (rewriting `T` and re-reading the snapshot),
+    complete from the branch at a descendant of `T`, switch at the same commit, the
+    branch-not-descending row (exit (b)), and the catch-all with exits (a) and (c). Exit (c)
+    names `--abandon` only when its precondition holds, and create-and-switch otherwise.
+  - `find_acceptance_commit` implements CP7's acceptance-commit definition (first-parent, first
+    `MILESTONE_COMPLETE` transition, `Workflow-Work-Item` trailer required, an untrailered one
+    named). CP6 already needs it for adopt after acceptance and for common check 5.
+  - `acknowledge(ctx, id, "new-pr" | "abandon")` performs the common checks in order (record
+    state, `HEAD` on trunk or the bound branch and not checked out in another worktree, a fresh
+    `view_pr` for a recorded PR, the `--abandon` preconditions of all three shapes, check 5),
+    then appends `acknowledged` and writes the new state. CP8 adds the CLI subcommand.
+  - **Deviations, for the reviewer.**
+    - `runtime.py` gains `create_json` (the `O_EXCL` create the plan requires, as an `fsync`ed
+      temp file hard-linked onto the name), `rename_exclusive` (link, then unlink the source:
+      never replaces a destination) and `remove_file`, not only a constant. An interrupted
+      rename (both names holding the same bytes) is completed rather than repeated, so the
+      generation count stays right.
+    - `gitrepo.py` gains `switch_at_head`: the `BRANCH_PLANNED` "switch to it" row must carry
+      the uncommitted plan, and `gitrepo.switch` requires a clean tree. It refuses unless the
+      branch is at exactly `HEAD`'s commit (I4).
+    - The record's `repository` block also stores `remote_url`. The forge/common-dir row compares
+      the `OWNER/NAME` parsed from a GitHub remote URL with the recorded forge repository. For
+      any other URL (the disposable bare origins), it compares the URL itself.
+    - Adopt inverts the branch name with the policy at `P` when that one is enabled and
+      admissible, so a policy edited on the branch never decides the candidate.
+  - Deferred to CP7 by the plan: PR creation and discovery, the reopen re-read, readiness,
+    close-out (from the branch, from trunk, PR-less) and the trunk-side reconciliations of
+    `PR_PLANNED`/`PR_OPEN`/`READY`/`MERGED`, which block from trunk for now. The gate texts move
+    into `decision.py` in CP7.
+  - Tests: `tests/test_milestone_branch.py` (64), in the `trunk` shard (`validate.yml`
+    regenerated). They cover the CP6 list: fresh bind with the plan carried over, every
+    adopt/collision row, crashes at each persist boundary, rewrite and remote-divergence
+    refusals, sync, snapshot and branch-point policy, adopt mid-implementation and after
+    acceptance, the plan-stage phase set, the catch-all and exits (a), (b) and (c), the
+    discarded-plan window and every `--abandon` refusal, re-planning an abandoned id (including
+    a crash between rename and create), remediation children, trunk blocking per state, the
+    state classification, and the pinned transition table.
+  - Verified (narrow): `tests.test_milestone_branch` plus the `trunk` shard,
+    `test_package_structure`, `test_write_containment`, `test_ci_workflows`,
+    `test_plan_document_consistency`, `test_runtime` and `test_identity` (367 tests), OK;
+    `python3 tools/ci_workflows.py --check` passes.

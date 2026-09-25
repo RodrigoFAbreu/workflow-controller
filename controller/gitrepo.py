@@ -395,6 +395,19 @@ def create_and_switch(repo_root: Path, branch: str, *, runner: Runner | None = N
     _git(repo_root, ["switch", "-c", branch], runner)
 
 
+def switch_at_head(repo_root: Path, branch: str, *, runner: Runner | None = None) -> None:
+    """``git switch <branch>`` where ``branch`` points at ``HEAD``'s own
+    commit (adopting a crash-interrupted bind, I4): the tree does not
+    change, so the working tree -- uncommitted plan files included -- is
+    carried over. Refuses unless the branch exists at exactly ``HEAD``."""
+    head = head_state(repo_root, runner=runner).commit
+    target = ref_commit(repo_root, f"refs/heads/{branch}", runner=runner)
+    if head is None or target != head:
+        raise GitOperationError(f"refusing to switch to {branch}: it is at {target}, not at HEAD ({head})",
+                                evidence={"branch": branch, "branch_commit": target, "head": head})
+    _git(repo_root, ["switch", "--no-guess", branch], runner)
+
+
 def switch(repo_root: Path, branch: str, *, runner: Runner | None = None) -> None:
     """``git switch <branch>`` (close-out only). Requires a clean tracked
     tree; never discards changes."""

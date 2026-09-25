@@ -176,6 +176,58 @@ def write_bytes(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) ->
     return _atomic_write(runtime_root, rel_path, data)
 
 
+def create_json(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
+    """Create ``<runtime_root>/<rel_path>`` holding ``obj`` as canonical
+    JSON, with ``O_EXCL`` semantics: an existing file is a
+    ``FileExistsError`` and is left untouched, so two processes can never
+    both create one record (``workflow-controller-trunk-branch-pr-release-
+    orchestration`` CP6's binding records). Containment-checked, and as
+    atomic as :func:`write_json`: the bytes are written and ``fsync``ed to
+    a ``.tmp`` sibling, which is then hard-linked onto the target (a link
+    never replaces an existing name)."""
+    data = json.dumps(obj, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    full_path = runtime_root / rel_path
+    _assert_contained(runtime_root, full_path)
+    full_path = full_path.resolve()
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = full_path.parent / f".{full_path.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.link(tmp_path, full_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return full_path
+
+
+def rename_exclusive(runtime_root: Path, src_rel: str | os.PathLike, dst_rel: str | os.PathLike) -> Path:
+    """Rename ``<runtime_root>/<src_rel>`` to ``<runtime_root>/<dst_rel>``
+    without ever replacing an existing destination (``FileExistsError``,
+    nothing changed). Both paths are containment-checked. Implemented as a
+    hard link followed by removing the source, so an interruption between
+    the two leaves both names holding the same bytes -- never neither."""
+    src, dst = runtime_root / src_rel, runtime_root / dst_rel
+    _assert_contained(runtime_root, src)
+    _assert_contained(runtime_root, dst)
+    src, dst = src.resolve(), dst.resolve()
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    os.link(src, dst)
+    src.unlink()
+    return dst
+
+
+def remove_file(runtime_root: Path, rel_path: str | os.PathLike) -> None:
+    """Remove ``<runtime_root>/<rel_path>`` (containment-checked). Used only
+    to finish an interrupted :func:`rename_exclusive`, whose destination
+    already holds the same bytes."""
+    full_path = runtime_root / rel_path
+    _assert_contained(runtime_root, full_path)
+    full_path.resolve().unlink()
+
+
 def create_log_file(runtime_root: Path, rel_path: str | os.PathLike) -> Path:
     """Create ``<runtime_root>/<rel_path>`` empty, with mode ``0o600``,
     and return its resolved path -- the file a worker then writes its own

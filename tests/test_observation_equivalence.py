@@ -77,6 +77,11 @@ STALLED_STDERR_BOUND_SECONDS = 30
 #: Record keys whose values are process identities, never lifecycle results.
 PROCESS_KEYS = frozenset({"pid", "pgid", "start_ticks"})
 
+#: Byte offsets into a worker's stream (worker-lifecycle-ownership CP4
+#: persists them): the stream embeds each case's own paths, whose lengths
+#: differ, so an offset is normalised like a pid.
+OFFSET_KEYS = frozenset({"offset", "ending_point"})
+
 _TIMESTAMP_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
 
 
@@ -333,7 +338,8 @@ class _ObservationCase(unittest.TestCase):
 
 def _normalise(value, names: dict[str, str]):
     if isinstance(value, dict):
-        return {key: "<N>" if key in PROCESS_KEYS and isinstance(item, int) else
+        return {key: "<N>" if (key in PROCESS_KEYS or key in OFFSET_KEYS or key.endswith("_offset"))
+                and isinstance(item, int) else
                 ["<N>"] * len(item) if key == "remaining_pids" and isinstance(item, list) else
                 _normalise(item, names) for key, item in value.items()}
     if isinstance(value, list):
@@ -605,6 +611,12 @@ class FinalResultTest(_ObservationCase):
         [result_job] = self.durable_results(result_only)["jobs"]
         self.assertEqual(streamed_job["worker.stdout"].count("\n"), len(fake_claude.default_events()))
         self.assertEqual(result_job["worker.stdout"].count("\n"), 1)
+        # Worker-lifecycle-ownership CP4: `worker.stream_diagnosis` accounts
+        # for each stream as read (its events and offsets), so it differs by
+        # construction; the reason it gives must not.
+        streamed_diagnosis = streamed_job["record"]["worker"].pop("stream_diagnosis")
+        result_diagnosis = result_job["record"]["worker"].pop("stream_diagnosis")
+        self.assertEqual(streamed_diagnosis["reason"], result_diagnosis["reason"])
         for key in ("worker", "worker_outcome", "transition_verified", "status"):
             with self.subTest(key=key):
                 self.assertEqual(streamed_job["record"][key], result_job["record"][key])

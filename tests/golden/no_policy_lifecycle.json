@@ -125,7 +125,7 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "event_seq": 6,
           "expected_transition": {
             "from": "__NO_PHASE__",
             "to_any_of": [
@@ -192,12 +192,54 @@
             "exit_code": 92,
             "is_error": null,
             "num_turns": null,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": null,
             "result_excerpt": null,
             "session_id": null,
             "stderr_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 92,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "exit_status",
+              "result_count": 0,
+              "results": [],
+              "secondary_reasons": [
+                "no_result",
+                "stdin_closed_while_waiting"
+              ],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": null,
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 0,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": null,
             "terminal_reason": null,
             "total_cost_usd": null
@@ -233,8 +275,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 0,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/bootstrap_step/runtime/jobs/<ID>/events.jsonl",
@@ -421,7 +473,8 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "ending_offset": "<V>",
+          "event_seq": 8,
           "expected_transition": {
             "from": "IMPLEMENTING",
             "to_any_of": [
@@ -483,12 +536,58 @@
             "exit_code": 0,
             "is_error": false,
             "num_turns": 1,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": [],
             "result_excerpt": "ok",
             "session_id": "fake-session-id",
             "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 0,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "quiescent_terminal_turn",
+              "result_count": 1,
+              "results": [
+                {
+                  "offset": "<V>",
+                  "origin": null,
+                  "queued_turn_count": null,
+                  "terminal_reason": null
+                }
+              ],
+              "secondary_reasons": [],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": "<V>",
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 1,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": "success",
             "terminal_reason": null,
             "total_cost_usd": 0.0
@@ -524,8 +623,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 1,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -550,7 +659,8 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "ending_offset": "<V>",
+          "event_seq": 8,
           "expected_transition": {
             "from": "IMPLEMENTING",
             "to_any_of": [
@@ -617,12 +727,58 @@
             "exit_code": 0,
             "is_error": false,
             "num_turns": 1,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": [],
             "result_excerpt": "ok",
             "session_id": "fake-session-id",
             "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 0,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "quiescent_terminal_turn",
+              "result_count": 1,
+              "results": [
+                {
+                  "offset": "<V>",
+                  "origin": null,
+                  "queued_turn_count": null,
+                  "terminal_reason": null
+                }
+              ],
+              "secondary_reasons": [],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": "<V>",
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 1,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": "success",
             "terminal_reason": null,
             "total_cost_usd": 0.0
@@ -658,8 +814,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 1,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -684,7 +850,8 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "ending_offset": "<V>",
+          "event_seq": 8,
           "expected_transition": {
             "from": "SELF_REVIEWING_IMPLEMENTATION",
             "to_any_of": [
@@ -753,12 +920,58 @@
             "exit_code": 0,
             "is_error": false,
             "num_turns": 1,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": [],
             "result_excerpt": "ok",
             "session_id": "fake-session-id",
             "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 0,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "quiescent_terminal_turn",
+              "result_count": 1,
+              "results": [
+                {
+                  "offset": "<V>",
+                  "origin": null,
+                  "queued_turn_count": null,
+                  "terminal_reason": null
+                }
+              ],
+              "secondary_reasons": [],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": "<V>",
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 1,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": "success",
             "terminal_reason": null,
             "total_cost_usd": 0.0
@@ -794,8 +1007,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 1,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -820,7 +1043,8 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "ending_offset": "<V>",
+          "event_seq": 8,
           "expected_transition": {
             "from": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
             "to_any_of": [
@@ -891,12 +1115,58 @@
             "exit_code": 0,
             "is_error": false,
             "num_turns": 1,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": [],
             "result_excerpt": "ok",
             "session_id": "fake-session-id",
             "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 0,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "quiescent_terminal_turn",
+              "result_count": 1,
+              "results": [
+                {
+                  "offset": "<V>",
+                  "origin": null,
+                  "queued_turn_count": null,
+                  "terminal_reason": null
+                }
+              ],
+              "secondary_reasons": [],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": "<V>",
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 1,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": "success",
             "terminal_reason": null,
             "total_cost_usd": 0.0
@@ -932,8 +1202,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 1,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -958,7 +1238,8 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "ending_offset": "<V>",
+          "event_seq": 8,
           "expected_transition": {
             "from": "APPLYING_REVIEW_FEEDBACK",
             "to_any_of": [
@@ -1030,12 +1311,58 @@
             "exit_code": 0,
             "is_error": false,
             "num_turns": 1,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": [],
             "result_excerpt": "ok",
             "session_id": "fake-session-id",
             "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 0,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "quiescent_terminal_turn",
+              "result_count": 1,
+              "results": [
+                {
+                  "offset": "<V>",
+                  "origin": null,
+                  "queued_turn_count": null,
+                  "terminal_reason": null
+                }
+              ],
+              "secondary_reasons": [],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": "<V>",
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 1,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": "success",
             "terminal_reason": null,
             "total_cost_usd": 0.0
@@ -1071,8 +1398,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 1,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -1097,7 +1434,8 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "ending_offset": "<V>",
+          "event_seq": 8,
           "expected_transition": {
             "from": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
             "to_any_of": [
@@ -1168,12 +1506,58 @@
             "exit_code": 0,
             "is_error": false,
             "num_turns": 1,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": [],
             "result_excerpt": "ok",
             "session_id": "fake-session-id",
             "stderr_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/implementation_run/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 0,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "quiescent_terminal_turn",
+              "result_count": 1,
+              "results": [
+                {
+                  "offset": "<V>",
+                  "origin": null,
+                  "queued_turn_count": null,
+                  "terminal_reason": null
+                }
+              ],
+              "secondary_reasons": [],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": "<V>",
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 1,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": "success",
             "terminal_reason": null,
             "total_cost_usd": 0.0
@@ -1209,8 +1593,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 1,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/implementation_run/runtime/jobs/<ID>/events.jsonl",
@@ -1534,7 +1928,7 @@
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
-          "event_seq": 5,
+          "event_seq": 6,
           "expected_transition": {
             "from": "__NO_PHASE__",
             "to_any_of": [
@@ -1601,12 +1995,54 @@
             "exit_code": 92,
             "is_error": null,
             "num_turns": null,
+            "owned_processes_seen": {
+              "count": 0,
+              "sample": []
+            },
             "permission_denials": null,
             "result_excerpt": null,
             "session_id": null,
             "stderr_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/worker.stderr",
             "stdout_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/worker.stdout",
             "stop_reason": null,
+            "stream_diagnosis": {
+              "command_lifecycle_anomalies": [],
+              "command_lifecycles": [],
+              "ending_point": "<V>",
+              "exit_status": 92,
+              "exit_status_known": true,
+              "ignored_settlements": [],
+              "malformed_lines": [],
+              "mode": "streaming",
+              "owned_work_at_exit": {
+                "fire_matched_wakeups": [],
+                "open_brackets": [],
+                "pending_wakeups": [],
+                "tasks": []
+              },
+              "reason": "exit_status",
+              "result_count": 0,
+              "results": [],
+              "secondary_reasons": [
+                "no_result",
+                "stdin_closed_while_waiting"
+              ],
+              "supervisor_facts": {
+                "command_lifecycle_overdue_command_uuid": null,
+                "command_lifecycle_overdue_declared_at": null,
+                "ending_offset": null,
+                "settled_wakeups": [],
+                "timed_out": false,
+                "wakeup_overdue_declared_at": null
+              },
+              "tasks_killed_after_end": [],
+              "tasks_seen": [],
+              "turn_open_at_exit": false,
+              "turns": 0,
+              "unknown_events": [],
+              "wakeup_stops": [],
+              "wakeups_seen": []
+            },
             "subtype": null,
             "terminal_reason": null,
             "total_cost_usd": null
@@ -1642,8 +2078,18 @@
             }
           },
           "worker_state": {
+            "excluded_processes": [],
+            "owned_processes": [],
+            "owned_processes_seen_count": 0,
+            "scan": "verified",
             "since": "<TS>",
-            "state": "STARTING"
+            "state": "ENDED",
+            "turns": 0,
+            "waiting_on": {
+              "command_lifecycles": [],
+              "tasks": [],
+              "wakeups": []
+            }
           },
           "worker_streams": {
             "events_path": "<TMP>/unborn_head_step/runtime/jobs/<ID>/events.jsonl",

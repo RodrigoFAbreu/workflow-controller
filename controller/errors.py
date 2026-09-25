@@ -496,6 +496,23 @@ class LifecycleWorkerUnverifiableError(LifecycleWorkerActiveError):
     code = "LIFECYCLE_WORKER_UNVERIFIABLE"
 
 
+class OwnedWorkDetachedError(LifecycleWorkerActiveError):
+    """``step``'s worker exited, but processes it owned were still alive
+    after ``controller.worker.DRAIN_DETACH_SECONDS``
+    (``workflow-controller-worker-lifecycle-ownership`` plan D). Nothing was
+    ended: the job record stays ``LAUNCHED`` at ``worker_state:
+    DRAINING`` with ``drain_detached_at``, the stdin anchor keeps the
+    lifecycle lock, and the job stays held until ``resume`` drains it.
+
+    A subclass of :class:`LifecycleWorkerActiveError`, so it exits ``45``
+    and every existing ``except`` of the parent still catches it; ``run``
+    stops on it as on any exit ``45``. ``evidence['remaining']`` names each
+    live owned process (pid and command line).
+    """
+
+    code = "OWNED_WORK_DETACHED"
+
+
 class LifecycleLockError(ControllerError):
     """The lifecycle lock could not be taken for any reason other than
     contention: an ``OSError`` from opening the git directory, or from

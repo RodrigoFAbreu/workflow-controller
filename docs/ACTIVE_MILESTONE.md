@@ -30,8 +30,8 @@ terminal turn, and reconciles only after the worker has ended and its owned work
 | --- | --- | --- |
 | CP1 -- harness contract evidence and fake harness | complete | `ef07f28` |
 | CP2 -- worker stream state machine | complete | `ed02157` |
-| CP3 -- streaming-input launch and supervision | complete | this checkpoint's commit |
-| CP4 -- job lifecycle integration | not started | |
+| CP3 -- streaming-input launch and supervision | complete | `e8364eb` |
+| CP4 -- job lifecycle integration | complete | this checkpoint's commit |
 | CP5 -- restart recovery | not started | |
 | CP6 -- same-phase durable progress | not started | |
 | CP7 -- operator diagnostics | not started | |
@@ -174,6 +174,57 @@ terminal turn, and reconciles only after the worker has ended and its owned work
   (`process_fixtures.end_recorded_anchor`) and keeps its reconciliation assertions.
 - **Verification.** See the checkpoint commit for the exact commands and results.
 
+### CP4 -- job lifecycle integration (complete)
+
+- **Record (D).** `execute_step` passes `on_state_change` to `worker.launch`. Each call writes
+  the still-`LAUNCHED` record (authoritative) with `worker_state` = `{state, since, turns,
+  waiting_on, owned_processes, owned_processes_seen_count, excluded_processes, scan}` and, once
+  the session was ended, the supervisor facts at the top level (`ending_offset`,
+  `wakeup_overdue_declared_at`, `command_lifecycle_overdue_declared_at` with
+  `command_lifecycle_overdue_command_uuid`, a non-empty `settled_wakeups`). Then it appends
+  `worker_running`/`worker_waiting`/`worker_ending`/`worker_draining`/`worker_ended`, whose
+  compact details carry `state_changed` (`false` for a flush of what the worker waits on or
+  owns), the turn count, task ids, wakeup ids and states, bracket uuids, the owned-process
+  count and `ending_offset`. `COMPLETED` is written only after `launch` returned (`ENDED`; a
+  `launch` double's `STARTING` is completed to `ENDED`), and `worker` gains `stream_diagnosis`
+  and `owned_processes_seen`. The status sequence stays `PLANNED -> LAUNCHED (x2+) ->
+  COMPLETED -> FINISHED|FAILED`.
+- **Drain detach.** A `DrainDetached` return writes the record `LAUNCHED` at `DRAINING` with
+  `drain_detached_at`, appends `worker_drain_detached` (pids and command lines), both under the
+  supervisor lock, then raises the new `OwnedWorkDetachedError` (a `LifecycleWorkerActiveError`,
+  exit 45) naming the pids, their command lines and `resume`.
+- **Validation case 3.** A `LAUNCHED`/`COMPLETED` record's `worker_state` must be one of
+  `WORKER_STATES` (`ENDED` when `COMPLETED`); `ending_offset` only at `ENDING`/`DRAINING`/
+  `ENDED`; the three `ENDING` facts need `ending_offset`; the bracket declaration names its
+  `command_uuid`; `settled_wakeups` is a list of distinct non-empty strings.
+- **Strings (O3).** `_OTHER_HOLDER_SENTENCE` and `controller/lock.py`'s docstring now name the
+  recorded anchor (or a group member), never a stray descendant, as the other lock holder.
+- **Fake.** A `FAKE_CLAUDE_SCRIPT` invocation may be `{"turns": [...]}` (a scripted streaming
+  session per invocation), with an `actions` step performing the scripted actions inside a turn;
+  the script's counter line gains `at`; `bash_bg`'s `orphan_write_file` records an orphan's end.
+- **Tests.** `tests/test_lifecycle_orchestration.py`: R12a-c (`FINISHED` on the continuation
+  turn, verification done before `COMPLETED`), R12d (anchor killed mid-wait: `AMBIGUOUS` then
+  `FAILED`; the apply variant then gated by the relaunch bound), R13 (task and reparented-orphan
+  variants; N+1 starts after N's background work; a second-process `step` exits 45), R14 (task,
+  wakeup stop, settle window, irregular fire), R14b (`IMPLEMENTING`, `SELF_REVIEWING_IMPLEMENTATION`,
+  the stop-inside count mismatch, a concurrent `step` during the window exits 45), and the lock
+  lifetime (held while `WAITING` and by the anchor after the Controller is SIGKILLed).
+  `tests/test_job.py`: worker_state persistence, the flush-failure and launch-double cases, the
+  drain detach and the recognised daemon. `tests/test_job_validation.py`: the case-3 rules.
+  Rewritten because they pinned exactly two `LAUNCHED` writes or the old event sequence or
+  holder sentence: `tests/test_job.py` (write-sequence prefix, second-`LAUNCHED` delta,
+  `COMPLETED` field set + `ending_offset`, supervisor-lock scope, the event-log and best-effort
+  append tests, the holder sentence), `tests/test_job_validation.py` (two status sequences),
+  `tests/test_lock.py` (the holder sentence). Beyond the plan's list, because the persisted
+  stream byte offsets depend on each case's path length: `tests/test_observation_equivalence.py`
+  normalises offset keys like pids and compares `worker` without its per-stream
+  `stream_diagnosis` (asserting the same reason), and the no-policy golden's generator treats
+  offsets as volatile; `tests/golden/no_policy_lifecycle.json` is regenerated (only the
+  `worker_state` flushes, `event_seq`, `ending_offset` and `worker.stream_diagnosis`/
+  `owned_processes_seen` moved; statuses, outcomes, exit codes and inspect/explain documents
+  are unchanged).
+- **Verification.** See the checkpoint commit for the exact commands and results.
+
 ## Next action
 
-`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP4.
+`/milestone-implement workflow-controller-worker-lifecycle-ownership` for CP5.

@@ -20,6 +20,14 @@ and each worker argv is the streaming-input form. Nothing else moved: every
 status, outcome, exit code and ``inspect``/``explain`` document is as
 generated at ``86801f6``.
 
+And once more by that work item's CP4, which persists the supervisor's
+``worker_state`` transitions: each launched job's record gains the
+``worker_state`` flushes (``RUNNING``, ``ENDING``, ``ENDED``, so a higher
+``event_seq``), ``ending_offset`` and ``worker.stream_diagnosis``/
+``owned_processes_seen``, and stream byte offsets became volatile keys.
+Statuses, outcomes, exit codes and ``inspect``/``explain`` documents are
+unchanged.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:
@@ -73,7 +81,15 @@ FAKE_CLAUDE = REPO_ROOT / "tests" / "fake_claude.py"
 VOLATILE_KEYS = frozenset({
     "pid", "pgid", "start_ticks", "boot_id", "pid_namespace", "hostname", "machine_id", "remaining_pids",
     "duration_ms", "duration_api_ms", "exec_depth",
+    # Worker-lifecycle-ownership CP4: byte offsets into a worker stream that
+    # embeds the (normalised) temporary directory, so they vary with its
+    # length; every ``*_offset`` key is volatile too (:func:`_volatile`).
+    "offset", "ending_point",
 })
+
+
+def _volatile(key: str) -> bool:
+    return key in VOLATILE_KEYS or key.endswith("_offset")
 
 _ID_RE = re.compile(r"\b\d{8}T\d{6}Z-[0-9a-f]{8}\b")
 _TS_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b")
@@ -82,7 +98,7 @@ _SHA_RE = re.compile(r"\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b")
 
 def normalise(value: Any, tmp: str) -> Any:
     if isinstance(value, dict):
-        return {key: "<V>" if key in VOLATILE_KEYS and value[key] is not None else normalise(item, tmp)
+        return {key: "<V>" if _volatile(key) and value[key] is not None else normalise(item, tmp)
                 for key, item in value.items()}
     if isinstance(value, list):
         return [normalise(item, tmp) for item in value]

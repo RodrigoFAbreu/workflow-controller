@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import cli, decision, evidence, identity, job, lock, routing, target_state, worker  # noqa: E402
 from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
+    OwnedWorkDetachedError,
     PendingJobReconciliationError,
     UserOnlyCommandError,
     WorkerLaunchError,
@@ -516,8 +517,13 @@ class LaunchPathTest(unittest.TestCase):
         # Automatic-lifecycle-orchestration CP5: the `on_spawn` flush of
         # `worker_process` is a second LAUNCHED write -- after `Popen`, and
         # after the first LAUNCHED write, so a crash between the two leaves
-        # a LAUNCHED record carrying `lifecycle_lock`.
-        self.assertEqual(statuses[:4], ["PLANNED", "LAUNCHED", "LAUNCHED", "COMPLETED"])
+        # a LAUNCHED record carrying `lifecycle_lock`. Worker-lifecycle-
+        # ownership CP4 (plan D): every `worker_state` flush is a further
+        # LAUNCHED write, so the prefix is PLANNED, LAUNCHED (x2+), COMPLETED.
+        completed = statuses.index("COMPLETED")
+        self.assertEqual(statuses[0], "PLANNED")
+        self.assertGreaterEqual(completed, 3)
+        self.assertEqual(set(statuses[1:completed]), {"LAUNCHED"})
 
     def test_the_second_launched_write_adds_only_the_worker_process(self) -> None:
         """CP5: the two LAUNCHED writes differ only by ``worker_process``
@@ -532,8 +538,10 @@ class LaunchPathTest(unittest.TestCase):
                 claude_bin=str(FAKE_CLAUDE), timeout=10,
             )
         launched = [obj for _rel, obj in spy.calls if obj.get("status") == "LAUNCHED"]
-        self.assertEqual(len(launched), 2)
-        first, second = launched
+        # CP4 (worker-lifecycle-ownership): the `worker_state` flushes
+        # follow; the first two are still the pre-spawn and on_spawn writes.
+        self.assertGreater(len(launched), 2)
+        first, second = launched[:2]
         self.assertNotIn("worker_process", first)
         self.assertEqual(
             {key for key in set(first) | set(second) if first.get(key) != second.get(key)} - {"updated_at"},
@@ -625,6 +633,8 @@ class LaunchPathTest(unittest.TestCase):
             "event_seq",
             # Worker-lifecycle-ownership CP3.
             "ownership_tag", "worker_state", "worker_anchor",
+            # Worker-lifecycle-ownership CP4: flushed with ENDING.
+            "ending_offset",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -1618,7 +1628,7 @@ class InProcessConcurrencyTest(_LifecycleCase):
             # group to wait for or end.
             worker_process = self._records()[0]["worker_process"]
             self.assertIn(f"process group {worker_process['pgid']}", message)
-            self.assertIn("is a process that inherited the descriptor", message)
+            self.assertIn("is that job's recorded stdin anchor (worker_anchor)", message)
 
             def second_step_via_cli(args, argv):
                 return self._step()
@@ -2205,8 +2215,11 @@ class StreamingJobTest(_StreamingCase):
 
         with unittest.mock.patch.object(job.runtime, "write_json", spy):
             record = self._step(timeout=10)
-        self.assertEqual([status for status, _free in probes][:3],
-                         [job.STATUS_LAUNCHED, job.STATUS_LAUNCHED, job.STATUS_COMPLETED])
+        statuses = [status for status, _free in probes]
+        # CP4: the worker_state flushes are further LAUNCHED writes.
+        completed = statuses.index(job.STATUS_COMPLETED)
+        self.assertGreaterEqual(completed, 2)
+        self.assertEqual(set(statuses[:completed]), {job.STATUS_LAUNCHED})
         self.assertIn(probes[-1][0], job.TERMINAL_STATUSES)
         self.assertEqual({is_free for _status, is_free in probes}, {False})
         self.assertTrue(free(self.runtime_root / job.supervisor_lock_rel_path(record["job_id"])))
@@ -2305,14 +2318,19 @@ class JobEventLogPathTest(_EventLogAssertions, _LifecycleCase):
         with _SeqSpy() as spy:
             record = self._step(timeout=10)
         self.assertEqual(record["status"], job.STATUS_FAILED)
+        # Worker-lifecycle-ownership CP4: the supervisor's worker_state
+        # flushes (plan D) sit between worker_spawned and completed.
         log = self._assert_log(self.runtime_root, record,
-                               ["planned", "launched", "worker_spawned", "completed", "failed"])
-        self.assertEqual([seq for seq, _status in spy.writes], [1, 2, 3, 4, 5])
+                               ["planned", "launched", "worker_spawned", "worker_running", "worker_ending",
+                                "worker_ended", "completed", "failed"])
+        self.assertEqual([seq for seq, _status in spy.writes], list(range(1, 9)))
         self.assertEqual(log[0]["command"], "/milestone-plan wi-1")
         self.assertEqual((log[2]["pid"], log[2]["pgid"]),
                          (record["worker_process"]["pid"], record["worker_process"]["pgid"]))
-        self.assertEqual((log[3]["outcome"], log[3]["exit_code"]), ("SUCCESS", 0))
-        self.assertEqual((log[4]["observed_phase_after"], log[4]["transition_verified"]), ("PLANNING", False))
+        self.assertTrue(all(line["state_changed"] for line in log[3:6]))
+        self.assertEqual(log[4]["ending_offset"], record["ending_offset"])
+        self.assertEqual((log[6]["outcome"], log[6]["exit_code"]), ("SUCCESS", 0))
+        self.assertEqual((log[7]["observed_phase_after"], log[7]["transition_verified"]), ("PLANNING", False))
         self.assertEqual(Path(record["worker_streams"]["events_path"]),
                          (self.runtime_root / "jobs" / record["job_id"] / "events.jsonl").resolve())
 
@@ -2390,7 +2408,8 @@ class JobEventLogVerifiedPathTest(_EventLogAssertions, unittest.TestCase):
         record = self._execute(partial_apply_plan_review_worker_env(self.managed_repo.root, manifest_revision=11))
         self.assertEqual(record["status"], job.STATUS_FINISHED)
         log = self._assert_log(self.runtime_root, record,
-                               ["planned", "launched", "worker_spawned", "completed", "finished"])
+                               ["planned", "launched", "worker_spawned", "worker_running", "worker_ending",
+                                "worker_ended", "completed", "finished"])
         self.assertEqual(log[-1]["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
         self.assertTrue(log[-1]["transition_verified"])
 
@@ -2421,9 +2440,15 @@ class WorkerEventBestEffortTest(_EventLogAssertions, _StreamingCase):
     def test_worker_exited_follows_worker_spawned_and_precedes_completed(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
             record, writes = self._spied_step(env=self._descendant_env("group-closed:1"), timeout=30)
-        log = self._assert_log(self.runtime_root, record,
-                               ["planned", "launched", "worker_spawned", "worker_exited", "completed", "failed"])
-        exited = log[3]
+        log = _job_events(self.runtime_root, record["job_id"])
+        names = [e["event"] for e in log]
+        # CP4: collapsed, the worker_state flushes put worker_exited after
+        # ENDING and before DRAINING (the on_group_drain contract is kept).
+        collapsed = [name for index, name in enumerate(names) if index == 0 or names[index - 1] != name]
+        self.assertEqual(collapsed, ["planned", "launched", "worker_spawned", "worker_running", "worker_ending",
+                                     "worker_exited", "worker_draining", "worker_ended", "completed", "failed"])
+        self._assert_log(self.runtime_root, record, names)
+        exited = log[names.index("worker_exited")]
         drained = next(w for _t, w in writes if "worker_group_drain" in w)
         self.assertEqual(exited["seq"], drained["event_seq"])
         self.assertEqual(exited["pid"], record["worker_process"]["pid"])
@@ -2440,7 +2465,15 @@ class WorkerEventBestEffortTest(_EventLogAssertions, _StreamingCase):
             forced, _ = self._spied_step(env=self._descendant_env("group-closed:1"), timeout=30)
         self.assertEqual((forced["status"], forced["worker_outcome"], forced["event_seq"]),
                          (unforced["status"], unforced["worker_outcome"], unforced["event_seq"]))
-        self.assertEqual([e["seq"] for e in _job_events(self.runtime_root, forced["job_id"])], [1, 2, 3, 5, 6])
+        forced_log = _job_events(self.runtime_root, forced["job_id"])
+        seqs = [e["seq"] for e in forced_log]
+        # One gap, exactly where worker_exited would have been (CP4: after
+        # worker_ending, before worker_draining).
+        [gap] = sorted(set(range(1, forced["event_seq"] + 1)) - set(seqs))
+        self.assertEqual(len(seqs), forced["event_seq"] - 1)
+        self.assertEqual(forced_log[seqs.index(gap - 1)]["event"], "worker_ending")
+        self.assertEqual(forced_log[seqs.index(gap + 1)]["event"], "worker_draining")
+        self.assertNotIn("worker_exited", [e["event"] for e in forced_log])
         self.assertEqual(sum("warning: could not write" in l for l in stderr.getvalue().splitlines()), 1)
 
     def test_a_failing_worker_spawned_append_neither_kills_nor_changes_the_job(self) -> None:
@@ -2457,7 +2490,226 @@ class WorkerEventBestEffortTest(_EventLogAssertions, _StreamingCase):
                                  (unforced["status"], unforced["worker_outcome"], unforced["event_seq"]))
                 self.assertEqual(forced["worker"]["exit_code"], 0)
                 self.assertEqual([e["event"] for e in _job_events(self.runtime_root, forced["job_id"])],
-                                 ["planned", "launched", "completed", "failed"])
+                                 ["planned", "launched", "worker_running", "worker_ending", "worker_ended",
+                                  "completed", "failed"])
+
+
+
+# ---------------------------------------------------------------------------
+# Worker-lifecycle-ownership CP4 (plan D): the job persists the supervisor's
+# worker_state transitions while the record stays LAUNCHED, records a drain
+# detach, and is never held by a recognised daemon.
+# ---------------------------------------------------------------------------
+
+
+def _fd_targets(pid: int) -> set[str]:
+    targets = set()
+    try:
+        names = os.listdir(f"/proc/{pid}/fd")
+    except OSError:
+        return targets
+    for name in names:
+        with contextlib.suppress(OSError):
+            targets.add(os.readlink(f"/proc/{pid}/fd/{name}"))
+    return targets
+
+
+def _alive(pid: int) -> bool:
+    stat_line = process_fixtures.read_stat(pid)
+    return stat_line is not None and stat_line[0] not in ("Z", "X", "x")
+
+
+def _worker_state_events(runtime_root: Path, job_id: str) -> list[dict]:
+    return [e for e in _job_events(runtime_root, job_id)
+            if e["event"] in ("worker_running", "worker_waiting", "worker_ending", "worker_draining",
+                              "worker_ended")]
+
+
+class WorkerStatePersistenceTest(_EventLogAssertions, _StreamingCase):
+    """``on_state_change`` flushes ``worker_state`` into the still-``LAUNCHED``
+    record, write then event, and ``COMPLETED`` is written only after
+    ``ENDED``."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(process_fixtures.reap_recorded_workers, self.runtime_root)
+
+    def test_a_waiting_worker_is_persisted_launched_through_each_state(self) -> None:
+        turns = [[{"step": "bash_bg", "id": "suite", "seconds": 1, "description": "full suite"}],
+                 [{"step": "text", "text": "suite passed"}]]
+        record, writes = self._spied_step(env={"FAKE_CLAUDE_TURNS": json.dumps(turns)}, timeout=60)
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        records = [w for _t, w in writes]
+        completed = next(i for i, w in enumerate(records) if w["status"] == job.STATUS_COMPLETED)
+        flushed = [w for w in records[:completed] if "worker_state" in w]
+        # Every flush before COMPLETED is a LAUNCHED record.
+        self.assertEqual({w["status"] for w in flushed}, {job.STATUS_LAUNCHED})
+        states = [w["worker_state"]["state"] for w in flushed]
+        collapsed = [st for i, st in enumerate(states) if i == 0 or states[i - 1] != st]
+        self.assertEqual(collapsed, ["STARTING", "RUNNING", "WAITING", "RUNNING", "ENDING", "ENDED"])
+        waiting = next(w for w in flushed if w["worker_state"]["state"] == "WAITING")
+        self.assertEqual(set(waiting["worker_state"]),
+                         {"state", "since", "turns", "waiting_on", "owned_processes",
+                          "owned_processes_seen_count", "excluded_processes", "scan"})
+        self.assertEqual(waiting["worker_state"]["waiting_on"]["tasks"],
+                         [{"task_id": "suite", "description": "full suite"}])
+        self.assertNotIn("ending_offset", waiting)
+        ending = next(w for w in flushed if w["worker_state"]["state"] == "ENDING")
+        self.assertIsInstance(ending["ending_offset"], int)
+        self.assertEqual(records[completed]["worker_state"]["state"], "ENDED")
+        # The events mirror the state changes, each after its record write.
+        events = [e for e in _worker_state_events(self.runtime_root, record["job_id"]) if e["state_changed"]]
+        self.assertEqual([e["event"] for e in events],
+                         ["worker_running", "worker_waiting", "worker_running", "worker_ending", "worker_ended"])
+        self.assertEqual(next(e for e in events if e["event"] == "worker_waiting")["tasks"], ["suite"])
+        by_seq = {w["event_seq"]: w for w in records}
+        for event in _worker_state_events(self.runtime_root, record["job_id"]):
+            self.assertEqual(by_seq[event["seq"]]["worker_state"]["state"], event["event"][len("worker_"):].upper())
+        self._assert_log(self.runtime_root, record, [e["event"] for e in _job_events(self.runtime_root,
+                                                                                      record["job_id"])])
+        # The COMPLETED record carries the stream diagnosis and the sample.
+        self.assertEqual(record["worker"]["stream_diagnosis"]["reason"], "quiescent_terminal_turn")
+        self.assertIn("count", record["worker"]["owned_processes_seen"])
+        self.assertEqual(job.validate_record(records[completed], managed_repo=self.managed_repo,
+                                             identity=FAKE_IDENTITY), job.VALID)
+
+    def test_a_launch_double_that_never_reports_a_state_still_completes_at_ended(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+
+        def launch(task, **kwargs):
+            kwargs["on_spawn"](worker.capture_worker_process(sleeper.pid))
+            return worker.WorkerResult(
+                outcome="SUCCESS", returncode=0, session_id="s", is_error=False, subtype="success",
+                terminal_reason=None, stop_reason=None, result="ok", num_turns=1, permission_denials=[],
+                total_cost_usd=0.0, duration_ms=1, stdout="", stderr="", raw_json={})
+
+        with _WriteSpy() as spy, unittest.mock.patch.object(job.worker, "launch", launch):
+            self._step(timeout=10)
+        completed = next(obj for _rel, obj in spy.calls if obj.get("status") == job.STATUS_COMPLETED)
+        self.assertEqual(completed["worker_state"]["state"], worker.ENDED)
+        self.assertEqual(job.validate_record(completed, managed_repo=self.managed_repo, identity=FAKE_IDENTITY),
+                         job.VALID)
+
+    def test_a_failing_worker_state_flush_ends_the_worker_and_propagates(self) -> None:
+        real = job.runtime.write_json
+
+        def write_json(runtime_root, rel_path, obj):
+            if (obj.get("worker_state") or {}).get("state") == worker.WAITING:
+                raise job.RuntimeContainmentError("injected", evidence={})
+            return real(runtime_root, rel_path, obj)
+
+        turns = [[{"step": "bash_bg", "id": "t", "seconds": 30}], [{"step": "text"}]]
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_TURNS": json.dumps(turns)}), \
+                unittest.mock.patch.object(job.runtime, "write_json", write_json), \
+                self.assertRaises(job.RuntimeContainmentError):
+            self._step(timeout=60)
+        [record] = self._records()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertFalse(_alive(record["worker_process"]["pid"]))
+        self.assertFalse(_alive(record["worker_anchor"]["pid"]))
+        self.assertEqual(process_fixtures.tagged_pids(record["ownership_tag"]), [])
+
+
+class DrainDetachJobTest(_StreamingCase):
+    """Round 1's B2 through ``execute_step``: an unrecognised long-lived
+    escapee detaches the job after the (patched) drain bound; a recognised
+    daemon never holds it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(process_fixtures.reap_recorded_workers, self.runtime_root)
+
+    def test_an_unrecognised_escapee_detaches_the_job_and_the_next_step_is_refused(self) -> None:
+        turns = [[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon", "argv0": "fake-escapee"}],
+                 [{"step": "text", "text": "done"}]]
+        probes: list[tuple[bool, dict]] = []
+        real_append = job.runtime.append_jsonl_best_effort
+
+        def append(runtime_root, rel_path, obj):
+            if obj.get("event") == "worker_drain_detached":
+                path = runtime_root / job.supervisor_lock_rel_path(obj["job_id"])
+                fd = os.open(path, os.O_RDONLY)
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held = False
+                except BlockingIOError:
+                    held = True
+                finally:
+                    os.close(fd)
+                on_disk = json.loads((runtime_root / "jobs" / f"{obj['job_id']}.json").read_text())
+                probes.append((held, on_disk))
+            return real_append(runtime_root, rel_path, obj)
+
+        with unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 2), \
+                unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_TURNS": json.dumps(turns)}), \
+                unittest.mock.patch.object(job.runtime, "append_jsonl_best_effort", append), \
+                self.assertRaises(OwnedWorkDetachedError) as ctx:
+            self._step(timeout=60)
+        self.assertIsInstance(ctx.exception, LifecycleWorkerActiveError)
+        [record] = self._records()
+        [remaining] = ctx.exception.evidence["remaining"]
+        pid = remaining["pid"]
+        self.assertTrue(_alive(pid), "the detach ended the escapee")
+        self.assertIn(f"{pid} (fake-escapee", ctx.exception.message)
+        self.assertIn("resume", ctx.exception.message)
+        # The record: LAUNCHED at DRAINING, with drain_detached_at, never COMPLETED.
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertEqual(record["worker_state"]["state"], worker.DRAINING)
+        self.assertEqual(record["drain_detached_at"], ctx.exception.evidence["drain_detached_at"])
+        self.assertIn(pid, [entry["pid"] for entry in record["worker_state"]["owned_processes"]])
+        self.assertNotIn("worker_outcome", record)
+        self.assertEqual(job.validate_record(record, managed_repo=self.managed_repo, identity=FAKE_IDENTITY),
+                         job.VALID)
+        # The record write, then the event, both under the supervisor lock.
+        [(held, on_disk)] = probes
+        self.assertTrue(held, "the supervisor lock was released before worker_drain_detached")
+        self.assertEqual(on_disk["drain_detached_at"], record["drain_detached_at"])
+        event = _job_events(self.runtime_root, record["job_id"])[-1]
+        self.assertEqual(event["event"], "worker_drain_detached")
+        self.assertEqual(event["remaining"], [{"pid": pid, "cmdline": remaining["cmdline"]}])
+        # ... and released once step returned.
+        fd = os.open(self.runtime_root / job.supervisor_lock_rel_path(record["job_id"]), os.O_RDONLY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(fd)
+        # The anchor keeps the lifecycle lock, so the job stays held.
+        self.assertTrue(_alive(record["worker_anchor"]["pid"]))
+        self.assertEqual(lock.probe_lifecycle_lock(self.root), lock.HELD)
+        with self.assertRaises(LifecycleWorkerActiveError):
+            self._step(timeout=10)
+        self.assertEqual(cli.EXIT_WORKER_ACTIVE, 45)
+
+    def test_a_recognised_daemon_does_not_hold_the_job_or_the_next_one(self) -> None:
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        managed_repo = seed_partial_apply_plan_review(Path(tmp.name))
+        runtime_root = Path(tmp.name) / "runtime"
+        runtime_root.mkdir()
+        self.addCleanup(process_fixtures.reap_recorded_workers, runtime_root)
+        turns = [[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon", "argv0": "gpg-agent"}],
+                 [{"step": "text", "text": "done"}]]
+        env = {**partial_apply_plan_review_worker_env(managed_repo.root, manifest_revision=11),
+               "FAKE_CLAUDE_TURNS": json.dumps(turns)}
+        started = time.monotonic()
+        with unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 30), \
+                unittest.mock.patch.dict("os.environ", env):
+            record = job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                                      claude_bin=str(FAKE_CLAUDE), timeout=60)
+        self.assertLess(time.monotonic() - started, 25, "the daemon held the job")
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        [excluded] = record["worker_state"]["excluded_processes"]
+        self.assertEqual(excluded["pattern"], "gpg-agent")
+        self.assertTrue(_alive(excluded["pid"]), "the recognised daemon was ended")
+        # A second job, while the daemon still runs, is not held by it.
+        lock.acquire_lifecycle_lock(managed_repo.root).release()
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_REQUIRE_FILE": str(Path(tmp.name) / "never"),
+                                                     "FAKE_CLAUDE_WRITES": ""}):
+            second = job.execute_step(managed_repo, identity=FAKE_IDENTITY, runtime=runtime_root,
+                                      claude_bin=str(FAKE_CLAUDE), timeout=60)
+        self.assertNotEqual(second["job_id"], record["job_id"])
+        self.assertTrue(_alive(excluded["pid"]))
+        os.kill(excluded["pid"], signal.SIGKILL)
 
 
 if __name__ == "__main__":

@@ -131,7 +131,14 @@ is refused before anything else runs: stderr ``Error: When using --print,
     action list (:func:`perform_actions`) in the current directory, which
     is the target repository. A task the script does not name, or an
     invocation past the end of its list, exits ``92`` naming it, after the
-    counter line and before any action. Checked after
+    counter line and before any action. The counter line also carries
+    ``at`` (``time.time()`` at the invocation's start). An invocation may
+    instead be an object ``{"turns": [...]}`` (worker-lifecycle-ownership
+    CP4): in streaming mode, those turns are played exactly as
+    ``FAKE_CLAUDE_TURNS`` would be (and take its place), so each
+    invocation of a multi-job ``run`` can wait on its own background work;
+    their ``{"step": "actions", "actions": [...]}`` steps perform the
+    scripted actions below inside the turn. Checked after
     ``FAKE_CLAUDE_REQUIRE_FILE`` and ``FAKE_CLAUDE_HANG_UNTIL_FILE``, and
     before the ``FAKE_CLAUDE_WRITE*`` writes.
 
@@ -200,7 +207,8 @@ mode (the lifecycle lock's included).
       behind (``setsid``
       in its own session, ``reparent`` double-forked in the group,
       ``daemon`` double-forked into its own session and long-lived, under
-      ``argv0``);
+      ``argv0``; with ``orphan_write_file`` the descendant instead writes
+      its end time there when it exits);
     - ``{"step": "task_stop", "id"}``: a worker-initiated stop, P8's
       statuses (``killed``/``stopped``) mid-turn, and no notification turn;
     - ``{"step": "await", "id", "notify"}``: wait, mid-turn, for task
@@ -232,6 +240,9 @@ mode (the lifecycle lock's included).
       ``parent_tool_use_id`` before the completion;
     - ``{"step": "commit", "message"}`` / ``{"step": "write", "path",
       "text"}``: a Bash / Write call with that side effect;
+    - ``{"step": "actions", "actions": [...]}``: one Bash call that performs
+      ``FAKE_CLAUDE_SCRIPT``'s scripted actions (:func:`perform_actions`,
+      revision tokens included) in the current directory;
     - ``{"step": "end_turn", ...overrides}``: the turn's ``result``
       (``queued_turn_count: 0``); implied at the end of every turn.
 
@@ -560,19 +571,29 @@ def _run_script() -> None:
         with open(counter) as fh:
             prior = sum(1 for line in fh if line.strip() and json.loads(line)["task"] == task)
     with open(counter, "a") as fh:
-        fh.write(json.dumps({"task": task, "invocation": prior}) + "\n")
+        fh.write(json.dumps({"task": task, "invocation": prior, "at": time.time()}) + "\n")
     with open(script_path) as fh:
         script = json.load(fh)
     invocations = script.get(task)
     if invocations is None or prior >= len(invocations):
         sys.stderr.write(f"FAKE_CLAUDE_SCRIPT: no scripted invocation #{prior} for task {task!r}\n")
         sys.exit(92)
-    perform_actions(invocations[prior])
+    entry = invocations[prior]
+    if isinstance(entry, dict):
+        # Worker-lifecycle-ownership CP4: a scripted streaming session.
+        global _SCRIPTED_TURNS
+        _SCRIPTED_TURNS = entry["turns"]
+        return
+    perform_actions(entry)
 
 
 # ---------------------------------------------------------------------------
 # Streaming-input mode (worker-lifecycle-ownership CP1).
 # ---------------------------------------------------------------------------
+
+#: The turns of a ``FAKE_CLAUDE_SCRIPT`` invocation given as
+#: ``{"turns": [...]}`` (worker-lifecycle-ownership CP4), or ``None``.
+_SCRIPTED_TURNS: "list | None" = None
 
 #: The first stream-json line read from stdin in streaming mode (a parsed
 #: object, the raw text when it is not JSON, or ``None`` at immediate EOF).
@@ -923,7 +944,11 @@ class StreamingSession:
             return command
         argv0 = step.get("argv0") or ("fake-claude-daemon" if orphan == "daemon" else "fake-claude-orphan")
         lifetime = step.get("orphan_seconds", 3600 if orphan == "daemon" else 60)
-        inner = shlex.quote(f"exec -a {shlex.quote(argv0)} sleep {lifetime}")
+        if step.get("orphan_write_file"):
+            # The orphan writes its end time (``time.time()``) when it exits.
+            inner = shlex.quote(f"sleep {lifetime}; date +%s.%N > {shlex.quote(step['orphan_write_file'])}")
+        else:
+            inner = shlex.quote(f"exec -a {shlex.quote(argv0)} sleep {lifetime}")
         if orphan == "setsid":
             spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &)"
         elif orphan == "reparent":
@@ -1045,6 +1070,11 @@ class StreamingSession:
         subprocess.run(["git", "add", "-A"], check=True, stdout=subprocess.DEVNULL)
         subprocess.run(["git", "commit", "-q", "-m", step["message"]], check=True, stdout=subprocess.DEVNULL)
         self.tool_result(tool_use_id, "committed", is_error=False)
+
+    def step_actions(self, step: dict) -> None:
+        tool_use_id = self.tool_use("Bash", {"command": "scripted actions"})
+        perform_actions(step["actions"])
+        self.tool_result(tool_use_id, "done", is_error=False)
 
     def step_write(self, step: dict) -> None:
         tool_use_id = self.tool_use("Write", {"file_path": step["path"]})
@@ -1216,8 +1246,9 @@ def main() -> None:
                 fh.write(str(child.pid))
         time.sleep(3600)
 
-    if _streaming() and os.environ.get("FAKE_CLAUDE_TURNS") is not None:
-        StreamingSession(json.loads(os.environ["FAKE_CLAUDE_TURNS"])).run()
+    if _streaming() and (_SCRIPTED_TURNS is not None or os.environ.get("FAKE_CLAUDE_TURNS") is not None):
+        turns = _SCRIPTED_TURNS if _SCRIPTED_TURNS is not None else json.loads(os.environ["FAKE_CLAUDE_TURNS"])
+        StreamingSession(turns).run()
         sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
 
     written = _write_stdout()

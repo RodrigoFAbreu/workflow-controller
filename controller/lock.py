@@ -6,9 +6,14 @@ an ``O_RDONLY`` descriptor of the target worktree's own git directory
 (``git rev-parse --absolute-git-dir``). It writes nothing into the target,
 and it excludes every Controller on the machine working on the same
 worktree, whatever runtime root each one uses. ``controller.job`` passes
-the descriptor to the worker (``pass_fds``): the kernel keeps a ``flock``
-held while *any* process holds that open file description, so an orphaned
-worker keeps the lock until it really exits.
+the descriptor to the worker and to its stdin anchor (``pass_fds``;
+``workflow-controller-worker-lifecycle-ownership``): the kernel keeps a
+``flock`` held while *any* process holds that open file description, so
+the worker and the anchor hold the lock for the job's whole owned
+lifetime, including after the Controller is lost. A tool process the
+worker starts does not inherit the descriptor (the harness closes it), so
+it is the anchor, not a stray descendant, that keeps an orphaned job
+held.
 
 :func:`probe_lifecycle_lock` is the read-only report ``explain``/``inspect``
 print. ``flock`` has no non-acquiring test, so it never acquires: it reads

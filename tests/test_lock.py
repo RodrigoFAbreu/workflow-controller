@@ -329,7 +329,7 @@ class InheritedDescriptorTest(unittest.TestCase):
         self.assertIn("verify those processes", message)
         self.assertIn(f"kill -TERM -- -{leader.pid}", message)
         # ... and the other-holder sentence.
-        self.assertIn("is a process that inherited the descriptor", message)
+        self.assertIn("is that job's recorded stdin anchor (worker_anchor)", message)
         self.assertEqual(ctx.exception.evidence["lock_path"], str(git_dir))
         self.assertEqual(ctx.exception.evidence["recorded_workers"],
                          [{"job_id": "job-orphan", "verdict": "active"}])

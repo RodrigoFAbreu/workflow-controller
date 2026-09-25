@@ -108,6 +108,7 @@ from controller.errors import (
     JobAbandonRefusedError,
     LifecycleWorkerActiveError,
     LifecycleWorkerUnverifiableError,
+    OwnedWorkDetachedError,
     PendingJobReconciliationError,
     RuntimeContainmentError,
     StaleJobRecordError,
@@ -2018,6 +2019,15 @@ def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> V
                 evidence={"job_id": record.get("job_id"), "status": status,
                           "worker_outcome": worker_outcome},
             )
+    if status in (STATUS_LAUNCHED, STATUS_COMPLETED):
+        worker_state_breach = _worker_state_breach(record, status)
+        if worker_state_breach is not None:
+            reason, message, breach_evidence = worker_state_breach
+            return _invalid(
+                record, case=3, code="StaleJobRecordError", reason=reason,
+                message=f"job {record.get('job_id')!r} is {status!r} but {message}",
+                evidence={"job_id": record.get("job_id"), "status": status, **breach_evidence},
+            )
 
     # Case 4: derived-field disagreement. `status` is derived from
     # `selected_action.declined` at record-write time; ranges only over
@@ -2045,6 +2055,62 @@ def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> V
         )
 
     return VALID
+
+
+#: The worker states a record may carry an ``ending_offset`` at: the
+#: supervisor flushed it with ``ENDING``, and a worker whose anchor was lost
+#: reaches ``DRAINING``/``ENDED`` without one (plan D).
+_ENDED_SESSION_WORKER_STATES = frozenset({worker.ENDING, worker.DRAINING, worker.ENDED})
+
+#: The supervisor facts flushed together with ``ENDING`` (plan C), each of
+#: which therefore needs ``ending_offset`` beside it.
+_ENDING_FACTS = ("wakeup_overdue_declared_at", "command_lifecycle_overdue_declared_at", "settled_wakeups")
+
+
+def _worker_state_breach(record: JobRecord, status: str) -> tuple[str, str, dict] | None:
+    """Validation case 3's ``worker_state`` rule for a ``LAUNCHED``/
+    ``COMPLETED`` record (``workflow-controller-worker-lifecycle-ownership``
+    plan D), as ``(reason, message, evidence)``, or ``None``. A record
+    without ``worker_state`` (a 1.2.x shape) is judged on its supervisor
+    facts alone, which it never carries."""
+    worker_state = record.get("worker_state")
+    state = None
+    if "worker_state" in record:
+        state = worker_state.get("state") if isinstance(worker_state, Mapping) else None
+        if state not in worker.WORKER_STATES:
+            return ("worker_state_invalid",
+                    f"its worker_state {state!r} is not one of {list(worker.WORKER_STATES)}",
+                    {"worker_state": state})
+        if status == STATUS_COMPLETED and state != worker.ENDED:
+            return ("worker_state_not_ended",
+                    f"its worker_state is {state!r} -- COMPLETED is written only after the worker ENDED",
+                    {"worker_state": state})
+    has_offset = record.get("ending_offset") is not None
+    if has_offset and state not in _ENDED_SESSION_WORKER_STATES:
+        return ("ending_offset_before_ending",
+                f"it carries ending_offset with worker_state {state!r}, not one of "
+                f"{sorted(_ENDED_SESSION_WORKER_STATES)}",
+                {"worker_state": state, "ending_offset": record.get("ending_offset")})
+    present = [key for key in _ENDING_FACTS
+               if (record.get(key) not in (None, []) if key == "settled_wakeups" else record.get(key) is not None)]
+    if present and not has_offset:
+        return ("ending_fact_without_ending_offset",
+                f"it carries {', '.join(present)} without ending_offset -- they are flushed with ENDING",
+                {"facts": present})
+    if record.get("command_lifecycle_overdue_declared_at") is not None:
+        command_uuid = record.get("command_lifecycle_overdue_command_uuid")
+        if not isinstance(command_uuid, str) or not command_uuid:
+            return ("command_lifecycle_overdue_without_command_uuid",
+                    f"its command_lifecycle_overdue_declared_at names no command_uuid ({command_uuid!r})",
+                    {"command_lifecycle_overdue_command_uuid": command_uuid})
+    if "settled_wakeups" in record:
+        settled = record.get("settled_wakeups")
+        if not isinstance(settled, list) or not all(isinstance(item, str) and item for item in settled) \
+                or len(set(settled)) != len(settled):
+            return ("settled_wakeups_invalid",
+                    f"its settled_wakeups {settled!r} is not a list of distinct non-empty strings",
+                    {"settled_wakeups": settled})
+    return None
 
 
 def _expected_outcome_for_record(record: JobRecord) -> ExpectedOutcome:
@@ -2771,10 +2837,11 @@ def _refuse_pending_reconciliation(runtime_root: Path, managed_repo: Any, identi
 
 
 _OTHER_HOLDER_SENTENCE = (
-    "Any holder those commands name that is not a recorded worker is a process that inherited the "
-    "descriptor from an earlier worker (for example a stray background descendant); it keeps the lock "
-    "until it exits, which is correct: the lock is released only when nothing from that worker's "
-    "process tree still holds it."
+    "Any holder those commands name that is not a recorded worker is that job's recorded stdin anchor "
+    "(worker_anchor), which holds the lock for the job's whole owned lifetime -- while the worker waits "
+    "on background work and while owned processes drain -- or a member of the worker's own process "
+    "group; a tool process the worker started never receives the descriptor. The lock is released "
+    "only when the job's owned work has ended."
 )
 
 
@@ -2871,7 +2938,7 @@ def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.Lifec
     refusal's message completed from this Controller's own job records:
     the lock path and how to find every holder (``lock``'s own text), the
     recorded worker's pid/pgid only when its verdict is ``active``, and
-    the "any other holder inherited the descriptor" sentence."""
+    the "any other holder is the recorded anchor or a group member" sentence."""
     try:
         return lock.acquire_lifecycle_lock(managed_repo.root)
     except LifecycleWorkerActiveError as exc:
@@ -3216,7 +3283,68 @@ def _worker_dict(result: worker.WorkerResult, *, stdout_path: str, stderr_path: 
         "result_excerpt": result_excerpt,
         "stdout_path": stdout_path,
         "stderr_path": stderr_path,
+        # CP4 (worker-lifecycle-ownership): why the outcome is what it is,
+        # and what the supervisor owned (plan C step 4, D).
+        "stream_diagnosis": result.stream_diagnosis,
+        "owned_processes_seen": result.owned_processes_seen,
     }
+
+
+#: The ``worker_state`` fields the record keeps from ``on_state_change``'s
+#: ``details`` (plan D): presentation data, rewritten at each flush, never
+#: an input to the stream state (replay rebuilds that).
+_WORKER_STATE_DETAIL_FIELDS = ("turns", "waiting_on", "owned_processes", "owned_processes_seen_count",
+                               "excluded_processes", "scan")
+
+
+def _with_worker_state(record: JobRecord, state: str, details: Mapping) -> JobRecord:
+    """``record`` with ``worker_state`` at ``state`` (``since`` kept while
+    the state is unchanged) and the supervisor facts ``details`` carries
+    once the session was ended (``ending_offset``, the two breach
+    declarations, ``settled_wakeups``) lifted to the record's top level,
+    where ``validate_record`` and a re-attaching ``resume`` read them."""
+    previous = record.get("worker_state") if isinstance(record.get("worker_state"), Mapping) else {}
+    since = previous.get("since") if previous.get("state") == state and previous.get("since") else _now()
+    worker_state = {key: previous[key] for key in _WORKER_STATE_DETAIL_FIELDS if key in previous}
+    worker_state.update({key: details[key] for key in _WORKER_STATE_DETAIL_FIELDS if key in details})
+    updated = {**record, "worker_state": {"state": state, "since": since, **worker_state}, "updated_at": _now()}
+    facts = details.get("supervisor_facts") if isinstance(details.get("supervisor_facts"), Mapping) else {}
+    ending_offset = details.get("ending_offset", facts.get("ending_offset"))
+    if ending_offset is not None:
+        updated["ending_offset"] = ending_offset
+    for key in ("wakeup_overdue_declared_at", "command_lifecycle_overdue_declared_at",
+                "command_lifecycle_overdue_command_uuid"):
+        if facts.get(key) is not None:
+            updated[key] = facts[key]
+    if facts.get("settled_wakeups"):
+        updated["settled_wakeups"] = list(facts["settled_wakeups"])
+    return updated
+
+
+def _worker_state_event(state: str) -> str:
+    """``worker_running``, ``worker_waiting``, ``worker_ending``,
+    ``worker_draining`` or ``worker_ended`` (plan D)."""
+    return f"worker_{state.lower()}"
+
+
+def _worker_state_event_details(record: JobRecord, details: Mapping, *, state_changed: bool) -> dict:
+    """A ``worker_<state>`` event's compact ``details``: whether the state
+    itself changed (``False`` for a flush of what the worker waits on or
+    owns), the turn count, what it waits on by id, how many processes it
+    owns, and ``ending_offset`` once the session was ended."""
+    waiting_on = details.get("waiting_on") if isinstance(details.get("waiting_on"), Mapping) else {}
+    compact = {
+        "state_changed": state_changed,
+        "turns": details.get("turns"),
+        "tasks": [task.get("task_id") for task in waiting_on.get("tasks") or []],
+        "wakeups": [{"tool_use_id": w.get("tool_use_id"), "state": w.get("state")}
+                    for w in waiting_on.get("wakeups") or []],
+        "command_lifecycles": [b.get("command_uuid") for b in waiting_on.get("command_lifecycles") or []],
+        "owned_processes": len(details.get("owned_processes") or []),
+    }
+    if record.get("ending_offset") is not None:
+        compact["ending_offset"] = record["ending_offset"]
+    return compact
 
 
 # ---------------------------------------------------------------------------
@@ -3954,6 +4082,19 @@ def _launch_job(
         spawned["drained"] = True
         _announce_group_drain(pid, remaining_pids)
 
+    def on_state_change(state: str, details: Mapping) -> None:
+        # CP4 (worker-lifecycle-ownership, plan D): every supervisor
+        # transition -- and every change in what the worker waits on or
+        # owns (at most one per scan) -- is flushed into the still-LAUNCHED
+        # record, authoritative like the on_spawn flush, then appended as
+        # the state's event. The record raising ends every owned process
+        # (`launch`'s contract) and propagates.
+        nonlocal record
+        state_changed = (record.get("worker_state") or {}).get("state") != state
+        record = _with_worker_state(record, state, details)
+        record = _persist(runtime, job_id, record, event=_worker_state_event(state),
+                          details=_worker_state_event_details(record, details, state_changed=state_changed))
+
     try:
         result = worker.launch(
             worker_task(decision.action),
@@ -3971,6 +4112,7 @@ def _launch_job(
             disallowed_tools=_worker_disallowed_tools(route, binding),
             ownership_tag=job_id,
             supervisor_lock_path=supervisor_lock_path,
+            on_state_change=on_state_change,
         )
     except (UserOnlyCommandError, WorkerLaunchError) as exc:
         if "worker_process" not in spawned:
@@ -3986,22 +4128,40 @@ def _launch_job(
         raise
 
     if isinstance(result, worker.DrainDetached):
-        # CP3 (worker-lifecycle-ownership): owned processes outlived the
-        # worker past the drain bound, and nothing was ended. Until CP4
-        # records the detach, this is today's exit 45 after a still-live
-        # worker: the record stays LAUNCHED, and the anchor keeps the
-        # lifecycle lock.
-        raise LifecycleWorkerActiveError(
-            f"worker pid {spawned['worker_process'].pid} exited, but {len(result.remaining)} owned "
+        # CP4 (worker-lifecycle-ownership, plan D): owned processes outlived
+        # the worker past the drain bound, and nothing was ended. The record
+        # stays LAUNCHED at DRAINING with `drain_detached_at`, and the
+        # `worker_drain_detached` event follows it -- both while this
+        # Controller still holds the job's supervisor lock, which the
+        # raise below releases as it unwinds `_supervisor_lock`. The anchor
+        # keeps the lifecycle lock, so the job stays held until `resume`.
+        record = _with_worker_state(record, worker.DRAINING, {
+            **result.worker_state, "supervisor_facts": result.supervisor_facts,
+        })
+        record = {**record, "drain_detached_at": result.drain_detached_at}
+        remaining = [{"pid": entry.get("pid"), "cmdline": entry.get("cmdline")} for entry in result.remaining]
+        record = _persist(runtime, job_id, record, event="worker_drain_detached", details={
+            "drain_detached_at": result.drain_detached_at, "remaining": remaining,
+        })
+        raise OwnedWorkDetachedError(
+            f"worker pid {spawned['worker_process'].pid} exited, but {len(remaining)} owned "
             f"process(es) are still running after {worker.DRAIN_DETACH_SECONDS} s: "
-            + ", ".join(f"{entry['pid']} ({entry['cmdline']})" for entry in result.remaining)
-            + f" -- end them, then run `{_resume_command(managed_repo.root)}`",
+            + ", ".join(f"{entry['pid']} ({entry['cmdline']})" for entry in remaining)
+            + f" -- job {job_id} stays held (LAUNCHED, DRAINING); either run "
+            f"`{_resume_command(managed_repo.root)}` to re-attach and keep draining, or end them, "
+            f"then run it",
             evidence={"job_id": job_id, "drain_detached_at": result.drain_detached_at,
                       "remaining": list(result.remaining)},
         )
 
     # Step 6: record the worker result. The streams are already on disk --
     # the worker wrote them itself.
+    # CP4 (worker-lifecycle-ownership, plan D): COMPLETED is written only
+    # after `launch` returned a result, which it does only at ENDED. A
+    # `launch` double that never called `on_state_change` leaves the
+    # pre-spawn STARTING, so the state is completed here (I2).
+    if (record.get("worker_state") or {}).get("state") != worker.ENDED:
+        record = _with_worker_state(record, worker.ENDED, {})
     record = {
         **record,
         "status": STATUS_COMPLETED,

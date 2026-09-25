@@ -77,6 +77,16 @@ class _WriteSpy:
         return [obj.get("status") for _rel, obj in self.calls if "jobs/" in _rel]
 
 
+def assert_launched_status_sequence(test: unittest.TestCase, statuses: list[str], final: str) -> None:
+    """``PLANNED -> LAUNCHED (x2+) -> COMPLETED -> final``
+    (worker-lifecycle-ownership plan D): the record stays ``LAUNCHED``
+    through every ``worker_state`` flush, so the number of ``LAUNCHED``
+    writes is at least the pre-spawn and ``on_spawn`` pair, never fixed."""
+    collapsed = [status for index, status in enumerate(statuses) if index == 0 or statuses[index - 1] != status]
+    test.assertEqual(collapsed, ["PLANNED", "LAUNCHED", "COMPLETED", final], statuses)
+    test.assertGreaterEqual(statuses.count("LAUNCHED"), 2, statuses)
+
+
 def _build_target(
     tmp_root: Path, *, phase: str, governing_workflow_version: str | None = "2.1",
     work_item_id: str = "wi-1", copy_commands: bool = True, **work_item_overrides,
@@ -774,7 +784,7 @@ class TransitionVerificationTest(unittest.TestCase):
         # step 9 appends through). Automatic-lifecycle-orchestration CP5:
         # the `on_spawn` flush of `worker_process` is a second LAUNCHED
         # write, after `Popen` and before the wait.
-        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "LAUNCHED", "COMPLETED", "FINISHED"])
+        assert_launched_status_sequence(self, spy.statuses(), "FINISHED")
 
     def test_worker_that_changes_nothing_fails_with_transition_not_observed(self) -> None:
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
@@ -944,7 +954,7 @@ class TwoPointTwoPlanReviewTransitionTest(unittest.TestCase):
         self.assertTrue(record["transition_verified"])
         self.assertEqual(record["observed_phase_after"], "AWAITING_LOCAL_PLAN_REVIEW")
         # CP5: the second LAUNCHED write is the `worker_process` flush.
-        self.assertEqual(spy.statuses(), ["PLANNED", "LAUNCHED", "LAUNCHED", "COMPLETED", "FINISHED"])
+        assert_launched_status_sequence(self, spy.statuses(), "FINISHED")
 
     def test_row3_ordinary_reaches_awaiting_manual_external_plan_review(self) -> None:
         managed_repo = _build_target(
@@ -2014,6 +2024,132 @@ class ApplyImplementationReviewRowExecuteTest(_ImplementationRowTestCase):
             record["pre_state"]["bundle_manifest_generation_head"],
             record["pre_state"]["target_head"],
         )
+
+
+
+# ---------------------------------------------------------------------------
+# Worker-lifecycle-ownership CP4 (plan D): validation case 3 covers
+# `worker_state` and the supervisor facts flushed with ENDING.
+# ---------------------------------------------------------------------------
+
+
+class WorkerStateValidationTest(unittest.TestCase):
+    """A ``LAUNCHED``/``COMPLETED`` record's ``worker_state`` names a member
+    of ``WORKER_STATES`` (``ENDED`` when ``COMPLETED``); ``ending_offset``
+    appears only at ``ENDING``/``DRAINING``/``ENDED``; the three facts
+    flushed with ``ENDING`` need ``ending_offset``; the bracket declaration
+    names its ``command_uuid``; ``settled_wakeups`` is a list of distinct
+    non-empty strings. Every breach is case 3 (``StaleJobRecordError``)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = TemporaryDirectory()
+        tmp_root = Path(cls._tmp.name)
+        cls.managed_repo = _build_target(tmp_root, phase="PLANNING")
+        runtime_root = tmp_root / "runtime"
+        runtime_root.mkdir()
+        with _WriteSpy() as spy:
+            _run(cls.managed_repo, runtime_root)
+        records = [obj for rel, obj in spy.calls if "jobs/" in rel]
+        cls.launched = copy.deepcopy([r for r in records if r.get("status") == job.STATUS_LAUNCHED][-1])
+        cls.completed = copy.deepcopy(next(r for r in records if r.get("status") == job.STATUS_COMPLETED))
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def _validity(self, record: dict) -> job.Validity:
+        return job.validate_record(record, managed_repo=self.managed_repo, identity=FAKE_IDENTITY)
+
+    def _assert_breach(self, record: dict, reason: str) -> None:
+        validity = self._validity(record)
+        self.assertFalse(validity.valid)
+        self.assertEqual((validity.case, validity.code, validity.reason), (3, "StaleJobRecordError", reason))
+        self.assertFalse(validity.terminal)
+
+    def test_the_real_records_are_valid(self) -> None:
+        self.assertEqual(self.launched["worker_state"]["state"], "ENDED")
+        self.assertIsInstance(self.launched["ending_offset"], int)
+        self.assertEqual(self._validity(self.launched), job.VALID)
+        self.assertEqual(self.completed["worker_state"]["state"], "ENDED")
+        self.assertEqual(self._validity(self.completed), job.VALID)
+
+    def test_every_worker_state_is_accepted_on_a_launched_record(self) -> None:
+        for state in ("STARTING", "RUNNING", "WAITING", "ENDING", "DRAINING", "ENDED"):
+            with self.subTest(state=state):
+                record = copy.deepcopy(self.launched)
+                record["worker_state"]["state"] = state
+                if state not in ("ENDING", "DRAINING", "ENDED"):
+                    record.pop("ending_offset")
+                self.assertEqual(self._validity(record), job.VALID)
+
+    def test_a_record_without_worker_state_takes_todays_path(self) -> None:
+        for base in (self.launched, self.completed):
+            record = {k: v for k, v in base.items() if k not in ("worker_state", "ending_offset")}
+            self.assertEqual(self._validity(record), job.VALID)
+
+    def test_an_unknown_or_malformed_worker_state_is_refused(self) -> None:
+        for value in ({"state": "SLEEPING"}, {"state": None}, "WAITING", None):
+            for base in (self.launched, self.completed):
+                with self.subTest(value=value, status=base["status"]):
+                    self._assert_breach({**base, "worker_state": value}, "worker_state_invalid")
+
+    def test_a_completed_record_must_say_ended(self) -> None:
+        for state in ("STARTING", "RUNNING", "WAITING", "ENDING", "DRAINING"):
+            with self.subTest(state=state):
+                record = copy.deepcopy(self.completed)
+                record["worker_state"]["state"] = state
+                self._assert_breach(record, "worker_state_not_ended")
+
+    def test_ending_offset_only_once_the_session_was_ended(self) -> None:
+        for state in ("STARTING", "RUNNING", "WAITING"):
+            with self.subTest(state=state):
+                record = copy.deepcopy(self.launched)
+                record["worker_state"]["state"] = state
+                self._assert_breach(record, "ending_offset_before_ending")
+        # ... and DRAINING/ENDED without one is a lost anchor, not a breach.
+        for state in ("DRAINING", "ENDED"):
+            record = copy.deepcopy(self.launched)
+            record["worker_state"]["state"] = state
+            record.pop("ending_offset")
+            self.assertEqual(self._validity(record), job.VALID)
+
+    def test_the_ending_facts_need_ending_offset(self) -> None:
+        facts = {
+            "wakeup_overdue_declared_at": {"wakeup_overdue_declared_at": "2026-01-01T00:00:00Z"},
+            "command_lifecycle_overdue_declared_at": {
+                "command_lifecycle_overdue_declared_at": "2026-01-01T00:00:00Z",
+                "command_lifecycle_overdue_command_uuid": "c-1"},
+            "settled_wakeups": {"settled_wakeups": ["toolu_1"]},
+        }
+        for name, fields in facts.items():
+            with self.subTest(fact=name):
+                with_offset = {**self.launched, **fields}
+                self.assertEqual(self._validity(with_offset), job.VALID)
+                without = {k: v for k, v in with_offset.items() if k != "ending_offset"}
+                without["worker_state"] = {**without["worker_state"], "state": "DRAINING"}
+                self._assert_breach(without, "ending_fact_without_ending_offset")
+        # An empty settled_wakeups carries nothing.
+        empty = {k: v for k, v in self.launched.items() if k != "ending_offset"}
+        empty["settled_wakeups"] = []
+        empty["worker_state"] = {**empty["worker_state"], "state": "DRAINING"}
+        self.assertEqual(self._validity(empty), job.VALID)
+
+    def test_the_bracket_declaration_names_its_command_uuid(self) -> None:
+        for command_uuid in (None, "", 7):
+            with self.subTest(command_uuid=command_uuid):
+                record = {**self.launched, "command_lifecycle_overdue_declared_at": "2026-01-01T00:00:00Z",
+                          "command_lifecycle_overdue_command_uuid": command_uuid}
+                self._assert_breach(record, "command_lifecycle_overdue_without_command_uuid")
+
+    def test_settled_wakeups_is_a_list_of_distinct_non_empty_strings(self) -> None:
+        for value in (["a", "a"], ["a", ""], [1], "a"):
+            with self.subTest(value=value):
+                self._assert_breach({**self.launched, "settled_wakeups": value}, "settled_wakeups_invalid")
+
+    def test_a_terminal_record_is_not_judged_on_worker_state(self) -> None:
+        record = {**self.completed, "status": job.STATUS_FAILED, "worker_state": {"state": "RUNNING"}}
+        self.assertEqual(self._validity(record), job.VALID)
 
 
 if __name__ == "__main__":

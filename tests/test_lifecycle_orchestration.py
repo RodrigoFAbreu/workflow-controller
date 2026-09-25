@@ -31,6 +31,7 @@ started.
 from __future__ import annotations
 
 import contextlib
+import copy
 import dataclasses
 import io
 import json
@@ -39,6 +40,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -1658,6 +1661,532 @@ class NoCheckpointPartialRunTest(_LifecycleTestCase):
         self.assert_finished(review, AWAITING_MANUAL)
         self.assertEqual(gate_record["human_gate_pending"]["safe_resume_command"], RECORD_MANUAL)
         self.assertEqual(self.processes(lc), 3)
+
+
+# ---------------------------------------------------------------------------
+# Worker-lifecycle-ownership CP4: a worker that waits on its own background
+# work, through the real `run`/`step`, `execute_step` and verification. The
+# worker is the scripted fake in streaming mode (`{"turns": [...]}`
+# invocations), so each job's turns are its own.
+# ---------------------------------------------------------------------------
+
+#: A second ``step`` from another process: ``cli.main`` with the same
+#: pinned identity, exiting with its real code.
+_CHILD_CLI = (
+    "import sys, json, unittest.mock; sys.path.insert(0, sys.argv[1]); "
+    "from pathlib import Path; from controller import cli, identity; "
+    "from controller.identity import ControllerIdentity; "
+    "fields = json.loads(sys.argv[2]); "
+    "fields.update(source_root=Path(fields['source_root']), "
+    "origin_source_root=Path(fields['origin_source_root'])); "
+    "ident = ControllerIdentity(**fields); "
+    "unittest.mock.patch.object(identity, 'pin', return_value=ident).start(); "
+    "unittest.mock.patch.object(identity, 'current', return_value=ident).start(); "
+    "sys.exit(cli.main(sys.argv[3:]))"
+)
+
+RUNNING, WAITING, ENDING, DRAINING, ENDED = (worker.RUNNING, worker.WAITING, worker.ENDING, worker.DRAINING,
+                                             worker.ENDED)
+_WORKER_STATE_EVENTS = ("worker_running", "worker_waiting", "worker_ending", "worker_draining", "worker_ended")
+
+
+def verification(done: Path, *, seconds: float = 1.5, release: Path | None = None) -> dict:
+    """A background full verification (``bash_bg``) that writes its
+    completion time (``time.time()``) to ``done`` -- after ``seconds``, or
+    once ``release`` exists."""
+    import shlex
+    wait = (f"while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.05; done" if release is not None
+            else f"sleep {seconds}")
+    return {"step": "bash_bg", "id": "verify", "description": "full verification",
+            "command": f"{wait}; date +%s.%N > {shlex.quote(str(done))}"}
+
+
+SAYS_IT_WILL_CONTINUE = {"step": "text", "text": "Full verification is running in the background; I will "
+                                                 "continue when it completes."}
+
+
+class _WaitingWorkerCase(_LifecycleTestCase):
+    """Scripted streaming sessions, a write spy with a hook, the recorded
+    ``worker_state`` history, and a second-process ``step``. Every worker,
+    anchor and tagged process a record names is reaped at cleanup."""
+
+    def seed(self, name: str, phase: str, **kwargs) -> Lifecycle:
+        lc = super().seed(name, phase, **kwargs)
+        self.addCleanup(process_fixtures.reap_recorded_workers, lc.runtime)
+        return lc
+
+    def cli_spied(self, lc: Lifecycle, command: str, *args: str,
+                  hook: Callable[[dict], None] | None = None) -> tuple[Run, list[tuple[float, dict]]]:
+        """:meth:`cli` with every job-record write recorded as
+        ``(time.time(), record)`` (after the write) and passed to ``hook``."""
+        writes: list[tuple[float, dict]] = []
+        real = job.runtime.write_json
+
+        def spy(runtime_root, rel_path, obj):
+            written = real(runtime_root, rel_path, obj)
+            if str(rel_path).startswith("jobs/"):
+                writes.append((time.time(), copy.deepcopy(obj)))
+                if hook is not None:
+                    hook(obj)
+            return written
+
+        with unittest.mock.patch.object(job.runtime, "write_json", spy):
+            result = self.cli(lc, command, *args)
+        return result, writes
+
+    @staticmethod
+    def events(lc: Lifecycle, job_id: str) -> list[dict]:
+        path = lc.runtime / "jobs" / job_id / "events.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def history(self, lc: Lifecycle, job_id: str) -> list[str]:
+        """The worker states the job's event log records, one per change."""
+        return [e["event"][len("worker_"):].upper() for e in self.events(lc, job_id)
+                if e["event"] in _WORKER_STATE_EVENTS and e["state_changed"]]
+
+    def child_step(self, lc: Lifecycle) -> subprocess.Popen:
+        fields = json.dumps(dataclasses.asdict(self.ident), default=str)
+        argv = ["--runtime-dir", str(lc.runtime), "--workflow-manager", str(self.stub_manager),
+                "--claude-binary", str(FAKE_CLAUDE), "--timeout", "60", "step", str(lc.root)]
+        child = subprocess.Popen(
+            [sys.executable, "-c", _CHILD_CLI, str(fixtures.REPO_ROOT), fields, *argv],
+            env={**os.environ, "FAKE_CLAUDE_REQUIRE_FILE": str(self.never),
+                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file)},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait()))
+        return child
+
+    def script_starts(self, lc: Lifecycle) -> list[float]:
+        """Each scripted worker invocation's start time, in order."""
+        from tests.fake_claude import script_invocations_path
+        counter = Path(script_invocations_path(lc.script_path))
+        return [json.loads(line)["at"] for line in counter.read_text().splitlines() if line.strip()]
+
+    def assert_worker_outcome_failure(self, record: dict, outcome: str, reason: str) -> dict:
+        """FAILED on the worker outcome (non-verifying before any
+        predicate), with ``reason`` the stream diagnosis's."""
+        self.assert_failed(record, "worker_outcome")
+        self.assertEqual(record["worker_outcome"], outcome)
+        diagnosis = record["worker"]["stream_diagnosis"]
+        self.assertEqual(diagnosis["reason"], reason, diagnosis)
+        return diagnosis
+
+    @staticmethod
+    def kill_anchor_when_waiting() -> tuple[Callable[[dict], None], list[int]]:
+        killed: list[int] = []
+
+        def hook(obj: dict) -> None:
+            if not killed and obj.get("status") == job.STATUS_LAUNCHED \
+                    and (obj.get("worker_state") or {}).get("state") == WAITING:
+                killed.append(obj["worker_anchor"]["pid"])
+                os.kill(obj["worker_anchor"]["pid"], signal.SIGKILL)
+
+        return hook, killed
+
+
+class WaitingWorkerRegressionTest(_WaitingWorkerCase):
+    """R12: the three observed phases in which a worker started its full
+    verification in the background, said it would continue, and ended its
+    turn -- each now finishes on its continuation turn -- and their
+    fail-closed variants (the anchor killed mid-wait)."""
+
+    def _r12_scripts(self, lc: Lifecycle, phase: str, done: Path) -> tuple[str, list, str]:
+        """``(task, turns, observed phase after)`` of the R12 worker at ``phase``."""
+        if phase == IMPLEMENTING:
+            return MILESTONE_IMPLEMENT, [
+                [{"step": "actions", "actions": lc.implement("CP1")}, verification(done), SAYS_IT_WILL_CONTINUE],
+                [{"step": "text", "text": "Verification passed."}],
+            ], IMPLEMENTING
+        if phase == SELF_REVIEWING:
+            return MILESTONE_IMPLEMENT, [
+                [verification(done), {"step": "text", "text": "The full regression suite is running; waiting."}],
+                [{"step": "actions", "actions": lc.generate()}],
+            ], AWAITING_LOCAL
+        fixes = [lc.commit_pending_state(), *lc.fix()]
+        return APPLY_PENDING, [
+            [{"step": "actions", "actions": fixes}, verification(done), SAYS_IT_WILL_CONTINUE],
+            [{"step": "actions", "actions": lc.generate()}],
+        ], AWAITING_LOCAL
+
+    def _seed_r12(self, name: str, phase: str) -> Lifecycle:
+        if phase == IMPLEMENTING:
+            return self.seed(name, IMPLEMENTING)
+        if phase == SELF_REVIEWING:
+            return self.at_self_reviewing(name)
+        return self.at_applying(name)
+
+    def test_r12_a_worker_waiting_on_its_verification_finishes_on_the_continuation_turn(self) -> None:
+        """R12a (``IMPLEMENTING``; the observed jobs ``8b244f42`` and
+        ``5d4a976a``), R12b (``SELF_REVIEWING_IMPLEMENTATION``; ``66988e17``,
+        ``6082a90b``, ``cb43fe49``) and R12c (``APPLYING_REVIEW_FEEDBACK``;
+        ``12a9f268``). Against the unfixed Controller the same scripts end
+        ``AMBIGUOUS``/``FAILED``: the first turn's ``result`` was taken as
+        the end of the job and the session was closed under the running
+        verification."""
+        for name, phase in (("r12a", IMPLEMENTING), ("r12b", SELF_REVIEWING), ("r12c", APPLYING)):
+            with self.subTest(phase=phase):
+                lc = self._seed_r12(name, phase)
+                done = lc.case_dir / "verification-done"
+                task, turns, observed = self._r12_scripts(lc, phase, done)
+                lc.add(task, {"turns": turns})
+                result, writes = self.cli_spied(lc, "step")
+                self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+                [record] = result.records
+                self.assert_finished(record, observed)
+                self.assertEqual(record["worker_outcome"], "SUCCESS")
+                self.assertEqual(record["worker"]["stream_diagnosis"]["turns"], 2)
+                completed_at = next(t for t, w in writes if w["status"] == job.STATUS_COMPLETED)
+                self.assertLess(float(done.read_text()), completed_at)
+                self.assertEqual(self.history(lc, record["job_id"]), [RUNNING, WAITING, RUNNING, ENDING, ENDED])
+                self.assertEqual(self.processes(lc), 1)
+                if phase == APPLYING:
+                    # The relaunch-bound view counts one verified attempt.
+                    view = job.last_launched_apply_job_view(lc.runtime, lc.root, WI)
+                    self.assertEqual((view.job_id, view.status), (record["job_id"], job.STATUS_FINISHED))
+                    self.assertFalse(evidence.relaunch_bound_applies(view, bundle_id(2)))
+
+    def test_r12d_the_anchor_killed_mid_wait_fails_closed(self) -> None:
+        """R12d: the same three scripts with the anchor killed while the
+        worker waits: stdin closes under the running verification, so the
+        outcome is ``AMBIGUOUS`` (``stdin_closed_while_waiting``) and the
+        job ``FAILED`` on it -- even at ``IMPLEMENTING``, whose checkpoint
+        commit already landed. The ``APPLYING_REVIEW_FEEDBACK`` variant is
+        then refused by the apply relaunch bound exactly as today (AC9)."""
+        for name, phase in (("r12d-impl", IMPLEMENTING), ("r12d-self", SELF_REVIEWING),
+                            ("r12d-apply", APPLYING)):
+            with self.subTest(phase=phase):
+                lc = self._seed_r12(name, phase)
+                done = lc.case_dir / "verification-done"
+                task, turns, _observed = self._r12_scripts(lc, phase, done)
+                turns[0][turns[0].index(next(s for s in turns[0] if s.get("id") == "verify"))] = \
+                    verification(done, release=lc.case_dir / "never-released")
+                lc.add(task, {"turns": turns})
+                hook, killed = self.kill_anchor_when_waiting()
+                result, _writes = self.cli_spied(lc, "step", hook=hook)
+                self.assertEqual(result.code, cli.EXIT_WORKER_FAILED, result.stderr)
+                self.assertTrue(killed)
+                [record] = result.records
+                self.assert_worker_outcome_failure(record, "AMBIGUOUS", "stdin_closed_while_waiting")
+                self.assertFalse(done.exists())
+                if phase == APPLYING:
+                    second = self.cli(lc, "run", fail_if_invoked=True)
+                    gate = self.assert_gate(second, lc, processes_before=1,
+                                            contains=(f"job {record['job_id']}, ended FAILED",),
+                                            safe=f"workflow-controller explain --work-item {WI}")
+                    self.assertIn(bundle_id(1), gate["what_is_required"])
+
+
+class NextActionWaitsForOwnedWorkTest(_WaitingWorkerCase):
+    """R13: with ``run`` driving two ``IMPLEMENTING`` checkpoints, the worker
+    for checkpoint N+1 starts only after checkpoint N's owned background
+    work ended, and a concurrent ``step`` from a second process during N's
+    ``WAITING`` exits 45."""
+
+    def test_checkpoint_n_plus_1_starts_after_n_s_background_verification(self) -> None:
+        lc = self.seed("r13-task", IMPLEMENTING)
+        done, release = lc.case_dir / "verification-done", lc.case_dir / "release"
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [
+            [{"step": "actions", "actions": lc.implement("CP1")}, verification(done, release=release),
+             SAYS_IT_WILL_CONTINUE],
+            [{"step": "text", "text": "Verification passed."}],
+        ]})
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP2", last=True)}]]})
+        concurrent: dict = {}
+
+        def hook(obj: dict) -> None:
+            if "child" in concurrent or (obj.get("worker_state") or {}).get("state") != WAITING:
+                return
+            child = concurrent["child"] = self.child_step(lc)
+
+            def wait_then_release() -> None:
+                child.wait()
+                concurrent["exited_at"] = time.time()
+                release.touch()
+
+            threading.Thread(target=wait_then_release, daemon=True).start()
+
+        result, _writes = self.cli_spied(lc, "run", "--max-steps", "2", hook=hook)
+        self.assertEqual(result.code, cli.EXIT_MAX_STEPS, result.stderr)
+        first, second = result.records
+        self.assert_finished(first, IMPLEMENTING)
+        self.assert_finished(second, SELF_REVIEWING)
+        child = concurrent["child"]
+        self.assertEqual(child.returncode, cli.EXIT_WORKER_ACTIVE, child.stderr.read())
+        self.assertLess(concurrent["exited_at"], float(done.read_text()))
+        starts = self.script_starts(lc)
+        self.assertEqual(len(starts), 2)
+        self.assertGreater(starts[1], float(done.read_text()))
+        self.assertEqual(self.processes(lc), 2, "the concurrent step launched a worker")
+
+    def test_checkpoint_n_plus_1_starts_after_n_s_reparented_orphan(self) -> None:
+        lc = self.seed("r13-orphan", IMPLEMENTING)
+        orphan_done = lc.case_dir / "orphan-done"
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [
+            [{"step": "actions", "actions": lc.implement("CP1")},
+             {"step": "bash_bg", "seconds": 0.2, "orphan": "reparent", "orphan_seconds": 2,
+              "orphan_write_file": str(orphan_done)}, SAYS_IT_WILL_CONTINUE],
+            [{"step": "text", "text": "Verification passed."}],
+        ]})
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP2", last=True)}]]})
+        result = self.cli(lc, "run", "--max-steps", "2")
+        self.assertEqual(result.code, cli.EXIT_MAX_STEPS, result.stderr)
+        first, second = result.records
+        self.assert_finished(first, IMPLEMENTING)
+        self.assert_finished(second, SELF_REVIEWING)
+        self.assertIn(DRAINING, self.history(lc, first["job_id"]))
+        starts = self.script_starts(lc)
+        self.assertGreater(starts[1], float(orphan_done.read_text()))
+
+
+class ResumingWorkerTest(_WaitingWorkerCase):
+    """R14: a worker ``WAITING`` on ``bash_bg``, and separately on a wakeup,
+    resumes on the completion turn, commits and finishes."""
+
+    def _implementing(self, name: str, turns: list) -> tuple[Lifecycle, dict, Run]:
+        lc = self.seed(name, IMPLEMENTING)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": turns(lc)})
+        result = self.cli(lc, "step")
+        return lc, result.records[0], result
+
+    def test_r14_a_worker_waiting_on_a_background_task_resumes_and_finishes(self) -> None:
+        lc, record, result = self._implementing("r14-task", lambda lc: [
+            [{"step": "bash_bg", "id": "suite", "seconds": 1}, SAYS_IT_WILL_CONTINUE],
+            [{"step": "actions", "actions": lc.implement("CP1")}],
+        ])
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_finished(record, IMPLEMENTING)
+        self.assertEqual(record["worker_state"]["state"], ENDED)
+        self.assertEqual(self.history(lc, record["job_id"]), [RUNNING, WAITING, RUNNING, ENDING, ENDED])
+        waiting = next(e for e in self.events(lc, record["job_id"]) if e["event"] == "worker_waiting")
+        self.assertEqual(waiting["tasks"], ["suite"])
+
+    def test_r14_a_worker_waiting_on_a_wakeup_resumes_on_the_fire_and_stops_it(self) -> None:
+        lc, record, result = self._implementing("r14-wakeup", lambda lc: [
+            [{"step": "wakeup", "delay": 1, "fire_turn": [{"step": "actions", "actions": lc.implement("CP1")},
+                                                          {"step": "wakeup_stop"}]},
+             {"step": "text", "text": "I will continue when the wakeup fires."}],
+        ])
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_finished(record, IMPLEMENTING)
+        self.assertEqual(self.history(lc, record["job_id"]), [RUNNING, WAITING, RUNNING, ENDING, ENDED])
+        diagnosis = record["worker"]["stream_diagnosis"]
+        [bracket] = diagnosis["command_lifecycles"]
+        [wakeup] = diagnosis["wakeups_seen"]
+        self.assertEqual((wakeup["state"], wakeup["settled_by"]), ("settled", "stop"))
+        self.assertEqual(wakeup["command_uuid"], bracket["command_uuid"])
+        self.assertEqual((wakeup["cancelled_wakeups"], wakeup["expected_count"]), (0, 0))
+        self.assertEqual(diagnosis["command_lifecycle_anomalies"], [])
+        waiting = next(e for e in self.events(lc, record["job_id"]) if e["event"] == "worker_waiting")
+        self.assertEqual([w["state"] for w in waiting["wakeups"]], ["pending"])
+
+    def test_r14_a_matched_wakeup_without_a_stop_settles_after_the_window(self) -> None:
+        with unittest.mock.patch.object(worker, "WAKEUP_SETTLE_SECONDS", 1):
+            lc, record, result = self._implementing("r14-settle", lambda lc: [
+                [{"step": "wakeup", "delay": 1, "fire_turn": [{"step": "actions", "actions": lc.implement("CP1")}]},
+                 {"step": "text", "text": "I will continue when the wakeup fires."}],
+            ])
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_finished(record, IMPLEMENTING)
+        self.assertEqual(self.history(lc, record["job_id"]), [RUNNING, WAITING, RUNNING, WAITING, ENDING, ENDED])
+        diagnosis = record["worker"]["stream_diagnosis"]
+        [bracket] = diagnosis["command_lifecycles"]
+        [wakeup] = diagnosis["wakeups_seen"]
+        self.assertEqual((wakeup["settled_by"], wakeup["command_uuid"]), ("settle_window", bracket["command_uuid"]))
+        self.assertEqual(record["settled_wakeups"], [wakeup["tool_use_id"]])
+        self.assertIsInstance(record["ending_offset"], int)
+        waits = [e for e in self.events(lc, record["job_id"]) if e["event"] == "worker_waiting" and e["state_changed"]]
+        self.assertEqual([w["state"] for w in waits[-1]["wakeups"]], ["fire_matched"])
+
+    def test_r14_an_irregular_fire_fails_closed_although_the_continuation_committed(self) -> None:
+        """The fail-closed twin: the fire's ``started(X)`` is omitted, so the
+        wakeup is never matched and becomes overdue (grace patched to 1 s).
+        The fire turn committed the checkpoint, but the outcome is
+        non-verifying before any predicate runs (I7)."""
+        with unittest.mock.patch.object(worker, "WAKEUP_GRACE_SECONDS", 1):
+            lc, record, result = self._implementing("r14-irregular", lambda lc: [
+                [{"step": "lifecycle_fault", "kind": "omit_started"},
+                 {"step": "wakeup", "delay": 1, "fire_turn": [{"step": "actions", "actions": lc.implement("CP1")}]},
+                 {"step": "text", "text": "I will continue when the wakeup fires."}],
+            ])
+        self.assertEqual(result.code, cli.EXIT_WORKER_FAILED, result.stderr)
+        self.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["checkpoints"]["CP1"]["status"],
+                         "COMPLETE")
+        diagnosis = self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_irregular")
+        self.assertIn("wakeup_not_delivered", diagnosis["secondary_reasons"])
+
+
+class WrongWakeupMatchTest(_WaitingWorkerCase):
+    """R14b: a wrong wakeup match cannot finish a job (round 9's I1). CP3's
+    dangerous sequence through ``execute_step``, ``WAKEUP_SETTLE_SECONDS``
+    patched to 3 s: the first turn already made the durable state satisfy
+    the row's predicate, schedules ``W`` and a ``bash_bg``; the
+    task-completion turn after ``W``'s due time is wrapped in a spurious
+    bracket, and ``W``'s real fire follows inside the window."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = unittest.mock.patch.object(worker, "WAKEUP_SETTLE_SECONDS", 3)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _turns(first: list, task_turn: list) -> list:
+        return [[*first, {"step": "wakeup", "delay": 1}, {"step": "bash_bg", "id": "A", "seconds": 2},
+                 {"step": "lifecycle_fault", "kind": "spurious_bracket", "turn": "task"},
+                 {"step": "lifecycle_fault", "kind": "delay_fire", "seconds": 2}],
+                task_turn]
+
+    def _run(self, lc: Lifecycle, task: str, turns: list, *, hook=None):
+        lc.add(task, {"turns": turns})
+        launch_returned: list[float] = []
+        predicate_calls: list[float] = []
+        real_launch, real_clauses = job.worker.launch, job._row_clauses_failure
+
+        def launch(*args, **kwargs):
+            try:
+                return real_launch(*args, **kwargs)
+            finally:
+                launch_returned.append(time.time())
+
+        def clauses(*args, **kwargs):
+            predicate_calls.append(time.time())
+            return real_clauses(*args, **kwargs)
+
+        with unittest.mock.patch.object(job.worker, "launch", launch), \
+                unittest.mock.patch.object(job, "_row_clauses_failure", clauses):
+            result, writes = self.cli_spied(lc, "step", hook=hook)
+        self.assertTrue(launch_returned)
+        self.assertTrue(all(at >= launch_returned[0] for at in predicate_calls),
+                        "the predicate was evaluated before the worker ended")
+        return result, writes
+
+    def _assert_owned_until_the_real_fire(self, lc: Lifecycle, record: dict, writes: list) -> dict:
+        diagnosis = record["worker"]["stream_diagnosis"]
+        spurious, real = diagnosis["command_lifecycles"]
+        flushed = [w for _t, w in writes if "worker_state" in w and w["job_id"] == record["job_id"]]
+        # Before the real fire's turn (turns < 3): LAUNCHED, never ENDING,
+        # and W fire_matched while WAITING after the spurious bracket.
+        before = [w for w in flushed if (w["worker_state"].get("turns") or 0) < 3]
+        self.assertEqual({w["status"] for w in before}, {job.STATUS_LAUNCHED})
+        self.assertNotIn(ENDING, {w["worker_state"]["state"] for w in before})
+        matched = [w for w in before if w["worker_state"]["state"] == WAITING
+                   and any(entry["state"] == "fire_matched" for entry in w["worker_state"]["waiting_on"]["wakeups"])]
+        self.assertTrue(matched, "no WAITING flush named W fire_matched")
+        [entry] = matched[0]["worker_state"]["waiting_on"]["wakeups"]
+        self.assertEqual(entry["command_uuid"], spurious["command_uuid"])
+        self.assertFalse([e for e in self.events(lc, record["job_id"])
+                          if e["event"] == "worker_ending" and (e.get("turns") or 0) < 3])
+        # ENDING, and so stdin's EOF, came only after the real fire's completed(X).
+        self.assertGreater(record["ending_offset"], real["completed_offset"])
+        return diagnosis
+
+    def test_a_wrong_match_fails_the_implementing_job_closed(self) -> None:
+        lc = self.seed("r14b-impl", IMPLEMENTING)
+        concurrent: dict = {}
+
+        def hook(obj: dict) -> None:
+            waiting_on = (obj.get("worker_state") or {}).get("waiting_on") or {}
+            if "child" not in concurrent and any(w["state"] == "fire_matched" for w in waiting_on.get("wakeups", [])):
+                child = concurrent["child"] = self.child_step(lc)
+                threading.Thread(target=lambda: (child.wait(), concurrent.setdefault("exited_at", time.time())),
+                                 daemon=True).start()
+
+        result, writes = self._run(lc, MILESTONE_IMPLEMENT, self._turns(
+            [{"step": "actions", "actions": lc.implement("CP1")}], [{"step": "text", "text": "task done"}]),
+            hook=hook)
+        self.assertEqual(result.code, cli.EXIT_WORKER_FAILED, result.stderr)
+        [record] = result.records
+        # The checkpoint is committed, so the predicate would pass.
+        self.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["checkpoints"]["CP1"]["status"],
+                         "COMPLETE")
+        diagnosis = self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_irregular")
+        real = diagnosis["command_lifecycles"][1]
+        self.assertEqual(diagnosis["command_lifecycle_anomalies"],
+                         [{"kind": "unmatched_bracket", "command_uuid": real["command_uuid"],
+                           "offset": real["completed_offset"]}])
+        self._assert_owned_until_the_real_fire(lc, record, writes)
+        # The concurrent step during the settle window was refused.
+        child = concurrent["child"]
+        self.assertTrue(process_fixtures.wait_until(lambda: "exited_at" in concurrent, timeout=30))
+        self.assertEqual(child.returncode, cli.EXIT_WORKER_ACTIVE, child.stderr.read())
+        ending_at = next(t for t, w in writes if (w.get("worker_state") or {}).get("state") == ENDING)
+        self.assertLess(concurrent["exited_at"], ending_at)
+        self.assertEqual(self.processes(lc), 1)
+
+    def test_a_wrong_match_fails_the_self_reviewing_job_closed(self) -> None:
+        lc = self.at_self_reviewing("r14b-self")
+        result, writes = self._run(lc, MILESTONE_IMPLEMENT, self._turns(
+            [{"step": "actions", "actions": lc.generate()}], [{"step": "text", "text": "task done"}]))
+        self.assertEqual(result.code, cli.EXIT_WORKER_FAILED, result.stderr)
+        [record] = result.records
+        self.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["phase"], AWAITING_LOCAL)
+        diagnosis = self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_irregular")
+        self.assertEqual([a["kind"] for a in diagnosis["command_lifecycle_anomalies"]], ["unmatched_bracket"])
+        self._assert_owned_until_the_real_fire(lc, record, writes)
+
+    def test_a_stop_inside_the_spurious_bracket_fails_on_the_count(self) -> None:
+        lc = self.seed("r14b-stop", IMPLEMENTING)
+        result, _writes = self._run(lc, MILESTONE_IMPLEMENT, self._turns(
+            [{"step": "actions", "actions": lc.implement("CP1")}], [{"step": "wakeup_stop"}]))
+        self.assertEqual(result.code, cli.EXIT_WORKER_FAILED, result.stderr)
+        [record] = result.records
+        diagnosis = self.assert_worker_outcome_failure(record, "AMBIGUOUS", "command_lifecycle_irregular")
+        self.assertIn("wakeup_count_mismatch", [a["kind"] for a in diagnosis["command_lifecycle_anomalies"]])
+        [stop] = diagnosis["wakeup_stops"]
+        self.assertEqual((stop["cancelled_wakeups"], stop["expected_count"]), (1, 0))
+
+
+_CHILD_WAITING_STEP = _CHILD_STEP
+
+
+class LifecycleLockLifetimeTest(_WaitingWorkerCase):
+    """The lifecycle lock is held for the whole owned lifetime: while the
+    job is ``WAITING``, and after its Controller is ``SIGKILL``ed mid-wait,
+    when the recorded anchor is what holds it."""
+
+    def test_the_lock_is_held_while_waiting_and_by_the_anchor_after_the_controller_dies(self) -> None:
+        lc = self.seed("lock-lifetime", IMPLEMENTING)
+        lc.runtime.mkdir(parents=True, exist_ok=True)
+        release = lc.case_dir / "release"
+        turns = [[verification(lc.case_dir / "done", release=release), SAYS_IT_WILL_CONTINUE],
+                 [{"step": "text", "text": "done"}]]
+        child = subprocess.Popen(
+            [sys.executable, "-c", _CHILD_WAITING_STEP, str(fixtures.REPO_ROOT), str(lc.root), str(lc.runtime),
+             str(FAKE_CLAUDE)],
+            env={**os.environ, "FAKE_CLAUDE_TURNS": json.dumps(turns),
+                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file)},
+        )
+        self.addCleanup(release.touch)
+        self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait()))
+
+        def waiting_record() -> dict | None:
+            for path in (lc.runtime / "jobs").glob("*.json"):
+                with contextlib.suppress(OSError, ValueError):
+                    record = json.loads(path.read_text())
+                    if (record.get("worker_state") or {}).get("state") == WAITING:
+                        return record
+            return None
+
+        self.assertTrue(process_fixtures.wait_until(lambda: waiting_record() is not None, timeout=30),
+                        "the job never reached WAITING")
+        record = waiting_record()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertEqual(lock.probe_lifecycle_lock(lc.root), lock.HELD)
+
+        child.send_signal(signal.SIGKILL)
+        child.wait(timeout=10)
+        self.assertEqual(lock.probe_lifecycle_lock(lc.root), lock.HELD)
+        # fuser-style evidence: the recorded anchor holds the git directory open.
+        anchor_pid = record["worker_anchor"]["pid"]
+        git_dir = str(lock.resolve_git_dir(lc.root))
+        targets = set()
+        for name in os.listdir(f"/proc/{anchor_pid}/fd"):
+            with contextlib.suppress(OSError):
+                targets.add(os.readlink(f"/proc/{anchor_pid}/fd/{name}"))
+        self.assertIn(git_dir, targets)
+        with self.assertRaises(LifecycleWorkerActiveError):
+            lock.acquire_lifecycle_lock(lc.root)
 
 
 if __name__ == "__main__":

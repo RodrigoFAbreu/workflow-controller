@@ -178,7 +178,7 @@ Requirements:
 
 ## 1.4 Follow-up patches to fold in where appropriate
 
-**Status:** Not started -- the next milestone to plan
+**Status:** Not started -- the next milestone to plan (1.6 waits for the Workflow 2.6.x release)
 
 - correct misordered `--work-item` resume hints;
 - improve manual-external gate behavior when local review ledger/content is incoherent;
@@ -191,7 +191,7 @@ Requirements:
 
 **Priority:** Immediate / High
 
-**Status:** Current active Controller milestone (planned under Workflow 2.5.1).
+**Status:** Complete (`workflow-controller-trunk-branch-pr-release-orchestration`, accepted 2026-09-25 under Workflow 2.5.1). The narrative is archived at `docs/milestones/completed/workflow-controller-trunk-branch-pr-release-orchestration.md`. The first automatic release (1.2.0, README "Runbook: the first automatic release") is the supervised rollout still to run.
 
 Milestone:
 
@@ -884,7 +884,7 @@ Ongoing work:
    |
 1. Release/runtime isolation + live observability            COMPLETE (1.1-1.3)
    |
-1.5 Trunk/branch/PR/release orchestration                    CURRENT
+1.5 Trunk/branch/PR/release orchestration                    COMPLETE
    |                    \
    |                     \  Workflow Manager 2.6 hardening runs in parallel
    |                      \

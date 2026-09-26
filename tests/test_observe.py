@@ -651,6 +651,16 @@ class JobActivityTest(_ActivityCase):
         expected = time.strftime("%H:%M:%S", time.localtime(int(due)))
         self.assertIn(f"and 1 wakeup (due {expected})", self.activity()["text"])
 
+    def test_two_owned_processes_are_processes_waiting_and_draining(self) -> None:
+        """Functional review F2: ``owns 2 processs`` / ``2 owned processs``."""
+        self.attach()
+        first, second = process_fixtures.spawn_sleeper(self), process_fixtures.spawn_sleeper(self)
+        pids = f"{first.pid}, {second.pid}"
+        self.tracked_job(state=worker.WAITING, owned=(first, second))
+        self.assertTrue(self.activity()["text"].endswith(f"; owns 2 processes ({pids})"), self.activity()["text"])
+        self.tracked_job(state=worker.DRAINING, worker_process=self.dead_process(), owned=(first, second))
+        self.assertEqual(self.activity()["text"], f"worker ended; 2 owned processes still running (pids {pids})")
+
     def test_an_unreadable_wakeup_due_time_is_named_never_replaced_by_now(self) -> None:
         self.attach()
         self.tracked_job(state=worker.WAITING, waiting_on={
@@ -763,6 +773,18 @@ class ParseAtTest(unittest.TestCase):
                      "2026-09-26T01:40:10.Z", "2026-09-26 01:40:10Z", "2026-09-26T01:40:10.1234567Z"):
             with self.subTest(text=text):
                 self.assertIsNone(observe._parse_at(text))
+
+
+class PluralTest(unittest.TestCase):
+    """Functional review F2: ``owns 2 processs``."""
+
+    def test_nouns_ending_in_s_take_es(self) -> None:
+        self.assertEqual(observe._plural(1, "process"), "1 process")
+        self.assertEqual(observe._plural(2, "process"), "2 processes")
+        self.assertEqual(observe._plural(0, "owned process"), "0 owned processes")
+        self.assertEqual(observe._plural(1, "background task"), "1 background task")
+        self.assertEqual(observe._plural(2, "wakeup"), "2 wakeups")
+        self.assertEqual(observe._plural(3, "harness command"), "3 harness commands")
 
 
 class TrackedFollowTest(_ActivityCase):

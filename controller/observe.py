@@ -954,7 +954,10 @@ LIVE_ACTIVITIES = frozenset({ACTIVITY_ACTIVE, ACTIVITY_WAITING, ACTIVITY_DRAININ
 
 
 def _plural(count: int, noun: str) -> str:
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+    """``count`` and ``noun``, pluralised: ``1 process``, ``2 processes``."""
+    if count == 1:
+        return f"{count} {noun}"
+    return f"{count} {noun}es" if noun.endswith("s") else f"{count} {noun}s"
 
 
 def _uuid8(value: Any) -> str:

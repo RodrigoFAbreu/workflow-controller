@@ -465,6 +465,18 @@ class BuildingBlocksTest(unittest.TestCase):
         self.assertIn("is not the expected", mismatch.stderr)
         self.assertFalse((self.results / "shard-0.json").exists())
 
+    def test_a_failing_shard_says_why_in_its_own_output(self) -> None:
+        plan_path = self.results / "plan.json"
+        planned = self.repo.run("plan", "tests.test_fail", "--profile", "ci", "--shards", "1",
+                                "--output", str(plan_path))
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        completed = self.exec_shard("--plan", str(plan_path))
+        self.assertEqual(completed.returncode, 1, completed.stderr)
+        self.assertIn(f"shard 0: FAIL (exit 1); log: {self.results / 'shard-0.log'}",
+                      completed.stderr)
+        self.assertIn("- fail: tests.test_fail.FailTest.test_fails", completed.stderr)
+        self.assertIn("one is not two", completed.stderr)
+
     def test_the_planning_inputs_form_runs_and_aggregates(self) -> None:
         summary = self.plan()
         for index in summary["shards"]:

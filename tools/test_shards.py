@@ -1685,6 +1685,23 @@ def _reproduce(name: str, index: int, results_dir: Path) -> list[str]:
             f"{Path(results_dir) / 'plan.json'} --shard {index}`"]
 
 
+def shard_verdict(record: Mapping, status: int, results_dir: Path) -> str:
+    """The executor's own short verdict for a shard that did not pass: its
+    failing ids and fixture errors with their traceback tails, and its log,
+    so a failed CI shard job says why in its own step log."""
+    index = record["shard"]
+    label = "REFUSED" if status == EXIT_REFUSED else "FAIL"
+    lines = [f"shard {index}: {label} (exit {status}); log: {log_path(results_dir, index)}"]
+    for entry in record["tests"]:
+        if entry["outcome"] in FAILING_OUTCOMES:
+            lines += [f"- {entry['outcome']}: {entry['id']}", _tail(entry.get("detail", ""))]
+    for entry in record["fixture_errors"]:
+        lines += [f"- fixture error: {entry['description']}", _tail(entry["traceback"])]
+    if status == EXIT_REFUSED:
+        lines.append("- the executor refused the shard; the log's REFUSED lines say why")
+    return "\n".join(line for line in lines if line) + "\n"
+
+
 def exclusive_registry_line(plan: Mapping) -> str:
     """The registry's audit line: its size, and how many atoms of ``plan``
     run on the exclusive shard."""

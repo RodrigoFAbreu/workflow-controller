@@ -1190,7 +1190,9 @@ each on `ubuntu-latest` with Python 3.12 and read-only permissions:
 - `tests`: one matrix job per planned shard (`fail-fast: false`). Each
   recomputes the plan from the checked-out commit, refuses to run unless
   its digest equals `plan`'s, runs its shard and uploads its result
-  record;
+  record and log as the `results-<i>` artifact. A shard that does not
+  pass prints its failing tests with their traceback tails in its own
+  step log;
 - `tests-result`: runs even when a shard failed or never started, and
   aggregates every shard's result. It passes only if every planned test
   ran exactly once and passed; a missing plan or a missing shard result

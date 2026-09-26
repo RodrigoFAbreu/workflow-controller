@@ -20,7 +20,8 @@ Local runs:
 Building blocks (used by the local runner and by CI):
 
 - ``exec-shard``: run one shard, given either a recorded ``--plan`` or the
-  planning inputs with ``--expect-digest``;
+  planning inputs with ``--expect-digest``; a shard that does not pass
+  prints its failing ids with traceback tails, and its log, to stderr;
 - ``plan``: compute and write a plan (``--github-output`` also hands its
   shard indexes, count and digest to a GitHub Actions job's outputs);
 - ``aggregate``: verdicts, coverage and summary for a results directory;
@@ -189,8 +190,10 @@ def cmd_exec_shard(args) -> int:
     # ts.SHARD_MARKER_ENV): its descendants carry it, its ancestors never do.
     inherited = os.environ.get(ts.SHARD_MARKER_ENV) or f"{plan['plan_digest'][:16]}/{args.shard}"
     os.environ[ts.SHARD_MARKER_ENV] = f"{inherited}/{os.getpid()}"
-    _, status = ts.execute_shard(plan, args.shard, args.results_dir, repo_root,
-                                 argv=[sys.executable, *sys.argv])
+    record, status = ts.execute_shard(plan, args.shard, args.results_dir, repo_root,
+                                      argv=[sys.executable, *sys.argv])
+    if status != ts.EXIT_PASS:
+        sys.stderr.write(ts.shard_verdict(record, status, args.results_dir))
     return status
 
 

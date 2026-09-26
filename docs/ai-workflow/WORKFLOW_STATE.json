@@ -2263,12 +2263,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 16,
-      "implementation_revision": 3,
+      "implementation_revision": 4,
       "functional_review_round": null,
       "base_commit": "4280bb6081530c1e437273348035d28c92d69c5c",
-      "reviewed_implementation_head": "c352b5dc71b34fdf67c5872e337e6e283403548e",
+      "reviewed_implementation_head": "95e169d8c0e5b4d5234ffff6d7dbc0cb4bf9a581",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP8",
       "checkpoints": {
@@ -2836,8 +2836,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 84,
-      "last_transition": "2026-09-26T11:57:33Z",
+      "state_revision": 85,
+      "last_transition": "2026-09-26T12:12:35Z",
       "amendment_history": [
         {
           "amendment_id": "0",

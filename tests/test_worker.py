@@ -1790,6 +1790,9 @@ class AnchorTest(_SupervisedCase):
         ready, _, _ = select.select([read_end], [], [], 10)
         self.assertEqual(ready, [read_end])
         self.assertEqual(os.read(read_end, 1), b"")
+        # A repeated request (a re-attached supervisor's) is a no-op: it
+        # never closes whatever descriptor now has the old number.
+        proc.send_signal(signal.SIGUSR1)
 
         time.sleep(2.0)
         self.assertIsNone(proc.poll(), "the anchor ended while a supervisor was attached")

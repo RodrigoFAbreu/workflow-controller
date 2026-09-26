@@ -163,7 +163,16 @@ def main(argv: list[str]) -> int:
     tag, supervisor_lock = argv[3], argv[4]
     poll, orphan_seconds = float(argv[5]), float(argv[6])
 
+    released = False
+
     def release_stdin(_signum, _frame) -> None:
+        # Idempotent: a re-attached supervisor repeats the request, and by
+        # then the descriptor number may belong to one of the orphan
+        # check's own transient descriptors.
+        nonlocal released
+        if released:
+            return
+        released = True
         try:
             os.close(stdin_fd)
         except OSError:

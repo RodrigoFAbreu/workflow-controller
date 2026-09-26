@@ -410,8 +410,33 @@ terminal turn, and reconciles only after the worker has ended and its owned work
     only `ResourceWarning`s for unclosed reader pipes inside `capture.py`'s threads (test
     harness, not product code).
 
+## Self-review (SELF_REVIEWING_IMPLEMENTATION, 2026-09-26)
+
+Full milestone diff (`4280bb6..HEAD`) reviewed. No Blocking findings; one Important finding
+fixed, none left open.
+
+- **I1 (Important): the anchor's stdin release was not idempotent.** `controller/anchor.py`'s
+  `SIGUSR1` handler closed the stdin descriptor number on every signal. A re-attached supervisor
+  (`worker.reattach` with `ending_offset` recorded) repeats the request after the lost
+  Controller's first one already closed it, and by then the number can belong to one of the
+  orphan check's own transient descriptors (`supervisor_attached`'s `os.open`). Closing it there
+  makes that function's own `os.close` raise `EBADF`, which ends the anchor early and releases
+  the lifecycle lock while tagged work may still drain. The handler now closes the descriptor
+  once and ignores later requests; `AnchorTest`'s orphan-lifetime test sends the request twice
+  and asserts the anchor still holds on.
+- **Verification** (2026-09-26):
+  - `python3 -m unittest discover -s tests -t .`: 1878 tests, `OK (skipped=8)`, 472 s. (A first
+    run launched as a shell background job failed the two Ctrl-C tests,
+    `test_cli.RunRecordCtrlCTest` and `test_resume.InterruptWhileWaitingTest`: a
+    non-interactive shell's `&` sets `SIGINT` to `SIG_IGN`, the child Controllers inherit that,
+    and the tests' `SIGINT` is ignored. That is an artifact of how the suite was started. Re-run
+    with `SIGINT` at its default, everything passed.)
+  - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime`:
+    9 tests OK;
+  - `python3 tools/ci_workflows.py --check`: exit 0;
+  - `python3 -m unittest tests.test_plan_document_consistency`: 40 tests OK.
+
 ## Next action
 
-Every checkpoint is complete. The next `/milestone-implement
-workflow-controller-worker-lifecycle-ownership` invocation performs the final full-diff
-self-review and generates the implementation review bundle.
+Self-review is done, and the implementation review bundle (revision 1) is generated for the
+`LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage (`/review-implementation`).

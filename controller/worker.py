@@ -1352,6 +1352,11 @@ class _Supervision:
 
     def _drain(self) -> WorkerResult | DrainDetached:
         worker_process = self.worker_process
+        # The group-emptiness test applies no RECOGNISED_DAEMONS exclusion:
+        # it assumes (H9, P2) that a recognised daemon never stays in the
+        # worker's group -- the harness kills attached, non-``setsid``
+        # descendants at exit, and the named daemons ``setsid`` themselves.
+        # A group-resident one would hold DRAINING until the detach bound.
         empty, members = _group_members(worker_process)
         if not empty and self.on_group_drain is not None:
             try:

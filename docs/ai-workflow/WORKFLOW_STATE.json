@@ -2263,7 +2263,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 16,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -2338,10 +2338,10 @@
         "recorded_at": "2026-09-25T18:55:03Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "00c32e01083f9e04c4d77218bfcc32d4a4c1b2df4451effd09b0a6d6c7b58a2e",
-        "approved_review_content_id": "338f0c07a7872b06f1f7c8af942b2ded0a24f39c6080f7658db4a70d50730134",
+        "reviewed_bundle_id": "1e1e0f017a753bb5cf05be1680f28c32aa01d992a0ba198aa166454f4e13bf2f",
+        "approved_review_content_id": "eede1ea971a9337b89b81d90ec8c6f8e0870bdba07c6558162fbcd706bdcd21d",
         "review_content_manifest": [
           {
             "path": ".github/workflows/validate.yml",
@@ -2395,7 +2395,7 @@
             "path": "controller/observe.py",
             "exists": true,
             "mode": "100644",
-            "blob": "80bd48485dde7d8e3540c50118a8e59968a54e5a"
+            "blob": "5a7d1010cb2df10857eea45b6dec34858f15ad71"
           },
           {
             "path": "controller/routing.py",
@@ -2773,7 +2773,7 @@
             "path": "tests/test_observe.py",
             "exists": true,
             "mode": "100644",
-            "blob": "25d9fec6e4706a21bd552339f45e98e489c4e124"
+            "blob": "548983a8a742e1f125f0a1e805be8be0c85ee626"
           },
           {
             "path": "tests/test_package_structure.py",
@@ -2812,11 +2812,11 @@
             "blob": "90e0d5e22142544c5555e1543812b34999855b04"
           }
         ],
-        "reviewed_content_commit": "f0a86d2bb89086c51a5138c865259b11aaca1490",
+        "reviewed_content_commit": "c352b5dc71b34fdf67c5872e337e6e283403548e",
         "legacy_evidence": null,
-        "user_confirmation": "I approve implementation for workflow-controller-worker-lifecycle-ownership",
+        "user_confirmation": "/approve-review implementation workflow-controller-worker-lifecycle-ownership",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-26T01:32:58Z"
+        "recorded_at": "2026-09-26T11:28:05Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -2836,8 +2836,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 80,
-      "last_transition": "2026-09-26T02:22:05Z",
+      "state_revision": 83,
+      "last_transition": "2026-09-26T11:28:05Z",
       "amendment_history": [
         {
           "amendment_id": "0",
@@ -2893,18 +2893,18 @@
       ],
       "amendment_base_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d",
       "implementation_review_stages": {
-        "review_content_id": "338f0c07a7872b06f1f7c8af942b2ded0a24f39c6080f7658db4a70d50730134",
+        "review_content_id": "eede1ea971a9337b89b81d90ec8c6f8e0870bdba07c6558162fbcd706bdcd21d",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "00c32e01083f9e04c4d77218bfcc32d4a4c1b2df4451effd09b0a6d6c7b58a2e",
+          "bundle_id": "1e1e0f017a753bb5cf05be1680f28c32aa01d992a0ba198aa166454f4e13bf2f",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-09-26T00:51:00Z"
+          "round": 3,
+          "completed_at": "2026-09-26T08:26:29Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "00c32e01083f9e04c4d77218bfcc32d4a4c1b2df4451effd09b0a6d6c7b58a2e",
+          "bundle_id": "1e1e0f017a753bb5cf05be1680f28c32aa01d992a0ba198aa166454f4e13bf2f",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-09-26T01:19:21Z"
+          "round": 2,
+          "completed_at": "2026-09-26T11:25:24Z"
         }
       }
     }

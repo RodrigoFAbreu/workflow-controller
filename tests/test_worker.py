@@ -2360,8 +2360,12 @@ class OwnershipTest(_SupervisedCase):
         self.assertEqual(result.outcome, worker.SUCCESS)
         self.assertLess(self.returned - self.started, 15)
         [excluded] = self.details(worker.ENDED)[0]["excluded_processes"]
-        self.assertEqual(excluded["pattern"], "gpg-agent")
         self.extra_pids.append(excluded["pid"])
+        self.assertEqual(excluded["pattern"], "gpg-agent")
+        # Functional review F3: the entry carries its command line, in the
+        # one shape the presenter and its fixtures use.
+        self.assertEqual(tuple(excluded), worker.DAEMON_ENTRY_FIELDS)
+        self.assertEqual(excluded["cmdline"], "gpg-agent 3600")
         self.assertTrue(_running(excluded["pid"]), "the recognised daemon was ended")
 
     def test_an_unrecognised_daemon_detaches_after_the_drain_bound_and_ends_nothing(self) -> None:

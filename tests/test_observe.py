@@ -578,7 +578,7 @@ class _ActivityCase(_FollowCase):
         worker_state = {"state": state, "since": "2026-01-01T00:00:00Z", "turns": 3,
                         "waiting_on": waiting_on or {"tasks": [], "wakeups": [], "command_lifecycles": []},
                         "owned_processes": [self.entry(proc) for proc in owned],
-                        "excluded_processes": [self.entry(proc) for proc in excluded], "scan": "verified"}
+                        "excluded_processes": [self.daemon_entry(proc) for proc in excluded], "scan": "verified"}
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         return self.write_job(job_id, worker_process=worker_process or self.live_worker(),
                               worker_state=worker_state, updated_at=now, **fields)
@@ -590,6 +590,18 @@ class _ActivityCase(_FollowCase):
     def entry(proc) -> dict:
         return {"pid": proc.pid, "start_ticks": process_fixtures.read_stat(proc.pid)[2], "source": "tag",
                 "cmdline": "python3 -c import time; time.sleep(3600)"}
+
+    @staticmethod
+    def daemon_entry(proc) -> dict:
+        """A recognised daemon's entry in exactly the shape the ownership
+        scan writes (``worker.DAEMON_ENTRY_FIELDS``), its ``cmdline`` read
+        from ``/proc`` as the scan reads it (functional review F3)."""
+        with open(f"/proc/{proc.pid}/cmdline", "rb") as handle:
+            cmdline = " ".join(part.decode() for part in handle.read().split(b"\0") if part)
+        entry = {"pid": proc.pid, "start_ticks": process_fixtures.read_stat(proc.pid)[2], "pattern": "gpg-agent",
+                 "cmdline": cmdline[:200]}
+        assert set(entry) == set(worker.DAEMON_ENTRY_FIELDS), entry
+        return entry
 
     def attach(self, job_id: str = "j1") -> None:
         """Hold the job's supervisor lock, as an attached Controller does."""
@@ -727,7 +739,7 @@ class JobActivityTest(_ActivityCase):
         self.assertEqual(activity["text"],
                          f"worker ended; 1 owned process still running (pids {owned.pid}); detached after 10:00 "
                          f"-- end them, then workflow-controller resume /repo; not owned: pid {daemon.pid} "
-                         f"(python3 -c import time; time.sleep(3600))")
+                         f"({self.daemon_entry(daemon)['cmdline']})")
         self.assertEqual([entry["pid"] for entry in activity["not_owned"]], [daemon.pid])
 
     def test_pending_reconciliation(self) -> None:

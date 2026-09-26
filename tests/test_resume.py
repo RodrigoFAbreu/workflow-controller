@@ -2856,6 +2856,52 @@ class ReattachAfterControllerLossTest(_LostControllerCase):
         self.assert_finished(self.job_record(lc, record["job_id"]), IMPLEMENTING)
 
 
+class RecognisedDaemonPresentationTest(_LostControllerCase):
+    """Functional review F3: the daemon entry a real Controller writes
+    carries the command line the presenter shows, never
+    ``(command line unreadable)``."""
+
+    def test_a_live_daemon_is_named_by_its_command_line_from_the_real_record(self) -> None:
+        lc = self.seed("f3-daemon", IMPLEMENTING)
+        release = lc.case_dir / "release"
+        self.addCleanup(release.touch)
+        lc.add(MILESTONE_IMPLEMENT, {"turns": [
+            [_verification(release),
+             {"step": "bash_bg", "id": "sign", "seconds": 0.3, "orphan": "daemon", "argv0": "gpg-agent",
+              "orphan_seconds": 120, "description": "signed build"},
+             lifecycle.SAYS_IT_WILL_CONTINUE],
+            [{"step": "text", "text": "The signed build finished."}],
+            [{"step": "actions", "actions": lc.implement("CP1")}]]})
+        child = self.child(lc, "step")
+
+        def waiting_with_daemon() -> bool:
+            record = self.job_record(lc) or {}
+            state = record.get("worker_state") or {}
+            return state.get("state") == WAITING and bool(state.get("excluded_processes"))
+
+        self.assertTrue(process_fixtures.wait_until(waiting_with_daemon, timeout=30), self.child_stderr(child))
+        record = self.job_record(lc)
+        [entry] = record["worker_state"]["excluded_processes"]
+        self.addCleanup(lambda: _kill_quietly(entry["pid"]))
+        self.assertEqual(set(entry), {"pid", "start_ticks", "pattern", "cmdline"})
+        self.assertEqual(entry["pattern"], "gpg-agent")
+        with open(f"/proc/{entry['pid']}/cmdline", "rb") as handle:
+            live = " ".join(part.decode() for part in handle.read().split(b"\0") if part)
+        self.assertEqual(entry["cmdline"], live)
+        self.assertEqual(entry["cmdline"], "gpg-agent 120")
+        text = observe.job_activity(record, lc.runtime)["text"]
+        self.assertIn(f"; not owned: pid {entry['pid']} (gpg-agent 120)", text)
+        self.assertNotIn("command line unreadable", text)
+
+        release.touch()
+        self.assertEqual(child.wait(timeout=60), cli.EXIT_OK, self.child_stderr(child))
+
+
+def _kill_quietly(pid: int) -> None:
+    with contextlib.suppress(ProcessLookupError):
+        os.kill(pid, signal.SIGKILL)
+
+
 class AbandonWithAnOrphanedAnchorTest(_LostControllerCase):
     def test_abandon_ends_a_leftover_anchor_and_refuses_while_owned_work_lives(self) -> None:
         lc = self.seed("abandon-anchor", IMPLEMENTING)

@@ -634,6 +634,14 @@ def _read_environ(root: Path, pid: int) -> bytes:
         return fh.read()
 
 
+#: The fields of a recognised daemon's entry in
+#: ``worker_state.excluded_processes``: presentation data only (never owned,
+#: never ended, never replayed). ``cmdline`` is the same space-joined,
+#: 200-character field an owned entry carries, which
+#: ``observe.job_activity``'s "not owned" names.
+DAEMON_ENTRY_FIELDS = ("pid", "start_ticks", "pattern", "cmdline")
+
+
 def _read_cmdline(root: Path, pid: int) -> list[str]:
     try:
         with open(f"{root}/{pid}/cmdline", "rb") as fh:
@@ -745,7 +753,8 @@ class _Ownership:
             cmdline = _read_cmdline(root, pid)
             pattern = daemon_pattern(cmdline)
             if pattern is not None:
-                self.excluded.setdefault(pid, {"pid": pid, "start_ticks": stat.start_ticks, "pattern": pattern})
+                self.excluded.setdefault(pid, {"pid": pid, "start_ticks": stat.start_ticks, "pattern": pattern,
+                                               "cmdline": " ".join(cmdline)[:200]})
                 continue
             entry = recorded or {"pid": pid, "start_ticks": stat.start_ticks, "source": source,
                                  "cmdline": " ".join(cmdline)[:200]}

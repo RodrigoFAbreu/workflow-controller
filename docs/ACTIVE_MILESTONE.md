@@ -489,6 +489,33 @@ edit.
   recognised-daemon orphan rule). The next functional checklist must cover the first four
   explicitly.
 
+## Functional review round 2 (revision 3, bounded fix)
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's finding from the revision-3 checklist below,
+evidence commit `e5810f0`). Only flow F11 was run, from a fresh install, to confirm the finding the
+checklist's dry-run notes predicted. `technical_approval` was marked `STALE` before the first
+edit.
+
+- **F3 (usability issue caused by a writer/presenter mismatch), fixed (`44777ec`):** the ownership
+  scan recorded a recognised daemon as `{pid, start_ticks, pattern}`, while
+  `observe.job_activity` names a live daemon by its entry's `cmdline`, so every real daemon read
+  `not owned: pid <d> (command line unreadable)` in `status`, `inspect`, `explain` and the
+  `follow` heartbeat. The entry now also carries `cmdline`, which the scan already reads to match
+  the daemon, in the same space-joined, 200-character form an owned entry carries.
+  `worker.DAEMON_ENTRY_FIELDS` names the shape. Lifecycle and ownership decisions are unchanged:
+  the entry is presentation data, and the flush signature and replay read only its pid.
+- **Tests:**
+  - `OwnershipTest.test_a_recognised_daemon_is_excluded_and_left_running` now pins a real
+    launch's entry to `DAEMON_ENTRY_FIELDS` and `cmdline == "gpg-agent 3600"`.
+  - The new `RecognisedDaemonPresentationTest` (`tests/test_resume.py`) runs a real child
+    Controller to `WAITING` with a live daemon. It checks that the on-disk entry's `cmdline`
+    equals `/proc/<pid>/cmdline` and that `job_activity` shows `(gpg-agent 120)`.
+  - Both fail before the fix.
+  - `tests/test_observe.py`'s hand-written daemon entries now use the production shape, read
+    `/proc` as the scan does, and assert the field set against `DAEMON_ENTRY_FIELDS`.
+- **Unchanged:** round 1's optional O1 and the implementation reviews' optional `_clock` note.
+  The scenarios the checklist leaves uncovered are coverage items, not findings.
+
 ## Functional review checklist
 
 This checklist covers implementation revision 3, reviewed at `c352b5d`, with technical approval
@@ -903,6 +930,8 @@ Two more points came up while building the new scenarios. Neither is a finding.
 
 ## Next action
 
-At the `AWAITING_FUNCTIONAL_REVIEW` hard gate for revision 3. The user runs the checklist above and
-records findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md` (fresh content: round 1's file is
-marked consumed). With no findings, `/accept-milestone`. With findings, `/apply-functional-review`.
+Functional round 2's bounded fix is committed, and the post-fix bundle (revision 4) is generated
+for a fresh `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`, in a fresh session).
+The manual external stage and `/approve-review implementation` follow. Only after that comes
+`/prepare-functional-review`, which regenerates the checklist; F11's expected
+`(gpg-agent 600)` then applies as written.

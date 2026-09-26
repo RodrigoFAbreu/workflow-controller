@@ -35,12 +35,21 @@ with one warning, on any missing, unreadable or invalid file; and
 ``estimate_atoms`` gives every selected atom an estimate, from history or
 from a per-test mean.
 
+*Planning* (``build_plan``) turns a selection and its estimates into
+``clamp(ceil(total / max(target, largest atom)), min, max)`` shards, never
+more than there are atoms, and places whole atoms on them by deterministic
+longest-processing-time-first assignment, each shard in canonical order. The
+plan carries a ``plan_digest`` over its canonical JSON, so every process
+given the same inputs computes a byte-identical plan, and the planner checks
+that the plan partitions the selection exactly before it returns it.
+
 Nothing in ``controller/`` imports this file.
 """
 
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 import math
 import os
@@ -118,6 +127,24 @@ EWMA_WEIGHT = 0.5
 #: How many contributing plan digests a profile remembers, newest last, so
 #: the local profile, updated after every run, does not grow without bound.
 MAX_UPDATED_FROM = 20
+
+#: Plans. The parameters per profile are justified in the plan's
+#: "Adaptive shard planning" section: the local target keeps the measured
+#: 8-shard win, the local maximum is one shard per CPU, and the CI target is
+#: about the unavoidable conformance floor.
+PLAN_SCHEMA_VERSION = 1
+LOCAL = "local"
+CI = "ci"
+LOCAL_TARGET_SHARD_SECONDS = 60
+LOCAL_MAX_SHARDS = 8
+CI_TARGET_SHARD_SECONDS = 180
+CI_MAX_SHARDS = 16
+DEFAULT_MIN_SHARDS = 2
+DEFAULTS_SOURCE = "defaults"
+LOCAL_PROFILE_SOURCE = "local-profile"
+_PLAN_KEYS = frozenset({"schema_version", "profile", "selection_names", "selected_ids",
+                        "parameters", "shard_count", "shards", "timing_source", "plan_digest"})
+_SHARD_KEYS = frozenset({"index", "atoms", "test_ids", "estimate_seconds"})
 
 _HOLDER_RE = re.compile(r"^(\w+) \(([\w.]+)\)$")
 
@@ -669,6 +696,13 @@ def estimate_atoms(atoms: Iterable[Atom], profiles: Iterable[TimingProfile]) -> 
       the first non-empty profile, else ``DEFAULT_SECONDS_PER_TEST``.
     """
     profiles = tuple(profiles)
+    means: dict[tuple[int, str | None], float | None] = {}
+
+    def mean(index: int, module: str | None) -> float | None:
+        if (index, module) not in means:
+            means[index, module] = _mean_per_test(profiles[index], module)
+        return means[index, module]
+
     estimates = {}
     for atom in atoms:
         tests = len(atom.test_ids)
@@ -681,10 +715,260 @@ def estimate_atoms(atoms: Iterable[Atom], profiles: Iterable[TimingProfile]) -> 
         elif atom.family == CONFORMANCE:
             estimates[atom.key] = DEFAULT_CONFORMANCE_SECONDS
         else:
-            mean = next((m for m in (_mean_per_test(p, atom.module) for p in profiles)
-                         if m is not None), None)
-            if mean is None:
-                mean = next((m for m in (_mean_per_test(p, None) for p in profiles)
-                             if m is not None), DEFAULT_SECONDS_PER_TEST)
-            estimates[atom.key] = tests * mean
+            per_test = next((m for m in (mean(i, atom.module) for i in range(len(profiles)))
+                             if m is not None), None)
+            if per_test is None:
+                per_test = next((m for m in (mean(i, None) for i in range(len(profiles)))
+                                 if m is not None), DEFAULT_SECONDS_PER_TEST)
+            estimates[atom.key] = tests * per_test
     return estimates
+
+
+# -- planning -------------------------------------------------------------------------------
+
+
+class PlanError(Exception):
+    """A plan cannot be built, or a plan is not a valid partition of its
+    selection; the message names every problem."""
+
+
+@dataclass(frozen=True)
+class PlanParameters:
+    """The planning inputs besides the selection and the timings. ``shards``
+    pins the count; ``None`` lets the formula choose it."""
+
+    profile: str
+    target_shard_seconds: float
+    min_shards: int
+    max_shards: int
+    shards: int | None = None
+
+    def document(self) -> dict:
+        doc = {"target_shard_seconds": self.target_shard_seconds,
+               "min_shards": self.min_shards, "max_shards": self.max_shards}
+        if self.shards is not None:
+            doc["shards"] = self.shards
+        return doc
+
+
+def profile_parameters(profile: str, *, cpu_count: int | None = None,
+                       target_shard_seconds: float | None = None,
+                       min_shards: int | None = None, max_shards: int | None = None,
+                       shards: int | None = None) -> PlanParameters:
+    """``profile``'s parameters, each overridable. The local maximum is
+    ``min(LOCAL_MAX_SHARDS, cpu_count)``: one shard per CPU is the measured
+    safe default (``cpu_count`` defaults to ``os.cpu_count()``)."""
+    if profile == LOCAL:
+        cpus = cpu_count if cpu_count is not None else (os.cpu_count() or 1)
+        defaults = (LOCAL_TARGET_SHARD_SECONDS, DEFAULT_MIN_SHARDS,
+                    max(1, min(LOCAL_MAX_SHARDS, cpus)))
+    elif profile == CI:
+        defaults = (CI_TARGET_SHARD_SECONDS, DEFAULT_MIN_SHARDS, CI_MAX_SHARDS)
+    else:
+        raise PlanError(f"unknown profile {profile!r}; expected {LOCAL!r} or {CI!r}")
+    parameters = PlanParameters(
+        profile=profile,
+        target_shard_seconds=defaults[0] if target_shard_seconds is None
+        else target_shard_seconds,
+        min_shards=defaults[1] if min_shards is None else min_shards,
+        max_shards=defaults[2] if max_shards is None else max_shards,
+        shards=shards)
+    problems = []
+    if not (_is_seconds(parameters.target_shard_seconds)
+            and parameters.target_shard_seconds > 0):
+        problems.append(f"target_shard_seconds must be positive and finite, "
+                        f"not {parameters.target_shard_seconds!r}")
+    for name in ("min_shards", "max_shards", "shards"):
+        value = getattr(parameters, name)
+        if not (value is None and name == "shards") and not (_is_int(value) and value >= 1):
+            problems.append(f"{name} must be an integer >= 1, not {value!r}")
+    if problems:
+        raise PlanError("; ".join(problems))
+    return parameters
+
+
+def timings_for(profile: str, repo_root: Path = REPO_ROOT, *,
+                environ: Mapping[str, str] = os.environ,
+                warn: Callable[[str], None] = _warn) -> tuple[tuple[Path, TimingProfile], ...]:
+    """The timing files ``profile`` plans from, in priority order, each with
+    its loaded profile: CI reads only the committed CI profile; local reads
+    the local profile, then the committed one."""
+    paths = [Path(repo_root) / CI_TIMINGS]
+    if profile == LOCAL:
+        paths.insert(0, local_timings_path(environ))
+    return tuple((path, load_timings(path, warn=warn)) for path in paths)
+
+
+def timing_source(timings: Iterable[tuple[Path, TimingProfile]],
+                  repo_root: Path = REPO_ROOT) -> list[dict] | str:
+    """The plan's ``timing_source``: one ``{path, sha256}`` per timing file
+    actually read, in priority order, or ``"defaults"`` when none was. A file
+    inside the repository is named by its repository-relative POSIX path; any
+    other (the local profile) as ``"local-profile"``, so the digest never
+    depends on where the checkout or the cache lives."""
+    root = Path(repo_root).resolve()
+    sources = []
+    for path, profile in timings:
+        if profile.sha256 is None:
+            continue
+        try:
+            name = Path(path).resolve().relative_to(root).as_posix()
+        except ValueError:
+            name = LOCAL_PROFILE_SOURCE
+        sources.append({"path": name, "sha256": profile.sha256})
+    return sources or DEFAULTS_SOURCE
+
+
+def _milliseconds(seconds: float) -> int:
+    return int(round(seconds * 1000))
+
+
+def shard_count(estimates_ms: Iterable[int], parameters: PlanParameters) -> int:
+    """``clamp(ceil(total / max(target, largest)), min, max)``, capped at the
+    number of atoms so no shard is empty; ``parameters.shards`` pins the count
+    (still capped). Integer milliseconds, so every platform agrees."""
+    estimates_ms = list(estimates_ms)
+    atoms = len(estimates_ms)
+    if parameters.shards is not None:
+        return min(parameters.shards, atoms)
+    total = sum(estimates_ms)
+    effective = max(_milliseconds(parameters.target_shard_seconds), max(estimates_ms, default=0))
+    count = -(-total // effective) if effective else 0
+    count = min(max(count, parameters.min_shards), parameters.max_shards)
+    return min(count, atoms)
+
+
+def assign_atoms(estimates_ms: list[int], count: int) -> list[list[int]]:
+    """Deterministic LPT: atoms (by canonical index) sorted by ``(-estimate,
+    index)``, each onto the shard with the least ``(load, shard index)``;
+    each shard's atoms then back in canonical order."""
+    heap = [(0, index) for index in range(count)]
+    shards: list[list[int]] = [[] for _ in range(count)]
+    for atom in sorted(range(len(estimates_ms)), key=lambda i: (-estimates_ms[i], i)):
+        load, index = heapq.heappop(heap)
+        shards[index].append(atom)
+        heapq.heappush(heap, (load + estimates_ms[atom], index))
+    return [sorted(shard) for shard in shards]
+
+
+def canonical_json(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                      allow_nan=False).encode("utf-8")
+
+
+def plan_digest(plan: Mapping) -> str:
+    """SHA-256 of the canonical JSON of everything in ``plan`` but the digest."""
+    return hashlib.sha256(canonical_json(
+        {key: value for key, value in plan.items() if key != "plan_digest"})).hexdigest()
+
+
+def build_plan(selection: Selection, parameters: PlanParameters,
+               timings: Iterable[tuple[Path, TimingProfile]] = (),
+               repo_root: Path = REPO_ROOT) -> dict:
+    """The plan for ``selection``: its shard count, a deterministic LPT
+    assignment of whole atoms, and the ``plan_digest`` over all of it. Timing
+    data (``timings``, ``(path, profile)`` in priority order) decides only
+    where an atom runs (I3). The plan is validated as a partition of the
+    selection (I1) before it is returned; a failure raises ``PlanError``."""
+    if not selection.atoms:
+        raise PlanError("the selection is empty; there is nothing to plan")
+    timings = tuple(timings)
+    estimates = estimate_atoms(selection.atoms, [profile for _, profile in timings])
+    # At least 1 ms each: with positive loads LPT puts the N longest atoms on
+    # N distinct shards, so no shard is left empty by zero estimates.
+    estimates_ms = [max(1, _milliseconds(estimates[atom.key])) for atom in selection.atoms]
+    count = shard_count(estimates_ms, parameters)
+    shards = []
+    for index, members in enumerate(assign_atoms(estimates_ms, count)):
+        atoms = [selection.atoms[i] for i in members]
+        shards.append({"index": index, "atoms": [atom.key for atom in atoms],
+                       "test_ids": [test_id for atom in atoms for test_id in atom.test_ids],
+                       "estimate_seconds": sum(estimates_ms[i] for i in members) / 1000})
+    plan = {"schema_version": PLAN_SCHEMA_VERSION, "profile": parameters.profile,
+            "selection_names": list(selection.names),
+            "selected_ids": list(selection.test_ids),
+            "parameters": parameters.document(), "shard_count": count, "shards": shards,
+            "timing_source": timing_source(timings, repo_root)}
+    plan["plan_digest"] = plan_digest(plan)
+    validate_plan(plan, selection)
+    return plan
+
+
+def validate_plan(plan, selection: Selection | None = None) -> dict:
+    """Check that ``plan`` is a well-formed partition of its own
+    ``selected_ids`` (I1): its keys and digest, ``shard_count`` shards indexed
+    in order, none empty, pairwise disjoint, their union exactly the
+    selection, each in canonical order. Given the ``selection`` it was
+    planned from, also that the selected ids match and that every shard
+    holds whole atoms. Returns ``plan``, or raises ``PlanError`` naming every
+    problem."""
+    if not isinstance(plan, dict):
+        raise PlanError("the plan is not a JSON object")
+    problems = []
+    if set(plan) != _PLAN_KEYS:
+        problems.append("keys are not exactly " + ", ".join(sorted(_PLAN_KEYS)))
+        raise PlanError("; ".join(problems))
+    if plan["schema_version"] != PLAN_SCHEMA_VERSION:
+        problems.append(f"schema_version is not {PLAN_SCHEMA_VERSION}")
+    try:
+        if plan["plan_digest"] != plan_digest(plan):
+            problems.append("plan_digest does not match the plan's content")
+    except (TypeError, ValueError) as exc:
+        problems.append(f"the plan is not canonical JSON: {exc}")
+    selected = plan["selected_ids"]
+    shards = plan["shards"]
+    if not isinstance(selected, list) or not isinstance(shards, list):
+        problems.append("selected_ids and shards must be lists")
+        raise PlanError("; ".join(problems))
+    if not all(isinstance(test_id, str) for test_id in selected):
+        problems.append("selected_ids must be strings")
+        raise PlanError("; ".join(problems))
+    position = {test_id: i for i, test_id in enumerate(selected)}
+    if len(position) != len(selected):
+        problems.append("selected_ids has duplicates")
+    if plan["shard_count"] != len(shards):
+        problems.append(f"shard_count is {plan['shard_count']!r} but there are "
+                        f"{len(shards)} shards")
+    seen: dict[str, int] = {}
+    for i, shard in enumerate(shards):
+        if not isinstance(shard, dict) or set(shard) != _SHARD_KEYS:
+            problems.append(f"shards[{i}] keys are not exactly " + ", ".join(sorted(_SHARD_KEYS)))
+            continue
+        if shard["index"] != i:
+            problems.append(f"shards[{i}].index is {shard['index']!r}")
+        ids = shard["test_ids"]
+        if not all(isinstance(value, list) and all(isinstance(item, str) for item in value)
+                   for value in (ids, shard["atoms"])):
+            problems.append(f"shards[{i}].atoms and test_ids must be lists of strings")
+            continue
+        if not ids or not shard["atoms"]:
+            problems.append(f"shard {i} is empty")
+        for test_id in ids:
+            if test_id not in position:
+                problems.append(f"shard {i} holds unselected id {test_id!r}")
+            elif test_id in seen:
+                problems.append(f"{test_id!r} is in shards {seen[test_id]} and {i}")
+            else:
+                seen[test_id] = i
+        order = [position[test_id] for test_id in ids if test_id in position]
+        if order != sorted(order):
+            problems.append(f"shard {i} is not in canonical order")
+    missing = [test_id for test_id in selected if test_id not in seen]
+    if missing:
+        problems.append(f"{len(missing)} selected ids are in no shard, first {missing[0]!r}")
+    if selection is not None and not problems:
+        if tuple(selected) != selection.test_ids:
+            problems.append("selected_ids differ from the selection")
+        by_key = {atom.key: atom for atom in selection.atoms}
+        for i, shard in enumerate(shards):
+            atoms = [by_key.get(key) for key in shard["atoms"]]
+            if None in atoms:
+                problems.append(f"shard {i} names an atom outside the selection")
+            elif shard["test_ids"] != [t for atom in atoms for t in atom.test_ids]:
+                problems.append(f"shard {i} does not hold exactly its whole atoms")
+        placed = [key for shard in shards for key in shard["atoms"]]
+        if sorted(placed) != sorted(by_key):
+            problems.append("the shards do not place every selected atom exactly once")
+    if problems:
+        raise PlanError("; ".join(problems))
+    return plan

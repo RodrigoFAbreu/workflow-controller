@@ -4,7 +4,10 @@ CP1: the inventory equals ``unittest discover``'s ids and order plus the
 managed conformance suites, discovery errors refuse it, atoms are classes
 except for module-fixture modules, selection by name, and the CI placement
 partition. CP2: the shard result-record schema, the timing-profile schema,
-EWMA update/merge/prune, estimates, and the fallback to defaults.
+EWMA update/merge/prune, estimates, and the fallback to defaults. CP3: the
+shard count, deterministic LPT, the plan document and digest, the planner's
+self-validation, and the equivalence regression suite (I1 over seeded random
+cases, I4 across interpreters, LPT balance on the recorded baseline).
 
 The synthetic-tree tests discover a throwaway package under a temporary
 directory, then drop it from ``sys.modules`` and ``sys.path`` again.
@@ -12,11 +15,14 @@ directory, then drop it from ``sys.modules`` and ``sys.path`` again.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import math
 import os
+import random
 import re
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -766,6 +772,447 @@ class RealInventoryTimingTest(unittest.TestCase):
                                         profile_name="seed-local")
         self.assertEqual(set(updated.atoms), {atom.key for atom in selection.atoms})
         self._assert_estimates_cover(self.inventory.select(), [updated])
+
+
+
+BASELINE_TIMINGS = fixtures.REPO_ROOT / "tests" / "golden" / "test_shards_baseline_timings.json"
+
+
+def _selection(*atoms, names=()):
+    return shards.Selection(names=tuple(names),
+                            test_ids=tuple(i for a in atoms for i in a.test_ids), atoms=atoms)
+
+
+def _timed(seconds: dict) -> tuple:
+    """A ``timings`` argument recording each ``{Atom: seconds}`` exactly."""
+    profile = _profile({atom.key: {"seconds": s, "samples": 1, "tests": len(atom.test_ids)}
+                        for atom, s in seconds.items()})
+    return ((Path("/nonexistent/timings.json"), profile),)
+
+
+def _params(**overrides):
+    base = dict(profile="ci", target_shard_seconds=10, min_shards=1, max_shards=32)
+    base.update(overrides)
+    return shards.PlanParameters(**base)
+
+
+def _redigest(plan: dict) -> dict:
+    plan["plan_digest"] = shards.plan_digest(plan)
+    return plan
+
+
+class ShardCountTest(unittest.TestCase):
+    """``clamp(ceil(total / max(target, largest)), min, max)``, at most one
+    shard per atom, and ``--shards`` pins it."""
+
+    def count(self, estimates, **overrides) -> int:
+        return shards.shard_count([int(s * 1000) for s in estimates], _params(**overrides))
+
+    def test_the_formula_rounds_up_total_over_target(self) -> None:
+        self.assertEqual(self.count([5] * 10, target_shard_seconds=10), 5)
+        self.assertEqual(self.count([5] * 10 + [0.001], target_shard_seconds=10), 6)
+        self.assertEqual(self.count([5] * 10, target_shard_seconds=25), 2)
+
+    def test_the_largest_atom_is_a_floor_on_the_target(self) -> None:
+        # total 100, largest 40 > target 10: effective 40, ceil(100/40) = 3
+        self.assertEqual(self.count([40, 20, 20, 10, 10], target_shard_seconds=10), 3)
+        self.assertEqual(self.count([40, 20, 20, 10, 10], target_shard_seconds=50), 2)
+
+    def test_the_count_is_clamped_to_the_minimum_and_the_maximum(self) -> None:
+        self.assertEqual(self.count([1] * 10, target_shard_seconds=100, min_shards=3), 3)
+        self.assertEqual(self.count([5] * 10, target_shard_seconds=1, max_shards=4), 4)
+        self.assertEqual(self.count([0] * 10, target_shard_seconds=1, min_shards=2), 2)
+
+    def test_there_are_never_more_shards_than_atoms(self) -> None:
+        self.assertEqual(self.count([5] * 3, target_shard_seconds=1, min_shards=8), 3)
+        self.assertEqual(self.count([100], min_shards=2), 1)
+
+    def test_a_pinned_count_wins_but_is_capped_at_the_atoms(self) -> None:
+        self.assertEqual(self.count([5] * 10, shards=7, max_shards=2), 7)
+        self.assertEqual(self.count([5] * 10, shards=1, min_shards=4), 1)
+        self.assertEqual(self.count([5] * 3, shards=32), 3)
+
+
+class ProfileParametersTest(unittest.TestCase):
+
+    def test_the_profiles_defaults(self) -> None:
+        local = shards.profile_parameters("local", cpu_count=16)
+        self.assertEqual((local.target_shard_seconds, local.min_shards, local.max_shards,
+                          local.shards), (60, 2, 8, None))
+        self.assertEqual(shards.profile_parameters("local", cpu_count=4).max_shards, 4)
+        self.assertEqual(shards.profile_parameters("local", cpu_count=1).max_shards, 1)
+        ci = shards.profile_parameters("ci", cpu_count=1)
+        self.assertEqual((ci.target_shard_seconds, ci.min_shards, ci.max_shards), (180, 2, 16))
+        with unittest.mock.patch.object(shards.os, "cpu_count", return_value=None):
+            self.assertEqual(shards.profile_parameters("local").max_shards, 1)
+
+    def test_every_parameter_is_overridable(self) -> None:
+        params = shards.profile_parameters("local", cpu_count=2, target_shard_seconds=5,
+                                           min_shards=3, max_shards=12, shards=9)
+        self.assertEqual(params, shards.PlanParameters("local", 5, 3, 12, 9))
+
+    def test_invalid_parameters_refuse_naming_each(self) -> None:
+        cases = {"unknown profile": dict(profile="nightly"),
+                 "target_shard_seconds": dict(target_shard_seconds=0),
+                 "min_shards": dict(min_shards=0),
+                 "max_shards": dict(max_shards=True),
+                 "shards must": dict(shards=-1)}
+        for problem, overrides in cases.items():
+            with self.subTest(problem=problem):
+                kwargs = dict(profile="ci")
+                kwargs.update(overrides)
+                with self.assertRaisesRegex(shards.PlanError, problem):
+                    shards.profile_parameters(**kwargs)
+        with self.assertRaisesRegex(shards.PlanError, "target_shard_seconds"):
+            shards.profile_parameters("ci", target_shard_seconds=math.inf)
+
+
+class PlanTest(unittest.TestCase):
+    A = _atom("tests.test_a.ATest", 3)
+    B = _atom("tests.test_a.BTest", 2)
+    C = _atom("tests.test_b.CTest", 1)
+    D = _atom("tests.test_c", 4, kind="module")
+    S = _atom("conformance:x_test.py", 1, family="conformance")
+
+    def plan(self, seconds: dict, **overrides) -> dict:
+        return shards.build_plan(_selection(*seconds), _params(**overrides), _timed(seconds))
+
+    def test_lpt_assigns_longest_first_to_the_least_loaded_shard(self) -> None:
+        plan = self.plan({self.A: 3, self.B: 5, self.C: 4, self.D: 2, self.S: 1}, shards=2)
+        # B(5)->0, C(4)->1, A(3)->1, D(2)->0, S(1)->0; each shard in canonical order
+        self.assertEqual([s["atoms"] for s in plan["shards"]],
+                         [[self.B.key, self.D.key, self.S.key], [self.A.key, self.C.key]])
+        self.assertEqual([s["estimate_seconds"] for s in plan["shards"]], [8.0, 7.0])
+        self.assertEqual(plan["shards"][1]["test_ids"], list(self.A.test_ids + self.C.test_ids))
+
+    def test_ties_break_by_canonical_index_then_shard_index(self) -> None:
+        plan = self.plan({self.A: 1, self.B: 1, self.C: 1, self.D: 1}, shards=3)
+        self.assertEqual([s["atoms"] for s in plan["shards"]],
+                         [[self.A.key, self.D.key], [self.B.key], [self.C.key]])
+
+    def test_zero_estimates_still_leave_no_shard_empty(self) -> None:
+        plan = self.plan({self.A: 0, self.B: 0, self.C: 0, self.D: 0, self.S: 0}, shards=4)
+        self.assertEqual([len(s["atoms"]) for s in plan["shards"]], [2, 1, 1, 1])
+        self.assertEqual(plan["shards"][0]["estimate_seconds"], 0.002)
+
+    def test_estimates_are_compared_in_whole_milliseconds(self) -> None:
+        plan = self.plan({self.A: 1.0001, self.B: 1.0004}, shards=1)
+        self.assertEqual(plan["shards"][0]["estimate_seconds"], 2.0)
+        tied = self.plan({self.A: 1.0001, self.B: 1.0004, self.C: 1.0}, shards=2)
+        self.assertEqual(tied["shards"][0]["atoms"], [self.A.key, self.C.key])
+
+    def test_the_plan_document(self) -> None:
+        selection = _selection(self.A, self.S, names=("tests.test_a.ATest", "conformance"))
+        plan = shards.build_plan(selection, _params(), _timed({self.A: 30, self.S: 20}))
+        self.assertEqual(set(plan), {"schema_version", "profile", "selection_names",
+                                     "selected_ids", "parameters", "shard_count", "shards",
+                                     "timing_source", "plan_digest"})
+        self.assertEqual(plan["profile"], "ci")
+        self.assertEqual(plan["selection_names"], ["tests.test_a.ATest", "conformance"])
+        self.assertEqual(plan["selected_ids"], list(selection.test_ids))
+        self.assertEqual(plan["parameters"],
+                         {"target_shard_seconds": 10, "min_shards": 1, "max_shards": 32})
+        self.assertEqual(plan["shard_count"], 2)
+        self.assertEqual(plan["plan_digest"], hashlib.sha256(json.dumps(
+            {k: v for k, v in plan.items() if k != "plan_digest"}, sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest())
+        json.dumps(plan, allow_nan=False)
+
+    def test_only_a_pinned_count_enters_the_parameters(self) -> None:
+        seconds = {self.A: 5, self.B: 5}
+        free, pinned = self.plan(seconds), self.plan(seconds, shards=1)
+        self.assertNotIn("shards", free["parameters"])
+        self.assertEqual(pinned["parameters"]["shards"], 1)
+        self.assertEqual(free["shard_count"], pinned["shard_count"])
+        self.assertNotEqual(free["plan_digest"], pinned["plan_digest"])
+
+    def test_every_planning_input_changes_the_digest(self) -> None:
+        seconds = {self.A: 5, self.B: 5, self.C: 5}
+        base = self.plan(seconds)["plan_digest"]
+        variants = {
+            "profile": shards.build_plan(_selection(*seconds), _params(profile="local"),
+                                         _timed(seconds)),
+            "target": self.plan(seconds, target_shard_seconds=11),
+            "min": self.plan(seconds, min_shards=2),
+            "max": self.plan(seconds, max_shards=31),
+            "timings": self.plan({self.A: 5, self.B: 5, self.C: 6}),
+            "names": shards.build_plan(_selection(*seconds, names=("x",)), _params(),
+                                       _timed(seconds)),
+        }
+        for name, plan in variants.items():
+            with self.subTest(changed=name):
+                self.assertNotEqual(plan["plan_digest"], base)
+
+    def test_the_timing_source_names_files_without_absolute_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            committed = root / "tools" / "test_timings.json"
+            local = Path(tmp) / "cache" / "timings-local.json"
+            for path in (committed, local):
+                shards.write_timings(path, _profile({self.A.key: {
+                    "seconds": 1.0, "samples": 1, "tests": 3}}, path.stem))
+            timings = shards.timings_for("local", root, environ={
+                "XDG_CACHE_HOME": str(Path(tmp) / "cache-root")}, warn=lambda _: None)
+            self.assertEqual(shards.timing_source(timings, root), [
+                {"path": "tools/test_timings.json", "sha256": timings[1][1].sha256}])
+            loaded = [(local, shards.load_timings(local)),
+                      (committed, shards.load_timings(committed))]
+            self.assertEqual(shards.timing_source(loaded, root), [
+                {"path": "local-profile", "sha256": loaded[0][1].sha256},
+                {"path": "tools/test_timings.json", "sha256": loaded[1][1].sha256}])
+            warnings = []
+            ci = shards.timings_for("ci", Path(tmp), warn=warnings.append)
+            self.assertEqual(len(ci), 1)
+            self.assertEqual(shards.timing_source(ci, Path(tmp)), "defaults")
+            self.assertEqual(len(warnings), 1)
+        self.assertEqual(shards.timing_source([]), "defaults")
+
+    def test_an_empty_selection_refuses(self) -> None:
+        with self.assertRaisesRegex(shards.PlanError, "empty"):
+            shards.build_plan(_selection(), _params())
+
+    def test_the_planner_validates_its_own_plan(self) -> None:
+        assign = shards.assign_atoms
+
+        def drop_one(estimates, count):
+            first, *rest = assign(estimates, count)
+            return [first[1:], *rest]
+
+        with unittest.mock.patch.object(shards, "assign_atoms", side_effect=drop_one):
+            with self.assertRaisesRegex(shards.PlanError, "in no shard"):
+                self.plan({self.A: 3, self.B: 2, self.C: 1}, shards=1)
+
+
+class PlanValidationTest(unittest.TestCase):
+    """A tampered plan fails validation, whether or not its digest was
+    recomputed, so the structural checks never rely on the digest."""
+
+    A, B, C = PlanTest.A, PlanTest.B, PlanTest.C
+
+    def setUp(self) -> None:
+        self.selection = _selection(self.A, self.B, self.C)
+        self.plan = shards.build_plan(self.selection, _params(shards=2),
+                                      _timed({self.A: 3, self.B: 2, self.C: 2}))
+
+    def test_a_valid_plan_validates_through_json(self) -> None:
+        plan = json.loads(json.dumps(self.plan))
+        self.assertIs(shards.validate_plan(plan, self.selection), plan)
+        self.assertIs(shards.validate_plan(plan), plan)
+
+    def test_tampering_is_refused(self) -> None:
+        a0 = self.A.test_ids[0]
+        cases = {
+            "plan_digest does not match": (lambda p: p["shards"][0].update(
+                estimate_seconds=0), False),
+            "keys are not exactly": (lambda p: p.pop("timing_source"), True),
+            "schema_version": (lambda p: p.update(schema_version=2), True),
+            "shard_count is 3": (lambda p: p.update(shard_count=3), True),
+            "shards\\[1\\].index": (lambda p: p["shards"][1].update(index=0), True),
+            "shard 1 is empty": (lambda p: p["shards"][1].update(test_ids=[], atoms=[]), True),
+            "in no shard": (lambda p: p["shards"][0]["test_ids"].remove(a0), True),
+            "is in shards 0 and 1": (lambda p: p["shards"][1]["test_ids"].append(a0), True),
+            "unselected id": (lambda p: p["shards"][1]["test_ids"].append("tests.x.Y.z"), True),
+            "canonical order": (lambda p: p["shards"][0]["test_ids"].reverse(), True),
+            "selected_ids has duplicates": (lambda p: p["selected_ids"].append(a0), True),
+            "lists of strings": (lambda p: p["shards"][0].update(atoms="x"), True),
+            "selected_ids must be strings": (lambda p: p["selected_ids"].append(1), True),
+            "not canonical JSON": (lambda p: p["shards"][0].update(
+                estimate_seconds=math.nan), False),
+        }
+        for problem, (tamper, redigest) in cases.items():
+            with self.subTest(problem=problem):
+                plan = json.loads(json.dumps(self.plan))
+                tamper(plan)
+                if redigest:
+                    _redigest(plan)
+                with self.assertRaisesRegex(shards.PlanError, problem):
+                    shards.validate_plan(plan)
+        with self.assertRaisesRegex(shards.PlanError, "not a JSON object"):
+            shards.validate_plan([])
+
+    def test_against_its_selection_a_split_or_foreign_atom_is_refused(self) -> None:
+        split = json.loads(json.dumps(self.plan))
+        moved = self.B.test_ids[-1]
+        home = next(s for s in split["shards"] if moved in s["test_ids"])
+        other = split["shards"][1 - home["index"]]
+        home["test_ids"].remove(moved)
+        other["test_ids"] = sorted(other["test_ids"] + [moved],
+                                   key=self.selection.test_ids.index)
+        _redigest(split)
+        shards.validate_plan(split)
+        with self.assertRaisesRegex(shards.PlanError, "whole atoms"):
+            shards.validate_plan(split, self.selection)
+        foreign = json.loads(json.dumps(self.plan))
+        foreign["shards"][0]["atoms"].append("tests.test_z.Z")
+        _redigest(foreign)
+        with self.assertRaisesRegex(shards.PlanError, "outside the selection"):
+            shards.validate_plan(foreign, self.selection)
+        other_selection = _selection(self.A, self.B)
+        with self.assertRaisesRegex(shards.PlanError, "differ from the selection"):
+            shards.validate_plan(self.plan, other_selection)
+
+
+class EquivalencePropertyTest(unittest.TestCase):
+    """I1 over 500 seeded random cases of the real inventory: random name
+    subsets (modules, classes, methods, conformance), with and without the CI
+    placement; random, corrupt or empty timings; ``N`` pinned from 1 to 32 or
+    left to random parameters. Checked directly here, not through
+    ``validate_plan``."""
+
+    CASES = 500
+    SEED = 20260926
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.inventory = shards.build_inventory(fixtures.REPO_ROOT)
+
+    def _names(self, rng) -> list[str]:
+        atoms = self.inventory.atoms
+        pool = []
+        for _ in range(rng.randint(1, 12)):
+            atom = rng.choice(atoms)
+            pool.append(rng.choice([atom.key, atom.module if atom.family == "controller"
+                                    else "conformance", rng.choice(atom.test_ids)]))
+        return pool
+
+    def _timings(self, rng, tmp: Path) -> tuple:
+        kind = rng.choice(["random", "corrupt", "empty", "missing"])
+        path = tmp / f"{kind}.json"
+        if kind == "random":
+            atoms = {}
+            for atom in rng.sample(self.inventory.atoms, rng.randint(0, len(self.inventory.atoms))):
+                seconds = rng.choice([0.0, rng.uniform(0, 1), rng.uniform(0, 200), 1e6])
+                atoms[atom.key] = {"seconds": seconds, "samples": 1,
+                                   "tests": rng.choice([len(atom.test_ids), 1, 50])}
+            shards.write_timings(path, _profile(atoms, "random"))
+        elif kind == "corrupt":
+            path.write_bytes(rng.choice([b"{", b"\xff\xfe", b'{"schema_version": 1}',
+                                         b'{"schema_version": 1, "profile": "x", "atoms": '
+                                         b'{"a": {"seconds": -1, "samples": 1, "tests": 1}}, '
+                                         b'"updated_from": []}']))
+        elif kind == "empty":
+            shards.write_timings(path, _profile({}, "empty"))
+        return ((path, shards.load_timings(path, warn=lambda _: None)),)
+
+    def _parameters(self, rng):
+        if rng.random() < 0.7:
+            return _params(shards=rng.randint(1, 32))
+        return _params(target_shard_seconds=rng.choice([0.001, 1, 60, 180, 1e5]),
+                       min_shards=rng.randint(1, 8), max_shards=rng.randint(1, 32))
+
+    def test_every_plan_partitions_its_selection_into_whole_atoms(self) -> None:
+        rng = random.Random(self.SEED)
+        planned = 0
+        with tempfile.TemporaryDirectory() as tmp:
+            for case in range(self.CASES):
+                names = self._names(rng)
+                selection = self.inventory.select(names, ci_placement=rng.random() < 0.3)
+                timings = self._timings(rng, Path(tmp))
+                parameters = self._parameters(rng)
+                with self.subTest(case=case, names=names):
+                    if not selection.atoms:
+                        with self.assertRaises(shards.PlanError):
+                            shards.build_plan(selection, parameters, timings)
+                        continue
+                    plan = shards.build_plan(selection, parameters, timings)
+                    planned += 1
+                    self._assert_partition(plan, selection, parameters)
+        self.assertGreater(planned, self.CASES * 0.9)
+
+    def _assert_partition(self, plan, selection, parameters) -> None:
+        placed = [test_id for shard in plan["shards"] for test_id in shard["test_ids"]]
+        self.assertEqual(len(placed), len(set(placed)), "a test is in two shards")
+        self.assertEqual(set(placed), set(selection.test_ids))
+        self.assertEqual(plan["selected_ids"], list(selection.test_ids))
+        self.assertEqual(plan["shard_count"], len(plan["shards"]))
+        self.assertTrue(all(shard["test_ids"] for shard in plan["shards"]), "an empty shard")
+        if parameters.shards is not None:
+            self.assertEqual(plan["shard_count"], min(parameters.shards, len(selection.atoms)))
+        else:
+            self.assertLessEqual(plan["shard_count"], parameters.max_shards)
+        home = {test_id: shard["index"] for shard in plan["shards"]
+                for test_id in shard["test_ids"]}
+        placed_atoms = [key for shard in plan["shards"] for key in shard["atoms"]]
+        self.assertEqual(sorted(placed_atoms), sorted(atom.key for atom in selection.atoms))
+        for atom in selection.atoms:
+            self.assertEqual(len({home[test_id] for test_id in atom.test_ids}), 1, atom.key)
+        canonical = {test_id: i for i, test_id in enumerate(selection.test_ids)}
+        for shard in plan["shards"]:
+            order = [canonical[test_id] for test_id in shard["test_ids"]]
+            self.assertEqual(order, sorted(order))
+
+
+def _digest_cases(shards_module, repo_root: Path, tmp: Path) -> list[str]:
+    """The plan digests of a fixed set of inputs, computed with
+    ``shards_module``: the full local and CI selections on the defaults, and
+    a named selection on a committed-profile file under ``tmp``."""
+    inventory = shards_module.build_inventory(repo_root)
+    quiet = lambda _: None
+    profile = shards_module.TimingProfile(profile="ci", atoms={
+        atom.key: {"seconds": (i * 7919 % 97) / 7, "samples": 1, "tests": len(atom.test_ids)}
+        for i, atom in enumerate(inventory.atoms)})
+    shards_module.write_timings(tmp / shards_module.CI_TIMINGS, profile)
+    cases = [
+        (inventory.select(), shards_module.profile_parameters("local", cpu_count=8),
+         shards_module.timings_for("ci", tmp / "absent", warn=quiet)),
+        (inventory.select(ci_placement=True), shards_module.profile_parameters("ci"),
+         shards_module.timings_for("ci", tmp, warn=quiet)),
+        (inventory.select(["tests.test_worker", "tests.test_lock", "conformance"]),
+         shards_module.profile_parameters("ci", shards=5),
+         shards_module.timings_for("ci", tmp, warn=quiet)),
+    ]
+    return [shards_module.build_plan(selection, parameters, timings, tmp)["plan_digest"]
+            for selection, parameters, timings in cases]
+
+
+class DeterminismTest(unittest.TestCase):
+    """I4: the same inputs give the same digest, in this interpreter and in
+    fresh ones under different ``PYTHONHASHSEED`` values."""
+
+    def test_the_same_inputs_give_the_same_digest_everywhere(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first = _digest_cases(shards, fixtures.REPO_ROOT, Path(tmp))
+            again = _digest_cases(shards, fixtures.REPO_ROOT, Path(tmp))
+            self.assertEqual(first, again)
+            self.assertEqual(len(set(first)), len(first))
+            probe = (f"import sys\nsys.path.insert(0, {str(fixtures.REPO_ROOT)!r})\n"
+                     f"sys.argv[1:] = [{tmp!r}]\n"
+                     "from tests import test_test_shards as t\n"
+                     "from pathlib import Path\n"
+                     "print(t._digest_cases(t.shards, t.fixtures.REPO_ROOT, Path(sys.argv[1])))\n")
+            for seed in ("0", "4242"):
+                with self.subTest(PYTHONHASHSEED=seed):
+                    env = dict(os.environ, PYTHONHASHSEED=seed)
+                    out = subprocess.run([sys.executable, "-c", probe], env=env,
+                                         cwd=fixtures.REPO_ROOT, capture_output=True,
+                                         text=True, check=True).stdout
+                    self.assertEqual(out.strip(), repr(first))
+
+
+class BaselineBalanceTest(unittest.TestCase):
+    """LPT on the recorded serial baseline (``tests/golden/``, measured at
+    CP3) keeps the longest shard within 1.10 × the ideal ``total / N``
+    whenever the largest atom is at most ``total / N``."""
+
+    def test_lpt_balances_the_recorded_baseline(self) -> None:
+        baseline = shards.load_timings(BASELINE_TIMINGS, warn=self.fail)
+        inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        known = [atom for atom in inventory.atoms if atom.key in baseline.atoms]
+        self.assertGreater(len(known), 0.9 * len(inventory.atoms))
+        selection = inventory.select([atom.key for atom in known])
+        estimates = shards.estimate_atoms(selection.atoms, [baseline])
+        total, largest = sum(estimates.values()), max(estimates.values())
+        checked = 0
+        for count in range(2, 33):
+            if largest > total / count:
+                continue
+            with self.subTest(shards=count):
+                plan = shards.build_plan(selection, _params(shards=count),
+                                         ((BASELINE_TIMINGS, baseline),))
+                longest = max(shard["estimate_seconds"] for shard in plan["shards"])
+                self.assertLessEqual(longest, 1.10 * total / count)
+                checked += 1
+        self.assertGreater(checked, 0)
 
 
 if __name__ == "__main__":

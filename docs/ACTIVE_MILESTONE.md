@@ -29,12 +29,97 @@ no retries.
 | id | status | commit |
 | --- | --- | --- |
 | CP1 -- inventory, atoms and selection | complete | `302d7fc` |
-| CP2 -- result records and timing model | complete | this checkpoint's commit |
-| CP3 -- adaptive deterministic planner | not started | |
+| CP2 -- result records and timing model | complete | `4467a80` |
+| CP3 -- adaptive deterministic planner | complete | this checkpoint's commit |
 | CP4 -- executor, local runner and aggregation | not started | |
 | CP5 -- serialization registry and timing-flake hardening | not started | |
 | CP6 -- CI integration | not started | |
 | CP7 -- documentation, measurement and full verification | not started | |
+
+### CP3 -- adaptive deterministic planner (complete)
+
+- **`tools/test_shards.py`** gains the planner, still stdlib only.
+  - **Parameters.** `profile_parameters(profile, ...)` gives the plan's table:
+    - `local`: a 60 s target, a minimum of 2, and a maximum of `min(8, cpu_count)`;
+    - `ci`: a 180 s target, a minimum of 2, and a maximum of 16.
+
+    Every value can be overridden, and `shards=` pins the count. An unknown profile, a
+    non-positive or non-finite target, or a count below 1 refuses with `PlanError`, naming each
+    problem. `PlanParameters.document()` puts `shards` into the digested parameters only when it
+    is pinned.
+  - **Count.** `shard_count` computes `clamp(ceil(total / max(target, largest)), min, max)`,
+    capped at the number of atoms. A pinned count is capped the same way. The arithmetic is in
+    integer milliseconds.
+  - **Assignment.** `assign_atoms` is deterministic LPT. It sorts by `(-estimate, canonical
+    index)`, places each atom on the shard with the least `(load, index)` using a heap, and then
+    puts each shard back into canonical order.
+  - **Timings.** `timings_for(profile)` loads the files a profile plans from, in priority order:
+    the local profile and then `tools/test_timings.json` for `local`, and only the committed file
+    for `ci`. `timing_source` names each file actually read as `{path, sha256}`. A path inside
+    the repository is recorded relative to it, and any other path is recorded as
+    `"local-profile"`. When no file was read, the source is `"defaults"`.
+  - **Plan.** `build_plan(selection, parameters, timings)` returns the plan's JSON document:
+    `schema_version`, `profile`, `selection_names`, `selected_ids`, `parameters`, `shard_count`,
+    `shards` (`{index, atoms, test_ids, estimate_seconds}`), `timing_source` and `plan_digest`.
+    The digest is the SHA-256 of the canonical JSON (sorted keys, no whitespace, no NaN) of
+    everything else. An empty selection refuses.
+  - **Self-validation.** `validate_plan(plan, selection=None)` checks all of the following and
+    names every problem:
+    - the exact keys, the schema version and the digest;
+    - `shard_count` equals the number of shards, and the shards are indexed in order;
+    - no shard is empty, no id is in two shards, no id is outside the selection, and no selected
+      id is missing;
+    - each shard is in canonical order.
+
+    Given the selection, it also checks that each shard holds exactly its whole atoms, and that
+    every atom is placed once. `build_plan` runs this check before it returns.
+- **Interpretations the plan leaves open:**
+  - **`timing_source` is a list.** Local planning reads two files (local, then CI) per the plan's
+    section B, so the source records each one read, in priority order. The plan's own
+    `"defaults"` value stands when none was read.
+  - **Each estimate is floored at 1 ms for placement.** The 500-case property test found that
+    atoms estimated at 0 ms (a profile can record `seconds: 0`) all landed on shard 0, whose load
+    never grew, leaving other shards empty. With every load positive, LPT puts the N longest
+    atoms on N distinct shards, so no shard can be empty.
+  - **An empty selection refuses.** With `ci_placement`, a name inside a `CI_PLACEMENT` module
+    resolves to no atoms. There is nothing to partition, so `build_plan` refuses rather than
+    emit a zero-shard plan. CP4 decides how the CLI reports it.
+- **`estimate_atoms`** now memoises each profile's per-module mean. The result is unchanged, but
+  it was quadratic in the number of atoms, which the 500-case property test made visible.
+- **`tests/golden/test_shards_baseline_timings.json`** (new) is the recorded baseline for the
+  balance test. It was measured during this checkpoint: per-atom first-`startTest`-to-last-
+  `stopTest` spans from a serial `discover` run (1947 tests, 479.5 s, OK, 8 skipped), plus each
+  conformance suite's wall time, for 428 atoms totalling 587 s. The largest atom is
+  `conformance:workflow_acceptance_matrix_test.py` at 79.2 s, then three `test_worker` classes
+  at about 33.5 s each. On this baseline, the default local profile plans 8 shards, as the
+  plan's table predicts.
+- **`tests/test_test_shards.py`** grows to 84 tests (133 together with `test_ci_workflows`):
+  - `ShardCountTest` covers the formula at each boundary: rounding up, the largest-atom floor,
+    the minimum and maximum clamps, the cap at the number of atoms, and a pinned count;
+  - `ProfileParametersTest` covers the defaults, including a `cpu_count` of 1 or unknown, the
+    overrides, and each invalid value named;
+  - `PlanTest` covers the LPT placement and tie-breaks, zero estimates, whole-millisecond
+    comparison, the document and its digest, a pinned count entering the parameters, every
+    planning input changing the digest, `timing_source` naming, an empty selection, and the
+    planner refusing its own broken plan;
+  - `PlanValidationTest` covers 14 tamperings, each refused whether or not the digest was
+    recomputed, and a split or foreign atom refused against the selection;
+  - `EquivalencePropertyTest` runs 500 seeded cases of the real inventory, checked directly
+    rather than through `validate_plan`. Each case has random module, class, method and
+    conformance names, with and without the CI placement; random, corrupt, empty or missing
+    timings; and `N` pinned from 1 to 32, or random parameters. Each plan must be an exact,
+    disjoint union of the selection, with no empty shard, whole atoms, and canonical order;
+  - `DeterminismTest` computes the same digests twice in-process, and in fresh interpreters
+    under `PYTHONHASHSEED` 0 and 4242;
+  - `BaselineBalanceTest` checks, for every N from 2 to 32 with `largest ≤ total/N`, that the
+    longest shard is within 1.10 × `total/N`. The measured ratio is 1.000 at N = 2 to 7. N = 8 is
+    excluded, because 79.2 s > 587/8.
+- Mutation check: each of the following fails the new tests: ascending instead of descending
+  LPT, dropping the 1 ms floor, the atom cap, the largest-atom floor, or the canonical reorder.
+- Verification: `python3 -m unittest tests.test_test_shards tests.test_ci_workflows` passes (133
+  tests, about 1 s). The serial baseline run above doubles as a full-suite run at CP2's content.
+  It ran under a reaping subreaper wrapper with SIGINT at `SIG_DFL`, because this session is a
+  Controller worker.
 
 ### CP2 -- result records and timing model (complete)
 

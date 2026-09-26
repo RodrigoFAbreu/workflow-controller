@@ -753,8 +753,37 @@ group still runs, `status` still describes the job as `worker pid <p> waiting on
 task`. It is derived from the last recorded `worker_state`, and no Controller is attached to
 update that state.
 
+## Functional review round 1 (revision 2, bounded fixes)
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's findings from the checklist above, at
+evidence commit `fcab1aa`). The rest of revision 2's manual pass was not completed, since
+revision 2 already needed remediation. `technical_approval` was marked `STALE` before the first
+edit.
+
+- **F1 (defect), fixed (`3245d6f`):** a pending wakeup's due time rendered as the current time.
+  `worker_stream._iso` records `due_at` with milliseconds (`...:10.201Z`), and
+  `observe._parse_at` accepted only whole seconds, so `_clock` fell back to now. `_parse_at` now
+  also accepts a fraction of up to six digits, still UTC (`Z`) only. A present `due_at` that
+  does not parse renders as `due time unreadable: '<value>'`, never as now. New tests: `ParseAtTest`
+  (whole, millisecond and microsecond times to the exact UTC moment; the Controller's own format
+  round-trips; malformed shapes are `None`); `JobActivityTest` (the due time is the recorded one,
+  hours from now; an unreadable due time is named). Each fails before the fix.
+- **F2 (usability issue), fixed (`577b59e`):** `observe._plural` appended `s` to every noun
+  (`owns 2 processs`, `2 owned processs still running` in `status`, `inspect`, `explain` and
+  the `follow` heartbeat). A noun ending in `s` now takes `es`. New tests: `PluralTest`, and
+  `JobActivityTest`'s two-owned-process waiting and draining lines. Each fails before the fix.
+- **O1 (optional), not changed:** a job whose worker leader died while its group still runs
+  reads `waiting` from the last recorded `worker_state` when no Controller is attached. The
+  lifecycle decision is correct; this is diagnostic wording only.
+- **Not findings:** the scenarios the pre-check found unexercised (background subagent
+  hand-back, several simultaneous background tasks, same-phase durable progress and its
+  `predicate_detail`, opt-in `--timeout` over the owned lifetime, anchor self-exit and the
+  recognised-daemon orphan rule). The next functional checklist must cover the first four
+  explicitly.
+
 ## Next action
 
-At the `AWAITING_FUNCTIONAL_REVIEW` hard gate: the user runs the checklist above and records
-findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`. With no findings, `/accept-milestone`.
-With findings, `/apply-functional-review`.
+The bounded functional fixes are committed and the post-fix bundle (revision 3) is generated for
+a fresh `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`), then the manual
+external stage and `/approve-review implementation`. Only after that: `/prepare-functional-review`
+with a regenerated checklist that adds the four coverage scenarios above.

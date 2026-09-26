@@ -436,7 +436,32 @@ fixed, none left open.
   - `python3 tools/ci_workflows.py --check`: exit 0;
   - `python3 -m unittest tests.test_plan_document_consistency`: 40 tests OK.
 
+## Implementation review round 1 (`LOCAL_MODEL_IMPLEMENTATION_REVIEW`, `REVISE`)
+
+- **Important 1, fixed: the anchor's orphan rule counted a tagged recognised daemon as owned
+  work.** `anchor.tagged_process_alive` applied no `RECOGNISED_DAEMONS` exclusion, so a
+  tag-inheriting `gpg-agent`/`ssh-agent`/Gradle daemon kept an orphaned anchor (and the lifecycle
+  lock) alive for the daemon's lifetime, contradicting I4 and the exit-45 anchor sentence.
+  `RECOGNISED_DAEMONS` and `daemon_pattern` now live in the stdlib-only `controller/anchor.py`
+  and `controller.worker` re-exports the same objects, so the list cannot drift; the anchor
+  skips a tagged process whose `/proc/<pid>/cmdline` matches, split exactly as
+  `worker._read_cmdline` splits it. New test
+  `AnchorTest.test_a_tagged_recognised_daemon_never_keeps_an_orphaned_anchor_alive` (a tagged
+  `exec -a gpg-agent sleep` leaves `orphaned()` true; an ordinary tagged sleeper does not; the
+  identity pin). ADR 0004's anchor paragraph names the exclusion.
+- **Optional 1, noted in code:** `_Supervision._drain`'s group-emptiness test carries a comment
+  stating the H9/P2 assumption that a recognised daemon never stays in the worker's group.
+- **Optional 2, not applied:** declining `ENDING` once the anchor has died changes `ENDING`
+  selection for every dead-anchor case (re-attach included) to cover a window P1 measured at
+  ~12 ms, and the fake harness has no delayed-exit-after-EOF mode to test it; left for a later
+  round if wanted.
+- **Optional 3, not applied:** row 2 (`exit_status`) is "non-zero" in plan B's classification
+  table; a signal's secondary `exit_status` is harmless and matches the plan text.
+- **Verification** (2026-09-26): full suite 1879 tests `OK (skipped=8)`;
+  `tools/ci_workflows.py --check` exit 0; `tests.test_plan_document_consistency` OK;
+  `tests.test_packaged_runtime` (packaging required) OK.
+
 ## Next action
 
-Self-review is done, and the implementation review bundle (revision 1) is generated for the
-`LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage (`/review-implementation`).
+Review feedback applied; the post-fix bundle (revision 2) is generated for another
+`LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`).

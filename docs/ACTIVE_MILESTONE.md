@@ -461,7 +461,300 @@ fixed, none left open.
   `tools/ci_workflows.py --check` exit 0; `tests.test_plan_document_consistency` OK;
   `tests.test_packaged_runtime` (packaging required) OK.
 
+## Functional review checklist
+
+This checklist covers implementation revision 2, reviewed at `f0a86d2`, with technical approval
+`4a65024`. The automated state is current: at `f0a86d2` the full suite ran 1879 tests, OK (8
+opt-in skips), `tests.test_packaged_runtime` (packaging required), `tools/ci_workflows.py --check`
+and `tests.test_plan_document_consistency` passed. Since then only `WORKFLOW_STATE.json` and this
+file have changed. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+Before this checklist was committed, every flow below was dry-run against a pipx install of a
+wheel built from a clean clone of `4a65024`. Two results did not match the expected text; see
+"Dry-run notes" at the end. Flows F1-F7 cost nothing: the worker is `tests/fake_claude.py` in
+streaming mode, scripted to own real background processes, and the Workflow Manager is the
+offline test stub. Nothing in this repository is modified. Only F8 calls the real `claude`.
+
+### Setup
+
+1. `pipx` is installed. You need **two zsh terminals**, called A and B below.
+2. In terminal A, write the session file:
+
+   ```zsh
+   mkdir /tmp/wc-lifecycle-fr && cat > /tmp/wc-lifecycle-fr/session.zsh <<'EOF'
+   C=/home/rodrigo/Workspace/workflow-controller; W=/tmp/wc-lifecycle-fr; unset PYTHONPATH
+   export C W PIPX_HOME=$W/pipx PIPX_BIN_DIR=$W/bin PIPX_MAN_DIR=$W/man XDG_STATE_HOME=$W/xdg
+   export WC=$W/bin/workflow-controller
+   use() { . $W/$1/env; J=$(ls $RT/jobs 2>/dev/null | sed -n 's/\.json$//p' | head -1); }
+   wcx() { (cd /tmp; $WC --runtime-dir $RT --workflow-manager $SM --claude-binary $C/tests/fake_claude.py "$@") }
+   drive() { (cd /tmp; python3 $W/drive.py "$@") }
+   rec() { python3 -c "import json, sys; r = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))" $RT/jobs/$J.json "$1"; }
+   hist() { python3 -c "import json, sys; print(' '.join(e['event'] for e in map(json.loads, open(sys.argv[1])) if e.get('state_changed') is not False))" $RT/jobs/$J/events.jsonl; }
+   EOF
+   ```
+
+   Then run `. /tmp/wc-lifecycle-fr/session.zsh` in **both** terminals.
+   - `drive stop <name> <scenario>` builds a disposable `"2.2"` target under `$W/<name>`: a work
+     item at `IMPLEMENTING` whose scripted `/milestone-implement` worker plays `<scenario>`.
+   - `use <name>` loads that target into the shell: `$R` (the target), `$RT` (its runtime root),
+     `$REL` (the file that releases the scripted "full verification"), and `$J` (its job id, once
+     a job exists; rerun `use <name>` after the first `step`).
+   - `wcx <args>` runs the installed Controller against the loaded target. `rec '<expr>'`
+     evaluates a Python expression over the job record `r`. `hist` prints the job's event
+     history, one entry per state change.
+3. In terminal A, save the driver from this file, build a wheel from a clean clone of this
+   commit, install it with pipx, and delete the clone:
+
+   ```zsh
+   awk '/^<!-- drive.py begin -->$/{f=1;next} /^<!-- drive.py end -->$/{f=0} f' $C/docs/ACTIVE_MILESTONE.md | sed '1d;$d' > $W/drive.py
+   git clone -q $C $W/clone && (cd $W && python3 -m pip wheel -q --no-deps --no-build-isolation --wheel-dir $W/dist $W/clone)
+   pipx install -q $W/dist/*.whl && rm -rf $W/clone && $WC --version
+   ```
+
+   Expected: `$W/drive.py` starts with `"""Functional-review driver`. There is one wheel,
+   `$W/dist/workflow_controller-1.1.1-py3-none-any.whl`. `--version` prints
+   `workflow-controller 1.1.1` and `runtime: package (local build from <this commit>)`.
+
+<!-- drive.py begin -->
+```python
+"""Functional-review driver: disposable "2.2" targets at IMPLEMENTING whose
+scripted streaming worker owns background work, for the installed
+Controller. Run as: python3 $W/drive.py stop <name> <scenario>"""
+import os, shlex, sys, tempfile
+from pathlib import Path
+
+C, W = Path(os.environ["C"]), Path(os.environ["W"])
+sys.path.insert(0, str(C))
+from tests import fixtures  # noqa: E402
+from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
+
+SAYS = lifecycle.SAYS_IT_WILL_CONTINUE
+
+
+class Case(lifecycle._LifecycleTestCase):
+    def runTest(self) -> None:
+        pass
+
+
+def turns(scenario: str, lc: lifecycle.Lifecycle, d: Path) -> list:
+    """The worker's scripted turns: turn 0 answers the task; each later
+    turn is the one a background task's completion starts."""
+    release, done, orphan = d / "release", d / "verification-done", d / "orphan-done"
+    implement = [{"step": "actions", "actions": lc.implement("CP1")}]
+    if scenario in ("wait", "ctrlc", "lose", "abandon"):
+        return [[lifecycle.verification(done, release=release), SAYS], implement]
+    if scenario == "drain":
+        return [[{"step": "bash_bg", "id": "suite", "seconds": 0.5, "orphan": "reparent", "orphan_seconds": 40,
+                  "orphan_write_file": str(orphan), "description": "full verification"}, SAYS], implement]
+    if scenario == "daemon":
+        return [[{"step": "bash_bg", "id": "build", "seconds": 0.5, "orphan": "daemon", "argv0": "gpg-agent",
+                  "orphan_seconds": 600, "description": "signed build"}, SAYS], implement]
+    if scenario == "wakeup":
+        return [[{"step": "wakeup", "delay": 30, "prompt": "check the verification", "reason": "verification",
+                  "fire_turn": [*implement, {"step": "wakeup_stop"}]},
+                 {"step": "text", "text": "I will continue when the wakeup fires."}]]
+    raise SystemExit(f"unknown scenario {scenario}")
+
+
+def stop(name: str, scenario: str) -> None:
+    d = W / name
+    d.mkdir()
+    tempfile.tempdir = str(d)
+    Case.setUpClass()
+    Case._class_tmp._finalizer.detach()
+    c = Case()
+    c.setUp()
+    c._tmp._finalizer.detach()
+    lc = c.seed("case", lifecycle.IMPLEMENTING)
+    lc.add(lifecycle.MILESTONE_IMPLEMENT, {"turns": turns(scenario, lc, d)})
+    fixtures.write_worker_script(lc.script_path, lc.script)
+    lc.runtime.mkdir(parents=True, exist_ok=True)
+    env = {"R": str(lc.root), "RT": str(lc.runtime), "SM": str(c.stub_manager),
+           "FAKE_CLAUDE_SCRIPT": str(lc.script_path), "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file),
+           "REL": str(d / "release")}
+    (d / "env").write_text("".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items()))
+    print(f"-- driver: {name} is a target at IMPLEMENTING ({scenario}); now run: use {name}")
+
+
+if __name__ == "__main__":
+    command, rest = sys.argv[1], sys.argv[2:]
+    {"stop": lambda: stop(*rest)}[command]()
+```
+<!-- drive.py end -->
+
+### Test data
+
+No seeding is needed beyond the driver. Each scenario gets its own target: a git repository with
+a registry of `CP1`/`CP2`, a `WORKFLOW_STATE.json` at `IMPLEMENTING`, and a worker script. The
+worker's first turn starts background work and ends its turn saying it will continue. A later
+turn (a task's completion, or a wakeup's fire) implements `CP1`, which means a commit `Implement
+CP1` and `last_completed_checkpoint_id=CP1`. Build every scenario once:
+
+```zsh
+for s in wait ctrlc lose drain daemon wakeup abandon; do drive stop $s $s; done
+```
+
+Expected: seven `-- driver: <s> is a target at IMPLEMENTING (<s>)` lines.
+
+### Flows
+
+**F1 -- a waiting worker keeps its session and the worktree (the core fix).**
+1. A: `use wait; wcx step $R`. It does not return.
+2. B: `use wait`, then:
+   - `wcx status`. Expected: under `active:`, the run (`controller pid <n> active`) and `job <J>
+     (LAUNCHED, ...): worker pid <p> waiting on 1 background task (verify "full verification")
+     and 0 wakeups; owns 2 processes (...)`, each with a `follow:` line.
+   - `wcx inspect $R`. Expected: `lifecycle lock: held`, then a `jobs:` block with the same
+     activity line. `last_completed_checkpoint_id=None`.
+   - `wcx explain $R`. Expected: `pending job: <J> (LAUNCHED)` followed by an `activity:` line
+     with the same text.
+   - `timeout 15 $WC --runtime-dir $RT follow $R`. Expected: the worker's first turn (`background
+     task verify started: full verification`, the "running in the background" text, `worker
+     result: success`), and `worker WAITING` job lines. It does **not** end at the worker's
+     `result`.
+   - `wcx step $R; echo $?` and `wcx run $R; echo $?`. Expected: both exit `45`. The message names
+     `Job <J>'s stdin anchor (pid <a>) holds the lock`, says `a Controller (pid <n>) is attached to
+     the job, supervising it`, and says a tool process never receives the descriptor.
+   - `touch $REL`.
+3. A: `step` returns within a few seconds, exit `0`.
+4. B: `use wait; hist; git -C $R log --oneline -1; wcx inspect $R | grep -E 'lock|last_completed'`.
+   Expected: `planned launched worker_spawned worker_running worker_waiting worker_running
+   worker_ending worker_ended completed finished`, `Implement CP1`, `lifecycle lock: free` and
+   `last_completed_checkpoint_id=CP1`. The worker's second turn ran in the **same** session:
+   `rec "r['worker']['stream_diagnosis']['turns']"` prints `2`.
+
+**F2 -- Ctrl-C ends only the Controller; `resume` re-attaches.**
+1. A: `use ctrlc; wcx step $R`. In B: `use ctrlc`, then `wcx status | grep waiting` until it
+   prints the job's waiting line.
+2. A: press Ctrl-C. Expected on stderr: `interrupted -- the worker (pid <p>, process group <p>)
+   keeps running in its own session ...`, `its stdin anchor (pid <a>) keeps the session open and
+   holds the lifecycle lock; `workflow-controller resume <R>` re-attaches ...`, and a `follow it:`
+   line. A Python `KeyboardInterrupt` traceback follows, because the interrupt propagates
+   unchanged (see known limitations).
+3. B: `use ctrlc; wcx status | grep ' job '`. Expected: still `waiting on 1 background task`, now
+   ending `; no Controller attached -- workflow-controller resume <R> re-attaches`. Then `wcx
+   step $R; echo $?`. Expected: `45`, naming the stdin anchor, `no Controller is attached`, and
+   `resume`.
+4. A: `wcx resume $R`. It does not return.
+5. B: `wcx status | grep ' job '`. Expected: `waiting`, with no `no Controller attached` suffix.
+   `wcx resume $R; echo $?`. Expected: `45`, `supervisor lock ... is held by another Controller
+   (pid <resume's pid>) ... nothing was reconciled`. Then `touch $REL`.
+6. A: `resume` prints `<J>: FINISHED`, exit `0`. B: `git -C $R log --oneline -1` shows
+   `Implement CP1`.
+
+**F3 -- the Controller is killed outright (`SIGKILL`); `resume` re-attaches.**
+1. A: `use lose; wcx step $R`. B: `use lose`, then wait until `wcx status | grep waiting` prints.
+2. B: `pkill -KILL -f -- "-m controller .*step $R\$"`. A's `step` dies (`killed`).
+3. B: `wcx status`. Expected: the run shows `controller pid <n> inactive`, and the job shows
+   `waiting ...; no Controller attached -- workflow-controller resume <R> re-attaches`. `wcx
+   inspect $R` shows `lifecycle lock: held` and the same `jobs:` line.
+4. A: `wcx resume $R`. B: `touch $REL`. Expected in A: `<J>: FINISHED`, exit `0`.
+5. B: `use lose; hist`. Expected: `... worker_waiting worker_running worker_ending worker_ended
+   completed reconciled`. `git -C $R log --oneline -1` shows `Implement CP1`.
+
+**F4 -- an orphaned process the job owns is drained before the job completes.** This scenario's
+background task leaves a double-forked child in the worker's group that lives 40 s.
+1. A: `use drain; time wcx step $R`.
+2. B: within the 40 s, `use drain; wcx status | grep ' job '`. Expected: `worker pid <p> ending
+   (DRAINING); 2 owned processes still running (pids ...)`. `wcx explain $R | grep activity`
+   shows the same.
+3. A: expected on stderr `worker pid <p> exited; waiting for 2 process(es) still in its process
+   group: ...`, then exit `0` after about 40 s.
+4. B: `use drain; hist`. Expected: `... worker_ending worker_exited worker_draining worker_ended
+   completed finished`. The orphan finished before the record completed: `cat
+   $W/drain/orphan-done` (the orphan's end time) is earlier than `date -r $RT/jobs/$J.json +%s.%N`.
+
+**F5 -- a recognised tool daemon is never owned.** The worker's build leaves a long-lived
+process named `gpg-agent` in its own session, carrying the job's ownership tag.
+1. A: `use daemon; time wcx step $R`. Expected: exit `0` within about
+   2 s. The job does not wait for the daemon.
+2. A: `use daemon; rec "r['worker_state']['excluded_processes']"; rec "r['status']"`. Expected:
+   one entry with `pattern: gpg-agent` and its pid, and `FINISHED`. `ps -o pid,args -p <that
+   pid>` shows `gpg-agent 600` still running. `wcx inspect $R | grep lock` shows `lifecycle
+   lock: free`.
+3. Clean up: `kill <that pid>`.
+
+**F6 -- a scheduled wakeup keeps the session open and is settled by its stop.** The worker
+schedules a 30 s wakeup, ends its turn, and implements `CP1` in the fire turn, then stops the
+wakeup.
+1. A: `use wakeup; date +%T; wcx step $R`.
+2. B: `use wakeup; wcx status | grep ' job '`. Expected: `waiting on 0 background tasks and 1
+   wakeup (due HH:MM:SS)`, where the due time is 30 s after the `date` printed in step 1, and
+   stays the same if you run the command again.
+3. A: exit `0` about 30 s after the start.
+4. B: `wcx explain $R`. Expected: `last job: <J> (FINISHED)`, `worker outcome SUCCESS:
+   quiescent_terminal_turn`, and `wakeup toolu_fake_0001: settled by stop (cancelledWakeups 0,
+   expected 0), inside its own fire's harness command <uuid>`. `wcx --json explain $R` carries
+   the same data under `last_job.stream_diagnosis.wakeups`. `git -C $R log --oneline -1` shows
+   `Implement CP1`.
+
+**F7 -- `resume --abandon` refuses while owned work runs, then ends the anchor.**
+1. A: `use abandon; wcx step $R`. B: `use abandon`, then wait until `wcx status | grep waiting`
+   prints.
+2. B: lose the Controller and the worker, but not the verification:
+   `pkill -KILL -f -- "-m controller .*step $R\$"; use abandon; kill -KILL $(rec "r['worker_process']['pid']")`.
+3. B: `wcx resume --abandon $J $R; echo $?`. Expected: `45`, `refused, and no flag overrides it`,
+   naming the dead leader and the running processes still in its recorded process group, with
+   the `ps -o pid,pgid,lstart,args -g <pgid>` and `kill -TERM -- -<pgid>` commands.
+   `rec "r['status']"` is still `LAUNCHED`.
+4. B: `kill -TERM -- -$(rec "r['worker_process']['pgid']")`, then `wcx resume --abandon $J $R;
+   echo $?`. Expected: `<J>: FAILED (OperatorAbandoned; was LAUNCHED; ...)`, exit `0`. `ps -eo
+   args | grep -c "[W]orker's stdin anchor"` prints `0`: the leftover anchor was ended. `wcx
+   inspect $R | grep lock` shows `lifecycle lock: free`, and `git -C $R log --oneline -1` is still
+   `Seed the work item`.
+
+**F8 (optional, real `claude`, real spend, about 10 minutes) -- the harness contract still holds
+on your installed `claude`.** From `$C`: `claude --version`, then `CONTROLLER_LIVE_WORKER=1
+python3 -m unittest -v tests.test_integration_disposable_repo.LiveHarnessContractProbeTest`.
+Expected: 2 tests OK. CP8 ran this against `claude` 2.1.283. A failure here means the measured
+contract (a session kept open while stdin is open, the `command_lifecycle` wakeup bracket, the
+P12 stop counts) changed. Report the version and the failing probe.
+
+**Teardown:** `pipx uninstall workflow-controller; rm -rf /tmp/wc-lifecycle-fr`. Check `ps -eo
+pid,args | grep -E '[f]ake_claude|[g]pg-agent 600'` prints nothing.
+
+### Known limitations and out of scope
+
+- Ctrl-C prints a Python `KeyboardInterrupt` traceback after the three guidance lines. The
+  interrupt propagates unchanged by design (plan C); the Controller never forwards it to the
+  worker.
+- The 305 s settle window, a matched wakeup that is never stopped, and the two 300 s
+  harness-contract breaches (`wakeup_not_delivered`, `command_lifecycle_unterminated`) are too
+  slow to walk by hand. They are covered by the suite and the README's "Time is not
+  termination".
+- The 600 s drain bound and its detach (`detached after 10:00`) are covered by the suite, not by
+  a flow here.
+- These are unsolved by design (README "What is not solved here", ADR 0004): the model relies on
+  the measured harness behaviour; wakeup fires are matched by an undocumented event; an
+  `env -i` descendant orphaned while nothing supervises it is not owned; daemon recognition is by
+  name.
+- Implementation review round 1's Optional 2 (declining `ENDING` once the anchor has died) and
+  Optional 3 were not applied. The four patches listed in `docs/ROADMAP.md` section 1.4 stay
+  open.
+- `--timeout` is now opt-in and spans the whole owned lifetime. There is no default worker
+  timeout.
+
+### Dry-run notes
+
+The dry run matched the expected results above except in two places. They are recorded here so
+you can confirm them and file them in `FUNCTIONAL_REVIEW.md`:
+
+- **F6: the wakeup's due time shows the current time.** The dry run printed `(due 02:39:45)` at
+  02:39:45 for a wakeup recorded as `due_at: 2026-09-26T01:40:10.201Z` (02:40:10 local). The
+  recorded `due_at` has milliseconds. `observe._parse_at` accepts only whole-second
+  `%Y-%m-%dT%H:%M:%SZ`, so `_clock` falls back to "now". The recorded `due_at` and the
+  `explain --json` data are correct. Any other presenter time built from the same millisecond
+  field would show the same fault.
+- **F1/F2/F3/F4/F7: `owns 2 processs` / `2 owned processs still running`.** The noun is
+  pluralised by appending `s` to `process`.
+
+One more observation, not necessarily a defect: in F7, after the worker leader is killed but its
+group still runs, `status` still describes the job as `worker pid <p> waiting on 1 background
+task`. It is derived from the last recorded `worker_state`, and no Controller is attached to
+update that state.
+
 ## Next action
 
-Review feedback applied; the post-fix bundle (revision 2) is generated for another
-`LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`).
+At the `AWAITING_FUNCTIONAL_REVIEW` hard gate: the user runs the checklist above and records
+findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`. With no findings, `/accept-milestone`.
+With findings, `/apply-functional-review`.

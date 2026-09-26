@@ -208,7 +208,10 @@ mode (the lifecycle lock's included).
       in its own session, ``reparent`` double-forked in the group,
       ``daemon`` double-forked into its own session and long-lived, under
       ``argv0``; with ``orphan_write_file`` the descendant instead writes
-      its end time there when it exits);
+      its end time there when it exits; ``orphan_pid_file`` receives the
+      descendant's pid, which it keeps through its ``setsid`` and ``exec
+      -a``, so a test can find it by pid: a supervisor records the command
+      line it first sees, which can be a stage before the ``exec -a``);
     - ``{"step": "task_stop", "id"}``: a worker-initiated stop, P8's
       statuses (``killed``/``stopped``) mid-turn, and no notification turn;
     - ``{"step": "await", "id", "notify"}``: wait, mid-turn, for task
@@ -949,12 +952,16 @@ class StreamingSession:
             inner = shlex.quote(f"sleep {lifetime}; date +%s.%N > {shlex.quote(step['orphan_write_file'])}")
         else:
             inner = shlex.quote(f"exec -a {shlex.quote(argv0)} sleep {lifetime}")
+        # ``$!`` is the descendant's pid for good: a background child is not
+        # a group leader, so ``setsid`` calls setsid(2) in place, and ``bash
+        # -c 'exec -a ...'`` execs in place.
+        record = f" echo $! > {shlex.quote(step['orphan_pid_file'])};" if step.get("orphan_pid_file") else ""
         if orphan == "setsid":
-            spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &)"
+            spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &{record})"
         elif orphan == "reparent":
-            spawn = f"(bash -c {inner} </dev/null >/dev/null 2>&1 &)"
+            spawn = f"(bash -c {inner} </dev/null >/dev/null 2>&1 &{record})"
         elif orphan == "daemon":
-            spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 & disown)"
+            spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &{record} disown)"
         else:
             raise ValueError(f"unknown bash_bg orphan mode {orphan!r}")
         return f"{spawn}; {command}"

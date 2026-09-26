@@ -129,9 +129,12 @@ def describe_plan(plan: dict, estimates: dict[str, float] | None = None) -> str:
     lines = [f"plan {plan['plan_digest']}",
              f"profile {plan['profile']}, parameters {json.dumps(plan['parameters'])}, "
              f"timing source {json.dumps(plan['timing_source'])}",
-             f"{len(plan['selected_ids'])} selected tests in {plan['shard_count']} shards"]
+             f"{len(plan['selected_ids'])} selected tests in {plan['shard_count']} shards",
+             ts.exclusive_registry_line(plan)]
     for shard in plan["shards"]:
-        lines.append(f"  shard {shard['index']}: {len(shard['test_ids'])} tests, "
+        alone = f" ({ts.EXCLUSIVE}: runs alone, after the others)" if ts.is_exclusive(shard) \
+            else ""
+        lines.append(f"  shard {shard['index']}{alone}: {len(shard['test_ids'])} tests, "
                      f"{len(shard['atoms'])} atoms, estimate {shard['estimate_seconds']:.1f} s")
     if estimates:
         key = max(estimates, key=lambda atom: (estimates[atom], atom))
@@ -309,14 +312,16 @@ def run_shards(plan: dict, plan_path: Path, results_dir: Path, repo_root: Path, 
                indexes: list[int], jobs: int, run_id: str, isolated_pip_cache: bool,
                verbose: bool) -> tuple[set[int], dict[int, list[dict]], float]:
     """Run ``indexes`` of ``plan`` as ``exec-shard`` children, at most
-    ``jobs`` at once, each in its own session. Returns the interrupted
-    shards, the leaks the parent found after each shard exited (already
-    killed), and the wall time. Ctrl-C (or SIGTERM) sends SIGTERM, then
-    SIGKILL after ``INTERRUPT_GRACE_SECONDS``, to every running shard's
-    group, and marks the running and queued shards interrupted."""
+    ``jobs`` at once, each in its own session; the exclusive shard starts
+    only once no other shard is running, and nothing starts beside it.
+    Returns the interrupted shards, the leaks the parent found after each
+    shard exited (already killed), and the wall time. Ctrl-C (or SIGTERM)
+    sends SIGTERM, then SIGKILL after ``INTERRUPT_GRACE_SECONDS``, to every
+    running shard's group, and marks the running and queued shards
+    interrupted."""
     interrupt = _Interrupt()
     previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
-    queue = list(indexes)
+    queue = sorted(indexes, key=lambda i: (ts.is_exclusive(plan["shards"][i]), i))
     running: dict[int, _Shard] = {}
     interrupted: set[int] = set()
     leaks: dict[int, list[dict]] = {}
@@ -337,6 +342,9 @@ def run_shards(plan: dict, plan_path: Path, results_dir: Path, repo_root: Path, 
     try:
         while (queue or running) and not interrupt.requested:
             while queue and len(running) < jobs and not interrupt.requested:
+                if running and (ts.is_exclusive(plan["shards"][queue[0]]) or any(
+                        ts.is_exclusive(plan["shards"][i]) for i in running)):
+                    break
                 index = queue.pop(0)
                 env = ts.shard_environment(os.environ, results_dir, run_id, index,
                                            isolated_pip_cache=isolated_pip_cache)

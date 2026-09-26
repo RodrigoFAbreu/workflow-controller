@@ -31,10 +31,131 @@ no retries.
 | CP1 -- inventory, atoms and selection | complete | `302d7fc` |
 | CP2 -- result records and timing model | complete | `4467a80` |
 | CP3 -- adaptive deterministic planner | complete | `b0eb707` |
-| CP4 -- executor, local runner and aggregation | complete | this checkpoint's commit |
-| CP5 -- serialization registry and timing-flake hardening | not started | |
+| CP4 -- executor, local runner and aggregation | complete | `55c855b` |
+| CP5 -- serialization registry and timing-flake hardening | complete | this checkpoint's commit |
 | CP6 -- CI integration | not started | |
 | CP7 -- documentation, measurement and full verification | not started | |
+
+### CP5 -- serialization registry and timing-flake hardening (complete)
+
+- **`EXCLUSIVE_ATOMS`** (`tools/test_shards.py`) maps an atom to the reason it must run alone.
+  It is **empty**: no failure in this checkpoint needed an entry (decision D5).
+  - `build_inventory` refuses an entry that names no atom or has an empty reason
+    (`exclusive_atoms_problems`), as a stale `CI_PLACEMENT` is refused.
+  - `build_plan` keeps the selected exclusive atoms out of the shard count and the LPT
+    assignment. It puts them, in canonical order, on one extra final shard marked
+    `"exclusive": true`, so `shard_count` is one more than the formula's. The same plan serves
+    CI, where that shard is one more job. A plan with no exclusive atom is byte-identical to
+    before, so every CP3/CP4 digest and golden test is unchanged.
+  - `validate_plan` accepts the key only as `true` on the last shard. Given the selection, it
+    also checks that the exclusive shard holds exactly the selection's registered atoms.
+  - The local runner (`run_shards`) starts the exclusive shard only once no other shard is
+    running, and starts nothing beside it. `--replay --shard i` of it runs it alone anyway.
+  - Every summary and `--plan-only` prints `EXCLUSIVE_ATOMS: <n> registered, <m> in this plan's
+    exclusive shard`, and the summary table marks the row `<i> (exclusive)`.
+- **Stress protocol, before any test fix** (the CP4 runner at HEAD `55c855b` plus the registry;
+  each run under a reaping subreaper, because this session is a Controller worker):
+
+  | configuration | command | runs | result | wall |
+  | --- | --- | --- | --- | --- |
+  | default (8 shards, 16 CPUs) | `python3 tools/run_tests.py` | 5 | 5 PASS | 81-83 s |
+  | oversubscribed | `taskset -c 0-3 python3 tools/run_tests.py --shards 12 --jobs 12` | 3 | 3 PASS | 104-105 s |
+  | 4 CPUs | `taskset -c 0-3 python3 tools/run_tests.py` | 5 | 5 PASS | 92-95 s |
+
+  Zero failures, zero leaked processes. None of the three known candidates showed, so each was
+  then run in targeted stress: 8 parallel copies of the class, pinned to one CPU
+  (`taskset -c 0`), several rounds.
+- **Candidate 1, the `DrainDetachJobTest` escapee race: reproduced and fixed** (a test defect).
+  - *Exposed:* 1 failure in 32 targeted runs. The drain-detach message named the escapee
+    `2529360 (bash -c exec -a fake-escapee sleep 3600)`, not `(fake-escapee ...`.
+  - *Cause:* the Controller records an owned process's entry, `cmdline` included, **when it
+    first sees it**, and keeps it (worker-lifecycle plan, C step 3; `controller/worker.py`,
+    `entry = recorded or {...}`). The escapee is owned from its fork, because it is in the
+    worker's group until its `setsid`. Under load, a scan can see it before its `exec -a`, and
+    then its recorded command line is a pre-exec stage. The test's `(fake-escapee` prefix
+    assumed the first scan came after the exec.
+  - *The plan's suggested fix does not work.* Two fixture variants were tried and measured:
+    - Waiting in the fake until `/proc/<pid>/cmdline` reads `fake-escapee` before the step
+      continues: 10 failures in 64. The first sighting still precedes the exec, and the
+      command substitution adds another pre-exec stage.
+    - An orphan named from birth (exec'd under `argv0`, then forked): 23 failures in 64. The
+      transient same-named parent becomes a second recognised `gpg-agent` in
+      `excluded_processes`, and it breaks name-based lookups.
+
+    Every stage of a process the worker spawns is visible from its fork, so no fixture can
+    make the first sighting come after the exec.
+  - *Fix:* `tests/fake_claude.py`'s `bash_bg` gains `orphan_pid_file`, which receives the
+    orphan's `$!`. That pid is kept through `setsid` and `exec -a`, because a background child
+    is not a group leader and `bash -c 'exec ...'` execs in place.
+    `test_an_unrecognised_escapee_detaches_the_job_and_the_next_step_is_refused` now asserts:
+    - the remaining pid is exactly the escapee's;
+    - the message carries `<pid> (<the recorded cmdline>)` verbatim;
+    - the recorded command line is one of the escapee's own stages
+      (`fake-escapee 3600`, or `(setsid )?bash -c ... exec -a fake-escapee sleep 3600 ...`);
+    - the live process's `argv[0]` is `fake-escapee`.
+  - *Cleared:* 0 failures in 64 targeted runs.
+  - **For the reviewer:** this changes one assertion's form, from a name prefix to the recorded
+    command line plus exact pid identity. I read it as correcting an assertion that encoded a
+    timing the Controller never guaranteed, not as loosening one, but the plan's hardening
+    policy says assertions are never loosened, so it needs an explicit decision.
+- **The same first-sighting class in `tests.test_worker.OwnershipTest`: found by targeted stress,
+  partly fixed, partly open.**
+  - *Exposed:* 11 failures in 24 targeted runs. The failures were
+    `no owned process named 'fake-claude-orphan' was flushed`, an empty `[pid] = recorded`, and
+    in the reparented case a first-sighting `ppid`.
+  - *Fixed:* the orphan is now identified by its exact pid through `orphan_pid_file` (`_orphan`
+    by pid, `_escaped`, `test_a_recorded_process_stays_owned_after_it_passes_no_other_test`,
+    `test_an_unrecognised_daemon_detaches_after_the_drain_bound_and_ends_nothing`). The
+    recorded command line is checked against the orphan's own stages
+    (`_orphan_cmdline_re`).
+  - *Still open:* 3 failures in 24, all
+    `test_a_setsid_escapee_is_owned_by_tag_and_adopted_and_waited_for`
+    (`'group' != 'tag'`). The recorded `source` is also first-seen, and before its `setsid`
+    the escapee is in the worker's group. The first-sighting `ppid` check in the reparented and
+    no-subreaper tests has the same shape.
+
+    The only test-side changes would be to patch the supervisor's scan or to stop proving tag
+    ownership. The alternative is a Controller change: refresh `source`/`cmdline` on later
+    scans. This milestone does not change `controller/`. **Not fixed; it needs a decision.**
+    It shows only at 8 copies on one CPU, never in the stress protocol's 26 runs.
+- **Candidate 2, the `CheckpointPredicateUnitTest` error: not reproduced.** 40 targeted runs and
+  all 26 protocol runs were clean. If it recurs, the executor's recording result now captures
+  its traceback in `shard-<i>.json` and the summary.
+- **Candidate 3, the `test_worker` hanging-worker reap check: not reproduced, and superseded.**
+  - Runs: 40 targeted runs under the reaping wrapper, 80 without one, and one under a
+    deliberately non-reaping subreaper, all clean.
+  - Why: since `e8364eb` (2026-09-25, the day after the flake was observed), `worker.launch`
+    is itself a reaping child subreaper for the launch's duration. The killed grandchild is
+    reaped there, whoever the outer reaper is. No change was made.
+- **Stress protocol, after the fixes** (same commands and configurations, now 2034 tests):
+
+  | configuration | runs | result | wall |
+  | --- | --- | --- | --- |
+  | default (8 shards) | 5 | 5 PASS | 81-83 s |
+  | 4 CPUs (`taskset -c 0-3`) | 5 | 5 PASS | 94-97 s |
+  | oversubscribed (`--shards 12 --jobs 12`, 4 CPUs) | 3 | 3 PASS | 108-111 s |
+
+  Zero failures, zero leaks; every summary reports `EXCLUSIVE_ATOMS: 0 registered`.
+- **Tests:**
+  - `tests/test_test_shards.py` has 120 tests. The 7 new ones are in `ExclusiveAtomsTest`:
+    - the registry audit against the real inventory;
+    - a named unknown atom and an empty reason;
+    - `build_inventory` refusing a bad registry;
+    - exclusive atoms together on the last shard, with the parallel shards planned as if they
+      were unselected;
+    - an unselected entry changing nothing, and an only-exclusive selection;
+    - a misplaced, non-`true` or missing exclusive marker refused.
+  - `tests/test_run_tests.py` has 20 tests. The new `ExclusivePhaseTest` registers an atom
+    through a driver and runs the real CLI. It asserts that the exclusive shard's test starts
+    after both parallel shards' tests have ended, and checks the summary lines. With the
+    runner's gate removed, it fails.
+  - `--plan-only` now prints the registry line.
+  - The `DrainDetachJobTest` and `OwnershipTest` changes above.
+- **Verification:**
+  - `python3 -m unittest tests.test_test_shards tests.test_run_tests
+    tests.test_fake_claude_contract tests.test_job.DrainDetachJobTest
+    tests.test_worker.OwnershipTest`: 222 tests, OK.
+  - The stress protocol before and after the fixes, as above: 26 full runs, all PASS.
 
 ### CP4 -- executor, local runner and aggregation (complete)
 

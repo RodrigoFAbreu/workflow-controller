@@ -7,7 +7,9 @@ partition. CP2: the shard result-record schema, the timing-profile schema,
 EWMA update/merge/prune, estimates, and the fallback to defaults. CP3: the
 shard count, deterministic LPT, the plan document and digest, the planner's
 self-validation, and the equivalence regression suite (I1 over seeded random
-cases, I4 across interpreters, LPT balance on the recorded baseline).
+cases, I4 across interpreters, LPT balance on the recorded baseline). CP5:
+the ``EXCLUSIVE_ATOMS`` audit, and the exclusive shard's placement and
+validation.
 
 The synthetic-tree tests discover a throwaway package under a temporary
 directory, then drop it from ``sys.modules`` and ``sys.path`` again.
@@ -1051,6 +1053,95 @@ class PlanValidationTest(unittest.TestCase):
         other_selection = _selection(self.A, self.B)
         with self.assertRaisesRegex(shards.PlanError, "differ from the selection"):
             shards.validate_plan(self.plan, other_selection)
+
+
+class ExclusiveAtomsTest(unittest.TestCase):
+    """CP5: the ``EXCLUSIVE_ATOMS`` registry is audited against the
+    inventory, and its atoms go, alone and last, on one exclusive shard."""
+
+    A, B, C, D = PlanTest.A, PlanTest.B, PlanTest.C, PlanTest.D
+
+    def test_every_registered_atom_exists_and_has_a_reason(self) -> None:
+        inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        self.assertEqual(shards.exclusive_atoms_problems(inventory), [])
+        keys = {atom.key for atom in inventory.atoms}
+        for key, reason in shards.EXCLUSIVE_ATOMS.items():
+            with self.subTest(atom=key):
+                self.assertIn(key, keys)
+                self.assertTrue(reason.strip())
+
+    def test_an_unknown_atom_or_an_empty_reason_is_named(self) -> None:
+        inventory = shards.Inventory(test_ids=self.A.test_ids, atoms=(self.A,))
+        self.assertEqual(shards.exclusive_atoms_problems(
+            inventory, {self.A.key: " ", "tests.test_gone.GoneTest": "why"}), [
+            f"{self.A.key!r} has no reason",
+            "'tests.test_gone.GoneTest' names no atom of the inventory"])
+        self.assertEqual(shards.exclusive_atoms_problems(inventory, {self.A.key: "why"}), [])
+
+    def test_the_inventory_refuses_a_bad_registry(self) -> None:
+        tree = SyntheticTree(self, {"test_x": PLAIN})
+        with unittest.mock.patch.object(shards, "TESTS_DIR", tree.pkg), \
+                unittest.mock.patch.object(shards, "conformance_family", return_value=([], [])), \
+                unittest.mock.patch.dict(shards.EXCLUSIVE_ATOMS,
+                                         {f"{tree.pkg}.test_x.ATest": ""}):
+            with self.assertRaisesRegex(shards.InventoryError, "EXCLUSIVE_ATOMS: .* no reason"):
+                shards.build_inventory(tree.top)
+
+    def plan(self, seconds: dict, exclusive: dict, **overrides) -> dict:
+        return shards.build_plan(_selection(*seconds), _params(**overrides), _timed(seconds),
+                                 exclusive=exclusive)
+
+    def test_exclusive_atoms_go_together_on_one_last_shard(self) -> None:
+        seconds = {self.A: 3, self.B: 5, self.C: 4, self.D: 2}
+        plan = self.plan(seconds, {self.D.key: "why", self.A.key: "why"}, shards=2)
+        self.assertEqual(plan["shard_count"], 3)
+        self.assertEqual([s["atoms"] for s in plan["shards"]],
+                         [[self.B.key], [self.C.key], [self.A.key, self.D.key]])
+        self.assertEqual([shards.is_exclusive(s) for s in plan["shards"]], [False, False, True])
+        self.assertIs(plan["shards"][2]["exclusive"], True)
+        self.assertNotIn("exclusive", plan["shards"][0])
+        self.assertEqual(plan["shards"][2]["test_ids"], list(self.A.test_ids + self.D.test_ids))
+        self.assertEqual(plan["shards"][2]["estimate_seconds"], 5.0)
+        # The parallel shards are planned exactly as if the exclusive atoms
+        # were not selected.
+        without = self.plan({self.B: 5, self.C: 4}, {}, shards=2)
+        self.assertEqual(plan["shards"][:2], without["shards"])
+
+    def test_an_unselected_registered_atom_changes_nothing(self) -> None:
+        seconds = {self.A: 3, self.B: 5}
+        self.assertEqual(self.plan(seconds, {self.C.key: "why"}), self.plan(seconds, {}))
+
+    def test_a_selection_of_only_exclusive_atoms_is_one_exclusive_shard(self) -> None:
+        plan = self.plan({self.A: 3, self.B: 5}, {self.A.key: "why", self.B.key: "why"})
+        self.assertEqual(plan["shard_count"], 1)
+        self.assertTrue(shards.is_exclusive(plan["shards"][0]))
+
+    def test_a_misplaced_exclusive_shard_is_refused(self) -> None:
+        seconds = {self.A: 3, self.B: 5, self.C: 4}
+        registry = {self.C.key: "why"}
+        plan = self.plan(seconds, registry, shards=2)
+        selection = _selection(*seconds)
+        cases = {
+            "only on the last shard": lambda p: p["shards"][0].update(exclusive=True),
+            "must be true": lambda p: p["shards"][2].update(exclusive=1),
+            "keys are not exactly": lambda p: p["shards"][0].update(alone=True),
+        }
+        for problem, tamper in cases.items():
+            with self.subTest(problem=problem):
+                tampered = json.loads(json.dumps(plan))
+                tamper(tampered)
+                _redigest(tampered)
+                with self.assertRaisesRegex(shards.PlanError, problem):
+                    shards.validate_plan(tampered)
+        dropped = json.loads(json.dumps(plan))
+        del dropped["shards"][2]["exclusive"]
+        _redigest(dropped)
+        shards.validate_plan(dropped)
+        with self.assertRaisesRegex(shards.PlanError, "exclusive shard holds \\[\\]"):
+            shards.validate_plan(dropped, selection, exclusive=registry)
+        shards.validate_plan(plan, selection, exclusive=registry)
+        with self.assertRaisesRegex(shards.PlanError, "exclusive atoms are \\[\\]"):
+            shards.validate_plan(plan, selection, exclusive={})
 
 
 class EquivalencePropertyTest(unittest.TestCase):

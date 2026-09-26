@@ -38,7 +38,10 @@ from a per-test mean.
 *Planning* (``build_plan``) turns a selection and its estimates into
 ``clamp(ceil(total / max(target, largest atom)), min, max)`` shards, never
 more than there are atoms, and places whole atoms on them by deterministic
-longest-processing-time-first assignment, each shard in canonical order. The
+longest-processing-time-first assignment, each shard in canonical order.
+Atoms registered in ``EXCLUSIVE_ATOMS`` are kept out of that assignment and
+placed together, in canonical order, on one final ``exclusive`` shard, which
+the local runner starts only once every other shard has finished. The
 plan carries a ``plan_digest`` over its canonical JSON, so every process
 given the same inputs computes a byte-identical plan, and the planner checks
 that the plan partitions the selection exactly before it returns it.
@@ -118,6 +121,13 @@ CI_PLACEMENT = {
 }
 
 
+#: Atoms that must run alone, keyed by atom, each with the reason and its
+#: evidence. An entry is admissible only for a demonstrated need that cannot
+#: be fixed in the test (decision D5); a timing flake is fixed at its cause
+#: instead. ``build_inventory`` refuses an entry that names no atom or gives
+#: no reason, and every run summary prints the registry's size.
+EXCLUSIVE_ATOMS: dict[str, str] = {}
+
 #: Result records and timing files.
 RESULT_SCHEMA_VERSION = 1
 TIMINGS_SCHEMA_VERSION = 1
@@ -159,6 +169,8 @@ LOCAL_PROFILE_SOURCE = "local-profile"
 _PLAN_KEYS = frozenset({"schema_version", "profile", "selection_names", "selected_ids",
                         "parameters", "shard_count", "shards", "timing_source", "plan_digest"})
 _SHARD_KEYS = frozenset({"index", "atoms", "test_ids", "estimate_seconds"})
+#: The optional key, always ``true`` when present, marking the exclusive shard.
+EXCLUSIVE = "exclusive"
 
 _HOLDER_RE = re.compile(r"^(\w+) \(([\w.]+)\)$")
 
@@ -339,8 +351,27 @@ def build_inventory(repo_root: Path = REPO_ROOT) -> Inventory:
     controller_ids, controller_atoms = controller_family(repo_root / TESTS_DIR, repo_root)
     conformance_ids, conformance_atoms = conformance_family(repo_root / CONFORMANCE_WORKFLOW,
                                                             repo_root / SCRIPTS_DIR)
-    return Inventory(test_ids=tuple(controller_ids + conformance_ids),
-                     atoms=tuple(controller_atoms + conformance_atoms))
+    inventory = Inventory(test_ids=tuple(controller_ids + conformance_ids),
+                          atoms=tuple(controller_atoms + conformance_atoms))
+    problems = exclusive_atoms_problems(inventory)
+    if problems:
+        raise InventoryError("EXCLUSIVE_ATOMS: " + "; ".join(problems))
+    return inventory
+
+
+def exclusive_atoms_problems(inventory: Inventory,
+                             registry: Mapping[str, str] | None = None) -> list[str]:
+    """What is wrong with ``registry`` (default ``EXCLUSIVE_ATOMS``) against
+    ``inventory``: an entry naming no atom, or with an empty reason."""
+    registry = EXCLUSIVE_ATOMS if registry is None else registry
+    keys = {atom.key for atom in inventory.atoms}
+    problems = []
+    for key, reason in sorted(registry.items()):
+        if key not in keys:
+            problems.append(f"{key!r} names no atom of the inventory")
+        if not isinstance(reason, str) or not reason.strip():
+            problems.append(f"{key!r} has no reason")
+    return problems
 
 
 def ci_partition(inventory: Inventory) -> dict[str, tuple[str, ...]]:
@@ -884,44 +915,68 @@ def plan_digest(plan: Mapping) -> str:
 
 def build_plan(selection: Selection, parameters: PlanParameters,
                timings: Iterable[tuple[Path, TimingProfile]] = (),
-               repo_root: Path = REPO_ROOT) -> dict:
+               repo_root: Path = REPO_ROOT, *,
+               exclusive: Mapping[str, str] | None = None) -> dict:
     """The plan for ``selection``: its shard count, a deterministic LPT
     assignment of whole atoms, and the ``plan_digest`` over all of it. Timing
     data (``timings``, ``(path, profile)`` in priority order) decides only
-    where an atom runs (I3). The plan is validated as a partition of the
-    selection (I1) before it is returned; a failure raises ``PlanError``."""
+    where an atom runs (I3). The selected atoms registered in ``exclusive``
+    (default ``EXCLUSIVE_ATOMS``) take no part in the count or the
+    assignment: they go, in canonical order, on one extra final shard marked
+    ``"exclusive": true``, so ``shard_count`` is one more than the formula's.
+    The plan is validated as a partition of the selection (I1) before it is
+    returned; a failure raises ``PlanError``."""
     if not selection.atoms:
         raise PlanError("the selection is empty; there is nothing to plan")
+    exclusive = EXCLUSIVE_ATOMS if exclusive is None else exclusive
     timings = tuple(timings)
     estimates = estimate_atoms(selection.atoms, [profile for _, profile in timings])
     # At least 1 ms each: with positive loads LPT puts the N longest atoms on
     # N distinct shards, so no shard is left empty by zero estimates.
     estimates_ms = [max(1, _milliseconds(estimates[atom.key])) for atom in selection.atoms]
-    count = shard_count(estimates_ms, parameters)
+    parallel = [i for i, atom in enumerate(selection.atoms) if atom.key not in exclusive]
+    alone = [i for i, atom in enumerate(selection.atoms) if atom.key in exclusive]
+    groups = []
+    if parallel:
+        parallel_ms = [estimates_ms[i] for i in parallel]
+        groups = [[parallel[i] for i in members]
+                  for members in assign_atoms(parallel_ms, shard_count(parallel_ms, parameters))]
+    if alone:
+        groups.append(alone)
     shards = []
-    for index, members in enumerate(assign_atoms(estimates_ms, count)):
+    for index, members in enumerate(groups):
         atoms = [selection.atoms[i] for i in members]
-        shards.append({"index": index, "atoms": [atom.key for atom in atoms],
-                       "test_ids": [test_id for atom in atoms for test_id in atom.test_ids],
-                       "estimate_seconds": sum(estimates_ms[i] for i in members) / 1000})
+        shard = {"index": index, "atoms": [atom.key for atom in atoms],
+                 "test_ids": [test_id for atom in atoms for test_id in atom.test_ids],
+                 "estimate_seconds": sum(estimates_ms[i] for i in members) / 1000}
+        if members is alone:
+            shard[EXCLUSIVE] = True
+        shards.append(shard)
     plan = {"schema_version": PLAN_SCHEMA_VERSION, "profile": parameters.profile,
             "selection_names": list(selection.names),
             "selected_ids": list(selection.test_ids),
-            "parameters": parameters.document(), "shard_count": count, "shards": shards,
+            "parameters": parameters.document(), "shard_count": len(shards), "shards": shards,
             "timing_source": timing_source(timings, repo_root)}
     plan["plan_digest"] = plan_digest(plan)
-    validate_plan(plan, selection)
+    validate_plan(plan, selection, exclusive=exclusive)
     return plan
 
 
-def validate_plan(plan, selection: Selection | None = None) -> dict:
+def is_exclusive(shard: Mapping) -> bool:
+    return shard.get(EXCLUSIVE) is True
+
+
+def validate_plan(plan, selection: Selection | None = None, *,
+                  exclusive: Mapping[str, str] | None = None) -> dict:
     """Check that ``plan`` is a well-formed partition of its own
     ``selected_ids`` (I1): its keys and digest, ``shard_count`` shards indexed
     in order, none empty, pairwise disjoint, their union exactly the
-    selection, each in canonical order. Given the ``selection`` it was
-    planned from, also that the selected ids match and that every shard
-    holds whole atoms. Returns ``plan``, or raises ``PlanError`` naming every
-    problem."""
+    selection, each in canonical order, and at most one exclusive shard, the
+    last. Given the ``selection`` it was planned from, also that the selected
+    ids match, that every shard holds whole atoms, and that the exclusive
+    shard holds exactly the selected atoms ``exclusive`` (default
+    ``EXCLUSIVE_ATOMS``) registers. Returns ``plan``, or raises ``PlanError``
+    naming every problem."""
     if not isinstance(plan, dict):
         raise PlanError("the plan is not a JSON object")
     problems = []
@@ -951,9 +1006,12 @@ def validate_plan(plan, selection: Selection | None = None) -> dict:
                         f"{len(shards)} shards")
     seen: dict[str, int] = {}
     for i, shard in enumerate(shards):
-        if not isinstance(shard, dict) or set(shard) != _SHARD_KEYS:
-            problems.append(f"shards[{i}] keys are not exactly " + ", ".join(sorted(_SHARD_KEYS)))
+        if not isinstance(shard, dict) or set(shard) - {EXCLUSIVE} != _SHARD_KEYS:
+            problems.append(f"shards[{i}] keys are not exactly " + ", ".join(sorted(_SHARD_KEYS))
+                            + f" and optionally {EXCLUSIVE}")
             continue
+        if EXCLUSIVE in shard and (shard[EXCLUSIVE] is not True or i != len(shards) - 1):
+            problems.append(f"shards[{i}].{EXCLUSIVE} must be true, and only on the last shard")
         if shard["index"] != i:
             problems.append(f"shards[{i}].index is {shard['index']!r}")
         ids = shard["test_ids"]
@@ -989,6 +1047,12 @@ def validate_plan(plan, selection: Selection | None = None) -> dict:
         placed = [key for shard in shards for key in shard["atoms"]]
         if sorted(placed) != sorted(by_key):
             problems.append("the shards do not place every selected atom exactly once")
+        registry = EXCLUSIVE_ATOMS if exclusive is None else exclusive
+        wanted = [atom.key for atom in selection.atoms if atom.key in registry]
+        alone = [key for shard in shards if is_exclusive(shard) for key in shard["atoms"]]
+        if alone != wanted:
+            problems.append(f"the exclusive shard holds {alone} but the selection's exclusive "
+                            f"atoms are {wanted}")
     if problems:
         raise PlanError("; ".join(problems))
     return plan
@@ -1621,6 +1685,14 @@ def _reproduce(name: str, index: int, results_dir: Path) -> list[str]:
             f"{Path(results_dir) / 'plan.json'} --shard {index}`"]
 
 
+def exclusive_registry_line(plan: Mapping) -> str:
+    """The registry's audit line: its size, and how many atoms of ``plan``
+    run on the exclusive shard."""
+    alone = sum(len(shard["atoms"]) for shard in plan["shards"] if is_exclusive(shard))
+    return (f"EXCLUSIVE_ATOMS: {len(EXCLUSIVE_ATOMS)} registered, {alone} in this plan's "
+            f"exclusive shard")
+
+
 def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
                    wall_seconds: float | None = None) -> str:
     """The run's Markdown summary: one row per shard, then every failing
@@ -1631,14 +1703,17 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
     lines = [f"# Test run: {_STATUS_WORDS[result.exit_status]} (exit {result.exit_status})", "",
              f"- plan `{plan['plan_digest']}`, profile `{plan['profile']}`, "
              f"{len(plan['selected_ids'])} selected tests in {plan['shard_count']} shards",
-             f"- results: `{results_dir}`", "",
+             f"- results: `{results_dir}`",
+             f"- {exclusive_registry_line(plan)}", "",
              "| shard | verdict | tests | wall s | estimate s |",
              "| --- | --- | --- | --- | --- |"]
     for row in result.shards:
         wall = "-" if row["wall_seconds"] is None else f"{row['wall_seconds']:.1f}"
         note = result.notes.get(row["index"])
         verdict = row["verdict"] + (f" ({note})" if note and row["verdict"] != PASS else "")
-        lines.append(f"| {row['index']} | {verdict} | {row['tests']} | {wall} | "
+        index = f"{row['index']} ({EXCLUSIVE})" if is_exclusive(
+            plan["shards"][row["index"]]) else row["index"]
+        lines.append(f"| {index} | {verdict} | {row['tests']} | {wall} | "
                      f"{row['estimate_seconds']:.1f} |")
     walls = [row["wall_seconds"] for row in result.shards if row["wall_seconds"] is not None]
     atoms = [(seconds, key) for row in result.shards for key, seconds in row["atoms"].items()]

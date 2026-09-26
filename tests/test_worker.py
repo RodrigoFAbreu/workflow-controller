@@ -27,6 +27,7 @@ import errno
 import fcntl
 import json
 import os
+import re
 import secrets
 import select
 import shlex
@@ -189,6 +190,16 @@ class InterruptedTest(unittest.TestCase):
             result = _launch(cwd=td, env_overrides={"FAKE_CLAUDE_SELF_TERM": "1"})
             self.assertEqual(result.outcome, worker.INTERRUPTED)
             self.assertLess(result.returncode, 0)
+
+
+def _orphan_cmdline_re(argv0: str, seconds: int) -> str:
+    """The command lines a supervisor can record for a fake ``bash_bg``
+    orphan. It records the one it first sees, and the orphan is owned from
+    its fork, so under load that can be a stage before the ``exec -a``: the
+    fake's ``bash -c`` (the fork), ``setsid bash -c ...`` or ``bash -c exec
+    -a ...`` (adaptive-test-sharding CP5)."""
+    stage = re.escape(f"exec -a {argv0} sleep {seconds}")
+    return rf"^({re.escape(f'{argv0} {seconds}')}|(setsid )?bash -c .*{stage}.*)$"
 
 
 def _pid_alive(pid: int) -> bool:
@@ -2185,12 +2196,12 @@ class OwnershipTest(_SupervisedCase):
     excluded; the drain bound; ``--timeout`` over the whole owned lifetime;
     and nested Controllers."""
 
-    def _orphan(self, details_list: list[dict], name: str = "fake-claude-orphan") -> dict:
+    def _orphan(self, details_list: list[dict], pid: int) -> dict:
         for details in details_list:
             for entry in details["owned_processes"]:
-                if entry["cmdline"].startswith(name):
+                if entry["pid"] == pid:
                     return entry
-        self.fail(f"no owned process named {name!r} was flushed")
+        self.fail(f"the orphan, pid {pid}, was never flushed as owned")
 
     def _escaped(self, orphan: str, **patches) -> tuple[worker.WorkerResult, dict, dict]:
         seen: dict = {}
@@ -2201,9 +2212,12 @@ class OwnershipTest(_SupervisedCase):
                 with contextlib.suppress(OSError):
                     seen.setdefault(entry["pid"], int(stat.read_text().rsplit(")", 1)[1].split()[1]))
 
-        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": orphan, "orphan_seconds": 2}],
+        pid_file = self.dir / "orphan.pid"
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": orphan, "orphan_seconds": 2,
+                                "orphan_pid_file": str(pid_file)}],
                               [{"step": "text"}]], on_state=on_state)
-        entry = self._orphan(self.details(worker.DRAINING))
+        entry = self._orphan(self.details(worker.DRAINING), int(pid_file.read_text()))
+        self.assertRegex(entry["cmdline"], _orphan_cmdline_re("fake-claude-orphan", 2))
         return result, entry, seen
 
     def test_a_setsid_escapee_is_owned_by_tag_and_adopted_and_waited_for(self) -> None:
@@ -2238,15 +2252,21 @@ class OwnershipTest(_SupervisedCase):
                 raise PermissionError(errno.EACCES, "scrubbed for the test")
             return real_read_environ(root, pid)
 
+        pid_file = self.dir / "orphan.pid"
+
         def on_state(state: str, details: dict) -> None:
-            recorded.update(entry["pid"] for entry in details["owned_processes"]
-                            if entry["cmdline"].startswith("fake-claude-orphan"))
+            with contextlib.suppress(OSError, ValueError):
+                orphan = int(pid_file.read_text())
+                recorded.update(entry["pid"] for entry in details["owned_processes"] if entry["pid"] == orphan)
 
         self.patch(worker, "_read_environ", read_environ)
-        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": "setsid", "orphan_seconds": 3}],
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": "setsid", "orphan_seconds": 3,
+                                "orphan_pid_file": str(pid_file)}],
                               [{"step": "text"}]], on_state=on_state)
         self.assertEqual(result.outcome, worker.SUCCESS)
         [pid] = recorded
+        self.assertRegex(self._orphan(self.details(worker.DRAINING), pid)["cmdline"],
+                         _orphan_cmdline_re("fake-claude-orphan", 3))
         draining = self.details(worker.DRAINING)
         self.assertTrue(draining)
         self.assertTrue(all(any(e["pid"] == pid for e in d["owned_processes"]) for d in draining[:-1]))
@@ -2374,12 +2394,15 @@ class OwnershipTest(_SupervisedCase):
         lock_file.touch()
         lock_fd = os.open(lock_file, os.O_RDONLY)
         self.addCleanup(os.close, lock_fd)
-        result = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon"}], [{"step": "text"}]],
+        pid_file = self.dir / "orphan.pid"
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon",
+                                "orphan_pid_file": str(pid_file)}], [{"step": "text"}]],
                              pass_fds=(lock_fd,))
         self.assertIsInstance(result, worker.DrainDetached)
         [remaining] = result.remaining
         self.extra_pids.append(remaining["pid"])
-        self.assertTrue(remaining["cmdline"].startswith("fake-claude-daemon"))
+        self.assertEqual(remaining["pid"], int(pid_file.read_text()))
+        self.assertRegex(remaining["cmdline"], _orphan_cmdline_re("fake-claude-daemon", 3600))
         self.assertEqual(result.remaining_pids, [remaining["pid"]])
         self.assertTrue(_running(remaining["pid"]), "the drain bound ended the escapee")
         anchor_pid = self.spawn["anchor"].pid

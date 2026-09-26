@@ -92,6 +92,26 @@ MODULES = {
                     handle.write(f"{os.getpid()} {stubborn.pid}")
                 time.sleep(600)
     """,
+    "test_timed": """
+        import os
+        import time
+        import unittest
+
+        def span(name):
+            start = time.monotonic()
+            time.sleep(0.5)
+            with open(os.path.join(os.environ["SHARD_PROBE_DIR"], f"{name}.span"), "w") as h:
+                h.write(f"{start} {time.monotonic()}")
+
+        class FirstTest(unittest.TestCase):
+            def test_span(self): span("first")
+
+        class SecondTest(unittest.TestCase):
+            def test_span(self): span("second")
+
+        class AloneTest(unittest.TestCase):
+            def test_span(self): span("alone")
+    """,
     "test_leak": """
         import os
         import subprocess
@@ -260,6 +280,8 @@ class RunnerVerdictTest(unittest.TestCase):
         completed = self.repo.run("--plan-only", "tests.test_pass", "--shards", "2")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("3 selected tests in 2 shards", completed.stdout)
+        self.assertIn("EXCLUSIVE_ATOMS: 0 registered, 0 in this plan's exclusive shard",
+                      completed.stdout)
         self.assertFalse(self.repo.results_parent.exists())
 
 
@@ -366,6 +388,40 @@ class NestedRunTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIsNone(outer.poll(), "the nested executor killed a process of its parent shard")
         self.assertEqual(repo.record(results, 0)["leaked_processes"], [])
+
+
+class ExclusivePhaseTest(unittest.TestCase):
+    """CP5: an atom registered in ``EXCLUSIVE_ATOMS`` runs on the final
+    exclusive shard, which starts only after every other shard has ended."""
+
+    def test_the_exclusive_shard_runs_alone_after_the_parallel_shards(self) -> None:
+        repo = SyntheticRepo(self)
+        results = repo.results()
+        alone = "tests.test_timed.AloneTest"
+        driver = textwrap.dedent(f"""
+            import sys
+            sys.path.insert(0, {str(RUN_TESTS.parent)!r})
+            import test_shards
+            test_shards.EXCLUSIVE_ATOMS[{alone!r}] = "the CP5 exclusive-phase test"
+            import run_tests
+            sys.exit(run_tests.main(sys.argv[1:]))
+        """)
+        completed = subprocess.run(
+            [sys.executable, "-c", driver, "tests.test_timed", "--shards", "2", "--results-dir",
+             str(results), "--repo-root", str(repo.root)],
+            env=repo.env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        plan = json.loads((results / "plan.json").read_text())
+        self.assertEqual([(s["atoms"], s.get("exclusive")) for s in plan["shards"]], [
+            (["tests.test_timed.FirstTest"], None), (["tests.test_timed.SecondTest"], None),
+            ([alone], True)])
+        spans = {name: [float(v) for v in (repo.probe / f"{name}.span").read_text().split()]
+                 for name in ("first", "second", "alone")}
+        self.assertGreaterEqual(spans["alone"][0], max(spans["first"][1], spans["second"][1]),
+                                spans)
+        self.assertIn("EXCLUSIVE_ATOMS: 1 registered, 1 in this plan's exclusive shard",
+                      completed.stdout)
+        self.assertIn("| 2 (exclusive) | PASS | 1 |", completed.stdout)
 
 
 class BuildingBlocksTest(unittest.TestCase):

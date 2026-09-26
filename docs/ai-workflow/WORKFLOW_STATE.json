@@ -2263,7 +2263,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 16,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -2338,10 +2338,10 @@
         "recorded_at": "2026-09-25T18:55:03Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "1e1e0f017a753bb5cf05be1680f28c32aa01d992a0ba198aa166454f4e13bf2f",
-        "approved_review_content_id": "eede1ea971a9337b89b81d90ec8c6f8e0870bdba07c6558162fbcd706bdcd21d",
+        "reviewed_bundle_id": "f23bb2c08bdce8d0eb4e0a270e93645769bb7c0bd26a9519e2a11b01fd95dfdb",
+        "approved_review_content_id": "e94cf5abf70a1c4978d1cc049f8f4b11c3abf3c4c3c2000c2d17bf463e1c3543",
         "review_content_manifest": [
           {
             "path": ".github/workflows/validate.yml",
@@ -2413,7 +2413,7 @@
             "path": "controller/worker.py",
             "exists": true,
             "mode": "100644",
-            "blob": "08e230afdbbcb05e141598bc5cfb947ff1108c40"
+            "blob": "63fce5c91d2fc7685a660f04299c5e61774588d6"
           },
           {
             "path": "controller/worker_stream.py",
@@ -2773,7 +2773,7 @@
             "path": "tests/test_observe.py",
             "exists": true,
             "mode": "100644",
-            "blob": "548983a8a742e1f125f0a1e805be8be0c85ee626"
+            "blob": "6b28579cf16cd7f06ff447f0a82511ae613c6474"
           },
           {
             "path": "tests/test_package_structure.py",
@@ -2785,7 +2785,7 @@
             "path": "tests/test_resume.py",
             "exists": true,
             "mode": "100644",
-            "blob": "294268da012ab660e0689c288d8dada9def799c5"
+            "blob": "50039798ffbd55f094c2346ba7b03843b0600d12"
           },
           {
             "path": "tests/test_trunk_preflight.py",
@@ -2797,7 +2797,7 @@
             "path": "tests/test_worker.py",
             "exists": true,
             "mode": "100644",
-            "blob": "49990c7751f01a4e35c03e1cd5f78ae0687c2a50"
+            "blob": "20e7048a7b2cdc3657115e48dbc1ceae7d92c540"
           },
           {
             "path": "tests/test_worker_stream.py",
@@ -2812,11 +2812,11 @@
             "blob": "90e0d5e22142544c5555e1543812b34999855b04"
           }
         ],
-        "reviewed_content_commit": "c352b5dc71b34fdf67c5872e337e6e283403548e",
+        "reviewed_content_commit": "95e169d8c0e5b4d5234ffff6d7dbc0cb4bf9a581",
         "legacy_evidence": null,
         "user_confirmation": "/approve-review implementation workflow-controller-worker-lifecycle-ownership",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-26T11:28:05Z"
+        "recorded_at": "2026-09-26T13:09:12Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -2836,8 +2836,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 85,
-      "last_transition": "2026-09-26T12:12:35Z",
+      "state_revision": 88,
+      "last_transition": "2026-09-26T13:09:12Z",
       "amendment_history": [
         {
           "amendment_id": "0",
@@ -2893,18 +2893,18 @@
       ],
       "amendment_base_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d",
       "implementation_review_stages": {
-        "review_content_id": "eede1ea971a9337b89b81d90ec8c6f8e0870bdba07c6558162fbcd706bdcd21d",
+        "review_content_id": "e94cf5abf70a1c4978d1cc049f8f4b11c3abf3c4c3c2000c2d17bf463e1c3543",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "1e1e0f017a753bb5cf05be1680f28c32aa01d992a0ba198aa166454f4e13bf2f",
+          "bundle_id": "f23bb2c08bdce8d0eb4e0a270e93645769bb7c0bd26a9519e2a11b01fd95dfdb",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-09-26T08:26:29Z"
+          "round": 4,
+          "completed_at": "2026-09-26T12:26:39Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "1e1e0f017a753bb5cf05be1680f28c32aa01d992a0ba198aa166454f4e13bf2f",
+          "bundle_id": "f23bb2c08bdce8d0eb4e0a270e93645769bb7c0bd26a9519e2a11b01fd95dfdb",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-09-26T11:25:24Z"
+          "round": 4,
+          "completed_at": "2026-09-26T13:01:49Z"
         }
       }
     }

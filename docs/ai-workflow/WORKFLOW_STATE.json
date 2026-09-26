@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-adaptive-test-sharding",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -2907,6 +2907,78 @@
           "completed_at": "2026-09-26T13:01:49Z"
         }
       }
+    },
+    "workflow-controller-adaptive-test-sharding": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-adaptive-test-sharding",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "405f050029f546055a3b42783fec25c87873bbd3",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
+        "approved_review_content_id": "1a35533430120462d5936b8b5f98fd8eb41e5d837e4a2a828d528636591be2ce",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9912e3599ff39af657cc84597fbd0fdbd77084af"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "00773062b61713f0483e2d9100944d655d8f7538"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cebe37b2b6a616e4b9d1201cd050be1ac55786a8"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve workflow-controller-adaptive-test-sharding at stage plan",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-26T18:01:13Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "1a35533430120462d5936b8b5f98fd8eb41e5d837e4a2a828d528636591be2ce",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-26T17:51:07Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-26T17:53:43Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 11,
+      "last_transition": "2026-09-26T18:01:13Z"
     }
   }
 }

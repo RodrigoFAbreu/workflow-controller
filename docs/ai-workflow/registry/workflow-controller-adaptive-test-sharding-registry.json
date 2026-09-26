@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-adaptive-test-sharding",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Inventory, atoms and selection: tools/test_shards.py builds one deterministic inventory (controller family equal to unittest discover's ids and order, refusing import failures, _FailedTest and duplicates; conformance family read from the managed workflow-conformance.yml), class atoms with whole-module atoms for setUpModule/tearDownModule modules, canonical order, name-based selection, and the CI placement partition",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Result records and timing model: per-shard result schema, the committed CI timing profile schema and the untracked local profile, EWMA update/merge/prune policy, estimates for unknown atoms, and corrupt-or-missing timing data falling back to defaults without affecting selection",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Adaptive deterministic planner: shard count clamp(ceil(total/max(target, largest atom)), min, max) with profile parameters, deterministic LPT assignment preserving canonical order within shards, plan.json with plan_digest, planner self-validation, and the serial/sharded equivalence property tests",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Executor, local runner and aggregation: tools/run_tests.py (full/selected parallel run, --serial reference, --plan-only, --replay, exec-shard, plan, aggregate, timings merge), per-shard process isolation (session, TMPDIR, XDG_STATE_HOME, pip cache, leak marker, SIGINT reset), loaded-vs-planned id refusal, run-time coverage proof, verdicts and exit codes, failure diagnostics with log paths and reproduction commands, Ctrl-C handling, and the committed timing profile seeded from a measured serial run",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Serialization registry and timing-flake hardening: the audited EXCLUSIVE_ATOMS mechanism (empty unless evidenced), the stress protocol run under default, 4-CPU and oversubscribed configurations, and each exposed test-fixture race (starting with the DrainDetachJobTest escapee exec race and the intermittent CheckpointPredicateUnitTest error) fixed at its cause without loosening assertions, lengthening windows or retrying",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "CI integration: tools/ci_workflows.py's validate.yml model gains plan / tests (dynamic fromJSON matrix, digest-checked exec-shard) / tests-result (always-run aggregate and coverage check) jobs, the hand-curated CONTROLLER_SHARDS and separate conformance matrix are removed, package reads the placement, workflows re-rendered, test_ci_workflows updated",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, and the local performance acceptance measurements",
+      "depends_on": [
+        "CP5",
+        "CP6"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

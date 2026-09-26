@@ -821,6 +821,33 @@ Correctness model:
 
 Current policy remains human-only merge. The adapter may observe merge state but must not auto-merge unless a future repository policy explicitly changes that invariant.
 
+## 7.7 `update`: self-update from published releases
+
+Replace the manual download / `sha256sum -c` / `pipx install --force` / `--version` sequence with one command:
+
+```text
+workflow-controller update            # the latest release
+workflow-controller update 1.1.1      # a named release (also accepts v1.1.1); covers rollback
+workflow-controller update --check    # report installed vs target; change nothing
+```
+
+Decided:
+
+- `update` performs the install itself, running `pipx install --force` on the verified wheel, then confirms the new `--version` and reports `old -> new`;
+- a source checkout or editable install (a `source` runtime) never self-updates: `update` refuses with an error that names the runtime kind and says to update the checkout instead;
+- the release repository comes from the wheel itself: the release build records `GITHUB_REPOSITORY` in the build info as a new field (e.g. `release_repository`; a `schema_version` bump that `verify-wheel` checks), so a release wheel only updates from the repository that published it. Local builds record none;
+- `--repo OWNER/NAME` overrides it (forks, mirrors, local builds). With neither a recorded repository nor `--repo`, `update` refuses rather than guess. No hardcoded fallback.
+
+Required behaviour:
+
+- downloads go through `gh release download` (the repository may be private: anonymous release URLs return 404), so `gh` missing or unauthenticated is an up-front refusal;
+- verification before install: the wheel against the release's `SHA256SUMS` (integrity only, since both come from the same release), then the wheel's own build info against the release (`build_origin: release`, the expected `release_tag`, and a `source_commit` equal to the tag's commit). The `verify-wheel` logic moves from `tools/release.py` into the package, since `tools/` is not shipped;
+- every refusal happens before pipx runs: a `source` runtime, `status` not `active: none`, `gh` unavailable, an unknown version, and a downgrade across a generation (`controller/GENERATION.json`) without an explicit flag, because the older generation refuses the newer one's job records (`StaleJobRecordError`, see the README's rollback notes);
+- requesting the already-installed version is a no-op that says so;
+- `doctor` (7.3) reports release/update status by reusing `update --check`.
+
+Initially GitHub-only via `gh`; release discovery moves behind the forge adapter (7.6) when that boundary exists.
+
 # 8. Routing and Cost/Efficiency Improvements
 
 **Priority:** Ongoing after routing foundation

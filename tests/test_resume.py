@@ -2924,9 +2924,17 @@ class AbandonWithAnOrphanedAnchorTest(_LostControllerCase):
             return bool(members)
 
         self.assertTrue(process_fixtures.wait_until(group_scanned), "the verification left the group")
+        before = set(members)
         refused = self.cli(lc, "resume", "--abandon", job_id)
         self.assertEqual(refused.code, cli.EXIT_WORKER_ACTIVE, refused.stderr)
-        for pid in members:
+        # The verification's loop forks a ``sleep 0.05`` every 50ms, so a
+        # member seen before ``resume`` may be gone by its own scan; one
+        # still there afterwards was there throughout, and is named. The
+        # loop's ``bash`` always is.
+        self.assertTrue(group_scanned(), "the verification left the group")
+        throughout = before & set(members)
+        self.assertTrue(throughout, (before, members))
+        for pid in throughout:
             self.assertIn(str(pid), refused.stderr)
         self.assertEqual(self.job_record(lc, job_id)["status"], job.STATUS_LAUNCHED)
         self.assertTrue(worker.identity_alive(anchor["pid"], anchor["start_ticks"]))

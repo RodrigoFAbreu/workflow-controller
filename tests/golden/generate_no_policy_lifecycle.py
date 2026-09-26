@@ -28,6 +28,10 @@ And once more by that work item's CP4, which persists the supervisor's
 Statuses, outcomes, exit codes and ``inspect``/``explain`` documents are
 unchanged.
 
+And once for the 1.2.0 release, whose bump alone broke it: every
+``inspect``/``explain`` ``controller.version`` became ``<VERSION>`` (see
+**Normalisation**). Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:
@@ -43,8 +47,11 @@ stub Workflow Manager and ``tests/fake_claude.py``:
 **Normalisation** (:func:`normalise`): the temporary directory becomes
 ``<TMP>``; job and run ids become ``<ID>``; ISO timestamps ``<TS>``; 40- and
 64-hex-digit tokens ``<SHA>``; the values of process- and host-specific keys
-(:data:`VOLATILE_KEYS`) ``<V>``. The file is canonical JSON (``sort_keys``,
-indent 2, trailing newline).
+(:data:`VOLATILE_KEYS`) ``<V>``; a ``version`` equal to this checkout's own
+Controller version (``pyproject.toml``'s, which the pinned test identity
+reports) ``<VERSION>``, so a release bump is not a behaviour change -- any
+other ``version`` value still shows verbatim. The file is canonical JSON
+(``sort_keys``, indent 2, trailing newline).
 
 Run ``python3 tests/golden/generate_no_policy_lifecycle.py`` to rewrite the
 golden, or with ``--check`` to compare without writing. Rewriting it is a
@@ -98,7 +105,8 @@ _SHA_RE = re.compile(r"\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b")
 
 def normalise(value: Any, tmp: str) -> Any:
     if isinstance(value, dict):
-        return {key: "<V>" if _volatile(key) and value[key] is not None else normalise(item, tmp)
+        return {key: "<V>" if _volatile(key) and value[key] is not None else
+                "<VERSION>" if key == "version" and item == fixtures.CONTROLLER_VERSION else normalise(item, tmp)
                 for key, item in value.items()}
     if isinstance(value, list):
         return [normalise(item, tmp) for item in value]

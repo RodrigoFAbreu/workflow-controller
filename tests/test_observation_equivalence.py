@@ -82,6 +82,19 @@ PROCESS_KEYS = frozenset({"pid", "pgid", "start_ticks"})
 #: differ, so an offset is normalised like a pid.
 OFFSET_KEYS = frozenset({"offset", "ending_point"})
 
+#: What a ``worker_<state>`` event snapshots at the instant the supervisor
+#: publishes it: which tasks, wakeups and command lifecycles its last poll
+#: of the stream had parsed, and how many owned processes its last
+#: ``/proc`` scan caught. Both are sampled on the supervisor's own poll and
+#: scan cadence, so two unfollowed runs of one fixture can differ here
+#: under CPU contention; the state transitions themselves (and ``turns``)
+#: cannot.
+SAMPLED_EVENT_KEYS = ("tasks", "wakeups", "command_lifecycles", "owned_processes")
+
+#: The per-job tallies of the processes those scans caught -- a transient
+#: process (a worker-run ``git``) is counted only when a scan lands on it.
+SAMPLED_RECORD_KEYS = frozenset({"owned_processes_seen", "owned_processes_seen_count"})
+
 _TIMESTAMP_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z")
 
 #: A random UUID the fake harness gives a streaming turn's events (event
@@ -328,9 +341,11 @@ class _ObservationCase(unittest.TestCase):
         jobs = []
         for job_id in job_ids:
             job_dir = fx.runtime / "jobs" / job_id
+            record, events = self._unsampled(json.loads((fx.runtime / "jobs" / f"{job_id}.json").read_text()),
+                                             _read_json_lines(job_dir / "events.jsonl"))
             jobs.append({
-                "record": json.loads((fx.runtime / "jobs" / f"{job_id}.json").read_text()),
-                "events": _read_json_lines(job_dir / "events.jsonl"),
+                "record": record,
+                "events": events,
                 "worker.stdout": (job_dir / "worker.stdout").read_text() if (job_dir / "worker.stdout").exists()
                 else None,
                 "worker.stderr": (job_dir / "worker.stderr").read_text() if (job_dir / "worker.stderr").exists()
@@ -350,6 +365,25 @@ class _ObservationCase(unittest.TestCase):
             "worker_diagnostics": _read_json_lines(fx.diag_log),
         }
         return _normalise(results, names)
+
+    def _unsampled(self, record: dict, events: list[dict]) -> tuple[dict, list[dict]]:
+        """A job's record and events without what the supervisor sampled
+        (:data:`SAMPLED_EVENT_KEYS`, :data:`SAMPLED_RECORD_KEYS`): each
+        ``worker_<state>`` flush with ``state_changed`` false (published
+        only when a poll or scan happened to see what the worker waits on
+        or owns change) is dropped and the rest renumbered, after checking
+        the log's own ``seq`` is gapless and ends at the record's
+        ``event_seq``. Every real state transition stays, in order."""
+        self.assertEqual([event["seq"] for event in events], list(range(1, len(events) + 1)))
+        self.assertEqual(record.get("event_seq"), len(events) or None)
+        kept = [event for event in events if event.get("state_changed") is not False]
+        events = [{**event, "seq": seq, **{key: "<SAMPLED>" for key in SAMPLED_EVENT_KEYS if key in event}}
+                  for seq, event in enumerate(kept, 1)]
+        record = {**record, "event_seq": len(kept) or None} if "event_seq" in record else dict(record)
+        for holder in (record.get("worker"), record.get("worker_state")):
+            if isinstance(holder, dict):
+                holder.update({key: "<SAMPLED>" for key in SAMPLED_RECORD_KEYS if key in holder})
+        return record, events
 
 
 def _normalise(value, names: dict[str, str]):

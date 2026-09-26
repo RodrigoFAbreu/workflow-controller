@@ -1808,6 +1808,30 @@ class AnchorTest(_SupervisedCase):
         self.assertGreaterEqual(time.monotonic() - released_at, 0.9)
         self.assertEqual(proc.returncode, 0)
 
+    def test_a_tagged_recognised_daemon_never_keeps_an_orphaned_anchor_alive(self) -> None:
+        # The anchor's orphan rule and every ownership reader share one
+        # daemon list and one matcher: they cannot drift.
+        self.assertIs(worker.RECOGNISED_DAEMONS, anchor.RECOGNISED_DAEMONS)
+        self.assertIs(worker.daemon_pattern, anchor.daemon_pattern)
+        gone = subprocess.Popen(["true"])
+        gone.wait()
+        tag = f"cp3-daemon-{secrets.token_hex(4)}"
+        env = {**os.environ, worker.OWNERSHIP_VAR: f"other:{tag}"}
+        missing_lock = str(self.dir / "no-supervisor.lock")
+        daemon = subprocess.Popen(["bash", "-c", "exec -a gpg-agent sleep 60"], env=env)
+        self.extra_pids.append(daemon.pid)
+        self.addCleanup(lambda: daemon.poll() is None and (daemon.kill(), daemon.wait()))
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: anchor.daemon_pattern(anchor._cmdline(daemon.pid)) == "gpg-agent"))
+        self.assertFalse(anchor.tagged_process_alive(tag))
+        self.assertTrue(anchor.orphaned(gone.pid, None, tag, missing_lock))
+        # An ordinary tagged process still keeps it alive.
+        sleeper = subprocess.Popen(["sleep", "60"], env=env)
+        self.extra_pids.append(sleeper.pid)
+        self.addCleanup(lambda: sleeper.poll() is None and (sleeper.kill(), sleeper.wait()))
+        self.assertTrue(process_fixtures.wait_until(lambda: anchor.tagged_process_alive(tag)))
+        self.assertFalse(anchor.orphaned(gone.pid, None, tag, missing_lock))
+
 
 class SupervisionTest(_SupervisedCase):
     """``RUNNING``/``WAITING``/``ENDING``/``ENDED`` from the stream (plan C,

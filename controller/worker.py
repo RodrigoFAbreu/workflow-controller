@@ -363,19 +363,10 @@ ENDED = "ENDED"
 WORKER_STATES = (STARTING, RUNNING, WAITING, ENDING, DRAINING, ENDED)
 
 #: Long-lived tool daemons a worker may start, which later jobs reuse:
-#: shared infrastructure, never owned (plan decision 9, limitation H9). A
-#: closed tuple of ``(kind, value)`` patterns over ``/proc/<pid>/cmdline``:
-#: ``argv0`` matches the basename of ``argv[0]``, ``argv`` any element.
-RECOGNISED_DAEMONS: tuple[tuple[str, str], ...] = (
-    ("argv0", "gpg-agent"),
-    ("argv0", "keyboxd"),
-    ("argv0", "dirmngr"),
-    ("argv0", "scdaemon"),
-    ("argv0", "ssh-agent"),
-    ("argv", "fsmonitor--daemon"),
-    ("argv", "org.gradle.launcher.daemon.bootstrap.GradleDaemon"),
-    ("argv", "org.jetbrains.kotlin.daemon.KotlinCompileDaemon"),
-)
+#: shared infrastructure, never owned (plan decision 9, limitation H9).
+#: Defined in the stdlib-only ``controller.anchor`` so the anchor's orphan
+#: rule applies the same exclusion; this is the same object.
+RECOGNISED_DAEMONS = anchor_module.RECOGNISED_DAEMONS
 
 #: How often the supervisor reads the stream (every
 #: :data:`_ACTIVE_POLL_SECONDS` while bytes arrived within the last
@@ -667,16 +658,9 @@ def _carries_tag(root: Path, pid: int, tag: str) -> bool:
     return False
 
 
-def daemon_pattern(cmdline: list[str]) -> str | None:
-    """The :data:`RECOGNISED_DAEMONS` pattern ``cmdline`` matches, or
-    ``None``."""
-    if not cmdline:
-        return None
-    argv0 = os.path.basename(cmdline[0])
-    for kind, value in RECOGNISED_DAEMONS:
-        if (kind == "argv0" and argv0 == value) or (kind == "argv" and value in cmdline):
-            return value
-    return None
+#: The :data:`RECOGNISED_DAEMONS` pattern a command line matches, or
+#: ``None`` (``controller.anchor.daemon_pattern``, shared with the anchor).
+daemon_pattern = anchor_module.daemon_pattern
 
 
 class _Ownership:

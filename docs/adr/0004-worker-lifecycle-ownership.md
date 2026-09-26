@@ -121,7 +121,9 @@ anchor process (`controller/anchor.py`, stdlib-only, run with
 layout). It also holds a copy of the lifecycle lock, runs with an empty
 environment (so no ownership tag, its own or an outer job's, owns it), and
 ends itself after `ANCHOR_ORPHAN_SECONDS` (60 s) with its worker gone, no
-tagged process alive and no supervisor attached. It has two separately
+tagged process alive other than a recognised daemon (the daemon policy
+below; the anchor applies the same `RECOGNISED_DAEMONS` list) and no
+supervisor attached. It has two separately
 ended roles: closing stdin at `ENDING` (on `SIGUSR1`), and holding the lock
 until the Controller ends it after the drain.
 

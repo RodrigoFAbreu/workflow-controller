@@ -22,7 +22,9 @@ It has two separately ended roles:
 **Orphan lifetime.** It ends itself, with no signal, once all of these have
 held on every check for ``orphan_seconds``: the worker's recorded
 ``(pid, start_ticks)`` is gone (a zombie counts as gone); no same-uid
-process's readable ``environ`` carries the job's ownership tag; and no
+process's readable ``environ`` carries the job's ownership tag, a
+recognised tool daemon (:data:`RECOGNISED_DAEMONS`) aside, since the daemon
+policy never owns one; and no
 supervisor is attached (a non-blocking ``flock`` on the supervisor lock
 succeeds, and is released at once). So an orphaned anchor never holds the
 lock for good.
@@ -53,6 +55,47 @@ OWNERSHIP_VAR = "WORKFLOW_CONTROLLER_OWNERSHIP"
 
 _NOT_RUNNING_STATES = ("Z", "X", "x")
 
+#: Long-lived tool daemons a worker may start, which later jobs reuse:
+#: shared infrastructure, never owned (plan decision 9, limitation H9). A
+#: closed tuple of ``(kind, value)`` patterns over ``/proc/<pid>/cmdline``:
+#: ``argv0`` matches the basename of ``argv[0]``, ``argv`` any element.
+#: Defined here, where the stdlib-only anchor can read it, and re-exported
+#: as ``controller.worker.RECOGNISED_DAEMONS``, so the anchor's orphan rule
+#: and every ownership reader share one list.
+RECOGNISED_DAEMONS: tuple[tuple[str, str], ...] = (
+    ("argv0", "gpg-agent"),
+    ("argv0", "keyboxd"),
+    ("argv0", "dirmngr"),
+    ("argv0", "scdaemon"),
+    ("argv0", "ssh-agent"),
+    ("argv", "fsmonitor--daemon"),
+    ("argv", "org.gradle.launcher.daemon.bootstrap.GradleDaemon"),
+    ("argv", "org.jetbrains.kotlin.daemon.KotlinCompileDaemon"),
+)
+
+
+def daemon_pattern(cmdline: list[str]) -> str | None:
+    """The :data:`RECOGNISED_DAEMONS` pattern ``cmdline`` matches, or
+    ``None`` (``controller.worker.daemon_pattern``)."""
+    if not cmdline:
+        return None
+    argv0 = os.path.basename(cmdline[0])
+    for kind, value in RECOGNISED_DAEMONS:
+        if (kind == "argv0" and argv0 == value) or (kind == "argv" and value in cmdline):
+            return value
+    return None
+
+
+def _cmdline(pid: int) -> list[str]:
+    """``/proc/<pid>/cmdline`` split as ``controller.worker`` splits it;
+    ``[]`` when unreadable."""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            raw = fh.read()
+    except OSError:
+        return []
+    return [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+
 
 def _stat(pid: int) -> tuple[str, int] | None:
     """``(state, start_ticks)`` of ``pid``, or ``None`` when it is gone or
@@ -79,8 +122,9 @@ def worker_gone(pid: int, start_ticks: int | None) -> bool:
 
 def tagged_process_alive(tag: str) -> bool:
     """Whether any running same-uid process's readable ``environ`` lists
-    ``tag`` in :data:`OWNERSHIP_VAR`. An unreadable ``environ`` is not
-    owned by tag."""
+    ``tag`` in :data:`OWNERSHIP_VAR`, other than a recognised daemon
+    (:func:`daemon_pattern`), which inherits the tag but is never owned.
+    An unreadable ``environ`` is not owned by tag."""
     uid = os.getuid()
     prefix = f"{OWNERSHIP_VAR}=".encode()
     wanted = tag.encode()
@@ -101,7 +145,8 @@ def tagged_process_alive(tag: str) -> bool:
         for item in environ:
             if item.startswith(prefix) and wanted in item[len(prefix):].split(b":"):
                 stat = _stat(int(name))
-                if stat is not None and stat[0] not in _NOT_RUNNING_STATES:
+                if (stat is not None and stat[0] not in _NOT_RUNNING_STATES
+                        and daemon_pattern(_cmdline(int(name))) is None):
                     return True
                 break
     return False

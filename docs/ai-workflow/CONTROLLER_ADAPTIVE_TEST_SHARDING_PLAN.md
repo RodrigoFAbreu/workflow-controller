@@ -1,4 +1,4 @@
-# Controller adaptive test sharding: one inventory, duration-balanced shards, local and CI (Revision 3)
+# Controller adaptive test sharding: one inventory, duration-balanced shards, local and CI (Revision 4)
 
 Work item: `workflow-controller-adaptive-test-sharding`
 Governing workflow version: `2.2` (this repository's `docs/ai-workflow/WORKFLOW_CONFIG.json`
@@ -15,6 +15,16 @@ Roadmap slot: none yet. The operator requested this milestone directly, ahead of
 section 1.4 ("Follow-up patches"), which stays the next roadmap item and is unaffected. CP7 adds
 the roadmap entry.
 Released baseline preserved: `workflow-controller 1.2.0` (`v1.2.0`, built from `6df5e9633c56`).
+Amendment 0's Design H changes one Controller behaviour for the next release. The released
+artefact is unaffected.
+
+**Amendment.** Revision 4 is plan amendment `0` (`amendment_history[0]`). It was requested at
+`b8b9a0f` from `IMPLEMENTING`, with amendment base `a5fe3f8`, and supersedes revision 3's approval
+(`5fdea5a`). It resolves the manual external implementation review's I1 (IR1-003) by fixing a
+pre-existing Controller defect that CP5's stress testing exposed. The only scope widening is one
+correction in `controller/worker.py`: Design H, delivered by the new checkpoint CP5B. Everything
+else in revision 3 stands. "Revision 4" at the end lists what changed and which checkpoints must
+be revalidated.
 
 ## Goal
 
@@ -34,10 +44,18 @@ can run any selection through the new runner.
 
 - No test tiers, no test removal, weakening or skipping, and no automatic retry of a failed test
   (a retry would hide exactly the timing defects this milestone must surface).
-- No change to `controller/` runtime behaviour. The released 1.2.0 behaviour, the wheel's
-  contents, the version and the release pipeline's classification are untouched. `tools/` and
-  `tests/` are not in the wheel (`pyproject.toml` `packages = ["controller"]`), and `setup.py`'s
-  `DIRTY_SCOPE` is `controller`, `pyproject.toml` and `setup.py`.
+- No change to `controller/` runtime behaviour, **except** Design H's ownership-provenance
+  correction (amendment 0). H changes how `controller/worker.py` labels an owned process's
+  `source`, and no ownership decision.
+  - The version, the release pipeline's classification, the job-record schema and
+    `controller/GENERATION.json` are untouched.
+  - The wheel's `controller/worker.py` changes. It ships with the next release, never as a
+    re-release of 1.2.0.
+  - `tools/` and `tests/` are not in the wheel (`pyproject.toml` `packages = ["controller"]`), and
+    `setup.py`'s `DIRTY_SCOPE` is `controller`, `pyproject.toml` and `setup.py`.
+- No other Controller change, and no Controller lifecycle refactor: no change to ownership
+  membership, adoption, waiting, draining, detaching, re-attaching, recovery or the record
+  schema. Design H lists what it preserves.
 - No Workflow lifecycle, Harness Adapter or provider redesign, and no Workflow 2.6 compatibility.
 - No edit to anything the Workflow Manager owns: `scripts/`, `.claude/commands/`,
   `.workflow-manager/` and `.github/workflows/workflow-conformance.yml`. The frozen conformance
@@ -204,6 +222,49 @@ to 2 s (`_QUIESCENCE_CONFIRM_SECONDS`, `_NOTIFICATION_CONFIRM_SECONDS`,
 40 `timeout=10` worker runs in `test_job`. There is no timeout-scaling knob, and this milestone
 does not add one (D6).
 
+### The ownership first-sighting race (CP5 evidence, amendment 0)
+
+CP5 measured this on 2026-09-26. It is kept here as the evidence that motivated amendment 0.
+
+- **Reproduction.** 8 parallel copies of `python3 -m unittest tests.test_worker.OwnershipTest`,
+  pinned to one CPU (`taskset -c 0`):
+  - 11 failures in 24 runs before CP5's pid-identity fixture fix;
+  - 3 failures in 24 after it, all in
+    `test_a_setsid_escapee_is_owned_by_tag_and_adopted_and_waited_for` (`'group' != 'tag'`);
+  - it never failed in the stress protocol's 26 runs (CP5, CP7).
+- **Cause, in the Controller.**
+  - `_Ownership.scan` (`controller/worker.py:743-760`) computes every process's basis on every
+    scan: `group`, then `tag`, then `adopted`, then the recorded entry.
+  - An already-recorded process keeps its first entry (`entry = recorded or {...}`), `source`
+    included.
+  - The escapee is forked in the worker's group, and calls `setsid(2)` in place only afterwards
+    (`tests/fake_claude.py:955-960`).
+  - The `bash_bg` step's task change triggers a scan at once (`_transition` then
+    `_scan_and_publish`). Under load that first sighting can precede the `setsid`. The entry then
+    says `group` for the rest of the process's life, although every later scan finds the process
+    by its tag.
+- **Not published either.** `_Supervision._signature` (`controller/worker.py:1277-1289`) compares
+  owned entries by `(pid, start_ticks)` only. So even a refreshed `source` would be flushed only
+  when something else changed.
+- **A second cause, in the tests.** `OwnershipTest._escaped` records the *first* observed `ppid`
+  (`seen.setdefault`). That can be the escapee's short-lived parent subshell, before the
+  subreaper adopts it. The `ppid == os.getpid()` checks of the setsid and reparented tests have
+  this shape.
+- **The same latent shape, never failed.** It also sits under:
+  - `tests.test_resume.DrainDetachedReattachTest`'s `source` checks
+    (`tests/test_resume.py:3201,3225`);
+  - `OwnershipTest.test_a_leaked_inner_anchor_holds_the_outer_job_only_until_it_ends_itself`
+    (`tests/test_worker.py:2466`).
+- **Why the tests cannot fix it.** Every stage of a process the worker spawns is visible from its
+  fork (CP5 notes), so no fixture can make the first sighting come after the `setsid`. The only
+  test-side alternatives were to patch the supervisor's scan, or to stop proving tag ownership.
+  Plan G reserves this case for an amendment.
+- **`source` is provenance only.** No `controller/` code path branches on it. Its only reads are
+  `worker.py:750` (the recorded fallback) and `worker.py:1560` (the re-attach seed). Owning,
+  waiting, draining, ending and reaping use the owned set, `outside_group` (derived from `pgrp`)
+  and `(pid, start_ticks)` identity. So the defect mislabels a process, and never changes what
+  is owned.
+
 ## Invariants
 
 - **I1 Equivalence.** For any selection `S` and any shard count `N`, the plan's shards partition
@@ -233,6 +294,9 @@ does not add one (D6).
   `TMPDIR` and `XDG_STATE_HOME`, and an environment marker that identifies its descendants.
 - **I9 Explicit serialization.** A test needs to run alone only if a reviewed registry entry,
   with a reason, says so. Nothing relies on accidental ordering or placement.
+- **I10 Provenance, not membership** (amendment 0). Design H changes only the `source` label of
+  an entry that is already owned, and when that label is published. It never changes which
+  processes are owned, or anything that is decided from the owned set.
 
 ## Design
 
@@ -747,7 +811,74 @@ run alone.
 
 The pass bar is zero failures across all runs. Every failure is triaged into a fixed test
 defect, a genuine Controller defect (stop, and raise a plan amendment: this milestone does not
-change `controller/`), or, only with evidence, an `EXCLUSIVE_ATOMS` entry.
+change `controller/`), or, only with evidence, an `EXCLUSIVE_ATOMS` entry. Amendment 0 is the one
+use of the second path so far. Its Controller change is Design H, and any further genuine
+Controller defect still needs its own amendment.
+
+### H. Ownership provenance follows the current basis (CP5B, amendment 0)
+
+This section fixes the defect described in "The ownership first-sighting race" (Investigation).
+The manual external implementation review's I1 accepted either an amendment that defers the
+race or one that fixes it. This one fixes it (D11).
+
+**Rule.** An owned process's `source` says why the **latest** scan that found it owns it, not
+why the first one did.
+
+1. **The scan.** In `_Ownership.scan` (`controller/worker.py`), a recorded entry whose identity
+   still matches becomes `dict(recorded, source=source)`, not `recorded`. `source` is computed
+   exactly as today, in the same order: `group`, then `tag`, then `adopted`, then the recorded
+   entry's own `source`. So a process found only through its record keeps the label it had.
+   A new entry is built exactly as today.
+2. **The publication.** `_Supervision._signature` compares owned entries by
+   `(pid, start_ticks, source)`, not `(pid, start_ticks)`. A relabel is then flushed by the next
+   scan, instead of waiting for an unrelated change. A label changes only when a process's real
+   basis changes, for example at its `setsid`, and a process cannot rejoin the worker's group
+   once it has left the session. So this adds at most one or two publications per escapee.
+
+**What H preserves**, each checked by a CP5B test or an existing one:
+
+- **Membership.** Which processes are owned, the order of the bases, pid-reuse detection
+  (`start_ticks`), daemon exclusion, `outside_group` and the unverifiable-scan fallback are
+  unchanged. No `controller/` code path branches on `source` (Investigation), so waiting,
+  draining, detaching, ending, reaping, re-attaching and recovery are unchanged too.
+- **First-sighting fields.** `cmdline` stays the first-seen command line. The external review
+  ratified the assertions that rely on that (IR1-002). `owned_processes_seen`'s `count` and
+  `sample` stay first-sighting history: each `sample` item is a copy taken when the identity was
+  first seen.
+- **The record schema.** Same keys, and the same `source` vocabulary (`group`, `tag`, `adopted`,
+  and `recorded` for a re-attach seed that had none). A re-attaching Controller
+  (`_recorded_ownership`) seeds from the record as today. Its scans now relabel a seeded entry
+  that they find by group or tag, for example a legacy `recorded` entry that carries the tag.
+- **Everything else.** The drain bound, `--timeout`, the scan cadence
+  (`_OWNERSHIP_SCAN_SECONDS`) and every other window are unchanged. There is no new setting, and
+  `controller/GENERATION.json` is not bumped, because no handoff or record contract changes.
+
+**Test-side corrections.** These fix the second, test-side cause under G's hardening policy.
+They do not loosen any assertion.
+
+- `OwnershipTest._escaped` records the **last** observed `ppid` of each owned process, not the
+  first. This is deterministic. The `bash_bg` command runs the `( ... & )` spawn subshell in the
+  foreground, so the subshell has exited, and the escapee has been reparented, before the step
+  ends. That happens before the worker exits, so before every `DRAINING` publication.
+- `OwnershipTest._orphan` returns the escapee's entry from the **last** `DRAINING` publication
+  that lists it, not the first. With H, that entry's `source` is the escapee's basis after its
+  `setsid`.
+- The existing assertions stay as they are: `source == "tag"` for the setsid escapee, `"group"`
+  for the reparented one, and `ppid == os.getpid()` (or `!=` without a subreaper).
+
+**Deterministic reproduction.** Stress only makes the race likely, so it is not enough.
+`tests/fake_claude.py`'s `bash_bg` gains an `orphan_gate` option, a FIFO path. The escapee
+blocks on `read _ < "$gate"` while it is still in the worker's group, and only then execs
+`setsid`. That is a shell builtin, so there is no extra child and the pid does not change. The
+test:
+
+1. waits until a publication lists the gated escapee with `source: "group"`, which is the first
+   sighting the race produced by chance;
+2. opens the FIFO to release it;
+3. asserts that a later publication lists the same `(pid, start_ticks)` with `source: "tag"`,
+   and that `cmdline` is still the first-seen value.
+
+Without H, step 3 fails every time.
 
 ## Checkpoints
 
@@ -759,9 +890,11 @@ change `controller/`), or, only with evidence, an `EXCLUSIVE_ATOMS` entry.
 | CP3 | Adaptive deterministic planner: shard count clamp(ceil(total/max(target, largest atom)), min, max) with profile parameters, deterministic LPT assignment preserving canonical order within shards, plan.json with plan_digest, planner self-validation, and the serial/sharded equivalence property tests | CP2 | 2 | 1 |
 | CP4 | Executor, local runner and aggregation: tools/run_tests.py (full/selected parallel run, --serial reference, --plan-only, --replay, exec-shard, plan, aggregate, timings merge), per-shard process isolation (session, TMPDIR, XDG_STATE_HOME, pip cache, leak marker, SIGINT reset), loaded-vs-planned id refusal, run-time coverage proof, verdicts and exit codes, failure diagnostics with log paths and reproduction commands, Ctrl-C handling, and the committed timing profile seeded from a measured serial run | CP3 | 3 | 1 |
 | CP5 | Serialization registry and timing-flake hardening: the audited EXCLUSIVE_ATOMS mechanism (empty unless evidenced), the stress protocol run under default, 4-CPU and oversubscribed configurations, and each exposed test-fixture race (starting with the DrainDetachJobTest escapee exec race and the intermittent CheckpointPredicateUnitTest error) fixed at its cause without loosening assertions, lengthening windows or retrying | CP4 | 3 | 1 |
+| CP5B | Ownership provenance follows the current basis (amendment 0, Design H): _Ownership.scan relabels a still-matching recorded entry's source from the current scan's basis (group, tag, adopted; the recorded fallback keeps it) while pid, start_ticks, cmdline and the seen sample stay first-sighting; _Supervision._signature includes source so a relabel publishes; OwnershipTest reads the last observed ppid and the last DRAINING entry; a gated escapee deterministically reproduces the pre-setsid first sighting; targeted stress clears IR1-003 | CP5 | 2 | 1 |
 | CP6 | CI integration: tools/ci_workflows.py's validate.yml model gains plan / tests (dynamic fromJSON matrix, digest-checked exec-shard) / tests-result (always-run aggregate and coverage check) jobs, the hand-curated CONTROLLER_SHARDS and separate conformance matrix are removed, package reads the placement, workflows re-rendered, test_ci_workflows updated | CP4 | 2 | 1 |
-| CP7 | Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, and the local performance acceptance measurements | CP5, CP6 | 2 | 1 |
+| CP7 | Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and re-verification on the amended head | CP5B, CP6 | 2 | 1 |
 
+<!-- CP1 -->
 ### CP1 -- inventory, atoms and selection
 
 Files: `tools/test_shards.py` (new: inventory, families, atoms, canonical order, selection,
@@ -780,7 +913,9 @@ Tests:
 - selection by module, class, method, `conformance` and `conformance:<file>`, and a name that
   matches nothing refuses;
 - the placement partition of the real inventory.
+<!-- /CP1 -->
 
+<!-- CP2 -->
 ### CP2 -- result records and timing model
 
 Files: `tools/test_shards.py` (result-record and timing schemas, estimates, update/merge, prune,
@@ -793,7 +928,9 @@ Tests:
 - a missing, unreadable, schema-invalid, negative or non-finite timing file falls back to the
   defaults with one warning and a valid plan;
 - the defaults alone give a valid plan for the real inventory.
+<!-- /CP2 -->
 
+<!-- CP3 -->
 ### CP3 -- adaptive deterministic planner
 
 Files: `tools/test_shards.py` (shard count, LPT, plan JSON, digest, self-validation),
@@ -810,7 +947,9 @@ Tests (the equivalence regression suite):
 - LPT balance on the recorded baseline stays within 1.10 × the ideal `total/N` when the largest
   atom is at most `total/N`;
 - a tampered plan fails the planner's self-validation.
+<!-- /CP3 -->
 
+<!-- CP4 -->
 ### CP4 -- executor, local runner and aggregation
 
 Files: `tools/test_shards.py` (the `aggregate` function, leak scan), `tools/run_tests.py` (new
@@ -861,7 +1000,9 @@ Tests:
   `exec-shard` argv has no `--count`;
 - the committed `tools/test_timings.json` validates against the schema and names only existing
   atoms.
+<!-- /CP4 -->
 
+<!-- CP5 -->
 ### CP5 -- serialization registry and timing-flake hardening
 
 Files: `tools/test_shards.py` (`EXCLUSIVE_ATOMS`, the exclusive phase and CI placement),
@@ -879,7 +1020,54 @@ Tests: the registry audit (existing atom, non-empty reason); the exclusive phase
 after the parallel phase; each fixed race gets a deterministic reproduction where one is
 possible (for example the escapee is asserted by name only after its cmdline is observed).
 The checkpoint notes record each stress round's command, configuration and result.
+<!-- /CP5 -->
 
+<!-- CP5B -->
+### CP5B -- ownership provenance follows the current basis (amendment 0)
+
+Files:
+- `controller/worker.py`: `_Ownership.scan`'s recorded-entry refresh and
+  `_Supervision._signature`, and nothing else (Design H);
+- `tests/test_worker.py`: `OwnershipTest` and new unit tests;
+- `tests/fake_claude.py`: `bash_bg`'s `orphan_gate`.
+
+No other `controller/` file changes, and no other test file is expected to change. If
+`tests/test_resume.py`'s `DrainDetachedReattachTest` needs an edit, that is a finding to report,
+because H should only make its `source` checks hold more often.
+
+Tests:
+- **Unit, over a synthetic `/proc` (`_proc_root` patched).**
+  - A recorded `group` entry whose process is now outside the group and carries the tag is
+    relabelled `tag`. Its `pid`, `start_ticks` and `cmdline` are unchanged, and the `sample` copy
+    taken at first sighting still says `group`.
+  - Without the tag but with `ppid ==` the supervisor, it is relabelled `adopted`.
+  - Found by nothing but its record, it keeps its recorded `source`.
+  - A changed `start_ticks` still drops it: pid reuse, as today.
+- **Unit, the signature.** Two `details` that differ only in one entry's `source` have different
+  signatures, and `_publish` calls `on_state_change` for the second.
+- **Membership is unchanged (I10).** For the same synthetic `/proc` sequence, the owned pid set,
+  `outside_group`, `excluded`, `seen_count` and `verifiable` are identical with and without the
+  relabel.
+- **The gated escapee (Design H).** It is first published as `group`, then as `tag`, with the
+  same identity and the first-seen `cmdline`.
+- **`OwnershipTest`'s corrected `_escaped`/`_orphan`.** The setsid, reparented and no-subreaper
+  tests keep their existing assertions.
+
+Verification:
+- **Targeted stress, the IR1-003 reproduction.** 8 parallel copies of `python3 -m unittest
+  tests.test_worker.OwnershipTest` under `taskset -c 0`, 48 runs, must give **0 failures**. The
+  same reproduction at the CP5 head gave 3 in 24.
+- **The latent sites.** The same stress, 24 runs each, over
+  `tests.test_resume.DrainDetachedReattachTest` and `tests.test_worker` must also give 0
+  failures.
+- **The full selection** through `tools/run_tests.py` at defaults, with its id set compared with
+  a serial run's.
+
+The checkpoint notes record each stress command, its configuration and its result, and close
+the CP5 "Still open" item.
+<!-- /CP5B -->
+
+<!-- CP6 -->
 ### CP6 -- CI integration
 
 Files: `tools/ci_workflows.py` (the `validate.yml` model's `plan`/`tests`/`tests-result` jobs;
@@ -893,7 +1081,9 @@ Tests: the job graph, the needs and `if: always()`, the matrix `fromJSON` expres
 `--shards`), the placement
 partition, the conformance family equal to the managed workflow, the artifact upload and download
 names, and `--check` clean.
+<!-- /CP6 -->
 
+<!-- CP7 -->
 ### CP7 -- documentation, measurement and full verification (terminal checkpoint)
 
 Files:
@@ -907,15 +1097,28 @@ Files:
 - `docs/ROADMAP.md` (the new entry, and the 1.2 CI section's hand-curated-shards line updated);
 - `docs/ACTIVE_MILESTONE.md`.
 
+Amendment 0 changes the following. CP7 was complete before the amendment, so these are
+revalidation edits:
+- The ADR, the roadmap entry and `docs/ACTIVE_MILESTONE.md` no longer list the `OwnershipTest`
+  first-sighting `source` race as open. They say that Design H fixed it (CP5B), and the ADR adds
+  I10.
+- The roadmap entry names the one Controller behaviour change for the next release's notes: the
+  `source` label of an owned process now follows its current basis.
+- The external review's optional O1: `README.md`'s timing-refresh wording separates ordinary
+  test drift, which needs no refresh, from a removed or renamed class. A removed or renamed class
+  leaves a stale atom that `CommittedTimingsTest` rejects until `timings merge` prunes it.
+  This is documentation only.
+
 Verification and measurement:
 - the full suite serially, both through `python3 -m unittest discover -s tests -t .` and through
   `run_tests.py --serial`, compared id for id;
 - the full selection through `run_tests.py` at defaults, 3 times, recording wall time, per-shard
   walls, the balance ratio and the largest atom;
-- the stress protocol (G) again;
+- the stress protocol (G) again, on the amended head;
 - the packaged-runtime suite under `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`;
 - `tools/ci_workflows.py --check`;
 - the performance acceptance table (below), filled from these runs.
+<!-- /CP7 -->
 
 ## Performance acceptance
 
@@ -983,6 +1186,18 @@ not move.
   run refreshes it. Only balance is affected (I3).
 - **D10 `validate`'s job names change**, so an external branch-protection rule would need
   updating. None is configured, and the README already says branch protection is not required.
+- **D11 Fix the first-sighting race now, rather than defer it** (amendment 0). The external
+  review's I1 accepted either. Fixing it is recommended because:
+  - the change is two expressions in one file, and Design H limits it to provenance (I10);
+  - deferring would leave a job record that can say `group` for a process the Controller owns
+    only by its tag, although CP5 has already measured that case;
+  - it would also leave one test that fails under the stress regime this milestone introduces,
+    so a known flake would sit in the suite that the zero-failure bar (G) is meant to keep clean.
+
+  *Alternative:* an amendment that authorizes deferral, keeps the race and its measurements as
+  evidence, and leaves `controller/` untouched. The external review names this as acceptable.
+  It would drop CP5B and keep the roadmap's "left for later" line. **This is the operator's
+  choice.** If they choose deferral, the next revision drops CP5B and Design H.
 
 `docs/TECHNICAL_DECISIONS.md` does not exist in this repository, so there are no "Open decision"
 rows to check. No ADR decision is reversed. ADR 0002 records "the Controller suite in seven named
@@ -1022,6 +1237,9 @@ checkpoint's own new tests. From CP4 on, each checkpoint runs the full selection
 `tools/run_tests.py` and compares its id set with the serial run's. A serial run started in the
 background must first reset SIGINT to `SIG_DFL` (Design D). CP5 and CP7 run the stress protocol. CP7 adds the
 packaged-runtime suite, `tools/ci_workflows.py --check` and the performance measurements.
+CP5B runs its targeted `OwnershipTest` stress and the full selection. Every checkpoint that
+amendment 0 reconciles to `NEEDS_REVALIDATION` re-runs its own tests and the full selection at
+the amended head (see "Revision 4").
 Nothing needs the real `claude`. Package-index access **is** needed, as it already is at the base
 commit: `fixtures.editable_install` runs a build-isolated `pip install -e` that fetches the build
 backend, and it is used by `tests.test_identity` (lines 321 and 357), `tests.test_handoff` (529),
@@ -1031,8 +1249,13 @@ dependency.
 
 ## Migration / data-integrity notes
 
-- **No stored-data or runtime migration.** `controller/` is untouched. So are job records, the
-  runtime layout and the wheel.
+- **No stored-data or runtime migration.** The only `controller/` change is Design H
+  (amendment 0).
+  - Job records keep their schema and their `source` vocabulary, so there is nothing to migrate.
+  - A record written by 1.2.0 re-attaches as today (`_recorded_ownership`), and its entries are
+    relabelled by the next scan that finds them by group, tag or adoption.
+  - The runtime layout is untouched. The wheel's `controller/worker.py` changes for the next
+    release only.
 - **Developer workflow.** `python3 -m unittest ...` and `cd scripts && python3 <suite>` are
   unchanged (I7). The runner is additive.
 - **CI.** The first CI run on the milestone branch uses the seeded timing file. A missing or
@@ -1041,7 +1264,8 @@ dependency.
   `$XDG_CACHE_HOME`. Nothing new is written into the checkout, so there is no `.gitignore`
   change.
 - **Rollback.** Restoring the previous `tools/ci_workflows.py` and re-rendering returns CI to the
-  hand-curated matrix. No other state depends on this milestone.
+  hand-curated matrix. No other state depends on this milestone. Reverting CP5B's `controller/`
+  hunk restores first-sighting labels, and no stored record depends on either behaviour.
 
 ## Plan review decisions
 
@@ -1109,3 +1333,52 @@ All three findings were validated against the repository and accepted. None is r
 
 No checkpoint was added, removed or renamed, and no requirement changed, so the registry and
 mapping are regenerated at revision 3 with the same checkpoints.
+
+### Revision 4 (plan amendment 0, manual external implementation review I1, `REVISE`)
+
+This revision is not a plan-review round. It answers implementation review I1 through the
+plan-amendment mechanism (`amendment_history[0]`, requested at `b8b9a0f`). The review's other
+items are handled as follows:
+
+- **IR1-002** is ratified, and nothing changes. Design H keeps `cmdline` first-seen for this
+  reason.
+- **O1** is folded into CP7, as documentation only.
+- **O2** (a `REFUSED` shard's reasons in its own step output) stays an optional follow-up. It is
+  not in this amendment's scope.
+
+**What changed:**
+
+- **Scope.** The one `controller/` change is Design H, delivered by the new checkpoint CP5B. The
+  Non-goals, the header, the Migration notes and I10 state its limits.
+- **Evidence.** The Investigation gains "The ownership first-sighting race", with CP5's
+  measurements and the static analysis of `source`'s readers.
+- **Decision.** D11: fix the race rather than defer it, with deferral as the operator's
+  alternative.
+- **Checkpoints.**
+  - CP5B is new. It depends on CP5, because it uses CP5's `orphan_pid_file` fixtures and its
+    stress protocol.
+  - CP7 now depends on CP5B and CP6, not CP5 and CP6, and its name and prose gain the
+    amendment's documentation and re-verification.
+  - No checkpoint was removed or renamed.
+- **Anchors.** Every checkpoint section is now delimited by a `<!-- CPn -->`/`<!-- /CPn -->`
+  pair. Each pair encloses the whole section, from the line above its heading to the section's
+  last line.
+- **Requirements.** The mapping gains R15, Controller ownership provenance, mapped to CP5B and
+  CP7. R11 now includes CP5B. R14 is reworded: 1.2.0's released artefact, its packaging scope and
+  its release classification are preserved, and Design H is the one runtime change.
+
+**Reconciliation, predicted from the `/approve-review plan` algorithm rather than claimed.**
+Revision 3's approved document (blob `9912e35`) has no checkpoint anchors. So every checkpoint
+it shares with this revision reconciles to `needs_revalidation`, whatever its content, because
+the pre-side hash is `None`. CP5B reconciles as `new`.
+
+| checkpoint | reconciled | revalidation expected |
+| --- | --- | --- |
+| CP1-CP4, CP6 | `needs_revalidation` (anchor legacy default) | No code change. Re-run the checkpoint's own tests and the full selection at the amended head. |
+| CP5 | `needs_revalidation` (anchor legacy default) | No code change. Re-run its tests, and confirm the stress protocol at the amended head. Its notes' "Still open" item is closed by CP5B, not by CP5. |
+| CP5B | `new` | Implement Design H (above). |
+| CP7 | `needs_revalidation` (row changed) | The documentation edits listed in CP7, the full verification, and the stress protocol re-run. |
+
+Each revalidation goes through the ordinary `/milestone-implement` path. The implementation
+review that follows may focus on CP5B, CP7's edits and the freshness of the bundle, as the
+external review anticipated.

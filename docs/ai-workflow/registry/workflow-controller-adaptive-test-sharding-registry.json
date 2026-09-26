@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-adaptive-test-sharding",
-  "plan_revision": 3,
+  "plan_revision": 4,
   "checkpoints": [
     {
       "id": "CP1",
@@ -47,6 +47,15 @@
       "session_target": 1
     },
     {
+      "id": "CP5B",
+      "name": "Ownership provenance follows the current basis (amendment 0, Design H): _Ownership.scan relabels a still-matching recorded entry's source from the current scan's basis (group, tag, adopted; the recorded fallback keeps it) while pid, start_ticks, cmdline and the seen sample stay first-sighting; _Supervision._signature includes source so a relabel publishes; OwnershipTest reads the last observed ppid and the last DRAINING entry; a gated escapee deterministically reproduces the pre-setsid first sighting; targeted stress clears IR1-003",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
       "id": "CP6",
       "name": "CI integration: tools/ci_workflows.py's validate.yml model gains plan / tests (dynamic fromJSON matrix, digest-checked exec-shard) / tests-result (always-run aggregate and coverage check) jobs, the hand-curated CONTROLLER_SHARDS and separate conformance matrix are removed, package reads the placement, workflows re-rendered, test_ci_workflows updated",
       "depends_on": [
@@ -57,9 +66,9 @@
     },
     {
       "id": "CP7",
-      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, and the local performance acceptance measurements",
+      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and re-verification on the amended head",
       "depends_on": [
-        "CP5",
+        "CP5B",
         "CP6"
       ],
       "complexity": 2,

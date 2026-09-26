@@ -72,6 +72,7 @@
       "description": "An explicit auditable serialization mechanism, and latent timing assumptions exposed by parallel load fixed at their cause",
       "checkpoint_ids": [
         "CP5",
+        "CP5B",
         "CP7"
       ]
     },
@@ -90,9 +91,16 @@
       ]
     },
     "R14": {
-      "description": "Released Controller 1.2.0 runtime behaviour, wheel contents and release pipeline classification preserved; documentation updated",
+      "description": "Released Controller 1.2.0 artefact, wheel packaging scope, version and release pipeline classification preserved; the only Controller runtime change is amendment 0's Design H; documentation updated",
       "checkpoint_ids": [
         "CP6",
+        "CP7"
+      ]
+    },
+    "R15": {
+      "description": "Controller ownership provenance: an owned process's recorded source reflects its current ownership basis and is published when it changes, without changing ownership membership or any decision made from it (amendment 0, IR1-003)",
+      "checkpoint_ids": [
+        "CP5B",
         "CP7"
       ]
     }

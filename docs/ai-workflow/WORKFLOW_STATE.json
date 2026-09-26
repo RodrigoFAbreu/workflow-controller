@@ -2917,8 +2917,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 3,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "405f050029f546055a3b42783fec25c87873bbd3",
@@ -2927,87 +2927,87 @@
       "last_completed_checkpoint_id": "CP7",
       "checkpoints": {
         "CP1": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "5fdea5ae0c7a331cbfe32425504f2ae565faaa2e"
         },
         "CP2": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "302d7fcd36933b977f750609e9a3b094d4f5dc30"
         },
         "CP3": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "4467a80e2287df7ed31913a91c9c6afab3b6981c"
         },
         "CP4": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "b0eb707a5d99b476ec8c97c41332cc11ff5fbf5a"
         },
         "CP5": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "55c855b46528ae3b61b47a308e9f344b095bc855"
         },
         "CP6": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "311078feebdee99f30cb2179fd5b89b52231a49d"
         },
         "CP7": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "14bbdcc0745f478d4fd5f2d91e1fba84be413743"
         }
       },
       "current_bundle_id": null,
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
-        "approved_review_content_id": "1a35533430120462d5936b8b5f98fd8eb41e5d837e4a2a828d528636591be2ce",
+        "reviewed_bundle_id": "b5b07e01e7d42e1c78b9097fc080932f0ed66c9e8993caa1ec3cc5bb1b214d4a",
+        "approved_review_content_id": "3e71f14c398eb9cdb97dd6bea064dbf7b523dc33a6dc6765b91fdc90237d77a6",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "9912e3599ff39af657cc84597fbd0fdbd77084af"
+            "blob": "d8f1f0d442ed93256c49bfc6c57fd0531ddf38ab"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "00773062b61713f0483e2d9100944d655d8f7538"
+            "blob": "53c53e20b3f1fb9aa2ff7f4255c6e554c4aca38f"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
             "exists": true,
             "mode": "100644",
-            "blob": "cebe37b2b6a616e4b9d1201cd050be1ac55786a8"
+            "blob": "f13c1d55722116728314fc5da578e7a03e34a317"
           }
         ],
         "reviewed_content_commit": null,
         "legacy_evidence": null,
-        "user_confirmation": "I approve workflow-controller-adaptive-test-sharding at stage plan",
+        "user_confirmation": "I approve the plan stage for workflow-controller-adaptive-test-sharding",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-26T18:01:13Z"
+        "recorded_at": "2026-09-26T23:50:07Z"
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "1a35533430120462d5936b8b5f98fd8eb41e5d837e4a2a828d528636591be2ce",
+        "review_content_id": "3e71f14c398eb9cdb97dd6bea064dbf7b523dc33a6dc6765b91fdc90237d77a6",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
+          "bundle_id": "b5b07e01e7d42e1c78b9097fc080932f0ed66c9e8993caa1ec3cc5bb1b214d4a",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-09-26T17:51:07Z"
+          "round": 4,
+          "completed_at": "2026-09-26T23:24:32Z"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
+          "bundle_id": "b5b07e01e7d42e1c78b9097fc080932f0ed66c9e8993caa1ec3cc5bb1b214d4a",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-09-26T17:53:43Z"
+          "round": 2,
+          "completed_at": "2026-09-26T23:40:09Z"
         }
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 32,
-      "last_transition": "2026-09-26T22:39:03Z",
+      "state_revision": 37,
+      "last_transition": "2026-09-26T23:50:07Z",
       "implementation_review_stages": {
         "review_content_id": "346258798a7d7b7293c33eefb9236c7a61503d3275255b61606b9d9e29e4cfb3",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
@@ -3087,7 +3087,17 @@
             }
           },
           "pre_amendment_approval_commit": "5fdea5ae0c7a331cbfe32425504f2ae565faaa2e",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 4,
+          "reconciliation_outcome": {
+            "CP1": "needs_revalidation",
+            "CP2": "needs_revalidation",
+            "CP3": "needs_revalidation",
+            "CP4": "needs_revalidation",
+            "CP5": "needs_revalidation",
+            "CP5B": "new",
+            "CP6": "needs_revalidation",
+            "CP7": "needs_revalidation"
+          }
         }
       ],
       "amendment_base_commit": "a5fe3f8e78753a25f8e0353c11e0f740ef40a8ec"

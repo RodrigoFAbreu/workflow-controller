@@ -27,16 +27,31 @@ matches nothing refuses. ``CI_PLACEMENT`` moves a few modules out of the CI
 shard matrix, and ``ci_partition`` proves the inventory is partitioned
 exactly into CI shards, ``package`` and ``excluded``.
 
+*Timing data* is advisory: it decides where an atom runs, never whether it
+runs. Each shard writes a result record (``validate_shard_result`` is its
+schema); ``update_timings`` folds the records' passing, complete atoms into a
+timing profile with an EWMA; ``load_timings`` falls back to the defaults,
+with one warning, on any missing, unreadable or invalid file; and
+``estimate_atoms`` gives every selected atom an estimate, from history or
+from a per-test mean.
+
 Nothing in ``controller/`` imports this file.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
+import os
 import re
 import sys
+import tempfile
 import unittest
+from datetime import datetime
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Callable, Iterable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = "tests"
@@ -78,6 +93,33 @@ CI_PLACEMENT = {
         EXCLUDED, "needs the live claude binary, network access and real spend "
                   "(CONTROLLER_LIVE_WORKER=1)"),
 }
+
+
+#: Result records and timing files.
+RESULT_SCHEMA_VERSION = 1
+TIMINGS_SCHEMA_VERSION = 1
+OUTCOMES = frozenset({"pass", "fail", "error", "skip", "expected_failure",
+                      "unexpected_success"})
+#: Outcomes that are not failures, exactly as in ``unittest``.
+PASSING_OUTCOMES = frozenset({"pass", "skip", "expected_failure"})
+
+#: The committed CI profile, the only timing input CI planning reads.
+CI_TIMINGS = Path("tools") / "test_timings.json"
+#: The untracked local profile, under ``$XDG_CACHE_HOME`` (else ``~/.cache``).
+LOCAL_TIMINGS_DIR = "workflow-controller-tests"
+LOCAL_TIMINGS_FILE = "timings-local.json"
+
+#: Estimates for atoms without history: the base commit's serial mean per
+#: test (475 s / 1887 tests), and a flat figure per conformance suite.
+DEFAULT_SECONDS_PER_TEST = 0.25
+DEFAULT_CONFORMANCE_SECONDS = 30.0
+#: Weight of a new observation in the EWMA.
+EWMA_WEIGHT = 0.5
+#: How many contributing plan digests a profile remembers, newest last, so
+#: the local profile, updated after every run, does not grow without bound.
+MAX_UPDATED_FROM = 20
+
+_HOLDER_RE = re.compile(r"^(\w+) \(([\w.]+)\)$")
 
 
 class InventoryError(Exception):
@@ -274,3 +316,375 @@ def ci_partition(inventory: Inventory) -> dict[str, tuple[str, ...]]:
         where = CI_PLACEMENT.get(atom.module, (SHARDS, ""))[0]
         partition[where].extend(atom.test_ids)
     return {where: tuple(ids) for where, ids in partition.items()}
+
+
+# -- result records -------------------------------------------------------------------------
+
+
+class ResultRecordError(Exception):
+    """A shard result record does not match its schema; the message names every problem."""
+
+
+_RESULT_KEYS = ("schema_version", "plan_digest", "shard", "argv", "started_at", "ended_at",
+                "wall_seconds", "exit_status", "tests", "fixture_errors", "fixture_skips",
+                "atoms", "leaked_processes")
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_seconds(value) -> bool:
+    """A finite, non-negative number of seconds."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and value >= 0)
+
+
+def _is_timestamp(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _entries(record: Mapping, key: str, required: dict[str, Callable],
+             optional: dict[str, Callable] | None = None, *, problems: list[str]) -> None:
+    """Check ``record[key]`` is a list of objects with exactly ``required``'s
+    keys (plus any of ``optional``'s), each value passing its predicate."""
+    optional = optional or {}
+    value = record.get(key)
+    if not isinstance(value, list):
+        problems.append(f"{key} is not a list")
+        return
+    for index, entry in enumerate(value):
+        where = f"{key}[{index}]"
+        if not isinstance(entry, dict):
+            problems.append(f"{where} is not an object")
+            continue
+        missing = sorted(set(required) - set(entry))
+        unknown = sorted(set(entry) - set(required) - set(optional))
+        if missing:
+            problems.append(f"{where} lacks {', '.join(missing)}")
+        if unknown:
+            problems.append(f"{where} has unknown keys {', '.join(unknown)}")
+        for name, check in {**required, **optional}.items():
+            if name in entry and not check(entry[name]):
+                problems.append(f"{where}.{name} is invalid: {entry[name]!r}")
+
+
+def validate_shard_result(record) -> dict:
+    """Return ``record`` if it is a well-formed ``shard-<i>.json``, else
+    raise ``ResultRecordError`` naming every problem.
+
+    This checks the shape only. Whether the reported ids cover the plan is
+    the aggregate's coverage check, so duplicate or unplanned ids are left
+    for it to name.
+    """
+    if not isinstance(record, dict):
+        raise ResultRecordError("a shard result record is not a JSON object")
+    problems = []
+    missing = [key for key in _RESULT_KEYS if key not in record]
+    unknown = sorted(set(record) - set(_RESULT_KEYS))
+    if missing:
+        problems.append("missing keys " + ", ".join(missing))
+    if unknown:
+        problems.append("unknown keys " + ", ".join(unknown))
+    is_str = lambda value: isinstance(value, str)  # noqa: E731
+    checks = {
+        "schema_version": lambda value: value == RESULT_SCHEMA_VERSION,
+        "plan_digest": lambda value: is_str(value) and bool(value),
+        "shard": lambda value: _is_int(value) and value >= 0,
+        "argv": lambda value: isinstance(value, list) and all(map(is_str, value)),
+        "started_at": _is_timestamp,
+        "ended_at": _is_timestamp,
+        "wall_seconds": _is_seconds,
+        "exit_status": _is_int,
+        "atoms": lambda value: (isinstance(value, dict) and all(map(is_str, value))
+                                and all(map(_is_seconds, value.values()))),
+    }
+    for key, check in checks.items():
+        if key in record and not check(record[key]):
+            problems.append(f"{key} is invalid: {record[key]!r}")
+    _entries(record, "tests",
+             {"id": lambda value: is_str(value) and bool(value),
+              "outcome": lambda value: value in OUTCOMES, "seconds": _is_seconds},
+             {"detail": is_str}, problems=problems)
+    _entries(record, "fixture_errors", {"description": is_str, "traceback": is_str},
+             problems=problems)
+    _entries(record, "fixture_skips", {"description": is_str, "reason": is_str},
+             problems=problems)
+    _entries(record, "leaked_processes",
+             {"pid": lambda value: _is_int(value) and value > 0,
+              "argv": lambda value: isinstance(value, list) and all(map(is_str, value)),
+              "age_seconds": _is_seconds}, problems=problems)
+    if problems:
+        raise ResultRecordError("the shard result record is invalid:\n  "
+                                + "\n  ".join(problems))
+    return record
+
+
+def load_shard_result(path: Path) -> dict:
+    """Read and validate one ``shard-<i>.json``."""
+    try:
+        record = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ResultRecordError(f"cannot read the shard result record {path}: {exc}")
+    try:
+        return validate_shard_result(record)
+    except ResultRecordError as exc:
+        raise ResultRecordError(f"{path}: {exc}")
+
+
+def record_passes(record: Mapping) -> bool:
+    """The verdict a record's own entries give: every test outcome is a
+    non-failure and no fixture errored. Fixture skips never affect it."""
+    return (all(entry["outcome"] in PASSING_OUTCOMES for entry in record["tests"])
+            and not record["fixture_errors"])
+
+
+def holder_target(description: str) -> str | None:
+    """The dotted module or class an ``_ErrorHolder`` description names, for
+    example ``tests.test_release_txn`` for ``tearDownModule
+    (tests.test_release_txn)``, or ``None`` if it does not parse."""
+    match = _HOLDER_RE.match(description)
+    return match.group(2) if match else None
+
+
+def _touches(target: str, atom: Atom) -> bool:
+    """Whether a fixture on ``target`` (a module or a class) covers any of
+    ``atom``'s tests: the same name, a module fixture over a class atom, or a
+    class fixture inside a module atom."""
+    return (target == atom.key or atom.key.startswith(target + ".")
+            or target.startswith(atom.key + "."))
+
+
+# -- timing profiles ------------------------------------------------------------------------
+
+
+class TimingError(Exception):
+    """A timing file cannot be read or does not match its schema."""
+
+
+@dataclass(frozen=True)
+class TimingProfile:
+    """A timing file's content. ``atoms`` maps an atom key to ``{"seconds",
+    "samples", "tests"}``. ``sha256`` is the file's own digest, or ``None``
+    for the built-in defaults (no file, or a file that fell back)."""
+
+    profile: str
+    atoms: Mapping[str, Mapping]
+    updated_from: tuple[str, ...] = ()
+    sha256: str | None = None
+
+
+DEFAULT_TIMINGS = TimingProfile(profile="defaults", atoms={})
+
+
+def local_timings_path(environ: Mapping[str, str] = os.environ) -> Path:
+    """``$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json``,
+    falling back to ``~/.cache`` when the variable is unset or empty."""
+    cache = environ.get("XDG_CACHE_HOME") or str(Path(environ.get("HOME") or Path.home())
+                                                 / ".cache")
+    return Path(cache) / LOCAL_TIMINGS_DIR / LOCAL_TIMINGS_FILE
+
+
+def parse_timings(data: bytes) -> TimingProfile:
+    """Parse and validate a timing file's bytes, or raise ``TimingError``."""
+    try:
+        doc = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise TimingError(f"not JSON: {exc}")
+    if not isinstance(doc, dict):
+        raise TimingError("not a JSON object")
+    problems = []
+    if set(doc) != {"schema_version", "profile", "atoms", "updated_from"}:
+        problems.append("keys are not exactly schema_version, profile, atoms, updated_from")
+    if doc.get("schema_version") != TIMINGS_SCHEMA_VERSION:
+        problems.append(f"schema_version is not {TIMINGS_SCHEMA_VERSION}")
+    if not isinstance(doc.get("profile"), str) or not doc.get("profile"):
+        problems.append("profile is not a non-empty string")
+    updated_from = doc.get("updated_from")
+    if not isinstance(updated_from, list) or not all(isinstance(d, str) for d in updated_from):
+        problems.append("updated_from is not a list of strings")
+    atoms = doc.get("atoms")
+    if not isinstance(atoms, dict):
+        problems.append("atoms is not an object")
+        atoms = {}
+    for key, entry in atoms.items():
+        if (not isinstance(entry, dict) or set(entry) != {"seconds", "samples", "tests"}
+                or not _is_seconds(entry["seconds"])
+                or not (_is_int(entry["samples"]) and entry["samples"] >= 1)
+                or not (_is_int(entry["tests"]) and entry["tests"] >= 1)):
+            problems.append(f"atom {key!r} is not {{seconds >= 0 finite, samples >= 1, "
+                            f"tests >= 1}}: {entry!r}")
+    if problems:
+        raise TimingError("; ".join(problems))
+    return TimingProfile(profile=doc["profile"], atoms=atoms, updated_from=tuple(updated_from),
+                         sha256=hashlib.sha256(data).hexdigest())
+
+
+def _warn(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def load_timings(path: Path, *, warn: Callable[[str], None] = _warn) -> TimingProfile:
+    """The timing profile at ``path``, or ``DEFAULT_TIMINGS`` with exactly one
+    warning line naming the file when it is missing, unreadable or invalid.
+    Never raises: timing data only ever affects balance (I3)."""
+    try:
+        data = Path(path).read_bytes()
+    except OSError as exc:
+        warn(f"warning: timing file {path} is unusable ({exc.strerror or exc}); "
+             f"using the default estimates")
+        return DEFAULT_TIMINGS
+    try:
+        return parse_timings(data)
+    except TimingError as exc:
+        warn(f"warning: timing file {path} is unusable ({exc}); using the default estimates")
+        return DEFAULT_TIMINGS
+
+
+def timings_document(profile: TimingProfile) -> dict:
+    return {"schema_version": TIMINGS_SCHEMA_VERSION, "profile": profile.profile,
+            "atoms": {key: dict(profile.atoms[key]) for key in sorted(profile.atoms)},
+            "updated_from": list(profile.updated_from)}
+
+
+def write_timings(path: Path, profile: TimingProfile) -> None:
+    """Write ``profile`` to ``path`` atomically: an adjacent temporary file,
+    ``fsync``, then ``os.replace``. Two concurrent writers can lose one
+    update, never tear the file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(timings_document(profile), indent=2, sort_keys=True) + "\n"
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _mergeable_atoms(record: Mapping, atoms_by_key: Mapping[str, Atom]) -> dict[str, float]:
+    """The atoms of ``record`` whose duration is representative: every one
+    of the atom's tests has exactly one passing entry (so a failed, errored,
+    interrupted or partially selected atom is left out), and no fixture
+    error or fixture skip touches it. A fixture holder that cannot be
+    attributed withholds the whole record."""
+    targets = []
+    for entry in list(record["fixture_errors"]) + list(record["fixture_skips"]):
+        target = holder_target(entry["description"])
+        if target is None:
+            return {}
+        targets.append(target)
+    outcomes: dict[str, list[str]] = {}
+    for entry in record["tests"]:
+        outcomes.setdefault(entry["id"], []).append(entry["outcome"])
+    mergeable = {}
+    for key, seconds in record["atoms"].items():
+        atom = atoms_by_key.get(key)
+        if atom is None:
+            continue
+        if not all(len(outcomes.get(test_id, ())) == 1
+                   and outcomes[test_id][0] in PASSING_OUTCOMES for test_id in atom.test_ids):
+            continue
+        if any(_touches(target, atom) for target in targets):
+            continue
+        mergeable[key] = float(seconds)
+    return mergeable
+
+
+def update_timings(profile: TimingProfile, records: Iterable[Mapping], inventory: Inventory,
+                   *, profile_name: str | None = None) -> TimingProfile:
+    """Fold ``records`` (validated shard result records, oldest first) into
+    ``profile`` and return the result.
+
+    - A representative atom (see ``_mergeable_atoms``) moves its seconds by
+      ``EWMA_WEIGHT`` towards the observation, and its ``samples`` grows;
+    - an atom new to the profile, or whose test count in the inventory
+      differs from the profile's, takes the observation outright;
+    - any profile atom the inventory no longer contains is pruned.
+    """
+    atoms_by_key = {atom.key: atom for atom in inventory.atoms}
+    atoms = {key: dict(entry) for key, entry in profile.atoms.items()}
+    updated_from = list(profile.updated_from)
+    for record in records:
+        for key, observed in _mergeable_atoms(record, atoms_by_key).items():
+            tests = len(atoms_by_key[key].test_ids)
+            old = atoms.get(key)
+            if old is None or old["tests"] != tests:
+                atoms[key] = {"seconds": round(observed, 3), "samples": 1, "tests": tests}
+            else:
+                seconds = EWMA_WEIGHT * observed + (1 - EWMA_WEIGHT) * old["seconds"]
+                atoms[key] = {"seconds": round(seconds, 3), "samples": old["samples"] + 1,
+                              "tests": tests}
+        digest = record["plan_digest"]
+        if digest in updated_from:
+            updated_from.remove(digest)
+        updated_from.append(digest)
+    atoms = {key: entry for key, entry in atoms.items() if key in atoms_by_key}
+    return TimingProfile(profile=profile_name or profile.profile, atoms=atoms,
+                         updated_from=tuple(updated_from[-MAX_UPDATED_FROM:]))
+
+
+# -- estimates ------------------------------------------------------------------------------
+
+
+def _mean_per_test(profile: TimingProfile, module: str | None) -> float | None:
+    """Seconds per test over the profile's controller atoms, restricted to
+    ``module`` (its module atom or its classes) when given."""
+    seconds = tests = 0
+    for key, entry in profile.atoms.items():
+        if key.startswith(CONFORMANCE_PREFIX):
+            continue
+        if module is not None and key != module and not key.startswith(module + "."):
+            continue
+        seconds += entry["seconds"]
+        tests += entry["tests"]
+    return seconds / tests if tests else None
+
+
+def estimate_atoms(atoms: Iterable[Atom], profiles: Iterable[TimingProfile]) -> dict[str, float]:
+    """An estimate in seconds for every atom in ``atoms``, keyed by atom key,
+    from ``profiles`` in priority order (local, then the committed CI
+    profile). The key set is exactly the atoms given: an estimate never adds,
+    drops or conditions a test (I3).
+
+    - A known atom uses the first profile that records it; if the atom's
+      test count differs from the recorded one (new tests, or a partial
+      selection), the recorded seconds are scaled per test;
+    - an unknown conformance atom uses ``DEFAULT_CONFORMANCE_SECONDS``;
+    - an unknown controller atom uses ``tests × mean seconds per test``, the
+      mean taken over its module in the first profile that has it, else over
+      the first non-empty profile, else ``DEFAULT_SECONDS_PER_TEST``.
+    """
+    profiles = tuple(profiles)
+    estimates = {}
+    for atom in atoms:
+        tests = len(atom.test_ids)
+        known = next((profile.atoms[atom.key] for profile in profiles
+                      if atom.key in profile.atoms), None)
+        if known is not None:
+            seconds = known["seconds"]
+            estimates[atom.key] = (seconds if known["tests"] == tests
+                                   else seconds / known["tests"] * tests)
+        elif atom.family == CONFORMANCE:
+            estimates[atom.key] = DEFAULT_CONFORMANCE_SECONDS
+        else:
+            mean = next((m for m in (_mean_per_test(p, atom.module) for p in profiles)
+                         if m is not None), None)
+            if mean is None:
+                mean = next((m for m in (_mean_per_test(p, None) for p in profiles)
+                             if m is not None), DEFAULT_SECONDS_PER_TEST)
+            estimates[atom.key] = tests * mean
+    return estimates

@@ -28,13 +28,99 @@ no retries.
 
 | id | status | commit |
 | --- | --- | --- |
-| CP1 -- inventory, atoms and selection | complete | this checkpoint's commit |
-| CP2 -- result records and timing model | not started | |
+| CP1 -- inventory, atoms and selection | complete | `302d7fc` |
+| CP2 -- result records and timing model | complete | this checkpoint's commit |
 | CP3 -- adaptive deterministic planner | not started | |
 | CP4 -- executor, local runner and aggregation | not started | |
 | CP5 -- serialization registry and timing-flake hardening | not started | |
 | CP6 -- CI integration | not started | |
 | CP7 -- documentation, measurement and full verification | not started | |
+
+### CP2 -- result records and timing model (complete)
+
+- **`tools/test_shards.py`** gains the timing layer, still stdlib only.
+  - **Result records.** `validate_shard_result(record)` checks the exact `shard-<i>.json` shape
+    from plan section B, and names every problem in one `ResultRecordError`. The shape is:
+    - the top-level keys, exactly;
+    - `tests` entries `{id, outcome, seconds, detail?}`, with `outcome` in the six unittest
+      outcomes;
+    - `fixture_errors` entries `{description, traceback}`;
+    - `fixture_skips` entries `{description, reason}`;
+    - `atoms` as `{key: seconds}`;
+    - `leaked_processes` entries `{pid, argv, age_seconds}`;
+    - every duration finite and non-negative, and the timestamps ISO.
+
+    Coverage (duplicate, missing or unplanned ids) is deliberately left to CP4's aggregate, so
+    that it can name them. `load_shard_result(path)` reads and validates one file, naming it.
+    `record_passes(record)` is the record's own verdict: every outcome in
+    `{pass, skip, expected_failure}` and no fixture error; fixture skips never count.
+    `holder_target()` parses an `_ErrorHolder` description such as `tearDownModule
+    (tests.test_release_txn)` into the module or class it names.
+  - **Timing files.** `parse_timings`/`load_timings` read the plan's schema,
+    `{schema_version: 1, profile, atoms: {key: {seconds, samples, tests}}, updated_from}`,
+    together with the file's SHA-256, which CP3's `timing_source` needs. A file that is
+    missing, unreadable, not UTF-8 or JSON, schema-invalid, or has a negative or non-finite
+    duration yields `DEFAULT_TIMINGS`, with exactly one warning line naming the file (on stderr
+    by default). It never raises. `write_timings` writes canonical sorted JSON to an adjacent
+    temporary file, fsyncs it, then `os.replace`s it. A failed write leaves the old file and no
+    temporary behind. `CI_TIMINGS` is `tools/test_timings.json`, which CP4 seeds.
+    `local_timings_path()` is `$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json`,
+    or `~/.cache/...` if that variable is unset or empty.
+  - **Update policy.** `update_timings(profile, records, inventory, profile_name=None)` does the
+    following:
+    - folds the records, oldest first, with `seconds = 0.5·observed + 0.5·old` and `samples + 1`;
+    - makes an atom that is new, or whose inventory test count differs from the profile's, take
+      the observation outright;
+    - prunes every profile atom the inventory no longer contains.
+
+    An atom is merged only if each of its inventory tests has exactly one passing entry in the
+    record, and no fixture error or fixture skip touches it (same key, a module fixture over a
+    class, or a class fixture inside a module atom). So a failed, errored, interrupted or
+    fixture-skipped atom is not merged. A record with an unparseable holder description merges
+    nothing.
+  - **Estimates.** `estimate_atoms(atoms, profiles)` returns exactly one estimate per given
+    atom, and nothing else (I3). The profiles are consulted in priority order: local, then the
+    committed CI profile.
+    - A known atom uses the first profile that records it.
+    - An unknown conformance suite gets 30 s.
+    - An unknown controller atom gets `tests × mean seconds per test`. The mean comes from its
+      module in the first profile that has that module, else from the first non-empty profile
+      (conformance entries excluded), else the default of 0.25 s.
+- **Two interpretations the plan leaves open, and why:**
+  - **A partially selected atom is not merged.** Its duration covers only a subset, the same
+    "not representative" reason the plan gives for failed atoms. The "every test has one passing
+    entry" rule covers it, together with interrupted and duplicated ids.
+  - **A known atom whose selected test count differs from the recorded count is scaled per
+    test.** Without scaling, selecting one test from each of several large classes would plan
+    many shards for seconds of work. When the counts match (every full run), the estimate is
+    exactly the recorded seconds.
+  - Separately, `updated_from` is kept ordered, unique and capped at the 20 most recent plan
+    digests, so that the local profile does not grow on every run.
+- **`tests/test_test_shards.py`** grows to 60 tests. The 30 new tests, in `ResultRecordTest`,
+  `TimingFileTest`, `TimingUpdateTest`, `EstimateTest` and `RealInventoryTimingTest`, cover:
+  - the record schema, each malformation named, unreadable records named, the verdict per
+    outcome, and holder parsing;
+  - every fallback case with one warning, the stderr default, the atomic write (and a failed
+    one), and the local path;
+  - EWMA, test-count reset, pruning, every non-merge case (failed, errored, unexpected success,
+    interrupted, class and module fixture skips, a fixture error, a duplicated id, a partial
+    selection, an unattributable holder), and the bounded `updated_from`;
+  - estimates for known, partial, unknown-in-known-module, unknown-module and
+    unknown-conformance atoms, and profile priority;
+  - the defaults and a corrupt file each give every atom of the real full and CI selections a
+    finite positive estimate, with the selection unchanged.
+
+  The plan's "and a valid plan" clauses need CP3's planner. CP3's property tests plan from
+  these same default and corrupt-file inputs.
+- Mutation check: changing the EWMA weight, accepting booleans as numbers, dropping the fixture
+  overlap check or its class-inside-module direction, or letting conformance entries into the
+  per-test mean each fails the new tests.
+- Verification:
+  - `python3 -m unittest tests.test_test_shards tests.test_ci_workflows` passes (109 tests).
+  - The full serial suite (`python3 -m unittest discover -s tests -t .`), run under a reaping
+    subreaper wrapper with SIGINT at `SIG_DFL` (this session is a Controller worker), ran 1947
+    tests in 518 s: OK, 8 skipped.
+  - The real inventory is now 423 atoms, because the new test classes are in it.
 
 ### CP1 -- inventory, atoms and selection (complete)
 

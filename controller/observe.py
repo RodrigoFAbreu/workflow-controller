@@ -280,13 +280,18 @@ def notice(message: str) -> dict:
 
 
 def _parse_at(at: Any) -> datetime.datetime | None:
-    """A recorded ``%Y-%m-%dT%H:%M:%SZ`` time, as an aware UTC datetime."""
+    """A recorded UTC time, as an aware UTC datetime: whole seconds
+    (``%Y-%m-%dT%H:%M:%SZ``, the job records' own times) or with a
+    fraction of up to six digits (``worker_stream._iso``'s millisecond
+    ``due_at``). Anything else is ``None``."""
     if not isinstance(at, str):
         return None
-    try:
-        return datetime.datetime.strptime(f"{at}+0000", "%Y-%m-%dT%H:%M:%SZ%z")
-    except ValueError:
-        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ%z", "%Y-%m-%dT%H:%M:%S.%fZ%z"):
+        try:
+            return datetime.datetime.strptime(f"{at}+0000", fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def _clock(at: Any) -> str:
@@ -988,9 +993,16 @@ def _task_clause(tasks: list) -> str:
     return _plural(len(tasks), "background task") + (f" ({listed})" if listed else "")
 
 
+def _due_text(due_at: Any) -> str:
+    """A pending wakeup's recorded due time in local time. A recorded value
+    that does not parse is named, never replaced by the current time."""
+    if not due_at:
+        return "due time unknown"
+    return f"due {_clock(due_at)}" if _parse_at(due_at) else f"due time unreadable: {due_at!r}"
+
+
 def _wakeup_clause(pending: list) -> str:
-    dues = ", ".join(f"due {_clock(w.get('due_at'))}" if w.get("due_at") else "due time unknown"
-                     for w in pending if isinstance(w, Mapping))
+    dues = ", ".join(_due_text(w.get("due_at")) for w in pending if isinstance(w, Mapping))
     return _plural(len(pending), "wakeup") + (f" ({dues})" if dues else "")
 
 

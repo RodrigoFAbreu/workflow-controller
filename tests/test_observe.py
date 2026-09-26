@@ -26,7 +26,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, lock, observe, runtime, worker  # noqa: E402
+from controller import job, lock, observe, runtime, worker, worker_stream  # noqa: E402
 from controller.errors import RuntimeContainmentError  # noqa: E402
 from tests import fake_claude, process_fixtures  # noqa: E402
 
@@ -638,6 +638,26 @@ class JobActivityTest(_ActivityCase):
         self.assertEqual([entry["pid"] for entry in activity["owned_processes"]], [owned.pid])
         self.assertEqual(activity["waiting_on"]["tasks"][0]["task_id"], "b1b5d6hjp")
 
+    def test_a_wakeup_due_time_is_the_recorded_one_in_the_controllers_own_format(self) -> None:
+        """Functional review F1: ``worker_stream._iso`` records ``due_at``
+        with milliseconds, and the presenter shows that moment, never now."""
+        self.attach()
+        due = time.time() - 7 * 3600 - 1234.5  # hours away from now, so "now" cannot match
+        due_at = worker_stream._iso(due)
+        self.assertRegex(due_at, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
+        self.tracked_job(state=worker.WAITING, waiting_on={
+            "tasks": [], "wakeups": [{"tool_use_id": "toolu_w", "state": "pending", "due_at": due_at}],
+            "command_lifecycles": []})
+        expected = time.strftime("%H:%M:%S", time.localtime(int(due)))
+        self.assertIn(f"and 1 wakeup (due {expected})", self.activity()["text"])
+
+    def test_an_unreadable_wakeup_due_time_is_named_never_replaced_by_now(self) -> None:
+        self.attach()
+        self.tracked_job(state=worker.WAITING, waiting_on={
+            "tasks": [], "wakeups": [{"tool_use_id": "toolu_w", "state": "pending", "due_at": "soon"}],
+            "command_lifecycles": []})
+        self.assertIn("and 1 wakeup (due time unreadable: 'soon')", self.activity()["text"])
+
     def test_an_open_bracket_shows_its_stall_time_only_with_a_controller_attached(self) -> None:
         waiting_on = {"tasks": [], "wakeups": [], "command_lifecycles": [
             {"command_uuid": BRACKET_UUID, "turn_seen": False, "stalled_seconds": 4.0}]}
@@ -716,6 +736,33 @@ class JobActivityTest(_ActivityCase):
         before = sorted((str(p), p.stat().st_mtime_ns) for p in self.runtime_root.rglob("*"))
         self.activity()
         self.assertEqual(sorted((str(p), p.stat().st_mtime_ns) for p in self.runtime_root.rglob("*")), before)
+
+
+class ParseAtTest(unittest.TestCase):
+    """Functional review F1: the recorded UTC times the presenter reads."""
+
+    def test_whole_and_fractional_seconds_parse_to_the_exact_utc_moment(self) -> None:
+        import datetime
+        utc = datetime.timezone.utc
+        for text, expected in (
+            ("2026-09-26T01:40:10Z", datetime.datetime(2026, 9, 26, 1, 40, 10, tzinfo=utc)),
+            ("2026-09-26T01:40:10.201Z", datetime.datetime(2026, 9, 26, 1, 40, 10, 201000, tzinfo=utc)),
+            ("2026-09-26T01:40:10.123456Z", datetime.datetime(2026, 9, 26, 1, 40, 10, 123456, tzinfo=utc)),
+        ):
+            with self.subTest(text=text):
+                parsed = observe._parse_at(text)
+                self.assertEqual(parsed, expected)
+                self.assertEqual(parsed.utcoffset(), datetime.timedelta(0))
+
+    def test_the_controllers_own_millisecond_format_round_trips(self) -> None:
+        moment = 1790386810.201
+        self.assertAlmostEqual(observe._parse_at(worker_stream._iso(moment)).timestamp(), moment, places=3)
+
+    def test_malformed_times_do_not_parse(self) -> None:
+        for text in (None, 17, "", "soon", "2026-09-26T01:40:10", "2026-09-26T01:40:10+01:00",
+                     "2026-09-26T01:40:10.Z", "2026-09-26 01:40:10Z", "2026-09-26T01:40:10.1234567Z"):
+            with self.subTest(text=text):
+                self.assertIsNone(observe._parse_at(text))
 
 
 class TrackedFollowTest(_ActivityCase):

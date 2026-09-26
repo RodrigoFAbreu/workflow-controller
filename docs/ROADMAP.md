@@ -57,7 +57,7 @@ These are not blockers for the baseline, but should remain visible in later mile
 
 **Priority:** Immediate / High
 
-**Status:** 1.1-1.3 complete; 1.4's worker lifecycle ownership hotfix delivered, its four listed patches still open
+**Status:** 1.1-1.3 complete; 1.4's worker lifecycle ownership hotfix complete (accepted 2026-09-26), its four listed patches still open
 
 Suggested milestone:
 `workflow-controller-release-runtime-observability`
@@ -178,8 +178,10 @@ Requirements:
 
 ## 1.4 Follow-up patches to fold in where appropriate
 
-**Status:** One urgent correctness hotfix delivered in this slot; the four patches below remain
-open (1.6 waits for the Workflow 2.6.x release)
+**Status:** One urgent correctness hotfix complete in this slot (`workflow-controller-worker-lifecycle-ownership`,
+accepted 2026-09-26 under Workflow 2.5.1; the narrative is archived at
+`docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`). The four patches
+below remain open and are the next milestone to plan (1.6 waits for the Workflow 2.6.x release)
 
 **Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
 plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR

@@ -1,64 +1,111 @@
 # Active Milestone
 
-## Status
+## Milestone
 
-**Complete.** `workflow-controller-worker-lifecycle-ownership` reached `MILESTONE_COMPLETE` on
-2026-09-26. Functional review passed in round 3 (implementation revision 4) with no findings,
-against checklist evidence commit `272bcb36d60551d8ae8ca85cc48d255e51a63d79` (checklist blob
-`71aa72372087e1987cac7849735e6477bd100299`). Flows F1-F11 all passed on a fresh, isolated pipx
-install of a wheel built from that commit (`workflow-controller 1.1.1`, `runtime: package (local
-build from 272bcb36d605)`). F12, the optional live `claude` harness-contract probe, was skipped.
-The three earlier findings were re-tested and did not reproduce:
-- round 1's F1: the wakeup due time `15:56:09` matched the persisted `14:56:09.146Z`;
-- round 1's F2: every line used `process`/`processes`, and `processs` never appeared;
-- round 2's F3: F11 named the daemon `not owned: pid <d> (gpg-agent 600)`, and F5's excluded
-  entry carried `cmdline: 'gpg-agent 600'`.
+`workflow-controller-adaptive-test-sharding`: one test inventory, duration-balanced shards, local
+and CI. The operator requested it directly, ahead of `docs/ROADMAP.md` section 1.4, which stays
+the next roadmap item.
 
-All eight registry checkpoints (`CP1`-`CP8`) are `COMPLETE`. Implementation revision 4 was
-approved by both implementation-review stages (technical approval `4328131`, `CURRENT`), and the user accepted
-the milestone through `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, and `active_work_item_id` is now `null`. `docs/ROADMAP.md`
-marks the section 1.4 hotfix accepted. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`. It covers the goal,
-checkpoint progress, the self-review, implementation review round 1, functional review rounds 1
-and 2, and the revision-4 functional-review checklist, including its driver.
+- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 3, approved at
+  `5fdea5a` (`EXTERNAL_APPROVE`).
+- Registry: `docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json`
+  (CP1-CP7).
+- Governing workflow version: `2.2`. Base commit: `405f050`.
+- Ground truth for phase and checkpoint status: `docs/ai-workflow/WORKFLOW_STATE.json`.
 
-This milestone's own deliverables remain live in the tree, unmoved (see the archive file's own
-preface for why): `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md` and its
-registry/mapping files, still at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry
-declares, and ADR `docs/adr/0004-worker-lifecycle-ownership.md`. The previously completed work
-items and their archived narratives in `docs/milestones/completed/` are unaffected.
+The previous milestone, `workflow-controller-worker-lifecycle-ownership`, is complete. Its
+narrative is archived at
+`docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`.
 
-Deferred follow-ups, not conditions of acceptance:
-- with no Controller attached, a job whose worker leader died while its group still runs reads
-  `waiting` from the last recorded `worker_state` (functional review round 1, O1; wording only);
-- `follow` stamps worker stream lines that carry no event time with the time they are read, and a
-  present but unreadable generic event time still renders as the current time (the checklist's
-  known limitation);
-- two messages still use the neutral `process(es)`: the drain stderr line and the `resume
-  --abandon` refusal;
-- in F8's scenario, a subagent's own `assistant` events that arrive while the session is idle
-  count as an extra turn (`stream_diagnosis.turns` is `3`, not `2`). The outcome is unaffected
-  (checklist dry-run notes);
-- implementation review round 1's Optional 2 (declining `ENDING` once the anchor has died) and
-  Optional 3 (`exit_status` wording in plan B's table) were not applied;
-- what ADR 0004 and the README's "What is not solved here" leave unsolved by design: reliance on
-  the measured harness behaviour, wakeup-fire matching by an undocumented event, an `env -i`
-  descendant orphaned while nothing supervises it, and daemon recognition by name;
-- carried over, unchanged: `docs/ROADMAP.md` section 1.4's four follow-up patches (the misordered
-  `--work-item` resume hints, the manual-external gate's behaviour when the local review ledger is
-  incoherent, the abandoned/unreconcilable apply-review relaunch-bound tests, active-job/status
-  presentation), and the deferred items of the earlier milestones, listed in their acceptance
-  commits (`4280bb6`, `82fa6a8`).
+## Goal
 
-Supervised rollout, still outstanding: the first automatic release, 1.2.0 (README "Runbook: the
-first automatic release"), has not run yet. Nothing of this milestone or the previous one has been
-pushed.
+Cut the wall-clock time of the Controller's full verification by running the same test selection
+in duration-balanced parallel shards. One deterministic inventory and planner is shared by local
+runs and CI. Coverage is unchanged and proven at run time. There are no test tiers, and there are
+no retries.
 
-**Next action:** `docs/ROADMAP.md` section 1.4, "Follow-up patches to fold in where appropriate",
-is the next incomplete milestone that can be planned now. Its four patches are still open. Run
-`/milestone-plan` for it. That creates a fresh `work_items` entry and claims
-`active_work_item_id`, ready for `PLANNING`. Section 1.6, "Post-Workflow-2.6 compatibility
-integration", waits for Workflow Manager's 2.6.x release; plan it once that release is installed
-through Workflow Manager. Independently of planning, the supervised 1.2.0 release above is an
-operator task, not a milestone.
+## Checkpoint progress
+
+| id | status | commit |
+| --- | --- | --- |
+| CP1 -- inventory, atoms and selection | complete | this checkpoint's commit |
+| CP2 -- result records and timing model | not started | |
+| CP3 -- adaptive deterministic planner | not started | |
+| CP4 -- executor, local runner and aggregation | not started | |
+| CP5 -- serialization registry and timing-flake hardening | not started | |
+| CP6 -- CI integration | not started | |
+| CP7 -- documentation, measurement and full verification | not started | |
+
+### CP1 -- inventory, atoms and selection (complete)
+
+- **`tools/test_shards.py`** (new, stdlib only, not imported by `controller/`).
+  - `build_inventory(repo_root)` returns one `Inventory`. It holds the `controller` family,
+    exactly what `unittest discover -s tests -t <repo>` loads, in discover's order. The
+    `conformance` family follows it: one `conformance:<file>` id per `run: python3 <file>` line of
+    the managed `workflow-conformance.yml`, in that file's order.
+  - Each of these refuses the whole inventory with `InventoryError`, naming every cause:
+    - any loader error, and any `_FailedTest`, `ModuleImportFailure`, `_ErrorHolder` or
+      `ModuleSkipped` in the loaded suite;
+    - a duplicate id;
+    - a test not loaded from a module as a `TestCase`;
+    - a class not bound in its loading module under its own name;
+    - an atom whose ids are not contiguous in discover's order;
+    - a managed workflow with no suite, a duplicate suite, or a suite that is not a file in
+      `scripts/`.
+  - An atom is one of three things:
+    - a class, keyed `<loading module>.<ClassName>`. A `TestLoader` subclass tags each module's
+      suite with its module, so the key is the loading module even for an imported class;
+    - the whole module, when the loaded module object defines `setUpModule` or `tearDownModule`.
+      Today that is `tests.test_release_txn` and `tests.test_forge`;
+    - a conformance suite.
+  - `Inventory.select(names, ci_placement=False)` gives set semantics over canonical ids:
+    - no names selects everything;
+    - a dotted name matches by whole-component prefix, so `tests.test_work` does not match
+      `tests.test_worker`;
+    - `conformance` selects every suite, and `conformance:<file>` selects one;
+    - any unmatched name refuses with `SelectionError`, naming each such name;
+    - a partial atom keeps its key and holds the selected subset.
+  - `CI_PLACEMENT` puts `tests.test_packaged_runtime` in `package` and
+    `tests.test_integration_disposable_repo` in `excluded`, each with a reason.
+    `ci_partition(inventory)` splits the ids into `shards`, `package` and `excluded`. A placed
+    module missing from the inventory refuses.
+- **`tests/test_test_shards.py`** (new, 30 tests).
+  - Synthetic trees, each discovered from a throwaway package and then dropped from
+    `sys.modules` and `sys.path`, cover:
+    - a clean tree equals discover;
+    - an import error, a `_FailedTest` with no loader error, an `_ErrorHolder`, a module that
+      raises `SkipTest` at import, and a duplicate id each refuse;
+    - `setUpModule` and `tearDownModule` each form a module atom;
+    - a class is keyed by its loading module;
+    - a renamed binding, and an interleaved atom, each refuse.
+  - The conformance family: the real family equals the managed `run:` lines, order is kept, and
+    each refusal fires.
+  - The real inventory:
+    - its controller ids equal discover's ids, in discover's order;
+    - the conformance ids follow the controller ids;
+    - the atoms partition the ids in canonical order;
+    - only the two fixture modules are module atoms;
+    - each class atom's name selects exactly its own ids.
+  - Selection by module, class, method, `tests`, `conformance` and `conformance:<file>`: names
+    union in canonical order, and a prefix must match whole components. Unmatched names refuse,
+    and a partial module atom holds the selected subset.
+  - The real inventory's CI partition is exact, and the CI selection equals its `shards` part.
+- **Interim CI placement.** `tools/ci_workflows.py`'s hand-curated `CONTROLLER_SHARDS` gains
+  `test_test_shards` in its `docs` shard, and `.github/workflows/validate.yml` is re-rendered.
+  This keeps `CoverageTest.test_every_test_module_is_placed_exactly_once` passing, and runs the
+  new module in CI until CP6 replaces the hand-curated matrix.
+- Measured: the real inventory holds 1894 ids (1887 controller + 7 conformance) in 418 atoms.
+  The CI partition is 1865 `shards`, 9 `package` and 20 `excluded`. Discovery takes about 0.1 s
+  in process.
+- Verification: `python3 -m unittest tests.test_test_shards tests.test_ci_workflows` passes (79
+  tests). `tools/ci_workflows.py --check` is clean.
+- Full serial suite (`python3 -m unittest discover -s tests -t .`): 1917 tests in 648 s. 1912
+  passed, 8 were skipped, and 5 failed for an environmental reason. The machine was loaded by
+  unrelated processes.
+  - The 5 failures are `tests.test_lock.InheritedDescriptorTest` and `tests.test_resume`'s
+    `OrphanWorkerTest`, `UnreconcilableOrphanTest`, `EndToEndInterruptionTest` and
+    `BootstrapEndToEndInterruptionTest`. Each asserts that an orphaned worker group is gone.
+  - This session ran as a Controller-launched worker. The Controller is a child subreaper, so the
+    orphans reparent to it and linger as zombies, and `killpg(pgid, 0)` still succeeds.
+  - Re-run under a wrapper that is itself a reaping subreaper, as systemd is outside the
+    Controller, the 6 tests pass in 3 s. CP1 touches none of the code they exercise.

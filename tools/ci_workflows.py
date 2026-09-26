@@ -97,7 +97,7 @@ CONTROLLER_SHARDS = {
     "worker": ["test_worker", "test_observe", "test_observation_equivalence", "test_fake_claude_contract",
                "test_worker_stream"],
     "docs": ["test_plan_document_consistency", "test_checklist_corrections",
-             "test_ci_workflows", "test_release_tools", "test_buildinfo"],
+             "test_ci_workflows", "test_test_shards", "test_release_tools", "test_buildinfo"],
     "trunk": ["test_version_authority", "test_repo_policy", "test_gitrepo", "test_forge", "test_milestone_branch",
               "test_pull_request_lifecycle", "test_release_txn", "test_no_rewrite_invariants",
               "test_trunk_preflight", "test_trunk_orchestration_e2e"],

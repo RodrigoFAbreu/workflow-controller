@@ -491,8 +491,8 @@ edit.
 
 ## Functional review round 2 (revision 3, bounded fix)
 
-`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's finding from the revision-3 checklist below,
-evidence commit `e5810f0`). Only flow F11 was run, from a fresh install, to confirm the finding the
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's finding from revision 3's checklist, evidence
+commit `e5810f0`). Only flow F11 was run, from a fresh install, to confirm the finding the
 checklist's dry-run notes predicted. `technical_approval` was marked `STALE` before the first
 edit.
 
@@ -518,29 +518,36 @@ edit.
 
 ## Functional review checklist
 
-This checklist covers implementation revision 3, reviewed at `c352b5d`, with technical approval
-`aac43ac`. Revision 2's checklist (evidence `fcab1aa`) and its two findings are recorded under
-"Functional review round 1" above. The automated state is current. At `c352b5d` the full suite ran
-1886 tests, OK (8 opt-in skips), and so did the local reviewer's independent rerun. The
-packaged-runtime suite (9), `tools/ci_workflows.py --check`, `tests.test_plan_document_consistency`
-and the seven frozen Workflow suites all passed. Since then only `WORKFLOW_STATE.json` and this file
-have changed. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+This checklist covers implementation revision 4, reviewed at `95e169d`, with technical approval
+`4328131`. Revision 2's checklist (evidence `fcab1aa`) and revision 3's (evidence `e5810f0`), and
+their findings, are recorded under "Functional review round 1" and "round 2" above. The automated
+state is current. At `95e169d` the full suite ran 1887 tests, OK (8 opt-in skips), and so did the
+local reviewer's independent rerun. The packaged-runtime suite (9), `tools/ci_workflows.py
+--check`, `tests.test_plan_document_consistency` and the seven frozen Workflow suites all passed.
+Since then only `WORKFLOW_STATE.json` and this file have changed. Record findings in
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
 
-Before this checklist was committed, every flow below was dry-run against a pipx install of a wheel
-built from a clean clone of `aac43ac`. See "Dry-run notes" at the end. Flows F1-F11 cost nothing.
+The flows are revision 3's; only the product changed. Before this checklist was committed, the
+flows that revision 4's change touches (F5, F11) and the core flow F1 were dry-run against a pipx
+install of a wheel built from a clean clone of `4328131`. Every flow was dry-run against revision 3
+(`aac43ac`), with no finding besides F3. See "Dry-run notes" at the end. Flows F1-F11 cost nothing.
 The worker is `tests/fake_claude.py` in streaming mode, scripted to own real background processes,
 and the Workflow Manager is the offline test stub. Nothing in this repository is modified. Only F12
 calls the real `claude`.
 
-What to re-test from round 1: F6 (the wakeup's due time, finding F1) and the process wording in F1,
-F4, F7 and F11 (finding F2). New in this round, as round 1 required: F8 (background subagent
-hand-back), F9 (several simultaneous background tasks), F10 (same-phase durable progress and its
-`predicate_detail`) and F11 (opt-in `--timeout` over the owned lifetime).
+What to re-test from earlier rounds:
+- F11 step 2: the daemon is now named `(gpg-agent 600)`, not `(command line unreadable)`. This is
+  round 2's F3.
+- F6: the wakeup's due time (round 1's F1).
+- The process wording in F1, F4, F7 and F11 (round 1's F2).
+
+F8-F11 (subagent hand-back, several simultaneous background tasks, same-phase durable progress,
+opt-in `--timeout`) are the scenarios round 1 required. Revision 3's pass covered only F11.
 
 ### Setup
 
 1. `pipx` is installed. You need **two zsh terminals**, called A and B below. If
-   `/tmp/wc-lifecycle-fr` is left over from revision 2's checklist, remove it first with the
+   `/tmp/wc-lifecycle-fr` is left over from an earlier checklist, remove it first with the
    Teardown commands.
 2. In terminal A, write the session file:
 
@@ -756,7 +763,7 @@ process named `gpg-agent` in its own session, carrying the job's ownership tag.
 1. A: `use daemon; time wcx step $R`. Expected: exit `0` within about 2 s. The job does not wait
    for the daemon.
 2. A: `use daemon; rec "r['worker_state']['excluded_processes']"; rec "r['status']"`. Expected:
-   one entry with `pattern: gpg-agent` and its pid, and `FINISHED`. `ps -o pid,args -p <that
+   one entry with `pattern: gpg-agent`, `cmdline: gpg-agent 600` and its pid, and `FINISHED`. `ps -o pid,args -p <that
    pid>` shows `gpg-agent 600` still running. `wcx inspect $R | grep lock` shows `lifecycle
    lock: free`.
 3. Clean up: `kill <that pid>`.
@@ -899,22 +906,11 @@ bracket, or the P12 stop counts. Report the version and the failing probe.
 
 ### Dry-run notes
 
-The dry run against `aac43ac` matched every expected result above except one, below. Round 1's
-two findings no longer reproduce: F6 showed `(due 12:33:29)` for a wakeup scheduled at 12:32:59
-with a 30 s delay, the same on a repeat and equal to the recorded `due_at`, and every count read
-`processes`.
-
-- **F11 step 2: a live recognised daemon reads `(command line unreadable)`.** The dry run printed
-  `not owned: pid <d> (command line unreadable)` twice, while `ps` read the same pid as
-  `gpg-agent 600`. `worker.py`'s ownership scan records a recognised daemon as `{pid,
-  start_ticks, pattern}`, with no `cmdline`. `observe.job_activity` renders `entry.get('cmdline')
-  or 'command line unreadable'`, so every live daemon shows as unreadable in `status`, `inspect`,
-  `explain` and the `follow` heartbeat. `tests/test_observe.py`'s draining test passes only
-  because its hand-written record includes a `cmdline` the Controller never writes (the same
-  fixture-versus-reality gap as round 1's F1). Confirm it and, if you agree, file it in
-  `FUNCTIONAL_REVIEW.md`.
-
-Two more points came up while building the new scenarios. Neither is a finding.
+Against `4328131`, F11, F5 and F1 matched every expected result above. F11 step 2 printed `not
+owned: pid <d> (gpg-agent 600)`, the same pid `ps` showed, and the recorded entry carried
+`cmdline: 'gpg-agent 600'`. Against `aac43ac`, every other flow matched, and round 1's two
+findings no longer reproduced. Two points came up while building F8 and F11. Neither is a
+finding.
 
 - **F8's turn count.** `stream_diagnosis.turns` is `3` for the two results F8 checks. In this
   scenario the subagent's own `assistant` events (with `parent_tool_use_id`) arrive while the
@@ -930,8 +926,6 @@ Two more points came up while building the new scenarios. Neither is a finding.
 
 ## Next action
 
-Functional round 2's bounded fix is committed, and the post-fix bundle (revision 4) is generated
-for a fresh `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`, in a fresh session).
-The manual external stage and `/approve-review implementation` follow. Only after that comes
-`/prepare-functional-review`, which regenerates the checklist; F11's expected
-`(gpg-agent 600)` then applies as written.
+At the `AWAITING_FUNCTIONAL_REVIEW` hard gate for revision 4. The user runs the checklist above and
+records findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md` (fresh content: round 2's file is
+marked consumed). With no findings, `/accept-milestone`. With findings, `/apply-functional-review`.

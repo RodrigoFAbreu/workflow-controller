@@ -1446,8 +1446,9 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   profile changes only through an explicit, reviewed refresh, for
   example from a CI run's `timings-ci` artifact:
   `python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`.
-  A test pins each committed entry's test count, so a change to a test
-  class's size needs that refresh for the class.
+  A stale entry only degrades balance: a class whose test count changed
+  is scaled per test, and a new class is estimated from its module's
+  mean, so adding or removing tests never needs a refresh.
 - **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.

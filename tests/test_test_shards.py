@@ -1290,7 +1290,9 @@ class BaselineBalanceTest(unittest.TestCase):
         baseline = shards.load_timings(BASELINE_TIMINGS, warn=self.fail)
         inventory = shards.build_inventory(fixtures.REPO_ROOT)
         known = [atom for atom in inventory.atoms if atom.key in baseline.atoms]
-        self.assertGreater(len(known), 0.9 * len(inventory.atoms))
+        # Bounded on the frozen baseline's own atoms, so new test classes
+        # never fail this test; only removing most of the baseline would.
+        self.assertGreater(len(known), 0.9 * len(baseline.atoms))
         selection = inventory.select([atom.key for atom in known])
         estimates = shards.estimate_atoms(selection.atoms, [baseline])
         total, largest = sum(estimates.values()), max(estimates.values())
@@ -1821,16 +1823,31 @@ class LeakScanTest(unittest.TestCase):
 
 
 class CommittedTimingsTest(unittest.TestCase):
+    """The committed profile is advisory (I3): it must parse and name only
+    existing atoms, but its test counts and coverage may drift until the
+    next reviewed refresh without failing anything."""
+
     def test_the_committed_profile_is_valid_and_names_only_existing_atoms(self) -> None:
         path = fixtures.REPO_ROOT / shards.CI_TIMINGS
         profile = shards.parse_timings(path.read_bytes())
         inventory = shards.build_inventory(fixtures.REPO_ROOT)
         keys = {atom.key for atom in inventory.atoms}
         self.assertEqual(sorted(set(profile.atoms) - keys), [])
-        self.assertGreater(len(profile.atoms), 0.9 * len(keys))
-        for key, entry in profile.atoms.items():
-            atom = next(atom for atom in inventory.atoms if atom.key == key)
-            self.assertEqual(entry["tests"], len(atom.test_ids), key)
+
+    def test_a_stale_test_count_still_plans_the_full_inventory(self) -> None:
+        profile = shards.parse_timings((fixtures.REPO_ROOT / shards.CI_TIMINGS).read_bytes())
+        inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        key = next(atom.key for atom in inventory.atoms
+                   if atom.key in profile.atoms and len(atom.test_ids) > 1)
+        atoms = {k: dict(v) for k, v in profile.atoms.items()}
+        atoms[key]["tests"] += 1
+        stale = shards.TimingProfile(profile.profile, atoms, profile.updated_from, profile.sha256)
+        selection = inventory.select([atom.key for atom in inventory.atoms])
+        estimate = shards.estimate_atoms(selection.atoms, [stale])[key]
+        self.assertAlmostEqual(estimate, profile.atoms[key]["seconds"] / atoms[key]["tests"]
+                               * profile.atoms[key]["tests"])
+        plan = shards.build_plan(selection, _params(), ((shards.CI_TIMINGS, stale),))
+        self.assertIs(shards.validate_plan(plan, selection), plan)
 
 
 if __name__ == "__main__":

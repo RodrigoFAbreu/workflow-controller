@@ -33,8 +33,72 @@ no retries.
 | CP3 -- adaptive deterministic planner | complete | `b0eb707` |
 | CP4 -- executor, local runner and aggregation | complete | `55c855b` |
 | CP5 -- serialization registry and timing-flake hardening | complete | `311078f` |
-| CP6 -- CI integration | complete | this checkpoint's commit |
-| CP7 -- documentation, measurement and full verification | not started | |
+| CP6 -- CI integration | complete | `14bbdcc` |
+| CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
+
+### CP7 -- documentation, measurement and full verification (complete)
+
+- **Documentation:**
+  - `README.md` "Development": the runner (selection, shards, `--serial`, `--plan-only`,
+    `--replay`, `--jobs`, planning overrides), the run-time proof and exit codes, the results
+    directory and its reproduction commands, the timing profiles and the explicit
+    `timings merge` refresh, `EXCLUSIVE_ATOMS`, and the `PYTHONPATH=.` and package-index notes.
+    "Continuous integration" now says why the managed `workflow-conformance.yml` (about 5 min,
+    serial) is still the floor on a pull request's checks, the `ci` profile's parameters, the
+    digest check, and what a failing `tests-result` summary names. The closing pointer list
+    gains ADR 0005.
+  - `docs/adr/0005-adaptive-test-sharding.md` (new): I1-I9, the inventory and its families,
+    atoms, why a sharded run equals a serial one (by construction, at run time, measured),
+    timing as advisory, the planning formula and both profiles' parameters with their measured
+    justification, execution and aggregation, CI, the serialization registry and the race
+    policy, and the rejected alternatives (method-level splitting, a static matrix,
+    pytest-xdist and other third-party runners, automatic retries, tiers, a timeout
+    multiplier, threads). It states that it supersedes ADR 0002's "seven named shards" and
+    ADR 0003's `trunk` shard, without editing either.
+  - `docs/ROADMAP.md`: new section 1.2.1 (status "implemented, in review"; 1.4 stays the next
+    roadmap item), and 1.2's parallel-matrix line notes the planned matrix.
+- **Verification and measurement** (reference machine, 16 CPUs, Python 3.14.7; every run
+  under a reaping subreaper, because this session is a Controller worker; runs sequential):
+  - `python3 -m unittest discover -s tests -t .`: 2040 tests in 480.8 s, OK (8 skipped).
+  - `python3 tools/run_tests.py --serial`: 2047 tests (2040 + 7 conformance), PASS, 606.0 s.
+    Its 2040 controller ids equal `discover`'s, **in the same order**; no duplicates.
+  - Full selection at defaults, 3 runs: 8 shards each, PASS, walls 83.8 / 83.4 / 83.3 s,
+    balance 1.07 each, largest atom `conformance:workflow_acceptance_matrix_test.py`
+    (83.1-83.6 s), which is the critical path (the shard holding it alone is the longest).
+  - Controller-only selection (`tests`) at defaults, 3 runs: 8 shards, PASS, walls 64.0 /
+    62.8 / 63.2 s, balance 1.02 / 1.01 / 1.02, largest atom `tests.test_worker.OwnershipTest`
+    (34.1 s).
+  - Id comparison: in all six runs the reported ids equal the serial run's (2047, or the 2040
+    controller ids), with no duplicates.
+  - Stress protocol (G), 13 runs, **all PASS, 0 failures, 0 leaks**, `EXCLUSIVE_ATOMS: 0`:
+
+    | configuration | runs | walls |
+    | --- | --- | --- |
+    | default (8 shards, 16 CPUs) | 5 | 82.9 / 83.2 / 83.4 / 83.7 / 83.3 s |
+    | 4 CPUs (`taskset -c 0-3`, 8 shards) | 5 | 96.8 / 95.9 / 95.3 / 95.4 / 95.2 s |
+    | oversubscribed (`--shards 12 --jobs 12`, 4 CPUs) | 3 | 107.4 / 108.1 / 108.7 s |
+  - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v`:
+    9 tests in 25.7 s, OK (none skipped).
+  - `python3 tools/ci_workflows.py --check`: clean.
+  - `python3 -m unittest tests.test_plan_document_consistency tests.test_ci_workflows` after the
+    documentation edits: 99 tests, OK.
+- **Performance acceptance:**
+
+  | measure | baseline | bar | measured |
+  | --- | --- | --- | --- |
+  | full selection, local defaults | ~602 s serial | median ≤ 120 s | **83.4 s** (median of 3; 7.3x vs the 606 s `--serial`) |
+  | controller-only, local defaults | 483 s serial | median ≤ 90 s | **63.2 s** (median of 3; 7.6x vs 480.8 s `discover`) |
+  | balance ratio | n/a | ≤ 1.25, or max shard = largest atom ± 10% | 1.07 full (max shard = the 83 s largest atom), ≤ 1.02 controller-only |
+  | sharded vs serial id set | n/a | identical every run | identical, 6 of 6 (and 13 of 13 stress runs PASS with exact coverage) |
+  | stress protocol | 1 failure at 12-on-4 | 0 failures | 0 of 13 |
+
+  The CI measures (critical path, a real `tests-result` coverage check, a deliberately failing
+  test) need a pushed branch and a Draft PR, which only the operator can create; they belong to
+  functional review, as planned. Also not done here: refreshing `tools/test_timings.json` from
+  real CI data (D9).
+- **Open, carried forward:** `OwnershipTest`'s first-sighting `source` race (CP5; seen only at
+  8 copies on one CPU, never in any protocol run), which needs a Controller or plan decision; D7
+  (failing on leaks) as a follow-up.
 
 ### CP6 -- CI integration (complete)
 

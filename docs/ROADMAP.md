@@ -107,7 +107,8 @@ Required end state:
 Required CI structure:
 
 - Controller tests and frozen Workflow conformance suites run in CI;
-- independent suites use parallel matrix jobs;
+- independent suites use parallel matrix jobs (since the adaptive test sharding milestone below,
+  a matrix planned from recorded durations, no longer the hand-curated shard list);
 - `strategy.fail-fast: false`;
 - ordinary push/PR validation uses same-ref concurrency cancellation:
   - group by workflow + ref;
@@ -128,6 +129,32 @@ Release requirements:
 - pipx installation from the released wheel;
 - release/rollback documentation;
 - release provenance recorded in durable Controller jobs.
+
+## 1.2.1 Adaptive test sharding
+
+**Status:** Implemented, in review (`workflow-controller-adaptive-test-sharding`, plan
+`docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, ADR
+`docs/adr/0005-adaptive-test-sharding.md`). The operator requested it directly, ahead of 1.4,
+which stays the next roadmap item.
+
+The Controller's full verification ran serially in about 10 minutes locally (483 s of Controller
+tests plus 119 s of frozen conformance suites), while CI split the Controller suite into eight
+hand-curated shards whose test times ranged from 3 s to 193 s. One deterministic inventory and
+planner now serves both:
+
+- `tools/test_shards.py` builds the inventory (everything `unittest discover` loads, plus the
+  managed conformance suites), forms class-level atoms, and plans duration-balanced shards from
+  recorded timings. Timing data is advisory: it decides where a test runs, never whether;
+- `tools/run_tests.py` runs a selection in parallel shards locally, `--serial` as the reference,
+  `--replay` of a recorded plan, and the CI `plan` / `exec-shard` / `aggregate` steps;
+- every run proves at run time that each planned test ran exactly once, with no retries and no
+  test tiers;
+- `validate.yml` plans its matrix in a `plan` job, runs one `tests` job per shard, and gates on
+  the always-run `tests-result` aggregate.
+
+Left for later: failing a run on a leaked process (D7), refreshing the committed timing profile
+from real CI runs, and the `OwnershipTest` first-sighting `source` race that needs a Controller
+decision (CP5 notes).
 
 ## 1.3 Live worker observability
 

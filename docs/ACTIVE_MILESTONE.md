@@ -32,9 +32,81 @@ no retries.
 | CP2 -- result records and timing model | complete | `4467a80` |
 | CP3 -- adaptive deterministic planner | complete | `b0eb707` |
 | CP4 -- executor, local runner and aggregation | complete | `55c855b` |
-| CP5 -- serialization registry and timing-flake hardening | complete | this checkpoint's commit |
-| CP6 -- CI integration | not started | |
+| CP5 -- serialization registry and timing-flake hardening | complete | `311078f` |
+| CP6 -- CI integration | complete | this checkpoint's commit |
 | CP7 -- documentation, measurement and full verification | not started | |
+
+### CP6 -- CI integration (complete)
+
+- **`tools/ci_workflows.py`**: `validate.yml`'s model now has four jobs:
+  - `plan`: `run_tests.py plan --profile ci --ci-placement --output plan.json --github-output`
+    after `pip install -e .`. Its outputs are `shards`, `count` and `digest`, and it uploads
+    `plan.json` as the `test-plan` artifact;
+  - `tests`: needs `plan`. The matrix is `shard: ${{ fromJSON(needs.plan.outputs.shards) }}`,
+    with `fail-fast: false`. Each job runs `exec-shard --profile ci --ci-placement --shard <i>
+    --expect-digest <plan digest> --results-dir results`, with no `--count` and no `--shards`,
+    and uploads `results-<i>` under `if: always()`;
+  - `tests-result`: needs `[plan, tests]`, with `if: always()`. It downloads `test-plan` and
+    `results-*` (`merge-multiple`) into `results/` and runs `aggregate`. It uploads
+    `plan.json` and `shard-*.json` as `timings-ci` under `if: always()`, which is
+    `timings merge`'s input;
+  - `package`: unchanged, except that it runs the modules `CI_PLACEMENT` puts in `package`
+    (`PACKAGE_TEST_MODULES` is now derived from it).
+
+  `CONTROLLER_SHARDS`, `EXCLUDED_TEST_MODULES` and `CONFORMANCE_SUITES` are deleted, and so are
+  the old `controller` and `conformance` jobs. The file loads `tools/test_shards.py` by path,
+  so it works both as a script and when a test loads it. `validate.yml` uses major-tag
+  actions, per ADR 0002, including `upload-artifact@v4` and `download-artifact@v4`.
+  `validate.yml` was re-rendered; `ci.yml` and `main.yml` are byte-identical.
+- **Never vacuous.** Both downloads have `continue-on-error: true`, so a missing artifact
+  still reaches `aggregate`, which then fails the job and names what was missing:
+  - a missing `plan.json` (the `plan` job failed or was cancelled) now refuses, exit 2, with
+    "there is no plan at ... nothing ran and nothing can pass";
+  - a missing shard result is CRASHED ("no result record"), exit 2.
+- **`tools/run_tests.py`**: `plan --github-output` appends `shards=[0,...]` (compact JSON),
+  `count=` and `digest=` to `$GITHUB_OUTPUT`. It refuses, exit 2, when that variable is unset.
+- **README "Continuous integration"** was changed as far as a live test forces now
+  (`ReadmeValidateJobTest` requires every `validate.yml` job to be named as a code span). The
+  change covers the four-job list, the check names, and `tests-result` as the check branch
+  protection should require. CP7 still owns the full rewrite of the Development and CI
+  sections.
+- **`tools/test_timings.json`** was refreshed through `timings merge` (not edited by hand)
+  from a run of the two classes this checkpoint extended. The reason:
+  `CommittedTimingsTest` pins each entry's test count, and it failed for
+  `tests.test_ci_workflows.CoverageTest` (5 -> 7) and `tests.test_run_tests.BuildingBlocksTest`
+  (5 -> 8). The refresh also adds `ValidatePlanTest`, for 446 atoms.
+- **Tests:**
+  - `tests/test_ci_workflows.py`:
+    - `CoverageTest` was rewritten over `test_shards`. It checks that the hand-curated lists
+      and jobs are gone, that every `tests/test_*.py` module is in the inventory, that the
+      placement partitions the inventory, that the CI selection equals the `shards` part, the
+      placed modules and their reasons, the package job's modules, and that the conformance
+      family equals the managed workflow;
+    - `ValidatePlanTest` (new, 8 tests) checks the job graph and needs, `if: always()`, the
+      check names, the plan outputs and argv, the `fromJSON` matrix, the `exec-shard` argv
+      (`--expect-digest`, `--ci-placement`, `--profile ci`, no `--count`/`--shards`/`--plan`,
+      the same planning inputs as `plan`), the aggregate argv, the downloads with
+      `continue-on-error`, the artifact names and paths, and that the actions are major tags;
+    - the artifact-location test now lists validate's uploads and downloads and asserts that
+      artifact names are unique across a `main.yml` run. The checkout count is now 7.
+  - `tests/test_run_tests.py` `BuildingBlocksTest`, 3 new tests: `--github-output` (appends,
+    and refuses when unset), `aggregate` without a plan, and `aggregate` with a missing shard
+    result.
+  - `tests/test_plan_document_consistency.py`: the pinned `validate.yml` job list was updated.
+- **Verification:**
+  - `python3 -m unittest tests.test_plan_document_consistency tests.test_ci_workflows
+    tests.test_test_shards tests.test_run_tests tests.test_release_tools`: 270 tests, OK.
+  - `python3 tools/ci_workflows.py --check`: clean.
+  - **Local dry run of the CI sequence**, under a reaping subreaper because this session is a
+    Controller worker. It ran `plan --profile ci --ci-placement --github-output`, then all 4
+    `exec-shard ... --expect-digest` in parallel, each in a separate process that recomputed
+    the plan, then `aggregate`. Result: digest `4e87f234adb0` matched in every shard, and the
+    run passed, exit 0. It ran 2018 tests (the CI selection, without the 9 package and 20
+    excluded tests). The shard walls were 143.2 / 142.6 / 143.7 / 146.9 s against an estimate
+    of 151.9 s each, a balance ratio of 1.02. The largest atom was
+    `conformance:workflow_acceptance_matrix_test.py`, at 78.5 s.
+  - Not verified here: a real GitHub Actions run. The artifact actions' behaviour on a
+    missing artifact (with `continue-on-error`) is by design and has not been observed.
 
 ### CP5 -- serialization registry and timing-flake hardening (complete)
 

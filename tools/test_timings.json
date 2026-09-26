@@ -86,34 +86,39 @@
       "tests": 2
     },
     "tests.test_ci_workflows.AllJobsTest": {
-      "samples": 1,
+      "samples": 2,
       "seconds": 0.002,
       "tests": 11
     },
     "tests.test_ci_workflows.CiWorkflowTest": {
-      "samples": 1,
+      "samples": 2,
       "seconds": 0.0,
       "tests": 4
     },
     "tests.test_ci_workflows.CommittedFilesTest": {
-      "samples": 1,
-      "seconds": 0.031,
+      "samples": 2,
+      "seconds": 0.037,
       "tests": 8
     },
     "tests.test_ci_workflows.CoverageTest": {
       "samples": 1,
-      "seconds": 0.0,
-      "tests": 5
+      "seconds": 0.042,
+      "tests": 7
     },
     "tests.test_ci_workflows.EmitterTest": {
-      "samples": 1,
+      "samples": 2,
       "seconds": 0.007,
       "tests": 9
     },
     "tests.test_ci_workflows.MainWorkflowTest": {
-      "samples": 1,
+      "samples": 2,
       "seconds": 0.002,
       "tests": 12
+    },
+    "tests.test_ci_workflows.ValidatePlanTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 8
     },
     "tests.test_cli.ApplyingReviewFeedbackCliTest": {
       "samples": 1,
@@ -1767,8 +1772,8 @@
     },
     "tests.test_run_tests.BuildingBlocksTest": {
       "samples": 1,
-      "seconds": 0.831,
-      "tests": 5
+      "seconds": 0.994,
+      "tests": 8
     },
     "tests.test_run_tests.EnvironmentTest": {
       "samples": 1,
@@ -2229,6 +2234,7 @@
   "profile": "seed-local",
   "schema_version": 1,
   "updated_from": [
-    "9a08591ca1928fdf6c2ce9b216a58049a74f27f942ce959cff0a65fd277aeaaf"
+    "9a08591ca1928fdf6c2ce9b216a58049a74f27f942ce959cff0a65fd277aeaaf",
+    "eebe7270f8ba9facd2ecebb78085fc81b878307d8392d3aa70e448070c6f1b06"
   ]
 }

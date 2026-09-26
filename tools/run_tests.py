@@ -21,7 +21,8 @@ Building blocks (used by the local runner and by CI):
 
 - ``exec-shard``: run one shard, given either a recorded ``--plan`` or the
   planning inputs with ``--expect-digest``;
-- ``plan``: compute and write a plan;
+- ``plan``: compute and write a plan (``--github-output`` also hands its
+  shard indexes, count and digest to a GitHub Actions job's outputs);
 - ``aggregate``: verdicts, coverage and summary for a results directory;
 - ``timings merge --into FILE DIR...``: fold results into a timing profile,
   the explicit way to refresh the committed ``tools/test_timings.json``.
@@ -202,10 +203,22 @@ def cmd_plan(args) -> int:
                            target_shard_seconds=args.target_shard_seconds,
                            min_shards=args.min_shards, max_shards=args.max_shards,
                            shards=args.shards)
+    github_output = os.environ.get("GITHUB_OUTPUT") if args.github_output else None
+    if args.github_output and not github_output:
+        raise UsageError("--github-output needs $GITHUB_OUTPUT (it is set inside a GitHub "
+                         "Actions step)")
     if args.output is not None:
         _write_plan(args.output, plan)
+    shards = list(range(plan["shard_count"]))
     print(json.dumps({"plan_digest": plan["plan_digest"], "shard_count": plan["shard_count"],
-                      "shards": list(range(plan["shard_count"]))}, sort_keys=True))
+                      "shards": shards}, sort_keys=True))
+    if github_output:
+        # The tests job's matrix is fromJSON(shards); its shard jobs recompute
+        # the plan and refuse to run unless their digest equals this one.
+        with open(github_output, "a", encoding="utf-8") as handle:
+            handle.write(f"shards={json.dumps(shards, separators=(',', ':'))}\n"
+                         f"count={plan['shard_count']}\n"
+                         f"digest={plan['plan_digest']}\n")
     return 0
 
 
@@ -219,6 +232,10 @@ def _publish_summary(summary: str, results_dir: Path) -> None:
 
 
 def cmd_aggregate(args) -> int:
+    if not Path(args.plan).exists():
+        # In CI: the plan job failed or was cancelled, so no shard ran either.
+        return _error(f"there is no plan at {args.plan}: the plan was never produced, so "
+                      f"nothing ran and nothing can pass")
     plan = load_plan(args.plan)
     records, notes = ts.load_results(plan, args.results_dir)
     result = ts.aggregate(plan, records, args.results_dir, notes=notes)
@@ -519,6 +536,8 @@ def _plan_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile", choices=(ts.LOCAL, ts.CI), default=ts.LOCAL)
     parser.add_argument("--ci-placement", action="store_true")
     parser.add_argument("--output", type=Path, help="write plan.json here")
+    parser.add_argument("--github-output", action="store_true",
+                        help="also append shards=, count= and digest= to $GITHUB_OUTPUT")
     _add_repo_root(parser)
     return parser
 

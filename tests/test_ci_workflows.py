@@ -1,8 +1,11 @@
 """Tests for ``tools/ci_workflows.py`` (CP9, and
 ``workflow-controller-trunk-branch-pr-release-orchestration`` CP5): the
 committed workflow files equal the render, the retired ``release.yml`` is
-absent, the emitter's quoting and layout, shard coverage, the conformance
-matrix, and the structure of ``ci.yml``, ``validate.yml`` and ``main.yml``.
+absent, the emitter's quoting and layout, and the structure of ``ci.yml``,
+``validate.yml`` and ``main.yml``; and
+(``workflow-controller-adaptive-test-sharding`` CP6) ``validate.yml``'s
+planned ``plan`` / ``tests`` / ``tests-result`` jobs, the CI placement
+partition and the conformance family.
 
 The assertions are made on the Python model, and the committed bytes are
 asserted equal to its render, so what GitHub runs is what is tested here. A
@@ -33,6 +36,7 @@ _spec = importlib.util.spec_from_file_location("ci_workflows", CI_WORKFLOWS_PY)
 ci = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = ci
 _spec.loader.exec_module(ci)
+shards = ci.test_shards
 
 WORKFLOWS = fixtures.REPO_ROOT / ".github" / "workflows"
 CONFORMANCE_YML = WORKFLOWS / "workflow-conformance.yml"
@@ -256,42 +260,160 @@ class EmitterTest(unittest.TestCase):
 
 
 class CoverageTest(unittest.TestCase):
-    def test_every_test_module_is_placed_exactly_once(self) -> None:
-        discovered = {path.stem for path in (fixtures.REPO_ROOT / "tests").glob("test_*.py")}
-        placed = [module for modules in ci.CONTROLLER_SHARDS.values() for module in modules]
-        placed += ci.PACKAGE_TEST_MODULES + list(ci.EXCLUDED_TEST_MODULES)
-        duplicates = sorted({module for module in placed if placed.count(module) > 1})
-        self.assertEqual(duplicates, [])
-        self.assertEqual(set(placed), discovered)
+    """The CI placement partitions the inventory, which the ``plan`` job
+    plans in full: nothing is hand-listed in the workflow model any more."""
 
-    def test_the_shards_are_what_the_controller_job_runs(self) -> None:
-        controller = _jobs(ci.validate_workflow())["controller"]
-        include = controller["strategy"]["matrix"]["include"]
-        self.assertEqual({row["shard"]: row["modules"].split() for row in include},
-                         {name: [f"tests.{m}" for m in modules]
-                          for name, modules in ci.CONTROLLER_SHARDS.items()})
-        self.assertIn("python -m unittest ${{ matrix.modules }} -v", map(_run, _steps(controller)))
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        cls.partition = shards.ci_partition(cls.inventory)
 
-    def test_package_job_runs_the_packaged_runtime_tests(self) -> None:
+    def test_the_hand_curated_lists_are_gone(self) -> None:
+        for name in ("CONTROLLER_SHARDS", "EXCLUDED_TEST_MODULES", "CONFORMANCE_SUITES"):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(ci, name))
+        self.assertNotIn("conformance", _jobs(ci.validate_workflow()))
+        self.assertNotIn("controller", _jobs(ci.validate_workflow()))
+
+    def test_every_test_module_is_in_the_inventory(self) -> None:
+        discovered = {f"tests.{path.stem}" for path in (fixtures.REPO_ROOT / "tests").glob("test_*.py")}
+        loaded = {atom.module for atom in self.inventory.atoms if atom.family == shards.CONTROLLER}
+        self.assertEqual(loaded, discovered)
+
+    def test_the_placement_partitions_the_inventory(self) -> None:
+        placed = [test_id for ids in self.partition.values() for test_id in ids]
+        self.assertEqual(len(placed), len(set(placed)))
+        self.assertEqual(set(placed), set(self.inventory.test_ids))
+        self.assertEqual(set(self.partition), {shards.SHARDS, shards.PACKAGE, shards.EXCLUDED})
+
+    def test_the_tests_matrix_plans_exactly_the_shards_part(self) -> None:
+        selection = self.inventory.select([], ci_placement=True)
+        self.assertEqual(tuple(selection.test_ids), self.partition[shards.SHARDS])
+
+    def test_the_placed_modules(self) -> None:
+        by_place = {}
+        for module, (where, reason) in shards.CI_PLACEMENT.items():
+            by_place.setdefault(where, []).append(module)
+            with self.subTest(module=module):
+                self.assertTrue(reason.strip())
+        self.assertEqual(by_place, {shards.PACKAGE: ["tests.test_packaged_runtime"],
+                                    shards.EXCLUDED: ["tests.test_integration_disposable_repo"]})
+        self.assertIn("claude", shards.CI_PLACEMENT["tests.test_integration_disposable_repo"][1])
+
+    def test_package_job_runs_the_package_placed_modules(self) -> None:
+        self.assertEqual(ci.PACKAGE_TEST_MODULES, ("tests.test_packaged_runtime",))
         package = _jobs(ci.validate_workflow())["package"]
         runs = [_run(step) for step in _steps(package)]
-        for module in ci.PACKAGE_TEST_MODULES:
-            self.assertIn(f"CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python -m unittest tests.{module} -v",
-                          runs)
+        self.assertIn("CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python -m unittest "
+                      "tests.test_packaged_runtime -v", runs)
+        package_ids = {test_id for test_id in self.partition[shards.PACKAGE]}
+        self.assertTrue(package_ids)
+        self.assertTrue(all(test_id.startswith("tests.test_packaged_runtime.")
+                            for test_id in package_ids))
 
-    def test_the_exclusion_has_a_reason(self) -> None:
-        for module, reason in ci.EXCLUDED_TEST_MODULES.items():
-            self.assertIn("claude", reason, module)
-
-    def test_conformance_matrix_equals_the_managed_workflow(self) -> None:
+    def test_conformance_family_equals_the_managed_workflow(self) -> None:
         managed = re.findall(r"(?m)^\s*run: python3 (\S+)\s*$",
                              CONFORMANCE_YML.read_text(encoding="utf-8"))
         self.assertTrue(managed)
-        conformance = _jobs(ci.validate_workflow())["conformance"]
-        self.assertEqual(conformance["strategy"]["matrix"]["suite"], managed)
-        step = _steps(conformance)[-1]
-        self.assertEqual((step["working-directory"], _run(step)),
-                         ("scripts", "python3 ${{ matrix.suite }}"))
+        conformance = [test_id for test_id in self.partition[shards.SHARDS]
+                       if test_id.startswith(shards.CONFORMANCE_PREFIX)]
+        self.assertEqual(conformance, [shards.CONFORMANCE_PREFIX + suite for suite in managed])
+
+
+class ValidatePlanTest(unittest.TestCase):
+    """``plan`` -> ``tests`` (one job per planned shard) -> ``tests-result``."""
+
+    def setUp(self) -> None:
+        self.jobs = _jobs(ci.validate_workflow())
+
+    def _argv(self, job: str, fragment: str) -> list[str]:
+        steps = _steps(self.jobs[job])
+        return shlex.split(_run(steps[_index(steps, lambda s: fragment in _run(s))]))
+
+    def test_job_graph(self) -> None:
+        self.assertEqual(list(self.jobs), ["plan", "tests", "tests-result", "package"])
+        self.assertNotIn("needs", self.jobs["plan"])
+        self.assertEqual(self.jobs["tests"]["needs"], ["plan"])
+        self.assertEqual(self.jobs["tests-result"]["needs"], ["plan", "tests"])
+        self.assertEqual(self.jobs["tests-result"]["if"], "always()")
+        self.assertNotIn("if", self.jobs["tests"])
+        self.assertNotIn("needs", self.jobs["package"])
+
+    def test_check_names(self) -> None:
+        self.assertNotIn("name", self.jobs["plan"])
+        self.assertEqual(self.jobs["tests"]["name"], "tests (${{ matrix.shard }})")
+        self.assertNotIn("name", self.jobs["tests-result"])
+        self.assertNotIn("name", self.jobs["package"])
+
+    def test_plan_outputs_and_argv(self) -> None:
+        plan = self.jobs["plan"]
+        self.assertEqual(plan["outputs"], {name: f"${{{{ steps.plan.outputs.{name} }}}}"
+                                           for name in ("shards", "count", "digest")})
+        steps = _steps(plan)
+        step = steps[_index(steps, lambda s: "run_tests.py plan" in _run(s))]
+        self.assertEqual(step["id"], "plan")
+        self.assertEqual(self._argv("plan", "run_tests.py plan"),
+                         ["python3", "tools/run_tests.py", "plan", "--profile", "ci",
+                          "--ci-placement", "--output", "plan.json", "--github-output"])
+        self.assertIn("pip install -e .", map(_run, steps))
+
+    def test_matrix_is_the_planned_shards(self) -> None:
+        strategy = self.jobs["tests"]["strategy"]
+        self.assertEqual(strategy, {"fail-fast": False,
+                                    "matrix": {"shard": "${{ fromJSON(needs.plan.outputs.shards) }}"}})
+
+    def test_exec_shard_recomputes_the_plan_and_checks_its_digest(self) -> None:
+        argv = self._argv("tests", "exec-shard")
+        self.assertEqual(argv, ["python3", "tools/run_tests.py", "exec-shard", "--profile", "ci",
+                                "--ci-placement", "--shard", "${{", "matrix.shard", "}}",
+                                "--expect-digest", "${{", "needs.plan.outputs.digest", "}}",
+                                "--results-dir", "results"])
+        for absent in ("--count", "--shards", "--plan", "--target-seconds", "--min-shards",
+                       "--max-shards"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, argv)
+        # Exactly the plan job's planning inputs, so the digests can match.
+        plan_argv = self._argv("plan", "run_tests.py plan")
+        self.assertEqual(argv[3:6], plan_argv[3:6])
+        self.assertIn("pip install -e .", map(_run, _steps(self.jobs["tests"])))
+
+    def test_tests_result_aggregates_the_plan_and_every_result(self) -> None:
+        steps = _steps(self.jobs["tests-result"])
+        self.assertEqual(self._argv("tests-result", "aggregate"),
+                         ["python3", "tools/run_tests.py", "aggregate", "--plan",
+                          "results/plan.json", "--results-dir", "results"])
+        downloads = [s for s in steps if "download-artifact" in _uses(s)]
+        self.assertEqual([s["with"] for s in downloads],
+                         [{"name": "test-plan", "path": "results"},
+                          {"pattern": "results-*", "merge-multiple": True, "path": "results"}])
+        # A missing artifact must reach aggregate (which exits 2, naming it),
+        # not end the job before it can say so.
+        self.assertTrue(all(s["continue-on-error"] is True for s in downloads))
+        aggregate = _index(steps, lambda s: "aggregate" in _run(s))
+        self.assertTrue(all(steps.index(s) < aggregate for s in downloads))
+        self.assertNotIn("continue-on-error", steps[aggregate])
+
+    def test_artifact_names(self) -> None:
+        plan_upload = [s["with"] for s in _steps(self.jobs["plan"]) if "upload-artifact" in _uses(s)]
+        self.assertEqual(plan_upload, [{"name": "test-plan", "path": "plan.json"}])
+        tests_upload = [s for s in _steps(self.jobs["tests"]) if "upload-artifact" in _uses(s)]
+        self.assertEqual([(s["if"], s["with"]) for s in tests_upload],
+                         [("always()", {"name": "results-${{ matrix.shard }}", "path": "results/"})])
+        timings = [s for s in _steps(self.jobs["tests-result"]) if "upload-artifact" in _uses(s)]
+        self.assertEqual([(s["if"], s["with"]["name"]) for s in timings],
+                         [("always()", "timings-ci")])
+        self.assertEqual(timings[0]["with"]["path"].split("\n"),
+                         ["results/plan.json", "results/shard-*.json"])
+        self.assertEqual(timings[0], _steps(self.jobs["tests-result"])[-1])
+
+    def test_validate_keeps_major_tag_actions(self) -> None:
+        # ADR 0002: only main.yml's own jobs are pinned to commits.
+        for job_name, job in self.jobs.items():
+            for step in _steps(job):
+                if "uses" in step:
+                    with self.subTest(job=job_name, uses=_uses(step)):
+                        self.assertIsInstance(step["uses"], str)
+                        self.assertRegex(step["uses"], r"^actions/[a-z-]+@v\d+$")
 
 
 class AllJobsTest(unittest.TestCase):
@@ -335,12 +457,21 @@ class AllJobsTest(unittest.TestCase):
                 self.assertNotIn("CONTROLLER_LIVE_WORKER", text)
                 self.assertNotRegex(text, r"(?m)^\s*(run: .*)?\bclaude\b")
 
-    def test_artifacts_only_in_main_build_and_publish(self) -> None:
+    def test_artifacts_only_where_expected(self) -> None:
         found = sorted((name, job_name, _uses(step).split("@")[0])
                        for name, job_name, _, step in _all_steps()
                        if "-artifact" in _uses(step))
         self.assertEqual(found, [("main.yml", "build", "actions/upload-artifact"),
-                                 ("main.yml", "publish", "actions/download-artifact")])
+                                 ("main.yml", "publish", "actions/download-artifact"),
+                                 ("validate.yml", "plan", "actions/upload-artifact"),
+                                 ("validate.yml", "tests", "actions/upload-artifact"),
+                                 ("validate.yml", "tests-result", "actions/download-artifact"),
+                                 ("validate.yml", "tests-result", "actions/download-artifact"),
+                                 ("validate.yml", "tests-result", "actions/upload-artifact")])
+        # main.yml calls validate.yml in the same run, so the names must not collide.
+        names = [step["with"].get("name") for _, _, _, step in _all_steps()
+                 if "upload-artifact" in _uses(step)]
+        self.assertEqual(len(names), len(set(names)))
 
     def test_no_bare_github_sha_commit(self) -> None:
         for name, text in ci.render().items():
@@ -400,8 +531,8 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, True)
                 else:
                     self.assertIs(persist, False)
-        # validate.yml's three jobs, then release-plan, build and publish.
-        self.assertEqual(checkouts, 6)
+        # validate.yml's four jobs, then release-plan, build and publish.
+        self.assertEqual(checkouts, 7)
 
 
 class CiWorkflowTest(unittest.TestCase):

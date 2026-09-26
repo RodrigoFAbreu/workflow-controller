@@ -563,7 +563,7 @@ class ReadmeValidateJobTest(unittest.TestCase):
 
     def test_the_readme_names_every_validate_job(self) -> None:
         jobs = validate_job_ids()
-        self.assertEqual(jobs, ["controller", "conformance", "package"])
+        self.assertEqual(jobs, ["plan", "tests", "tests-result", "package"])
         self.assertEqual(readme_validate_job_violations(README_PATH.read_text(), jobs), [])
 
     def test_a_job_the_readme_does_not_name_fails(self) -> None:

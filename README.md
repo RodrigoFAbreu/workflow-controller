@@ -1178,22 +1178,30 @@ numbers stay excluded from every later binding of the id.
 ## Continuous integration
 
 `.github/workflows/validate.yml` is the single definition of required
-validation. It is called, never triggered directly, and has three jobs,
-each on `ubuntu-latest` with Python 3.12, read-only permissions and
-`fail-fast: false` for its matrix:
+validation. It is called, never triggered directly, and has four jobs,
+each on `ubuntu-latest` with Python 3.12 and read-only permissions:
 
-- `controller`: the Controller suite in eight named shards (`identity`,
-  `job`, `resume`, `decision`, `cli`, `worker`, `docs`, `trunk`). A test
-  requires every `tests/test_*.py` module to be in exactly one shard, in
-  `package`, or in the one named exclusion,
-  `tests.test_integration_disposable_repo`, which needs the live
-  `claude` binary and real spend;
-- `conformance`: the seven frozen Workflow conformance suites, one per
-  matrix entry;
+- `plan`: plans the whole CI selection with
+  `tools/run_tests.py plan --profile ci --ci-placement`: every test
+  `python3 -m unittest discover -s tests -t .` loads, plus the seven frozen
+  Workflow conformance suites, in duration-balanced shards, from the
+  committed `tools/test_timings.json`. Its outputs are the shard indexes,
+  their count and the plan's digest, and it uploads `plan.json`;
+- `tests`: one matrix job per planned shard (`fail-fast: false`). Each
+  recomputes the plan from the checked-out commit, refuses to run unless
+  its digest equals `plan`'s, runs its shard and uploads its result
+  record;
+- `tests-result`: runs even when a shard failed or never started, and
+  aggregates every shard's result. It passes only if every planned test
+  ran exactly once and passed; a missing plan or a missing shard result
+  fails it. It uploads the run's durations as the `timings-ci` artifact.
+  `tools/test_shards.py`'s CI placement keeps `tests.test_packaged_runtime`
+  (run by `package`) and `tests.test_integration_disposable_repo` (which
+  needs the live `claude` binary and real spend) out of the plan;
 - `package`: builds the wheel, verifies it with
-  `tools/release.py verify-wheel --local`, runs
-  `tests.test_packaged_runtime`, then installs the wheel with pipx and
-  checks `--version`'s first line.
+  `tools/release.py verify-wheel --local`, runs the package-placed
+  modules (`tests.test_packaged_runtime`), then installs the wheel with
+  pipx and checks `--version`'s first line.
 
 Two workflows call it:
 
@@ -1222,10 +1230,11 @@ The three workflow files are generated. Edit the model in
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
 committed file differs from the model.
 
-A branch-protection rule that required the old `controller-tests` check
-must now require the `validate / controller (...)` checks (and, if you
-want them, `validate / conformance (...)` and `validate / package`).
-Branch protection is not required by anything here.
+The checks are `validate / plan`, `validate / tests (<i>)`,
+`validate / tests-result` and `validate / package`. A branch-protection
+rule should require `validate / tests-result` (its status stands for the
+Controller and conformance tests, whatever the shard count) and
+`validate / package`. Branch protection is not required by anything here.
 
 ## Releasing
 

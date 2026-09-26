@@ -494,6 +494,44 @@ class BuildingBlocksTest(unittest.TestCase):
         self.assertEqual(aggregated.returncode, 2)
         self.assertIn("plan_digest", aggregated.stderr)
 
+    def test_plan_hands_its_shards_and_digest_to_github_outputs(self) -> None:
+        self.results.mkdir(parents=True)
+        outputs = self.results / "github-output"
+        outputs.write_text("earlier=kept\n")
+        completed = self.repo.run("plan", "tests.test_pass", "--profile", "ci", "--shards", "2",
+                                  "--github-output", env={"GITHUB_OUTPUT": str(outputs)})
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        summary = json.loads(completed.stdout)
+        self.assertEqual(outputs.read_text(),
+                         "earlier=kept\nshards=[0,1]\ncount=2\n"
+                         f"digest={summary['plan_digest']}\n")
+        unset = {key: value for key, value in self.repo.env.items() if key != "GITHUB_OUTPUT"}
+        missing = subprocess.run(self.repo.command("plan", "tests.test_pass", "--github-output"),
+                                 env=unset, capture_output=True, text=True, timeout=60)
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("$GITHUB_OUTPUT", missing.stderr)
+
+    def test_aggregate_without_a_plan_refuses_and_says_why(self) -> None:
+        self.results.mkdir(parents=True)
+        step_summary = self.results / "step-summary.md"
+        aggregated = self.repo.run("aggregate", "--plan", str(self.results / "plan.json"),
+                                   "--results-dir", str(self.results),
+                                   env={"GITHUB_STEP_SUMMARY": str(step_summary)})
+        self.assertEqual(aggregated.returncode, 2)
+        self.assertIn("there is no plan", aggregated.stderr)
+        self.assertIn("nothing can pass", aggregated.stderr)
+
+    def test_aggregate_with_a_missing_shard_result_does_not_pass(self) -> None:
+        # A tests job that never started leaves no result artifact.
+        summary = self.plan()
+        self.assertGreater(len(summary["shards"]), 1)
+        completed = self.exec_shard("--plan", str(self.results / "plan.json"))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        aggregated = self.repo.run("aggregate", "--plan", str(self.results / "plan.json"),
+                                   "--results-dir", str(self.results))
+        self.assertEqual(aggregated.returncode, 2, aggregated.stdout)
+        self.assertIn("no result record", aggregated.stdout)
+
     def test_timings_merge_folds_a_results_directory_into_a_profile(self) -> None:
         completed, results = self.repo.run_selection("tests.test_pass", "tests.test_fail")
         self.assertEqual(completed.returncode, 1)

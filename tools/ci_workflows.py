@@ -5,8 +5,12 @@ The tests are stdlib-only and cannot parse YAML, so the three workflows live
 here as Python data and are rendered by a small deterministic emitter:
 
 - ``validate.yml`` (``workflow_call`` only) is the single definition of the
-  required validation: the Controller shard matrix, the frozen conformance
-  matrix and the ``package`` job;
+  required validation: ``plan`` computes a duration-balanced plan over the
+  Controller suite and the frozen conformance suites
+  (``tools/run_tests.py``, over ``tools/test_shards.py``), ``tests`` runs
+  one matrix job per planned shard, ``tests-result`` aggregates them and
+  proves every planned test ran exactly once, and ``package`` builds and
+  checks the wheel;
 - ``ci.yml`` runs it on every pull request;
 - ``main.yml`` runs it on every push to ``main`` (and on
   ``workflow_dispatch``), then classifies the trunk commit with
@@ -31,12 +35,29 @@ Every other string is JSON-quoted, which is valid YAML double-quoted style.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_test_shards():
+    """``tools/test_shards.py``, whichever way this file was loaded (as a
+    script, or by path from a test)."""
+    name = "test_shards"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name("test_shards.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+test_shards = _load_test_shards()
+
 WORKFLOWS_DIR = Path(".github") / "workflows"
 
 #: A string emitted bare: a leading letter or underscore, then only characters
@@ -84,42 +105,21 @@ GH_RELEASE_CREATE_NOTE = (
     "is needed. An interrupted upload leaves that draft behind, which the next run resumes."
 )
 
-#: The Controller test shards. Every ``tests/test_*.py`` module is in exactly
-#: one shard, in ``PACKAGE_TEST_MODULES`` or in ``EXCLUDED_TEST_MODULES``.
-CONTROLLER_SHARDS = {
-    "identity": ["test_identity", "test_runtime", "test_package_structure",
-                 "test_write_containment", "test_lock", "test_handoff"],
-    "job": ["test_job", "test_job_validation"],
-    "resume": ["test_resume"],
-    "decision": ["test_evidence", "test_decision", "test_golden_plan_stage_decisions",
-                 "test_target_state", "test_managed_repo", "test_routing"],
-    "cli": ["test_cli", "test_lifecycle_orchestration"],
-    "worker": ["test_worker", "test_observe", "test_observation_equivalence", "test_fake_claude_contract",
-               "test_worker_stream"],
-    "docs": ["test_plan_document_consistency", "test_checklist_corrections",
-             "test_ci_workflows", "test_test_shards", "test_run_tests", "test_release_tools",
-             "test_buildinfo"],
-    "trunk": ["test_version_authority", "test_repo_policy", "test_gitrepo", "test_forge", "test_milestone_branch",
-              "test_pull_request_lifecycle", "test_release_txn", "test_no_rewrite_invariants",
-              "test_trunk_preflight", "test_trunk_orchestration_e2e"],
-}
-PACKAGE_TEST_MODULES = ["test_packaged_runtime"]
-EXCLUDED_TEST_MODULES = {
-    "test_integration_disposable_repo":
-        "needs the live claude binary, network access and real spend (CONTROLLER_LIVE_WORKER=1)",
-}
+#: The ``tests.*`` modules the ``package`` job runs against the built wheel,
+#: read from ``tools/test_shards.py``'s CI placement (which also keeps them,
+#: and the one exclusion, out of the ``tests`` matrix).
+PACKAGE_TEST_MODULES = tuple(module for module, (where, _) in test_shards.CI_PLACEMENT.items()
+                             if where == test_shards.PACKAGE)
 
-#: The frozen Workflow conformance suites, run from ``scripts/``. They equal
-#: the managed ``workflow-conformance.yml``'s own ``run: python3 <file>`` lines.
-CONFORMANCE_SUITES = [
-    "workflow_fingerprint_test.py",
-    "workflow_state_test.py",
-    "workflow_test_harness_test.py",
-    "workflow_integration_test.py",
-    "workflow_acceptance_matrix_test.py",
-    "workflow_state_completion_obligations_test.py",
-    "workflow_fingerprint_generalization_test.py",
-]
+#: The ``tests`` jobs' planning inputs. ``plan`` and every shard job pass
+#: exactly these, so a digest match proves they computed the same plan.
+PLANNING_ARGS = "--profile ci --ci-placement"
+PLAN_FILE = "plan.json"
+PLAN_ARTIFACT = "test-plan"
+RESULTS_DIR = "results"
+RESULTS_ARTIFACT_PREFIX = "results-"
+TIMINGS_ARTIFACT = "timings-ci"
+PLAN_JOB_OUTPUTS = ("shards", "count", "digest")
 
 DIST_DIR = "dist"
 ARTIFACT_NAME = "dist"
@@ -258,36 +258,76 @@ def _setup_python(pinned: bool) -> dict:
             "with": {"python-version": PYTHON_VERSION}}
 
 
+def _install_editable() -> dict:
+    # The shard jobs' import environment; plan discovers the tests in the same one.
+    return {"name": "install (editable)", "run": "pip install -e ."}
+
+
 def validate_workflow() -> dict:
-    shards = [{"shard": name, "modules": " ".join(f"tests.{m}" for m in modules)}
-              for name, modules in CONTROLLER_SHARDS.items()]
     read = {"contents": "read"}
+    packaged = " ".join(PACKAGE_TEST_MODULES)
+    exec_shard = (f"python3 tools/run_tests.py exec-shard {PLANNING_ARGS} "
+                  "--shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} "
+                  f"--results-dir {RESULTS_DIR}")
     return {
         "name": "Validate",
         "on": {"workflow_call": None},
         "jobs": {
-            "controller": {
-                "name": "controller (${{ matrix.shard }})",
+            "plan": {
                 "runs-on": RUNNER,
                 "permissions": read,
-                "strategy": {"fail-fast": False, "matrix": {"include": shards}},
+                "outputs": {name: f"${{{{ steps.plan.outputs.{name} }}}}" for name in PLAN_JOB_OUTPUTS},
                 "steps": [
                     _checkout(pinned=False),
                     _setup_python(pinned=False),
-                    {"name": "install (editable)", "run": "pip install -e ."},
-                    {"name": "Controller tests", "run": "python -m unittest ${{ matrix.modules }} -v"},
+                    _install_editable(),
+                    {"name": "plan", "id": "plan",
+                     "run": f"python3 tools/run_tests.py plan {PLANNING_ARGS} "
+                            f"--output {PLAN_FILE} --github-output"},
+                    {"uses": "actions/upload-artifact@v4",
+                     "with": {"name": PLAN_ARTIFACT, "path": PLAN_FILE}},
                 ],
             },
-            "conformance": {
-                "name": "conformance (${{ matrix.suite }})",
+            "tests": {
+                "name": "tests (${{ matrix.shard }})",
+                "needs": ["plan"],
                 "runs-on": RUNNER,
                 "permissions": read,
-                "strategy": {"fail-fast": False, "matrix": {"suite": list(CONFORMANCE_SUITES)}},
+                "strategy": {"fail-fast": False,
+                             "matrix": {"shard": "${{ fromJSON(needs.plan.outputs.shards) }}"}},
                 "steps": [
                     _checkout(pinned=False),
                     _setup_python(pinned=False),
-                    {"name": "conformance suite", "working-directory": "scripts",
-                     "run": "python3 ${{ matrix.suite }}"},
+                    _install_editable(),
+                    {"name": "shard", "run": exec_shard},
+                    {"if": "always()", "uses": "actions/upload-artifact@v4",
+                     "with": {"name": RESULTS_ARTIFACT_PREFIX + "${{ matrix.shard }}",
+                              "path": f"{RESULTS_DIR}/"}},
+                ],
+            },
+            # Never passes vacuously: without the plan, or without a shard's
+            # result, aggregate exits 2 and says which.
+            "tests-result": {
+                "needs": ["plan", "tests"],
+                "if": "always()",
+                "runs-on": RUNNER,
+                "permissions": read,
+                "steps": [
+                    _checkout(pinned=False),
+                    _setup_python(pinned=False),
+                    {"uses": "actions/download-artifact@v4", "continue-on-error": True,
+                     "with": {"name": PLAN_ARTIFACT, "path": RESULTS_DIR}},
+                    {"uses": "actions/download-artifact@v4", "continue-on-error": True,
+                     "with": {"pattern": RESULTS_ARTIFACT_PREFIX + "*", "merge-multiple": True,
+                              "path": RESULTS_DIR}},
+                    {"name": "aggregate",
+                     "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
+                            f"--results-dir {RESULTS_DIR}"},
+                    # The run's per-atom durations, for
+                    # tools/run_tests.py timings merge --into tools/test_timings.json.
+                    {"if": "always()", "uses": "actions/upload-artifact@v4",
+                     "with": {"name": TIMINGS_ARTIFACT,
+                              "path": f"{RESULTS_DIR}/{PLAN_FILE}\n{RESULTS_DIR}/shard-*.json"}},
                 ],
             },
             "package": {
@@ -303,8 +343,7 @@ def validate_workflow() -> dict:
                      "run": f"python3 tools/release.py verify-wheel {DIST_DIR}/*.whl --local "
                             '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"'},
                     {"name": "packaged runtime tests",
-                     "run": "CONTROLLER_REQUIRE_PACKAGING_TESTS=1 "
-                            "python -m unittest tests.test_packaged_runtime -v"},
+                     "run": f"CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python -m unittest {packaged} -v"},
                     {"name": "pipx smoke test", "run": PIPX_SMOKE},
                 ],
             },

@@ -461,23 +461,60 @@ fixed, none left open.
   `tools/ci_workflows.py --check` exit 0; `tests.test_plan_document_consistency` OK;
   `tests.test_packaged_runtime` (packaging required) OK.
 
+## Functional review round 1 (revision 2, bounded fixes)
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's findings from revision 2's checklist, at
+evidence commit `fcab1aa`). The rest of revision 2's manual pass was not completed, since
+revision 2 already needed remediation. `technical_approval` was marked `STALE` before the first
+edit.
+
+- **F1 (defect), fixed (`3245d6f`):** a pending wakeup's due time rendered as the current time.
+  `worker_stream._iso` records `due_at` with milliseconds (`...:10.201Z`), and
+  `observe._parse_at` accepted only whole seconds, so `_clock` fell back to now. `_parse_at` now
+  also accepts a fraction of up to six digits, still UTC (`Z`) only. A present `due_at` that
+  does not parse renders as `due time unreadable: '<value>'`, never as now. New tests: `ParseAtTest`
+  (whole, millisecond and microsecond times to the exact UTC moment; the Controller's own format
+  round-trips; malformed shapes are `None`); `JobActivityTest` (the due time is the recorded one,
+  hours from now; an unreadable due time is named). Each fails before the fix.
+- **F2 (usability issue), fixed (`577b59e`):** `observe._plural` appended `s` to every noun
+  (`owns 2 processs`, `2 owned processs still running` in `status`, `inspect`, `explain` and
+  the `follow` heartbeat). A noun ending in `s` now takes `es`. New tests: `PluralTest`, and
+  `JobActivityTest`'s two-owned-process waiting and draining lines. Each fails before the fix.
+- **O1 (optional), not changed:** a job whose worker leader died while its group still runs
+  reads `waiting` from the last recorded `worker_state` when no Controller is attached. The
+  lifecycle decision is correct; this is diagnostic wording only.
+- **Not findings:** the scenarios the pre-check found unexercised (background subagent
+  hand-back, several simultaneous background tasks, same-phase durable progress and its
+  `predicate_detail`, opt-in `--timeout` over the owned lifetime, anchor self-exit and the
+  recognised-daemon orphan rule). The next functional checklist must cover the first four
+  explicitly.
+
 ## Functional review checklist
 
-This checklist covers implementation revision 2, reviewed at `f0a86d2`, with technical approval
-`4a65024`. The automated state is current: at `f0a86d2` the full suite ran 1879 tests, OK (8
-opt-in skips), `tests.test_packaged_runtime` (packaging required), `tools/ci_workflows.py --check`
-and `tests.test_plan_document_consistency` passed. Since then only `WORKFLOW_STATE.json` and this
-file have changed. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+This checklist covers implementation revision 3, reviewed at `c352b5d`, with technical approval
+`aac43ac`. Revision 2's checklist (evidence `fcab1aa`) and its two findings are recorded under
+"Functional review round 1" above. The automated state is current. At `c352b5d` the full suite ran
+1886 tests, OK (8 opt-in skips), and so did the local reviewer's independent rerun. The
+packaged-runtime suite (9), `tools/ci_workflows.py --check`, `tests.test_plan_document_consistency`
+and the seven frozen Workflow suites all passed. Since then only `WORKFLOW_STATE.json` and this file
+have changed. Record findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
 
-Before this checklist was committed, every flow below was dry-run against a pipx install of a
-wheel built from a clean clone of `4a65024`. Two results did not match the expected text; see
-"Dry-run notes" at the end. Flows F1-F7 cost nothing: the worker is `tests/fake_claude.py` in
-streaming mode, scripted to own real background processes, and the Workflow Manager is the
-offline test stub. Nothing in this repository is modified. Only F8 calls the real `claude`.
+Before this checklist was committed, every flow below was dry-run against a pipx install of a wheel
+built from a clean clone of `aac43ac`. See "Dry-run notes" at the end. Flows F1-F11 cost nothing.
+The worker is `tests/fake_claude.py` in streaming mode, scripted to own real background processes,
+and the Workflow Manager is the offline test stub. Nothing in this repository is modified. Only F12
+calls the real `claude`.
+
+What to re-test from round 1: F6 (the wakeup's due time, finding F1) and the process wording in F1,
+F4, F7 and F11 (finding F2). New in this round, as round 1 required: F8 (background subagent
+hand-back), F9 (several simultaneous background tasks), F10 (same-phase durable progress and its
+`predicate_detail`) and F11 (opt-in `--timeout` over the owned lifetime).
 
 ### Setup
 
-1. `pipx` is installed. You need **two zsh terminals**, called A and B below.
+1. `pipx` is installed. You need **two zsh terminals**, called A and B below. If
+   `/tmp/wc-lifecycle-fr` is left over from revision 2's checklist, remove it first with the
+   Teardown commands.
 2. In terminal A, write the session file:
 
    ```zsh
@@ -498,7 +535,7 @@ offline test stub. Nothing in this repository is modified. Only F8 calls the rea
      item at `IMPLEMENTING` whose scripted `/milestone-implement` worker plays `<scenario>`.
    - `use <name>` loads that target into the shell: `$R` (the target), `$RT` (its runtime root),
      `$REL` (the file that releases the scripted "full verification"), and `$J` (its job id, once
-     a job exists; rerun `use <name>` after the first `step`).
+     a job exists). **Rerun `use <name>` after the job starts** before using `$J`, `rec` or `hist`.
    - `wcx <args>` runs the installed Controller against the loaded target. `rec '<expr>'`
      evaluates a Python expression over the job record `r`. `hist` prints the job's event
      history, one entry per state change.
@@ -536,6 +573,12 @@ class Case(lifecycle._LifecycleTestCase):
         pass
 
 
+def bg(task_id: str, description: str, release: Path) -> dict:
+    """A background task that ends once ``release`` exists."""
+    return {"step": "bash_bg", "id": task_id, "description": description,
+            "command": f"while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.2; done"}
+
+
 def turns(scenario: str, lc: lifecycle.Lifecycle, d: Path) -> list:
     """The worker's scripted turns: turn 0 answers the task; each later
     turn is the one a background task's completion starts."""
@@ -548,6 +591,23 @@ def turns(scenario: str, lc: lifecycle.Lifecycle, d: Path) -> list:
                   "orphan_write_file": str(orphan), "description": "full verification"}, SAYS], implement]
     if scenario == "daemon":
         return [[{"step": "bash_bg", "id": "build", "seconds": 0.5, "orphan": "daemon", "argv0": "gpg-agent",
+                  "orphan_seconds": 600, "description": "signed build"}, SAYS], implement]
+    if scenario == "subagent":
+        return [[{"step": "subagent_handback", "after": 20, "id": "helper",
+                  "events": [{"step": "text", "text": "Wrote the CP1 tests."}]},
+                 {"step": "text", "text": "A background subagent is writing the tests; I will continue when it "
+                                          "hands back."}], implement]
+    if scenario == "tasks2":
+        return [[bg("suite", "full test suite", d / "release-suite"),
+                 bg("pack", "packaged runtime tests", d / "release-pack"),
+                 {"step": "text", "text": "Two verifications are running in the background."}],
+                [{"step": "text", "text": "One verification finished; waiting for the other."}], implement]
+    if scenario == "sameph":
+        return [[{"step": "actions", "actions": lc.implement("CP1", commit="product")}]]
+    if scenario == "timeout":
+        return [[{"step": "bash_bg", "id": "verify", "description": "full verification", "orphan": "setsid",
+                  "orphan_seconds": 600, "command": f"while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.2; done"},
+                 {"step": "bash_bg", "id": "sign", "seconds": 600, "orphan": "daemon", "argv0": "gpg-agent",
                   "orphan_seconds": 600, "description": "signed build"}, SAYS], implement]
     if scenario == "wakeup":
         return [[{"step": "wakeup", "delay": 30, "prompt": "check the verification", "reason": "verification",
@@ -585,16 +645,17 @@ if __name__ == "__main__":
 ### Test data
 
 No seeding is needed beyond the driver. Each scenario gets its own target: a git repository with
-a registry of `CP1`/`CP2`, a `WORKFLOW_STATE.json` at `IMPLEMENTING`, and a worker script. The
-worker's first turn starts background work and ends its turn saying it will continue. A later
-turn (a task's completion, or a wakeup's fire) implements `CP1`, which means a commit `Implement
-CP1` and `last_completed_checkpoint_id=CP1`. Build every scenario once:
+a registry of `CP1`/`CP2`, a `WORKFLOW_STATE.json` at `IMPLEMENTING`, and a worker script. Unless a
+flow says otherwise, the worker's first turn starts background work and ends its turn saying it
+will continue. A later turn (a task's completion, a subagent's hand-back or a wakeup's fire)
+implements `CP1`: a commit `Implement CP1`, with `CP1` `COMPLETE` in the committed state. Build
+every scenario once:
 
 ```zsh
-for s in wait ctrlc lose drain daemon wakeup abandon; do drive stop $s $s; done
+for s in wait ctrlc lose drain daemon wakeup abandon subagent tasks2 sameph timeout; do drive stop $s $s; done
 ```
 
-Expected: seven `-- driver: <s> is a target at IMPLEMENTING (<s>)` lines.
+Expected: eleven `-- driver: <s> is a target at IMPLEMENTING (<s>)` lines.
 
 ### Flows
 
@@ -603,7 +664,8 @@ Expected: seven `-- driver: <s> is a target at IMPLEMENTING (<s>)` lines.
 2. B: `use wait`, then:
    - `wcx status`. Expected: under `active:`, the run (`controller pid <n> active`) and `job <J>
      (LAUNCHED, ...): worker pid <p> waiting on 1 background task (verify "full verification")
-     and 0 wakeups; owns 2 processes (...)`, each with a `follow:` line.
+     and 0 wakeups; owns 2 processes (...)`, each with a `follow:` line. The word is
+     `processes`, never `processs`.
    - `wcx inspect $R`. Expected: `lifecycle lock: held`, then a `jobs:` block with the same
      activity line. `last_completed_checkpoint_id=None`.
    - `wcx explain $R`. Expected: `pending job: <J> (LAUNCHED)` followed by an `activity:` line
@@ -631,10 +693,9 @@ Expected: seven `-- driver: <s> is a target at IMPLEMENTING (<s>)` lines.
    holds the lifecycle lock; `workflow-controller resume <R>` re-attaches ...`, and a `follow it:`
    line. A Python `KeyboardInterrupt` traceback follows, because the interrupt propagates
    unchanged (see known limitations).
-3. B: `use ctrlc; wcx status | grep ' job '`. Expected: still `waiting on 1 background task`, now
-   ending `; no Controller attached -- workflow-controller resume <R> re-attaches`. Then `wcx
-   step $R; echo $?`. Expected: `45`, naming the stdin anchor, `no Controller is attached`, and
-   `resume`.
+3. B: `wcx status | grep ' job '`. Expected: still `waiting on 1 background task`, now ending `; no
+   Controller attached -- workflow-controller resume <R> re-attaches`. Then `wcx step $R; echo $?`.
+   Expected: `45`, naming the stdin anchor, `no Controller is attached`, and `resume`.
 4. A: `wcx resume $R`. It does not return.
 5. B: `wcx status | grep ' job '`. Expected: `waiting`, with no `no Controller attached` suffix.
    `wcx resume $R; echo $?`. Expected: `45`, `supervisor lock ... is held by another Controller
@@ -661,26 +722,27 @@ background task leaves a double-forked child in the worker's group that lives 40
 3. A: expected on stderr `worker pid <p> exited; waiting for 2 process(es) still in its process
    group: ...`, then exit `0` after about 40 s.
 4. B: `use drain; hist`. Expected: `... worker_ending worker_exited worker_draining worker_ended
-   completed finished`. The orphan finished before the record completed: `cat
-   $W/drain/orphan-done` (the orphan's end time) is earlier than `date -r $RT/jobs/$J.json +%s.%N`.
+   completed finished`, in that order. The drain events come before `completed`.
 
 **F5 -- a recognised tool daemon is never owned.** The worker's build leaves a long-lived
 process named `gpg-agent` in its own session, carrying the job's ownership tag.
-1. A: `use daemon; time wcx step $R`. Expected: exit `0` within about
-   2 s. The job does not wait for the daemon.
+1. A: `use daemon; time wcx step $R`. Expected: exit `0` within about 2 s. The job does not wait
+   for the daemon.
 2. A: `use daemon; rec "r['worker_state']['excluded_processes']"; rec "r['status']"`. Expected:
    one entry with `pattern: gpg-agent` and its pid, and `FINISHED`. `ps -o pid,args -p <that
    pid>` shows `gpg-agent 600` still running. `wcx inspect $R | grep lock` shows `lifecycle
    lock: free`.
 3. Clean up: `kill <that pid>`.
 
-**F6 -- a scheduled wakeup keeps the session open and is settled by its stop.** The worker
-schedules a 30 s wakeup, ends its turn, and implements `CP1` in the fire turn, then stops the
-wakeup.
+**F6 -- a scheduled wakeup keeps the session open and is settled by its stop (re-test of round
+1's F1).** The worker schedules a 30 s wakeup, ends its turn, and implements `CP1` in the fire
+turn, then stops the wakeup.
 1. A: `use wakeup; date +%T; wcx step $R`.
 2. B: `use wakeup; wcx status | grep ' job '`. Expected: `waiting on 0 background tasks and 1
-   wakeup (due HH:MM:SS)`, where the due time is 30 s after the `date` printed in step 1, and
-   stays the same if you run the command again.
+   wakeup (due HH:MM:SS)`, where the due time is 30 s after the `date` printed in step 1. It stays
+   the same when you run the command again a few seconds later. `use wakeup; rec
+   "r['worker_state']['waiting_on']['wakeups'][0]['due_at']"` prints the same moment in UTC,
+   with milliseconds.
 3. A: exit `0` about 30 s after the start.
 4. B: `wcx explain $R`. Expected: `last job: <J> (FINISHED)`, `worker outcome SUCCESS:
    quiescent_terminal_turn`, and `wakeup toolu_fake_0001: settled by stop (cancelledWakeups 0,
@@ -693,97 +755,154 @@ wakeup.
    prints.
 2. B: lose the Controller and the worker, but not the verification:
    `pkill -KILL -f -- "-m controller .*step $R\$"; use abandon; kill -KILL $(rec "r['worker_process']['pid']")`.
-3. B: `wcx resume --abandon $J $R; echo $?`. Expected: `45`, `refused, and no flag overrides it`,
-   naming the dead leader and the running processes still in its recorded process group, with
-   the `ps -o pid,pgid,lstart,args -g <pgid>` and `kill -TERM -- -<pgid>` commands.
-   `rec "r['status']"` is still `LAUNCHED`.
+3. B: `wcx status | grep ' job '` (see known limitations for its wording). Then `wcx resume
+   --abandon $J $R; echo $?`. Expected: `45`, `refused, and no flag overrides it`, naming the dead
+   leader and the running processes still in its recorded process group, with the `ps -o
+   pid,pgid,lstart,args -g <pgid>` and `kill -TERM -- -<pgid>` commands. `rec "r['status']"` is
+   still `LAUNCHED`.
 4. B: `kill -TERM -- -$(rec "r['worker_process']['pgid']")`, then `wcx resume --abandon $J $R;
    echo $?`. Expected: `<J>: FAILED (OperatorAbandoned; was LAUNCHED; ...)`, exit `0`. `ps -eo
    args | grep -c "[W]orker's stdin anchor"` prints `0`: the leftover anchor was ended. `wcx
    inspect $R | grep lock` shows `lifecycle lock: free`, and `git -C $R log --oneline -1` is still
    `Seed the work item`.
 
-**F8 (optional, real `claude`, real spend, about 10 minutes) -- the harness contract still holds
+**F8 -- a background subagent's hand-back is a new turn in the same session (new).** The worker
+starts a background `Agent` that hands back after 20 s, ends its turn, and implements `CP1` in
+the hand-back turn. This is the shape of the recorded `2857a730` failure.
+1. A: `use subagent; time wcx step $R`.
+2. B: within the 20 s, `use subagent; wcx status | grep ' job '`. Expected: `worker pid <p> waiting
+   on 1 background task (helper "fake subagent") and 0 wakeups`. `wcx step $R; echo $?` exits
+   `45`.
+3. A: exit `0` about 20 s after the start.
+4. B: `use subagent; hist; rec "r['status'], r['worker_outcome']"; rec
+   "[x['origin'] for x in r['worker']['stream_diagnosis']['results']]"; git -C $R log --oneline -1`.
+   Expected: `... worker_waiting worker_running worker_ending worker_ended completed finished`,
+   `('FINISHED', 'SUCCESS')`, `[None, {'kind': 'task-notification'}]` (two results: the first
+   turn's, and the hand-back turn's) and `Implement CP1`.
+
+**F9 -- several simultaneous background tasks (new).** The worker starts two background
+verifications, each released by its own file, and implements `CP1` only in the turn that the
+second completion starts.
+1. A: `use tasks2; wcx step $R`.
+2. B: `use tasks2; wcx status | grep ' job '`. Expected: `waiting on 2 background tasks (pack
+   "packaged runtime tests", suite "full test suite") and 0 wakeups; owns 4 processes (...)`.
+3. B: `touch $W/tasks2/release-pack`, wait about 3 s, then `wcx status | grep ' job '`. Expected:
+   `waiting on 1 background task (suite "full test suite") ...`: the first completion's turn ran
+   and the worker is waiting again. A's `step` has not returned. `git -C $R log --oneline -1` is
+   still `Seed the work item`.
+4. B: `touch $W/tasks2/release-suite`. A: exit `0` within a few seconds.
+5. B: `use tasks2; hist; rec "r['worker']['stream_diagnosis']['result_count'], r['status']"; git
+   -C $R log --oneline -1`. Expected: `... worker_waiting worker_running worker_waiting
+   worker_running worker_ending worker_ended completed finished`, `(3, 'FINISHED')` and
+   `Implement CP1`.
+
+**F10 -- same-phase durable progress is judged from the commit, with a named reason (new).** The
+worker commits its product change and marks `CP1` `COMPLETE` in `WORKFLOW_STATE.json`, but does
+not commit that state.
+1. A: `use sameph; wcx step $R; echo $?`. Expected: exit `30`.
+2. A: `use sameph; hist; rec "r['status'], r['reconciliation_evidence']['reason'],
+   r['reconciliation_evidence']['predicate_detail']"`. Expected: `... worker_ending worker_ended
+   completed failed` and `('FAILED', 'predicate_not_satisfied', 'last_completed_not_committed')`.
+   `rec "r['worker_outcome']"` is `SUCCESS`: the worker ended normally, and the Controller refused
+   the uncommitted completion anyway.
+3. A: `git -C $R log --oneline -1; git -C $R status --short`. Expected: `Implement CP1`, and ` M
+   docs/ai-workflow/WORKFLOW_STATE.json`.
+4. A: `wcx explain $R`. Expected: an `evidence: checkpoint 'CP1' is COMPLETE in the working tree's
+   WORKFLOW_STATE.json, but its status in the state committed at HEAD is absent` line, and a
+   `human gate` telling you to commit the completion with its trailers or discard it. No
+   automatic action is offered. (F1, F3 and F8 are the positive case: a committed completion
+   ends `FINISHED`.)
+
+**F11 -- opt-in `--timeout` spans the whole owned lifetime and ends everything the job owns
+(new).** The worker starts a verification that never finishes on its own and leaves a helper
+(`fake-claude-orphan`) in its own session. A second task leaves a `gpg-agent` daemon. Both carry
+the job's ownership tag. Nothing is released in this flow.
+1. A: `use timeout; time wcx --timeout 15 step $R; echo $?`.
+2. B: before the 15 s end, `use timeout; wcx status | grep ' job '`. Expected: `waiting on 2
+   background tasks (sign "signed build", verify "full verification") and 0 wakeups; owns 4
+   processes (...); not owned: pid <d> (gpg-agent 600)`: the daemon is named by its command
+   line (plan G). Note the worker pid `<p>`, the anchor pid (`rec
+   "r['worker_anchor']['pid']"`) and the helper and daemon pids (`ps -eo pid,args | grep -E
+   '[f]ake-claude-orphan|[g]pg-agent 600'`).
+3. A: after about 15 s, `step` exits `30`.
+4. B: `use timeout; hist; rec "r['worker_outcome'], r['worker']['stream_diagnosis']['reason'],
+   r['worker']['stream_diagnosis']['supervisor_facts']['timed_out']"; rec "r['status'],
+   r['reconciliation_evidence']['predicate_detail']"`. Expected: `... worker_waiting worker_ended
+   completed failed`, `('INTERRUPTED', 'timeout', True)` and `('FAILED', 'head_unchanged')`. The
+   worker outcome is `INTERRUPTED`. The job is `FAILED` because it made no durable progress. (A
+   timed-out worker that had already committed its checkpoint ends `FINISHED`, since the
+   Controller judges the job by durable state, not by the outcome alone.)
+5. B: `ps -o pid,args -p <p>,<anchor>`, and the `ps ... grep` from step 2. Expected: the worker,
+   the anchor and `fake-claude-orphan 600` are all gone. `gpg-agent 600` is still running: a
+   recognised daemon is never ended. `wcx inspect $R | grep lock` shows `lifecycle lock: free`,
+   and `git -C $R log --oneline -1` is still `Seed the work item`.
+6. Clean up: `kill <the gpg-agent pid>`.
+
+**F12 (optional, real `claude`, real spend, about 10 minutes) -- the harness contract still holds
 on your installed `claude`.** From `$C`: `claude --version`, then `CONTROLLER_LIVE_WORKER=1
 python3 -m unittest -v tests.test_integration_disposable_repo.LiveHarnessContractProbeTest`.
 Expected: 2 tests OK. CP8 ran this against `claude` 2.1.283. A failure here means the measured
-contract (a session kept open while stdin is open, the `command_lifecycle` wakeup bracket, the
-P12 stop counts) changed. Report the version and the failing probe.
+contract changed: a session kept open while stdin is open, the `command_lifecycle` wakeup
+bracket, or the P12 stop counts. Report the version and the failing probe.
 
-**Teardown:** `pipx uninstall workflow-controller; rm -rf /tmp/wc-lifecycle-fr`. Check `ps -eo
-pid,args | grep -E '[f]ake_claude|[g]pg-agent 600'` prints nothing.
+**Teardown:** `pipx uninstall workflow-controller; rm -rf /tmp/wc-lifecycle-fr`. Then check that
+`ps -eo pid,args | grep -E '[f]ake_claude|[g]pg-agent 600|[f]ake-claude-orphan'` prints nothing.
 
 ### Known limitations and out of scope
 
 - Ctrl-C prints a Python `KeyboardInterrupt` traceback after the three guidance lines. The
   interrupt propagates unchanged by design (plan C); the Controller never forwards it to the
   worker.
-- The 305 s settle window, a matched wakeup that is never stopped, and the two 300 s
-  harness-contract breaches (`wakeup_not_delivered`, `command_lifecycle_unterminated`) are too
-  slow to walk by hand. They are covered by the suite and the README's "Time is not
-  termination".
-- The 600 s drain bound and its detach (`detached after 10:00`) are covered by the suite, not by
-  a flow here.
-- These are unsolved by design (README "What is not solved here", ADR 0004): the model relies on
-  the measured harness behaviour; wakeup fires are matched by an undocumented event; an
-  `env -i` descendant orphaned while nothing supervises it is not owned; daemon recognition is by
-  name.
-- Implementation review round 1's Optional 2 (declining `ENDING` once the anchor has died) and
-  Optional 3 were not applied. The four patches listed in `docs/ROADMAP.md` section 1.4 stay
-  open.
-- `--timeout` is now opt-in and spans the whole owned lifetime. There is no default worker
-  timeout.
+- F7: after the worker leader is killed while its group still runs, and no Controller is
+  attached, `status` still reads `worker pid <p> waiting on 1 background task` from the last
+  recorded `worker_state` (round 1's O1). This is wording only; the abandon decision is correct.
+- A present but unreadable generic event time (`at`) still renders as the current time in `follow`
+  lines. The Controller never writes one; only the wakeup `due_at` path was in round 1's scope.
+- These are too slow to walk by hand and are covered by the suite and the README's "Time is not
+  termination": the 305 s settle window, a matched wakeup that is never stopped, and the two
+  300 s harness-contract breaches (`wakeup_not_delivered`, `command_lifecycle_unterminated`).
+  The 600 s drain bound and its detach are covered the same way.
+- These are unsolved by design (README "What is not solved here", ADR 0004):
+  - the model relies on the measured harness behaviour;
+  - wakeup fires are matched by an undocumented event;
+  - an `env -i` descendant orphaned while nothing supervises it is not owned;
+  - daemon recognition is by name.
+- Implementation review round 1's Optional 2 and 3 were not applied. The four patches listed in
+  `docs/ROADMAP.md` section 1.4 stay open.
 
 ### Dry-run notes
 
-The dry run matched the expected results above except in two places. They are recorded here so
-you can confirm them and file them in `FUNCTIONAL_REVIEW.md`:
+The dry run against `aac43ac` matched every expected result above except one, below. Round 1's
+two findings no longer reproduce: F6 showed `(due 12:33:29)` for a wakeup scheduled at 12:32:59
+with a 30 s delay, the same on a repeat and equal to the recorded `due_at`, and every count read
+`processes`.
 
-- **F6: the wakeup's due time shows the current time.** The dry run printed `(due 02:39:45)` at
-  02:39:45 for a wakeup recorded as `due_at: 2026-09-26T01:40:10.201Z` (02:40:10 local). The
-  recorded `due_at` has milliseconds. `observe._parse_at` accepts only whole-second
-  `%Y-%m-%dT%H:%M:%SZ`, so `_clock` falls back to "now". The recorded `due_at` and the
-  `explain --json` data are correct. Any other presenter time built from the same millisecond
-  field would show the same fault.
-- **F1/F2/F3/F4/F7: `owns 2 processs` / `2 owned processs still running`.** The noun is
-  pluralised by appending `s` to `process`.
+- **F11 step 2: a live recognised daemon reads `(command line unreadable)`.** The dry run printed
+  `not owned: pid <d> (command line unreadable)` twice, while `ps` read the same pid as
+  `gpg-agent 600`. `worker.py`'s ownership scan records a recognised daemon as `{pid,
+  start_ticks, pattern}`, with no `cmdline`. `observe.job_activity` renders `entry.get('cmdline')
+  or 'command line unreadable'`, so every live daemon shows as unreadable in `status`, `inspect`,
+  `explain` and the `follow` heartbeat. `tests/test_observe.py`'s draining test passes only
+  because its hand-written record includes a `cmdline` the Controller never writes (the same
+  fixture-versus-reality gap as round 1's F1). Confirm it and, if you agree, file it in
+  `FUNCTIONAL_REVIEW.md`.
 
-One more observation, not necessarily a defect: in F7, after the worker leader is killed but its
-group still runs, `status` still describes the job as `worker pid <p> waiting on 1 background
-task`. It is derived from the last recorded `worker_state`, and no Controller is attached to
-update that state.
+Two more points came up while building the new scenarios. Neither is a finding.
 
-## Functional review round 1 (revision 2, bounded fixes)
-
-`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's findings from the checklist above, at
-evidence commit `fcab1aa`). The rest of revision 2's manual pass was not completed, since
-revision 2 already needed remediation. `technical_approval` was marked `STALE` before the first
-edit.
-
-- **F1 (defect), fixed (`3245d6f`):** a pending wakeup's due time rendered as the current time.
-  `worker_stream._iso` records `due_at` with milliseconds (`...:10.201Z`), and
-  `observe._parse_at` accepted only whole seconds, so `_clock` fell back to now. `_parse_at` now
-  also accepts a fraction of up to six digits, still UTC (`Z`) only. A present `due_at` that
-  does not parse renders as `due time unreadable: '<value>'`, never as now. New tests: `ParseAtTest`
-  (whole, millisecond and microsecond times to the exact UTC moment; the Controller's own format
-  round-trips; malformed shapes are `None`); `JobActivityTest` (the due time is the recorded one,
-  hours from now; an unreadable due time is named). Each fails before the fix.
-- **F2 (usability issue), fixed (`577b59e`):** `observe._plural` appended `s` to every noun
-  (`owns 2 processs`, `2 owned processs still running` in `status`, `inspect`, `explain` and
-  the `follow` heartbeat). A noun ending in `s` now takes `es`. New tests: `PluralTest`, and
-  `JobActivityTest`'s two-owned-process waiting and draining lines. Each fails before the fix.
-- **O1 (optional), not changed:** a job whose worker leader died while its group still runs
-  reads `waiting` from the last recorded `worker_state` when no Controller is attached. The
-  lifecycle decision is correct; this is diagnostic wording only.
-- **Not findings:** the scenarios the pre-check found unexercised (background subagent
-  hand-back, several simultaneous background tasks, same-phase durable progress and its
-  `predicate_detail`, opt-in `--timeout` over the owned lifetime, anchor self-exit and the
-  recognised-daemon orphan rule). The next functional checklist must cover the first four
-  explicitly.
+- **F8's turn count.** `stream_diagnosis.turns` is `3` for the two results F8 checks. In this
+  scenario the subagent's own `assistant` events (with `parent_tool_use_id`) arrive while the
+  session is idle, and `worker_stream` opens a turn at any `assistant` event while no turn is open.
+  So they count as a turn of their own, and it never closes before the hand-back turn's
+  `system/init`. In the real P11 capture (`tests/harness_contract/p11_subagent_handback.jsonl`,
+  lines 10-11) those events arrive inside the main turn, before its `result`, so no extra turn
+  appears. The job outcome is unaffected. An open turn only keeps the Controller waiting longer.
+- **F11's job status.** The README's "classifies the run `INTERRUPTED`" is the worker outcome.
+  Job status follows the Controller's standing rule (`job._VERIFYING_WORKER_OUTCOMES`): an
+  `INTERRUPTED` worker counts for exactly the durable progress it committed. With none, the job
+  is `FAILED`, as F11 shows.
 
 ## Next action
 
-The bounded functional fixes are committed and the post-fix bundle (revision 3) is generated for
-a fresh `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`), then the manual
-external stage and `/approve-review implementation`. Only after that: `/prepare-functional-review`
-with a regenerated checklist that adds the four coverage scenarios above.
+At the `AWAITING_FUNCTIONAL_REVIEW` hard gate for revision 3. The user runs the checklist above and
+records findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md` (fresh content: round 1's file is
+marked consumed). With no findings, `/accept-milestone`. With findings, `/apply-functional-review`.

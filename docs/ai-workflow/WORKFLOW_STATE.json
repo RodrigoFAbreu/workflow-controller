@@ -2263,7 +2263,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-lifecycle-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 16,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -2337,7 +2337,487 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-25T18:55:03Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "00c32e01083f9e04c4d77218bfcc32d4a4c1b2df4451effd09b0a6d6c7b58a2e",
+        "approved_review_content_id": "338f0c07a7872b06f1f7c8af942b2ded0a24f39c6080f7658db4a70d50730134",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "adac1d4b9ae49e4f979cdf180e13c7a8a86f7069"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "609a6594567a6a9e7b4c5a605a86c32a5c6b2b54"
+          },
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "76fd5b6a136cd50a264afa47dc424cb2fc30ce6b"
+          },
+          {
+            "path": "controller/anchor.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1f09874a16128dc307102ad1a8423727b48948a2"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8a0b8300c423c02abaad51cdb84989c2af72d453"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f4db02d7c7cfadc08e5d2eb4af4dbdb88d62c61"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5434bdf9726b8f7a5d4bd630f1072027ba0da210"
+          },
+          {
+            "path": "controller/lock.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c96df0a118600d706e898a80239f9d7a092bcefe"
+          },
+          {
+            "path": "controller/observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "80bd48485dde7d8e3540c50118a8e59968a54e5a"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "de74144ddbf14af9606765c8b679aedf2c87e189"
+          },
+          {
+            "path": "controller/runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c1e5ffb4b00af2b39d56650bf04fccd88600e44f"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "08e230afdbbcb05e141598bc5cfb947ff1108c40"
+          },
+          {
+            "path": "controller/worker_stream.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b78e9c4198e2c17310d8d3734c67a2b907b0ae07"
+          },
+          {
+            "path": "docs/adr/0004-worker-lifecycle-ownership.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c1405f1ec0359f36b43f60c2fd2e76a00472d0de"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-worker-lifecycle-ownership-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "005fd152eeea7583e8964551c521ac0a7f6e28b3"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "d77c33d1856a9daffe9cf23f18c47d94b1c2e28b"
+          },
+          {
+            "path": "tests/golden/claude_stream_json_2.1.281.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "67db58e13c5e9b8adb6ff728d536845118a1fc61"
+          },
+          {
+            "path": "tests/golden/generate_no_policy_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6bcacdef56b55b682b7c7624979c21b22f39a6d3"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1581abd58243f05fdddf8e86a0a030bd110561da"
+          },
+          {
+            "path": "tests/harness_contract/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "caf4c7817816cb1fd10a773b69556988a835410b"
+          },
+          {
+            "path": "tests/harness_contract/capture.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "26f240a67b19d4fa6182fc0c24c8676c3069e13e"
+          },
+          {
+            "path": "tests/harness_contract/job_12a9f268_applying_review_feedback.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7fdab816845f2069e6fef5beac37dce315965e41"
+          },
+          {
+            "path": "tests/harness_contract/job_12a9f268_applying_review_feedback.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d105bfa0eef852937169e3c20218655a97d50274"
+          },
+          {
+            "path": "tests/harness_contract/job_2857a730_two_results.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "eac84cd7e533c39177eab18d758024137fee81ff"
+          },
+          {
+            "path": "tests/harness_contract/job_2857a730_two_results.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fd6fead5de77d6dadeb52f8457daadf62973fabf"
+          },
+          {
+            "path": "tests/harness_contract/job_5d4a976a_implementing.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "26bfcbfaa4797f225233f6ec4ea7ced1c6fa0d2c"
+          },
+          {
+            "path": "tests/harness_contract/job_5d4a976a_implementing.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9247262e5307b2ec2f4a13eba5e111ab08073257"
+          },
+          {
+            "path": "tests/harness_contract/job_6082a90b_self_reviewing.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "85de23fa79bd1903814f6b96b1ec0946d032ae88"
+          },
+          {
+            "path": "tests/harness_contract/job_6082a90b_self_reviewing.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "869099779270237a47f6a6374078e5350bffcc08"
+          },
+          {
+            "path": "tests/harness_contract/job_66988e17_self_reviewing.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "53541f5d3b238c659e4e008d466f2c2344d6f049"
+          },
+          {
+            "path": "tests/harness_contract/job_66988e17_self_reviewing.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "af2fdcbc34087d2cb74b41d659383ece6c0468fa"
+          },
+          {
+            "path": "tests/harness_contract/job_8b244f42_implementing.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cae32c3118799a2b5af5095481e5f5afa5389a40"
+          },
+          {
+            "path": "tests/harness_contract/job_8b244f42_implementing.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a996cadfdae72c68ff3eb22666794fbddecaf623"
+          },
+          {
+            "path": "tests/harness_contract/job_cb43fe49_self_reviewing.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "28543def7c8a882becd3c0ed876abaa2c9d95a26"
+          },
+          {
+            "path": "tests/harness_contract/job_cb43fe49_self_reviewing.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "495090fc2fd248141ffcad1dfe3a16c7af33b6aa"
+          },
+          {
+            "path": "tests/harness_contract/p11_subagent_handback.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "20f457754e8dd772e8633c2ddfbe12b1ad876662"
+          },
+          {
+            "path": "tests/harness_contract/p11_subagent_handback.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5dae26c857ce7c68ee317ec7ca6b48cf5db4d25e"
+          },
+          {
+            "path": "tests/harness_contract/p12_admission.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "79e2168e11c41db013bb219518f64b3f71126dbe"
+          },
+          {
+            "path": "tests/harness_contract/p12_stop_inside_fire_nested.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c74e63b89bc44ba7811c6a4b77d6e5679f1f8994"
+          },
+          {
+            "path": "tests/harness_contract/p12_stop_inside_fire_nested.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0ae1ad54c287c0b395ff18b734c032603349f6f2"
+          },
+          {
+            "path": "tests/harness_contract/p12_stop_inside_fire_single.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "89044196d5aaacb252ac7357330af03ef00475d5"
+          },
+          {
+            "path": "tests/harness_contract/p12_stop_inside_fire_single.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "66aa1c43520d2043b4d4e10abccd5274731530a7"
+          },
+          {
+            "path": "tests/harness_contract/p1_print_mode_background_bash.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8bc67542b41a6f59b8dc0b0176a53f5e45dc0c80"
+          },
+          {
+            "path": "tests/harness_contract/p1_print_mode_background_bash.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "23caeedbed8da9c62729afd980524e6dc0d63590"
+          },
+          {
+            "path": "tests/harness_contract/p2_escaped_descendants.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "60b3060d87687bca8a5f8141ff7ac2c36ddf7dd2"
+          },
+          {
+            "path": "tests/harness_contract/p2_escaped_descendants.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0aff50f585fe3ca7976304d892c16fdba92be605"
+          },
+          {
+            "path": "tests/harness_contract/p2_escaped_descendants_subreaper.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3e655b2764af8480dfe67d3786b15c56ac9a9405"
+          },
+          {
+            "path": "tests/harness_contract/p2_escaped_descendants_subreaper.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "30371d80df4a176c6cb1fcfc1abdce3c83f9f590"
+          },
+          {
+            "path": "tests/harness_contract/p3_streaming_background_bash.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6c6b8125e44f30ff19eabaf464e7b198cf3b91a9"
+          },
+          {
+            "path": "tests/harness_contract/p3_streaming_background_bash.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e5780e6ef0728800a19ee48a87382f6bbc2c902e"
+          },
+          {
+            "path": "tests/harness_contract/p4_monitor.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0c1f0816da27c733c5b72e09fd921da5cd66cc5d"
+          },
+          {
+            "path": "tests/harness_contract/p4_monitor.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1d0e1b27da436d5a7e2dc2070599542c9e8d902f"
+          },
+          {
+            "path": "tests/harness_contract/p5_p11_wakeup_fires.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "95fdc3e912b1ac93ff8bc11834f5c3e3bce38a1f"
+          },
+          {
+            "path": "tests/harness_contract/p5_p11_wakeup_fires.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a4b36c478db6299ae40df4b750d13e9d42de103c"
+          },
+          {
+            "path": "tests/harness_contract/p6_p10_slash_command.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d09a225e9a784bc1aff427a5ee7be743b7ee14bc"
+          },
+          {
+            "path": "tests/harness_contract/p6_p10_slash_command.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cba2135b95d854ab6218103ae0dcd34832806999"
+          },
+          {
+            "path": "tests/harness_contract/p8_monitor_timeout.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d3b33c56976f4bc691aba48e9707f48bd5b8ec7f"
+          },
+          {
+            "path": "tests/harness_contract/p8_monitor_timeout.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da735ba752b82d5ceb94e176e0b3f1a0cbe33138"
+          },
+          {
+            "path": "tests/harness_contract/p8_task_stop.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "213a3518da8fda5c7a6d00dc8824edc6a072a991"
+          },
+          {
+            "path": "tests/harness_contract/p8_task_stop.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88b7a04d6ae347fc007f6180601c0ee79fa17e85"
+          },
+          {
+            "path": "tests/harness_contract/p9_wakeup_cancel.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3dea376a281f5a06a9ff831bde6baff5fef3897e"
+          },
+          {
+            "path": "tests/harness_contract/p9_wakeup_cancel.meta.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d08539c627007fc9d7ade46ad6d166f48592d486"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "627fcd0fcd3d3875c9a2966bf156800827bd0c86"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3cf32cde689235e54a3739f059779a1b32b57438"
+          },
+          {
+            "path": "tests/test_fake_claude_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6cbdab671561ba63eb48bc5b9e43dc59c4f3f9af"
+          },
+          {
+            "path": "tests/test_integration_disposable_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "49c589e50c20f42562f4e0896b0ff08e9646cf61"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a76aac36354b6a86e0c1d20660219e7fd366bff4"
+          },
+          {
+            "path": "tests/test_job_validation.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "114b4492b619a677d5e480f1fdb6c1179ba4c458"
+          },
+          {
+            "path": "tests/test_lifecycle_orchestration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4519dc25a3be86011a50c14e03d4965f9f76fd48"
+          },
+          {
+            "path": "tests/test_lock.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "403be9fbe8d28528438a91cd9ce24af48a92c91e"
+          },
+          {
+            "path": "tests/test_observation_equivalence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "79cbbdcb0a0a650bda62074dd44cbcdd5714ec2a"
+          },
+          {
+            "path": "tests/test_observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "25d9fec6e4706a21bd552339f45e98e489c4e124"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "224d16ee4df4462e0dd254247fca456c0b78a0db"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "294268da012ab660e0689c288d8dada9def799c5"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1875550a7eba8cc7e573bdcb95a349af0981df68"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "49990c7751f01a4e35c03e1cd5f78ae0687c2a50"
+          },
+          {
+            "path": "tests/test_worker_stream.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ccfc7ff9790c4330b48a7812b870d5415024d13c"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "90e0d5e22142544c5555e1543812b34999855b04"
+          }
+        ],
+        "reviewed_content_commit": "f0a86d2bb89086c51a5138c865259b11aaca1490",
+        "legacy_evidence": null,
+        "user_confirmation": "I approve implementation for workflow-controller-worker-lifecycle-ownership",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-26T01:32:58Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "0eebc91de39986415f0e5272a29b0b8271118b9517f462d6a5387fb88f378c82",
@@ -2356,8 +2836,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 75,
-      "last_transition": "2026-09-26T00:38:47Z",
+      "state_revision": 78,
+      "last_transition": "2026-09-26T01:32:58Z",
       "amendment_history": [
         {
           "amendment_id": "0",
@@ -2411,7 +2891,22 @@
           }
         }
       ],
-      "amendment_base_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d"
+      "amendment_base_commit": "14205f347b4dc1d9d03ac67b94390a4b7c5a878d",
+      "implementation_review_stages": {
+        "review_content_id": "338f0c07a7872b06f1f7c8af942b2ded0a24f39c6080f7658db4a70d50730134",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "00c32e01083f9e04c4d77218bfcc32d4a4c1b2df4451effd09b0a6d6c7b58a2e",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-26T00:51:00Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "00c32e01083f9e04c4d77218bfcc32d4a4c1b2df4451effd09b0a6d6c7b58a2e",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-26T01:19:21Z"
+        }
+      }
     }
   }
 }

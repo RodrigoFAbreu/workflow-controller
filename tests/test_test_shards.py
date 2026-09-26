@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 import unittest.mock
 import uuid
@@ -1213,6 +1214,532 @@ class BaselineBalanceTest(unittest.TestCase):
                 self.assertLessEqual(longest, 1.10 * total / count)
                 checked += 1
         self.assertGreater(checked, 0)
+
+
+
+# -- CP4: the executor, its recording rules, leaks and aggregation --------------------------
+
+
+RECORDING_CASES = {
+    "test_teardown_module": """
+        import unittest
+
+        def tearDownModule():
+            raise AssertionError("a forbidden argv was recorded")
+
+        class SafeTest(unittest.TestCase):
+            def test_ok(self): pass
+    """,
+    "test_setup_class_error": """
+        import unittest
+
+        class BrokenTest(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                raise RuntimeError("no fixture today")
+
+            def test_a(self): pass
+            def test_b(self): pass
+    """,
+    "test_subtests": """
+        import unittest
+
+        class MixedTest(unittest.TestCase):
+            def test_one_subtest_fails(self):
+                for value in (1, 2, 3):
+                    with self.subTest(value=value):
+                        self.assertNotEqual(value, 2)
+
+        class AllPassTest(unittest.TestCase):
+            def test_every_subtest_passes(self):
+                for value in (1, 2):
+                    with self.subTest(value=value):
+                        self.assertTrue(value)
+    """,
+    "test_subtest_skip": """
+        import unittest
+
+        class SkipInsideSubTest(unittest.TestCase):
+            def test_skips_in_a_subtest(self):
+                with self.subTest(case=1):
+                    self.skipTest("not here")
+    """,
+    "test_unexpected_success": """
+        import unittest
+
+        class SurpriseTest(unittest.TestCase):
+            @unittest.expectedFailure
+            def test_passes_anyway(self): pass
+    """,
+    "test_expected_failure": """
+        import unittest
+
+        class KnownTest(unittest.TestCase):
+            @unittest.expectedFailure
+            def test_fails_as_expected(self): self.fail("known")
+
+            @unittest.skip("not today")
+            def test_skipped(self): pass
+    """,
+    "test_setup_class_skip": """
+        import unittest
+
+        class NeedsWheelTest(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                raise unittest.SkipTest("setuptools>=70.1 is missing")
+
+            def test_a(self): pass
+            def test_b(self): pass
+
+        class OtherTest(unittest.TestCase):
+            def test_runs(self): pass
+    """,
+    "test_setup_module_skip": """
+        import unittest
+
+        def setUpModule():
+            raise unittest.SkipTest("no packaging prerequisites")
+
+        class ATest(unittest.TestCase):
+            def test_a(self): pass
+
+        class BTest(unittest.TestCase):
+            def test_b(self): pass
+    """,
+}
+
+
+def _execute(test_case: unittest.TestCase, tree: SyntheticTree, names=(), *, shards_count=1,
+             index=0):
+    """Plan ``names`` of ``tree`` and execute shard ``index`` in-process."""
+    ids, atoms = tree.family()
+    inventory = shards.Inventory(test_ids=tuple(ids), atoms=tuple(atoms))
+    plan = shards.build_plan(inventory.select([f"{tree.pkg}.{name}" for name in names]),
+                             _params(shards=shards_count))
+    tmp = tempfile.TemporaryDirectory()
+    test_case.addCleanup(tmp.cleanup)
+    results = Path(tmp.name)
+    record, status = shards.execute_shard(plan, index, results, tree.top, argv=["exec-shard"],
+                                          environ={})
+    return plan, record, status, results, inventory
+
+
+def _plain_unittest_passes(name: str) -> bool:
+    """What plain ``unittest`` says about ``name``, run on its own."""
+    suite = unittest.TestLoader().loadTestsFromName(name)
+    result = unittest.TestResult()
+    suite.run(result)
+    return result.wasSuccessful()
+
+
+class ExecutorRecordingTest(unittest.TestCase):
+    """The recording rules over synthetic modules: every event lands on a
+    planned id or a fixture, coverage stays exact, and the shard's verdict
+    equals plain ``unittest``'s ``wasSuccessful()`` in both directions."""
+
+    def setUp(self) -> None:
+        self.tree = SyntheticTree(self, RECORDING_CASES)
+        self.p = self.tree.pkg
+
+    def run_case(self, module: str):
+        plan, record, status, results, inventory = _execute(self, self.tree, [module])
+        self.assertEqual(status == 0, _plain_unittest_passes(f"{self.p}.{module}"))
+        self.assertEqual(record["exit_status"], status)
+        self.assertEqual([entry["id"] for entry in record["tests"]], plan["selected_ids"])
+        self.assertEqual(shards.load_shard_result(shards.result_path(results, 0)), record)
+        result = shards.aggregate(plan, {0: record}, results)
+        self.assertEqual((result.not_run, result.violations), ([], []))
+        self.assertEqual(result.exit_status, status)
+        return plan, record, status, result, inventory
+
+    def outcomes(self, record) -> dict[str, str]:
+        return {entry["id"]: entry["outcome"] for entry in record["tests"]}
+
+    def test_a_failing_teardown_module_is_a_fixture_error(self) -> None:
+        _, record, status, result, _ = self.run_case("test_teardown_module")
+        self.assertEqual(status, 1)
+        self.assertEqual(set(self.outcomes(record).values()), {"pass"})
+        description = f"tearDownModule ({self.p}.test_teardown_module)"
+        self.assertEqual([e["description"] for e in record["fixture_errors"]], [description])
+        self.assertIn("a forbidden argv was recorded", record["fixture_errors"][0]["traceback"])
+        self.assertEqual(result.shards[0]["verdict"], shards.FAIL)
+        self.assertIn(f"### `{description}`", result.summary)
+        self.assertIn(f"python3 -m unittest {self.p}.test_teardown_module", result.summary)
+
+    def test_a_setup_class_error_reports_every_test_of_the_class_once(self) -> None:
+        _, record, status, result, _ = self.run_case("test_setup_class_error")
+        self.assertEqual(status, 1)
+        cls = f"{self.p}.test_setup_class_error.BrokenTest"
+        self.assertEqual(self.outcomes(record), {f"{cls}.test_a": "error",
+                                                 f"{cls}.test_b": "error"})
+        for entry in record["tests"]:
+            self.assertIn(f"setUpClass ({cls})", entry["detail"])
+            self.assertEqual(entry["seconds"], 0)
+        self.assertEqual([e["description"] for e in record["fixture_errors"]],
+                         [f"setUpClass ({cls})"])
+        self.assertEqual(result.shards[0]["verdict"], shards.FAIL)
+
+    def test_subtests_fold_into_one_entry_per_parent(self) -> None:
+        _, record, status, _, _ = self.run_case("test_subtests")
+        self.assertEqual(status, 1)
+        mod = f"{self.p}.test_subtests"
+        self.assertEqual(self.outcomes(record), {
+            f"{mod}.AllPassTest.test_every_subtest_passes": "pass",
+            f"{mod}.MixedTest.test_one_subtest_fails": "fail"})
+        self.assertFalse(any("(" in entry["id"] for entry in record["tests"]))
+        failing = record["tests"][1]
+        self.assertIn(f"{mod}.MixedTest.test_one_subtest_fails (value=2)", failing["detail"])
+
+    def test_a_skip_inside_a_subtest_skips_the_parent(self) -> None:
+        _, record, status, _, _ = self.run_case("test_subtest_skip")
+        self.assertEqual(status, 0)
+        self.assertEqual(list(self.outcomes(record).values()), ["skip"])
+
+    def test_an_unexpected_success_fails_the_shard(self) -> None:
+        _, record, status, result, _ = self.run_case("test_unexpected_success")
+        self.assertEqual(status, 1)
+        self.assertEqual(list(self.outcomes(record).values()), ["unexpected_success"])
+        self.assertEqual(result.shards[0]["verdict"], shards.FAIL)
+
+    def test_expected_failures_and_skips_pass(self) -> None:
+        _, record, status, _, _ = self.run_case("test_expected_failure")
+        self.assertEqual(status, 0)
+        self.assertEqual(sorted(self.outcomes(record).values()), ["expected_failure", "skip"])
+
+    def test_a_setup_class_skip_skips_its_tests_and_is_not_merged(self) -> None:
+        _, record, status, result, inventory = self.run_case("test_setup_class_skip")
+        self.assertEqual(status, 0)
+        cls = f"{self.p}.test_setup_class_skip.NeedsWheelTest"
+        other = f"{self.p}.test_setup_class_skip.OtherTest"
+        self.assertEqual(self.outcomes(record), {f"{cls}.test_a": "skip", f"{cls}.test_b": "skip",
+                                                 f"{other}.test_runs": "pass"})
+        self.assertIn(f"setUpClass ({cls})", record["tests"][0]["detail"])
+        self.assertEqual(record["fixture_skips"], [
+            {"description": f"setUpClass ({cls})", "reason": "setuptools>=70.1 is missing"}])
+        self.assertEqual(result.shards[0]["verdict"], shards.PASS)
+        self.assertIn(f"`setUpClass ({cls})` (shard 0): setuptools>=70.1 is missing "
+                      f"(2 planned tests skipped)", result.summary)
+        merged = shards.update_timings(shards.DEFAULT_TIMINGS, [record], inventory)
+        self.assertEqual(set(merged.atoms), {other})
+
+    def test_a_setup_module_skip_skips_the_whole_module(self) -> None:
+        _, record, status, result, inventory = self.run_case("test_setup_module_skip")
+        self.assertEqual(status, 0)
+        mod = f"{self.p}.test_setup_module_skip"
+        self.assertEqual(set(self.outcomes(record).values()), {"skip"})
+        self.assertEqual(len(record["tests"]), 2)
+        self.assertEqual([e["description"] for e in record["fixture_skips"]],
+                         [f"setUpModule ({mod})"])
+        self.assertIn("(2 planned tests skipped)", result.summary)
+        self.assertEqual(shards.update_timings(shards.DEFAULT_TIMINGS, [record],
+                                               inventory).atoms, {})
+
+    def test_a_record_that_disagrees_with_unittest_is_refused_either_way(self) -> None:
+        passing = {"tests": [{"id": "m.C.t", "outcome": "pass", "seconds": 0}],
+                   "fixture_errors": []}
+        failing = {"tests": [{"id": "m.C.t", "outcome": "fail", "seconds": 0}],
+                   "fixture_errors": []}
+        for record, was_successful in ((passing, False), (failing, True)):
+            with self.subTest(record=record["tests"][0]["outcome"]):
+                problems: list[str] = []
+                self.assertEqual(shards.shard_status(record, was_successful, problems), 2)
+                self.assertIn("wasSuccessful()", problems[0])
+        self.assertEqual(shards.shard_status(passing, True, []), 0)
+        self.assertEqual(shards.shard_status(failing, False, []), 1)
+        self.assertEqual(shards.shard_status(passing, None, []), 0)
+
+    def test_the_atoms_are_timed_and_run_their_class_fixtures_once(self) -> None:
+        tree = SyntheticTree(self, {"test_counts": """
+            import os
+            import unittest
+
+            class CountTest(unittest.TestCase):
+                @classmethod
+                def setUpClass(cls):
+                    os.environ["PKG_SETUP"] = os.environ.get("PKG_SETUP", "") + "s"
+
+                @classmethod
+                def tearDownClass(cls):
+                    os.environ["PKG_TEARDOWN"] = os.environ.get("PKG_TEARDOWN", "") + "t"
+
+                def test_a(self): pass
+                def test_b(self): pass
+
+            class NextTest(unittest.TestCase):
+                def test_c(self): pass
+        """})
+        self.addCleanup(os.environ.pop, f"{tree.pkg}_SETUP", None)
+        self.addCleanup(os.environ.pop, f"{tree.pkg}_TEARDOWN", None)
+        _, record, status, _, _ = _execute(self, tree)
+        self.assertEqual(status, 0)
+        self.assertEqual(os.environ[f"{tree.pkg}_SETUP"], "s")
+        self.assertEqual(os.environ[f"{tree.pkg}_TEARDOWN"], "t")
+        self.assertEqual(set(record["atoms"]), {f"{tree.pkg}.test_counts.CountTest",
+                                                f"{tree.pkg}.test_counts.NextTest"})
+
+
+class ExecutorRefusalTest(unittest.TestCase):
+    """The loaded ids must equal the planned ids before anything runs."""
+
+    def setUp(self) -> None:
+        self.tree = SyntheticTree(self, {"test_one": PLAIN})
+
+    def plan(self):
+        ids, atoms = self.tree.family()
+        inventory = shards.Inventory(test_ids=tuple(ids), atoms=tuple(atoms))
+        return shards.build_plan(inventory.select(), _params(shards=1))
+
+    def rewrite(self, source: str) -> None:
+        (self.tree.start / "test_one.py").write_text(textwrap.dedent(source))
+        for name in [n for n in sys.modules if n.startswith(f"{self.tree.pkg}.test_one")]:
+            del sys.modules[name]
+        # The package keeps the old module as an attribute, which the loader
+        # would otherwise fall back to; a fresh shard process has neither.
+        vars(sys.modules[self.tree.pkg]).pop("test_one", None)
+        importlib.invalidate_caches()
+
+    def execute(self, plan):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        record, status = shards.execute_shard(plan, 0, Path(tmp.name), self.tree.top,
+                                              environ={})
+        log = shards.log_path(Path(tmp.name), 0).read_text()
+        return record, status, log
+
+    def test_a_planned_id_that_no_longer_loads_refuses(self) -> None:
+        plan = self.plan()
+        self.rewrite("""
+            import unittest
+
+            class ATest(unittest.TestCase):
+                def test_a(self): pass
+
+            class BTest(unittest.TestCase):
+                def test_c(self): pass
+        """)
+        record, status, log = self.execute(plan)
+        self.assertEqual((status, record["exit_status"], record["tests"]), (2, 2, []))
+        self.assertIn(f"1 planned ids were not loaded: {self.tree.pkg}.test_one.ATest.test_b", log)
+        result = shards.aggregate(plan, {0: record}, Path("/r"))
+        self.assertEqual(result.shards[0]["verdict"], shards.REFUSED)
+        self.assertEqual(len(result.not_run), 3)
+        self.assertEqual(result.exit_status, 2)
+
+    def test_an_import_failure_refuses_naming_the_failed_test(self) -> None:
+        plan = self.plan()
+        self.rewrite("import no_such_module_for_the_executor\n")
+        record, status, log = self.execute(plan)
+        self.assertEqual((status, record["tests"]), (2, []))
+        self.assertIn("_FailedTest substituted", log)
+        self.assertIn("no_such_module_for_the_executor", log)
+
+    def test_a_module_skipping_at_import_refuses(self) -> None:
+        plan = self.plan()
+        self.rewrite("import unittest\nraise unittest.SkipTest('gone')\n")
+        record, status, log = self.execute(plan)
+        self.assertEqual((status, record["tests"]), (2, []))
+        self.assertIn("REFUSED", log)
+
+    def test_the_loader_is_given_the_planned_order(self) -> None:
+        plan = self.plan()
+        shard = plan["shards"][0]
+        swapped = dict(shard, test_ids=list(reversed(shard["test_ids"])))
+        with self.assertRaisesRegex(shards.ShardRefusedError, "not in the planned order"):
+            shards.load_shard(swapped, self.tree.top)
+
+
+def _fake_record(plan, index, outcomes: dict[str, str] | None = None, *, exit_status=None,
+                 digest=None, extra=()):
+    ids = plan["shards"][index]["test_ids"]
+    outcomes = outcomes or {}
+    tests = [{"id": test_id, "outcome": outcomes.get(test_id, "pass"), "seconds": 0.5}
+             for test_id in list(ids) + list(extra) if outcomes.get(test_id) != "missing"]
+    record = {"schema_version": 1, "plan_digest": digest or plan["plan_digest"], "shard": index,
+              "argv": ["exec-shard"], "started_at": "2026-09-26T00:00:00Z",
+              "ended_at": "2026-09-26T00:00:01Z", "wall_seconds": 1.0, "exit_status": 0,
+              "tests": tests, "fixture_errors": [], "fixture_skips": [],
+              "atoms": {key: 0.5 for key in plan["shards"][index]["atoms"]},
+              "leaked_processes": []}
+    passes = shards.record_passes(record)
+    record["exit_status"] = exit_status if exit_status is not None else (0 if passes else 1)
+    return shards.validate_shard_result(record)
+
+
+class AggregateTest(unittest.TestCase):
+    """Verdicts, the run-time coverage proof (I2), exit statuses and the
+    summary, over a two-shard plan of a synthetic tree."""
+
+    def setUp(self) -> None:
+        tree = SyntheticTree(self, {"test_one": PLAIN, "test_two": PLAIN})
+        ids, atoms = tree.family()
+        inventory = shards.Inventory(test_ids=tuple(ids), atoms=tuple(atoms))
+        self.plan = shards.build_plan(inventory.select(), _params(shards=2))
+        self.first = self.plan["shards"][0]["test_ids"][0]
+        self.results = Path("/results/run")
+
+    def run_aggregate(self, records, **kwargs):
+        return shards.aggregate(self.plan, records, self.results, **kwargs)
+
+    def test_exact_coverage_passes(self) -> None:
+        result = self.run_aggregate({0: _fake_record(self.plan, 0), 1: _fake_record(self.plan, 1)})
+        self.assertEqual(result.exit_status, 0)
+        self.assertEqual([row["verdict"] for row in result.shards], ["PASS", "PASS"])
+        self.assertIn("| 0 | PASS |", result.summary)
+        self.assertIn("balance ratio (max / mean shard wall): 1.00", result.summary)
+
+    def test_a_failure_is_exit_1_and_the_summary_says_how_to_reproduce_it(self) -> None:
+        records = {0: _fake_record(self.plan, 0, {self.first: "fail"}),
+                   1: _fake_record(self.plan, 1)}
+        records[0]["tests"][0]["detail"] = "\n".join(f"line {n}" for n in range(100))
+        result = self.run_aggregate(records)
+        self.assertEqual(result.exit_status, 1)
+        summary = result.summary
+        self.assertIn(f"### `{self.first}`", summary)
+        self.assertIn("- shard 0, outcome `fail`", summary)
+        self.assertIn(f"- log: `{self.results / 'shard-0.log'}`", summary)
+        self.assertIn(f"`python3 -m unittest {self.first}`", summary)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {self.results / 'plan.json'} "
+                      f"--shard 0`", summary)
+        self.assertIn("line 99", summary)
+        self.assertIn("line 60", summary)
+        self.assertNotIn("line 59\n", summary)
+
+    def test_a_missing_id_crashes_the_shard_and_is_not_run(self) -> None:
+        records = {0: _fake_record(self.plan, 0, {self.first: "missing"}),
+                   1: _fake_record(self.plan, 1)}
+        result = self.run_aggregate(records)
+        self.assertEqual(result.shards[0]["verdict"], shards.CRASHED)
+        self.assertEqual(result.not_run, [(self.first, 0)])
+        self.assertIn(f"- `{self.first}` (shard 0)", result.summary)
+        self.assertEqual(result.exit_status, 2)
+
+    def test_a_crashed_shard_names_every_id_it_did_not_run(self) -> None:
+        result = self.run_aggregate({0: None, 1: _fake_record(self.plan, 1)})
+        self.assertEqual(result.shards[0]["verdict"], shards.CRASHED)
+        self.assertEqual([test_id for test_id, _ in result.not_run],
+                         self.plan["shards"][0]["test_ids"])
+        self.assertIn("NOT RUN", result.summary)
+        self.assertEqual(result.exit_status, 2)
+
+    def test_duplicate_and_unplanned_ids_are_coverage_violations(self) -> None:
+        other = self.plan["shards"][1]["test_ids"][0]
+        records = {0: _fake_record(self.plan, 0, extra=[other, "x.Y.test_ghost"]),
+                   1: _fake_record(self.plan, 1)}
+        result = self.run_aggregate(records)
+        self.assertEqual(len(result.violations), 2)
+        self.assertIn("unplanned id x.Y.test_ghost", result.summary)
+        self.assertIn(f"shard 0 reported unplanned id {other}", result.summary)
+        self.assertEqual(result.exit_status, 2)
+        duplicated = _fake_record(self.plan, 1)
+        duplicated["tests"].append(dict(duplicated["tests"][0]))
+        result = self.run_aggregate({0: _fake_record(self.plan, 0), 1: duplicated})
+        self.assertEqual(len(result.violations), 1)
+        self.assertIn("reported more than once", result.violations[0])
+        self.assertEqual(result.exit_status, 2)
+
+    def test_exit_status_disagreeing_with_the_record_is_a_crash(self) -> None:
+        records = {0: _fake_record(self.plan, 0, {self.first: "fail"}, exit_status=0),
+                   1: _fake_record(self.plan, 1)}
+        self.assertEqual(self.run_aggregate(records).shards[0]["verdict"], shards.CRASHED)
+
+    def test_an_interrupted_run_is_130(self) -> None:
+        result = self.run_aggregate({0: None, 1: _fake_record(self.plan, 1)}, interrupted={0})
+        self.assertEqual(result.shards[0]["verdict"], shards.INTERRUPTED)
+        self.assertEqual(result.exit_status, 130)
+        self.assertEqual(len(result.not_run), len(self.plan["shards"][0]["test_ids"]))
+
+    def test_a_result_from_another_plan_is_refused(self) -> None:
+        records = {0: _fake_record(self.plan, 0, digest="f" * 64), 1: _fake_record(self.plan, 1)}
+        with self.assertRaisesRegex(shards.AggregateError, "plan_digest"):
+            self.run_aggregate(records)
+        with self.assertRaisesRegex(shards.AggregateError, "says it is shard 1"):
+            self.run_aggregate({0: _fake_record(self.plan, 1)}, shards=[0])
+
+    def test_a_single_shard_replay_is_judged_on_that_shard_alone(self) -> None:
+        result = self.run_aggregate({1: _fake_record(self.plan, 1)}, shards=[1])
+        self.assertEqual((result.exit_status, len(result.shards)), (0, 1))
+
+    def test_leaks_are_listed_as_a_warning(self) -> None:
+        record = _fake_record(self.plan, 0)
+        record["leaked_processes"] = [{"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}]
+        result = self.run_aggregate({0: record, 1: _fake_record(self.plan, 1)})
+        self.assertEqual(result.exit_status, 0)
+        self.assertIn("pid 4242, age 3.0 s: `sleep 60`", result.summary)
+
+    def test_load_results_names_missing_and_invalid_records(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        results = Path(tmp.name)
+        shards.result_path(results, 1).write_text("{not json")
+        records, notes = shards.load_results(self.plan, results)
+        self.assertEqual(records, {0: None, 1: None})
+        self.assertEqual(notes[0], "no result record")
+        self.assertIn("cannot read", notes[1])
+
+
+class EnvironmentShapingTest(unittest.TestCase):
+    BASE = {"HOME": "/home/op", "PATH": "/usr/bin", "PYTHONPATH": "/somewhere",
+            "WORKFLOW_CONTROLLER_HOME": "/wch", "TMPDIR": "/tmp"}
+
+    def test_each_shard_gets_its_own_tmp_state_and_marker_and_nothing_else(self) -> None:
+        env = shards.shard_environment(self.BASE, Path("/r"), "run1", 3)
+        self.assertEqual(env, {**self.BASE, "TMPDIR": "/r/shard-3/tmp",
+                               "XDG_STATE_HOME": "/r/shard-3/state",
+                               "WORKFLOW_CONTROLLER_TEST_SHARD": "run1/3"})
+
+    def test_the_pip_cache_is_shared_unless_isolated(self) -> None:
+        inherited = shards.shard_environment({**self.BASE, "PIP_CACHE_DIR": "/pc"}, Path("/r"),
+                                             "run1", 0)
+        self.assertEqual(inherited["PIP_CACHE_DIR"], "/pc")
+        isolated = shards.shard_environment(self.BASE, Path("/r"), "run1", 2,
+                                            isolated_pip_cache=True)
+        self.assertEqual(isolated["PIP_CACHE_DIR"], "/r/pip-cache-2")
+
+
+class LeakScanTest(unittest.TestCase):
+    def test_a_marked_process_is_found_and_its_group_killed(self) -> None:
+        marker = f"leak-test-{uuid.uuid4().hex}/0"
+        env = {**os.environ, shards.SHARD_MARKER_ENV: marker}
+        process = subprocess.Popen(["sleep", "300"], env=env, start_new_session=True)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 10
+        found = []
+        while not found and time.monotonic() < deadline:
+            found = shards.scan_marked_processes(marker)
+        self.assertEqual([(leak["pid"], leak["argv"]) for leak in found],
+                         [(process.pid, ["sleep", "300"])])
+        self.assertEqual(shards.scan_marked_processes(marker + "0"), [])
+        parent = marker.rsplit("/", 1)[0]
+        self.assertEqual([leak["pid"] for leak in shards.scan_marked_processes(parent)],
+                         [process.pid])
+        self.assertEqual(shards.scan_marked_processes(parent[:-1]), [])
+        nested = f"{marker}/123"
+        child = subprocess.Popen(["sleep", "300"], env={**env, shards.SHARD_MARKER_ENV: nested},
+                                 start_new_session=True)
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        deadline = time.monotonic() + 10
+        while len(found) < 2 and time.monotonic() < deadline:
+            found = shards.scan_marked_processes(marker)
+        self.assertEqual(sorted(leak["pid"] for leak in found), sorted([process.pid, child.pid]))
+        self.assertEqual([leak["pid"] for leak in shards.scan_marked_processes(nested)],
+                         [child.pid])
+        shards.kill_processes(found)
+        self.assertEqual(process.wait(timeout=10), -9)
+        self.assertEqual(shards.scan_marked_processes(marker), [])
+
+
+class CommittedTimingsTest(unittest.TestCase):
+    def test_the_committed_profile_is_valid_and_names_only_existing_atoms(self) -> None:
+        path = fixtures.REPO_ROOT / shards.CI_TIMINGS
+        profile = shards.parse_timings(path.read_bytes())
+        inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        keys = {atom.key for atom in inventory.atoms}
+        self.assertEqual(sorted(set(profile.atoms) - keys), [])
+        self.assertGreater(len(profile.atoms), 0.9 * len(keys))
+        for key, entry in profile.atoms.items():
+            atom = next(atom for atom in inventory.atoms if atom.key == key)
+            self.assertEqual(entry["tests"], len(atom.test_ids), key)
 
 
 if __name__ == "__main__":

@@ -30,11 +30,140 @@ no retries.
 | --- | --- | --- |
 | CP1 -- inventory, atoms and selection | complete | `302d7fc` |
 | CP2 -- result records and timing model | complete | `4467a80` |
-| CP3 -- adaptive deterministic planner | complete | this checkpoint's commit |
-| CP4 -- executor, local runner and aggregation | not started | |
+| CP3 -- adaptive deterministic planner | complete | `b0eb707` |
+| CP4 -- executor, local runner and aggregation | complete | this checkpoint's commit |
 | CP5 -- serialization registry and timing-flake hardening | not started | |
 | CP6 -- CI integration | not started | |
 | CP7 -- documentation, measurement and full verification | not started | |
+
+### CP4 -- executor, local runner and aggregation (complete)
+
+- **`tools/test_shards.py`** gains execution, leak detection and aggregation, still stdlib only.
+  - **Executor.** `execute_shard(plan, i, results_dir)` runs one shard in-process:
+    - `load_shard` loads each atom by name, filtered to the planned ids. Before anything runs,
+      it refuses with `ShardRefusedError` (exit 2) unless the loaded ids equal the planned ids
+      exactly and in order. A substituted test (`_FailedTest`, `ModuleImportFailure`,
+      `ModuleSkipped`, ...), a load error, or a missing, duplicated or reordered id is named.
+    - The controller atoms run through `unittest.TextTestRunner` (verbosity 2, into
+      `shard-<i>.log`) with a `RecordingResult`. Each atom is its own top-level suite run, so
+      its time includes its class and module fixtures. `_previousTestClass` is reset between
+      atoms; without that reset, the next atom's first test would run the previous class's
+      `tearDownClass` a second time (found by reading `unittest.suite`).
+    - Each conformance atom runs as `sys.executable <file>` in `scripts/`, with its output
+      appended to the log.
+    - `shard-<i>.json` is written atomically, through the new `write_json_atomic`, which
+      `write_timings` now uses too.
+  - **Recording rules** (`RecordingResult`) implement the plan's rules:
+    - an `_ErrorHolder` error or failure goes to `fixture_errors`, and an `_ErrorHolder` skip
+      to `fixture_skips`;
+    - after the run, `_backfill` gives every planned id that a fixture kept from running an
+      `error` or `skip` entry naming the holder;
+    - subtests fold into the parent at `stopTest`: `error`, then `fail`, then the parent's own
+      outcome;
+    - any event on an object the rules cannot map goes to `unmapped`, which refuses the shard.
+    - LP-R3-001 was probed on Python 3.14.7: a `skipTest` inside a `subTest` reaches
+      `addSkip(_SubTest)`, and the parent gets no outcome. The parent is then recorded as
+      `skip`, as `unittest` itself treats it (`wasSuccessful()` stays True).
+  - **Consistency.** `shard_status` is two-sided. If the record's controller verdict differs
+    from `unittest`'s `wasSuccessful()` either way, the shard is refused (exit 2) with both
+    values named. An unmapped event or a planned id without an entry also refuses.
+  - **Environment.** `shard_environment` sets `TMPDIR` and `XDG_STATE_HOME` under
+    `<results>/shard-<i>/`, plus the marker. It sets `PIP_CACHE_DIR=<results>/pip-cache-<i>`
+    only under `--isolated-pip-cache`. Nothing else changes.
+  - **Leaks.** `scan_marked_processes` finds live processes by their environment marker, and
+    `kill_processes` SIGKILLs each one's group (or the process alone, if it shares the caller's
+    group). The executor scans before writing its record, and the runner scans again after each
+    shard exits. A leak is a warning (D7).
+  - **Aggregation.** `aggregate(plan, records, results_dir)` works as follows:
+    - each shard is `PASS`, `FAIL`, `CRASHED`, `REFUSED` or `INTERRUPTED`. A record whose exit
+      status disagrees with its own verdict, or that does not cover its planned ids, is
+      `CRASHED`;
+    - the coverage proof (I2) names every NOT RUN id and every unplanned or duplicate id;
+    - the exit status is 130 if any shard was interrupted, else 2, 1 or 0, as in the plan's
+      table. A record carrying another plan's digest or shard index refuses the whole
+      aggregate;
+    - `render_summary` writes the Markdown summary: the shard table, then each failing test
+      and each fixture error with its last 40 traceback lines, its log path and both
+      reproduction commands (`cd scripts && python3 <file>` for a conformance suite). It also
+      lists NOT RUN ids, coverage violations, fixture skips with the count each skipped, leaks,
+      the wall time, the largest atom and the balance ratio.
+- **`tools/run_tests.py`** (new) is the CLI:
+  - the default run, a selection, `--serial` (a plan with `shards: 1` pinned, through the same
+    executor and shaping), `--plan-only` (it also prints the largest atom and the D4 note for
+    atoms above the target), `--replay PLAN [--shard i]`, `--jobs`, `--results-dir`, `-v`
+    (per-line `[i]` streaming), `--isolated-pip-cache` and the planning overrides;
+  - `exec-shard` takes either `--plan`, or the planning inputs with `--expect-digest`. Both,
+    neither, or a digest mismatch exits 2, and a mismatch runs nothing. The executor resets
+    SIGINT to `SIG_DFL`, sets `sys.path[0]` to the repository root and changes into it;
+  - `plan` writes `plan.json` and prints `{plan_digest, shard_count, shards}`. `aggregate`
+    writes `SUMMARY.md`, and also `$GITHUB_STEP_SUMMARY` when that is set. `timings merge
+    --into FILE [--profile-name N] DIR...` folds results directories into a profile, and
+    refuses to merge into an invalid existing file;
+  - each shard runs in its own session (`start_new_session`), with stdin at `/dev/null`.
+    Ctrl-C (or SIGTERM) sends SIGTERM to every running shard's group, then SIGKILL after 5 s,
+    marks the running and queued shards `INTERRUPTED`, and exits 130;
+  - after every run, the local timing cache is updated from the records' passing, complete
+    atoms. A failure to update it is only a warning.
+- **Interpretations the plan leaves open:**
+  - **The leak marker nests.** The shard environment carries `<run_id>/<i>`, as planned. Each
+    executor extends the marker it inherits to `<inherited>/<its pid>` before running
+    anything, and a scan matches a marker or any marker under it. The first full `--serial`
+    run found why this is needed. `tests.test_run_tests` starts an `exec-shard` inside a
+    shard. With exact matching, that nested executor inherited the outer marker, found the
+    outer executor in its leak scan, and SIGKILLed it, so all 2025 ids were NOT RUN (the
+    aggregate reported that correctly). `NestedRunTest` pins the fix, and fails under the old
+    rule.
+  - **`--repo-root`** (hidden) lets the end-to-end tests drive a synthetic repository. The
+    default is the checkout.
+  - **Intermixed arguments.** The runner, `exec-shard` and `plan` use
+    `parse_intermixed_args`, so test names may follow options.
+- **`tools/test_timings.json`** (new) is the committed profile, `profile: "seed-local"`. It
+  was seeded by `timings merge` from the full `--serial` run below: 445 atoms, 634 s. The one
+  atom missing is `tests.test_test_shards.CommittedTimingsTest`, which failed in that run
+  because this file did not exist yet; failed atoms are not merged, by design.
+- **`tools/ci_workflows.py`** places `test_run_tests` in the `docs` shard until CP6 replaces
+  the hand-curated matrix. `validate.yml` was re-rendered.
+- **Tests:**
+  - `tests/test_test_shards.py` has 113 tests (29 new):
+    - `ExecutorRecordingTest` covers each recording rule over synthetic modules: a failing
+      `tearDownModule`, a `setUpClass` error, mixed and passing subtests, a skip inside a
+      subtest, an unexpected success, expected failures and skips, and a `setUpClass` or
+      `setUpModule` `SkipTest` (not merged into timings). Every case checks the verdict
+      against plain `unittest`'s `wasSuccessful()`. It also checks forced disagreement both
+      ways, and that class fixtures run once;
+    - `ExecutorRefusalTest`: a missing id, an import failure (`_FailedTest`), a module that
+      skips at import, and the order;
+    - `AggregateTest`: exact coverage, the failure summary, a missing id, a crashed shard,
+      duplicate and unplanned ids, an exit-status disagreement, interruption, a foreign
+      digest or index, a single-shard replay, leaks, and `load_results`;
+    - `EnvironmentShapingTest`, `LeakScanTest` (including nested markers), and
+      `CommittedTimingsTest`.
+  - `tests/test_run_tests.py` (new, 19 tests) runs the real CLI end to end against a synthetic
+    repository. It covers:
+    - exit codes 0, 1, 2 and 130;
+    - the summary's reproduction commands, and `--replay --shard` reproducing the same ids in
+      the same order;
+    - a failing conformance suite, a crash, a selection that matches nothing, and
+      `--plan-only`;
+    - environment shaping, `--isolated-pip-cache` and `--serial`;
+    - SIGINT at `SIG_DFL` in shards when the runner started with it ignored;
+    - a leak reported and killed, and Ctrl-C leaving no process behind (including one that
+      traps SIGTERM);
+    - the plan digest across two checkout paths, and both `exec-shard` forms;
+    - `aggregate` with `$GITHUB_STEP_SUMMARY` and refusing a foreign digest, `timings merge`,
+      and the nested-run regression.
+- **Verification:**
+  - `python3 -m unittest tests.test_test_shards tests.test_run_tests tests.test_ci_workflows`:
+    181 tests, OK. `tools/ci_workflows.py --check` is clean.
+  - Full selection, `run_tests.py --serial` (under a reaping subreaper, because this session
+    is a Controller worker): 2026 tests in 634 s. The only failure was
+    `CommittedTimingsTest`, before the seed existed. After seeding, that test passes alone.
+  - Full selection, `run_tests.py` at defaults: 8 shards, PASS, 82.6 s wall, balance ratio
+    1.02. The largest atom is `conformance:workflow_acceptance_matrix_test.py` at 82.1 s. No
+    leaks.
+  - Id comparison: the sharded run reported exactly the serial run's 2026 ids, with no
+    duplicates. The serial run's controller ids equal `unittest discover`'s 2019 ids, in
+    order.
 
 ### CP3 -- adaptive deterministic planner (complete)
 

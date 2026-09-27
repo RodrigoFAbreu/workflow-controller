@@ -31,7 +31,7 @@ no retries.
 | id | status | commit |
 | --- | --- | --- |
 | CP1 -- inventory, atoms and selection | complete, revalidated at revision 4 | `302d7fc`, revalidation: this checkpoint's commit |
-| CP2 -- result records and timing model | complete | `4467a80` |
+| CP2 -- result records and timing model | complete, revalidated at revision 4 | `4467a80`, revalidation: this checkpoint's commit |
 | CP3 -- adaptive deterministic planner | complete | `b0eb707` |
 | CP4 -- executor, local runner and aggregation | complete | `55c855b` |
 | CP5 -- serialization registry and timing-flake hardening | complete | `311078f` |
@@ -510,6 +510,14 @@ no retries.
   Controller worker.
 
 ### CP2 -- result records and timing model (complete)
+
+- **Revalidation at revision 4** (2026-09-27, head `31b88ea`). CP2's plan section is unchanged
+  from revision 3, so there is no code change. Under a reaping subreaper (this session is a
+  Controller worker):
+  - `python3 -m unittest tests.test_test_shards`: 121 tests, OK. This includes CP2's estimate,
+    merge, prune, corrupt-file fallback and real-inventory defaults tests.
+  - Full selection, `python3 tools/run_tests.py` at defaults: PASS, 2049 tests in 8 shards,
+    wall 97.3 s, balance 1.13. The machine was loaded (load average about 10 on 16 CPUs).
 
 - **`tools/test_shards.py`** gains the timing layer, still stdlib only.
   - **Result records.** `validate_shard_result(record)` checks the exact `shard-<i>.json` shape

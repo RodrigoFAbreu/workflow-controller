@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-adaptive-test-sharding",
-  "plan_revision": 4,
+  "plan_revision": 6,
   "checkpoints": [
     {
       "id": "CP1",
@@ -56,6 +56,15 @@
       "session_target": 1
     },
     {
+      "id": "CP5C",
+      "name": "Drain detach bound 600 -> 10800 s (amendment 1, Design I): controller/worker.py DRAIN_DETACH_SECONDS = 10800 as an interim constant with every other drain semantic unchanged; tests/test_observe.py's hard-coded detach text; README and ADR 0004 state the new bound; docs/ROADMAP.md records that configurability of the drain bound and other Controller tunables is deferred to the next settings/configuration milestone",
+      "depends_on": [
+        "CP5B"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
       "id": "CP6",
       "name": "CI integration: tools/ci_workflows.py's validate.yml model gains plan / tests (dynamic fromJSON matrix, digest-checked exec-shard) / tests-result (always-run aggregate and coverage check) jobs, the hand-curated CONTROLLER_SHARDS and separate conformance matrix are removed, package reads the placement, workflows re-rendered, test_ci_workflows updated",
       "depends_on": [
@@ -66,9 +75,10 @@
     },
     {
       "id": "CP7",
-      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and re-verification on the amended head",
+      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and amendment 1's release-note line for the drain bound, and re-verification on the amended head",
       "depends_on": [
         "CP5B",
+        "CP5C",
         "CP6"
       ],
       "complexity": 2,

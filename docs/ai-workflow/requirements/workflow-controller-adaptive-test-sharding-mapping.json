@@ -91,7 +91,7 @@
       ]
     },
     "R14": {
-      "description": "Released Controller 1.2.0 artefact, wheel packaging scope, version and release pipeline classification preserved; the only Controller runtime change is amendment 0's Design H; documentation updated",
+      "description": "Released Controller 1.2.0 artefact, wheel packaging scope, version and release pipeline classification preserved; the only Controller runtime changes are amendment 0's Design H and amendment 1's drain detach bound; documentation updated",
       "checkpoint_ids": [
         "CP6",
         "CP7"
@@ -101,6 +101,13 @@
       "description": "Controller ownership provenance: an owned process's recorded source reflects its current ownership basis and is published when it changes, without changing ownership membership or any decision made from it (amendment 0, IR1-003)",
       "checkpoint_ids": [
         "CP5B",
+        "CP7"
+      ]
+    },
+    "R16": {
+      "description": "Interim drain detach bound: worker.DRAIN_DETACH_SECONDS is 10800 s (3 hours), not 600 s, with every other drain, detach and re-attach semantic unchanged, no new setting, and configurability of Controller tunables recorded as deferred (amendment 1)",
+      "checkpoint_ids": [
+        "CP5C",
         "CP7"
       ]
     }

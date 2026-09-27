@@ -1,4 +1,4 @@
-# Controller adaptive test sharding: one inventory, duration-balanced shards, local and CI (Revision 4)
+# Controller adaptive test sharding: one inventory, duration-balanced shards, local and CI (Revision 6)
 
 Work item: `workflow-controller-adaptive-test-sharding`
 Governing workflow version: `2.2` (this repository's `docs/ai-workflow/WORKFLOW_CONFIG.json`
@@ -15,8 +15,8 @@ Roadmap slot: none yet. The operator requested this milestone directly, ahead of
 section 1.4 ("Follow-up patches"), which stays the next roadmap item and is unaffected. CP7 adds
 the roadmap entry.
 Released baseline preserved: `workflow-controller 1.2.0` (`v1.2.0`, built from `6df5e9633c56`).
-Amendment 0's Design H changes one Controller behaviour for the next release. The released
-artefact is unaffected.
+Amendment 0's Design H and amendment 1's drain bound (Design I) are the two Controller changes
+for the next release. The released artefact is unaffected.
 
 **Amendment.** Revision 4 is plan amendment `0` (`amendment_history[0]`). It was requested at
 `b8b9a0f` from `IMPLEMENTING`, with amendment base `a5fe3f8`, and supersedes revision 3's approval
@@ -25,6 +25,15 @@ pre-existing Controller defect that CP5's stress testing exposed. The only scope
 correction in `controller/worker.py`: Design H, delivered by the new checkpoint CP5B. Everything
 else in revision 3 stands. "Revision 4" at the end lists what changed and which checkpoints must
 be revalidated.
+
+**Amendment 1.** Revision 5 is plan amendment `1` (`amendment_history[1]`), requested by the
+operator at `9946567` from `IMPLEMENTING`, with amendment base `ae74df7` (CP5B's commit). It
+supersedes revision 4's approval (`8b0f522`). It adds one bounded operational fix that the
+operator reproduced in `workflow-manager`: `worker.DRAIN_DETACH_SECONDS` rises from 600 to 10800
+(3 hours), delivered by the new checkpoint CP5C (Design I). Nothing else in revision 4 changes.
+"Revision 5" at the end lists what changed and how the checkpoints reconcile. Revision 6 answers
+the local-model review of revision 5 (round 5, `REVISE`): it corrects what bounds a `resume`
+re-attach drain and states that cost, still inside amendment 1 ("Revision 6" at the end).
 
 ## Goal
 
@@ -44,9 +53,11 @@ can run any selection through the new runner.
 
 - No test tiers, no test removal, weakening or skipping, and no automatic retry of a failed test
   (a retry would hide exactly the timing defects this milestone must surface).
-- No change to `controller/` runtime behaviour, **except** Design H's ownership-provenance
-  correction (amendment 0). H changes how `controller/worker.py` labels an owned process's
-  `source`, and no ownership decision.
+- No change to `controller/` runtime behaviour, **except** two:
+  - Design H's ownership-provenance correction (amendment 0). H changes how
+    `controller/worker.py` labels an owned process's `source`, and no ownership decision.
+  - Design I's drain detach bound (amendment 1): `worker.DRAIN_DETACH_SECONDS` is 10800, not
+    600. Only the constant's value changes.
   - The version, the release pipeline's classification, the job-record schema and
     `controller/GENERATION.json` are untouched.
   - The wheel's `controller/worker.py` changes. It ships with the next release, never as a
@@ -55,7 +66,9 @@ can run any selection through the new runner.
     `setup.py`'s `DIRTY_SCOPE` is `controller`, `pyproject.toml` and `setup.py`.
 - No other Controller change, and no Controller lifecycle refactor: no change to ownership
   membership, adoption, waiting, draining, detaching, re-attaching, recovery or the record
-  schema. Design H lists what it preserves.
+  schema, apart from the value of the drain bound. Designs H and I list what they preserve.
+- No Controller settings or configuration mechanism. The drain bound stays a module constant,
+  and making it and the other Controller tunables configurable is deferred (D12).
 - No Workflow lifecycle, Harness Adapter or provider redesign, and no Workflow 2.6 compatibility.
 - No edit to anything the Workflow Manager owns: `scripts/`, `.claude/commands/`,
   `.workflow-manager/` and `.github/workflows/workflow-conformance.yml`. The frozen conformance
@@ -849,9 +862,9 @@ why the first one did.
   and `recorded` for a re-attach seed that had none). A re-attaching Controller
   (`_recorded_ownership`) seeds from the record as today. Its scans now relabel a seeded entry
   that they find by group or tag, for example a legacy `recorded` entry that carries the tag.
-- **Everything else.** The drain bound, `--timeout`, the scan cadence
-  (`_OWNERSHIP_SCAN_SECONDS`) and every other window are unchanged. There is no new setting, and
-  `controller/GENERATION.json` is not bumped, because no handoff or record contract changes.
+- **Everything else.** H leaves the drain bound (amendment 1 changes it separately, Design I),
+  `--timeout`, the scan cadence (`_OWNERSHIP_SCAN_SECONDS`) and every other window unchanged.
+  There is no new setting, and `controller/GENERATION.json` is not bumped, because no handoff or record contract changes.
 
 **Test-side corrections.** These fix the second, test-side cause under G's hardening policy.
 They do not loosen any assertion.
@@ -880,6 +893,61 @@ test:
 
 Without H, step 3 fails every time.
 
+### I. The drain detach bound (CP5C, amendment 1)
+
+**Problem.** After the worker process exits, the supervisor waits for the processes it still owns
+for at most `worker.DRAIN_DETACH_SECONDS`, then detaches (plan decision 9 of the worker-lifecycle
+milestone, ADR 0004). The bound is 600 s. The operator has reproduced, several times in
+`workflow-manager`, legitimate owned background work (verification the worker started in the
+background) that runs well over 10 minutes after the worker exits. At 600 s the Controller
+detaches, exits 45 and leaves the job `LAUNCHED` at `DRAINING`, so a valid run needs a manual
+`resume` or is interrupted.
+
+**Change.** `DRAIN_DETACH_SECONDS = 10800` (3 hours) in `controller/worker.py`, as an interim
+bound for current and near-term runs. The constant's comment says so and names the deferral.
+
+**What I preserves.** Only the number changes:
+
+- The drain loop (`_Supervision`'s `DRAINING` wait), its poll and scan cadences, and what ends
+  the wait: the owned set empties (finish), `--timeout` expires (interrupt), or the bound passes
+  (detach). `--timeout` exists only on the launch drain: `step`/`run` pass it to
+  `execute_step` (`controller/cli.py:901`), so there an operator timeout below 3 hours still
+  bounds a drain.
+- The `resume` re-attach drain has no timeout, today or after this change. `worker.reattach`
+  builds its `_ReattachedSupervision` with `timeout=None` (`controller/worker.py:1676`), so
+  `_expired()` (`controller/worker.py:1118`) is never true, and `resume` takes no `--timeout`
+  (`controller/cli.py:1092` calls `job.resume(target, identity=..., runtime=...)`). The branch
+  for a worker gone with no `ending_offset` drains "with the same bound" and no timeout either
+  (`controller/job.py:3242-3244`). So `DRAIN_DETACH_SECONDS` alone bounds a re-attach drain.
+- A detach still ends nothing, keeps the record `LAUNCHED` at `DRAINING` with
+  `drain_detached_at`, keeps the anchor holding the lock and exits 45. `resume` re-attaches and
+  drains again with a fresh bound, now 3 hours.
+- The record schema, the events, the exit codes and `controller/GENERATION.json` are unchanged.
+  The value is not recorded anywhere, so no stored record depends on it.
+- The messages that state the bound read the constant: `observe` renders it as minutes
+  (`detached after 180:00`) and `job` as seconds (`after 10800 s`). Neither code path changes.
+- Tests that exercise a detach already patch the constant to 1-30 s
+  (`tests/test_job.py:2647,2711`, `tests/test_resume.py:3175,3350`,
+  `tests/test_worker.py:2573`). They keep testing the same semantics and need no change.
+
+**Cost.** A drain whose owned process never ends (an unrecognised daemon, a hung tool) now holds
+the lifecycle lock for up to 3 hours before the operator is told, not 10 minutes. `status`,
+`follow` and `inspect` already show a draining job with its pids and elapsed time, so the
+operator can end the process sooner.
+
+A second cost falls on `resume`. When an owned process never ends, `workflow-controller resume
+<repo>` now waits in the foreground for up to 3 hours, not about 10 minutes, and each further
+`resume` waits up to another 3 hours. `--timeout` cannot shorten it (above). The operator stops
+sooner in one of two ways. Ending the named pids lets the drain finish at once. Interrupting
+`resume` (Ctrl-C) ends only the Controller and nothing it owns (`launch`'s contract, which
+`reattach` shares: "A `KeyboardInterrupt` during supervision propagates and ends nothing",
+`controller/worker.py:944-945`; `README.md:658`), so the job stays
+`LAUNCHED` at `DRAINING` for a later `resume`. CP5C's README edit says both.
+
+This is the trade the operator chose (D12). Giving `resume` a `--timeout` of its own would change
+Controller behaviour beyond the constant, so it is not part of this amendment. It is deferred with
+the rest of the drain-bound configurability (D13).
+
 ## Checkpoints
 
 <!-- generated by workflow_state.render_registry_markdown(registry) -- do not edit by hand -->
@@ -891,8 +959,9 @@ Without H, step 3 fails every time.
 | CP4 | Executor, local runner and aggregation: tools/run_tests.py (full/selected parallel run, --serial reference, --plan-only, --replay, exec-shard, plan, aggregate, timings merge), per-shard process isolation (session, TMPDIR, XDG_STATE_HOME, pip cache, leak marker, SIGINT reset), loaded-vs-planned id refusal, run-time coverage proof, verdicts and exit codes, failure diagnostics with log paths and reproduction commands, Ctrl-C handling, and the committed timing profile seeded from a measured serial run | CP3 | 3 | 1 |
 | CP5 | Serialization registry and timing-flake hardening: the audited EXCLUSIVE_ATOMS mechanism (empty unless evidenced), the stress protocol run under default, 4-CPU and oversubscribed configurations, and each exposed test-fixture race (starting with the DrainDetachJobTest escapee exec race and the intermittent CheckpointPredicateUnitTest error) fixed at its cause without loosening assertions, lengthening windows or retrying | CP4 | 3 | 1 |
 | CP5B | Ownership provenance follows the current basis (amendment 0, Design H): _Ownership.scan relabels a still-matching recorded entry's source from the current scan's basis (group, tag, adopted; the recorded fallback keeps it) while pid, start_ticks, cmdline and the seen sample stay first-sighting; _Supervision._signature includes source so a relabel publishes; OwnershipTest reads the last observed ppid and the last DRAINING entry; a gated escapee deterministically reproduces the pre-setsid first sighting; targeted stress clears IR1-003 | CP5 | 2 | 1 |
+| CP5C | Drain detach bound 600 -> 10800 s (amendment 1, Design I): controller/worker.py DRAIN_DETACH_SECONDS = 10800 as an interim constant with every other drain semantic unchanged; tests/test_observe.py's hard-coded detach text; README and ADR 0004 state the new bound; docs/ROADMAP.md records that configurability of the drain bound and other Controller tunables is deferred to the next settings/configuration milestone | CP5B | 1 | 1 |
 | CP6 | CI integration: tools/ci_workflows.py's validate.yml model gains plan / tests (dynamic fromJSON matrix, digest-checked exec-shard) / tests-result (always-run aggregate and coverage check) jobs, the hand-curated CONTROLLER_SHARDS and separate conformance matrix are removed, package reads the placement, workflows re-rendered, test_ci_workflows updated | CP4 | 2 | 1 |
-| CP7 | Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and re-verification on the amended head | CP5B, CP6 | 2 | 1 |
+| CP7 | Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and amendment 1's release-note line for the drain bound, and re-verification on the amended head | CP5B, CP5C, CP6 | 2 | 1 |
 
 <!-- CP1 -->
 ### CP1 -- inventory, atoms and selection
@@ -1067,6 +1136,43 @@ The checkpoint notes record each stress command, its configuration and its resul
 the CP5 "Still open" item.
 <!-- /CP5B -->
 
+<!-- CP5C -->
+### CP5C -- drain detach bound 600 -> 10800 s (amendment 1)
+
+Files:
+- `controller/worker.py`: `DRAIN_DETACH_SECONDS = 10800` and its comment (interim bound,
+  configurability deferred), and nothing else (Design I);
+- `tests/test_observe.py`: the draining text expected after a detach becomes
+  `detached after 180:00` (`tests/test_observe.py:740`), the one test that hard-codes the default;
+- `README.md`: "The drain bound" says 3 hours (10800 s), not 600 s (`README.md:489`). It also
+  says that `--timeout` bounds only the `step`/`run` launch drain: `resume`'s re-attach drain has
+  no timeout, so `resume` may wait in the foreground for up to 3 hours per call. To stop sooner,
+  end the named pids (the drain then finishes), or interrupt `resume`, which ends nothing and
+  leaves the job `LAUNCHED` at `DRAINING` for a later `resume` (Design I, "Cost");
+- `docs/adr/0004-worker-lifecycle-ownership.md`: "Drain bound" gives 10800 s and one sentence
+  naming amendment 1 of `workflow-controller-adaptive-test-sharding` as the change and the
+  deferred configurability (`docs/adr/0004-worker-lifecycle-ownership.md:160`);
+- `docs/ROADMAP.md`: the deferral of drain-bound and Controller-tunable configurability, per D13.
+
+No other `controller/` file changes. If any other test turns out to depend on the default value,
+that is a finding to report, not something to loosen.
+
+Tests:
+- the updated `tests.test_observe` expectation, which also pins the new default through its
+  rendered text;
+- the classes that patch the bound (`tests.test_job.DrainDetachJobTest`,
+  `tests.test_resume.DrainDetachedReattachTest` and `SupervisorLockScopeTest`,
+  `tests.test_worker.OwnershipTest`) pass unchanged, showing the semantics are unchanged.
+
+Verification: those four classes, `tests.test_observe`, and the full selection through
+`tools/run_tests.py` at defaults. Also one check, not a new test, that `job`'s detach message
+states the default: grep `controller/job.py` for the `after {worker.DRAIN_DETACH_SECONDS} s`
+format (`controller/job.py:3375`) and confirm with
+`python3 -c 'import controller.worker as w; print(w.DRAIN_DETACH_SECONDS)'`, run from the
+repository root, that it renders
+`after 10800 s`.
+<!-- /CP5C -->
+
 <!-- CP6 -->
 ### CP6 -- CI integration
 
@@ -1108,6 +1214,9 @@ revalidation edits:
   test drift, which needs no refresh, from a removed or renamed class. A removed or renamed class
   leaves a stale atom that `CommittedTimingsTest` rejects until `timings merge` prunes it.
   This is documentation only.
+
+Amendment 1 adds one item: the roadmap entry's release-note line also names the drain detach
+bound, 600 s to 10800 s, as an interim value with its configurability deferred (D12).
 
 Verification and measurement:
 - the full suite serially, both through `python3 -m unittest discover -s tests -t .` and through
@@ -1199,6 +1308,25 @@ not move.
   It would drop CP5B and keep the roadmap's "left for later" line. **This is the operator's
   choice.** If they choose deferral, the next revision drops CP5B and Design H.
 
+- **D12 A 3-hour drain bound, as a constant, now** (amendment 1, the operator's decision). The
+  operator reproduced legitimate owned work outliving the 600 s bound and chose 10800 s as an
+  interim value. It stays a module constant: making the drain bound and the other Controller
+  tunables configurable is deferred to the next settings/configuration milestone, so this
+  milestone adds no setting, flag or environment variable. The trade has two costs (Design I,
+  "Cost"): a never-ending owned process holds the lifecycle lock for up to 3 hours before the
+  detach, and `resume`'s re-attach drain, which `--timeout` does not bound, waits in the
+  foreground for up to 3 hours per call unless the operator ends the named pids or interrupts it.
+  *Alternatives, not taken:* an unbounded
+  drain (ADR 0004 rejected it: one unrecognised daemon would hold the lock forever), or a
+  configurable bound now (a configuration design this milestone does not have).
+- **D13 Where the deferral is recorded.** `docs/ROADMAP.md` has no settings/configuration
+  milestone yet. CP5C adds the deferred item to 1.4's follow-up list ("make the drain detach
+  bound and the other Controller tunables configurable, including a `--timeout` for `resume`'s
+  re-attach drain; 10800 s is an interim constant, amendment 1 of 1.2.1"), and 1.2.1's entry
+  points to it. *Alternative:* a new numbered roadmap
+  section for Controller settings. The operator may prefer that; it changes only where the line
+  sits.
+
 `docs/TECHNICAL_DECISIONS.md` does not exist in this repository, so there are no "Open decision"
 rows to check. No ADR decision is reversed. ADR 0002 records "the Controller suite in seven named
 shards" and ADR 0003 "a `trunk` shard". ADR 0005 supersedes that one operational detail and says
@@ -1240,6 +1368,8 @@ packaged-runtime suite, `tools/ci_workflows.py --check` and the performance meas
 CP5B runs its targeted `OwnershipTest` stress and the full selection. Every checkpoint that
 amendment 0 reconciles to `NEEDS_REVALIDATION` re-runs its own tests and the full selection at
 the amended head (see "Revision 4").
+CP5C runs the four classes that patch the bound, `tests.test_observe` and the full selection,
+and checks that `job`'s detach message states `10800 s` (Design I).
 Nothing needs the real `claude`. Package-index access **is** needed, as it already is at the base
 commit: `fixtures.editable_install` runs a build-isolated `pip install -e` that fetches the build
 backend, and it is used by `tests.test_identity` (lines 321 and 357), `tests.test_handoff` (529),
@@ -1249,8 +1379,8 @@ dependency.
 
 ## Migration / data-integrity notes
 
-- **No stored-data or runtime migration.** The only `controller/` change is Design H
-  (amendment 0).
+- **No stored-data or runtime migration.** The only `controller/` changes are Design H
+  (amendment 0) and Design I's constant (amendment 1).
   - Job records keep their schema and their `source` vocabulary, so there is nothing to migrate.
   - A record written by 1.2.0 re-attaches as today (`_recorded_ownership`), and its entries are
     relabelled by the next scan that finds them by group, tag or adoption.
@@ -1266,6 +1396,8 @@ dependency.
 - **Rollback.** Restoring the previous `tools/ci_workflows.py` and re-rendering returns CI to the
   hand-curated matrix. No other state depends on this milestone. Reverting CP5B's `controller/`
   hunk restores first-sighting labels, and no stored record depends on either behaviour.
+  Reverting CP5C's constant restores the 600 s bound; the bound is never recorded, so nothing
+  stored depends on it either.
 
 ## Plan review decisions
 
@@ -1382,3 +1514,74 @@ the pre-side hash is `None`. CP5B reconciles as `new`.
 Each revalidation goes through the ordinary `/milestone-implement` path. The implementation
 review that follows may focus on CP5B, CP7's edits and the freshness of the bundle, as the
 external review anticipated.
+
+### Revision 5 (plan amendment 1, operator-requested drain bound)
+
+This revision is not a plan-review round. The operator requested amendment 1
+(`amendment_history[1]`, requested at `9946567`, amendment base `ae74df7`) to make the drain
+bound change a reviewed part of this milestone rather than an unrelated working-tree edit. Its
+recorded reason: legitimate owned background work, reproduced repeatedly in `workflow-manager`,
+outlives the worker by more than 10 minutes, so the 600 s bound detaches and interrupts valid
+runs; drain semantics are otherwise unchanged, and configurability is deferred to the next
+settings/configuration milestone.
+
+The edit itself (`controller/worker.py:411`, 600 -> 10800) has been in the working tree,
+uncommitted, since before CP5B was committed. CP5B was committed and verified without it, in a
+clean worktree. CP5C commits it.
+
+**What changed:**
+
+- **Scope.** Design I and the new checkpoint CP5C. The header, the Non-goals (including "no
+  settings mechanism"), Verification and the Migration notes state its limits.
+- **Decisions.** D12 (a 3-hour constant now, configurability deferred) and D13 (where the
+  deferral is recorded).
+- **Checkpoints.**
+  - CP5C is new. It depends on CP5B, because both edit `controller/worker.py` and CP5B is
+    complete, so CP5C starts from a committed `worker.py`.
+  - CP7 now depends on CP5B, CP5C and CP6. Its name and prose gain amendment 1's release-note
+    line.
+  - No checkpoint was removed or renamed, and no other checkpoint's section or registry row
+    changed.
+- **Requirements.** R16 (the interim drain bound) is new, mapped to CP5C and CP7. R14 now names
+  both Controller runtime changes.
+
+**Reconciliation, predicted from the `/approve-review plan` algorithm rather than claimed.**
+Revision 4's approved document has anchors, so unchanged checkpoints keep their status.
+
+| checkpoint | reconciled | status after approval |
+| --- | --- | --- |
+| CP1-CP5, CP5B | `retained` (row and anchored section unchanged) | `COMPLETE` |
+| CP6 | `retained` | stays `NEEDS_REVALIDATION` from amendment 0 |
+| CP5C | `new` | picked up next: implement Design I |
+| CP7 | `needs_revalidation` (row changed) | `NEEDS_REVALIDATION`, as it already was |
+
+The implementation order is therefore CP5C, then CP6's revalidation, then CP7.
+
+### Revision 6 (plan amendment 1, local-model plan review, round 5, `REVISE`)
+
+Round 5 reviewed revision 5 (bundle `aa80c9a3`) and returned 0 Blocking, 1 Important and 2
+Optional findings. All three are accepted. Every edit stays inside amendment 1: Design I, D12,
+D13, CP5C's section, CP7's registry name, the Verification section and these notes.
+
+- **IMP-001, accepted per resolution (a).** Revision 5 said `--timeout` still bounds a drain.
+  That holds only for the `step`/`run` launch drain (`controller/cli.py:901`). `worker.reattach`
+  passes `timeout=None` (`controller/worker.py:1676`), `resume` takes no timeout
+  (`controller/cli.py:1092`), and the no-`ending_offset` branch drains with no timeout either
+  (`controller/job.py:3242-3244`). So `DRAIN_DETACH_SECONDS` alone bounds a re-attach drain.
+  Design I's "What I preserves" now says this. Its "Cost" and D12 add the foreground-`resume`
+  cost: up to 3 hours per `resume`, with no `--timeout` escape. Both name the two ways to stop
+  sooner, which were checked in the code. Ending the pids lets the drain finish. Ctrl-C ends
+  nothing (`controller/worker.py:945`), and the job stays `LAUNCHED` at `DRAINING`. CP5C's
+  `README.md` edit now tells the operator the same. A `resume --timeout` would change Controller
+  behaviour beyond the constant, so it is not added here. D13's roadmap line lists it with the
+  deferred configurability, as the review suggested.
+- **OPT-001, accepted.** CP7's registry name (and so the generated Checkpoints table) gains the
+  missing "and" before "amendment 1's release-note line". CP7 already reconciles to
+  `needs_revalidation`, so this changes no prediction.
+- **OPT-002, accepted.** CP5C's verification, and the Verification section, add one check, not
+  a new test: `job`'s detach message renders the default as `after 10800 s`.
+
+No checkpoint was added, removed or re-ordered. No requirement changed, and the registry and
+mapping were regenerated at revision 6. Revision 5's reconciliation table still holds, because
+the reconciliation compares against revision 4's approved document: CP1-CP5, CP5B and CP6
+`retained`, CP5C `new`, CP7 `needs_revalidation`.

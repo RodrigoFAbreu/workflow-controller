@@ -25,6 +25,7 @@ import ast
 import contextlib
 import errno
 import fcntl
+import itertools
 import json
 import os
 import re
@@ -1607,6 +1608,15 @@ def _running(pid: int) -> bool:
     return stat is not None and stat[0] not in ("Z", "X", "x")
 
 
+def _ppid(pid: int) -> int | None:
+    """``pid``'s parent from the real ``/proc``, or ``None`` when it is gone."""
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    return int(text[text.rfind(")") + 1:].split()[1])
+
+
 def _fd_targets(pid: int) -> set[str]:
     targets = set()
     try:
@@ -2382,10 +2392,13 @@ class OwnershipTest(_SupervisedCase):
         self.assertNotEqual(ppids[entry["pid"]], os.getpid())
         self.assertTrue(process_fixtures.wait_until(lambda: not _running(entry["pid"]), timeout=5))
 
-    def test_a_gated_escapee_is_published_as_group_then_as_tag(self) -> None:
-        # The first-sighting race made deterministic (Design H): the
-        # escapee is held in the worker's group until it is seen owned by
-        # group, then released to setsid, and relabelled by a later scan.
+    def _gated_escapee(self, *, until_adopted: bool = False) -> tuple[worker.WorkerResult, int, list[dict]]:
+        """The first-sighting race made deterministic (Design H): the
+        escapee is held in the worker's group until it is seen owned by
+        group, then released to setsid, and relabelled by a later scan.
+        ``until_adopted`` also holds it until its parent has exited and it
+        is this Controller's child. Returns the result, the escapee's pid
+        and its published entries, in order."""
         gate, pid_file = self.dir / "gate", self.dir / "orphan.pid"
         os.mkfifo(gate)
         self.addCleanup(_open_gate, gate)  # never leaves the escapee blocked
@@ -2398,8 +2411,12 @@ class OwnershipTest(_SupervisedCase):
                     seen_by_group.set()
 
         def release() -> None:
-            if seen_by_group.wait(timeout=20):
-                _open_gate(gate, deadline=time.monotonic() + 10)
+            if not seen_by_group.wait(timeout=20):
+                return
+            if until_adopted:
+                pid = int(pid_file.read_text())
+                process_fixtures.wait_until(lambda: _ppid(pid) == os.getpid(), timeout=10)
+            _open_gate(gate, deadline=time.monotonic() + 10)
 
         releaser = threading.Thread(target=release, daemon=True)
         releaser.start()
@@ -2410,18 +2427,47 @@ class OwnershipTest(_SupervisedCase):
         self.assertEqual(result.outcome, worker.SUCCESS)
         pid = int(pid_file.read_text())
         entries = [e for _at, _state, details in self.log for e in details["owned_processes"] if e["pid"] == pid]
-        sources = [e["source"] for e in entries]
-        self.assertTrue(sources, "the escapee was never published")
-        self.assertEqual(sources[0], "group", sources)
-        self.assertIn("tag", sources, "the escapee's setsid was never published")
-        first_tag = sources.index("tag")
-        self.assertEqual(set(sources[:first_tag]), {"group"}, sources)
-        self.assertEqual(set(sources[first_tag:]), {"tag"}, sources)
+        self.assertTrue(entries, "the escapee was never published")
         self.assertEqual({(e["pid"], e["start_ticks"]) for e in entries}, {(pid, entries[0]["start_ticks"])})
         self.assertEqual({e["cmdline"] for e in entries}, {entries[0]["cmdline"]}, "cmdline is not the first-seen one")
         for sampled in result.owned_processes_seen["sample"]:
             if sampled["pid"] == pid:
                 self.assertEqual(sampled["source"], "group", "the sample is not first-sighting history")
+        return result, pid, entries
+
+    def test_a_gated_escapee_is_published_as_group_then_as_tag(self) -> None:
+        _result, _pid, entries = self._gated_escapee()
+        sources = [e["source"] for e in entries]
+        self.assertEqual(sources[0], "group", sources)
+        self.assertIn("tag", sources, "the escapee's setsid was never published")
+        first_tag = sources.index("tag")
+        # Between its setsid(2) and its exec of bash, a scan can read an
+        # empty environ: no tag, so that scan owns the escapee by adoption
+        # alone and says so (functional review round 2, F1).
+        self.assertLessEqual(set(sources[:first_tag]), {"group", "adopted"}, sources)
+        self.assertEqual(set(sources[first_tag:]), {"tag"}, sources)
+
+    def test_an_escapee_read_mid_exec_is_published_as_adopted_for_that_scan(self) -> None:
+        # Functional review round 2, F1: the escapee's first environ read
+        # outside the group comes back empty, as it can in the middle of
+        # its exec. That scan's basis is adoption (Design H); the next
+        # scan's is the tag again, and ownership never lapses (I10).
+        real_read_environ = worker._read_environ
+        pid_file = self.dir / "orphan.pid"
+        emptied: list[int] = []
+
+        def read_environ(root, pid: int) -> bytes:
+            with contextlib.suppress(OSError, ValueError):
+                if not emptied and pid == int(pid_file.read_text()):
+                    emptied.append(pid)
+                    return b""
+            return real_read_environ(root, pid)
+
+        self.patch(worker, "_read_environ", read_environ)
+        _result, pid, entries = self._gated_escapee(until_adopted=True)
+        self.assertEqual(emptied, [pid])
+        runs = [source for source, _ in itertools.groupby(e["source"] for e in entries)]
+        self.assertEqual(runs, ["group", "adopted", "tag"])
 
     def test_a_recorded_process_stays_owned_after_it_passes_no_other_test(self) -> None:
         self.patch(worker, "_prctl", lambda *args: None)

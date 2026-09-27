@@ -2917,7 +2917,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -3000,22 +3000,22 @@
         "recorded_at": "2026-09-27T10:59:01Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "837edc9e0be2b101d9cb7d7d8dc54c2898fc81192e648815b8c02b0c4824704a",
-        "approved_review_content_id": "e735ad9c56c043cf2e05ee46b2453368b0b9f447332f270ebf08614b063ed855",
+        "reviewed_bundle_id": "92f97e18c79d970609e01fc3004da7baf22f02f299c01fa3cf35f8ac7dac00af",
+        "approved_review_content_id": "79787123d827de2290b17cf81be69b7a707fd6cf919cce7bdb1c73bb1e471111",
         "review_content_manifest": [
           {
             "path": ".github/workflows/validate.yml",
             "exists": true,
             "mode": "100644",
-            "blob": "930d4ea2b6d51b49a4d8b85aeac638dcc679bd0f"
+            "blob": "54de230ccadfb8d3015075ce2c98eb665ffa310c"
           },
           {
             "path": "README.md",
             "exists": true,
             "mode": "100644",
-            "blob": "19db9c943442a89d76e7579ce2fe30d5039136f0"
+            "blob": "dc5a839452eef73738456827b5d92cdc5cb892ce"
           },
           {
             "path": "controller/worker.py",
@@ -3033,7 +3033,7 @@
             "path": "docs/adr/0005-adaptive-test-sharding.md",
             "exists": true,
             "mode": "100644",
-            "blob": "bccbadc97ec26404f4bb6a73a5b23670778fd506"
+            "blob": "2320d72326e3758ae7ab255ac8ec8f186fe64067"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-artifacts.json",
@@ -3057,7 +3057,7 @@
             "path": "tests/test_ci_workflows.py",
             "exists": true,
             "mode": "100644",
-            "blob": "5bc645ff6d1d806efa0028b6ba4154516a058111"
+            "blob": "e763f3d3f74b6f45484dfdf96b5d4aa111f77bc7"
           },
           {
             "path": "tests/test_job.py",
@@ -3081,13 +3081,13 @@
             "path": "tests/test_run_tests.py",
             "exists": true,
             "mode": "100644",
-            "blob": "f7db1834621c9dd58c7564c656a2e10370c1f878"
+            "blob": "1dc2c1cdcd617719df6c97dd3e566676b9932d69"
           },
           {
             "path": "tests/test_test_shards.py",
             "exists": true,
             "mode": "100644",
-            "blob": "88b4960e9a7008a6868e12f4e523a74aaa53d44b"
+            "blob": "a0af242180709be93b3fc94799b3edddf3af5183"
           },
           {
             "path": "tests/test_worker.py",
@@ -3099,32 +3099,32 @@
             "path": "tools/ci_workflows.py",
             "exists": true,
             "mode": "100644",
-            "blob": "5052229d35e27e213558b08dac6be3373fb5665a"
+            "blob": "2b3be848fc512407d5aeb2a5d44c8d2e72719ff5"
           },
           {
             "path": "tools/run_tests.py",
             "exists": true,
             "mode": "100644",
-            "blob": "5a9340403a5554b18038a23d83b9bd1d30a718bb"
+            "blob": "72fafa586267c8782cd619f7fda48590da994c74"
           },
           {
             "path": "tools/test_shards.py",
             "exists": true,
             "mode": "100644",
-            "blob": "d1e9b82264514042448be0f602184359ea28bb53"
+            "blob": "afe8721ce881fba385996a2e5eaf50e7f122f5b5"
           },
           {
             "path": "tools/test_timings.json",
             "exists": true,
             "mode": "100644",
-            "blob": "54e97110d067eae8ce305ddbb3cc1f4292e036f0"
+            "blob": "a4e75939701b8a819df46a61732fab078373da60"
           }
         ],
-        "reviewed_content_commit": "413427ab39d3f81591e16f8401f2c05f467ba6af",
+        "reviewed_content_commit": "f015b34f50be3bdc958a7c3b50638ed82624c687",
         "legacy_evidence": null,
-        "user_confirmation": "Approve implementation for workflow-controller-adaptive-test-sharding",
+        "user_confirmation": "Approve workflow-controller-adaptive-test-sharding implementation",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-27T04:20:44Z"
+        "recorded_at": "2026-09-27T13:25:13Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -3144,21 +3144,21 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 83,
-      "last_transition": "2026-09-27T12:35:58Z",
+      "state_revision": 86,
+      "last_transition": "2026-09-27T13:25:13Z",
       "implementation_review_stages": {
-        "review_content_id": "e735ad9c56c043cf2e05ee46b2453368b0b9f447332f270ebf08614b063ed855",
+        "review_content_id": "79787123d827de2290b17cf81be69b7a707fd6cf919cce7bdb1c73bb1e471111",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "837edc9e0be2b101d9cb7d7d8dc54c2898fc81192e648815b8c02b0c4824704a",
+          "bundle_id": "92f97e18c79d970609e01fc3004da7baf22f02f299c01fa3cf35f8ac7dac00af",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-09-27T04:11:06Z"
+          "round": 5,
+          "completed_at": "2026-09-27T12:43:41Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "837edc9e0be2b101d9cb7d7d8dc54c2898fc81192e648815b8c02b0c4824704a",
+          "bundle_id": "92f97e18c79d970609e01fc3004da7baf22f02f299c01fa3cf35f8ac7dac00af",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-09-27T04:19:18Z"
+          "round": 5,
+          "completed_at": "2026-09-27T13:16:24Z"
         }
       },
       "amendment_history": [

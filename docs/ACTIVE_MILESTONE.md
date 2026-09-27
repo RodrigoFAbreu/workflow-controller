@@ -29,6 +29,72 @@ in duration-balanced parallel shards. One deterministic inventory and planner is
 runs and CI. Coverage is unchanged and proven at run time. There are no test tiers, and there are
 no retries.
 
+## Functional review round 1 (revision 3, bounded fix)
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (the user's findings on the checklist below, CI run
+`36296292494` at `ae54962`): L1 PASS, L2 FAIL, L3 FAIL (reporting gap only), L4 PASS with a minor
+reporting gap. All three findings took the bounded branch. `technical_approval` was marked `STALE`
+before the first edit.
+
+- **F1 (defect: L2's critical path about 6 min 10 s, bar 5 min and baseline + 45 s = 4 min 8 s),
+  fixed (`9501fbb`).**
+  - The cause was D9. `tools/test_timings.json` was local-machine data, which underestimated CI
+    about 1.6x overall and 2.6x for `conformance:workflow_acceptance_matrix_test.py` (79 s seeded,
+    176-234 s on CI). The 4-shard CI plan therefore put the matrix on a shard with about 106 s of
+    other work (shard walls 285-351 s across five runs).
+  - Remedy: no planner change. The file was refreshed with `timings merge --profile-name ci` from
+    the `timings-ci` artifacts of CI runs `36281950118`, `36286437283`, `36292751625`,
+    `36293387496` and `36296292494`, oldest first.
+  - The CI plan is now 5 shards: the matrix alone (estimate 207 s), and four shards of about
+    184 s. Replaying the five runs' per-atom times against that plan gives the non-matrix shards
+    184-189 s at the median, 200-220 s at worst.
+  - Regression test: `CommittedTimingsTest.test_the_committed_profile_is_measured_on_ci` pins
+    the profile to `ci`. It fails on the old `seed-local` file.
+- **F2 (usability issue: L3 wants the coverage check reported on a passing run), fixed
+  (`c8bc8de`).** The aggregate now counts missing, unplanned and duplicate ids. Every summary
+  carries `- coverage: exact; all N planned tests ran once; 0 missing, 0 unplanned, 0 duplicate`,
+  or `- coverage: NOT exact; ...` with the counts. Two new `AggregateTest` cases fail before the
+  fix.
+- **F3 (missing requirement: L4's "names the log artifact"), fixed (`73dbb25`).**
+  - `aggregate` takes `--plan-artifact` and `--results-artifact-prefix`, which only go together.
+    `validate.yml`'s `tests-result` passes `test-plan` and `results-` from
+    `tools/ci_workflows.py`'s own constants.
+  - Each failure and fixture error gains `- CI artifacts: the log is in `results-<i>`;
+    `test-plan` holds `plan.json` for the replay command`. Local summaries are unchanged.
+  - New tests in `test_test_shards`, `test_run_tests` and `test_ci_workflows` fail before the
+    fix.
+- **Verification:** `tests.test_test_shards`, `tests.test_run_tests`, `tests.test_ci_workflows`
+  and `tests.test_plan_document_consistency` passed (249 tests), and `ci_workflows --check` is
+  clean. The full sharded selection passed: 2061 tests, 8 shards, 89.4 s, exact coverage.
+- **Projection for L2, stated honestly.** The critical path is now bounded by the matrix atom
+  alone, plus about 50 s of fixed overhead measured on run `36296292494`:
+  - the `plan` job, 14 s;
+  - runner allocation and setup before the shard step, about 17-24 s;
+  - the gaps between jobs;
+  - `tests-result`, 12 s.
+
+  Over the five runs' matrix times (176-234 s, median 208 s), that projects about 3 min 50 s
+  to 4 min 45 s, median about 4 min 18 s.
+  - This should meet the 5-minute bar.
+  - It may still miss the "no more than 45 s slower than 3 min 23 s" (4 min 8 s) half of the
+    bar. The acceptance-matrix suite is frozen and indivisible (D2), and its own CI time varies
+    by about 60 s between runs.
+  - If the re-measurement misses 4 min 8 s, the options are these, and they are the user's
+    decision:
+    - accept the 5-minute bar, a plan-level change;
+    - route the critical path to a remediation child, for example taking the `plan` job off the
+      matrix atom's path.
+- **Needs re-testing:**
+  - **L2** on the new head, ideally over two or three runs, because of the variance above.
+  - **L3:** the coverage line appears in `tests-result`'s summary.
+  - **L4** (a throwaway failing commit): the `CI artifacts` line appears.
+  - A CI run's plan should show 5 shards, with the acceptance matrix alone on one.
+
+Round 1's bounded fixes are committed, and the post-fix bundle (implementation revision 4) is
+generated for a fresh `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implementation`, in a
+fresh session). The manual external stage and `/approve-review implementation` follow. Only after
+that comes `/prepare-functional-review`, which regenerates the checklist.
+
 ## Functional review checklist
 
 Technical approval: `2c356fb` (implementation revision 3, reviewed head `413427a`). Put findings
@@ -75,11 +141,10 @@ runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same
 
 **Known limitations and out of scope.**
 
-- **D9, timing seed.** `tools/test_timings.json` is still local-machine data (`seed-local`), so it
-  only affects CI balance, never coverage. Refreshing it from L3's `timings-ci` artifact
-  (`python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`) changes a
-  protected path. If you want the refresh, record it as a finding so it goes through
-  `/apply-functional-review`.
+- **D9, timing seed.** Superseded by functional round 1's F1: `tools/test_timings.json` is now
+  CI-measured (`profile: "ci"`, five runs). A later refresh
+  (`python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`) still changes a
+  protected path, so it goes through review.
 - **D7, leaked processes.** A leaked process is reported as a warning and killed; it does not
   fail the run.
 - `workflow-conformance.yml` (managed, serial, about 5 min) still runs on pull requests and stays

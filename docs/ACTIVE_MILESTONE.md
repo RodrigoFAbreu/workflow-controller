@@ -6,10 +6,12 @@
 and CI. The operator requested it directly, ahead of `docs/ROADMAP.md` section 1.4, which stays
 the next roadmap item.
 
-- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 3, approved at
-  `5fdea5a` (`EXTERNAL_APPROVE`).
+- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 4 (amendment 0),
+  approved at `8b0f522` (`EXTERNAL_APPROVE`). Revision 3 was approved at `5fdea5a`.
 - Registry: `docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json`
-  (CP1-CP7).
+  (CP1-CP5, CP5B, CP6, CP7).
+- Amendment 0 reconciliation marked CP1-CP7 `NEEDS_REVALIDATION` (revision 3 had no checkpoint
+  anchors) and added CP5B. Each is revalidated through `/milestone-implement`.
 - Governing workflow version: `2.2`. Base commit: `405f050`.
 - Ground truth for phase and checkpoint status: `docs/ai-workflow/WORKFLOW_STATE.json`.
 
@@ -28,7 +30,7 @@ no retries.
 
 | id | status | commit |
 | --- | --- | --- |
-| CP1 -- inventory, atoms and selection | complete | `302d7fc` |
+| CP1 -- inventory, atoms and selection | complete, revalidated at revision 4 | `302d7fc`, revalidation: this checkpoint's commit |
 | CP2 -- result records and timing model | complete | `4467a80` |
 | CP3 -- adaptive deterministic planner | complete | `b0eb707` |
 | CP4 -- executor, local runner and aggregation | complete | `55c855b` |
@@ -594,6 +596,14 @@ no retries.
   - The real inventory is now 423 atoms, because the new test classes are in it.
 
 ### CP1 -- inventory, atoms and selection (complete)
+
+- **Revalidation at revision 4** (2026-09-27, head `8b0f522`). CP1's plan section is unchanged
+  from revision 3, so there is no code change. Under a reaping subreaper (this session is a
+  Controller worker):
+  - `python3 -m unittest tests.test_test_shards tests.test_ci_workflows`: 180 tests, OK.
+  - `python3 tools/ci_workflows.py --check`: clean.
+  - Full selection, `python3 tools/run_tests.py` at defaults: PASS, 2049 tests in 8 shards,
+    wall 101.0 s, balance 1.15. The machine was loaded (load average about 10 on 16 CPUs).
 
 - **`tools/test_shards.py`** (new, stdlib only, not imported by `controller/`).
   - `build_inventory(repo_root)` returns one `Inventory`. It holds the `controller` family,

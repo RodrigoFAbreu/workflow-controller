@@ -2917,7 +2917,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 6,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -2965,7 +2965,7 @@
       },
       "current_bundle_id": null,
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "EXTERNAL_APPROVE",
         "reviewed_bundle_id": "8d19760a49a153094782b51a656b2ed7f7e928d4c46940103c1eea1524f595ef",
         "approved_review_content_id": "f394fe407c5fefaef264dec4a6b685dd3a0bdc7332267209ba05e5b344250a9d",
@@ -3140,8 +3140,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 72,
-      "last_transition": "2026-09-27T10:04:09Z",
+      "state_revision": 73,
+      "last_transition": "2026-09-27T10:09:23Z",
       "implementation_review_stages": {
         "review_content_id": "e735ad9c56c043cf2e05ee46b2453368b0b9f447332f270ebf08614b063ed855",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
@@ -3322,9 +3322,87 @@
             "CP6": "retained",
             "CP7": "needs_revalidation"
           }
+        },
+        {
+          "amendment_id": "2",
+          "requested_at": "2026-09-27T10:09:23Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "Local implementation review round 4 reproduced LIR4-001 after functional-review remediation F1 replaced the committed timing seed with real CI measurements. With a cold local timing cache, local planning now chooses 5 shards and takes about 145.9 seconds, exceeding the approved 120-second local full-selection target. With a partial local profile missing the acceptance-matrix timing, it chooses 4 shards. This occurs because CI fallback timings currently participate in the local planner's largest-atom floor, which changes shard-count behaviour and contradicts the approved §B fallback semantics, §C formula, and D9 wording that timing replacement affects only balance.\n\nAmend the plan narrowly using remedy (c): for local planning, CI-fallback estimates may still contribute to estimated total work, but they must not contribute to the local largest-atom floor used to derive shard count. Only timing estimates from the local-machine profile should influence that floor. CI planning must remain unchanged.\n\nAdd deterministic regression coverage showing that on an 8-CPU machine both:\n\n* an empty local timing profile plans 8 shards; and\n* a partial local timing profile missing the acceptance-matrix timing still plans 8 shards.\n\nUpdate the relevant plan design text, §B fallback semantics, §C formula, D9 wording, README and ADR so they accurately describe this behaviour.\n\nDo not expand this into a broader planner redesign.",
+          "superseded_plan_revision": 6,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "EXTERNAL_APPROVE",
+            "reviewed_bundle_id": "8d19760a49a153094782b51a656b2ed7f7e928d4c46940103c1eea1524f595ef",
+            "approved_review_content_id": "f394fe407c5fefaef264dec4a6b685dd3a0bdc7332267209ba05e5b344250a9d",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "80fd638868412fa60bf307cbb6fd9d6cd9ac64bc"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "92f27241386f4fcb83415d8bfb077c31e0a69882"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "bf521ce21615959f5d6619786748027a248499df"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "plan workflow-controller-adaptive-test-sharding",
+            "waived_guarantees": [],
+            "recorded_at": "2026-09-27T02:24:56Z"
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "8b0f522101150e9f2dc2bc7f1cf84a3663ae0806"
+            },
+            "CP2": {
+              "status": "COMPLETE",
+              "start_commit": "31b88ea80565a87f93f7531a41895d8b17580157"
+            },
+            "CP3": {
+              "status": "COMPLETE",
+              "start_commit": "435de8aec0d54864789391db3d63fd563a8180fa"
+            },
+            "CP4": {
+              "status": "COMPLETE",
+              "start_commit": "ed902102795cb5ddba6bbccb9f191145ab4969e2"
+            },
+            "CP5": {
+              "status": "COMPLETE",
+              "start_commit": "2cf86dae1b01389d66db1c589e646ec551e10965"
+            },
+            "CP6": {
+              "status": "COMPLETE",
+              "start_commit": "f50017afa0dddbd91290ce4a367348d7af3cc239"
+            },
+            "CP7": {
+              "status": "COMPLETE",
+              "start_commit": "9e7c96c73436992ed812e739a489e1b3f000e1de"
+            },
+            "CP5B": {
+              "status": "COMPLETE",
+              "start_commit": "cae45c792363aa4a73a32abe0a73f25d31366ce9"
+            },
+            "CP5C": {
+              "status": "COMPLETE",
+              "start_commit": "4a4d0bc8c58da8a46a56d4fbb861b4f37c83aa36"
+            }
+          },
+          "pre_amendment_approval_commit": "4a4d0bc8c58da8a46a56d4fbb861b4f37c83aa36",
+          "resolved_at_plan_revision": null
         }
       ],
-      "amendment_base_commit": "ae74df78a29e39147eda59c7ccbdbf17ef97b5c9"
+      "amendment_base_commit": "f358409d050bdc01528d8734585a7e37a6e6206c"
     }
   }
 }

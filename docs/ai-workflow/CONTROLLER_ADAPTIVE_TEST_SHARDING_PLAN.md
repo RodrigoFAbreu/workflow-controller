@@ -1,4 +1,4 @@
-# Controller adaptive test sharding: one inventory, duration-balanced shards, local and CI (Revision 6)
+# Controller adaptive test sharding: one inventory, duration-balanced shards, local and CI (Revision 7)
 
 Work item: `workflow-controller-adaptive-test-sharding`
 Governing workflow version: `2.2` (this repository's `docs/ai-workflow/WORKFLOW_CONFIG.json`
@@ -35,6 +35,17 @@ operator reproduced in `workflow-manager`: `worker.DRAIN_DETACH_SECONDS` rises f
 the local-model review of revision 5 (round 5, `REVISE`): it corrects what bounds a `resume`
 re-attach drain and states that cost, still inside amendment 1 ("Revision 6" at the end).
 
+**Amendment 2.** Revision 7 is plan amendment `2` (`amendment_history[2]`), requested by the
+operator at `68ffbbb` from `IMPLEMENTING`, with amendment base `f358409`. It supersedes revision
+6's approval (`4a4d0bc`). It resolves the local implementation review's LIR4-001 (round 4). The
+functional review's F1 (`9501fbb`) replaced the committed timing seed with CI measurements, and
+those CI estimates then set the *local* planner's largest-atom floor: a cold local timing cache
+planned 5 shards and took 145.9 s. Revision 7 takes the operator's remedy (c): for local
+planning, an estimate taken from the committed CI profile still counts in the total and in the
+assignment, but only estimates from the local-machine profile can set the largest-atom floor.
+CI planning is unchanged. It is delivered by the new checkpoint CP6B (Design J). Nothing else in
+revision 6 changes. "Revision 7" at the end lists what changed and how the checkpoints reconcile.
+
 ## Goal
 
 Cut the wall-clock time of the Controller's full verification substantially by running the
@@ -67,6 +78,9 @@ can run any selection through the new runner.
 - No other Controller change, and no Controller lifecycle refactor: no change to ownership
   membership, adoption, waiting, draining, detaching, re-attaching, recovery or the record
   schema, apart from the value of the drain bound. Designs H and I list what they preserve.
+- No other planner change (amendment 2). Design J changes only which estimates may set the local
+  largest-atom floor. The parameters, the estimates, the LPT assignment, the plan schema, the
+  timing files and everything about CI planning stay as they are.
 - No Controller settings or configuration mechanism. The drain bound stays a module constant,
   and making it and the other Controller tunables configurable is deferred (D12).
 - No Workflow lifecycle, Harness Adapter or provider redesign, and no Workflow 2.6 compatibility.
@@ -468,7 +482,8 @@ version on the reference machine (Python 3.14.7) with a probe module:
 - **Committed CI profile, `tools/test_timings.json`.** This is the only input CI planning reads.
   It is seeded in CP4, once the runner exists, from a `--serial` run on the reference machine
   through `timings merge`, with `profile: "seed-local"`. It is refreshed from a real CI run's
-  aggregate artifact during functional review. Nothing writes
+  aggregate artifact during functional review (done in round 1, F1 `9501fbb`: the file is now
+  `profile: "ci"`, merged from 5 CI runs). Nothing writes
   it except the explicit command below. CI never writes the repository.
 - **Local profile, `$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json`.** The fallback
   is `~/.cache/...`, keyed by nothing else, because it is advisory. It is updated automatically
@@ -491,7 +506,8 @@ Refreshing the committed CI profile is an explicit, reviewed act:
 
 `python3 tools/run_tests.py timings merge --into tools/test_timings.json <aggregate-dir>...`
 
-A sustained drift is not a correctness problem (I3). It costs only balance.
+A sustained drift is not a correctness problem (I3). It can cost wall time, through the shard
+count and the balance, but never coverage.
 
 **Estimates.**
 
@@ -501,7 +517,10 @@ A sustained drift is not a correctness problem (I3). It costs only balance.
   from a fixed default of 0.25 s per test, the baseline mean (475 s / 1887).
 - A conformance atom without history uses 30 s.
 - Local planning uses the local profile, falling back to the committed CI profile per atom.
-  Mixing profiles distorts only balance, never I1.
+  The fallback estimate counts in the total and in the assignment. It never sets the local
+  largest-atom floor (Design J, amendment 2): CI seconds are not local seconds (the acceptance
+  matrix is about 207 s on CI and 81 s locally), and a CI-sized floor shrinks the local shard
+  count. Mixing profiles can change the shard count and the balance, never I1.
 
 **Failure tolerance.** A timing file that is missing, unreadable or schema-invalid is replaced
 by the defaults with one warning line naming the file. The same holds for any file whose
@@ -512,7 +531,7 @@ corrupt timing file yields a valid partition.
 
 ```
 total      = Σ estimate(atom)                      over the selected atoms
-largest    = max estimate(atom)
+largest    = max estimate(atom)                    over the floor atoms (below; 0 if there are none)
 effective  = max(target_shard_seconds, largest)   # no shard can be shorter than its largest atom
 N          = clamp(ceil(total / effective), min_shards, max_shards)
 N          = min(N, number_of_atoms)               # never an empty shard
@@ -520,12 +539,21 @@ N          = min(N, number_of_atoms)               # never an empty shard
 
 `--shards N` pins the count. A selection with one atom plans one shard.
 
+**Floor atoms** (amendment 2, Design J). For the `ci` profile, every non-exclusive selected
+atom is a floor atom, exactly as before. For the `local` profile, a floor atom is one whose
+estimate comes from a local-machine timing profile: the first timing file that records the atom
+is not the committed `tools/test_timings.json`. An atom that is estimated from the committed CI
+profile, or from a per-test mean or a default because no file records it, still counts in
+`total` and in the assignment, but not in `largest`. With no local profile at all, `effective`
+is the target.
+
 Parameter values, justified by the Investigation:
 
 | profile | `target_shard_seconds` | `min_shards` | `max_shards` | resulting N at the base commit |
 | --- | --- | --- | --- | --- |
 | `local` | 60 | 2 | `min(8, os.cpu_count())` | total ≈ 594 s, largest = conformance acceptance matrix ≈ 81 s → effective 81 → `ceil(594/81)` = 8 → **8** |
 | `ci` | 180 | 2 | 16 | total ≈ 665 + 344 ≈ 1009 s (CI seconds), largest ≈ 185 s → effective 185 → **6** |
+| `local`, no local profile (amendment 2) | 60 | 2 | `min(8, os.cpu_count())` | total ≈ 968 s from the committed CI profile, no floor atom → effective 60 → `ceil(968/60)` = 17 → **8** |
 
 The prompt's suggested starting points were a 240 s target, a minimum of 2 and maxima of 8 local
 and 16 CI. The measurements refine them:
@@ -948,6 +976,69 @@ This is the trade the operator chose (D12). Giving `resume` a `--timeout` of its
 Controller behaviour beyond the constant, so it is not part of this amendment. It is deferred with
 the rest of the drain-bound configurability (D13).
 
+### J. The local largest-atom floor (CP6B, amendment 2)
+
+**Problem** (LIR4-001, local implementation review round 4). `shard_count` computes
+`effective = max(target, largest estimate)`. Locally, the estimates come from the local profile,
+falling back per atom to the committed `tools/test_timings.json`. Until the functional review,
+that file held local-machine seconds, so the fallback was harmless. F1 (`9501fbb`) refreshed it
+from CI, as §B intended, and the acceptance matrix's committed estimate became 207 s, its CI
+time; locally it takes about 81 s. Whenever the local profile has no entry for the matrix, that
+CI estimate becomes the local floor:
+
+- **Cold cache** (a fresh clone, or `XDG_CACHE_HOME` cleared): the reviewer measured 5 shards
+  and 145.9 s for the full selection, over the 120 s bar. Before F1 the same case planned 8.
+- **A local profile without the matrix atom** (an operator who has run only `run_tests.py tests`
+  or narrow selections): 4 shards, with estimates of 207/195/195/195 s.
+- A warm, complete local profile is unaffected: 8 shards, 86.9 s.
+
+The first run on every clone misses the bar. It also contradicts §B ("mixing profiles distorts
+only balance") and D9.
+
+**Change.** For the `local` profile, only atoms whose estimate comes from a local-machine timing
+file are floor atoms (§C, "Floor atoms"). `build_plan` knows each timing file's path, so it marks
+an atom local-sourced when the first file that records it is not `repo_root /
+tools/test_timings.json`, and it passes `shard_count` the floor atoms' estimates alongside all
+the estimates. `shard_count` takes the floor from that list, and from all the estimates when it
+is not given, which is what the `ci` profile does. The committed estimate still counts in
+`total`, so a cold-cache plan still uses the CI profile's relative weights, and LPT still gives
+the matrix a shard of its own.
+
+**Evidence** (2026-09-27, at `68ffbbb`, on this machine; a scratch-worktree prototype of exactly
+this change). The shard count on the full selection with the committed profile, from
+`build_plan` with `profile_parameters("local", cpu_count=n)`, where "partial" is this machine's
+local profile minus the matrix atom:
+
+| local profile | CPUs | before J | after J |
+| --- | --- | --- | --- |
+| none (cold) | 8 / 16 / 4 | 5 / 5 / 4 | **8 / 8 / 4** |
+| partial | 8 / 16 / 4 | 4 / 4 / 4 | **8 / 8 / 4** |
+| complete | 8 / 16 / 4 | 8 / 8 / 4 | 8 / 8 / 4 (unchanged) |
+
+The CI plan of the CI placement from the committed profile has the same digest before and after
+(`786666d77b24...`, 5 shards). Two full runs of the prototype passed:
+
+- cold cache: 8 shards, 2061 tests, 87.8 s, balance 1.08, the matrix alone on shard 0;
+- partial profile: 8 shards, 87.3 s, balance 1.08.
+
+**What J preserves.**
+
+- CI planning: the `ci` profile's floor is every atom, as before, so every CI plan and digest is
+  unchanged. `timings_for("ci")` reads only the committed file anyway.
+- The estimates themselves, `estimate_atoms`, the LPT assignment, the exclusive shard, the plan
+  schema and its digest inputs. A local plan's `N` can change, and `N` is an output that the
+  digest already covers.
+- A warm, complete local profile gives the same count as before, because every atom is then a
+  floor atom.
+- I1-I4: the floor decides how many shards there are, never which tests run.
+
+**Cost.** Without local data, the local count follows `total / target`, and `total` is in CI
+seconds, which are larger than local ones. So a cold cache can plan more shards than a warm one
+would, up to `min(8, CPUs)`, for a small selection. `run_tests.py conformance` on a cold cache
+plans 6 shards instead of 2, for example. Each extra shard costs one process start-up, and the
+CPU cap keeps it at one shard per CPU, the measured-safe default. The next run plans from the
+local profile that this run wrote.
+
 ## Checkpoints
 
 <!-- generated by workflow_state.render_registry_markdown(registry) -- do not edit by hand -->
@@ -961,7 +1052,8 @@ the rest of the drain-bound configurability (D13).
 | CP5B | Ownership provenance follows the current basis (amendment 0, Design H): _Ownership.scan relabels a still-matching recorded entry's source from the current scan's basis (group, tag, adopted; the recorded fallback keeps it) while pid, start_ticks, cmdline and the seen sample stay first-sighting; _Supervision._signature includes source so a relabel publishes; OwnershipTest reads the last observed ppid and the last DRAINING entry; a gated escapee deterministically reproduces the pre-setsid first sighting; targeted stress clears IR1-003 | CP5 | 2 | 1 |
 | CP5C | Drain detach bound 600 -> 10800 s (amendment 1, Design I): controller/worker.py DRAIN_DETACH_SECONDS = 10800 as an interim constant with every other drain semantic unchanged; tests/test_observe.py's hard-coded detach text; README and ADR 0004 state the new bound; docs/ROADMAP.md records that configurability of the drain bound and other Controller tunables is deferred to the next settings/configuration milestone | CP5B | 1 | 1 |
 | CP6 | CI integration: tools/ci_workflows.py's validate.yml model gains plan / tests (dynamic fromJSON matrix, digest-checked exec-shard) / tests-result (always-run aggregate and coverage check) jobs, the hand-curated CONTROLLER_SHARDS and separate conformance matrix are removed, package reads the placement, workflows re-rendered, test_ci_workflows updated | CP4 | 2 | 1 |
-| CP7 | Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and amendment 1's release-note line for the drain bound, and re-verification on the amended head | CP5B, CP5C, CP6 | 2 | 1 |
+| CP6B | Local largest-atom floor from local-machine estimates only (amendment 2, Design J): for the local profile, build_plan passes shard_count only the estimates of atoms whose first recording timing file is not the committed tools/test_timings.json, so CI-fallback estimates still count in the total and the assignment but never set the floor; CI planning unchanged; regressions on the real inventory and committed profile that an empty and a matrix-less local profile both plan 8 shards on 8 CPUs; README and ADR 0005 state the rule and correct 'only balance' | CP6 | 1 | 1 |
+| CP7 | Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) amendment 1's release-note line for the drain bound, amendment 2's cold-cache measurement (no local profile), and re-verification on the amended head | CP5B, CP5C, CP6B | 2 | 1 |
 
 <!-- CP1 -->
 ### CP1 -- inventory, atoms and selection
@@ -1189,6 +1281,46 @@ partition, the conformance family equal to the managed workflow, the artifact up
 names, and `--check` clean.
 <!-- /CP6 -->
 
+<!-- CP6B -->
+### CP6B -- local largest-atom floor from local-machine estimates only (amendment 2)
+
+Files:
+- `tools/test_shards.py`: `shard_count` takes an optional list of floor estimates (all the
+  estimates when it is omitted); `build_plan`, for the `local` profile, passes the estimates of
+  the atoms whose first recording timing file is not the committed profile; the module docstring
+  and both docstrings state the rule (Design J). Nothing else changes;
+- `tests/test_test_shards.py`: the tests below;
+- `README.md`: the "Timings" bullet says that a CI-profile fallback estimate never sets the local
+  largest-atom floor, and that a stale or missing entry costs wall time (shard count and
+  balance), never coverage. The same correction applies to the CI paragraph's "A stale or missing
+  entry only costs balance";
+- `docs/adr/0005-adaptive-test-sharding.md`: "Timing is advisory" and "Planning" give the floor
+  rule and correct "a stale profile costs balance only". One sentence names amendment 2 and
+  LIR4-001 as the reason;
+- `docs/ACTIVE_MILESTONE.md`: the amendment-2 record.
+
+Tests:
+- `shard_count` with a floor list smaller than the largest estimate plans `ceil(total / target)`,
+  with the floor list omitted it is unchanged, and an empty floor list makes `effective` the
+  target;
+- `build_plan` with the `local` profile, a local timing file and a committed one under a temporary
+  repository root: an atom recorded only in the committed file does not set the floor, and the
+  same atom recorded in the local file does. With the `ci` profile, the same committed atom sets
+  the floor;
+- the amendment's two regressions, both on the real inventory and the committed
+  `tools/test_timings.json`, with `profile_parameters("local", cpu_count=8)` and
+  `timings_for("local", ...)` against a temporary `XDG_CACHE_HOME`: (a) no local profile plans
+  **8** shards; (b) a local profile that records every committed atom except the acceptance
+  matrix, with the committed seconds, plans **8** shards. Both plan fewer than 8 without Design J
+  (5 and 5 with these inputs), which is checked once by reverting the `build_plan` hunk;
+- the CI plan of the CI placement from the committed profile is still the count the formula
+  gives over every atom, with the matrix setting the floor.
+
+Verification: `tests.test_test_shards`, `tests.test_run_tests`, `tests.test_ci_workflows`, the
+full selection through `tools/run_tests.py` at defaults, and once with an empty temporary
+`XDG_CACHE_HOME` (8 shards, within the 120 s bar), and `tools/ci_workflows.py --check`.
+<!-- /CP6B -->
+
 <!-- CP7 -->
 ### CP7 -- documentation, measurement and full verification (terminal checkpoint)
 
@@ -1218,11 +1350,16 @@ revalidation edits:
 Amendment 1 adds one item: the roadmap entry's release-note line also names the drain detach
 bound, 600 s to 10800 s, as an interim value with its configurability deferred (D12).
 
+Amendment 2 adds no documentation of its own to CP7 (CP6B carries it). CP7 re-runs its
+verification and measurement on the amended head, and the performance table gains the
+cold-cache row. `docs/ACTIVE_MILESTONE.md` records the new measurements.
+
 Verification and measurement:
 - the full suite serially, both through `python3 -m unittest discover -s tests -t .` and through
   `run_tests.py --serial`, compared id for id;
 - the full selection through `run_tests.py` at defaults, 3 times, recording wall time, per-shard
   walls, the balance ratio and the largest atom;
+- the full selection 3 times more, each with a fresh, empty `XDG_CACHE_HOME` (amendment 2);
 - the stress protocol (G) again, on the amended head;
 - the packaged-runtime suite under `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`;
 - `tools/ci_workflows.py --check`;
@@ -1237,6 +1374,7 @@ bundle's `TEST_RESULTS.md`:
 | measure | baseline | acceptance bar |
 | --- | --- | --- |
 | full selection (controller + conformance), local defaults | ~602 s serial (483 + 119) | median of 3 runs **≤ 120 s** |
+| the same, with no local profile (each run with a fresh, empty `XDG_CACHE_HOME`; amendment 2) | 145.9 s, 5 shards, at `b2650d4` (LIR4-001) | median of 3 runs **≤ 120 s**, planned at `min(8, CPUs)` shards |
 | controller-only selection (`tests`), local defaults | 483 s serial | median of 3 runs **≤ 90 s** |
 | balance ratio, local defaults | n/a | `max/mean` shard wall **≤ 1.25**, or the max shard equals the largest atom's own time ± 10% |
 | sharded vs serial id set | n/a | identical, every run (I2) |
@@ -1291,8 +1429,14 @@ not move.
 - **D8 CI placement is unchanged.** `test_integration_disposable_repo`'s three non-gated classes
   still do not run in CI, as today. Running them would add coverage, but it would also run
   `git status` against the checkout. That is a separate decision.
-- **D9 The committed timing seed is local-machine data** until the functional review's first CI
-  run refreshes it. Only balance is affected (I3).
+- **D9 The committed timing seed was local-machine data** until the functional review's first CI
+  run refreshed it (F1, `9501fbb`). Its provenance never affects which tests run (I3), but it
+  can affect the shard count as well as the balance, because the estimates set both `total` and
+  the largest-atom floor (§C). Revision 7 corrects this decision's earlier "only balance is
+  affected", which LIR4-001 disproved: CI estimates used as the local fallback set a CI-sized
+  local floor. Design J (D14) removes that one effect. A committed estimate still counts in a
+  local plan's total, so it can still change the local count, but only through `total / target`,
+  which the CPU cap bounds.
 - **D10 `validate`'s job names change**, so an external branch-protection rule would need
   updating. None is configured, and the README already says branch protection is not required.
 - **D11 Fix the first-sighting race now, rather than defer it** (amendment 0). The external
@@ -1326,6 +1470,18 @@ not move.
   points to it. *Alternative:* a new numbered roadmap
   section for Controller settings. The operator may prefer that; it changes only where the line
   sits.
+
+- **D14 Remedy (c) for LIR4-001: only local-machine estimates set the local floor** (amendment
+  2, the operator's choice). The review offered three remedies. The operator chose (c), and the
+  plan does not reopen that choice. For the record, the other two were modelled on an 8-CPU
+  machine before the amendment was requested:
+  - (a) scaling the CI profile to local seconds cannot fix the cold case. While the scaled
+    largest estimate stays above the target, the count is `ceil(total / largest)`, and a
+    uniform scale leaves that ratio unchanged (968 / 207 gives 5);
+  - (b) committing a local-machine seed as a second file (the pre-F1 file) also plans 8 in both
+    cases. But it adds a second committed profile that needs its own refresh discipline.
+
+  (c) needs no new file and no parameter, and it leaves CI untouched.
 
 `docs/TECHNICAL_DECISIONS.md` does not exist in this repository, so there are no "Open decision"
 rows to check. No ADR decision is reversed. ADR 0002 records "the Controller suite in seven named
@@ -1370,6 +1526,9 @@ amendment 0 reconciles to `NEEDS_REVALIDATION` re-runs its own tests and the ful
 the amended head (see "Revision 4").
 CP5C runs the four classes that patch the bound, `tests.test_observe` and the full selection,
 and checks that `job`'s detach message states `10800 s` (Design I).
+CP6B runs the planner and runner tests, `tests.test_ci_workflows`, `tools/ci_workflows.py
+--check`, and the full selection twice: at defaults, and with an empty `XDG_CACHE_HOME`
+(Design J).
 Nothing needs the real `claude`. Package-index access **is** needed, as it already is at the base
 commit: `fixtures.editable_install` runs a build-isolated `pip install -e` that fetches the build
 backend, and it is used by `tests.test_identity` (lines 321 and 357), `tests.test_handoff` (529),
@@ -1388,8 +1547,11 @@ dependency.
     release only.
 - **Developer workflow.** `python3 -m unittest ...` and `cd scripts && python3 <suite>` are
   unchanged (I7). The runner is additive.
-- **CI.** The first CI run on the milestone branch uses the seeded timing file. A missing or
-  stale entry only degrades balance.
+- **CI.** The first CI run on the milestone branch used the seeded timing file, and F1
+  refreshed it from CI. A missing or stale entry can change the shard count and the balance,
+  never which tests run.
+- **Local timing cache.** Design J needs no migration. An existing local profile is read as
+  before, and a missing one now plans from the target rather than from a CI-sized floor.
 - **Artifacts.** Results directories live under `$TMPDIR` and the local timing cache under
   `$XDG_CACHE_HOME`. Nothing new is written into the checkout, so there is no `.gitignore`
   change.
@@ -1585,3 +1747,52 @@ No checkpoint was added, removed or re-ordered. No requirement changed, and the 
 mapping were regenerated at revision 6. Revision 5's reconciliation table still holds, because
 the reconciliation compares against revision 4's approved document: CP1-CP5, CP5B and CP6
 `retained`, CP5C `new`, CP7 `needs_revalidation`.
+
+### Revision 7 (plan amendment 2, local implementation review round 4, LIR4-001)
+
+This revision is not a plan-review round. The operator requested amendment 2
+(`amendment_history[2]`, requested at `68ffbbb`, amendment base `f358409`) after
+`/apply-implementation-review` found that LIR4-001 could not be fixed as a bounded fix: every
+remedy contradicted approved plan text (§B's fallback, §C's formula and D9), and
+`APPLYING_REVIEW_FEEDBACK` has no path to `AMENDING_PLAN`. The operator recovered the item to
+`IMPLEMENTING` (`f358409`) and then requested the amendment. The recorded reason names remedy
+(c), 8-shard regressions for an empty and for a matrix-less local profile on an 8-CPU machine,
+corrections to the design text, §B, §C, D9, the README and the ADR, and no broader planner
+redesign.
+
+**What changed:**
+
+- **Scope.** Design J and the new checkpoint CP6B. The header and a new Non-goal state its limit
+  (only the local floor changes).
+- **Design text.** §B's committed-profile bullet records F1's refresh. Its drift sentence and
+  its "Estimates" fallback bullet say what the fallback may and may not affect. §C gains "Floor
+  atoms" and a cold-cache row in the parameter table.
+- **Decisions.** D9 is corrected, and D14 (remedy (c), with (a) and (b) as modelled
+  alternatives) is new.
+- **Performance acceptance.** A cold-cache row: median of 3 runs, each with a fresh
+  `XDG_CACHE_HOME`, within 120 s.
+- **Checkpoints.**
+  - CP6B is new. It depends on CP6, the last checkpoint that edits `tools/`, so it starts from
+    the current planner, runner and CI model, including the functional review's F1-F3 commits.
+  - CP7 now depends on CP5B, CP5C and CP6B (CP6 is reached through CP6B). Its name and section
+    gain the cold-cache measurement.
+  - No checkpoint was removed or renamed, and no other checkpoint's row or anchored section
+    changed. CP3's formula text in its row is still accurate for CI, and "Floor atoms" refines
+    it for local planning.
+- **Requirements.** R17 (the local floor ignores CI-fallback estimates) is new, mapped to CP6B and
+  CP7.
+- **Not in this amendment.** The round-4 review's optional findings stay open and outside the
+  recorded reason: LIR4-O1 (the replay path hint for the downloaded `test-plan` artifact),
+  LIR4-O2 (one over-long README line) and LIR4-O3 (whether the L2 bar's "baseline" is 3 min
+  23 s or 4 min 8 s, which the operator settles at functional review).
+
+**Reconciliation, predicted from the `/approve-review plan` algorithm rather than claimed.**
+Revision 6's approved document has anchors, so unchanged checkpoints keep their status.
+
+| checkpoint | reconciled | status after approval |
+| --- | --- | --- |
+| CP1-CP6, CP5B, CP5C | `retained` (row and anchored section unchanged) | `COMPLETE` |
+| CP6B | `new` | picked up next: implement Design J |
+| CP7 | `needs_revalidation` (row and section changed) | `NEEDS_REVALIDATION` |
+
+The implementation order is therefore CP6B, then CP7.

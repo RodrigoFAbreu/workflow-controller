@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-adaptive-test-sharding",
-  "plan_revision": 6,
+  "plan_revision": 7,
   "checkpoints": [
     {
       "id": "CP1",
@@ -74,12 +74,21 @@
       "session_target": 1
     },
     {
+      "id": "CP6B",
+      "name": "Local largest-atom floor from local-machine estimates only (amendment 2, Design J): for the local profile, build_plan passes shard_count only the estimates of atoms whose first recording timing file is not the committed tools/test_timings.json, so CI-fallback estimates still count in the total and the assignment but never set the floor; CI planning unchanged; regressions on the real inventory and committed profile that an empty and a matrix-less local profile both plan 8 shards on 8 CPUs; README and ADR 0005 state the rule and correct 'only balance'",
+      "depends_on": [
+        "CP6"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
       "id": "CP7",
-      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) and amendment 1's release-note line for the drain bound, and re-verification on the amended head",
+      "name": "Documentation, measurement and full verification (terminal checkpoint): README development and CI sections, ADR 0005 adaptive test sharding, docs/ROADMAP.md entry, serial-vs-sharded id comparison, the stress protocol re-run, packaged-runtime suite, ci_workflows --check, the local performance acceptance measurements, and amendment 0's documentation (the first-sighting race closed by Design H, I10, README timing-refresh wording) amendment 1's release-note line for the drain bound, amendment 2's cold-cache measurement (no local profile), and re-verification on the amended head",
       "depends_on": [
         "CP5B",
         "CP5C",
-        "CP6"
+        "CP6B"
       ],
       "complexity": 2,
       "session_target": 1

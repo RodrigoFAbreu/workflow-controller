@@ -110,6 +110,13 @@
         "CP5C",
         "CP7"
       ]
+    },
+    "R17": {
+      "description": "Local planning's largest-atom floor uses only local-machine timing estimates: a committed CI-profile fallback estimate counts in the total but never sets the local floor, so an empty or partial local profile still plans min(8, CPUs) shards; CI planning unchanged (amendment 2, LIR4-001)",
+      "checkpoint_ids": [
+        "CP6B",
+        "CP7"
+      ]
     }
   }
 }

@@ -212,6 +212,10 @@ mode (the lifecycle lock's included).
       descendant's pid, which it keeps through its ``setsid`` and ``exec
       -a``, so a test can find it by pid: a supervisor records the command
       line it first sees, which can be a stage before the ``exec -a``);
+      ``orphan_gate`` (``setsid`` only), a FIFO path, holds the descendant
+      in the worker's group, blocked opening the FIFO, until a writer opens
+      it, and only then execs ``setsid`` in place, so a test can see it
+      owned by group first (adaptive-test-sharding CP5B);
     - ``{"step": "task_stop", "id"}``: a worker-initiated stop, P8's
       statuses (``killed``/``stopped``) mid-turn, and no notification turn;
     - ``{"step": "await", "id", "notify"}``: wait, mid-turn, for task
@@ -956,7 +960,15 @@ class StreamingSession:
         # a group leader, so ``setsid`` calls setsid(2) in place, and ``bash
         # -c 'exec -a ...'`` execs in place.
         record = f" echo $! > {shlex.quote(step['orphan_pid_file'])};" if step.get("orphan_pid_file") else ""
-        if orphan == "setsid":
+        gate = step.get("orphan_gate")
+        if gate and orphan != "setsid":
+            raise ValueError("orphan_gate needs the setsid orphan mode")
+        if gate:
+            # ``read`` is a builtin, and ``exec`` keeps the pid: the
+            # descendant is the same process before and after its setsid.
+            spawn = (f"({{ read _ < {shlex.quote(gate)}; exec setsid bash -c {inner}; }}"
+                     f" </dev/null >/dev/null 2>&1 &{record})")
+        elif orphan == "setsid":
             spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &{record})"
         elif orphan == "reparent":
             spawn = f"(bash -c {inner} </dev/null >/dev/null 2>&1 &{record})"

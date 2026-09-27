@@ -35,6 +35,7 @@ no retries.
 | CP3 -- adaptive deterministic planner | complete, revalidated at revision 4 | `b0eb707`, revalidation: this checkpoint's commit |
 | CP4 -- executor, local runner and aggregation | complete, revalidated at revision 4 | `55c855b`, revalidation: this checkpoint's commit |
 | CP5 -- serialization registry and timing-flake hardening | complete, revalidated at revision 4 | `311078f`, revalidation: this checkpoint's commit |
+| CP5B -- ownership provenance follows the current basis (amendment 0) | complete (sharded full selection PASS, 2056 tests, 148 s) | this checkpoint's commit |
 | CP6 -- CI integration | complete | `14bbdcc` |
 | CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
 
@@ -273,6 +274,9 @@ no retries.
     ownership. The alternative is a Controller change: refresh `source`/`cmdline` on later
     scans. This milestone does not change `controller/`. **Not fixed; it needs a decision.**
     It shows only at 8 copies on one CPU, never in the stress protocol's 26 runs.
+
+    *Closed by CP5B* (amendment 0, Design H): the operator chose the Controller fix, and the
+    same reproduction now gives 0 failures in 48 runs.
 - **Candidate 2, the `CheckpointPredicateUnitTest` error: not reproduced.** 40 targeted runs and
   all 26 protocol runs were clean. If it recurs, the executor's recording result now captures
   its traceback in `shard-<i>.json` and the summary.

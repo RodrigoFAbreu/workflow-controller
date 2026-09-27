@@ -1009,11 +1009,11 @@ class GroupDrainTest(_SpawnedWorkerCase):
 _TRAP_COMM = "claude) Z 1 (x y"
 
 
-def _stat_line(pid: int, *, state: str, pgrp: int, start_ticks: int, comm: str = _TRAP_COMM) -> str:
-    """A ``/proc/<pid>/stat`` line: field 3 state, field 5 pgrp, field 22
-    starttime, and a few more fields after it."""
+def _stat_line(pid: int, *, state: str, pgrp: int, start_ticks: int, comm: str = _TRAP_COMM, ppid: int = 1) -> str:
+    """A ``/proc/<pid>/stat`` line: field 3 state, field 4 ppid, field 5
+    pgrp, field 22 starttime, and a few more fields after it."""
     after = [
-        state, "1", str(pgrp), str(pgrp), "0", "-1", "4194560", "0", "0", "0", "0",
+        state, str(ppid), str(pgrp), str(pgrp), "0", "-1", "4194560", "0", "0", "0", "0",
         "3", "1", "0", "0", "20", "0", "1", "0", str(start_ticks), "1000000", "300",
     ]
     return f"{pid} ({comm}) " + " ".join(after) + "\n"
@@ -1031,9 +1031,10 @@ class _FakeProc:
         os.symlink(str(os.getpid()) if own_namespace else "1", self.root / "self")
 
     def process(self, pid: int, *, state: str, pgrp: int, start_ticks: int = 100,
-                threads: dict[int, str] | None = None) -> "_FakeProc":
+                threads: dict[int, str] | None = None, ppid: int = 1) -> "_FakeProc":
         (self.root / str(pid)).mkdir(exist_ok=True)
-        (self.root / str(pid) / "stat").write_text(_stat_line(pid, state=state, pgrp=pgrp, start_ticks=start_ticks))
+        (self.root / str(pid) / "stat").write_text(
+            _stat_line(pid, state=state, pgrp=pgrp, start_ticks=start_ticks, ppid=ppid))
         for tid, thread_state in (threads or {}).items():
             task = self.root / str(pid) / "task" / str(tid)
             task.mkdir(parents=True, exist_ok=True)
@@ -2190,6 +2191,140 @@ worker.launch("inner task", cwd=out_dir, permission_mode="auto", timeout=60, cla
 '''
 
 
+def _open_gate(gate: Path, *, deadline: float | None = None) -> None:
+    """Release a fake ``bash_bg`` ``orphan_gate``: open its FIFO for writing
+    and close it, so the escapee's blocked open returns and its ``read``
+    sees end of file. It retries (``ENXIO``: no reader yet) until
+    ``deadline``. Without one it is the cleanup form: one ``O_RDWR`` open,
+    which never blocks and releases an escapee already waiting."""
+    if deadline is None:
+        with contextlib.suppress(OSError):
+            os.close(os.open(gate, os.O_RDWR | os.O_NONBLOCK))
+        return
+    while True:
+        try:
+            os.close(os.open(gate, os.O_WRONLY | os.O_NONBLOCK))
+            return
+        except OSError as exc:
+            if exc.errno != errno.ENXIO or time.monotonic() >= deadline:
+                return
+        time.sleep(0.01)
+
+
+class OwnershipProvenanceTest(unittest.TestCase):
+    """Design H (adaptive-test-sharding CP5B): an owned entry's ``source``
+    follows the basis of the latest scan that found it, while its identity,
+    its ``cmdline`` and the first-sighting sample do not change, and nor
+    does which processes are owned (I10). Over a fixture ``/proc``."""
+
+    TAG = "cp5b-tag"
+    PGID = 4_100_000  # the worker's group, not a real process here
+    ESCAPEE = 4_100_001
+
+    def setUp(self) -> None:
+        self.fake = _FakeProc(self)
+        self.enterContext(self.fake.patch())
+        self.enterContext(unittest.mock.patch.dict(worker._ADOPTED))
+        self.me = os.getpid()
+
+    def _ownership(self, *, adopting: bool = True) -> worker._Ownership:
+        process = worker.WorkerProcess(pid=self.PGID, pgid=self.PGID, start_ticks=1, boot_id=None,
+                                       pid_namespace=None, hostname=None, machine_id=None)
+        return worker._Ownership(tag=self.TAG, worker_process=process, anchor_pid=None, baseline=set(),
+                                 adopting=adopting)
+
+    def _process(self, pid: int, *, pgrp: int, tag: bool, ppid: int = 1, start_ticks: int = 500,
+                 cmdline: str = "bash -c gated") -> None:
+        self.fake.process(pid, state="S", pgrp=pgrp, start_ticks=start_ticks, ppid=ppid)
+        environ = f"{worker.OWNERSHIP_VAR}={self.TAG}\0" if tag else "PATH=/bin\0"
+        self.fake.write(f"{pid}/environ", environ)
+        self.fake.write(f"{pid}/cmdline", cmdline.replace(" ", "\0") + "\0")
+
+    def _first_sighting(self) -> worker._Ownership:
+        ownership = self._ownership()
+        self._process(self.ESCAPEE, pgrp=self.PGID, tag=True)
+        ownership.scan()
+        self.assertEqual([e["source"] for e in ownership.entries()], ["group"])
+        return ownership
+
+    def test_an_escapee_that_left_the_group_with_the_tag_is_relabelled_tag(self) -> None:
+        ownership = self._first_sighting()
+        self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=True, cmdline="fake-claude-orphan 2")
+        ownership.scan()
+        self.assertEqual(ownership.entries(), [{"pid": self.ESCAPEE, "start_ticks": 500, "source": "tag",
+                                                "cmdline": "bash -c gated"}])
+        self.assertEqual([e["source"] for e in ownership.sample], ["group"])
+
+    def test_without_the_tag_an_adopted_escapee_is_relabelled_adopted(self) -> None:
+        ownership = self._first_sighting()
+        self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False, ppid=self.me)
+        ownership.scan()
+        [entry] = ownership.entries()
+        self.assertEqual((entry["pid"], entry["start_ticks"], entry["source"]), (self.ESCAPEE, 500, "adopted"))
+
+    def test_a_process_found_only_by_its_record_keeps_its_recorded_source(self) -> None:
+        ownership = self._first_sighting()
+        self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False)
+        ownership.scan()
+        self.assertEqual([e["source"] for e in ownership.entries()], ["group"])
+
+    def test_a_changed_start_ticks_still_drops_the_entry(self) -> None:
+        ownership = self._first_sighting()
+        self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False, start_ticks=501)
+        ownership.scan()
+        self.assertEqual(ownership.entries(), [])
+
+    def test_the_relabel_changes_no_membership(self) -> None:
+        # The same /proc sequence, scanned with the relabel and with it
+        # undone after every scan (the pre-H ``entry = recorded``): the
+        # membership fields agree at every step.
+        daemon, stranger = self.ESCAPEE + 1, self.ESCAPEE + 2
+        steps = [
+            lambda: (self._process(self.ESCAPEE, pgrp=self.PGID, tag=True),
+                     self._process(daemon, pgrp=self.PGID, tag=True, cmdline="gpg-agent --daemon"),
+                     self._process(stranger, pgrp=stranger, tag=False)),
+            lambda: self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=True),
+            lambda: self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False, ppid=self.me),
+            lambda: self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False),
+            lambda: self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False, start_ticks=501),
+        ]
+
+        def membership(ownership: worker._Ownership) -> tuple:
+            return (sorted(ownership.owned), ownership.outside_group, ownership.excluded_entries(),
+                    ownership.seen_count, ownership.verifiable)
+
+        relabelled, first_seen = self._ownership(), self._ownership()
+        labels: dict[int, str] = {}
+        for step in steps:
+            step()
+            relabelled.scan()
+            first_seen.scan()
+            for pid, entry in first_seen.owned.items():
+                entry["source"] = labels.setdefault(pid, entry["source"])
+            self.assertEqual(membership(relabelled), membership(first_seen))
+        self.assertEqual(relabelled.seen_count, 1)
+        self.assertEqual([e["pid"] for e in relabelled.excluded_entries()], [daemon])
+
+    def test_a_relabel_changes_the_signature_and_is_published(self) -> None:
+        supervision = worker._Supervision.__new__(worker._Supervision)
+        supervision.state, supervision.published = worker.DRAINING, None
+        published: list[str] = []
+        supervision.on_state_change = lambda state, details: published.append(
+            details["owned_processes"][0]["source"])
+        waiting_on = {"tasks": [], "wakeups": [], "command_lifecycles": []}
+
+        def details(source: str) -> dict:
+            return {"owned_processes": [{"pid": self.ESCAPEE, "start_ticks": 500, "source": source, "cmdline": "x"}],
+                    "excluded_processes": [], "scan": "verified", "waiting_on": waiting_on}
+
+        group, tag = details("group"), details("tag")
+        self.assertNotEqual(supervision._signature(group), supervision._signature(tag))
+        for current in (group, group, tag, tag):
+            supervision.details = lambda current=current: current
+            supervision._publish()
+        self.assertEqual(published, ["group", "tag"])
+
+
 class OwnershipTest(_SupervisedCase):
     """Owned descendants (plan C, step 3): by the process group, the tag,
     adoption and the record of what was seen owned; recognised daemons
@@ -2197,7 +2332,10 @@ class OwnershipTest(_SupervisedCase):
     and nested Controllers."""
 
     def _orphan(self, details_list: list[dict], pid: int) -> dict:
-        for details in details_list:
+        """The orphan's entry in the **last** publication that lists it: its
+        ``source`` follows its current basis (Design H), so the last one
+        is the escapee's basis after its ``setsid``."""
+        for details in reversed(details_list):
             for entry in details["owned_processes"]:
                 if entry["pid"] == pid:
                     return entry
@@ -2210,7 +2348,9 @@ class OwnershipTest(_SupervisedCase):
             for entry in details["owned_processes"]:
                 stat = Path(f"/proc/{entry['pid']}/stat")
                 with contextlib.suppress(OSError):
-                    seen.setdefault(entry["pid"], int(stat.read_text().rsplit(")", 1)[1].split()[1]))
+                    # The last ppid: the spawn subshell has exited, and the
+                    # escapee has been reparented, before the worker exits.
+                    seen[entry["pid"]] = int(stat.read_text().rsplit(")", 1)[1].split()[1])
 
         pid_file = self.dir / "orphan.pid"
         result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": orphan, "orphan_seconds": 2,
@@ -2241,6 +2381,47 @@ class OwnershipTest(_SupervisedCase):
         self.assertEqual(entry["source"], "tag")
         self.assertNotEqual(ppids[entry["pid"]], os.getpid())
         self.assertTrue(process_fixtures.wait_until(lambda: not _running(entry["pid"]), timeout=5))
+
+    def test_a_gated_escapee_is_published_as_group_then_as_tag(self) -> None:
+        # The first-sighting race made deterministic (Design H): the
+        # escapee is held in the worker's group until it is seen owned by
+        # group, then released to setsid, and relabelled by a later scan.
+        gate, pid_file = self.dir / "gate", self.dir / "orphan.pid"
+        os.mkfifo(gate)
+        self.addCleanup(_open_gate, gate)  # never leaves the escapee blocked
+        seen_by_group = threading.Event()
+
+        def on_state(state: str, details: dict) -> None:
+            with contextlib.suppress(OSError, ValueError):
+                pid = int(pid_file.read_text())
+                if any(e["pid"] == pid and e["source"] == "group" for e in details["owned_processes"]):
+                    seen_by_group.set()
+
+        def release() -> None:
+            if seen_by_group.wait(timeout=20):
+                _open_gate(gate, deadline=time.monotonic() + 10)
+
+        releaser = threading.Thread(target=release, daemon=True)
+        releaser.start()
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": "setsid", "orphan_seconds": 3,
+                                "orphan_pid_file": str(pid_file), "orphan_gate": str(gate)}],
+                              [{"step": "text"}]], on_state=on_state, timeout=30)
+        releaser.join(timeout=10)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        pid = int(pid_file.read_text())
+        entries = [e for _at, _state, details in self.log for e in details["owned_processes"] if e["pid"] == pid]
+        sources = [e["source"] for e in entries]
+        self.assertTrue(sources, "the escapee was never published")
+        self.assertEqual(sources[0], "group", sources)
+        self.assertIn("tag", sources, "the escapee's setsid was never published")
+        first_tag = sources.index("tag")
+        self.assertEqual(set(sources[:first_tag]), {"group"}, sources)
+        self.assertEqual(set(sources[first_tag:]), {"tag"}, sources)
+        self.assertEqual({(e["pid"], e["start_ticks"]) for e in entries}, {(pid, entries[0]["start_ticks"])})
+        self.assertEqual({e["cmdline"] for e in entries}, {entries[0]["cmdline"]}, "cmdline is not the first-seen one")
+        for sampled in result.owned_processes_seen["sample"]:
+            if sampled["pid"] == pid:
+                self.assertEqual(sampled["source"], "group", "the sample is not first-sighting history")
 
     def test_a_recorded_process_stays_owned_after_it_passes_no_other_test(self) -> None:
         self.patch(worker, "_prctl", lambda *args: None)

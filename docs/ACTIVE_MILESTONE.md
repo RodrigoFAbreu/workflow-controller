@@ -145,11 +145,12 @@ The next steps are a fresh implementation-review round on the post-fix bundle
 
 ## Functional review checklist
 
-Round 2. Technical approval: `d1fa359` (implementation revision 5, reviewed head `f015b34`). Since
-round 1's checklist (`ae54962`), this head adds round 1's fixes F1-F3, amendment 1 (CP5C, drain
-detach bound 10800 s) and amendment 2 (CP6B, the local largest-atom floor, LIR4-001). Put findings
-in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`, replacing round 1's file there (it is already
-consumed).
+Round 3. Technical approval: `a5d9095` (implementation revision 6, reviewed head `8637685`). Since
+round 2's checklist (`a5a2220`), this head adds only round 2's two test-only fixes, F1 (`a7920ca`)
+and F2 (`a634dfe`); no product, planner, timing or CI-workflow file changed. The one item to
+re-test is **L1 over two or three CI runs**; the rest passed in round 2 and is optional. The suite
+now has 2070 tests (F1 added one). Put findings in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`,
+replacing round 2's file there (it is already consumed).
 
 **Setup.**
 
@@ -168,7 +169,7 @@ runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same
 
 | # | do | expect |
 | --- | --- | --- |
-| A | `python3 tools/run_tests.py` | Prints a plan (8 shards on 8+ CPUs, the acceptance matrix alone on shard 0), then per-shard progress. Ends `PASS` with 2069 tests in roughly 80-100 s, exit 0. The summary has `- coverage: exact; all 2069 planned tests ran once; 0 missing, 0 unplanned, 0 duplicate`. It prints a results directory under `$TMPDIR/workflow-controller-tests/<run_id>/` holding `plan.json`, `shard-<i>.json`, `shard-<i>.log` and `SUMMARY.md`. |
+| A | `python3 tools/run_tests.py` | Prints a plan (8 shards on 8+ CPUs, the acceptance matrix alone on shard 0), then per-shard progress. Ends `PASS` with 2070 tests in roughly 80-100 s, exit 0. The summary has `- coverage: exact; all 2070 planned tests ran once; 0 missing, 0 unplanned, 0 duplicate`. It prints a results directory under `$TMPDIR/workflow-controller-tests/<run_id>/` holding `plan.json`, `shard-<i>.json`, `shard-<i>.log` and `SUMMARY.md`. |
 | B | Run A again | The plan's `timing source` line lists `local-profile` ahead of `tools/test_timings.json`. The shard walls are about as balanced as before, or better. |
 | C | `python3 tools/run_tests.py tests.test_worker conformance:workflow_state_test.py` | Only those atoms are planned and run. PASS, exit 0. |
 | D | `python3 tools/run_tests.py tests.test_no_such_module` | Refused, naming the unmatched name. Exit 2, nothing run. |
@@ -178,16 +179,17 @@ runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same
 | H | Start A, press Ctrl-C after about 20 s | Every shard stops, and the runner exits with 130. Afterwards, `ps` shows no leftover `exec-shard`/`unittest` processes. |
 | I | In a scratch edit (not committed), add `self.fail("functional probe")` to one test, e.g. `test_clean_tree_materialises_commit_kind` in `tests/test_identity.py`, then run `python3 tools/run_tests.py tests.test_identity` | FAIL, exit 1. `SUMMARY.md` names the test, its traceback, its shard's log and two reproduction commands (`python3 -m unittest <id>` and `--replay ... --shard <i>`). The coverage line still says exact. There is no retry, and no `CI artifacts` line (that is CI-only). Revert the edit afterwards. |
 | J | Optional: `taskset -c 0-3 python3 tools/run_tests.py` | PASS on 4 CPUs (96-98 s at CP7), with no timing-flake failures. |
-| K | Optional: `python3 tools/run_tests.py --serial` (about 10 min) | PASS, 2069 ids. It proves the same set of tests as A. |
-| M | **New (CP6B, LIR4-001).** `XDG_CACHE_HOME=$(mktemp -d) python3 tools/run_tests.py` | One missing-file warning for the local profile, then **8 shards** (not LIR4-001's 5), the acceptance matrix alone on shard 0. PASS, 2069 tests, about 83 s (bar: 120 s). |
+| K | Optional: `python3 tools/run_tests.py --serial` (about 10 min) | PASS, 2070 ids. It proves the same set of tests as A. |
+| M | **New (CP6B, LIR4-001).** `XDG_CACHE_HOME=$(mktemp -d) python3 tools/run_tests.py` | One missing-file warning for the local profile, then **8 shards** (not LIR4-001's 5), the acceptance matrix alone on shard 0. PASS, 2070 tests, about 83 s (bar: 120 s). |
 | N | **New (CP6B, the CI side is unchanged).** `python3 tools/run_tests.py plan --profile ci --ci-placement` | Prints `"shard_count": 5` and digest `8850f631fa954d0c...`: the CI plan is the one round 1's F1 produced. |
 
-**CI flows** (Draft PR). Acceptance bars from the plan's "Performance acceptance". These are the
-flows round 1 asks to re-test (see "Functional review round 1" above).
+**CI flows** (Draft PR). Acceptance bars from the plan's "Performance acceptance". Round 3
+re-tests **L1** (see "Functional review round 2" above); L2-L4 passed in round 2 (critical path
+median 4:02) and need re-checking only if you want more L2 samples.
 
 | # | do | expect |
 | --- | --- | --- |
-| L1 | Push the branch and open (or update) the Draft PR | `Validate` runs `plan`, a `tests` matrix of **5** jobs, `tests-result` and `package`. All green. The job names differ from before (D10). |
+| L1 | **Re-test (round 2's F1, F2).** Push the branch to update the Draft PR, then re-run the workflow for two or three runs in total | Every run: `Validate` runs `plan`, a `tests` matrix of **5** jobs, `tests-result` and `package`, all green. In particular, no `OwnershipTest.test_a_gated_escapee_is_published_as_group_then_as_tag` failure (F1) and no `RunRecordCtrlCTest.test_sigint_marks_the_run_interrupted_and_keeps_the_orphan` failure (F2). Any other spontaneous test failure is a new finding. |
 | L2 | Read the `validate` critical path (the longest `plan` -> `tests` -> `tests-result` chain), ideally over 2-3 runs (re-run the workflow) | At most 5 min, and no more than 45 s slower than the 3 min 23 s baseline (run `36257702439`), i.e. at most 4 min 8 s. Projection from round 1: about 3 min 50 s to 4 min 45 s, median about 4 min 18 s, bounded by the acceptance-matrix shard. If only the 4 min 8 s half misses, that is a finding for you to route: accepting the 5-minute bar is a plan-level change, shortening the critical path is a remediation child. |
 | L3 | Open `tests-result`'s summary | A line `- coverage: exact; all N planned tests ran once; 0 missing, 0 unplanned, 0 duplicate`. The plan shows the acceptance matrix alone on one shard. The job uploads a `timings-ci` artifact. |
 | L4 | Push a throwaway commit with a deliberately failing test (as in I), then remove it | `tests-result` fails. Its summary names the test, the shard, the reproduction commands, and a line `- CI artifacts: the log is in `results-<i>`; `test-plan` holds `plan.json` for the replay command`. |
@@ -211,6 +213,10 @@ flows round 1 asks to re-test (see "Functional review round 1" above).
   exercising the detach needs a 3-hour drain. Both are covered by automated tests and by the
   stress runs. `resume` has no `--timeout`, and configurability of the bound is deferred to
   ROADMAP 1.4.
+- **Other known timing races (not fixed this round).** The round-6 local implementation review
+  noted, as optional, that `CrossProcessEventSeqTest` may have the same SIGKILL-before-
+  `worker_spawned` window F2 closed, and that a matched-wakeup assertion (0.9 s) can flake under
+  heavy load. Neither has failed on CI so far. If either fails in L1, report it as a finding.
 - There is no method-level splitting (D4), no retries, no timeout multiplier (D6), and
   `EXCLUSIVE_ATOMS` is empty (D5).
 

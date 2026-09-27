@@ -40,7 +40,7 @@ no retries.
 | CP5 -- serialization registry and timing-flake hardening | complete, revalidated at revision 4 | `311078f`, revalidation: this checkpoint's commit |
 | CP5B -- ownership provenance follows the current basis (amendment 0) | complete (sharded full selection PASS, 2056 tests, 148 s) | this checkpoint's commit |
 | CP5C -- drain detach bound 600 -> 10800 s (amendment 1) | complete (narrow 101 OK; sharded full selection PASS, 2056 tests, 101 s) | this checkpoint's commit |
-| CP6 -- CI integration | complete | `14bbdcc` |
+| CP6 -- CI integration | complete, revalidated at revision 6 (test_ci_workflows 59 OK; `ci_workflows --check` clean; sharded full selection PASS, 2056 tests, 92.8 s) | `14bbdcc`, revalidation: this checkpoint's commit |
 | CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
 
 ### CP7 -- documentation, measurement and full verification (complete)
@@ -108,6 +108,10 @@ no retries.
   (failing on leaks) as a follow-up.
 
 ### CP6 -- CI integration (complete)
+
+- **Revalidated at plan revision 6** (amendments 0 and 1 left CP6's plan section unchanged): no
+  code change. `tests.test_ci_workflows` 59 OK, `tools/ci_workflows.py --check` clean, and the
+  sharded full selection PASS at 2056 tests, 92.8 s wall, on the CP5C head.
 
 - **`tools/ci_workflows.py`**: `validate.yml`'s model now has four jobs:
   - `plan`: `run_tests.py plan --profile ci --ci-placement --output plan.json --github-output`

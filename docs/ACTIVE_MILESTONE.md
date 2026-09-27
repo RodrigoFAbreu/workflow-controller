@@ -98,6 +98,51 @@ generated for a fresh `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round (`/review-implem
 fresh session). The manual external stage and `/approve-review implementation` follow. Only after
 that comes `/prepare-functional-review`, which regenerates the checklist.
 
+## Functional review round 2 (revision 5, bounded fix)
+
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md` (round 2, on the checklist below at evidence commit
+`a5a2220`; CI run `36323398451`, three attempts on that head): L1-L4, M and N all PASS. L2's
+critical path was 4:02 / 4:02 / 3:56 (median 4:02) against both bars (5 min, and 4 min 8 s, a
+6 s margin). Two findings, both spontaneous CI test failures, both defects in the tests and not
+in the product, both took the bounded branch. `technical_approval` was marked `STALE` before the
+first edit.
+
+- **F1 (defect: `OwnershipTest.test_a_gated_escapee_is_published_as_group_then_as_tag`, CI run
+  `36309803063`, `['group', 'adopted', 'tag', ...]`), fixed (`a7920ca`).**
+  - Cause: between the escapee's `setsid(2)` and its exec of bash, a scan can read an empty
+    `/proc/<pid>/environ`. With no tag found and its parent already exited, that scan owns it by
+    adoption and says so. This is Design H working as specified; I10 keeps membership unchanged.
+    The test asserted more than the plan's "first `group`, then `tag`".
+  - Reproduced deterministically: one empty environ read for the escapee failed the old test
+    3 of 3 times, with CI's exact sequence.
+  - Fix: `adopted` is allowed before the first `tag`, never after it. The new
+    `test_an_escapee_read_mid_exec_is_published_as_adopted_for_that_scan` makes the race
+    deterministic and pins the published runs to `group`, `adopted`, `tag`.
+- **F2 (defect: `RunRecordCtrlCTest.test_sigint_marks_the_run_interrupted_and_keeps_the_orphan`,
+  CI run `36323398451` attempt 2, "the Controller must not end the worker"), fixed (`a634dfe`).**
+  - Cause: the test sent SIGINT as soon as the record showed `worker_process`, which `on_spawn`
+    flushes *before* appending `worker_spawned`. An interrupt in that window leaves `on_spawn` as
+    a `KeyboardInterrupt`, and `launch` then ends the group, by its documented contract.
+  - Reproduced deterministically: a 2 s sleep in that append failed the test 3 of 3 times.
+    `worker_state` is no signal: it is `STARTING` from before the spawn, and the hung fake worker
+    never changes it.
+  - Fix: the test waits until the Controller holds the worker's stdout open read-only. `launch`
+    opens it only after `on_spawn` returns, and without `--follow` nothing else in the Controller
+    reads it. The widened window now passes. `InterruptWhileWaitingTest`, the only other SIGINT
+    test, already waits for `WAITING` and is unaffected.
+- **Verification:**
+  - the two modules through the runner: 239 tests, PASS;
+  - the three changed tests, stressed 6 parallel copies × 6 on 2 CPUs with SIGINT at its
+    default: 36 of 36 runs OK;
+  - full sharded selection: PASS, 2070 tests, 8 shards, 84.8 s, exact coverage;
+  - `ci_workflows --check`: clean.
+- **Needs re-testing:** L1 ("all green") over two or three CI runs. The other items (L2-L4, M,
+  N) passed in round 2, and the fixes touch only two test files.
+
+The next steps are a fresh implementation-review round on the post-fix bundle
+(`/review-implementation`, `/record-manual-implementation-review`,
+`/approve-review implementation`), then `/prepare-functional-review`.
+
 ## Functional review checklist
 
 Round 2. Technical approval: `d1fa359` (implementation revision 5, reviewed head `f015b34`). Since

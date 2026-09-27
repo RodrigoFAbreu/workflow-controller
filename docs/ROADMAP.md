@@ -57,7 +57,7 @@ These are not blockers for the baseline, but should remain visible in later mile
 
 **Priority:** Immediate / High
 
-**Status:** 1.1-1.3 complete; 1.4's worker lifecycle ownership hotfix complete (accepted 2026-09-26), its four listed patches still open
+**Status:** 1.1-1.3 and 1.2.1 complete; 1.4's worker lifecycle ownership hotfix complete (accepted 2026-09-26), its four listed patches still open
 
 Suggested milestone:
 `workflow-controller-release-runtime-observability`
@@ -132,10 +132,11 @@ Release requirements:
 
 ## 1.2.1 Adaptive test sharding
 
-**Status:** Implemented, in review (`workflow-controller-adaptive-test-sharding`, plan
-`docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, ADR
-`docs/adr/0005-adaptive-test-sharding.md`). The operator requested it directly, ahead of 1.4,
-which stays the next roadmap item. Its two plan amendments each made one Controller change,
+**Status:** Complete (`workflow-controller-adaptive-test-sharding`, accepted 2026-09-27 under
+Workflow 2.5.1; plan `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, ADR
+`docs/adr/0005-adaptive-test-sharding.md`; the narrative is archived at
+`docs/milestones/completed/workflow-controller-adaptive-test-sharding.md`). The operator requested
+it directly, ahead of 1.4, which stays the next roadmap item. Its two plan amendments each made one Controller change,
 listed below for the next release's notes.
 
 The Controller's full verification ran serially in about 10 minutes locally (483 s of Controller

@@ -1681,6 +1681,27 @@ class AggregateTest(unittest.TestCase):
         self.assertIn("| 0 | PASS |", result.summary)
         self.assertIn("balance ratio (max / mean shard wall): 1.00", result.summary)
 
+    def test_a_passing_summary_states_the_coverage_check(self) -> None:
+        # Functional review F2: the check must be visible when it passes too.
+        result = self.run_aggregate({0: _fake_record(self.plan, 0), 1: _fake_record(self.plan, 1)})
+        planned = len(self.plan["selected_ids"])
+        self.assertEqual(result.coverage, {"planned": planned, "missing": 0, "unplanned": 0,
+                                           "duplicate": 0})
+        self.assertIn(f"- coverage: exact; all {planned} planned tests ran once; 0 missing, "
+                      f"0 unplanned, 0 duplicate\n", result.summary)
+
+    def test_an_inexact_summary_counts_each_kind_of_coverage_violation(self) -> None:
+        other = self.plan["shards"][1]["test_ids"][0]
+        records = {0: _fake_record(self.plan, 0, {self.first: "missing"},
+                                   extra=["x.Y.test_ghost"]),
+                   1: _fake_record(self.plan, 1, extra=[other])}
+        result = self.run_aggregate(records)
+        self.assertEqual(result.coverage, {"planned": len(self.plan["selected_ids"]),
+                                           "missing": 1, "unplanned": 1, "duplicate": 1})
+        self.assertIn("- coverage: NOT exact; 1 missing, 1 unplanned, 1 duplicate (listed below)",
+                      result.summary)
+        self.assertNotIn("coverage: exact", result.summary)
+
     def test_a_failure_is_exit_1_and_the_summary_says_how_to_reproduce_it(self) -> None:
         records = {0: _fake_record(self.plan, 0, {self.first: "fail"}),
                    1: _fake_record(self.plan, 1)}

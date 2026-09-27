@@ -1549,6 +1549,9 @@ class Aggregate:
     exit_status: int
     summary: str = ""
     notes: dict[int, str] = field(default_factory=dict)
+    #: The coverage check's counts: ``planned``, ``missing``, ``unplanned``
+    #: and ``duplicate``; it is exact when the last three are all zero.
+    coverage: dict[str, int] = field(default_factory=dict)
 
 
 def load_results(plan: Mapping, results_dir: Path, indexes: Iterable[int] | None = None
@@ -1616,6 +1619,7 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
                                  f"{record['shard']}")
     rows, not_run, violations, failures = [], [], [], []
     fixture_errors, fixture_skips, leaks = [], [], []
+    unplanned = duplicate = 0
     seen: dict[str, int] = {}
     for index in indexes:
         shard = plan["shards"][index]
@@ -1629,8 +1633,10 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
                 test_id = entry["id"]
                 reported.append(test_id)
                 if test_id not in planned_set:
+                    unplanned += 1
                     violations.append(f"shard {index} reported unplanned id {test_id}")
                 elif test_id in seen:
+                    duplicate += 1
                     violations.append(f"{test_id} was reported more than once "
                                       f"(shards {seen[test_id]} and {index})")
                 else:
@@ -1662,7 +1668,10 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
         status = EXIT_PASS
     result = Aggregate(shards=rows, not_run=not_run, violations=violations, failures=failures,
                        fixture_errors=fixture_errors, fixture_skips=fixture_skips, leaks=leaks,
-                       exit_status=status, notes=notes)
+                       exit_status=status, notes=notes,
+                       coverage={"planned": sum(row["tests"] for row in rows),
+                                 "missing": len(not_run), "unplanned": unplanned,
+                                 "duplicate": duplicate})
     result.summary = render_summary(plan, result, results_dir, wall_seconds=wall_seconds)
     return result
 
@@ -1710,12 +1719,22 @@ def exclusive_registry_line(plan: Mapping) -> str:
             f"exclusive shard")
 
 
+def _coverage_line(coverage: Mapping[str, int]) -> str:
+    """The coverage check's verdict, stated whether or not it passed."""
+    counts = (f"{coverage['missing']} missing, {coverage['unplanned']} unplanned, "
+              f"{coverage['duplicate']} duplicate")
+    if coverage["missing"] or coverage["unplanned"] or coverage["duplicate"]:
+        return f"- coverage: NOT exact; {counts} (listed below)"
+    return f"- coverage: exact; all {coverage['planned']} planned tests ran once; {counts}"
+
+
 def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
                    wall_seconds: float | None = None) -> str:
     """The run's Markdown summary: one row per shard, then every failing
     test and fixture error with its traceback tail, log and reproduction
     commands, the NOT RUN ids, coverage violations, fixture skips and leaked
-    processes, and the wall time, largest atom and balance ratio."""
+    processes, and the coverage verdict, wall time, largest atom and balance
+    ratio."""
     results_dir = Path(results_dir)
     lines = [f"# Test run: {_STATUS_WORDS[result.exit_status]} (exit {result.exit_status})", "",
              f"- plan `{plan['plan_digest']}`, profile `{plan['profile']}`, "
@@ -1735,6 +1754,7 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
     walls = [row["wall_seconds"] for row in result.shards if row["wall_seconds"] is not None]
     atoms = [(seconds, key) for row in result.shards for key, seconds in row["atoms"].items()]
     lines.append("")
+    lines.append(_coverage_line(result.coverage))
     if wall_seconds is not None:
         lines.append(f"- wall time: {wall_seconds:.1f} s")
     if atoms:

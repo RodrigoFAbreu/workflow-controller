@@ -1436,8 +1436,10 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   override the planning parameters.
 - **Proof.** A run passes only if every planned test ran exactly once and
   passed; a missing, extra, duplicated or substituted test id fails the
-  run and is named. A failed test is never retried. The exit status is
-  0 (pass), 1 (a test or fixture failed), 2 (refused, crashed, not run,
+  run and is named. The summary states the check's verdict either way
+  (`coverage: exact; ...` or `coverage: NOT exact; ...`, with the
+  missing, unplanned and duplicate counts). A failed test is never
+  retried. The exit status is 0 (pass), 1 (a test or fixture failed), 2 (refused, crashed, not run,
   or a coverage violation) or 130 (interrupted: Ctrl-C stops every
   shard's process group).
 - **Results.** Each run writes `plan.json`, one `shard-<i>.json` and

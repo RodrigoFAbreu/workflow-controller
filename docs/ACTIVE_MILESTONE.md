@@ -34,7 +34,7 @@ no retries.
 | CP2 -- result records and timing model | complete, revalidated at revision 4 | `4467a80`, revalidation: this checkpoint's commit |
 | CP3 -- adaptive deterministic planner | complete, revalidated at revision 4 | `b0eb707`, revalidation: this checkpoint's commit |
 | CP4 -- executor, local runner and aggregation | complete, revalidated at revision 4 | `55c855b`, revalidation: this checkpoint's commit |
-| CP5 -- serialization registry and timing-flake hardening | complete | `311078f` |
+| CP5 -- serialization registry and timing-flake hardening | complete, revalidated at revision 4 | `311078f`, revalidation: this checkpoint's commit |
 | CP6 -- CI integration | complete | `14bbdcc` |
 | CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
 
@@ -175,6 +175,23 @@ no retries.
     missing artifact (with `continue-on-error`) is by design and has not been observed.
 
 ### CP5 -- serialization registry and timing-flake hardening (complete)
+
+- **Revalidation at revision 4** (2026-09-27, head `2cf86da`). CP5's plan section is unchanged
+  from revision 3, so there is no code change. Under a reaping subreaper (this session is a
+  Controller worker):
+  - `python3 -m unittest tests.test_test_shards tests.test_run_tests
+    tests.test_fake_claude_contract tests.test_job.DrainDetachJobTest
+    tests.test_worker.OwnershipTest`: 227 tests, OK.
+  - The stress protocol (G) at the amended head, 2049 tests per run:
+
+    | configuration | runs | result | wall |
+    | --- | --- | --- | --- |
+    | default (8 shards) | 5 | 5 PASS | 84-86 s |
+    | 4 CPUs (`taskset -c 0-3`) | 5 | 5 PASS | 93-98 s |
+    | oversubscribed (`--shards 12 --jobs 12`, 4 CPUs) | 3 | 3 PASS | 110-111 s |
+
+    Zero failures and no leak reported; every summary reports `EXCLUSIVE_ATOMS: 0 registered`.
+  - The "Still open" `OwnershipTest` source race below is not closed here. CP5B closes it.
 
 - **`EXCLUSIVE_ATOMS`** (`tools/test_shards.py`) maps an atom to the reason it must run alone.
   It is **empty**: no failure in this checkpoint needed an entry (decision D5).

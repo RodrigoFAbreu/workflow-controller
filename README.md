@@ -1241,7 +1241,8 @@ pushing a `v*` tag by hand triggers nothing.
 
 The CI plan uses the `ci` profile: about 180 s of work per shard, at
 least 2 and at most 16 shards, from the committed `tools/test_timings.json`
-only. A stale or missing entry only costs balance. The plan is
+only. A stale or missing entry costs wall time (the shard count and the
+balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
 digest mismatch, so the matrix carries only shard indexes. Every
 `tests-result` summary states the coverage check's verdict. A failing
@@ -1456,11 +1457,16 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   `$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json`
   (updated after every run), falling back to the committed
   `tools/test_timings.json`, which is all CI plans from. A missing or
-  corrupt file falls back to defaults with a warning. The committed
+  corrupt file falls back to defaults with a warning. A committed (CI)
+  estimate used as the local fallback counts in the total and the
+  assignment, but never sets the local largest-atom floor: CI seconds are
+  not local seconds, so only local-machine estimates can hold the local
+  shard count down. The committed
   profile changes only through an explicit, reviewed refresh, for
   example from a CI run's `timings-ci` artifact:
   `python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`.
-  Ordinary drift needs no refresh and only degrades balance: a class
+  Ordinary drift needs no refresh and costs wall time (the shard count
+  and the balance), never coverage: a class
   whose test count changed is scaled per test, and a new class is
   estimated from its module's mean. A removed or renamed class is
   different: its old entry names an atom that no longer exists, which

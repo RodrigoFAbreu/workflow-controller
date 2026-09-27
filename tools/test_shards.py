@@ -39,6 +39,12 @@ from a per-test mean.
 ``clamp(ceil(total / max(target, largest atom)), min, max)`` shards, never
 more than there are atoms, and places whole atoms on them by deterministic
 longest-processing-time-first assignment, each shard in canonical order.
+The largest atom is taken over the *floor atoms* only: every atom for the
+``ci`` profile, but for the ``local`` profile only the atoms whose estimate
+comes from a local-machine timing file (the first file that records the atom
+is not the committed ``tools/test_timings.json``). A CI-profile fallback
+estimate still counts in the total and in the assignment, but CI seconds are
+not local seconds, so it never sets the local floor (Design J).
 Atoms registered in ``EXCLUSIVE_ATOMS`` are kept out of that assignment and
 placed together, in canonical order, on one final ``exclusive`` shard, which
 the local runner starts only once every other shard has finished. The
@@ -874,16 +880,22 @@ def _milliseconds(seconds: float) -> int:
     return int(round(seconds * 1000))
 
 
-def shard_count(estimates_ms: Iterable[int], parameters: PlanParameters) -> int:
+def shard_count(estimates_ms: Iterable[int], parameters: PlanParameters,
+                floor_ms: Iterable[int] | None = None) -> int:
     """``clamp(ceil(total / max(target, largest)), min, max)``, capped at the
     number of atoms so no shard is empty; ``parameters.shards`` pins the count
-    (still capped). Integer milliseconds, so every platform agrees."""
+    (still capped). ``total`` is over every estimate; ``largest`` is over
+    ``floor_ms``, the floor atoms' estimates, or over every estimate when
+    ``floor_ms`` is omitted (the ``ci`` profile). An empty ``floor_ms`` makes
+    the target the effective shard length. Integer milliseconds, so every
+    platform agrees."""
     estimates_ms = list(estimates_ms)
     atoms = len(estimates_ms)
     if parameters.shards is not None:
         return min(parameters.shards, atoms)
     total = sum(estimates_ms)
-    effective = max(_milliseconds(parameters.target_shard_seconds), max(estimates_ms, default=0))
+    floor_ms = estimates_ms if floor_ms is None else list(floor_ms)
+    effective = max(_milliseconds(parameters.target_shard_seconds), max(floor_ms, default=0))
     count = -(-total // effective) if effective else 0
     count = min(max(count, parameters.min_shards), parameters.max_shards)
     return min(count, atoms)
@@ -924,6 +936,10 @@ def build_plan(selection: Selection, parameters: PlanParameters,
     (default ``EXCLUSIVE_ATOMS``) take no part in the count or the
     assignment: they go, in canonical order, on one extra final shard marked
     ``"exclusive": true``, so ``shard_count`` is one more than the formula's.
+    For the ``local`` profile only the atoms whose first recording timing file
+    is not ``repo_root / CI_TIMINGS`` can set the largest-atom floor; a
+    committed (CI) or default estimate still counts in the total and the
+    assignment (Design J). The ``ci`` profile's floor is every atom.
     The plan is validated as a partition of the selection (I1) before it is
     returned; a failure raises ``PlanError``."""
     if not selection.atoms:
@@ -936,11 +952,22 @@ def build_plan(selection: Selection, parameters: PlanParameters,
     estimates_ms = [max(1, _milliseconds(estimates[atom.key])) for atom in selection.atoms]
     parallel = [i for i, atom in enumerate(selection.atoms) if atom.key not in exclusive]
     alone = [i for i, atom in enumerate(selection.atoms) if atom.key in exclusive]
+    floor_ms = None
+    if parameters.profile == LOCAL:
+        committed = (Path(repo_root) / CI_TIMINGS).resolve()
+        local_keys = set()
+        for atom in selection.atoms:
+            source = next((path for path, profile in timings if atom.key in profile.atoms), None)
+            if source is not None and Path(source).resolve() != committed:
+                local_keys.add(atom.key)
+        floor_ms = [estimates_ms[i] for i in parallel
+                    if selection.atoms[i].key in local_keys]
     groups = []
     if parallel:
         parallel_ms = [estimates_ms[i] for i in parallel]
+        count = shard_count(parallel_ms, parameters, floor_ms)
         groups = [[parallel[i] for i in members]
-                  for members in assign_atoms(parallel_ms, shard_count(parallel_ms, parameters))]
+                  for members in assign_atoms(parallel_ms, count)]
     if alone:
         groups.append(alone)
     shards = []

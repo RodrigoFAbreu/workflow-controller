@@ -835,6 +835,18 @@ class ShardCountTest(unittest.TestCase):
         self.assertEqual(self.count([5] * 10, shards=1, min_shards=4), 1)
         self.assertEqual(self.count([5] * 3, shards=32), 3)
 
+    def test_the_floor_comes_from_the_floor_estimates_only(self) -> None:
+        # Design J: total 100, largest 40, target 10. A floor list without
+        # the 40 s atom plans ceil(100/20) = 5; omitted, the floor is every
+        # estimate (3, as before); empty, the effective length is the target.
+        estimates = [40_000, 20_000, 20_000, 10_000, 10_000]
+        params = _params(target_shard_seconds=10)
+        self.assertEqual(shards.shard_count(estimates, params, [20_000, 10_000]), 5)
+        self.assertEqual(shards.shard_count(estimates, params), 3)
+        self.assertEqual(shards.shard_count(estimates, params, None), 3)
+        self.assertEqual(shards.shard_count(estimates, params, []), 5)
+        self.assertEqual(shards.shard_count(estimates, params, [40_000]), 3)
+
 
 class ProfileParametersTest(unittest.TestCase):
 
@@ -984,6 +996,112 @@ class PlanTest(unittest.TestCase):
         with unittest.mock.patch.object(shards, "assign_atoms", side_effect=drop_one):
             with self.assertRaisesRegex(shards.PlanError, "in no shard"):
                 self.plan({self.A: 3, self.B: 2, self.C: 1}, shards=1)
+
+
+class LocalFloorTest(unittest.TestCase):
+    """Design J (amendment 2, LIR4-001): for the ``local`` profile only an
+    estimate from a local-machine timing file sets the largest-atom floor; a
+    committed (CI) estimate still counts in the total. The ``ci`` profile's
+    floor is every atom."""
+
+    BIG = _atom("conformance:big_test.py", 1, family="conformance")
+    SMALL = [_atom(f"tests.test_s.S{i}Test", 1) for i in range(10)]
+
+    def _plan(self, profile: str, local_big: bool) -> dict:
+        # total 100 + 10 * 10 = 200 s, target 20 s, max 32 shards: the big
+        # atom as the floor gives ceil(200/100) = 2, without it 10.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            cache = Path(tmp) / "cache"
+            committed = {self.BIG.key: {"seconds": 100.0, "samples": 1, "tests": 1}}
+            local = {atom.key: {"seconds": 10.0, "samples": 1, "tests": 1}
+                     for atom in self.SMALL}
+            if local_big:
+                local[self.BIG.key] = committed[self.BIG.key]
+            shards.write_timings(root / shards.CI_TIMINGS, _profile(committed, "ci"))
+            shards.write_timings(shards.local_timings_path({"XDG_CACHE_HOME": str(cache)}),
+                                 _profile(local, "local"))
+            timings = shards.timings_for(profile, root, environ={"XDG_CACHE_HOME": str(cache)},
+                                         warn=self.fail)
+            return shards.build_plan(_selection(self.BIG, *self.SMALL),
+                                     _params(profile=profile, target_shard_seconds=20),
+                                     timings, root)
+
+    def test_a_committed_only_atom_does_not_set_the_local_floor(self) -> None:
+        plan = self._plan("local", local_big=False)
+        self.assertEqual(plan["shard_count"], 10)
+        # It still counts in the assignment: LPT gives it a shard of its own.
+        self.assertEqual(plan["shards"][0]["atoms"], [self.BIG.key])
+        self.assertEqual(plan["shards"][0]["estimate_seconds"], 100.0)
+
+    def test_the_same_atom_recorded_locally_sets_the_local_floor(self) -> None:
+        self.assertEqual(self._plan("local", local_big=True)["shard_count"], 2)
+
+    def test_the_committed_atom_sets_the_ci_floor(self) -> None:
+        self.assertEqual(self._plan("ci", local_big=False)["shard_count"], 2)
+
+    def test_a_default_estimate_does_not_set_the_local_floor(self) -> None:
+        plan = shards.build_plan(_selection(self.BIG, *self.SMALL),
+                                 _params(profile="local", target_shard_seconds=20),
+                                 _timed({atom: 10.0 for atom in self.SMALL}))
+        # BIG unrecorded: the 30 s conformance default counts in the total
+        # (130 s) but not in the floor (target 20 s) -> ceil(6.5) = 7 shards,
+        # where the default as a floor would give ceil(130/30) = 5.
+        self.assertEqual(plan["shard_count"], 7)
+
+
+class RealInventoryLocalFloorTest(unittest.TestCase):
+    """Amendment 2's regressions, on the real inventory and the committed
+    ``tools/test_timings.json``: a cold local cache, and a local profile
+    without the acceptance matrix, both plan 8 shards on 8 CPUs (both
+    planned 5 before Design J). The CI plan is unchanged."""
+
+    MATRIX = "conformance:workflow_acceptance_matrix_test.py"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        cls.committed = shards.load_timings(fixtures.REPO_ROOT / shards.CI_TIMINGS,
+                                            warn=lambda message: None)
+        assert cls.MATRIX in cls.committed.atoms
+
+    def _local_plan(self, local_atoms: dict | None) -> dict:
+        with tempfile.TemporaryDirectory() as tmp:
+            environ = {"XDG_CACHE_HOME": tmp}
+            if local_atoms is not None:
+                shards.write_timings(shards.local_timings_path(environ),
+                                     _profile(local_atoms, "local"))
+            warnings = []
+            timings = shards.timings_for("local", fixtures.REPO_ROOT, environ=environ,
+                                         warn=warnings.append)
+            self.assertEqual(len(warnings), 0 if local_atoms is not None else 1)
+            return shards.build_plan(self.inventory.select(),
+                                     shards.profile_parameters("local", cpu_count=8),
+                                     timings, fixtures.REPO_ROOT)
+
+    def test_a_cold_local_cache_plans_eight_shards(self) -> None:
+        self.assertEqual(self._local_plan(None)["shard_count"], 8)
+
+    def test_a_local_profile_without_the_matrix_plans_eight_shards(self) -> None:
+        atoms = {key: dict(entry) for key, entry in self.committed.atoms.items()
+                 if key != self.MATRIX}
+        self.assertEqual(self._local_plan(atoms)["shard_count"], 8)
+
+    def test_the_ci_plan_floors_on_the_matrix_over_every_atom(self) -> None:
+        selection = self.inventory.select(ci_placement=True)
+        parameters = shards.profile_parameters("ci")
+        timings = shards.timings_for("ci", fixtures.REPO_ROOT, warn=self.fail)
+        plan = shards.build_plan(selection, parameters, timings, fixtures.REPO_ROOT)
+        estimates = shards.estimate_atoms(selection.atoms, [profile for _, profile in timings])
+        parallel = [max(1, round(estimates[atom.key] * 1000)) for atom in selection.atoms
+                    if atom.key not in shards.EXCLUSIVE_ATOMS]
+        largest = max(parallel)
+        self.assertEqual(largest, round(estimates[self.MATRIX] * 1000))
+        self.assertGreater(largest, parameters.target_shard_seconds * 1000)
+        expected = min(max(-(-sum(parallel) // largest), parameters.min_shards),
+                       parameters.max_shards, len(parallel))
+        exclusive = any(atom.key in shards.EXCLUSIVE_ATOMS for atom in selection.atoms)
+        self.assertEqual(plan["shard_count"], expected + exclusive)
 
 
 class PlanValidationTest(unittest.TestCase):

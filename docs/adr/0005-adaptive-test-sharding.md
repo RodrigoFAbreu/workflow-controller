@@ -138,15 +138,29 @@ unknown atom is estimated from its module's mean seconds per test, else the
 profile's, else 0.25 s per test; a conformance suite without history is 30
 s. A missing, unreadable or invalid file falls back to defaults with a
 warning. Nothing reads timing data to include, exclude or condition a test,
-so a stale profile costs balance only. Every write is temporary file,
+so a stale profile costs wall time (the shard count and the balance), never
+coverage. Local planning falls back per atom to the committed profile, and
+that CI estimate counts in the total and the assignment but never sets the
+local largest-atom floor (Planning, below). Every write is temporary file,
 `fsync`, `os.replace`.
 
 ### Planning
 
 ```
-effective = max(target_shard_seconds, largest atom estimate)
+effective = max(target_shard_seconds, largest floor-atom estimate)
 N         = min(clamp(ceil(total / effective), min_shards, max_shards), atoms)
 ```
+
+`total` is over every selected atom. For the `ci` profile every atom is a
+floor atom. For the `local` profile a floor atom is one whose estimate comes
+from a local-machine timing file (the first file that records it is not the
+committed `tools/test_timings.json`); an estimate from the committed CI
+profile, a per-test mean or a default counts in `total` and in the
+assignment only. Plan amendment 2 added this rule for the local
+implementation review's LIR4-001: once the committed profile held CI
+seconds, the acceptance matrix's 207 s CI estimate became the local floor on
+a cold local cache, which planned 5 shards and took 145.9 s where 8 shards
+take under 90 s. With no local profile the effective length is the target.
 
 Assignment is deterministic LPT: atoms sorted by (-estimate, canonical
 index), each placed on the shard with the least (load, index), estimates in

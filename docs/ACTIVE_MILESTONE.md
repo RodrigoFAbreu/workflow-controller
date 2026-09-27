@@ -6,15 +6,18 @@
 and CI. The operator requested it directly, ahead of `docs/ROADMAP.md` section 1.4, which stays
 the next roadmap item.
 
-- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 6 (amendment 1),
-  approved at `4a4d0bc` (`EXTERNAL_APPROVE`). Revision 4 (amendment 0) was approved at
-  `8b0f522`, revision 3 at `5fdea5a`.
+- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 7 (amendment 2),
+  approved at `cbd9b76` (`EXTERNAL_APPROVE`). Revision 6 (amendment 1) was approved at
+  `4a4d0bc`, revision 4 (amendment 0) at `8b0f522`, revision 3 at `5fdea5a`.
 - Registry: `docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json`
-  (CP1-CP5, CP5B, CP5C, CP6, CP7).
+  (CP1-CP5, CP5B, CP5C, CP6, CP6B, CP7).
 - Amendment 0 reconciliation marked CP1-CP7 `NEEDS_REVALIDATION` (revision 3 had no checkpoint
   anchors) and added CP5B. Each is revalidated through `/milestone-implement`.
 - Amendment 1 (drain detach bound 600 -> 10800 s, Design I) retained CP1-CP5, CP5B and CP6,
   added CP5C and marked CP7 `NEEDS_REVALIDATION`.
+- Amendment 2 (local largest-atom floor from local-machine estimates only, Design J, resolving
+  the local implementation review's LIR4-001) retained CP1-CP6, CP5B and CP5C, added CP6B and
+  marked CP7 `NEEDS_REVALIDATION`.
 - Governing workflow version: `2.2`. Base commit: `405f050`.
 - Ground truth for phase and checkpoint status: `docs/ai-workflow/WORKFLOW_STATE.json`.
 
@@ -169,7 +172,45 @@ runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same
 | CP5B -- ownership provenance follows the current basis (amendment 0) | complete (sharded full selection PASS, 2056 tests, 148 s) | this checkpoint's commit |
 | CP5C -- drain detach bound 600 -> 10800 s (amendment 1) | complete (narrow 101 OK; sharded full selection PASS, 2056 tests, 101 s) | this checkpoint's commit |
 | CP6 -- CI integration | complete, revalidated at revision 6 (test_ci_workflows 59 OK; `ci_workflows --check` clean; sharded full selection PASS, 2056 tests, 92.8 s) | `14bbdcc`, revalidation: this checkpoint's commit |
-| CP7 -- documentation, measurement and full verification | complete, revalidated at revision 6 (full selection median 81.1 s; stress 0 of 13 failures) | revalidation: this checkpoint's commit |
+| CP6B -- local largest-atom floor from local-machine estimates only (amendment 2) | complete (planner/runner/CI tests 257 OK; `ci_workflows --check` clean; sharded full selection PASS, 2069 tests, 8 shards, 116.1 s at defaults and 101.2 s with an empty `XDG_CACHE_HOME`) | this checkpoint's commit |
+| CP7 -- documentation, measurement and full verification | needs revalidation at revision 7 (amendment 2); last complete at revision 6 (full selection median 81.1 s; stress 0 of 13 failures) | revalidation: pending |
+
+### CP6B -- local largest-atom floor from local-machine estimates only (complete)
+
+- **Change (Design J, amendment 2, LIR4-001).** `tools/test_shards.py`: `shard_count` takes an
+  optional `floor_ms` list; `total` is over every estimate, `largest` over `floor_ms` (every
+  estimate when omitted, the target alone when empty). `build_plan`, for the `local` profile only,
+  passes the estimates of the non-exclusive atoms whose first recording timing file is not
+  `repo_root / tools/test_timings.json`. A committed (CI), per-test-mean or default estimate still
+  counts in `total` and in the LPT assignment. The module docstring and both function docstrings
+  state the rule. The `ci` profile passes no floor list, so every CI plan is unchanged: the CI
+  plan of the CI placement from the committed profile has digest `8850f631fa95...` (5 shards)
+  both at `cbd9b76` and with the change.
+- **Docs.** `README.md`'s "Timings" bullet and CI paragraph, and ADR 0005's "Timing is advisory"
+  and "Planning", state the floor rule and replace "costs balance only" with "costs wall time
+  (the shard count and the balance), never coverage". ADR 0005 names amendment 2 and LIR4-001.
+- **Tests** (`tests/test_test_shards.py`):
+  - `ShardCountTest.test_the_floor_comes_from_the_floor_estimates_only`: a floor list without the
+    largest estimate, an omitted list, `None`, an empty list;
+  - `LocalFloorTest` (temporary repository root and `XDG_CACHE_HOME`): a committed-only atom does
+    not set the local floor (10 shards, still alone on its own shard), the same atom recorded
+    locally does (2), the `ci` profile floors on it (2), and a default estimate does not (7);
+  - `RealInventoryLocalFloorTest` (real inventory, committed profile,
+    `profile_parameters("local", cpu_count=8)`): (a) no local profile plans **8** shards; (b) a
+    local profile of every committed atom except the acceptance matrix plans **8**; and the CI
+    plan's count equals the formula over every atom, with the matrix as the floor.
+  - Checked once by reverting the `build_plan` hunk (calling `shard_count` without the floor
+    list): regressions (a) and (b) then plan **5** and **5**, and the two synthetic
+    committed/default cases fail (2 and 5); restored afterwards.
+- **Verification** (host: 16 CPUs, load average about 13 from other work during the runs):
+  - `python3 -m unittest tests.test_test_shards tests.test_run_tests tests.test_ci_workflows
+    tests.test_plan_document_consistency`: 257 tests OK;
+  - `python3 tools/ci_workflows.py --check`: exit 0;
+  - `python3 tools/run_tests.py` at defaults: PASS, 2069 tests, 8 shards, 116.1 s wall, coverage
+    exact, balance 1.21;
+  - the same with an empty temporary `XDG_CACHE_HOME`: one missing-file warning, PASS, 2069
+    tests, **8 shards**, 101.2 s wall (within the 120 s bar), coverage exact, the acceptance
+    matrix alone on shard 0, balance 1.14.
 
 ### CP7 -- documentation, measurement and full verification (complete)
 

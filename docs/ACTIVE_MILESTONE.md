@@ -173,7 +173,7 @@ runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same
 | CP5C -- drain detach bound 600 -> 10800 s (amendment 1) | complete (narrow 101 OK; sharded full selection PASS, 2056 tests, 101 s) | this checkpoint's commit |
 | CP6 -- CI integration | complete, revalidated at revision 6 (test_ci_workflows 59 OK; `ci_workflows --check` clean; sharded full selection PASS, 2056 tests, 92.8 s) | `14bbdcc`, revalidation: this checkpoint's commit |
 | CP6B -- local largest-atom floor from local-machine estimates only (amendment 2) | complete (planner/runner/CI tests 257 OK; `ci_workflows --check` clean; sharded full selection PASS, 2069 tests, 8 shards, 116.1 s at defaults and 101.2 s with an empty `XDG_CACHE_HOME`) | this checkpoint's commit |
-| CP7 -- documentation, measurement and full verification | needs revalidation at revision 7 (amendment 2); last complete at revision 6 (full selection median 81.1 s; stress 0 of 13 failures) | revalidation: pending |
+| CP7 -- documentation, measurement and full verification | complete, revalidated at revision 7 (full selection median 82.9 s; with no local profile 83.2 s at 8 shards; stress 0 of 13 failures) | revalidation: this checkpoint's commit |
 
 ### CP6B -- local largest-atom floor from local-machine estimates only (complete)
 
@@ -213,6 +213,57 @@ runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same
     matrix alone on shard 0, balance 1.14.
 
 ### CP7 -- documentation, measurement and full verification (complete)
+
+- **Revalidated at plan revision 7** (amendment 2), on head `d62a6f6` (CP6B):
+  - **Documentation:** none of CP7's own. Amendment 2's README and ADR 0005 edits are CP6B's,
+    and no document quotes a measurement that these runs change.
+  - **Verification and measurement** (reference machine, 16 CPUs, load average about 1.4 at the
+    start; every run under a reaping subreaper with SIGINT at its default; runs sequential,
+    12:34-13:31, nothing else running):
+    - `python3 -m unittest discover -s tests -t .`: 2062 tests in 488.2 s, OK (8 skipped).
+    - `python3 tools/run_tests.py --serial`: 2069 tests (2062 + 7 conformance), PASS, 608.3 s.
+      Its 2062 controller ids equal `discover`'s, **in the same order**; no duplicates.
+    - Full selection at defaults, 3 runs: 8 shards, PASS, walls 83.0 / 82.8 / 82.9 s, balance
+      1.06 each, largest atom `conformance:workflow_acceptance_matrix_test.py` (82.7-82.8 s),
+      the critical path.
+    - Full selection with a fresh, empty `XDG_CACHE_HOME` (no local profile), 3 runs: one
+      missing-file warning each, **8 shards** (the same plan, `d9262c3b7e62...`, each time),
+      PASS, walls 83.0 / 83.2 / 83.3 s, balance 1.06 each, the acceptance matrix alone on
+      shard 0. LIR4-001's 5 shards and 145.9 s are gone.
+    - Controller-only (`tests`) at defaults, 3 runs: 8 shards, PASS, walls 63.1 / 63.5 / 63.0 s,
+      balance 1.01 / 1.02 / 1.01, largest atom `tests.test_worker.OwnershipTest` (37.3 s).
+    - Id comparison: every run's reported ids equal the serial run's (2069, or its 2062
+      controller ids), with no duplicates; 2061 pass + 8 skip (2054 + 8 controller-only).
+    - Stress protocol (G), 13 runs, **all PASS, 0 failures, 0 leaks**, `EXCLUSIVE_ATOMS: 0`,
+      exact coverage and the serial id set in each:
+
+      | configuration | runs | walls |
+      | --- | --- | --- |
+      | default (8 shards, 16 CPUs) | 5 | 89.7 / 84.3 / 84.1 / 83.8 / 83.9 s |
+      | 4 CPUs (`taskset -c 0-3`, 8 shards) | 5 | 96.5 / 97.3 / 96.0 / 98.3 / 98.0 s |
+      | oversubscribed (`--shards 12 --jobs 12`, 4 CPUs) | 3 | 109.3 / 110.0 / 106.9 s |
+    - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v`:
+      9 tests in 25.0 s, OK (none skipped).
+    - `python3 tools/ci_workflows.py --check`: clean (exit 0).
+  - **Performance acceptance at revision 7:**
+
+    | measure | baseline | bar | measured |
+    | --- | --- | --- | --- |
+    | full selection, local defaults | ~602 s serial | median ≤ 120 s | **82.9 s** (7.3x vs the 608.3 s `--serial`) |
+    | the same, no local profile (fresh `XDG_CACHE_HOME`) | 145.9 s, 5 shards (LIR4-001) | median ≤ 120 s at `min(8, CPUs)` shards | **83.2 s**, 8 shards every run |
+    | controller-only, local defaults | 483 s serial | median ≤ 90 s | **63.1 s** (7.7x vs 488.2 s `discover`) |
+    | balance ratio | n/a | ≤ 1.25, or max shard = largest atom ± 10% | 1.06 full and no-profile (max shard = the 83 s largest atom), ≤ 1.02 controller-only |
+    | sharded vs serial id set | n/a | identical every run | identical, 9 of 9, and 13 of 13 stress runs |
+    | stress protocol | 1 failure at 12-on-4 | 0 failures | 0 of 13 |
+
+    The CI measures still belong to functional review (they need a pushed branch and a Draft PR).
+    The 12-on-4 runs' balance (1.47-1.53) is outside the default-profile bar by design: the bar
+    applies to local defaults, and at 12 shards the 107-110 s acceptance matrix is the whole
+    critical path.
+  - **Open, carried forward:** D7 (failing a run on a leaked process) and refreshing
+    `tools/test_timings.json` from real CI data (D9).
+
+The record below is CP7's revalidation at plan revision 6, kept for history.
 
 - **Revalidated at plan revision 6** (amendments 0 and 1), on head `9e7c96c`:
   - **Documentation edits:**

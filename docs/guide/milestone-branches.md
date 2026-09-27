@@ -89,10 +89,9 @@ milestone ends at `integration_required`, and the supported procedure is:
 on GitHub, mark the PR ready and merge it with "Create a merge commit".
 Close-out then converges as for any merge. This stays the contract until
 the follow-up integration milestone binds integration to the released
-Workflow 2.6.x (`docs/ROADMAP.md`). In this repository, `main`'s ruleset
-currently also requires a pull request to be up to date before it can be
-merged, which blocks this procedure; see the known conflict under
-[Repository settings](ci-and-releases.md#repository-settings).
+Workflow 2.6.x (`docs/ROADMAP.md`). This is why this repository's ruleset
+does not require a pull request to be up to date before merging (see
+[Repository settings](ci-and-releases.md#repository-settings)).
 
 **Do not press GitHub's "Update branch" button** while a milestone is in
 flight. It pushes a merge commit to the milestone branch on the server,

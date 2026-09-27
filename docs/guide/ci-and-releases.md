@@ -196,11 +196,16 @@ them, but the release and review flow assumes them.
   - `main` cannot be deleted or force-pushed;
   - the only allowed merge method is **merge commit**;
   - the required checks are `validate / plan`, `validate / tests-result`,
-    `validate / package` and `workflow-conformance`, and the branch must
-    be up to date with `main` before merging. The individual
+    `validate / package` and `workflow-conformance`. The individual
     `validate / tests (<i>)` shards are deliberately not required: their
     number changes with the plan, and `tests-result` fails whenever a
-    shard fails or is missing.
+    shard fails or is missing;
+  - a pull request does **not** have to be up to date with `main` to be
+    merged. That requirement would block the `integration_required`
+    procedure (merging a milestone pull request that `main` moved ahead
+    of) under Workflow 2.5.1. Milestone pull requests keep their freshness
+    check anyway: the Controller marks one ready only when `main` is an
+    ancestor of it.
 - **Merge methods**: merge commits only; squash and rebase merging are off.
   Squash and rebase merges take the reviewed Workflow commits off `main`.
   Close-out detects them (`merge_method_rewrote_history`) but cannot undo
@@ -209,17 +214,9 @@ them, but the release and review flow assumes them.
   [the roadmap](../ROADMAP.md)).
 - **Auto-merge** is allowed, and **head branches are deleted** after a
   merge. The Controller itself never merges.
-- **Do not press "Update branch"** on a milestone pull request. GitHub
-  may offer it, because `main` requires an up-to-date branch, but it
+- **Do not press "Update branch"** on a milestone pull request. It
   pushes a merge commit the next Controller step refuses (see
   [Milestone branches and pull requests](milestone-branches.md)).
-- **Known conflict:** the "up to date with `main`" requirement blocks the
-  documented `integration_required` procedure, which merges a milestone
-  pull request without integrating `main` first. While the requirement
-  is on, a milestone whose `main` moved cannot be merged that way. Either
-  relax the requirement (the Controller's readiness check already refuses
-  a branch `main` is not an ancestor of) or decide the procedure before
-  the next milestone that meets `integration_required`.
 - **Immutable releases** (Settings, General) is recommended: it makes a
   published release's assets and tag unchangeable, even by an admin, and
   a workflow cannot turn it on for itself. It is currently off.

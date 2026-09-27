@@ -32,7 +32,7 @@ no retries.
 | --- | --- | --- |
 | CP1 -- inventory, atoms and selection | complete, revalidated at revision 4 | `302d7fc`, revalidation: this checkpoint's commit |
 | CP2 -- result records and timing model | complete, revalidated at revision 4 | `4467a80`, revalidation: this checkpoint's commit |
-| CP3 -- adaptive deterministic planner | complete | `b0eb707` |
+| CP3 -- adaptive deterministic planner | complete, revalidated at revision 4 | `b0eb707`, revalidation: this checkpoint's commit |
 | CP4 -- executor, local runner and aggregation | complete | `55c855b` |
 | CP5 -- serialization registry and timing-flake hardening | complete | `311078f` |
 | CP6 -- CI integration | complete | `14bbdcc` |
@@ -425,6 +425,15 @@ no retries.
     order.
 
 ### CP3 -- adaptive deterministic planner (complete)
+
+- **Revalidation at revision 4** (2026-09-27, head `435de8a`). CP3's plan section is unchanged
+  from revision 3, so there is no code change. Under a reaping subreaper (this session is a
+  Controller worker):
+  - `python3 -m unittest tests.test_test_shards`: 121 tests, OK. This includes CP3's shard-count,
+    parameter, plan, self-validation, 500-case equivalence property, determinism and baseline
+    balance tests.
+  - Full selection, `python3 tools/run_tests.py` at defaults: PASS, 2049 tests in 8 shards,
+    wall 91.0 s, balance 1.11. Load average about 7 on 16 CPUs.
 
 - **`tools/test_shards.py`** gains the planner, still stdlib only.
   - **Parameters.** `profile_parameters(profile, ...)` gives the plan's table:

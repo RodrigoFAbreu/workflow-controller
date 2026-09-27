@@ -33,7 +33,7 @@ no retries.
 | CP1 -- inventory, atoms and selection | complete, revalidated at revision 4 | `302d7fc`, revalidation: this checkpoint's commit |
 | CP2 -- result records and timing model | complete, revalidated at revision 4 | `4467a80`, revalidation: this checkpoint's commit |
 | CP3 -- adaptive deterministic planner | complete, revalidated at revision 4 | `b0eb707`, revalidation: this checkpoint's commit |
-| CP4 -- executor, local runner and aggregation | complete | `55c855b` |
+| CP4 -- executor, local runner and aggregation | complete, revalidated at revision 4 | `55c855b`, revalidation: this checkpoint's commit |
 | CP5 -- serialization registry and timing-flake hardening | complete | `311078f` |
 | CP6 -- CI integration | complete | `14bbdcc` |
 | CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
@@ -296,6 +296,16 @@ no retries.
   - The stress protocol before and after the fixes, as above: 26 full runs, all PASS.
 
 ### CP4 -- executor, local runner and aggregation (complete)
+
+- **Revalidation at revision 4** (2026-09-27, head `ed90210`). CP4's plan section is unchanged
+  from revision 3, so there is no code change. Under a reaping subreaper (this session is a
+  Controller worker):
+  - `python3 -m unittest tests.test_test_shards tests.test_run_tests`: 145 tests, OK. This
+    includes the executor, recording-rule, verdict, aggregation, diagnostics and end-to-end runner
+    tests.
+  - Full selection, `python3 tools/run_tests.py` at defaults, run twice: PASS both times, 2049
+    tests in 8 shards, wall 83.6 s and 84.8 s, balance 1.07 and 1.08. Load average about 7 on 16
+    CPUs.
 
 - **`tools/test_shards.py`** gains execution, leak detection and aggregation, still stdlib only.
   - **Executor.** `execute_shard(plan, i, results_dir)` runs one shard in-process:

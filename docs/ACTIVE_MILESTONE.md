@@ -29,6 +29,69 @@ in duration-balanced parallel shards. One deterministic inventory and planner is
 runs and CI. Coverage is unchanged and proven at run time. There are no test tiers, and there are
 no retries.
 
+## Functional review checklist
+
+Technical approval: `2c356fb` (implementation revision 3, reviewed head `413427a`). Put findings
+in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+**Setup.**
+
+- On a checkout of `milestone/workflow-controller-adaptive-test-sharding`, run `pip install -e .`
+  (needs package-index access). Do not set `PYTHONPATH=.`.
+- Python 3.12 or later. Nothing else is needed: the runner uses only the standard library.
+- Before any timed run, make sure no other test process is running (`ps` for `run_tests` or
+  `unittest`).
+- CI flows (L below) need the branch pushed and a Draft PR open, which only you can do.
+
+**Test data.** None to seed. The runner builds its own temporary directories per shard. Local
+runs update `~/.cache/workflow-controller-tests/timings-local.json` (or the same path under
+`$XDG_CACHE_HOME`). Delete that file first if you want the first run to plan from the committed
+`tools/test_timings.json`.
+
+**Local flows.**
+
+| # | do | expect |
+| --- | --- | --- |
+| A | `python3 tools/run_tests.py` | Prints a plan (about 8 shards on 8+ CPUs), then per-shard progress. Ends `PASS` with about 2056 tests in roughly 80-100 s, exit 0. It prints a results directory under `$TMPDIR/workflow-controller-tests/<run_id>/` holding `plan.json`, `shard-<i>.json`, `shard-<i>.log` and `SUMMARY.md`. |
+| B | Run A again | The plan's `timing source` line lists `local-profile` ahead of `tools/test_timings.json`. The shard walls are about as balanced as before, or better. |
+| C | `python3 tools/run_tests.py tests.test_worker conformance:workflow_state_test.py` | Only those atoms are planned and run. PASS, exit 0. |
+| D | `python3 tools/run_tests.py tests.test_no_such_module` | Refused, naming the unmatched name. Exit 2, nothing run. |
+| E | `python3 tools/run_tests.py --plan-only` | Prints the plan (shards, atoms, estimates, digest) and runs nothing. Exit 0. |
+| F | `python3 tools/run_tests.py --serial tests.test_cli` | One shard, in canonical order. PASS. Its ids are the same as a sharded run of `tests.test_cli`. |
+| G | `python3 tools/run_tests.py --replay <results dir from A>/plan.json --shard 0` | Re-runs exactly shard 0 of A's plan, in the same order. PASS. |
+| H | Start A, press Ctrl-C after about 20 s | Every shard stops, and the runner exits with 130. Afterwards, `ps` shows no leftover `exec-shard`/`unittest` processes. |
+| I | In a scratch edit (not committed), add `self.fail("functional probe")` to one test, e.g. in `tests/test_identity.py`, then run `python3 tools/run_tests.py tests.test_identity` | FAIL, exit 1. `SUMMARY.md` names the test, its traceback, its shard's log and two reproduction commands (`python3 -m unittest <id>` and `--replay ... --shard <i>`). There is no retry. Revert the edit afterwards. |
+| J | Optional: `taskset -c 0-3 python3 tools/run_tests.py` | PASS on 4 CPUs (about 95 s at CP7), with no timing-flake failures. |
+| K | Optional: `python3 tools/run_tests.py --serial` (about 10 min) | PASS, 2056 ids. It proves the same set of tests as A. |
+
+**CI flows** (Draft PR). Acceptance bars from the plan's "Performance acceptance":
+
+| # | do | expect |
+| --- | --- | --- |
+| L1 | Push the branch and open a Draft PR | `Validate` runs `plan`, a `tests` matrix (one job per planned shard), `tests-result` and `package`. All green. The job names differ from before (D10). |
+| L2 | Read the `validate` critical path (the longest `plan` -> `tests` -> `tests-result` chain) | At most 5 min, and no more than 45 s slower than the 3 min 23 s baseline (run `36257702439`). |
+| L3 | Open `tests-result`'s summary | It reports an exact coverage check on the real run: every planned id ran once. It uploads a `timings-ci` artifact. |
+| L4 | Push a throwaway commit with a deliberately failing test (as in I), then remove it | `tests-result` fails. Its summary names the test, the shard, the log artifact (`results-<i>`) and the reproduction commands. |
+
+**Known limitations and out of scope.**
+
+- **D9, timing seed.** `tools/test_timings.json` is still local-machine data (`seed-local`), so it
+  only affects CI balance, never coverage. Refreshing it from L3's `timings-ci` artifact
+  (`python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`) changes a
+  protected path. If you want the refresh, record it as a finding so it goes through
+  `/apply-functional-review`.
+- **D7, leaked processes.** A leaked process is reported as a warning and killed; it does not
+  fail the run.
+- `workflow-conformance.yml` (managed, serial, about 5 min) still runs on pull requests and stays
+  the floor of the PR's checks.
+- Design H (the owned-process `source` follows the current basis) and Design I (drain detach
+  bound 10800 s, shown by `observe` as `detached after 180:00`) have no practical manual flow:
+  exercising the detach needs a 3-hour drain. Both are covered by automated tests and by the
+  stress runs. `resume` has no `--timeout`, and configurability of the bound is deferred to
+  ROADMAP 1.4.
+- There is no method-level splitting (D4), no retries, no timeout multiplier (D6), and
+  `EXCLUSIVE_ATOMS` is empty (D5).
+
 ## Checkpoint progress
 
 | id | status | commit |

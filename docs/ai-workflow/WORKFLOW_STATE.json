@@ -2917,7 +2917,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -3140,8 +3140,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 70,
-      "last_transition": "2026-09-27T05:35:46Z",
+      "state_revision": 71,
+      "last_transition": "2026-09-27T09:41:57Z",
       "implementation_review_stages": {
         "review_content_id": "e735ad9c56c043cf2e05ee46b2453368b0b9f447332f270ebf08614b063ed855",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {

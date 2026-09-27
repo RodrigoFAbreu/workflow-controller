@@ -6,6 +6,42 @@ This roadmap captures the planned evolution of Workflow Controller from the comp
 
 The roadmap is ordered by dependency and operational value. Correctness, runtime isolation, and migration safety come before broader portability and ergonomics.
 
+## At a glance
+
+**Where things stand (2026-09-27).** Controller 1.2.1 is the latest release. Every milestone
+through adaptive test sharding (1.2.1 below) is complete. Workflow 2.6.0 is released by Workflow
+Manager; the Controller still admits only Workflow 2.5.1.
+
+**Where this is heading.** Each roadmap item becomes one autonomous Controller run: fresh workers
+for implementation, independent review and remediation, automated evidence where it suffices, a
+green pull request, an automatic merge into a protected `main`, a deterministic release, and then
+a fresh run for the next item. Human gates stay only where a decision needs human judgement.
+
+**Next, in order.** Each step is one small milestone that is released on its own.
+
+| # | Step | Repository | Roadmap section |
+|---|---|---|---|
+| 1 | Integrate the released Workflow 2.6, kept minimal | Controller | 1.6 |
+| 2 | Squash merges, with the release version derived from pull request titles | Controller | new; the first slice of automatic merging (1.8/1.9) |
+| 3 | Operational cleanup and telemetry v0 (token, cache, cost and timing per job) | Controller | 1.4, plus 8 |
+| 4 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | Controller | new; the base of automated functional evidence (1.8) |
+| 5 | Workflow 2.7: Orchestration Protocol v1 (`describe`, `verify`, `next-action`, `reconcile`) | Workflow Manager | 1.7 |
+| 6 | The Controller on the protocol: decisions first, then outcomes | Controller | 1.7 |
+| 7 | Workflow 2.8: gate policy; automatic advance on sufficient evidence, including automated cross-model review and automated functional evidence | Workflow Manager | 1.8 |
+| 8 | A review-only harness seam with a Codex reviewer | Controller | the smallest slice of 5 |
+| 9 | Automatic merge: fix the known timing flakes and D7 first, then GitHub auto-merge on green required checks | Controller | 1.9 |
+| 10 | The roadmap runner: next item, one run, merge, release, stop | Controller | new |
+
+In parallel, in Workflow Manager: finish its test-sharding milestone; then a protected `main`,
+pull requests and separate Manager and Workflow releases; later, Manager resolving exact Workflow
+releases from published artifacts instead of the checked-in `distribution/` tree.
+
+**Deferred** because they do not unlock that operating model: concurrency and multi-worktree (6),
+the observation dashboard (7.5), other forges (7.6), hot-reloadable routing (8), the orchestrator
+(9), and assurance tiers. RepFlow (3, 4) migrates once, directly to a protocol-capable Workflow.
+
+The numbered sections below keep their historical numbers; this table is the current order.
+
 ---
 
 ## 0. Baseline — Automatic Lifecycle Orchestration
@@ -155,7 +191,8 @@ planner now serves both:
   the always-run `tests-result` aggregate.
 
 Controller behaviour changes for the next release's notes (both in `controller/worker.py`, both
-through plan amendments; 1.2.0 is not re-released):
+through plan amendments; both shipped in 1.2.1, a bump-only release, since the milestone's merge
+did not change the version):
 
 - an owned process's `source` label now follows its current ownership basis, not the one it had
   when first seen, and a relabel is published (amendment 0). For example, a background process
@@ -220,7 +257,8 @@ Requirements:
 **Status:** One urgent correctness hotfix complete in this slot (`workflow-controller-worker-lifecycle-ownership`,
 accepted 2026-09-26 under Workflow 2.5.1; the narrative is archived at
 `docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`). The four patches
-below remain open and are the next milestone to plan (1.6 waits for the Workflow 2.6.x release)
+below remain open; they are step 3 of [At a glance](#at-a-glance), after the Workflow 2.6
+integration (1.6, now unblocked) and the squash-merge versioning change
 
 **Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
 plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR
@@ -248,7 +286,7 @@ name) are in ADR 0004. It was not folded together with the patches below, which 
 
 **Priority:** Immediate / High
 
-**Status:** Complete (`workflow-controller-trunk-branch-pr-release-orchestration`, accepted 2026-09-25 under Workflow 2.5.1). The narrative is archived at `docs/milestones/completed/workflow-controller-trunk-branch-pr-release-orchestration.md`. The first automatic release (1.2.0, README "Runbook: the first automatic release") is the supervised rollout still to run.
+**Status:** Complete (`workflow-controller-trunk-branch-pr-release-orchestration`, accepted 2026-09-25 under Workflow 2.5.1). The narrative is archived at `docs/milestones/completed/workflow-controller-trunk-branch-pr-release-orchestration.md`. The first automatic release, 1.2.0, was published by `main.yml` on 2026-09-26.
 
 Milestone:
 
@@ -882,7 +920,7 @@ Required behaviour:
 
 - downloads go through `gh release download` (the repository may be private: anonymous release URLs return 404), so `gh` missing or unauthenticated is an up-front refusal;
 - verification before install: the wheel against the release's `SHA256SUMS` (integrity only, since both come from the same release), then the wheel's own build info against the release (`build_origin: release`, the expected `release_tag`, and a `source_commit` equal to the tag's commit). The `verify-wheel` logic moves from `tools/release.py` into the package, since `tools/` is not shipped;
-- every refusal happens before pipx runs: a `source` runtime, `status` not `active: none`, `gh` unavailable, an unknown version, and a downgrade across a generation (`controller/GENERATION.json`) without an explicit flag, because the older generation refuses the newer one's job records (`StaleJobRecordError`, see the README's rollback notes);
+- every refusal happens before pipx runs: a `source` runtime, `status` not `active: none`, `gh` unavailable, an unknown version, and a downgrade across a generation (`controller/GENERATION.json`) without an explicit flag, because the older generation refuses the newer one's job records (`StaleJobRecordError`, see the rollback notes in `docs/guide/installation.md`);
 - requesting the already-installed version is a no-op that says so;
 - `doctor` (7.3) reports release/update status by reusing `update --check`.
 
@@ -961,41 +999,17 @@ Ongoing work:
 
 ---
 
-# Suggested Execution Order
+# Execution order
+
+The current order is the table in [At a glance](#at-a-glance). Completed so far, in order:
 
 ```text
-0. Automatic lifecycle orchestration                         COMPLETE
-   |
-1. Release/runtime isolation + live observability            COMPLETE (1.1-1.3)
-   |
-1.5 Trunk/branch/PR/release orchestration                    COMPLETE
-   |                    \
-   |                     \  Workflow Manager 2.6 hardening runs in parallel
-   |                      \
-1.6 Controller <-> released Workflow 2.6 integration         AFTER BOTH COMPLETE
-   |
-1.7 Workflow Orchestration Protocol decoupling
-   |
-2. RepFlow disposable migration / real migration validation
-   |
-3. Harness Adapter Protocol + multi-harness/model portability
-   |
-4. Forge Adapter maturation + PR-review/remediation loop
-   |
-5. Structured Observation API + web dashboard + analytics
-   |
-6. Concurrency / multi-worktree / worker leases
-   |
-7. Operator UX / diagnostics
-   |
-8. Routing / cost-efficiency / usage-aware scheduling
-   |
-9. Orchestrator / escalation layer
-   |
-10. Ongoing quality / maintenance
+0.     Automatic lifecycle orchestration                     COMPLETE
+1.1-3  Release/runtime isolation + live observability        COMPLETE (1.1.0)
+1.5    Trunk/branch/PR/release orchestration                 COMPLETE (first automatic release 1.2.0)
+1.4    Worker lifecycle ownership hotfix                     COMPLETE (in 1.2.0)
+1.2.1  Adaptive test sharding                                COMPLETE (released as 1.2.1)
 ```
-
-The exact numeric headings above remain historical roadmap sections; this execution order is the dependency-oriented target sequence.
 
 ---
 

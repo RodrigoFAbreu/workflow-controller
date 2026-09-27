@@ -36,3 +36,10 @@ on update. Add repository-specific guidance below it; it is never touched.
 -->
 
 <!-- workflow-manager:end -->
+
+## Controller documentation
+
+- Documentation map (guides, ADRs, roadmap, history): `docs/README.md`
+- Operator and developer guides: `docs/guide/`. Keep them current when a
+  change alters behaviour they describe; plans and completed-milestone
+  narratives are historical records and are not updated afterwards.

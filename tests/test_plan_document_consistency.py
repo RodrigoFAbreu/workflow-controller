@@ -91,6 +91,7 @@ ADR_PATH = REPO_ROOT / "docs" / "adr" / "0001-controller-generation-1-architectu
 ADR_0002_PATH = REPO_ROOT / "docs" / "adr" / "0002-release-runtime-identity-and-observability.md"
 TRUNK_PLAN_PATH = REPO_ROOT / "docs" / "ai-workflow" / "CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md"
 README_PATH = REPO_ROOT / "README.md"
+GUIDE_DIR = REPO_ROOT / "docs" / "guide"
 CI_WORKFLOWS_PY = REPO_ROOT / "tools" / "ci_workflows.py"
 
 
@@ -523,7 +524,8 @@ class LiveDocumentTest(unittest.TestCase):
 class OperatorDocumentCommandLineTest(unittest.TestCase):
     """The fourth half's recogniser over the two operator documents
     (automatic-lifecycle-orchestration CP8): every Controller invocation
-    line ``README.md`` or the ADR states parses under the live parser, so
+    line ``README.md``, the ``docs/guide/`` reference or the ADR states
+    parses under the live parser, so
     an operator who copies one never meets a usage error (exit 2)."""
 
     def setUp(self) -> None:
@@ -535,6 +537,16 @@ class OperatorDocumentCommandLineTest(unittest.TestCase):
         # --abandon`, the routing examples) are recognised invocation lines.
         self.assertGreaterEqual(len(extract_invocation_lines(text)), 5)
         self.assertEqual(command_line_violations(text, self.parser), [])
+
+    def test_every_guide_invocation_line_parses_under_the_live_parser(self) -> None:
+        # The operator reference moved from README.md into docs/guide/; its
+        # invocation lines stay held to the live parser.
+        guides = sorted(GUIDE_DIR.glob("*.md"))
+        self.assertTrue(guides)
+        self.assertGreaterEqual(sum(len(extract_invocation_lines(p.read_text())) for p in guides), 10)
+        for path in guides:
+            with self.subTest(guide=path.name):
+                self.assertEqual(command_line_violations(path.read_text(), self.parser), [])
 
     def test_every_adr_invocation_line_parses_under_the_live_parser(self) -> None:
         self.assertEqual(command_line_violations(ADR_PATH.read_text(), self.parser), [])

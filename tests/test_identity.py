@@ -36,6 +36,7 @@ class MaterialiseCleanTreeTest(unittest.TestCase):
     """Test 1 (mechanism half) + test 9 (dirt outside the pathspec)."""
 
     def test_clean_tree_materialises_commit_kind(self) -> None:
+        self.fail("functional probe")  # THROWAWAY L4 probe, never merge
         with tempfile.TemporaryDirectory() as td:
             checkout = fixtures.build_checkout(Path(td) / "origin")
             head = fixtures.run(["git", "rev-parse", "HEAD"], cwd=checkout).stdout.strip()

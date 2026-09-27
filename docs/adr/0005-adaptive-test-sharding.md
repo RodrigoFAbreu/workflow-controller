@@ -6,10 +6,16 @@ design record (work item `workflow-controller-adaptive-test-sharding`,
 `docs/ROADMAP.md` section 1.2.1). This document records the invariants, the
 unit of placement, why a sharded run is equivalent to a serial one, the
 planning parameters and their measured justification, and the alternatives
-rejected. It changes nothing in `controller/`: the wheel, the version, the
-exit-code contract of [ADR 0001](0001-controller-generation-1-architecture.md)
-and the release pipeline's classification are untouched. `tools/` and
-`tests/` are not in the wheel.
+rejected. `tools/` and `tests/` are not in the wheel. The work item makes
+two bounded changes to `controller/worker.py`, both through plan amendments
+and both shipped with the next release, never as a re-release of 1.2.0:
+an owned process's `source` label now follows its current basis (amendment
+0, I10 below), and the drain detach bound rises from 600 s to 10800 s as an
+interim constant (amendment 1; [ADR 0004](0004-worker-lifecycle-ownership.md)).
+The version, the exit-code contract of
+[ADR 0001](0001-controller-generation-1-architecture.md), the job-record
+schema, `controller/GENERATION.json` and the release pipeline's
+classification are untouched.
 
 It supersedes one operational detail of two earlier ADRs, without editing
 them: [ADR 0002](0002-release-runtime-identity-and-observability.md) runs
@@ -67,6 +73,10 @@ on 4 CPUs) exposed a test-fixture timing race.
   state (the worker's subreaper refcount, cached identity) are per process.
 - **I9 Explicit serialization.** A test runs alone only if a reviewed
   `EXCLUSIVE_ATOMS` entry, with a reason, says so.
+- **I10 Provenance, not membership** (amendment 0). The Controller fix for
+  the ownership race below changes only the `source` label of a process that
+  is already owned, and when that label is published. It never changes which
+  processes are owned, or anything decided from the owned set.
 
 ### One inventory, two families
 
@@ -191,11 +201,21 @@ entry needs evidence that the race cannot be fixed in the test (D5):
 pre-registering the timing-sensitive worker modules would forfeit most of
 the local gain and hide the defects this milestone was asked to surface.
 Races that parallel load exposed are fixed at their cause, never by
-loosening an assertion, lengthening a window or retrying. The one fixed so
-far (`DrainDetachJobTest`'s escapee) was an assertion that assumed the
-Controller's first sighting of a process came after its `exec`; the
-Controller records an owned process when it first sees it, so the test now
-identifies the escapee by pid.
+loosening an assertion, lengthening a window or retrying. Two have been
+found, both first-sighting races:
+
+- `DrainDetachJobTest`'s escapee was an assertion that assumed the
+  Controller's first sighting of a process came after its `exec`. The
+  Controller records an owned process's command line when it first sees
+  it, so the test now identifies the escapee by pid (a test defect).
+- `OwnershipTest`'s setsid escapee was sometimes reported with `source`
+  `group` instead of `tag`, because the Controller also kept the `source`
+  of its first sighting, taken before the escapee's `setsid`. That was a
+  Controller defect, so it was fixed in the Controller (amendment 0): a
+  still-matching recorded entry takes the current scan's basis, and a
+  relabel is published. `pid`, `start_ticks`, the command line and the
+  `owned_processes_seen` sample stay first-sighting (I10). A test with a
+  FIFO-gated escapee reproduces the pre-`setsid` sighting deterministically.
 
 ## Rejected alternatives
 
@@ -226,12 +246,13 @@ identifies the escapee by pid.
 
 - One local command reproduces what CI validates, in about a sixth of the
   serial time.
-- Adding a test needs no CI edit. A new class is planned from estimates
-  until the committed profile is refreshed, and a changed class size fails
-  `CommittedTimingsTest` until `timings merge` refreshes that class.
+- Adding a test needs no CI edit. A new class is planned from estimates,
+  and a class whose test count changed is scaled per test, until the
+  committed profile is refreshed; neither needs a refresh. A removed or
+  renamed class leaves a stale atom that `CommittedTimingsTest` rejects
+  until `timings merge` prunes it.
 - `validate`'s check names changed; an external branch-protection rule would
   need to require `validate / tests-result` and `validate / package`.
-- Open: failing a run on a leaked process (D7), refreshing the committed
-  profile from real CI data (it is local-machine data until then, D9), and
-  `OwnershipTest`'s first-sighting `source` race, seen only at 8 copies of the
-  class on one CPU, which needs a Controller decision.
+- Open: failing a run on a leaked process (D7), and refreshing the
+  committed profile from real CI data (it is local-machine data until then,
+  D9).

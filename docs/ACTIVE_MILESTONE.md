@@ -41,9 +41,72 @@ no retries.
 | CP5B -- ownership provenance follows the current basis (amendment 0) | complete (sharded full selection PASS, 2056 tests, 148 s) | this checkpoint's commit |
 | CP5C -- drain detach bound 600 -> 10800 s (amendment 1) | complete (narrow 101 OK; sharded full selection PASS, 2056 tests, 101 s) | this checkpoint's commit |
 | CP6 -- CI integration | complete, revalidated at revision 6 (test_ci_workflows 59 OK; `ci_workflows --check` clean; sharded full selection PASS, 2056 tests, 92.8 s) | `14bbdcc`, revalidation: this checkpoint's commit |
-| CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
+| CP7 -- documentation, measurement and full verification | complete, revalidated at revision 6 (full selection median 81.1 s; stress 0 of 13 failures) | revalidation: this checkpoint's commit |
 
 ### CP7 -- documentation, measurement and full verification (complete)
+
+- **Revalidated at plan revision 6** (amendments 0 and 1), on head `9e7c96c`:
+  - **Documentation edits:**
+    - `docs/adr/0005-adaptive-test-sharding.md`: the introduction names the work item's two
+      bounded `controller/worker.py` changes (amendment 0's `source` provenance, amendment 1's
+      drain bound 600 -> 10800 s), both shipped with the next release, never as a re-release of
+      1.2.0. New invariant **I10 Provenance, not membership**. The race-policy section lists both
+      first-sighting races found: `DrainDetachJobTest` (a test defect) and `OwnershipTest`'s
+      setsid escapee (a Controller defect, fixed by Design H in CP5B). The consequences no longer
+      list the `OwnershipTest` race as open.
+    - `docs/ROADMAP.md` 1.2.1: the release-note list names both Controller behaviour changes (the
+      `source` label follows the current basis, with a relabel published; the drain detach bound
+      is 10800 s as an interim constant, configurability under 1.4). "Left for later" no longer
+      lists the race.
+    - `README.md` (external review O1): ordinary drift (a changed test count, a new class) needs
+      no timing refresh; a removed or renamed class leaves a stale atom that
+      `CommittedTimingsTest` rejects until `timings merge` prunes it.
+  - **Verification and measurement** (reference machine, 16 CPUs; every run under a reaping
+    subreaper with SIGINT at its default; runs sequential). The battery ran in two parts: a
+    first pass from 03:56 to 04:34, then a re-run of the five stress runs and the packaging run
+    that had overlapped another test process on the same machine. Only the re-runs are counted
+    below; the overlapped originals also passed (4 CPUs 96.3 / 95.7 s, 12-on-4 114.8 / 110.5 /
+    108.6 s). A separate `workflow-manager` test session was running on the machine throughout
+    (load average 3-7), so these walls are, if anything, pessimistic.
+    - `python3 -m unittest discover -s tests -t .`: 2049 tests in 486.3 s, OK (8 skipped).
+    - `python3 tools/run_tests.py --serial`: 2056 tests (2049 + 7 conformance), PASS, 606.9 s.
+      Its 2049 controller ids equal `discover`'s, **in the same order**; no duplicates.
+    - Full selection at defaults, 3 runs: 8 shards, PASS, walls 81.3 / 81.1 / 81.1 s, balance
+      1.05 each, largest atom `conformance:workflow_acceptance_matrix_test.py` (81.0-81.2 s),
+      the critical path.
+    - Controller-only (`tests`) at defaults, 3 runs: 8 shards, PASS, walls 62.1 / 62.6 / 62.0 s,
+      balance 1.00 / 1.01 / 1.00, largest atom `tests.test_worker.OwnershipTest` (37.2 s; up
+      from 34.1 s with CP5B's FIFO-gated test).
+    - Id comparison: every run's reported ids equal the serial run's (2056, or its 2049
+      controller ids), with no duplicates; 2048 pass + 8 skip (2041 + 8 controller-only).
+    - Stress protocol (G), 13 runs, **all PASS, 0 failures, 0 leaks**, `EXCLUSIVE_ATOMS: 0`:
+
+      | configuration | runs | walls |
+      | --- | --- | --- |
+      | default (8 shards, 16 CPUs) | 5 | 81.4 / 81.1 / 81.1 / 82.2 / 82.0 s |
+      | 4 CPUs (`taskset -c 0-3`, 8 shards) | 5 | 93.0 / 93.9 / 95.3 / 99.1 / 94.1 s |
+      | oversubscribed (`--shards 12 --jobs 12`, 4 CPUs) | 3 | 107.7 / 106.5 / 106.2 s |
+    - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v`:
+      9 tests in 25.1 s, OK (none skipped).
+    - `python3 tools/ci_workflows.py --check`: clean.
+    - `python3 -m unittest tests.test_plan_document_consistency tests.test_ci_workflows` after
+      the documentation edits: 99 tests, OK.
+  - **Performance acceptance at revision 6:**
+
+    | measure | baseline | bar | measured |
+    | --- | --- | --- | --- |
+    | full selection, local defaults | ~602 s serial | median ≤ 120 s | **81.1 s** (7.5x vs the 606.9 s `--serial`) |
+    | controller-only, local defaults | 483 s serial | median ≤ 90 s | **62.1 s** (7.8x vs 486.3 s `discover`) |
+    | balance ratio | n/a | ≤ 1.25, or max shard = largest atom ± 10% | 1.05 full (max shard = the 81 s largest atom), ≤ 1.01 controller-only |
+    | sharded vs serial id set | n/a | identical every run | identical, 6 of 6, and 13 of 13 stress runs |
+    | stress protocol | 1 failure at 12-on-4 | 0 failures | 0 of 13 |
+
+    The CI measures still belong to functional review (they need a pushed branch and a Draft PR).
+  - **Open, carried forward:** D7 (failing a run on a leaked process) and refreshing
+    `tools/test_timings.json` from real CI data (D9). The `OwnershipTest` first-sighting race is
+    closed by CP5B (Design H), not carried forward.
+
+The record below is CP7's original completion at plan revision 3, kept for history.
 
 - **Documentation:**
   - `README.md` "Development": the runner (selection, shards, `--serial`, `--plan-only`,

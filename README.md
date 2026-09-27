@@ -1456,9 +1456,12 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   profile changes only through an explicit, reviewed refresh, for
   example from a CI run's `timings-ci` artifact:
   `python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`.
-  A stale entry only degrades balance: a class whose test count changed
-  is scaled per test, and a new class is estimated from its module's
-  mean, so adding or removing tests never needs a refresh.
+  Ordinary drift needs no refresh and only degrades balance: a class
+  whose test count changed is scaled per test, and a new class is
+  estimated from its module's mean. A removed or renamed class is
+  different: its old entry names an atom that no longer exists, which
+  `CommittedTimingsTest` rejects until a `timings merge` prunes it (the
+  merge drops every entry the inventory no longer contains).
 - **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.

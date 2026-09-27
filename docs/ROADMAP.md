@@ -135,8 +135,8 @@ Release requirements:
 **Status:** Implemented, in review (`workflow-controller-adaptive-test-sharding`, plan
 `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, ADR
 `docs/adr/0005-adaptive-test-sharding.md`). The operator requested it directly, ahead of 1.4,
-which stays the next roadmap item. Its amendment 1 raised the drain detach bound from 600 s to
-10800 s as an interim constant; making it configurable is listed under 1.4.
+which stays the next roadmap item. Its two plan amendments each made one Controller change,
+listed below for the next release's notes.
 
 The Controller's full verification ran serially in about 10 minutes locally (483 s of Controller
 tests plus 119 s of frozen conformance suites), while CI split the Controller suite into eight
@@ -153,9 +153,19 @@ planner now serves both:
 - `validate.yml` plans its matrix in a `plan` job, runs one `tests` job per shard, and gates on
   the always-run `tests-result` aggregate.
 
-Left for later: failing a run on a leaked process (D7), refreshing the committed timing profile
-from real CI runs, and the `OwnershipTest` first-sighting `source` race that needs a Controller
-decision (CP5 notes).
+Controller behaviour changes for the next release's notes (both in `controller/worker.py`, both
+through plan amendments; 1.2.0 is not re-released):
+
+- an owned process's `source` label now follows its current ownership basis, not the one it had
+  when first seen, and a relabel is published (amendment 0). For example, a background process
+  that leaves the worker's group with `setsid` is now always reported as owned by `tag`; a first
+  sighting before its `setsid` used to leave it labelled `group`. Which processes are owned is
+  unchanged;
+- the drain detach bound is 10800 s (3 hours), up from 600 s, as an interim constant; making it
+  configurable is listed under 1.4 (amendment 1).
+
+Left for later: failing a run on a leaked process (D7) and refreshing the committed timing
+profile from real CI runs.
 
 ## 1.3 Live worker observability
 

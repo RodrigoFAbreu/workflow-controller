@@ -1989,8 +1989,24 @@ class RunRecordCtrlCTest(_RunRecordFixture, unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait(10)))
-        self.assertTrue(process_fixtures.wait_until(
-            lambda: any("worker_process" in r for r in self._jobs()), timeout=30), "the worker never started")
+        # Interrupt supervision, never `on_spawn`: `worker_process` is flushed
+        # inside `on_spawn`, and an interrupt there ends the group by
+        # `launch`'s contract (functional review round 2, F2). `launch` opens
+        # the worker's stdout for reading only once `on_spawn` has returned,
+        # and without `--follow` nothing else in the Controller reads it.
+        def supervising() -> bool:
+            stdout = next((r["worker_streams"]["stdout_path"] for r in self._jobs()
+                           if "worker_process" in r), None)
+            if stdout is None:
+                return False
+            with contextlib.suppress(OSError):
+                for fd in os.listdir(f"/proc/{child.pid}/fd"):
+                    flags = int(Path(f"/proc/{child.pid}/fdinfo/{fd}").read_text().split("flags:")[1].split()[0], 8)
+                    if flags & os.O_ACCMODE == os.O_RDONLY and os.readlink(f"/proc/{child.pid}/fd/{fd}") == os.path.realpath(stdout):
+                        return True
+            return False
+
+        self.assertTrue(process_fixtures.wait_until(supervising, timeout=30), "supervision never began")
         child.send_signal(signal.SIGINT)
         _out, err = child.communicate(timeout=30)
         self.assertNotEqual(child.returncode, 0)

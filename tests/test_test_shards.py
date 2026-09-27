@@ -1834,6 +1834,14 @@ class CommittedTimingsTest(unittest.TestCase):
         keys = {atom.key for atom in inventory.atoms}
         self.assertEqual(sorted(set(profile.atoms) - keys), [])
 
+    def test_the_committed_profile_is_measured_on_ci(self) -> None:
+        # Functional review F1: a local-machine seed underestimated CI by
+        # 1.6x overall (2.6x for the acceptance matrix), so the CI plan put
+        # the matrix on a shard with 106 s of other work.
+        profile = shards.parse_timings((fixtures.REPO_ROOT / shards.CI_TIMINGS).read_bytes())
+        self.assertEqual(profile.profile, shards.CI)
+        self.assertTrue(profile.updated_from)
+
     def test_a_stale_test_count_still_plans_the_full_inventory(self) -> None:
         profile = shards.parse_timings((fixtures.REPO_ROOT / shards.CI_TIMINGS).read_bytes())
         inventory = shards.build_inventory(fixtures.REPO_ROOT)

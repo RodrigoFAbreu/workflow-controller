@@ -2917,7 +2917,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 6,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -2995,7 +2995,133 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-27T02:24:56Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "837edc9e0be2b101d9cb7d7d8dc54c2898fc81192e648815b8c02b0c4824704a",
+        "approved_review_content_id": "e735ad9c56c043cf2e05ee46b2453368b0b9f447332f270ebf08614b063ed855",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "930d4ea2b6d51b49a4d8b85aeac638dcc679bd0f"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "19db9c943442a89d76e7579ce2fe30d5039136f0"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "53d66ad955ffe16965f4f9a5998652dd9ffa63e2"
+          },
+          {
+            "path": "docs/adr/0004-worker-lifecycle-ownership.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c2daa88a72b72ae14594a6542b041723e4e95dd"
+          },
+          {
+            "path": "docs/adr/0005-adaptive-test-sharding.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bccbadc97ec26404f4bb6a73a5b23670778fd506"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "79c2d6511a71dbe48290b75c08bfceba02802996"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "b56bfe59e84ccb4f05c053df63dd856960d8b787"
+          },
+          {
+            "path": "tests/golden/test_shards_baseline_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ed4f53e139f4303554a68561293bc3625e21930"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5bc645ff6d1d806efa0028b6ba4154516a058111"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1da9f1e8e9c7b5f10fb4d09c88acd2c3167d135d"
+          },
+          {
+            "path": "tests/test_observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2182af31eae780771929c0a1670c17fb279eb834"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca4a1337755c10d626ce70a55a5a5b7eb144c9ce"
+          },
+          {
+            "path": "tests/test_run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f7db1834621c9dd58c7564c656a2e10370c1f878"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88b4960e9a7008a6868e12f4e523a74aaa53d44b"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e3f159d40375728223116d2f67e42f23842df07a"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5052229d35e27e213558b08dac6be3373fb5665a"
+          },
+          {
+            "path": "tools/run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5a9340403a5554b18038a23d83b9bd1d30a718bb"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d1e9b82264514042448be0f602184359ea28bb53"
+          },
+          {
+            "path": "tools/test_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "54e97110d067eae8ce305ddbb3cc1f4292e036f0"
+          }
+        ],
+        "reviewed_content_commit": "413427ab39d3f81591e16f8401f2c05f467ba6af",
+        "legacy_evidence": null,
+        "user_confirmation": "Approve implementation for workflow-controller-adaptive-test-sharding",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-27T04:20:44Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "f394fe407c5fefaef264dec4a6b685dd3a0bdc7332267209ba05e5b344250a9d",
@@ -3014,17 +3140,22 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 65,
-      "last_transition": "2026-09-27T04:05:52Z",
+      "state_revision": 68,
+      "last_transition": "2026-09-27T04:20:44Z",
       "implementation_review_stages": {
-        "review_content_id": "346258798a7d7b7293c33eefb9236c7a61503d3275255b61606b9d9e29e4cfb3",
+        "review_content_id": "e735ad9c56c043cf2e05ee46b2453368b0b9f447332f270ebf08614b063ed855",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "a93e737726dec24e6529d5fc31f170819b003e2e06315cfea772cc8fa00e4df2",
+          "bundle_id": "837edc9e0be2b101d9cb7d7d8dc54c2898fc81192e648815b8c02b0c4824704a",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-09-26T22:23:33Z"
+          "round": 3,
+          "completed_at": "2026-09-27T04:11:06Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "837edc9e0be2b101d9cb7d7d8dc54c2898fc81192e648815b8c02b0c4824704a",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-27T04:19:18Z"
+        }
       },
       "amendment_history": [
         {

@@ -737,7 +737,7 @@ class JobActivityTest(_ActivityCase):
         activity = self.activity()
         self.assertEqual(activity["activity"], observe.ACTIVITY_DRAINING)
         self.assertEqual(activity["text"],
-                         f"worker ended; 1 owned process still running (pids {owned.pid}); detached after 10:00 "
+                         f"worker ended; 1 owned process still running (pids {owned.pid}); detached after 180:00 "
                          f"-- end them, then workflow-controller resume /repo; not owned: pid {daemon.pid} "
                          f"({self.daemon_entry(daemon)['cmdline']})")
         self.assertEqual([entry["pid"] for entry in activity["not_owned"]], [daemon.pid])

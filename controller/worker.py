@@ -407,8 +407,11 @@ COMMAND_LIFECYCLE_GRACE_SECONDS = 300
 WAKEUP_SETTLE_SECONDS = WAKEUP_GRACE_SECONDS + worker_stream.WAKEUP_SKEW_SECONDS
 
 #: How long, after the worker exited, the supervisor waits for owned
-#: processes before it detaches (plan decision 9). It ends nothing.
-DRAIN_DETACH_SECONDS = 600
+#: processes before it detaches (plan decision 9). It ends nothing. An
+#: interim 3-hour bound (amendment 1 of adaptive test sharding): legitimate
+#: background verification outlives 600 s. Making it configurable is
+#: deferred (ROADMAP 1.4).
+DRAIN_DETACH_SECONDS = 10800
 
 #: How many owned processes ``WorkerResult.owned_processes_seen`` lists.
 OWNED_PROCESS_SAMPLE = 20

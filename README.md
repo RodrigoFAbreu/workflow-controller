@@ -486,8 +486,8 @@ is owned like any other process, and one that imitates a listed name is
 not waited for. Extending the list is a Controller change.
 
 **The drain bound.** After `claude` exits, the Controller waits for
-the remaining owned processes for at most 600 s
-(`worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends
+the remaining owned processes for at most 3 hours (10800 s,
+`worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends
 **nothing**. It *detaches*: the record stays `LAUNCHED` at `DRAINING`
 with `drain_detached_at`, a `worker_drain_detached` event names the
 processes, the anchor keeps the lock, and the command exits 45 naming
@@ -495,6 +495,14 @@ each pid with its command line. Either run `workflow-controller resume
 <repo>`, which re-attaches and drains again with a fresh bound, or end
 the processes and then run `resume`. No later action can start while
 they run.
+
+`--timeout` bounds only the drain of the `step` or `run` that launched
+the worker. `resume` takes no `--timeout`, and its re-attach drain has
+none, so `resume` may wait in the foreground for up to 3 hours per call.
+To stop sooner, end the named pids (the drain then finishes at once), or
+interrupt `resume` with Ctrl-C: that ends only the Controller, nothing
+it owns, and the job stays `LAUNCHED` at `DRAINING` for a later
+`resume`.
 
 ### Scheduled wakeups
 

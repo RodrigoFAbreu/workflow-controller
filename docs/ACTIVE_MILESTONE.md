@@ -6,12 +6,15 @@
 and CI. The operator requested it directly, ahead of `docs/ROADMAP.md` section 1.4, which stays
 the next roadmap item.
 
-- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 4 (amendment 0),
-  approved at `8b0f522` (`EXTERNAL_APPROVE`). Revision 3 was approved at `5fdea5a`.
+- Plan: `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, revision 6 (amendment 1),
+  approved at `4a4d0bc` (`EXTERNAL_APPROVE`). Revision 4 (amendment 0) was approved at
+  `8b0f522`, revision 3 at `5fdea5a`.
 - Registry: `docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json`
-  (CP1-CP5, CP5B, CP6, CP7).
+  (CP1-CP5, CP5B, CP5C, CP6, CP7).
 - Amendment 0 reconciliation marked CP1-CP7 `NEEDS_REVALIDATION` (revision 3 had no checkpoint
   anchors) and added CP5B. Each is revalidated through `/milestone-implement`.
+- Amendment 1 (drain detach bound 600 -> 10800 s, Design I) retained CP1-CP5, CP5B and CP6,
+  added CP5C and marked CP7 `NEEDS_REVALIDATION`.
 - Governing workflow version: `2.2`. Base commit: `405f050`.
 - Ground truth for phase and checkpoint status: `docs/ai-workflow/WORKFLOW_STATE.json`.
 
@@ -36,6 +39,7 @@ no retries.
 | CP4 -- executor, local runner and aggregation | complete, revalidated at revision 4 | `55c855b`, revalidation: this checkpoint's commit |
 | CP5 -- serialization registry and timing-flake hardening | complete, revalidated at revision 4 | `311078f`, revalidation: this checkpoint's commit |
 | CP5B -- ownership provenance follows the current basis (amendment 0) | complete (sharded full selection PASS, 2056 tests, 148 s) | this checkpoint's commit |
+| CP5C -- drain detach bound 600 -> 10800 s (amendment 1) | complete (narrow 101 OK; sharded full selection PASS, 2056 tests, 101 s) | this checkpoint's commit |
 | CP6 -- CI integration | complete | `14bbdcc` |
 | CP7 -- documentation, measurement and full verification | complete | this checkpoint's commit |
 

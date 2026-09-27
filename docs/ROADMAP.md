@@ -135,7 +135,8 @@ Release requirements:
 **Status:** Implemented, in review (`workflow-controller-adaptive-test-sharding`, plan
 `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, ADR
 `docs/adr/0005-adaptive-test-sharding.md`). The operator requested it directly, ahead of 1.4,
-which stays the next roadmap item.
+which stays the next roadmap item. Its amendment 1 raised the drain detach bound from 600 s to
+10800 s as an interim constant; making it configurable is listed under 1.4.
 
 The Controller's full verification ran serially in about 10 minutes locally (483 s of Controller
 tests plus 119 s of frozen conformance suites), while CI split the Controller suite into eight
@@ -227,7 +228,8 @@ name) are in ADR 0004. It was not folded together with the patches below, which 
 - correct misordered `--work-item` resume hints;
 - improve manual-external gate behavior when local review ledger/content is incoherent;
 - add explicit abandoned/unreconcilable apply-review relaunch-bound tests;
-- improve active-job/status presentation while observability work is already touching runtime diagnostics.
+- improve active-job/status presentation while observability work is already touching runtime diagnostics;
+- make the drain detach bound and the other Controller tunables configurable, including a `--timeout` for `resume`'s re-attach drain; 10800 s is an interim constant, amendment 1 of 1.2.1.
 
 ---
 

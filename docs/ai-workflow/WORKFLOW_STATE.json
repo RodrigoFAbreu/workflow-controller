@@ -2907,6 +2907,524 @@
           "completed_at": "2026-09-26T13:01:49Z"
         }
       }
+    },
+    "workflow-controller-adaptive-test-sharding": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-adaptive-test-sharding",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 7,
+      "implementation_revision": 6,
+      "functional_review_round": null,
+      "base_commit": "405f050029f546055a3b42783fec25c87873bbd3",
+      "reviewed_implementation_head": "8637685f0f200bd3b97ac9b8155213a82bc7ff36",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP7",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "8b0f522101150e9f2dc2bc7f1cf84a3663ae0806"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "31b88ea80565a87f93f7531a41895d8b17580157"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "435de8aec0d54864789391db3d63fd563a8180fa"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "ed902102795cb5ddba6bbccb9f191145ab4969e2"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "2cf86dae1b01389d66db1c589e646ec551e10965"
+        },
+        "CP6": {
+          "status": "COMPLETE",
+          "start_commit": "f50017afa0dddbd91290ce4a367348d7af3cc239"
+        },
+        "CP7": {
+          "status": "COMPLETE",
+          "start_commit": "d62a6f6a76b63767ededdb47639ebc12e856cb5b"
+        },
+        "CP5B": {
+          "status": "COMPLETE",
+          "start_commit": "cae45c792363aa4a73a32abe0a73f25d31366ce9"
+        },
+        "CP5C": {
+          "status": "COMPLETE",
+          "start_commit": "4a4d0bc8c58da8a46a56d4fbb861b4f37c83aa36"
+        },
+        "CP6B": {
+          "status": "COMPLETE",
+          "start_commit": "cbd9b76d5998c917d05a3ac806094c7a9cf980a0"
+        }
+      },
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "5b47eab332ac816130b970b4be59cd0d56e901c24402b6852c6c5ab899081d40",
+        "approved_review_content_id": "133c03c433b43471e0a1dc7ea5a334d789ae73a0c2bcdf86c5855f49913dd321",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8cbeed6794992a90d334e7f4fca7193e897c2a1"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ee9d6f38e48d3743bd20338c566dab70ef3d0bb9"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "734dbfe65fce4fb941a402f3f04fdd5320cb331a"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "Confirm approval of the plan review for workflow-controller-adaptive-test-sharding.",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-27T10:59:01Z"
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "3512d2384f9acd619ba3c4bc70ed22c162c85c4d76b7be16fd76bd56dfd33888",
+        "approved_review_content_id": "4104da017ad7c545f4bdc6e4bc64976d9942eabe26b5b0ea8beb71dbcb203088",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "54de230ccadfb8d3015075ce2c98eb665ffa310c"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dc5a839452eef73738456827b5d92cdc5cb892ce"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "53d66ad955ffe16965f4f9a5998652dd9ffa63e2"
+          },
+          {
+            "path": "docs/adr/0004-worker-lifecycle-ownership.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c2daa88a72b72ae14594a6542b041723e4e95dd"
+          },
+          {
+            "path": "docs/adr/0005-adaptive-test-sharding.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2320d72326e3758ae7ab255ac8ec8f186fe64067"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "79c2d6511a71dbe48290b75c08bfceba02802996"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "b56bfe59e84ccb4f05c053df63dd856960d8b787"
+          },
+          {
+            "path": "tests/golden/test_shards_baseline_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ed4f53e139f4303554a68561293bc3625e21930"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e763f3d3f74b6f45484dfdf96b5d4aa111f77bc7"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "90bea3c1189552ea09166ee0bb9c2ff09c3d9dc9"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1da9f1e8e9c7b5f10fb4d09c88acd2c3167d135d"
+          },
+          {
+            "path": "tests/test_observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2182af31eae780771929c0a1670c17fb279eb834"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca4a1337755c10d626ce70a55a5a5b7eb144c9ce"
+          },
+          {
+            "path": "tests/test_run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1dc2c1cdcd617719df6c97dd3e566676b9932d69"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a0af242180709be93b3fc94799b3edddf3af5183"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b59f4c4e45d677a594c069d19a83f4e9d5a3761f"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2b3be848fc512407d5aeb2a5d44c8d2e72719ff5"
+          },
+          {
+            "path": "tools/run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "72fafa586267c8782cd619f7fda48590da994c74"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "afe8721ce881fba385996a2e5eaf50e7f122f5b5"
+          },
+          {
+            "path": "tools/test_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a4e75939701b8a819df46a61732fab078373da60"
+          }
+        ],
+        "reviewed_content_commit": "8637685f0f200bd3b97ac9b8155213a82bc7ff36",
+        "legacy_evidence": null,
+        "user_confirmation": "Approve implementation for workflow-controller-adaptive-test-sharding",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-27T14:42:10Z"
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "133c03c433b43471e0a1dc7ea5a334d789ae73a0c2bcdf86c5855f49913dd321",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "5b47eab332ac816130b970b4be59cd0d56e901c24402b6852c6c5ab899081d40",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-09-27T10:27:30Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "5b47eab332ac816130b970b4be59cd0d56e901c24402b6852c6c5ab899081d40",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-09-27T10:46:40Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 92,
+      "last_transition": "2026-09-27T16:03:18Z",
+      "implementation_review_stages": {
+        "review_content_id": "4104da017ad7c545f4bdc6e4bc64976d9942eabe26b5b0ea8beb71dbcb203088",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3512d2384f9acd619ba3c4bc70ed22c162c85c4d76b7be16fd76bd56dfd33888",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-09-27T14:35:42Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3512d2384f9acd619ba3c4bc70ed22c162c85c4d76b7be16fd76bd56dfd33888",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-09-27T14:40:20Z"
+        }
+      },
+      "amendment_history": [
+        {
+          "amendment_id": "0",
+          "requested_at": "2026-09-26T22:39:03Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "IR1-003 exposed a genuine pre-existing Controller ownership first-sighting race during the CP5 stress testing. The approved plan explicitly requires a plan amendment when stress testing reveals a genuine Controller defect, and resolving it requires widening scope to permit the necessary `controller/` change.",
+          "superseded_plan_revision": 3,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "EXTERNAL_APPROVE",
+            "reviewed_bundle_id": "cbbafe3d37ddb8ac871b88fa6dbeb9e2beca13867cd189007d203abb60da35fb",
+            "approved_review_content_id": "1a35533430120462d5936b8b5f98fd8eb41e5d837e4a2a828d528636591be2ce",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "9912e3599ff39af657cc84597fbd0fdbd77084af"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "00773062b61713f0483e2d9100944d655d8f7538"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "cebe37b2b6a616e4b9d1201cd050be1ac55786a8"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "I approve workflow-controller-adaptive-test-sharding at stage plan",
+            "waived_guarantees": [],
+            "recorded_at": "2026-09-26T18:01:13Z"
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "5fdea5ae0c7a331cbfe32425504f2ae565faaa2e"
+            },
+            "CP2": {
+              "status": "COMPLETE",
+              "start_commit": "302d7fcd36933b977f750609e9a3b094d4f5dc30"
+            },
+            "CP3": {
+              "status": "COMPLETE",
+              "start_commit": "4467a80e2287df7ed31913a91c9c6afab3b6981c"
+            },
+            "CP4": {
+              "status": "COMPLETE",
+              "start_commit": "b0eb707a5d99b476ec8c97c41332cc11ff5fbf5a"
+            },
+            "CP5": {
+              "status": "COMPLETE",
+              "start_commit": "55c855b46528ae3b61b47a308e9f344b095bc855"
+            },
+            "CP6": {
+              "status": "COMPLETE",
+              "start_commit": "311078feebdee99f30cb2179fd5b89b52231a49d"
+            },
+            "CP7": {
+              "status": "COMPLETE",
+              "start_commit": "14bbdcc0745f478d4fd5f2d91e1fba84be413743"
+            }
+          },
+          "pre_amendment_approval_commit": "5fdea5ae0c7a331cbfe32425504f2ae565faaa2e",
+          "resolved_at_plan_revision": 4,
+          "reconciliation_outcome": {
+            "CP1": "needs_revalidation",
+            "CP2": "needs_revalidation",
+            "CP3": "needs_revalidation",
+            "CP4": "needs_revalidation",
+            "CP5": "needs_revalidation",
+            "CP5B": "new",
+            "CP6": "needs_revalidation",
+            "CP7": "needs_revalidation"
+          }
+        },
+        {
+          "amendment_id": "1",
+          "requested_at": "2026-09-27T01:38:42.272406+00:00",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "Raise worker.DRAIN_DETACH_SECONDS from 600 to 10800 as a bounded interim operational fix. Reproduced repeatedly in workflow-manager: legitimate owned background work outlives the worker by more than 10 minutes, so the 600 s bound detaches and interrupts valid runs. Drain semantics are otherwise unchanged; making drain tunables configurable is deferred to the next settings/configuration milestone.",
+          "superseded_plan_revision": 4,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "EXTERNAL_APPROVE",
+            "reviewed_bundle_id": "b5b07e01e7d42e1c78b9097fc080932f0ed66c9e8993caa1ec3cc5bb1b214d4a",
+            "approved_review_content_id": "3e71f14c398eb9cdb97dd6bea064dbf7b523dc33a6dc6765b91fdc90237d77a6",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "d8f1f0d442ed93256c49bfc6c57fd0531ddf38ab"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "53c53e20b3f1fb9aa2ff7f4255c6e554c4aca38f"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "f13c1d55722116728314fc5da578e7a03e34a317"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "I approve the plan stage for workflow-controller-adaptive-test-sharding",
+            "waived_guarantees": [],
+            "recorded_at": "2026-09-26T23:50:07Z"
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "8b0f522101150e9f2dc2bc7f1cf84a3663ae0806"
+            },
+            "CP2": {
+              "status": "COMPLETE",
+              "start_commit": "31b88ea80565a87f93f7531a41895d8b17580157"
+            },
+            "CP3": {
+              "status": "COMPLETE",
+              "start_commit": "435de8aec0d54864789391db3d63fd563a8180fa"
+            },
+            "CP4": {
+              "status": "COMPLETE",
+              "start_commit": "ed902102795cb5ddba6bbccb9f191145ab4969e2"
+            },
+            "CP5": {
+              "status": "COMPLETE",
+              "start_commit": "2cf86dae1b01389d66db1c589e646ec551e10965"
+            },
+            "CP6": {
+              "status": "NEEDS_REVALIDATION",
+              "start_commit": "311078feebdee99f30cb2179fd5b89b52231a49d"
+            },
+            "CP7": {
+              "status": "NEEDS_REVALIDATION",
+              "start_commit": "14bbdcc0745f478d4fd5f2d91e1fba84be413743"
+            },
+            "CP5B": {
+              "status": "COMPLETE",
+              "start_commit": "cae45c792363aa4a73a32abe0a73f25d31366ce9"
+            }
+          },
+          "pre_amendment_approval_commit": "8b0f522101150e9f2dc2bc7f1cf84a3663ae0806",
+          "resolved_at_plan_revision": 6,
+          "reconciliation_outcome": {
+            "CP1": "retained",
+            "CP2": "retained",
+            "CP3": "retained",
+            "CP4": "retained",
+            "CP5": "retained",
+            "CP5B": "retained",
+            "CP5C": "new",
+            "CP6": "retained",
+            "CP7": "needs_revalidation"
+          }
+        },
+        {
+          "amendment_id": "2",
+          "requested_at": "2026-09-27T10:09:23Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "Local implementation review round 4 reproduced LIR4-001 after functional-review remediation F1 replaced the committed timing seed with real CI measurements. With a cold local timing cache, local planning now chooses 5 shards and takes about 145.9 seconds, exceeding the approved 120-second local full-selection target. With a partial local profile missing the acceptance-matrix timing, it chooses 4 shards. This occurs because CI fallback timings currently participate in the local planner's largest-atom floor, which changes shard-count behaviour and contradicts the approved §B fallback semantics, §C formula, and D9 wording that timing replacement affects only balance.\n\nAmend the plan narrowly using remedy (c): for local planning, CI-fallback estimates may still contribute to estimated total work, but they must not contribute to the local largest-atom floor used to derive shard count. Only timing estimates from the local-machine profile should influence that floor. CI planning must remain unchanged.\n\nAdd deterministic regression coverage showing that on an 8-CPU machine both:\n\n* an empty local timing profile plans 8 shards; and\n* a partial local timing profile missing the acceptance-matrix timing still plans 8 shards.\n\nUpdate the relevant plan design text, §B fallback semantics, §C formula, D9 wording, README and ADR so they accurately describe this behaviour.\n\nDo not expand this into a broader planner redesign.",
+          "superseded_plan_revision": 6,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "EXTERNAL_APPROVE",
+            "reviewed_bundle_id": "8d19760a49a153094782b51a656b2ed7f7e928d4c46940103c1eea1524f595ef",
+            "approved_review_content_id": "f394fe407c5fefaef264dec4a6b685dd3a0bdc7332267209ba05e5b344250a9d",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "80fd638868412fa60bf307cbb6fd9d6cd9ac64bc"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-adaptive-test-sharding-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "92f27241386f4fcb83415d8bfb077c31e0a69882"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-adaptive-test-sharding-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "bf521ce21615959f5d6619786748027a248499df"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "plan workflow-controller-adaptive-test-sharding",
+            "waived_guarantees": [],
+            "recorded_at": "2026-09-27T02:24:56Z"
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "8b0f522101150e9f2dc2bc7f1cf84a3663ae0806"
+            },
+            "CP2": {
+              "status": "COMPLETE",
+              "start_commit": "31b88ea80565a87f93f7531a41895d8b17580157"
+            },
+            "CP3": {
+              "status": "COMPLETE",
+              "start_commit": "435de8aec0d54864789391db3d63fd563a8180fa"
+            },
+            "CP4": {
+              "status": "COMPLETE",
+              "start_commit": "ed902102795cb5ddba6bbccb9f191145ab4969e2"
+            },
+            "CP5": {
+              "status": "COMPLETE",
+              "start_commit": "2cf86dae1b01389d66db1c589e646ec551e10965"
+            },
+            "CP6": {
+              "status": "COMPLETE",
+              "start_commit": "f50017afa0dddbd91290ce4a367348d7af3cc239"
+            },
+            "CP7": {
+              "status": "COMPLETE",
+              "start_commit": "9e7c96c73436992ed812e739a489e1b3f000e1de"
+            },
+            "CP5B": {
+              "status": "COMPLETE",
+              "start_commit": "cae45c792363aa4a73a32abe0a73f25d31366ce9"
+            },
+            "CP5C": {
+              "status": "COMPLETE",
+              "start_commit": "4a4d0bc8c58da8a46a56d4fbb861b4f37c83aa36"
+            }
+          },
+          "pre_amendment_approval_commit": "4a4d0bc8c58da8a46a56d4fbb861b4f37c83aa36",
+          "resolved_at_plan_revision": 7,
+          "reconciliation_outcome": {
+            "CP1": "retained",
+            "CP2": "retained",
+            "CP3": "retained",
+            "CP4": "retained",
+            "CP5": "retained",
+            "CP5B": "retained",
+            "CP5C": "retained",
+            "CP6": "retained",
+            "CP6B": "new",
+            "CP7": "needs_revalidation"
+          }
+        }
+      ],
+      "amendment_base_commit": "f358409d050bdc01528d8734585a7e37a6e6206c"
     }
   }
 }

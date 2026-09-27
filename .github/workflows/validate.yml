@@ -6,31 +6,14 @@ name: Validate
 "on":
   workflow_call:
 jobs:
-  controller:
-    name: "controller (${{ matrix.shard }})"
+  plan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - shard: identity
-            modules: "tests.test_identity tests.test_runtime tests.test_package_structure tests.test_write_containment tests.test_lock tests.test_handoff"
-          - shard: job
-            modules: "tests.test_job tests.test_job_validation"
-          - shard: resume
-            modules: tests.test_resume
-          - shard: decision
-            modules: "tests.test_evidence tests.test_decision tests.test_golden_plan_stage_decisions tests.test_target_state tests.test_managed_repo tests.test_routing"
-          - shard: cli
-            modules: "tests.test_cli tests.test_lifecycle_orchestration"
-          - shard: worker
-            modules: "tests.test_worker tests.test_observe tests.test_observation_equivalence tests.test_fake_claude_contract tests.test_worker_stream"
-          - shard: docs
-            modules: "tests.test_plan_document_consistency tests.test_checklist_corrections tests.test_ci_workflows tests.test_release_tools tests.test_buildinfo"
-          - shard: trunk
-            modules: "tests.test_version_authority tests.test_repo_policy tests.test_gitrepo tests.test_forge tests.test_milestone_branch tests.test_pull_request_lifecycle tests.test_release_txn tests.test_no_rewrite_invariants tests.test_trunk_preflight tests.test_trunk_orchestration_e2e"
+    outputs:
+      shards: "${{ steps.plan.outputs.shards }}"
+      count: "${{ steps.plan.outputs.count }}"
+      digest: "${{ steps.plan.outputs.digest }}"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,24 +23,24 @@ jobs:
           python-version: "3.12"
       - name: "install (editable)"
         run: "pip install -e ."
-      - name: "Controller tests"
-        run: "python -m unittest ${{ matrix.modules }} -v"
-  conformance:
-    name: "conformance (${{ matrix.suite }})"
+      - name: plan
+        id: plan
+        run: "python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json --github-output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-plan
+          path: plan.json
+  tests:
+    name: "tests (${{ matrix.shard }})"
+    needs:
+      - plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        suite:
-          - workflow_fingerprint_test.py
-          - workflow_state_test.py
-          - workflow_test_harness_test.py
-          - workflow_integration_test.py
-          - workflow_acceptance_matrix_test.py
-          - workflow_state_completion_obligations_test.py
-          - workflow_fingerprint_generalization_test.py
+        shard: "${{ fromJSON(needs.plan.outputs.shards) }}"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,9 +48,50 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: "conformance suite"
-        working-directory: scripts
-        run: "python3 ${{ matrix.suite }}"
+      - name: "install (editable)"
+        run: "pip install -e ."
+      - name: shard
+        run: "python3 tools/run_tests.py exec-shard --profile ci --ci-placement --shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} --results-dir results"
+      - if: "always()"
+        uses: actions/upload-artifact@v4
+        with:
+          name: "results-${{ matrix.shard }}"
+          path: results/
+  tests-result:
+    needs:
+      - plan
+      - tests
+    if: "always()"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-plan
+          path: results
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: "results-*"
+          merge-multiple: true
+          path: results
+      - name: aggregate
+        run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir results --plan-artifact test-plan --results-artifact-prefix results-"
+      - if: "always()"
+        uses: actions/upload-artifact@v4
+        with:
+          name: timings-ci
+          path: |
+            results/plan.json
+            results/shard-*.json
   package:
     runs-on: ubuntu-latest
     permissions:

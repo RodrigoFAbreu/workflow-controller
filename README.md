@@ -486,8 +486,8 @@ is owned like any other process, and one that imitates a listed name is
 not waited for. Extending the list is a Controller change.
 
 **The drain bound.** After `claude` exits, the Controller waits for
-the remaining owned processes for at most 600 s
-(`worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends
+the remaining owned processes for at most 3 hours (10800 s,
+`worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends
 **nothing**. It *detaches*: the record stays `LAUNCHED` at `DRAINING`
 with `drain_detached_at`, a `worker_drain_detached` event names the
 processes, the anchor keeps the lock, and the command exits 45 naming
@@ -495,6 +495,14 @@ each pid with its command line. Either run `workflow-controller resume
 <repo>`, which re-attaches and drains again with a fresh bound, or end
 the processes and then run `resume`. No later action can start while
 they run.
+
+`--timeout` bounds only the drain of the `step` or `run` that launched
+the worker. `resume` takes no `--timeout`, and its re-attach drain has
+none, so `resume` may wait in the foreground for up to 3 hours per call.
+To stop sooner, end the named pids (the drain then finishes at once), or
+interrupt `resume` with Ctrl-C: that ends only the Controller, nothing
+it owns, and the job stays `LAUNCHED` at `DRAINING` for a later
+`resume`.
 
 ### Scheduled wakeups
 
@@ -1178,22 +1186,32 @@ numbers stay excluded from every later binding of the id.
 ## Continuous integration
 
 `.github/workflows/validate.yml` is the single definition of required
-validation. It is called, never triggered directly, and has three jobs,
-each on `ubuntu-latest` with Python 3.12, read-only permissions and
-`fail-fast: false` for its matrix:
+validation. It is called, never triggered directly, and has four jobs,
+each on `ubuntu-latest` with Python 3.12 and read-only permissions:
 
-- `controller`: the Controller suite in eight named shards (`identity`,
-  `job`, `resume`, `decision`, `cli`, `worker`, `docs`, `trunk`). A test
-  requires every `tests/test_*.py` module to be in exactly one shard, in
-  `package`, or in the one named exclusion,
-  `tests.test_integration_disposable_repo`, which needs the live
-  `claude` binary and real spend;
-- `conformance`: the seven frozen Workflow conformance suites, one per
-  matrix entry;
+- `plan`: plans the whole CI selection with
+  `tools/run_tests.py plan --profile ci --ci-placement`: every test
+  `python3 -m unittest discover -s tests -t .` loads, plus the seven frozen
+  Workflow conformance suites, in duration-balanced shards, from the
+  committed `tools/test_timings.json`. Its outputs are the shard indexes,
+  their count and the plan's digest, and it uploads `plan.json`;
+- `tests`: one matrix job per planned shard (`fail-fast: false`). Each
+  recomputes the plan from the checked-out commit, refuses to run unless
+  its digest equals `plan`'s, runs its shard and uploads its result
+  record and log as the `results-<i>` artifact. A shard that does not
+  pass prints its failing tests with their traceback tails in its own
+  step log;
+- `tests-result`: runs even when a shard failed or never started, and
+  aggregates every shard's result. It passes only if every planned test
+  ran exactly once and passed; a missing plan or a missing shard result
+  fails it. It uploads the run's durations as the `timings-ci` artifact.
+  `tools/test_shards.py`'s CI placement keeps `tests.test_packaged_runtime`
+  (run by `package`) and `tests.test_integration_disposable_repo` (which
+  needs the live `claude` binary and real spend) out of the plan;
 - `package`: builds the wheel, verifies it with
-  `tools/release.py verify-wheel --local`, runs
-  `tests.test_packaged_runtime`, then installs the wheel with pipx and
-  checks `--version`'s first line.
+  `tools/release.py verify-wheel --local`, runs the package-placed
+  modules (`tests.test_packaged_runtime`), then installs the wheel with
+  pipx and checks `--version`'s first line.
 
 Two workflows call it:
 
@@ -1214,18 +1232,34 @@ Two workflows call it:
   pinned to a commit SHA.
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
-untouched. `release.yml` is gone: pushing a `v*` tag by hand triggers
-nothing.
+untouched. It still runs the seven conformance suites serially, in one
+job, on every pull request (about 5 minutes), so it, not `validate`, is
+the floor on when all of a pull request's checks finish. `validate` runs
+the same suites through the planner as well; the acceptance-matrix suite
+(about 3 minutes on CI) is its own largest shard. `release.yml` is gone:
+pushing a `v*` tag by hand triggers nothing.
+
+The CI plan uses the `ci` profile: about 180 s of work per shard, at
+least 2 and at most 16 shards, from the committed `tools/test_timings.json`
+only. A stale or missing entry costs wall time (the shard count and the
+balance), never coverage. The plan is
+deterministic: each `tests` job recomputes it and refuses to run on a
+digest mismatch, so the matrix carries only shard indexes. Every
+`tests-result` summary states the coverage check's verdict. A failing
+run's summary also names each failing test, its shard, the shard's log,
+the artifacts to download (`results-<i>` holds the log, `test-plan` the
+`plan.json` the replay command reads) and the reproduction commands.
 
 The three workflow files are generated. Edit the model in
 `tools/ci_workflows.py`, then run `python3 tools/ci_workflows.py --write`;
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
 committed file differs from the model.
 
-A branch-protection rule that required the old `controller-tests` check
-must now require the `validate / controller (...)` checks (and, if you
-want them, `validate / conformance (...)` and `validate / package`).
-Branch protection is not required by anything here.
+The checks are `validate / plan`, `validate / tests (<i>)`,
+`validate / tests-result` and `validate / package`. A branch-protection
+rule should require `validate / tests-result` (its status stands for the
+Controller and conformance tests, whatever the shard count) and
+`validate / package`. Branch protection is not required by anything here.
 
 ## Releasing
 
@@ -1356,7 +1390,8 @@ moves `main` under that milestone: it ends at `integration_required`
 
 ```bash
 pip install -e .
-python3 -m unittest discover -s tests -t .          # the Controller's own suite
+python3 tools/run_tests.py                          # everything, in parallel shards (about 1.5 min)
+python3 -m unittest discover -s tests -t .          # the Controller's own suite, serially (about 8 min)
 CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v  # wheel build + venv install
 CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_repo -v  # opt-in: live claude, real spend
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
@@ -1366,6 +1401,80 @@ The packaging tests skip when a build prerequisite is missing, unless
 `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` makes that a failure. A local wheel
 build refuses a stale `build/` directory left by an earlier build that
 held files this one does not; delete `build/` and rebuild.
+
+Do not set `PYTHONPATH=.`: `tests.test_identity`'s decoy-package test
+then imports its decoy and fails. Some tests need package-index access,
+because `fixtures.editable_install` runs a build-isolated `pip install -e`.
+
+### The test runner
+
+`tools/run_tests.py` (with its library `tools/test_shards.py`, both
+stdlib only and outside the wheel) runs a selection of tests in
+duration-balanced parallel shards. `python3 -m unittest ...` and
+`cd scripts && python3 <suite>` keep working unchanged; the runner is
+additive. The design record is
+[ADR 0005](docs/adr/0005-adaptive-test-sharding.md).
+
+```bash
+python3 tools/run_tests.py                                  # the full selection
+python3 tools/run_tests.py tests.test_worker tests.test_cli.RunRecordCtrlCTest conformance:workflow_state_test.py
+python3 tools/run_tests.py --serial [names]                 # the same selection in one process, in order
+python3 tools/run_tests.py --plan-only [names]              # print the plan and exit
+python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a recorded plan, or one shard of it
+```
+
+- **Selection.** With no names the selection is every test
+  `python3 -m unittest discover -s tests -t .` loads plus the seven frozen
+  Workflow conformance suites. A name is a unittest dotted name (`tests`,
+  a module, a class or a test), `conformance` (every suite) or
+  `conformance:<file>`. A name that matches nothing is refused.
+- **Shards.** A class is the smallest unit of placement (a whole module
+  when it defines `setUpModule`/`tearDownModule`, a whole file for a
+  conformance suite), so class fixtures run once, as serially. Each
+  shard is a separate process in its own session, with its own `TMPDIR`
+  and `XDG_STATE_HOME`. The shard count is planned from recorded
+  durations: about 60 s of work per shard, at least 2, at most
+  `min(8, CPUs)`. `--shards N` pins it, `--jobs J` runs at most `J` at
+  once, and `--target-seconds`, `--min-shards` and `--max-shards`
+  override the planning parameters.
+- **Proof.** A run passes only if every planned test ran exactly once and
+  passed; a missing, extra, duplicated or substituted test id fails the
+  run and is named. The summary states the check's verdict either way
+  (`coverage: exact; ...` or `coverage: NOT exact; ...`, with the
+  missing, unplanned and duplicate counts). A failed test is never
+  retried. The exit status is 0 (pass), 1 (a test or fixture failed), 2 (refused, crashed, not run,
+  or a coverage violation) or 130 (interrupted: Ctrl-C stops every
+  shard's process group).
+- **Results.** Each run writes `plan.json`, one `shard-<i>.json` and
+  `shard-<i>.log` per shard, and `SUMMARY.md` under
+  `$TMPDIR/workflow-controller-tests/<run_id>/` (or `--results-dir`). The
+  summary names every failing test with its traceback, its shard's log,
+  and two reproduction commands: `python3 -m unittest <id>` alone, and
+  `--replay ... --shard <i>` for the exact co-resident order. A process
+  that outlives its shard is reported, then killed, as a warning.
+- **Timings.** Durations only decide where a test runs, never whether it
+  runs. Local runs plan from the untracked
+  `$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json`
+  (updated after every run), falling back to the committed
+  `tools/test_timings.json`, which is all CI plans from. A missing or
+  corrupt file falls back to defaults with a warning. A committed (CI)
+  estimate used as the local fallback counts in the total and the
+  assignment, but never sets the local largest-atom floor: CI seconds are
+  not local seconds, so only local-machine estimates can hold the local
+  shard count down. The committed
+  profile changes only through an explicit, reviewed refresh, for
+  example from a CI run's `timings-ci` artifact:
+  `python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`.
+  Ordinary drift needs no refresh and costs wall time (the shard count
+  and the balance), never coverage: a class
+  whose test count changed is scaled per test, and a new class is
+  estimated from its module's mean. A removed or renamed class is
+  different: its old entry names an atom that no longer exists, which
+  `CommittedTimingsTest` rejects until a `timings merge` prunes it (the
+  merge drops every entry the inventory no longer contains).
+- **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
+  `tools/test_shards.py` lists its class, with a reason. It is empty;
+  an entry needs evidence that the race cannot be fixed in the test.
 
 See `docs/ai-workflow/CONTROLLER_GEN1_PLAN.md` for the full design record,
 `docs/ai-workflow/CONTROLLER_AUTOMATIC_LIFECYCLE_ORCHESTRATION_PLAN.md`
@@ -1382,4 +1491,6 @@ decisions most likely to matter to a later generation,
 1.1's, `docs/adr/0003-trunk-branch-pr-release-orchestration.md` for
 the trunk, pull-request and release decisions, and
 `docs/adr/0004-worker-lifecycle-ownership.md` for the worker ownership
-model and the harness limitations it documents.
+model and the harness limitations it documents, and
+`docs/adr/0005-adaptive-test-sharding.md` for the test inventory,
+planner and runner.

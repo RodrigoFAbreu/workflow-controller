@@ -2620,7 +2620,11 @@ class DrainDetachJobTest(_StreamingCase):
         self.addCleanup(process_fixtures.reap_recorded_workers, self.runtime_root)
 
     def test_an_unrecognised_escapee_detaches_the_job_and_the_next_step_is_refused(self) -> None:
-        turns = [[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon", "argv0": "fake-escapee"}],
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        pid_file = Path(tmp.name) / "escapee.pid"
+        turns = [[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon", "argv0": "fake-escapee",
+                   "orphan_pid_file": str(pid_file)}],
                  [{"step": "text", "text": "done"}]]
         probes: list[tuple[bool, dict]] = []
         real_append = job.runtime.append_jsonl_best_effort
@@ -2649,8 +2653,20 @@ class DrainDetachJobTest(_StreamingCase):
         [record] = self._records()
         [remaining] = ctx.exception.evidence["remaining"]
         pid = remaining["pid"]
+        self.assertEqual(pid, int(pid_file.read_text()))
         self.assertTrue(_alive(pid), "the detach ended the escapee")
-        self.assertIn(f"{pid} (fake-escapee", ctx.exception.message)
+        # The message names the pid with the command line the supervisor
+        # recorded for it, which is the one it first saw: an owned process's
+        # entry is recorded when first seen and kept (the worker-lifecycle
+        # plan's C step 3), and the escapee is owned from its fork, so under
+        # load it can be first seen before its `exec -a` as `bash -c exec -a
+        # fake-escapee ...` (adaptive-test-sharding CP5; a "(fake-escapee"
+        # prefix assumed the first scan came after the exec). The pid is the
+        # escapee's, and the recorded command line one of its own stages.
+        self.assertIn(f"{pid} ({remaining['cmdline']})", ctx.exception.message)
+        self.assertRegex(remaining["cmdline"],
+                         r"^(fake-escapee 3600|(setsid )?bash -c .*exec -a fake-escapee sleep 3600.*)$")
+        self.assertEqual(Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[0], b"fake-escapee")
         self.assertIn("resume", ctx.exception.message)
         # The record: LAUNCHED at DRAINING, with drain_detached_at, never COMPLETED.
         self.assertEqual(record["status"], job.STATUS_LAUNCHED)

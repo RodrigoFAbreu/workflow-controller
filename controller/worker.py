@@ -407,8 +407,11 @@ COMMAND_LIFECYCLE_GRACE_SECONDS = 300
 WAKEUP_SETTLE_SECONDS = WAKEUP_GRACE_SECONDS + worker_stream.WAKEUP_SKEW_SECONDS
 
 #: How long, after the worker exited, the supervisor waits for owned
-#: processes before it detaches (plan decision 9). It ends nothing.
-DRAIN_DETACH_SECONDS = 600
+#: processes before it detaches (plan decision 9). It ends nothing. An
+#: interim 3-hour bound (amendment 1 of adaptive test sharding): legitimate
+#: background verification outlives 600 s. Making it configurable is
+#: deferred (ROADMAP 1.4).
+DRAIN_DETACH_SECONDS = 10800
 
 #: How many owned processes ``WorkerResult.owned_processes_seen`` lists.
 OWNED_PROCESS_SAMPLE = 20
@@ -756,8 +759,13 @@ class _Ownership:
                 self.excluded.setdefault(pid, {"pid": pid, "start_ticks": stat.start_ticks, "pattern": pattern,
                                                "cmdline": " ".join(cmdline)[:200]})
                 continue
-            entry = recorded or {"pid": pid, "start_ticks": stat.start_ticks, "source": source,
-                                 "cmdline": " ".join(cmdline)[:200]}
+            # A recorded entry keeps its first-seen identity and cmdline, but
+            # its source says why this scan owns it (Design H).
+            if recorded is not None:
+                entry = dict(recorded, source=source)
+            else:
+                entry = {"pid": pid, "start_ticks": stat.start_ticks, "source": source,
+                         "cmdline": " ".join(cmdline)[:200]}
             found[pid] = entry
             if stat.pgrp != self.pgid:
                 outside.append(pid)
@@ -1278,7 +1286,7 @@ class _Supervision:
         waiting_on = details["waiting_on"]
         return json.dumps([
             self.state,
-            [(p["pid"], p["start_ticks"]) for p in details["owned_processes"]],
+            [(p["pid"], p["start_ticks"], p["source"]) for p in details["owned_processes"]],
             [p["pid"] for p in details["excluded_processes"]],
             details["scan"],
             [t["task_id"] for t in waiting_on["tasks"]],

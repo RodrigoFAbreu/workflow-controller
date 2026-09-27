@@ -57,7 +57,7 @@ These are not blockers for the baseline, but should remain visible in later mile
 
 **Priority:** Immediate / High
 
-**Status:** 1.1-1.3 complete; 1.4's worker lifecycle ownership hotfix complete (accepted 2026-09-26), its four listed patches still open
+**Status:** 1.1-1.3 and 1.2.1 complete; 1.4's worker lifecycle ownership hotfix complete (accepted 2026-09-26), its four listed patches still open
 
 Suggested milestone:
 `workflow-controller-release-runtime-observability`
@@ -107,7 +107,8 @@ Required end state:
 Required CI structure:
 
 - Controller tests and frozen Workflow conformance suites run in CI;
-- independent suites use parallel matrix jobs;
+- independent suites use parallel matrix jobs (since the adaptive test sharding milestone below,
+  a matrix planned from recorded durations, no longer the hand-curated shard list);
 - `strategy.fail-fast: false`;
 - ordinary push/PR validation uses same-ref concurrency cancellation:
   - group by workflow + ref;
@@ -128,6 +129,44 @@ Release requirements:
 - pipx installation from the released wheel;
 - release/rollback documentation;
 - release provenance recorded in durable Controller jobs.
+
+## 1.2.1 Adaptive test sharding
+
+**Status:** Complete (`workflow-controller-adaptive-test-sharding`, accepted 2026-09-27 under
+Workflow 2.5.1; plan `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md`, ADR
+`docs/adr/0005-adaptive-test-sharding.md`; the narrative is archived at
+`docs/milestones/completed/workflow-controller-adaptive-test-sharding.md`). The operator requested
+it directly, ahead of 1.4, which stays the next roadmap item. Its two plan amendments each made one Controller change,
+listed below for the next release's notes.
+
+The Controller's full verification ran serially in about 10 minutes locally (483 s of Controller
+tests plus 119 s of frozen conformance suites), while CI split the Controller suite into eight
+hand-curated shards whose test times ranged from 3 s to 193 s. One deterministic inventory and
+planner now serves both:
+
+- `tools/test_shards.py` builds the inventory (everything `unittest discover` loads, plus the
+  managed conformance suites), forms class-level atoms, and plans duration-balanced shards from
+  recorded timings. Timing data is advisory: it decides where a test runs, never whether;
+- `tools/run_tests.py` runs a selection in parallel shards locally, `--serial` as the reference,
+  `--replay` of a recorded plan, and the CI `plan` / `exec-shard` / `aggregate` steps;
+- every run proves at run time that each planned test ran exactly once, with no retries and no
+  test tiers;
+- `validate.yml` plans its matrix in a `plan` job, runs one `tests` job per shard, and gates on
+  the always-run `tests-result` aggregate.
+
+Controller behaviour changes for the next release's notes (both in `controller/worker.py`, both
+through plan amendments; 1.2.0 is not re-released):
+
+- an owned process's `source` label now follows its current ownership basis, not the one it had
+  when first seen, and a relabel is published (amendment 0). For example, a background process
+  that leaves the worker's group with `setsid` is now always reported as owned by `tag`; a first
+  sighting before its `setsid` used to leave it labelled `group`. Which processes are owned is
+  unchanged;
+- the drain detach bound is 10800 s (3 hours), up from 600 s, as an interim constant; making it
+  configurable is listed under 1.4 (amendment 1).
+
+Left for later: failing a run on a leaked process (D7) and refreshing the committed timing
+profile from real CI runs.
 
 ## 1.3 Live worker observability
 
@@ -200,7 +239,8 @@ name) are in ADR 0004. It was not folded together with the patches below, which 
 - correct misordered `--work-item` resume hints;
 - improve manual-external gate behavior when local review ledger/content is incoherent;
 - add explicit abandoned/unreconcilable apply-review relaunch-bound tests;
-- improve active-job/status presentation while observability work is already touching runtime diagnostics.
+- improve active-job/status presentation while observability work is already touching runtime diagnostics;
+- make the drain detach bound and the other Controller tunables configurable, including a `--timeout` for `resume`'s re-attach drain; 10800 s is an interim constant, amendment 1 of 1.2.1.
 
 ---
 

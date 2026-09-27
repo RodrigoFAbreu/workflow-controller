@@ -1,0 +1,2262 @@
+{
+  "atoms": {
+    "conformance:workflow_acceptance_matrix_test.py": {
+      "samples": 6,
+      "seconds": 206.969,
+      "tests": 1
+    },
+    "conformance:workflow_fingerprint_generalization_test.py": {
+      "samples": 6,
+      "seconds": 9.033,
+      "tests": 1
+    },
+    "conformance:workflow_fingerprint_test.py": {
+      "samples": 6,
+      "seconds": 6.707,
+      "tests": 1
+    },
+    "conformance:workflow_integration_test.py": {
+      "samples": 6,
+      "seconds": 8.089,
+      "tests": 1
+    },
+    "conformance:workflow_state_completion_obligations_test.py": {
+      "samples": 6,
+      "seconds": 12.369,
+      "tests": 1
+    },
+    "conformance:workflow_state_test.py": {
+      "samples": 6,
+      "seconds": 58.282,
+      "tests": 1
+    },
+    "conformance:workflow_test_harness_test.py": {
+      "samples": 6,
+      "seconds": 0.49,
+      "tests": 1
+    },
+    "tests.test_buildinfo.BuildHookTest": {
+      "samples": 6,
+      "seconds": 0.482,
+      "tests": 9
+    },
+    "tests.test_buildinfo.EditableModeEarlyReturnTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 1
+    },
+    "tests.test_buildinfo.PackageDigestTest": {
+      "samples": 6,
+      "seconds": 0.027,
+      "tests": 6
+    },
+    "tests.test_buildinfo.ValidateBuildInfoTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 12
+    },
+    "tests.test_buildinfo.VersionSourceTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_checklist_corrections.ChecklistFileExistsTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_checklist_corrections.ExplainExitCodeTest": {
+      "samples": 6,
+      "seconds": 0.01,
+      "tests": 2
+    },
+    "tests.test_checklist_corrections.FunctionalReviewPreconditionTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_checklist_corrections.InspectJsonPayloadTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_checklist_corrections.JsonPlacementTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_ci_workflows.AllJobsTest": {
+      "samples": 7,
+      "seconds": 0.004,
+      "tests": 11
+    },
+    "tests.test_ci_workflows.CiWorkflowTest": {
+      "samples": 7,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_ci_workflows.CommittedFilesTest": {
+      "samples": 7,
+      "seconds": 0.115,
+      "tests": 8
+    },
+    "tests.test_ci_workflows.CoverageTest": {
+      "samples": 6,
+      "seconds": 0.046,
+      "tests": 7
+    },
+    "tests.test_ci_workflows.EmitterTest": {
+      "samples": 7,
+      "seconds": 0.002,
+      "tests": 9
+    },
+    "tests.test_ci_workflows.MainWorkflowTest": {
+      "samples": 7,
+      "seconds": 0.003,
+      "tests": 12
+    },
+    "tests.test_ci_workflows.ValidatePlanTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 8
+    },
+    "tests.test_cli.ApplyingReviewFeedbackCliTest": {
+      "samples": 6,
+      "seconds": 0.374,
+      "tests": 3
+    },
+    "tests.test_cli.ExitCodeTableTest": {
+      "samples": 6,
+      "seconds": 0.024,
+      "tests": 6
+    },
+    "tests.test_cli.ExplainCommandTest": {
+      "samples": 6,
+      "seconds": 0.191,
+      "tests": 8
+    },
+    "tests.test_cli.ExplainPendingJobsTest": {
+      "samples": 6,
+      "seconds": 1.44,
+      "tests": 2
+    },
+    "tests.test_cli.FollowAttributeReadTest": {
+      "samples": 6,
+      "seconds": 0.365,
+      "tests": 1
+    },
+    "tests.test_cli.FollowCommandTest": {
+      "samples": 6,
+      "seconds": 1.279,
+      "tests": 11
+    },
+    "tests.test_cli.FollowHintTest": {
+      "samples": 6,
+      "seconds": 0.18,
+      "tests": 2
+    },
+    "tests.test_cli.FollowSourceCheckoutTest": {
+      "samples": 6,
+      "seconds": 1.291,
+      "tests": 1
+    },
+    "tests.test_cli.InspectCommandTest": {
+      "samples": 6,
+      "seconds": 0.976,
+      "tests": 5
+    },
+    "tests.test_cli.JobActivitySurfacesTest": {
+      "samples": 6,
+      "seconds": 0.391,
+      "tests": 6
+    },
+    "tests.test_cli.LifecycleLockReportTest": {
+      "samples": 6,
+      "seconds": 0.105,
+      "tests": 1
+    },
+    "tests.test_cli.LockErrorCliTest": {
+      "samples": 6,
+      "seconds": 0.144,
+      "tests": 1
+    },
+    "tests.test_cli.ParserTest": {
+      "samples": 6,
+      "seconds": 0.016,
+      "tests": 9
+    },
+    "tests.test_cli.PartialApplyPlanReviewCliTest": {
+      "samples": 6,
+      "seconds": 0.341,
+      "tests": 1
+    },
+    "tests.test_cli.PermissionModePassThroughTest": {
+      "samples": 6,
+      "seconds": 0.295,
+      "tests": 4
+    },
+    "tests.test_cli.ResumeCommandTest": {
+      "samples": 6,
+      "seconds": 0.143,
+      "tests": 7
+    },
+    "tests.test_cli.ResumeWorkerHoldExitTest": {
+      "samples": 6,
+      "seconds": 0.097,
+      "tests": 2
+    },
+    "tests.test_cli.RoutingOptionsParserTest": {
+      "samples": 6,
+      "seconds": 0.045,
+      "tests": 3
+    },
+    "tests.test_cli.RoutingOptionsPassThroughTest": {
+      "samples": 6,
+      "seconds": 0.482,
+      "tests": 4
+    },
+    "tests.test_cli.RunRecordBestEffortTest": {
+      "samples": 6,
+      "seconds": 1.283,
+      "tests": 1
+    },
+    "tests.test_cli.RunRecordCtrlCTest": {
+      "samples": 6,
+      "seconds": 0.27,
+      "tests": 1
+    },
+    "tests.test_cli.RunRecordExitPathTest": {
+      "samples": 6,
+      "seconds": 0.617,
+      "tests": 3
+    },
+    "tests.test_cli.RunRecordJobTrackingTest": {
+      "samples": 6,
+      "seconds": 4.052,
+      "tests": 2
+    },
+    "tests.test_cli.StatusActiveSectionTest": {
+      "samples": 6,
+      "seconds": 0.026,
+      "tests": 2
+    },
+    "tests.test_cli.StatusFirstLineTest": {
+      "samples": 6,
+      "seconds": 0.521,
+      "tests": 1
+    },
+    "tests.test_cli.StepCommandTest": {
+      "samples": 6,
+      "seconds": 0.526,
+      "tests": 8
+    },
+    "tests.test_cli.StepFollowTest": {
+      "samples": 6,
+      "seconds": 0.763,
+      "tests": 1
+    },
+    "tests.test_cli.UnreadableJobFileCliTest": {
+      "samples": 6,
+      "seconds": 0.064,
+      "tests": 1
+    },
+    "tests.test_cli.VersionFlagTest": {
+      "samples": 6,
+      "seconds": 4.421,
+      "tests": 5
+    },
+    "tests.test_decision.AutomaticTriplesTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 4
+    },
+    "tests.test_decision.CommandFilePartitionTest": {
+      "samples": 6,
+      "seconds": 0.015,
+      "tests": 6
+    },
+    "tests.test_decision.DecideNeverReturnsUserOnlyCommandTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 1
+    },
+    "tests.test_decision.DecideNoWorkItemTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_decision.DispatchRuleTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 5
+    },
+    "tests.test_decision.HumanGateShapeTest": {
+      "samples": 6,
+      "seconds": 0.01,
+      "tests": 3
+    },
+    "tests.test_decision.ImplementingDispatchTest": {
+      "samples": 6,
+      "seconds": 0.006,
+      "tests": 4
+    },
+    "tests.test_decision.InterimSetRemovalTest": {
+      "samples": 6,
+      "seconds": 0.022,
+      "tests": 2
+    },
+    "tests.test_decision.KnownPhaseSetTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_decision.PerPhaseSetRemovalTest": {
+      "samples": 6,
+      "seconds": 0.022,
+      "tests": 2
+    },
+    "tests.test_decision.PhaseWireRoundTripTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 6
+    },
+    "tests.test_decision.ProtocolTwoTwoCompatibilityParityTest": {
+      "samples": 6,
+      "seconds": 0.009,
+      "tests": 3
+    },
+    "tests.test_decision.Revision64PhaseWideningTest": {
+      "samples": 6,
+      "seconds": 0.059,
+      "tests": 4
+    },
+    "tests.test_decision.ScopeAssertionTest": {
+      "samples": 6,
+      "seconds": 0.015,
+      "tests": 4
+    },
+    "tests.test_decision.TableDrivenPhaseDecisionTest": {
+      "samples": 6,
+      "seconds": 0.023,
+      "tests": 7
+    },
+    "tests.test_decision.TwoShapeAssertionTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 1
+    },
+    "tests.test_decision.UserOnlyDenylistTest": {
+      "samples": 6,
+      "seconds": 0.027,
+      "tests": 7
+    },
+    "tests.test_evidence.ApplyImplementationReviewAdmissibilityTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_evidence.ApplyingReviewFeedbackAutomaticPathTest": {
+      "samples": 6,
+      "seconds": 0.411,
+      "tests": 10
+    },
+    "tests.test_evidence.ApplyingReviewFeedbackCorrectedGateTest": {
+      "samples": 6,
+      "seconds": 0.122,
+      "tests": 4
+    },
+    "tests.test_evidence.AwaitingExternalImplementationReviewTest": {
+      "samples": 6,
+      "seconds": 0.082,
+      "tests": 4
+    },
+    "tests.test_evidence.AwaitingExternalImplementationReviewTwoStageTest": {
+      "samples": 6,
+      "seconds": 0.345,
+      "tests": 14
+    },
+    "tests.test_evidence.AwaitingExternalPlanReviewV1Test": {
+      "samples": 6,
+      "seconds": 0.085,
+      "tests": 5
+    },
+    "tests.test_evidence.AwaitingFunctionalReviewTest": {
+      "samples": 6,
+      "seconds": 0.217,
+      "tests": 5
+    },
+    "tests.test_evidence.AwaitingLocalImplementationReviewTest": {
+      "samples": 6,
+      "seconds": 0.392,
+      "tests": 10
+    },
+    "tests.test_evidence.AwaitingLocalPlanReviewTest": {
+      "samples": 6,
+      "seconds": 0.065,
+      "tests": 4
+    },
+    "tests.test_evidence.AwaitingManualExternalImplementationReviewTest": {
+      "samples": 6,
+      "seconds": 0.368,
+      "tests": 13
+    },
+    "tests.test_evidence.AwaitingManualExternalPlanReviewTest": {
+      "samples": 6,
+      "seconds": 0.205,
+      "tests": 10
+    },
+    "tests.test_evidence.BundleDirResolutionTest": {
+      "samples": 6,
+      "seconds": 0.1,
+      "tests": 3
+    },
+    "tests.test_evidence.BundleGenerationRecordRoleTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_evidence.CommittedStateReadTest": {
+      "samples": 6,
+      "seconds": 0.202,
+      "tests": 6
+    },
+    "tests.test_evidence.DecideWithdrawnBundleTest": {
+      "samples": 6,
+      "seconds": 0.047,
+      "tests": 3
+    },
+    "tests.test_evidence.ExternalImplementationReviewGoldenTest": {
+      "samples": 6,
+      "seconds": 0.408,
+      "tests": 4
+    },
+    "tests.test_evidence.FeedbackDirResolutionTest": {
+      "samples": 6,
+      "seconds": 0.043,
+      "tests": 3
+    },
+    "tests.test_evidence.GenerationRecordViewTest": {
+      "samples": 6,
+      "seconds": 0.54,
+      "tests": 10
+    },
+    "tests.test_evidence.ImplementationBundleCoherenceTest": {
+      "samples": 6,
+      "seconds": 0.438,
+      "tests": 19
+    },
+    "tests.test_evidence.ImplementationBundleRecoveryGateTest": {
+      "samples": 6,
+      "seconds": 1.02,
+      "tests": 8
+    },
+    "tests.test_evidence.ImplementationGeneratorStageTest": {
+      "samples": 6,
+      "seconds": 0.312,
+      "tests": 5
+    },
+    "tests.test_evidence.ImplementationRejectedMarkerGateTest": {
+      "samples": 6,
+      "seconds": 0.233,
+      "tests": 6
+    },
+    "tests.test_evidence.ImplementationStageManifestLabelsTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_evidence.ManualImplementationStageAdmissibilityTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 8
+    },
+    "tests.test_evidence.PendingReviewStageWriteAddendumTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_evidence.PlanBundleCoherenceTest": {
+      "samples": 6,
+      "seconds": 0.008,
+      "tests": 11
+    },
+    "tests.test_evidence.ProvenanceBlockTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_evidence.ReadFeedbackFieldsRealArtifactShapeTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_evidence.ReadImplementationReviewLedgerTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_evidence.ReadManifestFieldsTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 3
+    },
+    "tests.test_evidence.ReadReviewRequestFieldsTest": {
+      "samples": 6,
+      "seconds": 0.003,
+      "tests": 4
+    },
+    "tests.test_evidence.RejectedMarkerTest": {
+      "samples": 6,
+      "seconds": 0.076,
+      "tests": 3
+    },
+    "tests.test_evidence.StalePlanBundleGateTest": {
+      "samples": 6,
+      "seconds": 0.316,
+      "tests": 15
+    },
+    "tests.test_evidence.UncommittedImplementationStateGateTest": {
+      "samples": 6,
+      "seconds": 0.417,
+      "tests": 8
+    },
+    "tests.test_fake_claude_contract.FakeStreamingModeTest": {
+      "samples": 6,
+      "seconds": 9.196,
+      "tests": 14
+    },
+    "tests.test_fake_claude_contract.FixtureDigestTest": {
+      "samples": 6,
+      "seconds": 0.003,
+      "tests": 1
+    },
+    "tests.test_fake_claude_contract.FixtureReplayTest": {
+      "samples": 6,
+      "seconds": 3.95,
+      "tests": 3
+    },
+    "tests.test_fake_claude_contract.P12AdmissionTest": {
+      "samples": 6,
+      "seconds": 0.039,
+      "tests": 36
+    },
+    "tests.test_fake_claude_contract.P12FixtureTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 2
+    },
+    "tests.test_fake_claude_contract.ReapRecordedWorkersTest": {
+      "samples": 6,
+      "seconds": 0.013,
+      "tests": 2
+    },
+    "tests.test_fake_claude_contract.RecogniserEvidenceTest": {
+      "samples": 6,
+      "seconds": 0.021,
+      "tests": 7
+    },
+    "tests.test_forge": {
+      "samples": 6,
+      "seconds": 4.885,
+      "tests": 21
+    },
+    "tests.test_gitrepo.BranchTest": {
+      "samples": 6,
+      "seconds": 0.22,
+      "tests": 3
+    },
+    "tests.test_gitrepo.FetchTest": {
+      "samples": 6,
+      "seconds": 0.205,
+      "tests": 3
+    },
+    "tests.test_gitrepo.MergeTrunkTest": {
+      "samples": 6,
+      "seconds": 0.368,
+      "tests": 3
+    },
+    "tests.test_gitrepo.PushBranchTest": {
+      "samples": 6,
+      "seconds": 0.222,
+      "tests": 2
+    },
+    "tests.test_gitrepo.ReadTest": {
+      "samples": 6,
+      "seconds": 0.514,
+      "tests": 9
+    },
+    "tests.test_gitrepo.RunnerTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_gitrepo.TagTest": {
+      "samples": 6,
+      "seconds": 0.328,
+      "tests": 4
+    },
+    "tests.test_golden_plan_stage_decisions.NormaliseTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_golden_plan_stage_decisions.PlanStageDecisionGoldenTest": {
+      "samples": 6,
+      "seconds": 0.768,
+      "tests": 6
+    },
+    "tests.test_handoff.ClassifyJobsTest": {
+      "samples": 6,
+      "seconds": 0.022,
+      "tests": 2
+    },
+    "tests.test_handoff.DetectTest": {
+      "samples": 6,
+      "seconds": 0.46,
+      "tests": 9
+    },
+    "tests.test_handoff.EndToEndHandoffSubprocessTest": {
+      "samples": 6,
+      "seconds": 4.452,
+      "tests": 1
+    },
+    "tests.test_handoff.EqualGenerationRunLoopContinuesTest": {
+      "samples": 6,
+      "seconds": 0.064,
+      "tests": 1
+    },
+    "tests.test_handoff.PackageHandoffTest": {
+      "samples": 6,
+      "seconds": 0.061,
+      "tests": 2
+    },
+    "tests.test_handoff.PauseFileGatingTest": {
+      "samples": 6,
+      "seconds": 0.201,
+      "tests": 4
+    },
+    "tests.test_handoff.RunLoopExitCodeTest": {
+      "samples": 6,
+      "seconds": 0.621,
+      "tests": 9
+    },
+    "tests.test_handoff.WriteHandoffRecordTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_identity.DecoyAndRealRouteTest": {
+      "samples": 6,
+      "seconds": 10.742,
+      "tests": 2
+    },
+    "tests.test_identity.DirectoryCreationOrderingTest": {
+      "samples": 6,
+      "seconds": 0.073,
+      "tests": 2
+    },
+    "tests.test_identity.GenerationSourceRuleTest": {
+      "samples": 6,
+      "seconds": 0.209,
+      "tests": 3
+    },
+    "tests.test_identity.GuardTest": {
+      "samples": 6,
+      "seconds": 0.354,
+      "tests": 3
+    },
+    "tests.test_identity.MaterialiseCleanTreeTest": {
+      "samples": 6,
+      "seconds": 0.207,
+      "tests": 3
+    },
+    "tests.test_identity.MaterialiseDirtyTreeTest": {
+      "samples": 6,
+      "seconds": 0.109,
+      "tests": 2
+    },
+    "tests.test_identity.MaterialisePackageTest": {
+      "samples": 6,
+      "seconds": 0.305,
+      "tests": 8
+    },
+    "tests.test_identity.MaterialiseReuseTest": {
+      "samples": 6,
+      "seconds": 0.701,
+      "tests": 3
+    },
+    "tests.test_identity.PinCachingTest": {
+      "samples": 6,
+      "seconds": 0.004,
+      "tests": 1
+    },
+    "tests.test_identity.ResolveRuntimeTest": {
+      "samples": 6,
+      "seconds": 1.236,
+      "tests": 10
+    },
+    "tests.test_identity.RuntimeRecordTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_identity.TamperedSnapshotRefusalTest": {
+      "samples": 6,
+      "seconds": 0.545,
+      "tests": 3
+    },
+    "tests.test_identity.UnpinnedIdentityByKindTest": {
+      "samples": 6,
+      "seconds": 0.135,
+      "tests": 4
+    },
+    "tests.test_integration_disposable_repo.ControllerSourceTreeDigestVerificationTest": {
+      "samples": 1,
+      "seconds": 0.01,
+      "tests": 5
+    },
+    "tests.test_integration_disposable_repo.DisposableRepoRealWorkflowActionTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_integration_disposable_repo.InstallationAdmissibilityTest": {
+      "samples": 1,
+      "seconds": 0.001,
+      "tests": 6
+    },
+    "tests.test_integration_disposable_repo.LiveConcurrencyDrillTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_integration_disposable_repo.LiveHarnessContractProbeTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_integration_disposable_repo.LiveImplementationLifecycleTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_integration_disposable_repo.LiveSingleAgentProbeTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_integration_disposable_repo.Protocol22ImplementationReviewGatesTest": {
+      "samples": 1,
+      "seconds": 0.761,
+      "tests": 1
+    },
+    "tests.test_job.ApplyingReviewFeedbackExecuteTest": {
+      "samples": 6,
+      "seconds": 2.042,
+      "tests": 8
+    },
+    "tests.test_job.BaseVersionPlannedRecordTest": {
+      "samples": 6,
+      "seconds": 0.04,
+      "tests": 1
+    },
+    "tests.test_job.BootstrapRowSevenTest": {
+      "samples": 6,
+      "seconds": 1.016,
+      "tests": 5
+    },
+    "tests.test_job.BundleManifestBundleIdCaptureTest": {
+      "samples": 6,
+      "seconds": 0.636,
+      "tests": 3
+    },
+    "tests.test_job.CtrlCTest": {
+      "samples": 6,
+      "seconds": 0.138,
+      "tests": 3
+    },
+    "tests.test_job.DefaultPermissionModeTest": {
+      "samples": 6,
+      "seconds": 0.434,
+      "tests": 3
+    },
+    "tests.test_job.DispatchRuleDeclineTest": {
+      "samples": 6,
+      "seconds": 0.538,
+      "tests": 3
+    },
+    "tests.test_job.DrainDetachJobTest": {
+      "samples": 6,
+      "seconds": 3.329,
+      "tests": 2
+    },
+    "tests.test_job.InProcessConcurrencyTest": {
+      "samples": 6,
+      "seconds": 0.803,
+      "tests": 2
+    },
+    "tests.test_job.JobEventLogPathTest": {
+      "samples": 6,
+      "seconds": 0.693,
+      "tests": 7
+    },
+    "tests.test_job.JobEventLogVerifiedPathTest": {
+      "samples": 6,
+      "seconds": 0.557,
+      "tests": 2
+    },
+    "tests.test_job.LastLaunchedApplyJobViewTest": {
+      "samples": 6,
+      "seconds": 0.01,
+      "tests": 7
+    },
+    "tests.test_job.LaunchPathTest": {
+      "samples": 6,
+      "seconds": 2.696,
+      "tests": 9
+    },
+    "tests.test_job.MissingGoverningVersionRowRegressionTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_job.NoActionClassTest": {
+      "samples": 6,
+      "seconds": 0.045,
+      "tests": 2
+    },
+    "tests.test_job.NoLaunchRecordTest": {
+      "samples": 6,
+      "seconds": 0.155,
+      "tests": 4
+    },
+    "tests.test_job.PartialApplyPlanReviewExecuteTest": {
+      "samples": 6,
+      "seconds": 1.041,
+      "tests": 4
+    },
+    "tests.test_job.PendingJobReconciliationRefusalTest": {
+      "samples": 6,
+      "seconds": 0.425,
+      "tests": 7
+    },
+    "tests.test_job.PredicateRow3RoleNormalizationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_job.ProseOverStateTest": {
+      "samples": 6,
+      "seconds": 1.186,
+      "tests": 2
+    },
+    "tests.test_job.SpawnFlushFailureTest": {
+      "samples": 6,
+      "seconds": 0.047,
+      "tests": 1
+    },
+    "tests.test_job.StreamingJobTest": {
+      "samples": 6,
+      "seconds": 10.333,
+      "tests": 7
+    },
+    "tests.test_job.UnboundedDefaultTimeoutTest": {
+      "samples": 6,
+      "seconds": 1.29,
+      "tests": 1
+    },
+    "tests.test_job.WorkerEventBestEffortTest": {
+      "samples": 6,
+      "seconds": 4.177,
+      "tests": 3
+    },
+    "tests.test_job.WorkerNotStartedTest": {
+      "samples": 6,
+      "seconds": 0.484,
+      "tests": 2
+    },
+    "tests.test_job.WorkerRouteTest": {
+      "samples": 6,
+      "seconds": 4.546,
+      "tests": 4
+    },
+    "tests.test_job.WorkerStatePersistenceTest": {
+      "samples": 6,
+      "seconds": 1.499,
+      "tests": 3
+    },
+    "tests.test_job.WorkerTaskTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_job_validation.ApplyImplementationReviewRowExecuteTest": {
+      "samples": 6,
+      "seconds": 2.105,
+      "tests": 7
+    },
+    "tests.test_job_validation.BootstrapRowSevenVerificationTest": {
+      "samples": 6,
+      "seconds": 0.796,
+      "tests": 3
+    },
+    "tests.test_job_validation.CheckpointPredicateUnitTest": {
+      "samples": 6,
+      "seconds": 0.14,
+      "tests": 5
+    },
+    "tests.test_job_validation.CheckpointProgressDetailUnitTest": {
+      "samples": 6,
+      "seconds": 0.091,
+      "tests": 2
+    },
+    "tests.test_job_validation.CheckpointRowsExecuteTest": {
+      "samples": 6,
+      "seconds": 4.979,
+      "tests": 8
+    },
+    "tests.test_job_validation.DeclarationAgainstArtifactTest": {
+      "samples": 6,
+      "seconds": 0.007,
+      "tests": 14
+    },
+    "tests.test_job_validation.ExpectedOutcomesTableStructureTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 24
+    },
+    "tests.test_job_validation.GenerationRowsExecuteTest": {
+      "samples": 6,
+      "seconds": 3.849,
+      "tests": 3
+    },
+    "tests.test_job_validation.IncompleteEffectPhaseTest": {
+      "samples": 6,
+      "seconds": 0.296,
+      "tests": 2
+    },
+    "tests.test_job_validation.LocalImplementationReviewRowExecuteTest": {
+      "samples": 6,
+      "seconds": 5.931,
+      "tests": 7
+    },
+    "tests.test_job_validation.ManualImplementationReviewRowExecuteTest": {
+      "samples": 6,
+      "seconds": 2.671,
+      "tests": 6
+    },
+    "tests.test_job_validation.PairKeyedReachabilityTest": {
+      "samples": 6,
+      "seconds": 0.194,
+      "tests": 10
+    },
+    "tests.test_job_validation.PlanBundlePostconditionExecuteTest": {
+      "samples": 6,
+      "seconds": 2.943,
+      "tests": 3
+    },
+    "tests.test_job_validation.PlanBundlePostconditionRowSevenTest": {
+      "samples": 6,
+      "seconds": 0.619,
+      "tests": 5
+    },
+    "tests.test_job_validation.Row3BlockPredicateBundleIdRegressionTest": {
+      "samples": 6,
+      "seconds": 1.53,
+      "tests": 5
+    },
+    "tests.test_job_validation.SamePhaseDurableProgressExecuteTest": {
+      "samples": 6,
+      "seconds": 3.51,
+      "tests": 6
+    },
+    "tests.test_job_validation.SelfLoopPredicateSingleSiteTest": {
+      "samples": 6,
+      "seconds": 0.069,
+      "tests": 6
+    },
+    "tests.test_job_validation.TransitionVerificationTest": {
+      "samples": 6,
+      "seconds": 1.793,
+      "tests": 9
+    },
+    "tests.test_job_validation.TwoPointTwoPlanReviewTransitionTest": {
+      "samples": 6,
+      "seconds": 2.086,
+      "tests": 7
+    },
+    "tests.test_job_validation.WorkerStateValidationTest": {
+      "samples": 6,
+      "seconds": 0.35,
+      "tests": 10
+    },
+    "tests.test_lifecycle_orchestration.ApplyRelaunchBoundTest": {
+      "samples": 6,
+      "seconds": 0.318,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.FailClosedArtifactTest": {
+      "samples": 6,
+      "seconds": 10.136,
+      "tests": 2
+    },
+    "tests.test_lifecycle_orchestration.FullLifecycleRunTest": {
+      "samples": 6,
+      "seconds": 1.691,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.GatesLaunchNothingTest": {
+      "samples": 6,
+      "seconds": 1.414,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.LifecycleLockLifetimeTest": {
+      "samples": 6,
+      "seconds": 0.335,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.LiteralApplyWorkerTest": {
+      "samples": 6,
+      "seconds": 0.794,
+      "tests": 2
+    },
+    "tests.test_lifecycle_orchestration.ManualVerdictTest": {
+      "samples": 6,
+      "seconds": 5.386,
+      "tests": 3
+    },
+    "tests.test_lifecycle_orchestration.NextActionWaitsForOwnedWorkTest": {
+      "samples": 6,
+      "seconds": 3.357,
+      "tests": 2
+    },
+    "tests.test_lifecycle_orchestration.NoCheckpointPartialRunTest": {
+      "samples": 6,
+      "seconds": 0.888,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.PlanStageUnchangedTest": {
+      "samples": 6,
+      "seconds": 2.385,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.ResumeReconciliationTest": {
+      "samples": 6,
+      "seconds": 4.848,
+      "tests": 3
+    },
+    "tests.test_lifecycle_orchestration.ResumingWorkerTest": {
+      "samples": 6,
+      "seconds": 7.184,
+      "tests": 4
+    },
+    "tests.test_lifecycle_orchestration.SameContentGeneratorFailureTest": {
+      "samples": 6,
+      "seconds": 0.475,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.ScriptedWorkerTest": {
+      "samples": 6,
+      "seconds": 0.289,
+      "tests": 2
+    },
+    "tests.test_lifecycle_orchestration.UncommittedImplementationStateTest": {
+      "samples": 6,
+      "seconds": 2.137,
+      "tests": 1
+    },
+    "tests.test_lifecycle_orchestration.WaitingWorkerRegressionTest": {
+      "samples": 6,
+      "seconds": 6.801,
+      "tests": 2
+    },
+    "tests.test_lifecycle_orchestration.WrongWakeupMatchTest": {
+      "samples": 6,
+      "seconds": 15.086,
+      "tests": 3
+    },
+    "tests.test_lock.AcquireContentionTest": {
+      "samples": 6,
+      "seconds": 0.447,
+      "tests": 4
+    },
+    "tests.test_lock.GitDirectoryUnresolvableTest": {
+      "samples": 6,
+      "seconds": 0.008,
+      "tests": 2
+    },
+    "tests.test_lock.InheritedDescriptorTest": {
+      "samples": 6,
+      "seconds": 0.546,
+      "tests": 2
+    },
+    "tests.test_lock.LifecycleLockErrorTest": {
+      "samples": 6,
+      "seconds": 0.02,
+      "tests": 4
+    },
+    "tests.test_lock.ProbeChildPidNamespaceTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 1
+    },
+    "tests.test_lock.ProbePatchedProcTest": {
+      "samples": 6,
+      "seconds": 0.141,
+      "tests": 17
+    },
+    "tests.test_lock.ProbeRealFilesystemTest": {
+      "samples": 6,
+      "seconds": 1.686,
+      "tests": 3
+    },
+    "tests.test_managed_repo.CleanManagedRepositoryTest": {
+      "samples": 6,
+      "seconds": 0.018,
+      "tests": 2
+    },
+    "tests.test_managed_repo.DriftedInstallationTest": {
+      "samples": 6,
+      "seconds": 0.036,
+      "tests": 2
+    },
+    "tests.test_managed_repo.InstallProfilePairTest": {
+      "samples": 6,
+      "seconds": 0.049,
+      "tests": 4
+    },
+    "tests.test_managed_repo.MalformedManifestTest": {
+      "samples": 6,
+      "seconds": 0.043,
+      "tests": 5
+    },
+    "tests.test_managed_repo.UnmanagedRepositoryTest": {
+      "samples": 6,
+      "seconds": 0.011,
+      "tests": 2
+    },
+    "tests.test_managed_repo.UnsupportedWorkflowVersionTest": {
+      "samples": 6,
+      "seconds": 0.139,
+      "tests": 7
+    },
+    "tests.test_managed_repo.WorkflowManagerUnavailableTest": {
+      "samples": 6,
+      "seconds": 0.035,
+      "tests": 2
+    },
+    "tests.test_milestone_branch.AcceptanceCommitTest": {
+      "samples": 6,
+      "seconds": 0.28,
+      "tests": 2
+    },
+    "tests.test_milestone_branch.AcknowledgeTest": {
+      "samples": 6,
+      "seconds": 3.172,
+      "tests": 6
+    },
+    "tests.test_milestone_branch.AdoptTest": {
+      "samples": 6,
+      "seconds": 2.435,
+      "tests": 6
+    },
+    "tests.test_milestone_branch.BindTest": {
+      "samples": 6,
+      "seconds": 1.08,
+      "tests": 7
+    },
+    "tests.test_milestone_branch.CrashTest": {
+      "samples": 6,
+      "seconds": 1.622,
+      "tests": 6
+    },
+    "tests.test_milestone_branch.DiscardedPlanTest": {
+      "samples": 6,
+      "seconds": 3.132,
+      "tests": 9
+    },
+    "tests.test_milestone_branch.InactiveTest": {
+      "samples": 6,
+      "seconds": 0.177,
+      "tests": 2
+    },
+    "tests.test_milestone_branch.LaterPreflightTest": {
+      "samples": 6,
+      "seconds": 2.725,
+      "tests": 8
+    },
+    "tests.test_milestone_branch.PlannedExitsTest": {
+      "samples": 6,
+      "seconds": 1.975,
+      "tests": 6
+    },
+    "tests.test_milestone_branch.StateModelTest": {
+      "samples": 6,
+      "seconds": 0.854,
+      "tests": 5
+    },
+    "tests.test_milestone_branch.TrunkBlockTest": {
+      "samples": 6,
+      "seconds": 1.973,
+      "tests": 3
+    },
+    "tests.test_milestone_branch.TrunkStartTest": {
+      "samples": 6,
+      "seconds": 0.688,
+      "tests": 4
+    },
+    "tests.test_no_rewrite_invariants.ControllerScanTest": {
+      "samples": 6,
+      "seconds": 0.456,
+      "tests": 3
+    },
+    "tests.test_no_rewrite_invariants.PlantedFixtureTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 2
+    },
+    "tests.test_observation_equivalence.AttachDetachTest": {
+      "samples": 6,
+      "seconds": 2.593,
+      "tests": 2
+    },
+    "tests.test_observation_equivalence.EquivalenceTest": {
+      "samples": 6,
+      "seconds": 12.368,
+      "tests": 2
+    },
+    "tests.test_observation_equivalence.FinalResultTest": {
+      "samples": 6,
+      "seconds": 1.798,
+      "tests": 1
+    },
+    "tests.test_observation_equivalence.FollowReadOnlyTest": {
+      "samples": 6,
+      "seconds": 2.396,
+      "tests": 2
+    },
+    "tests.test_observation_equivalence.RendererFailureTest": {
+      "samples": 6,
+      "seconds": 6.422,
+      "tests": 3
+    },
+    "tests.test_observe.AppendJsonlTest": {
+      "samples": 6,
+      "seconds": 0.003,
+      "tests": 4
+    },
+    "tests.test_observe.BestEffortTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 5
+    },
+    "tests.test_observe.ControllerLivenessTest": {
+      "samples": 6,
+      "seconds": 0.103,
+      "tests": 6
+    },
+    "tests.test_observe.FdSinkTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_observe.FollowJobTest": {
+      "samples": 6,
+      "seconds": 0.442,
+      "tests": 3
+    },
+    "tests.test_observe.FollowRunTest": {
+      "samples": 6,
+      "seconds": 0.344,
+      "tests": 9
+    },
+    "tests.test_observe.HeartbeatTest": {
+      "samples": 6,
+      "seconds": 0.867,
+      "tests": 2
+    },
+    "tests.test_observe.JobActivityTest": {
+      "samples": 6,
+      "seconds": 0.306,
+      "tests": 14
+    },
+    "tests.test_observe.NormaliseRenderTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 14
+    },
+    "tests.test_observe.ParseAtTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_observe.PluralTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_observe.StreamDiagnosisPresentationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_observe.TailTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 3
+    },
+    "tests.test_observe.TrackedFollowTest": {
+      "samples": 6,
+      "seconds": 1.307,
+      "tests": 6
+    },
+    "tests.test_observe.TrackedRenderingTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_package_structure.DependencyGraphTest": {
+      "samples": 6,
+      "seconds": 0.316,
+      "tests": 2
+    },
+    "tests.test_package_structure.EagerLoadTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_package_structure.NoHotReloadOrUserOverrideTest": {
+      "samples": 6,
+      "seconds": 0.289,
+      "tests": 2
+    },
+    "tests.test_package_structure.NoLateResourceReadTest": {
+      "samples": 6,
+      "seconds": 0.764,
+      "tests": 2
+    },
+    "tests.test_package_structure.RaisedByInvariantTest": {
+      "samples": 6,
+      "seconds": 0.243,
+      "tests": 4
+    },
+    "tests.test_packaged_runtime.CheckoutAbsentTest": {
+      "samples": 1,
+      "seconds": 3.74,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.CheckoutModifiedTest": {
+      "samples": 1,
+      "seconds": 2.467,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.CheckoutRenamedTest": {
+      "samples": 1,
+      "seconds": 3.71,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.EditableSourceRetainedTest": {
+      "samples": 1,
+      "seconds": 3.619,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.ReproducedDefectTest": {
+      "samples": 1,
+      "seconds": 2.415,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.TamperedInstallTest": {
+      "samples": 1,
+      "seconds": 2.062,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.UpgradeHandoffTest": {
+      "samples": 1,
+      "seconds": 2.968,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.VenvInsideCheckoutTest": {
+      "samples": 1,
+      "seconds": 3.05,
+      "tests": 1
+    },
+    "tests.test_packaged_runtime.VersionEqualsArtifactTest": {
+      "samples": 1,
+      "seconds": 2.097,
+      "tests": 1
+    },
+    "tests.test_plan_document_consistency.AdrExitCodeConstantsInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 6
+    },
+    "tests.test_plan_document_consistency.CommandLineHalfInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 4
+    },
+    "tests.test_plan_document_consistency.ComplexityHalfInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_plan_document_consistency.ExitCodeHalfInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_plan_document_consistency.Gen1ExitCodeRowInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 7
+    },
+    "tests.test_plan_document_consistency.LiveDocumentTest": {
+      "samples": 6,
+      "seconds": 0.206,
+      "tests": 7
+    },
+    "tests.test_plan_document_consistency.OperatorDocumentCommandLineTest": {
+      "samples": 6,
+      "seconds": 0.033,
+      "tests": 5
+    },
+    "tests.test_plan_document_consistency.ReadmeValidateJobTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 2
+    },
+    "tests.test_plan_document_consistency.RoundCountHalfInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_pull_request_lifecycle.CloseOutFromTrunkTest": {
+      "samples": 6,
+      "seconds": 4.913,
+      "tests": 4
+    },
+    "tests.test_pull_request_lifecycle.CloseOutTest": {
+      "samples": 6,
+      "seconds": 7.836,
+      "tests": 7
+    },
+    "tests.test_pull_request_lifecycle.CreationTest": {
+      "samples": 6,
+      "seconds": 7.784,
+      "tests": 9
+    },
+    "tests.test_pull_request_lifecycle.GateTextTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_pull_request_lifecycle.MatrixShapeTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_pull_request_lifecycle.OutcomeMatrixTest": {
+      "samples": 6,
+      "seconds": 18.138,
+      "tests": 36
+    },
+    "tests.test_pull_request_lifecycle.PrLessCloseOutTest": {
+      "samples": 6,
+      "seconds": 5.373,
+      "tests": 5
+    },
+    "tests.test_pull_request_lifecycle.ReadinessTest": {
+      "samples": 6,
+      "seconds": 8.951,
+      "tests": 9
+    },
+    "tests.test_pull_request_lifecycle.RefusalExitTest": {
+      "samples": 6,
+      "seconds": 7.977,
+      "tests": 13
+    },
+    "tests.test_release_tools.CheckedOutVersionTest": {
+      "samples": 1,
+      "seconds": 0.912,
+      "tests": 1
+    },
+    "tests.test_release_tools.ChecksumsTest": {
+      "samples": 6,
+      "seconds": 0.008,
+      "tests": 2
+    },
+    "tests.test_release_tools.ReleaseTransactionCliTest": {
+      "samples": 6,
+      "seconds": 1.001,
+      "tests": 3
+    },
+    "tests.test_release_tools.RetiredSubcommandsTest": {
+      "samples": 6,
+      "seconds": 0.004,
+      "tests": 2
+    },
+    "tests.test_release_tools.VerifyWheelTest": {
+      "samples": 1,
+      "seconds": 1.403,
+      "tests": 16
+    },
+    "tests.test_release_tools.VersionCommandTest": {
+      "samples": 6,
+      "seconds": 0.315,
+      "tests": 4
+    },
+    "tests.test_release_txn": {
+      "samples": 6,
+      "seconds": 11.41,
+      "tests": 26
+    },
+    "tests.test_repo_policy.CommittedTreeReaderTest": {
+      "samples": 6,
+      "seconds": 0.388,
+      "tests": 9
+    },
+    "tests.test_repo_policy.ReferencePolicyTest": {
+      "samples": 6,
+      "seconds": 0.055,
+      "tests": 3
+    },
+    "tests.test_repo_policy.SwitchesTest": {
+      "samples": 6,
+      "seconds": 0.055,
+      "tests": 2
+    },
+    "tests.test_repo_policy.ValidationRefusalTest": {
+      "samples": 6,
+      "seconds": 1.581,
+      "tests": 26
+    },
+    "tests.test_resume.AbandonBeyondPreMilestoneRecordsTest": {
+      "samples": 6,
+      "seconds": 1.032,
+      "tests": 7
+    },
+    "tests.test_resume.AbandonWithAnOrphanedAnchorTest": {
+      "samples": 6,
+      "seconds": 0.554,
+      "tests": 1
+    },
+    "tests.test_resume.BaseVersionRecordShapeTest": {
+      "samples": 6,
+      "seconds": 0.031,
+      "tests": 1
+    },
+    "tests.test_resume.BootKeyedLivenessResumeTest": {
+      "samples": 6,
+      "seconds": 0.415,
+      "tests": 4
+    },
+    "tests.test_resume.BootstrapEndToEndInterruptionTest": {
+      "samples": 6,
+      "seconds": 0.321,
+      "tests": 1
+    },
+    "tests.test_resume.Case1UninterpretableTest": {
+      "samples": 6,
+      "seconds": 0.122,
+      "tests": 7
+    },
+    "tests.test_resume.Case2UnresolvableSubjectTest": {
+      "samples": 6,
+      "seconds": 0.09,
+      "tests": 5
+    },
+    "tests.test_resume.Case3WorkerOutcomeDisagreementTest": {
+      "samples": 6,
+      "seconds": 0.114,
+      "tests": 5
+    },
+    "tests.test_resume.Case4DerivedFieldDisagreementTest": {
+      "samples": 6,
+      "seconds": 0.052,
+      "tests": 3
+    },
+    "tests.test_resume.CrossProcessEventSeqTest": {
+      "samples": 6,
+      "seconds": 0.753,
+      "tests": 1
+    },
+    "tests.test_resume.DrainDetachedReattachTest": {
+      "samples": 6,
+      "seconds": 6.781,
+      "tests": 2
+    },
+    "tests.test_resume.EndToEndInterruptionTest": {
+      "samples": 6,
+      "seconds": 0.327,
+      "tests": 1
+    },
+    "tests.test_resume.EndedSessionLossTest": {
+      "samples": 6,
+      "seconds": 0.991,
+      "tests": 1
+    },
+    "tests.test_resume.ImplementationStageResumeTest": {
+      "samples": 6,
+      "seconds": 1.946,
+      "tests": 5
+    },
+    "tests.test_resume.IncompleteLifecyclePairTest": {
+      "samples": 6,
+      "seconds": 20.189,
+      "tests": 4
+    },
+    "tests.test_resume.InterruptWhileWaitingTest": {
+      "samples": 6,
+      "seconds": 0.478,
+      "tests": 1
+    },
+    "tests.test_resume.NoKillAdviceAcrossBootsTest": {
+      "samples": 6,
+      "seconds": 0.052,
+      "tests": 1
+    },
+    "tests.test_resume.NonTerminalCoverageTest": {
+      "samples": 6,
+      "seconds": 0.223,
+      "tests": 2
+    },
+    "tests.test_resume.ObservationPathsNeverReadTest": {
+      "samples": 6,
+      "seconds": 0.032,
+      "tests": 1
+    },
+    "tests.test_resume.OrphanWorkerTest": {
+      "samples": 6,
+      "seconds": 0.614,
+      "tests": 1
+    },
+    "tests.test_resume.PartialApplyPlanReviewResumeTest": {
+      "samples": 6,
+      "seconds": 0.1,
+      "tests": 4
+    },
+    "tests.test_resume.PlanBundlePostconditionResumeTest": {
+      "samples": 6,
+      "seconds": 0.646,
+      "tests": 5
+    },
+    "tests.test_resume.PlanBundlePostconditionRowSevenResumeTest": {
+      "samples": 6,
+      "seconds": 0.062,
+      "tests": 3
+    },
+    "tests.test_resume.PreMilestoneUnreconcilableRecordTest": {
+      "samples": 6,
+      "seconds": 0.315,
+      "tests": 2
+    },
+    "tests.test_resume.ReattachAfterControllerLossTest": {
+      "samples": 6,
+      "seconds": 7.416,
+      "tests": 4
+    },
+    "tests.test_resume.RecognisedDaemonPresentationTest": {
+      "samples": 6,
+      "seconds": 0.834,
+      "tests": 1
+    },
+    "tests.test_resume.ReconcileCompletedTest": {
+      "samples": 6,
+      "seconds": 0.169,
+      "tests": 7
+    },
+    "tests.test_resume.ReconcileLaunchedTest": {
+      "samples": 6,
+      "seconds": 0.479,
+      "tests": 8
+    },
+    "tests.test_resume.ReconcilePlannedTest": {
+      "samples": 6,
+      "seconds": 0.024,
+      "tests": 1
+    },
+    "tests.test_resume.ReconciliationEventTest": {
+      "samples": 6,
+      "seconds": 0.167,
+      "tests": 6
+    },
+    "tests.test_resume.ReplayDeterminismTest": {
+      "samples": 6,
+      "seconds": 2.513,
+      "tests": 3
+    },
+    "tests.test_resume.ResumeLockScopeTest": {
+      "samples": 6,
+      "seconds": 0.021,
+      "tests": 1
+    },
+    "tests.test_resume.RowPredicateResumePathTest": {
+      "samples": 6,
+      "seconds": 0.111,
+      "tests": 4
+    },
+    "tests.test_resume.SettleWindowLossTest": {
+      "samples": 6,
+      "seconds": 15.847,
+      "tests": 4
+    },
+    "tests.test_resume.StartingRecordTest": {
+      "samples": 6,
+      "seconds": 1.476,
+      "tests": 1
+    },
+    "tests.test_resume.SupervisorLockScopeTest": {
+      "samples": 6,
+      "seconds": 4.036,
+      "tests": 2
+    },
+    "tests.test_resume.SupervisorProbeTest": {
+      "samples": 6,
+      "seconds": 0.692,
+      "tests": 3
+    },
+    "tests.test_resume.TargetScopingTest": {
+      "samples": 6,
+      "seconds": 0.044,
+      "tests": 1
+    },
+    "tests.test_resume.TerminalRecordsTest": {
+      "samples": 6,
+      "seconds": 0.028,
+      "tests": 1
+    },
+    "tests.test_resume.UnknownStatusRowTest": {
+      "samples": 6,
+      "seconds": 0.021,
+      "tests": 1
+    },
+    "tests.test_resume.UnreconcilableOrphanTest": {
+      "samples": 6,
+      "seconds": 0.413,
+      "tests": 1
+    },
+    "tests.test_resume.ZombieWorkerResumeTest": {
+      "samples": 6,
+      "seconds": 0.234,
+      "tests": 1
+    },
+    "tests.test_routing.PrecedenceTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 5
+    },
+    "tests.test_routing.RoleDerivationTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_routing.RoutingConfigTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_routing.RoutingTableTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 7
+    },
+    "tests.test_routing.SingleAgentNotOverridableTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_routing.ValueCheckTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_run_tests.BuildingBlocksTest": {
+      "samples": 5,
+      "seconds": 2.193,
+      "tests": 9
+    },
+    "tests.test_run_tests.EnvironmentTest": {
+      "samples": 6,
+      "seconds": 0.969,
+      "tests": 4
+    },
+    "tests.test_run_tests.ExclusivePhaseTest": {
+      "samples": 5,
+      "seconds": 1.447,
+      "tests": 1
+    },
+    "tests.test_run_tests.NestedRunTest": {
+      "samples": 6,
+      "seconds": 0.164,
+      "tests": 1
+    },
+    "tests.test_run_tests.ProcessHygieneTest": {
+      "samples": 6,
+      "seconds": 0.74,
+      "tests": 2
+    },
+    "tests.test_run_tests.RunnerVerdictTest": {
+      "samples": 6,
+      "seconds": 1.595,
+      "tests": 7
+    },
+    "tests.test_runtime.EnsureRuntimeRootTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_runtime.ResolveRuntimeRootTest": {
+      "samples": 6,
+      "seconds": 0.029,
+      "tests": 6
+    },
+    "tests.test_runtime.WriteJsonTest": {
+      "samples": 6,
+      "seconds": 0.003,
+      "tests": 4
+    },
+    "tests.test_target_state.ImplementationReviewFieldsTest": {
+      "samples": 6,
+      "seconds": 0.004,
+      "tests": 5
+    },
+    "tests.test_target_state.IncompleteChildrenTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_target_state.KnownPhaseSetEqualityTest": {
+      "samples": 6,
+      "seconds": 0.119,
+      "tests": 2
+    },
+    "tests.test_target_state.MalformedStateTest": {
+      "samples": 6,
+      "seconds": 0.004,
+      "tests": 7
+    },
+    "tests.test_target_state.MissingStateTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_target_state.NoPhaseSentinelTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_target_state.ReadHappyPathTest": {
+      "samples": 6,
+      "seconds": 0.006,
+      "tests": 6
+    },
+    "tests.test_target_state.ReadOnlySourceScanTest": {
+      "samples": 6,
+      "seconds": 0.012,
+      "tests": 3
+    },
+    "tests.test_target_state.RegistryCompleteTest": {
+      "samples": 6,
+      "seconds": 0.011,
+      "tests": 9
+    },
+    "tests.test_target_state.SelectWorkItemTest": {
+      "samples": 6,
+      "seconds": 0.005,
+      "tests": 8
+    },
+    "tests.test_target_state.UnknownPhaseTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 2
+    },
+    "tests.test_test_shards.AggregateTest": {
+      "samples": 6,
+      "seconds": 0.029,
+      "tests": 11
+    },
+    "tests.test_test_shards.BaselineBalanceTest": {
+      "samples": 6,
+      "seconds": 0.156,
+      "tests": 1
+    },
+    "tests.test_test_shards.CiPlacementTest": {
+      "samples": 6,
+      "seconds": 0.065,
+      "tests": 4
+    },
+    "tests.test_test_shards.CommittedTimingsTest": {
+      "samples": 5,
+      "seconds": 0.239,
+      "tests": 2
+    },
+    "tests.test_test_shards.ConformanceFamilyTest": {
+      "samples": 6,
+      "seconds": 0.003,
+      "tests": 4
+    },
+    "tests.test_test_shards.DeterminismTest": {
+      "samples": 6,
+      "seconds": 0.714,
+      "tests": 1
+    },
+    "tests.test_test_shards.EnvironmentShapingTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_test_shards.EquivalencePropertyTest": {
+      "samples": 6,
+      "seconds": 2.242,
+      "tests": 1
+    },
+    "tests.test_test_shards.EstimateTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_test_shards.ExclusiveAtomsTest": {
+      "samples": 5,
+      "seconds": 0.049,
+      "tests": 7
+    },
+    "tests.test_test_shards.ExecutorRecordingTest": {
+      "samples": 6,
+      "seconds": 0.069,
+      "tests": 10
+    },
+    "tests.test_test_shards.ExecutorRefusalTest": {
+      "samples": 6,
+      "seconds": 0.014,
+      "tests": 4
+    },
+    "tests.test_test_shards.LeakScanTest": {
+      "samples": 6,
+      "seconds": 0.018,
+      "tests": 1
+    },
+    "tests.test_test_shards.PlanTest": {
+      "samples": 6,
+      "seconds": 0.006,
+      "tests": 10
+    },
+    "tests.test_test_shards.PlanValidationTest": {
+      "samples": 6,
+      "seconds": 0.004,
+      "tests": 3
+    },
+    "tests.test_test_shards.ProfileParametersTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_test_shards.RealInventoryTest": {
+      "samples": 6,
+      "seconds": 0.076,
+      "tests": 4
+    },
+    "tests.test_test_shards.RealInventoryTimingTest": {
+      "samples": 6,
+      "seconds": 0.052,
+      "tests": 3
+    },
+    "tests.test_test_shards.ResultRecordTest": {
+      "samples": 6,
+      "seconds": 0.003,
+      "tests": 5
+    },
+    "tests.test_test_shards.SelectionTest": {
+      "samples": 6,
+      "seconds": 0.046,
+      "tests": 8
+    },
+    "tests.test_test_shards.ShardCountTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_test_shards.SyntheticInventoryTest": {
+      "samples": 6,
+      "seconds": 0.018,
+      "tests": 10
+    },
+    "tests.test_test_shards.TimingFileTest": {
+      "samples": 6,
+      "seconds": 0.007,
+      "tests": 7
+    },
+    "tests.test_test_shards.TimingUpdateTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 10
+    },
+    "tests.test_trunk_orchestration_e2e.InterruptedLifecycleTest": {
+      "samples": 6,
+      "seconds": 27.27,
+      "tests": 2
+    },
+    "tests.test_trunk_orchestration_e2e.NoPolicyLifecycleTest": {
+      "samples": 6,
+      "seconds": 4.474,
+      "tests": 1
+    },
+    "tests.test_trunk_orchestration_e2e.PolicyLifecycleTest": {
+      "samples": 6,
+      "seconds": 4.559,
+      "tests": 1
+    },
+    "tests.test_trunk_orchestration_e2e.ReleaseHistoryTest": {
+      "samples": 6,
+      "seconds": 2.827,
+      "tests": 1
+    },
+    "tests.test_trunk_orchestration_e2e.TrunkDriftTest": {
+      "samples": 6,
+      "seconds": 4.265,
+      "tests": 1
+    },
+    "tests.test_trunk_preflight.DisallowedToolsTest": {
+      "samples": 6,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_trunk_preflight.MilestoneBindingTest": {
+      "samples": 6,
+      "seconds": 5.678,
+      "tests": 8
+    },
+    "tests.test_trunk_preflight.NoPolicyGoldenTest": {
+      "samples": 6,
+      "seconds": 2.102,
+      "tests": 1
+    },
+    "tests.test_trunk_preflight.ObservationTest": {
+      "samples": 6,
+      "seconds": 2.756,
+      "tests": 5
+    },
+    "tests.test_trunk_preflight.PolicyStepTest": {
+      "samples": 6,
+      "seconds": 5.118,
+      "tests": 8
+    },
+    "tests.test_trunk_preflight.ProbeTest": {
+      "samples": 6,
+      "seconds": 0.21,
+      "tests": 5
+    },
+    "tests.test_version_authority.HandoffVersionTest": {
+      "samples": 6,
+      "seconds": 0.086,
+      "tests": 2
+    },
+    "tests.test_version_authority.PackageRuntimeTest": {
+      "samples": 6,
+      "seconds": 0.026,
+      "tests": 3
+    },
+    "tests.test_version_authority.PinnedChildTest": {
+      "samples": 6,
+      "seconds": 0.281,
+      "tests": 4
+    },
+    "tests.test_version_authority.ReadersTest": {
+      "samples": 6,
+      "seconds": 0.006,
+      "tests": 3
+    },
+    "tests.test_version_authority.SingleAuthorityTest": {
+      "samples": 6,
+      "seconds": 0.294,
+      "tests": 3
+    },
+    "tests.test_version_authority.SourceRuntimeTest": {
+      "samples": 6,
+      "seconds": 0.835,
+      "tests": 4
+    },
+    "tests.test_worker.AmbiguousTest": {
+      "samples": 6,
+      "seconds": 0.491,
+      "tests": 4
+    },
+    "tests.test_worker.AnchorTest": {
+      "samples": 6,
+      "seconds": 8.556,
+      "tests": 5
+    },
+    "tests.test_worker.FailureTest": {
+      "samples": 6,
+      "seconds": 0.426,
+      "tests": 2
+    },
+    "tests.test_worker.GoldenTranscriptTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_worker.GroupDrainTest": {
+      "samples": 6,
+      "seconds": 12.175,
+      "tests": 7
+    },
+    "tests.test_worker.InterruptedTest": {
+      "samples": 6,
+      "seconds": 1.097,
+      "tests": 2
+    },
+    "tests.test_worker.LaunchMechanicsTest": {
+      "samples": 6,
+      "seconds": 0.653,
+      "tests": 3
+    },
+    "tests.test_worker.LaunchOnSpawnTest": {
+      "samples": 6,
+      "seconds": 0.363,
+      "tests": 7
+    },
+    "tests.test_worker.LifecycleBracketSupervisionTest": {
+      "samples": 6,
+      "seconds": 33.756,
+      "tests": 6
+    },
+    "tests.test_worker.LivenessBootKeyedVerdictTest": {
+      "samples": 6,
+      "seconds": 0.786,
+      "tests": 10
+    },
+    "tests.test_worker.LivenessProcessTestRealTest": {
+      "samples": 6,
+      "seconds": 0.15,
+      "tests": 6
+    },
+    "tests.test_worker.LivenessZombieTest": {
+      "samples": 6,
+      "seconds": 0.272,
+      "tests": 14
+    },
+    "tests.test_worker.OwnershipProvenanceTest": {
+      "samples": 4,
+      "seconds": 0.014,
+      "tests": 6
+    },
+    "tests.test_worker.OwnershipTest": {
+      "samples": 4,
+      "seconds": 38.001,
+      "tests": 16
+    },
+    "tests.test_worker.QuiescenceConfirmationTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 2
+    },
+    "tests.test_worker.RouteArgvTest": {
+      "samples": 6,
+      "seconds": 12.222,
+      "tests": 8
+    },
+    "tests.test_worker.StreamFilesTest": {
+      "samples": 6,
+      "seconds": 0.502,
+      "tests": 4
+    },
+    "tests.test_worker.StreamParseTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 10
+    },
+    "tests.test_worker.SuccessTest": {
+      "samples": 6,
+      "seconds": 0.203,
+      "tests": 1
+    },
+    "tests.test_worker.SupervisionTest": {
+      "samples": 6,
+      "seconds": 13.024,
+      "tests": 9
+    },
+    "tests.test_worker.TimeoutNoneTest": {
+      "samples": 6,
+      "seconds": 1.644,
+      "tests": 2
+    },
+    "tests.test_worker.UserOnlyCommandTest": {
+      "samples": 6,
+      "seconds": 0.237,
+      "tests": 5
+    },
+    "tests.test_worker.WorkerLaunchErrorTest": {
+      "samples": 6,
+      "seconds": 0.008,
+      "tests": 1
+    },
+    "tests.test_worker.WrongMatchTest": {
+      "samples": 6,
+      "seconds": 33.214,
+      "tests": 5
+    },
+    "tests.test_worker_stream.BracketCorrelationTest": {
+      "samples": 6,
+      "seconds": 0.103,
+      "tests": 17
+    },
+    "tests.test_worker_stream.FixtureClassificationTest": {
+      "samples": 6,
+      "seconds": 0.354,
+      "tests": 11
+    },
+    "tests.test_worker_stream.OriginTest": {
+      "samples": 6,
+      "seconds": 0.007,
+      "tests": 3
+    },
+    "tests.test_worker_stream.PositionalKillTest": {
+      "samples": 6,
+      "seconds": 0.004,
+      "tests": 2
+    },
+    "tests.test_worker_stream.RowPrecedenceTest": {
+      "samples": 6,
+      "seconds": 0.001,
+      "tests": 5
+    },
+    "tests.test_worker_stream.SettlementTest": {
+      "samples": 6,
+      "seconds": 0.011,
+      "tests": 12
+    },
+    "tests.test_worker_stream.StateTest": {
+      "samples": 6,
+      "seconds": 0.14,
+      "tests": 8
+    },
+    "tests.test_worker_stream.WakeupTimeTest": {
+      "samples": 6,
+      "seconds": 0.009,
+      "tests": 4
+    },
+    "tests.test_worker_stream.WrongMatchTest": {
+      "samples": 6,
+      "seconds": 0.002,
+      "tests": 6
+    },
+    "tests.test_write_containment.PackageWideWriteContainmentScanTest": {
+      "samples": 6,
+      "seconds": 0.437,
+      "tests": 1
+    },
+    "tests.test_write_containment.SyntheticInstantiationTest": {
+      "samples": 6,
+      "seconds": 0.046,
+      "tests": 9
+    }
+  },
+  "profile": "ci",
+  "schema_version": 1,
+  "updated_from": [
+    "9a08591ca1928fdf6c2ce9b216a58049a74f27f942ce959cff0a65fd277aeaaf",
+    "eebe7270f8ba9facd2ecebb78085fc81b878307d8392d3aa70e448070c6f1b06",
+    "053470524efcd13bd25776f5a88e07abaae16049fea18091658d585673a32356",
+    "96f191f7ac28fddf432179c722534fad874634cfadfdf008d63411a6476f1cc7"
+  ]
+}

@@ -2,63 +2,62 @@
 
 ## Status
 
-**Complete.** `workflow-controller-worker-lifecycle-ownership` reached `MILESTONE_COMPLETE` on
-2026-09-26. Functional review passed in round 3 (implementation revision 4) with no findings,
-against checklist evidence commit `272bcb36d60551d8ae8ca85cc48d255e51a63d79` (checklist blob
-`71aa72372087e1987cac7849735e6477bd100299`). Flows F1-F11 all passed on a fresh, isolated pipx
-install of a wheel built from that commit (`workflow-controller 1.1.1`, `runtime: package (local
-build from 272bcb36d605)`). F12, the optional live `claude` harness-contract probe, was skipped.
-The three earlier findings were re-tested and did not reproduce:
-- round 1's F1: the wakeup due time `15:56:09` matched the persisted `14:56:09.146Z`;
-- round 1's F2: every line used `process`/`processes`, and `processs` never appeared;
-- round 2's F3: F11 named the daemon `not owned: pid <d> (gpg-agent 600)`, and F5's excluded
-  entry carried `cmdline: 'gpg-agent 600'`.
+**Complete.** `workflow-controller-adaptive-test-sharding` reached `MILESTONE_COMPLETE` on
+2026-09-27. Functional review passed in round 3 (implementation revision 6) with no findings,
+against checklist evidence commit `a09b6c120963bc0e95c2a88d3670bed6da8946fc` (checklist blob
+`ed42abb2191d9d80815f7c242dd4388482106193`). The required re-test, L1, passed on CI run
+`36330896229`, attempts 1 and 2, on head `a09b6c1`:
+- every `Validate` job was green both times: `plan`, the 5 `tests` shards, `tests-result` and
+  `package`;
+- coverage was exact both times (2041 planned tests, each ran once);
+- the critical path was 3:49 both times, within both acceptance bars (5 min, and 4 min 8 s);
+- round 2's two findings did not recur: `OwnershipTest.test_a_gated_escapee_is_published_as_group_then_as_tag`
+  (F1) and `RunRecordCtrlCTest.test_sigint_marks_the_run_interrupted_and_keeps_the_orphan` (F2)
+  were both in the run's plan and passed on both attempts.
 
-All eight registry checkpoints (`CP1`-`CP8`) are `COMPLETE`. Implementation revision 4 was
-approved by both implementation-review stages (technical approval `4328131`, `CURRENT`), and the user accepted
-the milestone through `/accept-milestone`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, and `active_work_item_id` is now `null`. `docs/ROADMAP.md`
-marks the section 1.4 hotfix accepted. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`. It covers the goal,
-checkpoint progress, the self-review, implementation review round 1, functional review rounds 1
-and 2, and the revision-4 functional-review checklist, including its driver.
+The other flows (local A-K, M, N and CI L2-L4) passed in round 2 and were not repeated; the round-3
+head added only round 2's two test-only fixes.
+
+All ten registry checkpoints (`CP1`-`CP5`, `CP5B`, `CP5C`, `CP6`, `CP6B`, `CP7`) are `COMPLETE`.
+Implementation revision 6 was approved by both implementation-review stages (technical approval
+`a5d9095`, `CURRENT`), and the user accepted the milestone through `/accept-milestone`.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of this transition, and
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks section 1.2.1 complete. The full
+milestone narrative is archived verbatim at
+`docs/milestones/completed/workflow-controller-adaptive-test-sharding.md`. It covers the goal, the
+three plan amendments, checkpoint progress, functional review rounds 1 and 2, and the round-3
+functional-review checklist.
 
 This milestone's own deliverables remain live in the tree, unmoved (see the archive file's own
-preface for why): `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md` and its
+preface for why): `docs/ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md` and its
 registry/mapping files, still at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry
-declares, and ADR `docs/adr/0004-worker-lifecycle-ownership.md`. The previously completed work
-items and their archived narratives in `docs/milestones/completed/` are unaffected.
+declares, ADR `docs/adr/0005-adaptive-test-sharding.md`, `tools/test_shards.py`,
+`tools/run_tests.py`, `tools/test_timings.json` and the rendered `validate.yml`. The previously
+completed work items and their archived narratives in `docs/milestones/completed/` are unaffected.
 
 Deferred follow-ups, not conditions of acceptance:
-- with no Controller attached, a job whose worker leader died while its group still runs reads
-  `waiting` from the last recorded `worker_state` (functional review round 1, O1; wording only);
-- `follow` stamps worker stream lines that carry no event time with the time they are read, and a
-  present but unreadable generic event time still renders as the current time (the checklist's
-  known limitation);
-- two messages still use the neutral `process(es)`: the drain stderr line and the `resume
-  --abandon` refusal;
-- in F8's scenario, a subagent's own `assistant` events that arrive while the session is idle
-  count as an extra turn (`stream_diagnosis.turns` is `3`, not `2`). The outcome is unaffected
-  (checklist dry-run notes);
-- implementation review round 1's Optional 2 (declining `ENDING` once the anchor has died) and
-  Optional 3 (`exit_status` wording in plan B's table) were not applied;
-- what ADR 0004 and the README's "What is not solved here" leave unsolved by design: reliance on
-  the measured harness behaviour, wakeup-fire matching by an undocumented event, an `env -i`
-  descendant orphaned while nothing supervises it, and daemon recognition by name;
-- carried over, unchanged: `docs/ROADMAP.md` section 1.4's four follow-up patches (the misordered
-  `--work-item` resume hints, the manual-external gate's behaviour when the local review ledger is
-  incoherent, the abandoned/unreconcilable apply-review relaunch-bound tests, active-job/status
-  presentation), and the deferred items of the earlier milestones, listed in their acceptance
-  commits (`4280bb6`, `82fa6a8`).
+- the round-6 local implementation review's optional findings: `CrossProcessEventSeqTest` may
+  have the same SIGKILL-before-`worker_spawned` window round 2's F2 closed, and a matched-wakeup
+  assertion (0.9 s) can flake under heavy load. Neither failed in the round-3 CI runs;
+- the round-3 checklist's flow N quoted the round-2 CI plan digest (`8850f631...`); the CI plan
+  on the accepted head is `7240aaf5...`, still 5 shards. The digest changed only because F1 added
+  one test;
+- what the plan leaves for later: failing a run on a leaked process (D7, today a warning), and
+  periodic refreshes of the committed CI timing profile (a refresh changes a protected path, so
+  it goes through review);
+- making the drain detach bound (10800 s, amendment 1) configurable, listed under
+  `docs/ROADMAP.md` section 1.4;
+- the two Controller behaviour changes (`source` follows the current ownership basis; the 10800 s
+  detach bound) go in the next release's notes, per `docs/ROADMAP.md` section 1.2.1;
+- carried over, unchanged: `docs/ROADMAP.md` section 1.4's four follow-up patches, and the
+  deferred items of the earlier milestones, listed in their acceptance commits.
 
-Supervised rollout, still outstanding: the first automatic release, 1.2.0 (README "Runbook: the
-first automatic release"), has not run yet. Nothing of this milestone or the previous one has been
-pushed.
+The milestone branch is on Draft PR #1 (head `a09b6c1`, pushed for functional-review CI evidence
+with the user's authorization) and is not merged; this acceptance commit is local only.
 
 **Next action:** `docs/ROADMAP.md` section 1.4, "Follow-up patches to fold in where appropriate",
 is the next incomplete milestone that can be planned now. Its four patches are still open. Run
 `/milestone-plan` for it. That creates a fresh `work_items` entry and claims
 `active_work_item_id`, ready for `PLANNING`. Section 1.6, "Post-Workflow-2.6 compatibility
 integration", waits for Workflow Manager's 2.6.x release; plan it once that release is installed
-through Workflow Manager. Independently of planning, the supervised 1.2.0 release above is an
-operator task, not a milestone.
+through Workflow Manager.

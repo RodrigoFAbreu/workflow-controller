@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-adaptive-test-sharding",
+  "requirements": {
+    "R1": {
+      "description": "One authoritative deterministic inventory of runnable tests (controller discover-equivalent plus managed conformance suites), refusing import failures and duplicates",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Explicit targeted selection by module/class/test/suite name; existing python -m unittest and scripts/ suite entry points unchanged",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R3": {
+      "description": "Serial and sharded execution of the same selection are equivalent: union equals the selection, shards disjoint, nothing skipped or duplicated, proven by property tests and verified at run time",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R4": {
+      "description": "Historical timing data is collected and persisted (committed CI profile, local cache) with an explicit update policy and sensible estimates for unknown tests",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "Timing data is optimization metadata only: missing, stale or corrupt timing data never changes which tests run",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "Adaptive shard count from estimated runtime, clamped to profile bounds, with measured parameter values",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R7": {
+      "description": "Duration-balanced deterministic assignment that keeps fixture-sharing atoms whole and reports oversized atoms",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R8": {
+      "description": "A straightforward local command running a full or selected suite with the shared planner, bounded concurrency and one aggregated result",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R9": {
+      "description": "CI shard matrix generated dynamically from the same planner, full suite still executed and coverage checked, no hand-curated inventory",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R10": {
+      "description": "Per-shard isolation of temporary directories, state roots, caches, process groups and signals, with leak detection",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R11": {
+      "description": "An explicit auditable serialization mechanism, and latent timing assumptions exposed by parallel load fixed at their cause",
+      "checkpoint_ids": [
+        "CP5",
+        "CP5B",
+        "CP7"
+      ]
+    },
+    "R12": {
+      "description": "Failures identify the failing tests, shard, logs and reproduction commands; crashed shards list not-run tests",
+      "checkpoint_ids": [
+        "CP4",
+        "CP6"
+      ]
+    },
+    "R13": {
+      "description": "Measured baseline, bottleneck profile and re-measured performance acceptance",
+      "checkpoint_ids": [
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R14": {
+      "description": "Released Controller 1.2.0 artefact, wheel packaging scope, version and release pipeline classification preserved; the only Controller runtime changes are amendment 0's Design H and amendment 1's drain detach bound; documentation updated",
+      "checkpoint_ids": [
+        "CP6",
+        "CP7"
+      ]
+    },
+    "R15": {
+      "description": "Controller ownership provenance: an owned process's recorded source reflects its current ownership basis and is published when it changes, without changing ownership membership or any decision made from it (amendment 0, IR1-003)",
+      "checkpoint_ids": [
+        "CP5B",
+        "CP7"
+      ]
+    },
+    "R16": {
+      "description": "Interim drain detach bound: worker.DRAIN_DETACH_SECONDS is 10800 s (3 hours), not 600 s, with every other drain, detach and re-attach semantic unchanged, no new setting, and configurability of Controller tunables recorded as deferred (amendment 1)",
+      "checkpoint_ids": [
+        "CP5C",
+        "CP7"
+      ]
+    },
+    "R17": {
+      "description": "Local planning's largest-atom floor uses only local-machine timing estimates: a committed CI-profile fallback estimate counts in the total but never sets the local floor, so an empty or partial local profile still plans min(8, CPUs) shards; CI planning unchanged (amendment 2, LIR4-001)",
+      "checkpoint_ids": [
+        "CP6B",
+        "CP7"
+      ]
+    }
+  }
+}

@@ -157,10 +157,13 @@ an `argv[0]` basename of `gpg-agent`, `keyboxd`, `dirmngr`, `scdaemon` or
 in `worker_state.excluded_processes`.
 
 **Drain bound.** Every other owned process that outlives `claude` is waited
-for up to `DRAIN_DETACH_SECONDS` (600 s). Then the Controller detaches: it
+for up to `DRAIN_DETACH_SECONDS` (10800 s). Then the Controller detaches: it
 ends nothing, leaves the record `LAUNCHED` at `DRAINING` with
 `drain_detached_at`, leaves the anchor holding the lock, and exits 45 naming
-the pids and `resume`.
+the pids and `resume`. The bound was 600 s until amendment 1 of
+`workflow-controller-adaptive-test-sharding` raised it to 3 hours as an
+interim constant, because legitimate background verification outlived it;
+making it configurable is deferred (`docs/ROADMAP.md` 1.4).
 
 Rejected: ownership limited to processes still attached to the task tree or
 group, which gives up exactly the `setsid` escapees D4 is about; and no

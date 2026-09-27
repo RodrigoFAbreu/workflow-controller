@@ -381,7 +381,9 @@ class ValidatePlanTest(unittest.TestCase):
         steps = _steps(self.jobs["tests-result"])
         self.assertEqual(self._argv("tests-result", "aggregate"),
                          ["python3", "tools/run_tests.py", "aggregate", "--plan",
-                          "results/plan.json", "--results-dir", "results"])
+                          "results/plan.json", "--results-dir", "results",
+                          "--plan-artifact", "test-plan", "--results-artifact-prefix",
+                          "results-"])
         downloads = [s for s in steps if "download-artifact" in _uses(s)]
         self.assertEqual([s["with"] for s in downloads],
                          [{"name": "test-plan", "path": "results"},

@@ -477,6 +477,22 @@ class BuildingBlocksTest(unittest.TestCase):
         self.assertIn("- fail: tests.test_fail.FailTest.test_fails", completed.stderr)
         self.assertIn("one is not two", completed.stderr)
 
+    def test_aggregate_names_the_ci_artifacts_of_a_failure(self) -> None:
+        plan_path = self.results / "plan.json"
+        planned = self.repo.run("plan", "tests.test_fail", "--profile", "ci", "--shards", "1",
+                                "--output", str(plan_path))
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        self.assertEqual(self.exec_shard("--plan", str(plan_path)).returncode, 1)
+        base = ("aggregate", "--plan", str(plan_path), "--results-dir", str(self.results))
+        aggregated = self.repo.run(*base, "--plan-artifact", "test-plan",
+                                   "--results-artifact-prefix", "results-")
+        self.assertEqual(aggregated.returncode, 1, aggregated.stdout + aggregated.stderr)
+        self.assertIn("- CI artifacts: the log is in `results-0`; `test-plan` holds "
+                      "`plan.json` for the replay command", aggregated.stdout)
+        alone = self.repo.run(*base, "--plan-artifact", "test-plan")
+        self.assertEqual(alone.returncode, 2)
+        self.assertIn("go together", alone.stderr)
+
     def test_the_planning_inputs_form_runs_and_aggregates(self) -> None:
         summary = self.plan()
         for index in summary["shards"]:

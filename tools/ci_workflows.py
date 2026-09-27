@@ -322,7 +322,8 @@ def validate_workflow() -> dict:
                               "path": RESULTS_DIR}},
                     {"name": "aggregate",
                      "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
-                            f"--results-dir {RESULTS_DIR}"},
+                            f"--results-dir {RESULTS_DIR} --plan-artifact {PLAN_ARTIFACT} "
+                            f"--results-artifact-prefix {RESULTS_ARTIFACT_PREFIX}"},
                     # The run's per-atom durations, for
                     # tools/run_tests.py timings merge --into tools/test_timings.json.
                     {"if": "always()", "uses": "actions/upload-artifact@v4",

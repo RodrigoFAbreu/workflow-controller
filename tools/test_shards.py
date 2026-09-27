@@ -1533,6 +1533,14 @@ INTERRUPTED = "INTERRUPTED"
 FAILING_OUTCOMES = frozenset({"fail", "error", "unexpected_success"})
 
 
+@dataclass(frozen=True)
+class ArtifactNames:
+    """Where a CI run's evidence can be downloaded: the plan's artifact, and
+    the prefix of each shard's results artifact (``<prefix><index>``)."""
+    plan: str
+    results_prefix: str
+
+
 class AggregateError(Exception):
     """The results cannot be aggregated against the plan (exit 2)."""
 
@@ -1596,13 +1604,14 @@ def _verdict(index: int, planned: list[str], record: Mapping | None, interrupted
 
 def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir: Path, *,
               shards: Iterable[int] | None = None, interrupted: Iterable[int] = (),
-              notes: Mapping[int, str] | None = None, wall_seconds: float | None = None
-              ) -> Aggregate:
+              notes: Mapping[int, str] | None = None, wall_seconds: float | None = None,
+              artifacts: ArtifactNames | None = None) -> Aggregate:
     """Verdicts, the run-time coverage proof (I2), the exit status and the
     summary for ``plan`` given its shards' ``records`` (``None`` for a shard
     that left none). ``shards`` restricts the run to those shards (a
     ``--replay --shard``). A record carrying another plan's digest, or
-    another shard's index, refuses the whole aggregate."""
+    another shard's index, refuses the whole aggregate. ``artifacts`` names
+    the CI artifacts that hold each failure's log and the plan."""
     validate_plan(plan)
     indexes = list(range(plan["shard_count"]) if shards is None else shards)
     interrupted = set(interrupted)
@@ -1672,7 +1681,8 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
                        coverage={"planned": sum(row["tests"] for row in rows),
                                  "missing": len(not_run), "unplanned": unplanned,
                                  "duplicate": duplicate})
-    result.summary = render_summary(plan, result, results_dir, wall_seconds=wall_seconds)
+    result.summary = render_summary(plan, result, results_dir, wall_seconds=wall_seconds,
+                                    artifacts=artifacts)
     return result
 
 
@@ -1719,6 +1729,14 @@ def exclusive_registry_line(plan: Mapping) -> str:
             f"exclusive shard")
 
 
+def _where(index: int, results_dir: Path, artifacts: ArtifactNames | None) -> list[str]:
+    lines = [f"- log: `{log_path(results_dir, index)}`"]
+    if artifacts is not None:
+        lines.append(f"- CI artifacts: the log is in `{artifacts.results_prefix}{index}`; "
+                     f"`{artifacts.plan}` holds `plan.json` for the replay command")
+    return lines
+
+
 def _coverage_line(coverage: Mapping[str, int]) -> str:
     """The coverage check's verdict, stated whether or not it passed."""
     counts = (f"{coverage['missing']} missing, {coverage['unplanned']} unplanned, "
@@ -1729,10 +1747,12 @@ def _coverage_line(coverage: Mapping[str, int]) -> str:
 
 
 def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
-                   wall_seconds: float | None = None) -> str:
+                   wall_seconds: float | None = None,
+                   artifacts: ArtifactNames | None = None) -> str:
     """The run's Markdown summary: one row per shard, then every failing
     test and fixture error with its traceback tail, log and reproduction
-    commands, the NOT RUN ids, coverage violations, fixture skips and leaked
+    commands (and, in CI, the artifacts holding the log and the plan), the
+    NOT RUN ids, coverage violations, fixture skips and leaked
     processes, and the coverage verdict, wall time, largest atom and balance
     ratio."""
     results_dir = Path(results_dir)
@@ -1768,7 +1788,7 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
         for failure in result.failures:
             lines += ["", f"### `{failure['id']}`", "",
                       f"- shard {failure['shard']}, outcome `{failure['outcome']}`",
-                      f"- log: `{log_path(results_dir, failure['shard'])}`",
+                      *_where(failure["shard"], results_dir, artifacts),
                       *_reproduce(failure["id"], failure["shard"], results_dir),
                       "", "```text", _tail(failure["detail"]), "```"]
     if result.fixture_errors:
@@ -1776,7 +1796,7 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
         for index, entry in result.fixture_errors:
             name = holder_target(entry["description"]) or entry["description"]
             lines += ["", f"### `{entry['description']}`", "", f"- shard {index}",
-                      f"- log: `{log_path(results_dir, index)}`",
+                      *_where(index, results_dir, artifacts),
                       *_reproduce(name, index, results_dir),
                       "", "```text", _tail(entry["traceback"]), "```"]
     if result.not_run:

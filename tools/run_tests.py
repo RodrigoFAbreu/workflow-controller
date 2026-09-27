@@ -24,7 +24,9 @@ Building blocks (used by the local runner and by CI):
   prints its failing ids with traceback tails, and its log, to stderr;
 - ``plan``: compute and write a plan (``--github-output`` also hands its
   shard indexes, count and digest to a GitHub Actions job's outputs);
-- ``aggregate``: verdicts, coverage and summary for a results directory;
+- ``aggregate``: verdicts, coverage and summary for a results directory
+  (``--plan-artifact``/``--results-artifact-prefix`` name the CI artifacts
+  a failure's evidence can be downloaded from);
 - ``timings merge --into FILE DIR...``: fold results into a timing profile,
   the explicit way to refresh the committed ``tools/test_timings.json``.
 
@@ -239,9 +241,13 @@ def cmd_aggregate(args) -> int:
         # In CI: the plan job failed or was cancelled, so no shard ran either.
         return _error(f"there is no plan at {args.plan}: the plan was never produced, so "
                       f"nothing ran and nothing can pass")
+    if (args.plan_artifact is None) != (args.results_artifact_prefix is None):
+        raise UsageError("--plan-artifact and --results-artifact-prefix go together")
+    artifacts = None if args.plan_artifact is None else ts.ArtifactNames(
+        plan=args.plan_artifact, results_prefix=args.results_artifact_prefix)
     plan = load_plan(args.plan)
     records, notes = ts.load_results(plan, args.results_dir)
-    result = ts.aggregate(plan, records, args.results_dir, notes=notes)
+    result = ts.aggregate(plan, records, args.results_dir, notes=notes, artifacts=artifacts)
     _publish_summary(result.summary, args.results_dir)
     return result.exit_status
 
@@ -550,6 +556,10 @@ def _aggregate_parser() -> argparse.ArgumentParser:
                                      description="Aggregate a results directory.")
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--results-dir", type=Path, required=True)
+    parser.add_argument("--plan-artifact", metavar="NAME",
+                        help="the CI artifact holding the plan, named in the summary")
+    parser.add_argument("--results-artifact-prefix", metavar="PREFIX",
+                        help="shard <i>'s CI results artifact is PREFIX<i>, named in the summary")
     _add_repo_root(parser)
     return parser
 

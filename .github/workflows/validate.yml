@@ -84,7 +84,7 @@ jobs:
           merge-multiple: true
           path: results
       - name: aggregate
-        run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir results"
+        run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir results --plan-artifact test-plan --results-artifact-prefix results-"
       - if: "always()"
         uses: actions/upload-artifact@v4
         with:

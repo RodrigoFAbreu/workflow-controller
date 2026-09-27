@@ -1243,9 +1243,11 @@ The CI plan uses the `ci` profile: about 180 s of work per shard, at
 least 2 and at most 16 shards, from the committed `tools/test_timings.json`
 only. A stale or missing entry only costs balance. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
-digest mismatch, so the matrix carries only shard indexes. A failing run's
-`tests-result` summary names each failing test, its shard, the shard's
-log (in the `results-<i>` artifact) and the reproduction commands.
+digest mismatch, so the matrix carries only shard indexes. Every
+`tests-result` summary states the coverage check's verdict. A failing
+run's summary also names each failing test, its shard, the shard's log,
+the artifacts to download (`results-<i>` holds the log, `test-plan` the
+`plan.json` the replay command reads) and the reproduction commands.
 
 The three workflow files are generated. Edit the model in
 `tools/ci_workflows.py`, then run `python3 tools/ci_workflows.py --write`;

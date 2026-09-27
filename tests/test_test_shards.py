@@ -1719,6 +1719,18 @@ class AggregateTest(unittest.TestCase):
         self.assertIn("line 60", summary)
         self.assertNotIn("line 59\n", summary)
 
+    def test_a_ci_failure_names_the_artifacts_holding_its_log_and_plan(self) -> None:
+        # Functional review F3: in CI the log path is inside the runner, so
+        # the summary must also say which artifacts to download.
+        records = {0: _fake_record(self.plan, 0, {self.first: "fail"}),
+                   1: _fake_record(self.plan, 1)}
+        line = ("- CI artifacts: the log is in `results-0`; `test-plan` holds `plan.json` "
+                "for the replay command")
+        self.assertNotIn("CI artifacts", self.run_aggregate(records).summary)
+        result = self.run_aggregate(records, artifacts=shards.ArtifactNames(
+            plan="test-plan", results_prefix="results-"))
+        self.assertIn(f"- log: `{self.results / 'shard-0.log'}`\n{line}\n", result.summary)
+
     def test_a_missing_id_crashes_the_shard_and_is_not_run(self) -> None:
         records = {0: _fake_record(self.plan, 0, {self.first: "missing"}),
                    1: _fake_record(self.plan, 1)}

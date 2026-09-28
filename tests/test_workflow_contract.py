@@ -615,6 +615,19 @@ class GitIsolationTest(_SeededTargets):
     SEEDS = {"bound": ("2.6.0", "ready", {})}
     PLAN = f"docs/ai-workflow/{WORK_ITEM_ID}-PLAN.md"
 
+    def setUp(self) -> None:
+        # The tests assert the exact filters and settings the query's Git
+        # sees, so the host's own Git configuration is left out: a GitHub
+        # runner configures a `git-lfs` filter system-wide (functional
+        # review round 1, F1). A test that plants an operator's or a
+        # system's configuration sets these again itself.
+        super().setUp()
+        empty = self._scratch / "empty.gitconfig"
+        empty.touch()
+        patcher = mock.patch.dict(os.environ, {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": str(empty)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def fresh(self) -> Path:
         self.root = self.target("bound")
         # Outside the target, so it is never a path the query classifies.
@@ -654,6 +667,19 @@ class GitIsolationTest(_SeededTargets):
         self.assertEqual((status.row, status.status), ("2", "BOUND"))
         self.assertFalse(self.sentinel.exists(), "a program the target configures ran during a query")
         self.assertEqual(_tree_snapshot(self.root), before, "a query wrote to the target")
+
+    def query_filter_overrides(self) -> dict[str, str]:
+        """The ``filter.*`` settings the status query's Git ran under, and
+        that its probe directory is the query's private directory."""
+        spy = _PrivateDirSpy()
+        with mock.patch.object(workflow_contract, "_execute_query", spy):
+            workflow_contract.plan_review_publication_status(self.root, CONTRACT, WORK_ITEM_ID)
+        (call,) = spy.calls
+        env = call["env"]
+        self.assertEqual(env[workflow_contract._FILTER_PROBE_ENV], str(call["private_dir"]))
+        overrides = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]
+                     for i in range(int(env["GIT_CONFIG_COUNT"]))}
+        return {key: value for key, value in overrides.items() if key.startswith("filter.")}
 
     def assert_status_refuses_the_filter(self) -> WorkflowQueryError:
         """The feedback query, which hashes nothing, answers; the status
@@ -766,7 +792,7 @@ class GitIsolationTest(_SeededTargets):
         # `evil` has a program but selects no path a query hashes; `idle`
         # selects every path but has only a smudge program, which a query
         # never runs. Git applies neither, so the answer is Workflow's own.
-        root = self.fresh()
+        self.fresh()
         self.attributes("*.bin filter=evil\n*.md filter=idle")
         self.git_config("filter.evil.clean", f"{self.touch} && tr a-z A-Z")
         self.git_config("filter.idle.smudge", f"{self.touch} && tr a-z A-Z")
@@ -774,20 +800,38 @@ class GitIsolationTest(_SeededTargets):
         self.assertEqual((released["row"], released["status"]), ("2", "BOUND"))
         self.assertFalse(self.sentinel.exists())
         self.assert_queries_run_nothing()
-        spy = _PrivateDirSpy()
-        with mock.patch.object(workflow_contract, "_execute_query", spy):
-            workflow_contract.plan_review_publication_status(root, CONTRACT, WORK_ITEM_ID)
-        (call,) = spy.calls
-        env = call["env"]
-        overrides = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]
-                     for i in range(int(env["GIT_CONFIG_COUNT"]))}
-        self.assertEqual({key: value for key, value in overrides.items() if key.startswith("filter.")}, {
+        self.assertEqual(self.query_filter_overrides(), {
             **{f"filter.{name}.{variable}": "" for name in ("evil", "idle")
                for variable in ("process", "clean", "smudge")},
             "filter.evil.process": workflow_contract._filter_probe(0),
             "filter.evil.required": "true",
         })
-        self.assertEqual(env[workflow_contract._FILTER_PROBE_ENV], str(call["private_dir"]))
+
+    def test_an_ambient_filter_no_hashed_path_selects_is_switched_off(self) -> None:
+        # Functional review round 1 (F1): a GitHub runner configures
+        # `git-lfs` system-wide, with clean, smudge and process programs and
+        # `required`, and the target selects it for no path. The query is
+        # answered, the answer is Workflow's, and the driver is switched off
+        # like one the target configures.
+        for scope in ("system", "global"):
+            with self.subTest(scope=scope):
+                root = self.fresh()
+                ambient = root.parent / "ambient.gitconfig"
+                ambient.write_text(f'[filter "lfs"]\n\tclean = {self.touch} && cat\n\tsmudge = {self.touch} && cat\n'
+                                   f"\tprocess = sh -c '{self.touch}; exit 1'\n\trequired = true\n")
+                with mock.patch.dict(os.environ, {f"GIT_CONFIG_{scope.upper()}": str(ambient)}):
+                    if scope == "system":
+                        del os.environ["GIT_CONFIG_NOSYSTEM"]
+                    self.assertEqual(_git(root, "config", "--show-scope", "filter.lfs.required").split(),
+                                     [scope, "true"], "control: the ambient filter is not configured")
+                    released = self.released_status_in_place()
+                    self.assertEqual((released["row"], released["status"]), ("2", "BOUND"))
+                    self.assertFalse(self.sentinel.exists())
+                    self.assert_queries_run_nothing()
+                    self.assertEqual(self.query_filter_overrides(), {
+                        "filter.lfs.clean": "", "filter.lfs.smudge": "",
+                        "filter.lfs.process": workflow_contract._filter_probe(0), "filter.lfs.required": "true",
+                    })
 
     def test_the_querys_git_sees_a_racily_clean_edit_as_git_in_place_does(self) -> None:
         # An edit in the clock tick the index was written in keeps the

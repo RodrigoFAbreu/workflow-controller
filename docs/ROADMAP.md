@@ -25,26 +25,27 @@ starts the next item, until the roadmap is empty. In the end no human gate is le
 Usage limits are tracked, so a run never starts work it cannot finish before a limit resets.
 
 **Two lanes run in parallel**, one milestone at a time in each: this repository, and Workflow
-Manager together with the new `workflow` repository. The lanes meet at two points only: C8 needs
-Workflow 2.7 (W1), and C9 needs Workflow 2.8 (W2).
+Manager together with the new `workflow` repository. The lanes meet at two points only: C9 needs
+Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 
 **Controller lane, in order.** Each step is one small milestone that is released on its own.
 
 | # | Step | Needs | Section |
 |---|---|---|---|
-| C1 | Squash merges, with the release version derived from the pull request title | — | [11.1](#111-squash-merges-and-pr-title-versions) |
+| C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, and telemetry v0 (tokens, cache, cost and time per job) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements) |
 | C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C2 | [11.3](#113-auto-merge-and-release-wait) |
-| C5 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.4](#114-automated-lifecycle-scenarios) |
-| C6 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
-| C7 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3, C6 | [11.5](#115-usage-budget) |
-| C8 | The Controller on Orchestration Protocol v1: decisions first, then outcomes | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
-| C9 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop | W2, C5 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
-| C10 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C7, C9 | [11.6](#116-the-kanban-runner) |
+| C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
+| C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
+| C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
+| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3, C7 | [11.6](#116-usage-budget) |
+| C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
+| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
+| C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10 | [11.7](#117-the-kanban-runner) |
 
 **Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
-because C8 and C9 depend on them.
+because C9 and C10 depend on them.
 
 | # | Step | Repository |
 |---|---|---|
@@ -1044,8 +1045,16 @@ code as it stands when its turn comes, not from this list.
 
 - Squash merges only. The repository settings become squash-only, with the squash message set to
   the pull request title and body.
-- The release version is derived from the pull request title, so no milestone bumps
-  `pyproject.toml` by hand.
+- The release version is derived from the pull request title, as in SignalHub:
+  - the title must be a Conventional Commit (`feat: …`, `fix: …`, `feat!: …`), checked by a
+    required check;
+  - it becomes the squash commit's subject;
+  - its type decides the bump: `feat` gives a minor release, `fix` a patch, and `!` a major;
+  - types such as `docs`, `chore` and `ci` merge without a release.
+
+  No milestone bumps `pyproject.toml` by hand. The computed version reaches the wheel at build time.
+- The existing release transaction stays: build and verify before the tag, immutable tags, and a
+  safe resume of an interrupted publication. Releases on `main` are serialized.
 - Workflow's provenance checks look only at the active work item's history, so a completed item's
   squashed commits are never re-checked.
 - Close-out gains a merged-by-squash state (`MERGED_SQUASHED`). The next item is planned from
@@ -1074,22 +1083,52 @@ five re-runs.
   auto-merge, and GitHub merges when the required checks are green.
 - The Controller waits for the release run on `main`, records the published release, closes out,
   and stops.
-- If a check goes red after acceptance, it stops and reports. The fix loop is C9.
-- Until C9, `/accept-milestone` stays a human gate, and it is the last one.
+- If a check goes red after acceptance, it stops and reports. The fix loop is C10.
+- Until C10, `/accept-milestone` stays a human gate, and it is the last one.
 - The settings file (C3) can turn auto-merge off.
 
-## 11.4 Automated lifecycle scenarios
+## 11.4 SignalHub notifications
 
-**Step C5.**
+**Step C5.** Once runs are unattended, the operator needs to know what is happening and when
+something is blocked, without watching a terminal. [SignalHub](https://github.com/RodrigoFAbreu/SignalHub)
+is the owner's notification platform and already accepts generic events from any producer. The
+Controller becomes one more producer over its public API (`POST /api/v1/events`), and SignalHub
+needs no special case.
+
+- **What is sent:**
+  - a milestone started, planned or accepted;
+  - **a blocker**: a human gate reached, a refusal, a failed job, red checks after acceptance, a
+    stuck release;
+  - a pull request merged;
+  - a release published;
+  - a usage pause and its resume (C8);
+  - a run finished.
+- **How each event is shaped:** a category and a severity, with a blocker at the highest severity,
+  so SignalHub's per-device filters apply. Each event links to the pull request, release or run
+  where there is one.
+- **Idempotency:** each event carries an `Idempotency-Key` derived from its run, job or event
+  identity, so a retry or a `resume` never sends a notification twice.
+- **Configuration:** it lives in the settings file (C3): the server address, which events are sent,
+  and the minimum severity. The API key comes from the environment or a file, never from the
+  repository.
+- **Notifications never steer the lifecycle.** A notification that cannot be delivered is retried
+  a bounded number of times and recorded in the run's events. It never blocks, fails or changes a
+  lifecycle step.
+- **Standard library only.** The Controller calls the HTTP API directly, the same contract
+  SignalHub's own Python SDK uses.
+
+## 11.5 Automated lifecycle scenarios
+
+**Step C6.**
 
 - Disposable repositories, fake workers and fake forges run whole lifecycle paths without model
   usage.
-- They become the automated functional evidence that C9 accepts in place of a manual functional
+- They become the automated functional evidence that C10 accepts in place of a manual functional
   review.
 
-## 11.5 Usage budget
+## 11.6 Usage budget
 
-**Step C7.** The kanban loop and the two parallel lanes share one set of usage limits: the Claude
+**Step C8.** The kanban loop and the two parallel lanes share one set of usage limits: the Claude
 plan's 5-hour window, and Codex's limits.
 
 - Track usage against those limits across every repository the Controller drives.
@@ -1098,9 +1137,9 @@ plan's 5-hour window, and Codex's limits.
   automatically after the reset, so no work is left half finished.
 - Record every pause and resume in the run's events.
 
-## 11.6 The kanban runner
+## 11.7 The kanban runner
 
-**Step C10.**
+**Step C11.**
 
 - Read the roadmap and pick the next open item.
 - Run it end to end: plan, implement, review, test, accept, merge, release.

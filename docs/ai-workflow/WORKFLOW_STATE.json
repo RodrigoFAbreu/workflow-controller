@@ -3435,12 +3435,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-6-integration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 7,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "2296ad63b35521684d6e421cebbb7c1c49b76551",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "48a84ef9644e999b9fd09dcdd07aaf25cb2855ab",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP6",
       "checkpoints": {
@@ -3520,8 +3520,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 38,
-      "last_transition": "2026-09-28T09:07:53Z"
+      "state_revision": 39,
+      "last_transition": "2026-09-28T09:16:35Z"
     }
   }
 }

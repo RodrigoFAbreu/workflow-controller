@@ -28,9 +28,9 @@ resolved from the live `active_work_item_id` for that stage, since
 (`D-Fingerprint-Generalization`). It remains optional for every other
 stage (`implementation`/`post-fix`/`functional-review`): passing it writes
 the bundle under the per-work-item layout (`.ai-review/<work-item-id>/`,
-see below); omitting it writes the flat compatibility layout
-(`.ai-review/current/`, `.ai-review/feedback/`) directly under
-`.ai-review/`. For the `plan` stage, the script's own final step also
+see below); omitting it writes the flat compatibility bundle layout
+(`.ai-review/current/`) directly under `.ai-review/`. (Where feedback is
+placed never depends on this argument — see "Feedback directory" below.) For the `plan` stage, the script's own final step also
 writes `MANIFEST.md` (`scripts/workflow_fingerprint.py --write-manifest`,
 the same CLI entry point every other invocation uses, never a
 reimplementation) — no separate manual step is needed.
@@ -38,7 +38,11 @@ reimplementation) — no separate manual step is needed.
 The script is deterministic and safe to rerun: it always regenerates the
 git-derived files from current repository state, and leaves author-written
 files untouched if they already exist (it only creates empty stubs for
-missing ones, so the bundle structure stays stable at every stage).
+missing ones, so the bundle structure stays stable at every stage). At the
+`plan` stage (workflow-2.6.0) the author-written files are read from
+`<plan_inputs_dir>` instead and the bundle is assembled in a staging
+directory — see "Plan-stage staging generation and `<plan_inputs_dir>`"
+below.
 
 ### Bundle location: `.ai-review/<work_item_id>/` layout, with a compatibility fallback
 
@@ -48,19 +52,148 @@ The canonical layout is per-work-item:
 .ai-review/<work_item_id>/
 ├── current/            # the bundle currently under review (see structure below)
 ├── feedback/            # external feedback, placed here by the reviewer/user
+├── plan-inputs/         # plan stage only (workflow-2.6.0): the author-written inputs, <plan_inputs_dir>
 └── review-bundle.tar.gz # archive of current/
 ```
 
 For any work item that has never had this layout created yet, commands
-read the flat compatibility path instead: `.ai-review/current/` and
-`.ai-review/feedback/` directly under `.ai-review/` (no work-item
-subdirectory). The resolution rule (implemented in
-`scripts/workflow_fingerprint.py`'s `resolve_bundle_dir`/
-`resolve_feedback_dir`, not left to prose alone) is: prefer the scoped
+read the flat compatibility bundle path instead: `.ai-review/current/`
+directly under `.ai-review/` (no work-item subdirectory). The resolution
+rule (implemented in `scripts/workflow_fingerprint.py`'s
+`resolve_bundle_dir`, not left to prose alone) is: prefer the scoped
 layout once this work item is on it, else fall back to the flat path.
-`feedback/` is stage-agnostic and always follows this same
-scoped-else-flat rule, for every stage alike, keyed on
-`.ai-review/<work_item_id>/feedback/`'s own existence.
+
+#### Feedback directory (`D-Feedback-Layout`, workflow-2.6.0)
+
+`<feedback_dir>` — wherever any command, document or tool says it — is
+exactly what `workflow_fingerprint.resolve_feedback_dir(repo_root,
+work_item_id)` returns. That one function is the only resolver; nothing
+restates or reimplements it. It is stage-agnostic (no stage argument at
+any stage) and is keyed on a durable fact, the work item's own
+`feedback_layout` field in the worktree's
+`docs/ai-workflow/WORKFLOW_STATE.json`:
+
+- **`feedback_layout: "scoped"`** — written once, at creation, by
+  `route_work_item`'s fresh-id branch and
+  `create_remediation_child_work_item`, for every work item created under
+  `2.6.0` or later; never written on resume, never changed, never
+  back-filled. `<feedback_dir>` is `.ai-review/<work_item_id>/feedback/`
+  **by construction**: no existence gate, so two scoped items never share
+  a path and no other item's feedback file — completed or live — is ever
+  consulted.
+- **Legacy** — the entry has no `feedback_layout` field, there is no entry
+  (a `"1"`-governed item, which carries none by construction), or there is
+  no state file (a pre-activation repository). The unchanged pre-`2.6.0`
+  rule applies: `.ai-review/<work_item_id>/feedback/` if that directory
+  already exists, else the flat, shared `.ai-review/feedback/`. An active
+  legacy item therefore keeps finding its unconsumed flat file across the
+  update; it is never moved.
+- **Refused** — a state file that exists but is a symlink, is not JSON, or
+  whose top level, `work_items` or entry is not an object
+  (`FeedbackLayoutUndecidableError`); a `feedback_layout` value other than
+  `"scoped"`, `null` included (`UnknownFeedbackLayoutError`). Never a
+  fallback to the legacy rule.
+
+Every feedback **writer** creates the resolved directory first through
+`workflow_fingerprint.ensure_feedback_dir(repo_root, work_item_id)` —
+`/review-plan`, both `/review-implementation` writers,
+`/prepare-functional-review` and the functional-review consumed marker
+(`mark_functional_review_consumed`). It creates only the resolved
+directory, so it never flips a legacy flat item onto the scoped path. The
+functional-review consumed marker (`FUNCTIONAL_REVIEW.consumed`) lives in
+the same directory, so it is per item for scoped items. Commands that ask
+an operator to paste feedback (`/record-manual-plan-review`,
+`/record-manual-implementation-review`, and the gate reports) print the
+exact resolved path.
+
+**Supported contract for external tools.** Controller, or any other tool
+that needs to locate a work item's feedback, runs:
+
+```bash
+python3 scripts/workflow_fingerprint.py --resolve-feedback-path <work-item-id>
+```
+
+which prints one JSON object and writes nothing:
+
+```json
+{"feedback_dir": "...", "functional_review_path": "...", "layout": "scoped", "review_feedback_path": "...", "work_item_id": "..."}
+```
+
+`layout` is `"scoped"`, `"legacy-scoped"` or `"legacy-flat"`; every path is
+POSIX and repo-root-relative. It is built from `resolve_feedback_dir`
+itself — never a second implementation — and a tool must consume it rather
+than copy the scoped-else-flat rule, which is wrong for every scoped item.
+
+**Ownership guards.** A scoped item's directory is private, so its writers
+never meet another item's file. For a legacy item resolving flat,
+`assert_feedback_not_owned_by_other_work_item(existing, work_item_id=...,
+state=<parsed WORKFLOW_STATE.json>)` still refuses a file whose
+`Work item:` names another item — except that an owner whose own entry is
+at a terminal phase (`MILESTONE_COMPLETE`) is non-blocking, since terminal
+state proves no consumer remains. The new writer replaces that file whole,
+with its own binding fields; it is never reinterpreted as the writer's. A
+non-terminal owner, or an owner absent from state, still refuses, and a
+scoped writer is never relaxed. `/record-manual-plan-review` and
+`/record-manual-implementation-review` additionally refuse a pasted file
+whose `Work item:` is present and names another item
+(`assert_manual_feedback_names_work_item`); a file without that field is
+still bound by the hard `review_content_id` check.
+
+#### Plan-stage staging generation and `<plan_inputs_dir>` (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0)
+
+`<plan_inputs_dir>` — wherever any command or document says it — is exactly
+what `workflow_fingerprint.resolve_plan_review_inputs_dir(repo_root,
+work_item_id)` returns: `.ai-review/<work_item_id>/plan-inputs/`, a sibling
+of `current/`. At the `plan` stage the four author-written files
+(`REVIEW_REQUEST.md`, `TEST_RESULTS.md`, `CONTEXT_FILES.txt`,
+`IMPLEMENTATION_SUMMARY.md`) are written there, never into `<bundle_dir>`.
+`/milestone-plan` step 6 and `/apply-plan-review` step 5 name it.
+
+`scripts/prepare-ai-review.sh`'s plan stage assembles the bundle in
+`.ai-review/<work_item_id>/current.staging-<token>/current/`, captures the
+plan-stage pin into a sibling `.ai-review/<work_item_id>/.pin.staging-<token>/`,
+and writes a staging archive (and, for an open amendment, a staging
+`AMENDMENT_DIFF.patch`). It copies each author file byte-for-byte from
+`<plan_inputs_dir>` into the staging bundle; a file missing there is seeded
+from `current/<file>` if that exists (read-only — the migration path for an
+author who has not yet moved), else stubbed empty as before. Every closing
+check, including `assert_review_request_states_review_content_id` and
+`assert_test_results_consistent_with_plan_review_request`, reads the staging
+copy. The copy is byte-exact, so `bundle_id` is computed over exactly the
+bytes an in-place generation would have hashed. Only once
+`finalize_staged_plan_bundle_generation`'s closing checks (the same checks
+`finalize_bundle_generation` runs in place) succeed are the pin, `current/`, the archive
+and `AMENDMENT_DIFF.patch` renamed into place, and any `REJECTED` marker
+cleared. So, in the real command order (refresh the inputs, then
+generate), nothing writes `current/` until that final rename.
+
+**Revised `WFR-67` semantics at the plan stage — a deliberate revision**
+(`LPR-R3-002`; `WORKFLOW_V2_PLAN.md`'s `D-Plan-Review-Bundle-Binding`).
+`WFR-67` requires that a failed closing binding assertion leave no
+review-ready artifact. A failed plan-stage generation's artifacts exist
+only in the staging directory, the staging pin and the staging archive, and
+the failure path removes exactly those: it **does not** call
+`withdraw_bundle` on `current/` and **writes no `REJECTED` marker**. The
+previous `current/`, its archive and `.pin` are left byte-identical. That
+previous bundle is review-ready only for its own content, and only while it
+is still the one the work item's `plan_review_binding` record says is
+`BOUND` — which every plan-stage reader checks by `review_content_id`
+(`assert_plan_review_bundle_bound`) — so a failed generation never makes
+the readers refuse a still-bound previous bundle, and never lets them
+accept unpublished content. A `REJECTED` marker written by `2.5.1`, or by
+an implementation-stage withdrawal, keeps its existing meaning:
+`assert_bundle_not_rejected` still refuses while it exists, and the next
+successful generation clears it. The pair of final renames is not atomic:
+a crash between them leaves a `current/` whose manifest, directory and
+archive disagree, which the bind verifier (`verify_plan_review_bundle`)
+refuses with `PlanReviewBundleUnverifiedError` — regenerate. Leftover
+`current.staging-*`/`.pin.staging-*` directories are read by nothing and
+removed by the next generation.
+
+**Stage scope.** The `implementation` and `post-fix` stages are unchanged:
+in-place generation, in-place author files under `<bundle_dir>`, and
+`withdraw_bundle` (quarantine plus a `REJECTED` marker) on a failed closing
+assertion, exactly as before.
 
 "Is on the scoped layout" is decided, for the **bundle** directory, from
 the work item's own root directory `.ai-review/<work_item_id>/` — never
@@ -86,7 +219,9 @@ flat fallback: the work-item-id argument is required (above), so
 flat `.ai-review/current/`/`.ai-review/review-bundle.tar.gz` were
 relocated to `.ai-review/workflow-v2-1-core/` as a one-time migration when
 this rule landed; `.ai-review/feedback/` was deliberately left flat (it is
-stage-agnostic and every non-plan stage's bundle is still flat too).
+stage-agnostic and every non-plan stage's bundle is still flat too). That
+still holds for legacy items; a scoped item's feedback is scoped by
+construction ("Feedback directory" above).
 
 That plan-stage rule is **an argument to the resolver, not prose a caller
 is trusted to remember**: a plan-stage caller passes
@@ -111,7 +246,8 @@ attempt then resolved). An unrecognized `stage` value raises
 `InvalidBundleStageError` rather than falling through to the
 compatibility branch, so a typo cannot silently reintroduce it.
 `<feedback_dir>` takes no stage argument at any stage;
-`resolve_feedback_dir` is deliberately untouched by this rule.
+`resolve_feedback_dir` is deliberately untouched by this rule (its own
+rule is "Feedback directory" above).
 
 The implementation/post-fix stages keep a **narrower** version of the same
 split, and it is accepted rather than closed (workflow system audit,
@@ -151,6 +287,12 @@ warns on) any such entry as defense in depth.
 
 ### Bundle structure
 
+At the `plan` stage this tree is first assembled under
+`.ai-review/<work_item_id>/current.staging-<token>/current/` and renamed onto
+`current/` only after a successful generation ("Plan-stage staging
+generation" above); its author-written files are byte-exact copies of
+`<plan_inputs_dir>`'s.
+
 ```text
 <bundle_dir>/                  # .ai-review/<work_item_id>/current/, or .ai-review/current/ (compatibility)
 ├── REVIEW_REQUEST.md          # author-written, see below
@@ -173,13 +315,32 @@ present, is a **sibling** of `<bundle_dir>` itself, at
 tree above, and never hashed into `bundle_id`/`review_content_id`, both of
 which walk only `<bundle_dir>`. `scripts/prepare-ai-review.sh` writes it
 during a plan-stage generation for a work item whose `amendment_history`'s
-last entry is still open (`resolved_at_plan_revision` still `null`) —
-`git diff <amendment_base_commit>..HEAD` restricted to the plan-stage
-protected paths, reviewer convenience only — and deletes any stale copy
-once no amendment is open. The manual-external-review archive
-(`review-bundle.tar.gz`) bundles it alongside `current/` when present, so
-both the local and the manual-external reviewer see the identical
-convenience diff.
+last entry is still open (`resolved_at_plan_revision` still `null`),
+reviewer convenience only, and deletes any stale copy once no amendment is
+open. The manual-external-review archive (`review-bundle.tar.gz`) bundles
+it alongside `current/` when present, so both the local and the
+manual-external reviewer see the identical convenience diff.
+
+**`workflow-2.6.0`** (`v2.4.0-003`): the patch is anchored at the **working
+tree** — `git diff --no-renames <amendment_base_commit> -- <pathspec>` —
+because the amended plan stays uncommitted until `/approve-review plan`
+commits it; the `<amendment_base_commit>..HEAD` form earlier releases
+wrote was therefore always empty. It shows the uncommitted amendment
+itself, and new untracked protected files as `new file` (the generator's
+own intent-to-add, restored on exit). The pathspec is the sorted union of
+the `plan_stage.protected_paths` declared in `<work_item_id>-artifacts.json`
+at `amendment_base_commit` (empty when absent there), the ones declared
+now, and `<work_item_id>-artifacts.json` itself: a path dropped from the
+declaration and removed from the worktree appears as `deleted file`, a
+rename as that deletion plus a `new file`, and every declaration change
+appears in the `<work_item_id>-artifacts.json` hunk (a dropped path left
+unchanged in the worktree has no hunk of its own). A leading `#` comment
+block names `work_item_id`, `amendment_id`, `amendment_base_commit`,
+`plan_revision` and this bundle's `review_content_id`; `git apply` ignores
+it, so the patch applies against `amendment_base_commit`. It is written
+after `MANIFEST.md`, so for every currently declared path it describes the
+same bytes `review_content_id` hashes. It remains convenience only:
+nothing checks it, and it is hashed into neither identity.
 
 ### Generation diagnostic metadata (`worktree_root`/`generation_head`)
 
@@ -243,7 +404,10 @@ This is **portability vs. local staleness, split by consumer**:
   different HEAD, or carries forward a previous implementation round's
   evidence unexamined fails the closing consistency check (item 272,
   `assert_test_results_consistent_with_plan_review_request`,
-  `finalize_bundle_generation`) and is withdrawn rather than published.
+  `finalize_bundle_generation`) and is never published — at the `plan`
+  stage the failed staging generation is discarded and the previous
+  `current/` left intact (no withdrawal, no `REJECTED` marker; "Plan-stage
+  staging generation" above).
 - **CONTEXT_FILES.txt** — one repo-relative path per line, no comments. Only
   the files a reviewer genuinely needs beyond the diff itself (e.g. the ADR
   a decision follows, the domain glossary entry a rule depends on). The
@@ -270,7 +434,8 @@ refuses with `current/` intact.
 ### Computing `review_content_id`
 
 Every generation driver tells the author to refresh
-`<bundle_dir>/REVIEW_REQUEST.md`'s `review_content_id: <hex>` line before
+`REVIEW_REQUEST.md`'s `review_content_id: <hex>` line (in `<plan_inputs_dir>`
+at the `plan` stage, in `<bundle_dir>` otherwise) before
 running the generator, because
 `assert_review_request_states_review_content_id` runs inside
 `--write-manifest` and *refuses* the whole generation on a stale one
@@ -312,6 +477,27 @@ that entry point does.
 stages) and before `scripts/prepare-ai-review.sh` — which is exactly where
 every driver's own step places the refresh. Running them earlier states a
 digest for a commit the generation will not be measured at.
+
+**Classification, and its one release-derived fallback.** Both stages
+classify every changed or untracked path against the work item's own
+declared sets: declared protected first, then declared excluded, and
+otherwise `UnclassifiedPathError` — fail closed. Since workflow-2.6.0
+(`D-Tooling-Ambient-Classification`) there is exactly one exception to
+that last step, `workflow_fingerprint.TOOLING_AMBIENT_EXCLUDED_PATHS`,
+which names the single exact path `.workflow-manager/installation.json`.
+`classify_path` and `classify_path_implementation_stage` consult it **only
+after every declared classification has failed, immediately before the
+raise**, and treat that path as excluded. So a declaration that names the
+path still decides (protected stays protected); the constant is never
+hashed into either stage's projection, which carries only the declared
+sets; no digest `2.5.1` could compute changes; and a digest that raised
+only because a committed `workflow_manager update` rewrote the
+installation record now returns, equal to the recorded approval. It is an
+exact path, not a prefix: `.workflow-manager/installation.json.tmp`, every
+other `.workflow-manager/*` path and every other undeclared path still
+raise. It exists for artifact declarations authored before
+`.workflow-manager/` was declared (`v2.4.0-001`); a new declaration should
+still classify `.workflow-manager/` itself.
 
 ### What the script does NOT do
 
@@ -427,8 +613,11 @@ External plan/implementation feedback is placed at:
 <feedback_dir>/REVIEW_FEEDBACK.md
 ```
 
-(`.ai-review/<work_item_id>/feedback/`, or the flat compatibility
-`.ai-review/feedback/` — see "Bundle location" above.)
+(`.ai-review/<work_item_id>/feedback/` for every work item created under
+`2.6.0` or later; a legacy item may still resolve the flat compatibility
+`.ai-review/feedback/` — see "Feedback directory" above. Print the exact
+path with `python3 scripts/workflow_fingerprint.py --resolve-feedback-path
+<work-item-id>`.)
 
 Required structure:
 

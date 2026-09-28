@@ -21758,14 +21758,34 @@ terminal-phase item and never touches any other work item's entry. It is written
 through the same serialized state-write primitive every other state writer uses
 (`D1`), never as a plain JSON edit.
 
+**Revised by `workflow-2.6.0` (`D-Plan-Review-Bundle-Binding`, below): mirror-only
+for a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item.** The `"1"` branch above is
+byte-for-byte unchanged. For a `"2.1"`/`"2.2"` item,
+`publish_plan_revision(state, work_item_id, plan_revision, now, *,
+review_content_id)` writes `plan_revision`, `state_revision` and
+`last_transition`, **leaves `phase` unchanged** (at `PLANNING`, `REVISING_PLAN`
+or `AMENDING_PLAN`, the only phases it runs at), and writes the
+`plan_review_binding` record's `PUBLISHED` status for `review_content_id` — the
+fresh plan-stage id, computed inside the same `state_transaction` mutator after
+the registry regeneration, the table re-embed and the intent-to-add staging
+step. It is the author's "edits declared complete" act; the review-ready phase
+`AWAITING_LOCAL_PLAN_REVIEW` is written only by `bind_plan_review_bundle`, once
+a bundle of exactly that content verifies. `WFR-65`'s "mirror before
+generation" invariant is kept exactly: every call site still publishes before
+the bundle is generated. Idempotence now means the same revision *and* the same
+published content.
+
 **Its call sites are exhaustive, and each is named here rather than left to
 convention**:
 
-1. `/milestone-plan` step 3's `[2.1]` registry write — the ordinary path, which
-   already calls `route_work_item(...)` for the mirror and now also owns the
-   phase transition;
-2. `/apply-plan-review` step 5, on both branches, whenever the revision counter
-   advances as part of applying feedback;
+1. `/milestone-plan`'s `[2.1]` publication point, between its steps 5 and 6
+   (`workflow-2.6.0`: moved out of step 3's registry write, so every
+   self-review edit in steps 4-5 precedes it, `LPR-R4-001`) — the ordinary
+   path, which calls `route_work_item(...)` for the mirror advance in step 1;
+2. `/apply-plan-review` step 5 — for a `"1"` item whenever the revision counter
+   advances as part of applying feedback; for a `"2.1"`/`"2.2"` item on
+   **every** round (`workflow-2.6.0`: the revision counter's advance now
+   governs only the registry regeneration);
 3. `D-Bootstrap`'s `/bootstrap-workflow-v2` — the sole driver of the
    permanently-v1 `workflow-v2-1-core`, and therefore the owner of a
    **self-discovered** revision opened while `IMPLEMENTING`. Its step 1
@@ -28986,7 +29006,8 @@ implementation rather than from this document's own prose (see item 372(h)
 and "Revision 91" below) — a hand-maintained enumeration is, demonstrably now
 three times over, the thing that goes stale, which is why the closing rule
 below is a conformance obligation with a test owner rather than a convention.
-This design has **eight** lock-shaped primitives:
+This design has **nine** lock-shaped primitives (eight through workflow-2.5.1;
+workflow-2.6.0's `D-Repo-Global-Lifecycle` adds (9)):
 
 1. the per-work-item **transaction** mutation/handoff guard
    (`.ai-review/runtime/PLAN_APPROVAL_MUTATION.lease`, link-based,
@@ -29041,12 +29062,27 @@ This design has **eight** lock-shaped primitives:
    mutex) is not disturbed by admitting it as a lock-order primitive too — the
    two are not exclusive, and the ordering obligation this section exists to
    close applies to every object meeting the stated predicate regardless of
-   what else the object also is.
+   what else the object also is;
+9. the repository-global **lifecycle lock**,
+   `…/checkpoint-claims/<sha256(work_item_id)>.lifecycle.lock` (`flock`,
+   never unlinked, added workflow-2.6.0, `D-Repo-Global-Lifecycle`) — the
+   per-work-item primitive, rooted at the git common dir, that serializes
+   every claim publication with every amendment request and every
+   resolution reservation, advance and release across all linked worktrees.
+   It is a **pure source**: acquired only while the process holds no other
+   primitive (a process-local held-set asserts it,
+   `LifecycleLockOrderError`), so every edge touching it is `(9)→X` and no
+   edge targets it. The amendment witness beside it
+   (`<token>.amendment.json`) is written by tempfile plus `os.replace`, not
+   `os.link`, and is not a primitive.
 
-The whole order over them is **eleven edges — six blocking and five
-non-blocking, widened from ten/six/four this round (workflow-v2.4.0,
+The whole order over them is **sixteen edges — nine blocking and seven
+non-blocking since workflow-2.6.0 (`D-Repo-Global-Lifecycle` adds the five
+`(9)`-sourced edges: `(9)→(2)`, `(9)→(3)`, `(9)→(6)` blocking, `(9)→(5)`,
+`(9)→(8)` non-blocking); eleven — six blocking and five non-blocking —
+through workflow-2.5.1, widened from ten/six/four in workflow-v2.4.0,
 plan-amendment-mechanism round 8 external implementation review,
-`XMODEL-R8-B1`)** — and it is a **DAG rather than a
+`XMODEL-R8-B1`** — and it is a **DAG rather than a
 forest** over its blocking half; the raw eleven-edge relation itself contains
 two real two-cycles and is not, and does not need to be, acyclic as a whole
 (see "Blocking vs. non-blocking edges" below) — revision 75's "forest with one
@@ -29064,9 +29100,29 @@ claim:
 (8) checkpoint-claims/<wi>.json   →  (6) …/<wi>.guardlock  [owner_mutation → acquire_guard, step 1d/1f, claim held across the guardlock's real flock acquisition]  -- blocking  [new, revision 94, `OPUS-R118-002`]
 (8) checkpoint-claims/<wi>.json   →  (2) WORKFLOW_STATE.lock  [step 1d: (8) published by claim_checkpoint before owner_mutation opens; the state write inside that window is reached while (8) is still held; repeated at step 1f]  -- blocking  [new, revision 95, `OPUS-R119-001`]
 (8) checkpoint-claims/<wi>.json   →  (3) WORKTREE_IDENTITY.lock  [step 1d: the identity refresh inside owner_mutation's window is reached while (8) is still held]  -- blocking  [new, revision 95, `OPUS-R119-001`]
-(2) WORKFLOW_STATE.lock           →  (8) checkpoint-claims/<wi>.json   [claim_checkpoint's own pre-publication phase check, XMODEL-R8-B1: publication now runs inside `state_lock`, closing the window in which a checkpoint claim could be published between `request_plan_amendment`'s authoritative `resolve_claim(...)` read and its `AMENDING_PLAN` commit -- within one worktree root only; `XMODEL-R9-B1`/`docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md` records that a claim published from a different linked worktree is not caught]  -- non-blocking  [new, workflow-v2.4.0 plan-amendment-mechanism round 8, `XMODEL-R8-B1`]
+(2) WORKFLOW_STATE.lock           →  (8) checkpoint-claims/<wi>.json   [claim_checkpoint's own pre-publication phase check, XMODEL-R8-B1: publication runs inside `state_lock`, closing the window in which a checkpoint claim could be published between `request_plan_amendment`'s authoritative `resolve_claim(...)` read and its `AMENDING_PLAN` commit within one worktree root; across linked worktrees (`XMODEL-R9-B1`, `v2.4.0-002`) the window is closed by (9) and the amendment witness since workflow-2.6.0, see `D-Repo-Global-Lifecycle`]  -- non-blocking  [new, workflow-v2.4.0 plan-amendment-mechanism round 8, `XMODEL-R8-B1`]
+(9) …/<wi>.lifecycle.lock         →  (2) WORKFLOW_STATE.lock      [claim_checkpoint (9) → (2) → witness check → _claim_or_refuse; request_plan_amendment_transaction's state_transaction]  -- blocking  [new, workflow-2.6.0, `D-Repo-Global-Lifecycle`]
+(9) …/<wi>.lifecycle.lock         →  (8) checkpoint-claims/<wi>.json   [claim_checkpoint's and adopt_claim's claim publication, both under (9)]  -- non-blocking  [new, workflow-2.6.0, `D-Repo-Global-Lifecycle`]
+(9) …/<wi>.lifecycle.lock         →  (6) …/<wi>.guardlock  [adopt_claim's guard_mutation_lock; absent-claim take_over_claim's acquire_guard]  -- blocking  [new, workflow-2.6.0, `D-Repo-Global-Lifecycle`]
+(9) …/<wi>.lifecycle.lock         →  (5) checkpoint-claims/<wi>.lease  [absent-claim take_over_claim's acquire_guard publish]  -- non-blocking  [new, workflow-2.6.0, `D-Repo-Global-Lifecycle`]
+(9) …/<wi>.lifecycle.lock         →  (3) WORKTREE_IDENTITY.lock   [absent-claim take_over_claim's _establish_or_repair_identity, inside its (5) window]  -- blocking  [new, workflow-2.6.0, `D-Repo-Global-Lifecycle`; found by the census, not in the plan's hand count]
 (4) identity-gap.lock                                             [isolated leaf, no edge either way]
 ```
+
+**workflow-2.6.0 (`D-Repo-Global-Lifecycle`):** all five `(9)` edges are
+code-derivable — instances of the "Guard-bracket nesting" shape, through
+`with lifecycle_lock(...):` in `claim_checkpoint` (`(9)→(2)`, `(9)→(8)`),
+`adopt_claim` (`(9)→(6)`, `(9)→(8)`) and an absent-claim `take_over_claim`
+(`(9)→(6)`, `(9)→(5)`, `(9)→(3)`). So twelve of the sixteen are
+code-derivable and the same four are command-orchestrated.
+`(9)→(3)` was not in the plan's own hand count
+(`WORKFLOW_REVIEW_ARTIFACT_AND_CONCURRENCY_HARDENING_PLAN.md` section 5.6
+stated fifteen edges and an 8/7 split). `verify_372h_raw_edge_derivation.py`
+rediscovered it, because an absent-claim takeover under (9) runs
+`_establish_or_repair_identity` inside its (5) window, exactly as the
+existing `(5)→(3)` edge records. The takeover keeps its "refuse, having
+mutated nothing" contract rather than moving the identity write out of the
+window to avoid the edge; the stated totals are therefore sixteen and 9/7.
 
 **Not all eleven edges are code-derivable from `scripts/workflow_state.py`
 alone, and this document no longer states one equality rule that silently
@@ -29122,10 +29178,13 @@ wait, only when `Y` is one of those five; an edge landing on `(1)`, `(5)`, or
 (`XMODEL-R8-B1`, workflow-v2.4.0 plan-amendment-mechanism round 8) lands on
 `(8)`, so it is non-blocking on the identical footing, regardless of `(2)`
 being one of the five blocking primitives itself: the discriminator classifies
-by the *target*, never the source. Of the eleven edges
+by the *target*, never the source. Of the sixteen edges
 above, the **blocking** ones are `(1)→(2)`, `(5)→(2)`, `(8)→(2)`, `(5)→(3)`,
-`(8)→(3)`, `(8)→(6)`; the **non-blocking** ones are `(7)→(1)`, `(6)→(5)`,
-`(6)→(8)`, `(8)→(5)`, `(2)→(8)`.
+`(8)→(3)`, `(8)→(6)`, and since workflow-2.6.0 `(9)→(2)`, `(9)→(3)`,
+`(9)→(6)`; the **non-blocking** ones are `(7)→(1)`, `(6)→(5)`,
+`(6)→(8)`, `(8)→(5)`, `(2)→(8)`, and since workflow-2.6.0 `(9)→(5)`,
+`(9)→(8)`. `(9)` is itself an `fcntl.flock` primitive, so it joins the
+blocking-target set the discriminator uses, but no edge targets it.
 
 **The discriminator's own limit, and the one normative clause that closes
 it** (added, revision 95, external plan review, `OPUS-R119-004`): the rule
@@ -29335,10 +29394,17 @@ stated at the strength each mechanism actually has:
   `repo_root / DEFAULT_STATE_PATH`, that worktree's own working-tree copy
   of `WORKFLOW_STATE.json`, which cannot observe a phase committed only to
   another worktree's own branch, however well the two operations are
-  serialized. This release deliberately leaves that residual open rather
+  serialized. `2.4.0` deliberately left that residual open rather
   than half-fixing it -- see
   `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md`
-  for the full accounting and what a real fix would need.
+  for the full accounting. **workflow-2.6.0 closes it**
+  (`D-Repo-Global-Lifecycle`, below) with exactly the two things that
+  record named: a `claims_dir`-rooted serialization primitive, `(9)`, taken
+  before `(2)` by `claim_checkpoint` and by
+  `request_plan_amendment_transaction`, and a repository-global witness for
+  the amendment, which a claim from any worktree reads before its own local
+  phase check. `(2)→(8)` itself is unchanged; it now always sits inside a
+  `(9)` window.
 
 **The blocking edges are acyclic, and that is the property deadlock-freedom
 actually requires; the raw eleven-edge graph is not acyclic, and does not need
@@ -29364,6 +29430,13 @@ abandoned destructive-guard recovery, `authorize_identity_reference_gap`,
 identity establishment, state mutation and the bootstrap transaction were
 each traced again against the corrected eleven-edge, blocking/non-blocking-
 classified graph, and no blocking cycle is constructible in any of them.
+**workflow-2.6.0 (`D-Repo-Global-Lifecycle`):** the three new blocking
+edges `(9)→(2)`, `(9)→(3)`, `(9)→(6)` add one source, `(9)`, and no
+target. The blocking sources are now `{1, 5, 8, 9}`, the targets are still
+`{2, 3, 6}`, and the two sets stay disjoint, because `(9)` is a pure source
+(acquired only while nothing else is held, asserted at run time by the
+held-set). `(9)` is a single digit, so the edge table's `^\((\d)\)`
+parser needs no change.
 
 The raw graph — blocking and non-blocking edges together, "X may be held
 while Y is acquired," with no distinction drawn — **does** contain two cycles:
@@ -30795,6 +30868,15 @@ Two further preconditions, both refusals rather than silent handling:
   that check reads its own worktree's working-tree `WORKFLOW_STATE.json`.
   Left open for `2.4.0` rather than half-fixed; see
   `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md`.
+  **Repository-wide since workflow-2.6.0** (`D-Repo-Global-Lifecycle`):
+  `/request-plan-amendment` runs through `request_plan_amendment_transaction`,
+  which holds the repository-global lifecycle lock (9) across this
+  precondition's `resolve_claim` read and the `AMENDING_PLAN` publication,
+  and publishes the amendment witness. Every claim publisher takes the same
+  (9) and refuses while the witness shows the amendment open, whatever its
+  own worktree's local phase is. The guarantee holds once every registered
+  worktree's branch has merged the `2.6.0` update; a lagging worktree's
+  unrecorded amendment is detected and refused.
 - **No open plan-approval or approval journal.** Mirrors
   `/approve-review`'s existing "already-open approval journal" refusal --
   an amendment must never race an in-flight approval commit.
@@ -32100,9 +32182,52 @@ nothing" is visibly distinct from "it never ran."
   identity problem. `scripts/prepare-ai-review.sh`, when generating a
   plan-stage bundle for a work item whose `amendment_history`'s last entry
   is open (`resolved_at_plan_revision` still `null`, B4), additionally
-  writes `AMENDMENT_DIFF.patch` -- `git diff <amendment_base_commit>..HEAD`
-  restricted to the plan-stage protected paths, for reviewer convenience
-  only.
+  writes `AMENDMENT_DIFF.patch` -- a diff of the plan-stage protected
+  design set since `amendment_base_commit`, for reviewer convenience
+  only. Through `workflow-2.5.1` this was `git diff
+  <amendment_base_commit>..HEAD`; `workflow-2.6.0` anchors it at the
+  working tree instead (see "Working-tree anchor" below).
+
+  **Working-tree anchor (`workflow-2.6.0`, `v2.4.0-003`).** The `..HEAD`
+  form was always empty: the amended plan stays uncommitted until
+  `/approve-review plan` commits it, so `HEAD` never carried the edit the
+  patch existed to show, and no test ran the block. The generator now
+  writes `git diff --no-renames <amendment_base_commit> -- <pathspec>`,
+  anchored at the working tree; its own intent-to-add covers new,
+  untracked protected files, and its EXIT trap restores the index. The
+  pathspec is the sorted union of:
+  - the `plan_stage.protected_paths` declared in `<work_item_id>-artifacts.json`
+    **at `amendment_base_commit`** (read with `git show`; empty if the file
+    is absent there);
+  - the ones declared now; and
+  - `<work_item_id>-artifacts.json` itself, which is not a plan-stage
+    protected path, so without it a declaration edit would not appear at
+    all.
+
+  A still-declared protected path cannot be absent (`capture_plan_stage_pin`
+  raises `AbsentProtectedPathError` first), so the only reachable deletion
+  is a path dropped from the declaration and removed from the worktree: it
+  is in the base-side half and appears as `deleted file`. A rename is that
+  deletion plus a newly declared path appearing as `new file`;
+  `--no-renames` keeps that shape under any `diff.renames` setting, so Git's
+  rename detection is never relied on. A path dropped from the declaration
+  but still present appears as its content diff only if it changed since
+  `amendment_base_commit`; either way the `<work_item_id>-artifacts.json`
+  hunk shows it leaving the protected set. A leading `#` comment block
+  names `work_item_id`, `amendment_id`, `amendment_base_commit`,
+  `plan_revision` and the bundle's `review_content_id`; `git apply`
+  ignores text before the first `diff --git`, so the patch still applies
+  against `amendment_base_commit`. The block runs after `--write-manifest`
+  (after the pin and its pin/worktree byte-identity check), so for every
+  currently declared path the diff describes exactly the bytes
+  `review_content_id` hashes; base-only paths are outside the current
+  identity by definition and are shown, never hashed, and
+  `<work_item_id>-artifacts.json`'s bytes are outside both identities (only
+  its declared key sets are hashed). The file is still convenience only:
+  outside `current/`, hashed into neither `bundle_id` nor
+  `review_content_id`. Pinned by `workflow_fingerprint_generalization_test.py`'s
+  `TestPrepareAiReviewShAmendmentDiffWorkingTreeAnchor`, through the real
+  script.
 
   **Placement, corrected this revision (B5-new)**: revision 2 wrote it to
   `<bundle_dir>/AMENDMENT_DIFF.patch` and claimed it was "never hashed" --
@@ -33203,6 +33328,421 @@ introduction reclassifies no pre-existing unmarked unit `HISTORICAL` except
 where deliberately and visibly marked as part of this checkpoint's own
 work.
 
+### D-Tooling-Ambient-Classification — a release-derived, exact-path fallback for the legacy installation record (`workflow-2.6.0`)
+
+**Problem (`v2.4.0-001`, legacy half).** `workflow_manager` writes
+`.workflow-manager/installation.json` into every managed repository on
+install and on every committed `update`. Artifact declarations authored
+before that path was declared never classify it: every `2.3.1`-shaped item
+at both stages, and every `2.4.0`-shaped item at the implementation stage.
+After the first committed update, every gate that reaches a classifier —
+`implementing_entry_reachable`, `approval_is_current`,
+`any_protected_path_changed_since`, the provenance-interval check, both
+plan-stage digests and the implementation digest at `HEAD` — raises
+`UnclassifiedPathError`, and the item is wedged. The only two
+classification choke points are `classify_path` (plan stage) and
+`classify_path_implementation_stage`; every gate reaches one of them.
+
+**Decision.** `workflow_fingerprint.TOOLING_AMBIENT_EXCLUDED_PATHS =
+frozenset({".workflow-manager/installation.json"})`, an exact path, never
+a prefix. Both classifiers consult it **only after every declared
+classification has failed, immediately before the `UnclassifiedPathError`
+raise**, and classify a member as excluded. Therefore:
+
+- it never overrides a declared protected or excluded entry;
+- it never enters the hashed classification sets — both stage projections
+  hash the declared *key strings* plus protected content, never excluded
+  content and never a classifier-internal fallback;
+- it persists nothing, and needs no per-item metadata or operator action;
+- it applies to every work item, because classification is not
+  version-dispatched.
+
+**Authority.** It is release-derived: the constant is part of the reviewed
+`2.6.0` payload, approved through that release's own plan and technical
+gates, and documented here and in `REVIEW_PROTOCOL.md`'s "Computing
+`review_content_id`".
+
+**Why approval identity is unaffected.** Declared classification
+decides first, and the set of paths that raise only shrinks. So every
+digest `2.5.1` could compute is byte-identical, and every digest that
+raised only because of this path now returns and equals the value the
+approval recorded before the update — reproduced against a `2.3.1`-shaped
+and a `2.4.0`-shaped item updated to `2.5.1`, and pinned by
+`workflow_fingerprint_test.py`'s `TestToolingAmbientExcludedPaths` and
+`workflow_state_test.py`'s
+`TestImplementingEntryReachableAfterInstallationRecordUpdate`.
+
+**What stays fail-closed.** `.workflow-manager/installation.json.tmp`,
+every other `.workflow-manager/*` path, and every other unclassified path
+still raise.
+
+**Relation to the frozen plan-stage classifier.** `classify_path` was
+described as frozen after its round-10 review. What stays frozen is its
+*declared-classification* semantics, which this change leaves untouched:
+it adds one terminal fallback for a single tooling-owned path that never
+existed in any Workflow payload, nor in the upstream repository the frozen
+semantics were written for. This is the first overlay replacement of
+`workflow_fingerprint.py`.
+
+**Rejected alternatives.** A per-item, operator-authorized compatibility
+record (new persisted vocabulary, a new downgrade constraint and another
+gate, for no identity benefit); hand-editing legacy declarations (stales
+their approvals); catching and renaming the error (unblocks nothing).
+
+**Out of scope.** For a `process` item, the same update also rewrites
+protected `scripts/`/`.claude/commands/` paths, moving its implementation
+digest independently of classification. That hazard is recorded in the
+`v2.4.0-001` defect record, not fixed here.
+
+### D-Feedback-Layout — one authoritative feedback resolver, scoped by construction for new work items (`workflow-2.6.0`)
+
+**Problem.** `resolve_feedback_dir` returned `.ai-review/<id>/feedback`
+only when that directory already existed, else the shared flat
+`.ai-review/feedback`. Nothing ever created the scoped directory (and
+hand-creating it mid-round was not an endorsed remedy, since it silently
+moves resolution), so in practice every work item shared the flat path.
+`assert_feedback_not_owned_by_other_work_item` never consulted state, so a
+`MILESTONE_COMPLETE` item's leftover `REVIEW_FEEDBACK.md` blocked every new
+item exactly like a live one's (`FeedbackOwnedByOtherWorkItemError`);
+the functional-review consumed marker was shared across items too; and
+`/record-manual-*-review` never checked `Work item:` at all. Controller
+had reimplemented the scoped-else-flat rule for itself.
+
+**Decision.**
+
+- **Durable stamp.** A new work-item field, `feedback_layout: "scoped"`,
+  written only at creation — `route_work_item`'s fresh-id branch and
+  `create_remediation_child_work_item`. Never written on resume, never
+  changed, never back-filled. Absent means legacy; any other present
+  value, `null` included, refuses (`UnknownFeedbackLayoutError`, from both
+  the resolver and `validate_state`).
+- **One resolver.** `resolve_feedback_dir(repo_root, work_item_id)` keeps
+  its signature, so every call site and every command's `<feedback_dir>`
+  prose stays valid. It reads the item's entry from the worktree's
+  `WORKFLOW_STATE.json`: a `"scoped"` item resolves
+  `.ai-review/<id>/feedback` unconditionally; an entry without the field,
+  no entry, or no state file keeps the unchanged legacy rule
+  (`resolve_feedback_layout` names the three layouts: `scoped`,
+  `legacy-scoped`, `legacy-flat`); a state file present but undecidable
+  (symlink, not JSON, non-object top level/`work_items`/entry) refuses
+  (`FeedbackLayoutUndecidableError`) and never falls back.
+- **Directory creation.** `ensure_feedback_dir` creates the resolved
+  directory; every writer calls it (`/review-plan`, both
+  `/review-implementation` writers, `/prepare-functional-review`,
+  `mark_functional_review_consumed`). It never flips a legacy flat item.
+- **External contract.** `workflow_fingerprint.py --resolve-feedback-path
+  <id>` prints `{work_item_id, layout, feedback_dir, review_feedback_path,
+  functional_review_path}` as one JSON object, from the same function, with
+  no second implementation — the supported way for Controller or any tool
+  to locate feedback (`REVIEW_PROTOCOL.md` "Feedback directory").
+- **Bounded guard relaxation.** `assert_feedback_not_owned_by_other_work_item`
+  gains an optional `state`. For a legacy writer, a foreign owner at a
+  terminal phase is non-blocking and its file is replaced whole — never
+  reinterpreted as the writer's. A non-terminal owner, an owner absent from
+  state, or any foreign file in a scoped writer's private directory still
+  refuses.
+- **Manual-record binding.** `/record-manual-plan-review` and
+  `/record-manual-implementation-review` refuse a pasted file whose
+  `Work item:` is present and names another item
+  (`assert_manual_feedback_names_work_item`); an absent field keeps
+  today's behavior, bound by the hard `review_content_id` check.
+
+**Why legacy items are not moved (INV-7).** Durable review facts
+(`plan_review_stages`, `implementation_review_stages`,
+`technical_review_block_pins`) store no feedback path or content hash, so
+changing an item's resolution can never corrupt a recorded verdict — but
+it can orphan an *unconsumed* file mid-round. The rule is therefore keyed
+on a fact recorded at the item's creation, never on file shape, file
+existence alone, or `governing_workflow_version` (`"2.2"` items already
+exist under `2.5.x`).
+
+**Downgrade evidence.** `2.5.1`'s `validate_state` has no work-item key
+allowlist: it accepts a `feedback_layout` key — any value — and ignores
+it; and because the stamp is written once at creation and never changes,
+it never appears in a committed field diff, so no committed-field set
+(`ORDINARY_`/`RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS`,
+`TECHNICAL_APPROVAL_COMMIT_FIELDS`) sees it. A downgraded repository
+therefore does not fail: it silently resolves every scoped item's feedback
+by the legacy rule — the scoped path once `.ai-review/<id>/feedback/`
+happens to exist, the shared flat path before then. The downgrade posture
+is recorded with the `2.6.0` release.
+
+**Rejected alternatives.** Keying on the file's `Work item:` line (a
+hand-pasted manual verdict may omit it, and it decides ownership, not
+location); keying on `governing_workflow_version`; moving legacy items
+(orphans an unconsumed file mid-round).
+
+### D-Plan-Review-Bundle-Binding — the review-ready phase is written only for a verified bundle of published content (`workflow-2.6.0`; revises `D-Plan-Revision-Publication`)
+
+**Problem.** Under `2.5.1`, `publish_plan_revision` wrote
+`AWAITING_LOCAL_PLAN_REVIEW` before the bundle existed (`/milestone-plan` step
+3, ahead of its own self-review edits), and `/apply-plan-review` step 7'
+re-wrote it with a bare phase flip (`transition_to_awaiting_local_plan_review`).
+Nothing tied the ready phase to a bundle: a failed generation left an item
+review-ready over a missing, withdrawn or mixed bundle; already-reviewed
+content could re-enter review after a wrapper-only regeneration; and
+`/milestone-plan <id>` at `IMPLEMENTING` silently re-entered plan review. The
+design separates "the revision exists" from "the revision is review-ready".
+Every rule below applies to `TWO_STAGE_PLAN_REVIEW_VERSIONS` items only;
+`"1"`-governed behavior is byte-for-byte unchanged.
+
+**Decision.**
+
+1. **Mirror-only publication** (see the revised `D-Plan-Revision-Publication`
+   above). `publish_plan_revision` and `route_work_item`'s resume-branch
+   revision advance run only at `PLANNING`, `REVISING_PLAN` or `AMENDING_PLAN`
+   — an allow-list, not a deny-list. At a ready phase
+   (`AWAITING_LOCAL_PLAN_REVIEW`, `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`,
+   `AWAITING_PLAN_APPROVAL`) they refuse with `PlanReviewInProgressError`,
+   naming the withdrawal (item 7); at any other phase with
+   `PlanReviewPhaseNotPlanStageError`, naming `/request-plan-amendment <id>`
+   only where an amendment is allowed. Every command publishes after its last
+   protected edit (`/milestone-plan`'s publication point after steps 4-5,
+   which re-runs the registry/mapping regeneration, re-embeds the table
+   unconditionally and re-applies the intent-to-add staging before the
+   publish; `/apply-plan-review` step 5), and no command exits between its
+   publish and its bind except a reported generator failure, whose report
+   names the explicit-id re-run of the same command (`LPR-R5-001`).
+   `/apply-plan-review` step 6 is `"1"`-only, and its step 7'.2 second
+   generation is removed, so step 5 is the round's single generation
+   (`MPR-R1-O1`).
+2. **The durable record, `plan_review_binding`.** A new work-item field,
+   `{"status": "CONSUMED"|"PUBLISHED"|"BOUND", "at", "consumed", "published",
+   "bound"}`, keyed on `review_content_id`, never `bundle_id`. Its writers:
+   - **`CONSUMED`** — every transition that takes reviewed content out of
+     review, from its own inputs: `record_local_plan_review`/
+     `record_manual_plan_review` on `REVISE`, `request_plan_amendment` (the
+     approved content being amended), and `withdraw_plan_review` (the `BOUND`
+     record's own `bound` content). A `2.5.1` item mid-round with no record
+     gets, at command entry (`ensure_plan_review_binding_marker`), a
+     fail-closed legacy marker at the current mirror — or, for an open
+     amendment with a recorded `approved_review_content_id`, the non-legacy
+     `CONSUMED` record from it; until then publish and bind refuse with
+     `LegacyPlanReviewBindingUnknownError`;
+   - **`PUBLISHED`** — `publish_plan_revision`, which refuses early with
+     `ConsumedPlanReviewContentError` for consumed content (or, for a legacy
+     marker, a revision not past it);
+   - **`BOUND`** — `bind_plan_review_bundle` only.
+
+   `validate_state` accepts the record and refuses an unknown `status` or a
+   malformed sub-object (INV-3).
+3. **The sole writer of the review-ready phase.** The read-only verifier
+   `verify_plan_review_bundle(repo_root, work_item_id)` returns a binding only
+   when `current/MANIFEST.md` is present, the bundle is not rejected, the
+   manifest's `plan_revision` equals the mirror, its `review_content_id`
+   equals a fresh recomputation, and `current/`, the manifest and the archive
+   agree on `bundle_id`; it refuses by cause with `ReviewedContentDriftError`
+   (the worktree drifted from a consistent bundle) or
+   `PlanReviewBundleUnverifiedError` (anything else).
+   `bind_plan_review_bundle(state, work_item_id, *, binding, now)` decides
+   legitimacy entirely inside its `state_transaction` mutator: it requires a
+   non-ready plan-stage phase, a `PUBLISHED` record whose content and revision
+   equal the binding's (`PlanReviewNotPublishedError` otherwise), and content
+   that is not consumed (`ConsumedPlanReviewContentError`). It then writes
+   `AWAITING_LOCAL_PLAN_REVIEW`, `current_bundle_id` and `BOUND`. It is
+   idempotent for the same bound content at `AWAITING_LOCAL_PLAN_REVIEW` and
+   never regresses a later ready phase (`PlanReviewAlreadyReadyError`).
+   `transition_to_awaiting_local_plan_review` is retired and always raises
+   `PlanReviewWriterRetiredError`.
+4. **Readers enforce the binding.** `assert_plan_review_bundle_bound(repo_root,
+   work_item_id)` — called by `/review-plan` (through
+   `validate_local_plan_review_preconditions_bound`),
+   `/record-manual-plan-review` and `/approve-review plan` step 2 — re-runs
+   the verifier and requires a `BOUND` record for exactly the bundle's
+   `review_content_id`. A `bundle_id` differing from `current_bundle_id` (a
+   wrapper-only regeneration) is advisory only, never a block. Every refusal
+   names its remedy — restore the bound bytes from `current/files/<path>`,
+   regenerate, or withdraw with `/milestone-plan <id>` — including an
+   unreadable fresh id, never surfaced as the bare
+   `PlanRevisionMismatchError`/`AbsentProtectedPathError`. A `2.5.1` ready
+   item with no record is accepted when its bundle verifies; nothing is
+   back-filled (INV-7).
+5. **A recoverable generator.** At the `plan` stage only,
+   `prepare-ai-review.sh` assembles the bundle, the pin and the archive under
+   `.ai-review/<id>/current.staging-<token>/` and `.pin.staging-<token>/`, and
+   renames them into place only after `finalize_staged_plan_bundle_generation`'s
+   closing checks succeed.
+   The author inputs live in `.ai-review/<id>/plan-inputs/`
+   (`workflow_fingerprint.resolve_plan_review_inputs_dir`) and are copied
+   byte-for-byte into the staging bundle, seeded from `current/<file>` when
+   missing, so `bundle_id` is unchanged for identical bytes (INV-8) and
+   nothing writes `current/` until the final rename. **The failure path is a
+   deliberate revision of `WFR-67`** (`LPR-R3-002`): a failed plan-stage
+   generation discards only its staging artifacts, **does not** call
+   `withdraw_bundle` on `current/`, and **writes no `REJECTED` marker**, so
+   the previous `current/`, archive and pin stay byte-identical. `WFR-67`'s
+   own requirement — a failed closing binding assertion leaves no review-ready
+   artifact — still holds, because the failed generation's artifacts never
+   leave staging, and the previous bundle is review-ready only while it is
+   the `BOUND` one (item 4). A pre-existing `REJECTED` marker keeps its
+   meaning and is cleared by the next successful generation. The
+   implementation and post-fix stages are unchanged.
+6. **One total resume rule.** `plan_review_publication_status(repo_root,
+   state, work_item_id)` evaluates, read-only, a first-match decision table
+   over the phase, the registry's revision, the mirror, the record and the
+   fresh id (`⊥` when a plan-stage file is absent or the `(Revision N)`
+   marker disagrees): row 1 `NOT_PLAN_STAGE` (both commands refuse at entry,
+   before any write); ready rows 2/3 `BOUND`, 4a `CONTENT_DRIFTED`, 4b
+   `BUNDLE_UNVERIFIED`, 4c `LEGACY_UNVERIFIED`, 4d inconsistent (refuses);
+   non-ready rows 5 `LEGACY_UNMARKED`, 6 inconsistent (refuses), 7 and 10
+   `NEEDS_EDIT`, 8 `NEEDS_REVISION`, 9 `PUBLISHED_UNBOUND` (regenerate if
+   needed, then bind; never re-advance the revision), 11 `EDIT_IN_PROGRESS`.
+   It is consulted once, at `/milestone-plan`'s and `/apply-plan-review`'s
+   entry; the status only routes, and legitimacy stays with item 3's mutator.
+   Under rows 9 and 11 `/apply-plan-review` checks feedback against the
+   durable `CONSUMED` record rather than the possibly regenerated bundle
+   (`assert_apply_plan_review_feedback`), and it applies only `Status:
+   REVISE` — a plan-stage `BLOCK` is resolved at its ready phase, by
+   re-review of the unchanged content or by an edit plus withdrawal. A
+   read-only CLI, `python3 scripts/workflow_state.py
+   --plan-review-publication-status <id>`, prints the same result as one JSON
+   object for Controller.
+7. **Withdrawal from review.** `withdraw_plan_review(state, work_item_id,
+   now)` is the one sanctioned way to leave a ready phase for editing without
+   a `REVISE` verdict; `/milestone-plan <id>`'s entry is its only command
+   caller. It reads only the phase, the record and `amendment_history` (never
+   the fresh id, so no worktree state can block it), moves the item to
+   `AMENDING_PLAN` if an amendment is open, else `REVISING_PLAN`, writes
+   `CONSUMED` from the bound content (or the legacy marker), leaves
+   `plan_review_stages` to the recomputation rule, and refuses at a non-ready
+   phase (`PlanReviewNotReadyError`). The command withdraws only when its
+   argument is a `work_items` key (`PlanReviewWithdrawalNeedsExplicitIdError`
+   otherwise), never while an open plan-approval journal names the item
+   (`PlanApprovalInProgressError`; an unreadable journal refuses too), and
+   reports that both recorded stages were discarded and the content consumed.
+
+**Rejected alternatives.** Deciding bind legitimacy from bundle verification
+alone (the ordinary start of every round also verifies); keying on
+`bundle_id` (a wrapper-only regeneration would re-admit rejected content);
+back-filling legacy ready items (nothing needs it); keeping
+`/apply-plan-review` step 6 or step 7'.2 for two-stage items (each is an
+unreported exit between publish and bind).
+
+### D-Plan-Approval-Closure — the plan-approval commit closes over the declared protected set, proven before it exists and verified from what it committed (`workflow-2.6.0`)
+
+**Problem.** Under `2.5.1` the approval commit's member set was fixed:
+`resolve_plan_stage_approval_commit_paths` returned the plan document,
+registry, mapping, `WORKFLOW_STATE.json` and a conditional
+`<id>-artifacts.json`, and never consulted the declared
+`plan_stage.protected_paths` -- while the approved `review_content_id` hashes
+every declared protected path, snapshotted from the worktree. Omissions were
+invisible to the checks (`assert_committed_path_set_matches` is a subset
+check), so a declared-protected companion that was new (intent-to-add),
+edited, or renamed failed only *after* the commit existed
+(`AbsentProtectedPathError`, `PostApprovalManifestMismatchError`,
+`UnclassifiedPathError`), where step 6a routed it into 6a1's amend, which
+re-staged the same insufficient set and stopped. Separately, step 6a passed
+the command's own pre-commit `work_item` to the verifier while the journal
+design deliberately keeps the worktree state pre-approval until step 6c: a
+first approval raised `TypeError: 'NoneType' object is not subscriptable`,
+and a re-approval over a `STALE`/`SUPERSEDED` record raised a *false*
+`PostApprovalManifestMismatchError` against the old id and was routed into
+the amend -- the only path in the design that replaces an approval commit,
+triggered by a verifier-input error. The design applies to every governing
+version's plan-stage approval; the implementation stage is unchanged apart
+from the shared helper's named error.
+
+**Decision.**
+
+1. **Commit members.** Every declared `plan_stage.protected_paths` entry of
+   the worktree declaration the approved identity was computed from;
+   `WORKFLOW_STATE.json`; `<id>-artifacts.json` under the unchanged
+   pending-and-fresh rule; and **removals** -- every path protected under
+   `HEAD`'s committed declaration and tracked at `HEAD` that is absent from
+   both the current declaration and the worktree, staged as a deletion. A
+   rename is a removal plus an addition. A path the current declaration no
+   longer protects but that is still in the worktree (including one deleted
+   and re-created) is not a member: nothing is staged for it, `HEAD`'s copy
+   stays, and the reviewed declaration keeps it out of the identity. A first
+   approval has no committed declaration, so its removal set is empty.
+   `PlanApprovalCommitPlan` gains `protected_paths` and `removal_paths`
+   (both defaulted, so a hand-built plan still constructs); the journal
+   gains an optional `removal_paths` (a `2.5.1` journal, which never staged
+   a removal, reads as `[]`).
+2. **Freshness before mutation, per member kind**
+   (`workflow_state.resolve_fresh_plan_approval_members`, `/approve-review`
+   step 4a, after step 2's bundle-bound check). The empty-index precondition
+   runs first and names the staged-`git mv` remedy. Against the bound bundle
+   (`current/`, never `.pin`): a protected member's worktree bytes must equal
+   its `files/` capture when one exists, otherwise its blob at the bundle's
+   own `MANIFEST.md` `base_commit` (the generator's capture condition: every
+   member either was captured or equalled that blob at generation), and with
+   neither it refuses; a removal member must be neither captured nor listed
+   among the bundle's protected paths; the artifacts declaration keeps its
+   rule; `WORKFLOW_STATE.json` is not compared. Every failure is
+   `ReviewedContentDriftError` naming the path and member kind (a stale
+   declaration's `StaleArtifactsDeclarationError` chained under it), before
+   the journal opens. Step 5 re-resolves inside its guarded window and
+   requires the journal's pinned set (`PlanApprovalMemberSetChangedError`
+   otherwise, rolled back), so the worktree-absence condition that defines a
+   removal is evaluated against the tree that is staged. An edit to a
+   declared protected path usually refuses one step earlier, at step 2 (it
+   moves the fresh id); the per-member check is what reaches a removal
+   member the bound bundle captured and an artifacts-declaration byte edit
+   outside its hashed key sets, and stays defense in depth for the rest.
+3. **Pre-commit closure proof** (`prove_plan_approval_index_closure`, step
+   6.3a). After staging and the state pin, `git write-tree`, then the
+   plan-stage identity recomputed at that tree
+   (`compute_review_content_id_plan_stage_at_commit_for_work_item` accepts
+   any tree-ish), required to equal the journal's
+   `expected_review_content_id`, with every removal absent. A failure is
+   `PlanApprovalClosureProofError`; the outcome is still `NOT_COMMITTED`, so
+   step 6b rolls back and there is no commit to amend.
+4. **Committed-truth verification** (`verify_plan_approval_commit(repo_root,
+   journal, commit)`, the one function the in-session and every resumed or
+   taken-over step 6a run): the committed state blob against the journal
+   pin; the work item derived from the committed `WORKFLOW_STATE.json`; its
+   `plan_approval.approved_review_content_id` and the identity recomputed at
+   the commit both equal to the journal's pin; the two-sided path-set check
+   -- nothing outside the members in the commit
+   (`assert_committed_path_set_matches`), every protected path of the
+   committed record exactly as approved and every removal absent
+   (`assert_committed_plan_approval_closure`); the artifacts blob when it
+   was a member.
+5. **Named errors.** `verify_post_approval_manifest_match` raises
+   `MissingApprovalRecordError` for a missing record at either stage, and
+   takes an optional explicit `expected_review_content_id` (the plan stage
+   always passes the journal's); a record naming another id is
+   `CommittedApprovalRecordMismatchError`, raised before any recomputation.
+   The implementation-stage transaction is otherwise unchanged.
+6. **Amend gating** (`classify_post_commit_verification_failure`). 6a1's
+   amend is reachable only for `TREE_CONTENT`: a committed blob differing
+   from the staged and pinned bytes (`CommittedStateBlobMismatchError`,
+   `CommittedBlobMismatchError`, `CommittedProtectedContentMismatchError`),
+   the committed tree recomputing to another identity
+   (`PostApprovalManifestMismatchError`) or missing a protected member
+   (`AbsentProtectedPathError`). Everything else -- a record, input or
+   verifier error, an unclassified path, anything unforeseen, and an extra
+   path in the commit (`CommittedPathSetMismatchError`, a membership defect
+   re-staging cannot remove) -- stops with `HEAD` unchanged (INV-5). 6a1
+   re-stages the journal's members, never a fresh resolution, since `HEAD`
+   is then the approval commit; its one-shot rule (`WF8c` 348(jj)) stands.
+   CP6 of this release adds `assert_amendment_resolution_held` before 6a1's
+   re-staging for an item with an open amendment.
+7. **Declined.** Forward-completing a `COMMITTED` outcome without the
+   takeover gate after the owner process died; the takeover gate is
+   unchanged.
+
+**Recovery.** Re-entry at any `progress` step converges through
+`verify_plan_approval_commit` plus 6c/6d; discovery by trailer plus first
+parent is unchanged; the approval-trailer commit count for a round stays 1
+(tested). Step 6d's closing check narrows from a whole-tree `git status
+--porcelain` to a clean index and clean members, because a de-protected path
+still in the worktree legitimately survives the approval uncommitted.
+
+**Identity stability (INV-8).** No hashed projection changes: the member set,
+the freshness check, the proof and the verifier read identities, they never
+compute a new one, and the tree-ish generalization only admits a new input
+kind to an unchanged computation.
+
+**Rejected alternatives.** Gating protected members on `HEAD` instead of the
+bundle's `base_commit` (a member can differ from `HEAD` and still equal its
+`base_commit` blob, so it would need a second comparison source anyway);
+capturing every protected path in the generator (moves `bundle_id` for such
+bundles, breaking INV-8); keeping the pre-commit `work_item` and only
+null-guarding it (the `STALE`/`SUPERSEDED` false mismatch would remain and
+still route to the amend).
+
 ## Preserved ownership (unchanged, extended)
 
 `CLAUDE.md`'s gate-count section points at `MILESTONE_WORKFLOW.md`;
@@ -33238,6 +33778,153 @@ approval, the same proactive-classification discipline
 Unchanged scope from revision 5: metrics (hooks, status-line, per-session
 storage, retention, the background-`SubagentStop` empirical check),
 context governance, subagent routing.
+
+### D-Repo-Global-Lifecycle — one repository-global lifecycle lock and one amendment witness, so an amendment and a checkpoint start, or two resolutions of one amendment, can never both happen across linked worktrees (`workflow-2.6.0`; closes `v2.4.0-002`)
+
+**Problem.** `v2.4.0-002` had two independent causes, both still present in
+`2.5.1`. `WORKFLOW_STATE.lock` (primitive (2)) is per worktree, so an
+amendment requested in worktree A and a checkpoint claim published from
+worktree B were serialized by nothing. And `claim_checkpoint`'s phase check
+read only B's own working-tree state, which cannot see an `AMENDING_PLAN`
+committed on A's branch. Reproduced end to end: A committed `AMENDING_PLAN`,
+B published `CP2` and moved it to `IN_PROGRESS`, and `apply_plan_approval`
+never consulted claims. Two further paths published a claim without even
+the phase check: `take_over_claim` of an absent claim and `adopt_claim`.
+Resolution had the same gap one step later. Nothing stopped two worktrees
+whose branches carried the same unresolved amendment from each approving a
+different amended plan, and a resolution recorded only by its revision and
+reconciliation outcome could not even tell two such approvals apart.
+
+**Decision** (the normative text is
+`WORKFLOW_REVIEW_ARTIFACT_AND_CONCURRENCY_HARDENING_PLAN.md` section 5.6; the
+names below are `scripts/workflow_state.py`'s):
+
+1. **Primitive (9), the lifecycle lock.**
+   `<git-common-dir>/ai-workflow/checkpoint-claims/<token>.lifecycle.lock`, a
+   per-work-item `flock`, never unlinked, released by the kernel on process
+   death (`lifecycle_lock`). It is a pure source: the process-local held-set
+   (`_held_primitives`, which every other primitive registers in) must be
+   empty when it is taken (`LifecycleLockOrderError`). It is taken by
+   `claim_checkpoint` ((9) → (2) → witness check → phase check →
+   `_claim_or_refuse`), by `adopt_claim` and absent-claim `take_over_claim`
+   before (6)/(5), by `request_plan_amendment_transaction`, and by the four
+   resolution calls below. It is never held across a turn and never inside a
+   `plan_approval_guarded_mutation` window.
+2. **No bypass.** `request_plan_amendment`, the pure mutator, refuses unless
+   (9) is held for its work item (`LifecycleLockNotHeldError`);
+   `request_plan_amendment_transaction` is the only sanctioned caller. The
+   step-5 staging entry, `stage_plan_approval_members`, takes an explicit
+   mode: `first_commit` requires this journal's own 4d reservation, and
+   `amend_recovery` requires the proof a passing
+   `assert_amendment_resolution_held` returned
+   (`AmendmentResolutionHeldError` otherwise).
+3. **The amendment witness.** `<token>.amendment.json` beside the lock,
+   written by tempfile plus `os.replace` (not an `os.link` primitive),
+   advanced and rolled back, never deleted in ordinary operation. Its status
+   is `OPEN`, `RESOLVING`, `RESOLVED` or `NONE`. It records the sequence,
+   the requester worktree, branch and `amendment_base_commit`, the request
+   digest, and, by status, the reservation, the bound resolution digest, and
+   the `previous` witness a rollback restores. Anything torn, symlinked,
+   unknown-schema, unknown-status or missing a status's required fields
+   refuses (`AmendmentWitnessUnavailableError`). It is a gate, not an
+   authority: it can only cause refusals, and committed Git state stays
+   authoritative.
+4. **Two digests, one function each.** `amendment_request_projection_sha256`
+   hashes an `amendment_history` entry minus exactly the three
+   resolution-time keys, so an entry's request digest is the same before
+   and after resolution. `amendment_resolution_projection_sha256` hashes
+   the request digest plus `resolved_at_plan_revision`,
+   `reconciliation_outcome` and the new `resolved_review_content_id`, which
+   `apply_plan_approval` now writes equal to the approval's
+   `approved_review_content_id`. `2.5.1` ignores the new key: its
+   `validate_state` has no `amendment_history` entry-key check.
+5. **The predicate list**, identical for every side and evaluated under (9)
+   after the mixed-release lag probe (`_evaluate_lifecycle`):
+   (1) `OPEN`/`RESOLVING` at seq N with a committed resolution of N visible
+   (the evaluating `HEAD`; for `RESOLVING` also the resolver's `HEAD` or
+   branch tip): advance to `RESOLVED` binding that digest (`RESOLVING` only
+   when it equals the reservation's; otherwise
+   `AmendmentResolutionConflictError`, or `AmendmentResolutionReservedError`
+   when the only differing resolution is the reserving transaction's own
+   commit awaiting 6a1); (2) `OPEN` otherwise: the provable-orphan test
+   rolls it back, or the claim side refuses (`AmendmentInFlightError`), the
+   amendment side refuses, and the resolution side proceeds; (2a)
+   `RESOLVING` otherwise: the orphan-reservation test, or the claim and
+   amendment sides refuse (`AmendmentInFlightError`), and the resolution
+   side proceeds only for its own journal (`AmendmentResolutionReservedError`
+   otherwise); (3) `RESOLVED`: the evaluating `HEAD` must show N resolved
+   (`StaleLifecycleStateError`) with the bound digest
+   (`AmendmentResolutionConflictError`); (4) `NONE`: proceed; (5) absent:
+   the upgrade bootstrap.
+6. **Resolution: reserve before any commit.** `/approve-review plan` step 4d
+   (`reserve_amendment_resolution`, directly after 4c, the only reservation
+   point) rewrites `OPEN` to `RESOLVING` with the journal's token, the
+   resolver worktree and branch, and the pinned resolution digest. 6a1 holds
+   the resolution with `assert_amendment_resolution_held` (no predicate list,
+   no write, digest from the journal's pinned post-state). Step 6c1
+   (`advance_amendment_witness`, with the journal and the verified commit)
+   binds `RESOLVED` before 6d closes the journal, so an open journal always
+   outlives its reservation. Step 6b captures the journal's tokens before
+   the rollback and then calls `release_amendment_resolution`, which
+   restores `OPEN` in band, on a detached `HEAD` too.
+7. **Crash recovery without liveness heuristics.** A provable orphan `OPEN`
+   (requester still registered, on its branch, and neither it, its branch
+   tip nor any worktree holds the entry) or orphan reservation (resolver
+   still registered, on its branch, no journal holding the token, no
+   resolution anywhere) is rolled back automatically to `previous`. When the
+   test cannot complete (requester or resolver gone, unreadable, detached,
+   or switched branch), the refusal offers the evidence-bound literal
+   `clear amendment witness|resolution <wi> <sha256 of the witness bytes>`
+   (`clear_amendment_witness`, `clear_amendment_resolution`), which
+   re-checks liveness under (9) before rewriting to `previous`. A killed (9)
+   holder's `flock` dies with it.
+8. **Upgrade bootstrap** (INV-7). With no witness, one deterministic scan of
+   every registered worktree's `HEAD`-committed and working-tree state:
+   request and resolution agreement at every shared seq (with a
+   `Workflow-Plan-Approval:` trailer comparison for legacy resolutions),
+   `amendment_base_commit` agreement, and no working-tree resolution its own
+   `HEAD` lacks (`AmendmentBootstrapConflictError`, writing nothing);
+   then `RESOLVED` if any `HEAD` shows the last seq resolved, else `OPEN`
+   with a deterministic requester, else (never amended) the `NONE`
+   sentinel, which is not written while any worktree lags.
+9. **Mixed-release worktrees.** The lag probe reads every registered
+   worktree's `HEAD`-committed `.workflow-manager/installation.json`. A
+   `workflow_version` below `2.6.0` (compared numerically,
+   `workflow_release_version_key`, pinned against `release._version_key`),
+   or an absent, unreadable or unorderable one, lags. `bare` entries are
+   skipped. While any worktree lags, its unrecorded unresolved amendments
+   refuse (`LaggingWorktreeAmendmentError`) and its divergent resolutions
+   refuse (`AmendmentResolutionConflictError`); a lagging worktree alone
+   does not.
+10. **Defense in depth at approval.** `open_plan_approval_journal` refuses
+    (`AmendmentCheckpointActiveError`) to open an amendment-resolving
+    transaction while any checkpoint claim for the item is live.
+
+**Lock order.** Nine primitives and sixteen edges, nine blocking and seven
+non-blocking (see "The complete global partial order"): the five new edges
+are `(9)→(2)`, `(9)→(3)`, `(9)→(6)` (blocking) and `(9)→(5)`, `(9)→(8)`
+(non-blocking), all code-derivable and rediscovered by
+`docs/ai-workflow/dry-run/verify_372h_raw_edge_derivation.py`, with a
+regression that removes both of `(9)→(8)`'s evidence paths. The blocking
+sources `{1, 5, 8, 9}` and targets `{2, 3, 6}` stay disjoint.
+
+**Residual** (an unsupported mixed-release posture). The exclusion is
+guaranteed only once every registered worktree's branch has merged the
+`2.6.0` update. A lagging `2.5.1` process never takes (9) and never reads the
+witness. It can still claim while an amendment is `OPEN` (caught at approval
+by item 10 if the claim is still live), request an amendment (detected on the
+next (9) acquisition, but the window before that read is not closed), or
+resolve an `OPEN` amendment without reserving it (the first such resolution
+a `2.6.0` holder observes is bound; any different one is refused wherever it
+becomes visible). An amendment on a branch checked out in no worktree is not
+discoverable. Two independent `2.5.1` resolutions with equal revision and
+outcome, at least one landed without its trailer, compare equal at
+bootstrap; their checkpoint outcomes are identical by construction.
+
+**Forward compatibility.** The witness records worktree, branch and base
+identity, so a later release can record or enforce repository-global
+branch/base/worktree policy by extending this record rather than adding a
+second one. This release adds no such policy.
 
 ### Workflow v2.2 handoff (unchanged from revision 6)
 

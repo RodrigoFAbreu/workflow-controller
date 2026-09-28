@@ -27,6 +27,22 @@ overlay copy is the one place that new edge, `(2)->(8)`, is declared;
 `docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s own eleven-edge table (this
 overlay's own copy) is this script's evidence source, exactly as before.
 
+**workflow-2.6.0 overlay note (`D-Repo-Global-Lifecycle`, CP6; closes
+`v2.4.0-002`):** primitive (9), the repository-global per-work-item
+lifecycle `flock` (`<git-common-dir>/ai-workflow/checkpoint-claims/
+<token>.lifecycle.lock`), is a new `with lifecycle_lock(...):` context
+manager, so its edges are instances of the existing "Guard-bracket nesting"
+shape (`DIRECT_WITH_PRIMITIVE["lifecycle_lock"] = "9"`), not a new
+detection rule. Five edges out of (9) are rediscovered: `(9)->(2)`,
+`(9)->(8)` (`claim_checkpoint`), `(9)->(6)`, `(9)->(8)` (`adopt_claim`),
+`(9)->(6)`, `(9)->(5)` and `(9)->(3)` (an absent-claim `take_over_claim`,
+whose (5) window establishes this worktree's identity). The plan's hand
+count named the first four; `(9)->(3)` was found by this script, which is
+what it exists for. No edge targets (9): it is a pure source. The totals
+are sixteen edges (twelve code-derivable, four command-orchestrated), nine
+blocking and seven non-blocking; the blocking sources `{1, 5, 8, 9}` and
+targets `{2, 3, 6}` stay disjoint.
+
 **The raw edge set is not uniformly code-derivable, and this script does
 not pretend otherwise.** Eleven edges are declared, read fresh from
 `docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s own fenced eleven-edge table
@@ -39,7 +55,7 @@ are provable from this module's own AST -- two structural shapes, both
 mechanized below:
 
   - **Guard-bracket nesting**: a `with G(...):` block, where `G` is one of
-    this module's seven lock-opening functions (the five bare `fcntl.flock`
+    this module's lock-opening functions (the bare `fcntl.flock`
     context managers, plus `owner_mutation`/`plan_approval_guarded_mutation`,
     whose own bodies open guard (6)/(7) and hand the caller a still-open
     lease (5)/(1)) -- every acquisition reachable, transitively through
@@ -162,13 +178,18 @@ CODE_DERIVABLE = {
     # five bare `fcntl.flock` context managers that shape's own detection
     # walks, so this is a new call site, not a new detection rule.
     ("2", "8"),
+    # workflow-2.6.0, `D-Repo-Global-Lifecycle` (CP6): primitive (9)'s
+    # `with lifecycle_lock(...):` windows -- `claim_checkpoint` ((9)->(2),
+    # (9)->(8)), `adopt_claim` ((9)->(6), (9)->(8)), and an absent-claim
+    # `take_over_claim` ((9)->(6), (9)->(5), (9)->(3)).
+    ("9", "2"), ("9", "8"), ("9", "6"), ("9", "5"), ("9", "3"),
 }
 
 COMMAND_ORCHESTRATED = {
     ("1", "2"), ("5", "2"), ("8", "2"), ("8", "3"),
 }
 
-BLOCKING_TARGETS = {"2", "3", "4", "6", "7"}  # fcntl.flock primitives
+BLOCKING_TARGETS = {"2", "3", "4", "6", "7", "9"}  # fcntl.flock primitives
 
 PLAN_PATH = Path(__file__).resolve().parent.parent / "WORKFLOW_V2_PLAN.md"
 
@@ -177,6 +198,14 @@ PLAN_PATH = Path(__file__).resolve().parent.parent / "WORKFLOW_V2_PLAN.md"
 # duplicated table is caught (fails closed) rather than silently mis-parsed.
 RAW_EDGE_TABLE_START_ANCHOR = "(7) PLAN_APPROVAL_MUTATION.guardlock"
 RAW_EDGE_TABLE_END_ANCHOR = "(4) identity-gap.lock"
+
+
+#: The stated totals (workflow-2.6.0, CP6): sixteen edges, nine blocking and
+#: seven non-blocking. Stated, not re-derived: a drift in either the code or
+#: the plan table fails against these numbers.
+DECLARED_EDGE_COUNT = 16
+DECLARED_BLOCKING_COUNT = 9
+DECLARED_NON_BLOCKING_COUNT = 7
 
 
 def is_blocking(edge: tuple[str, str]) -> bool:
@@ -201,23 +230,24 @@ def parse_declared_raw_edges_from_plan(plan_text: str) -> set[tuple[str, str]]:
     own `CODE_DERIVABLE`/`COMMAND_ORCHESTRATED` constants against a source
     that is not derived from those same constants. Fails closed, naming the
     reason, if the anchors are not found exactly once, or if the parsed
-    count is not exactly eleven -- an edited or reorganized table must not
+    count is not exactly `DECLARED_EDGE_COUNT` (sixteen since workflow-2.6.0's
+    five (9) edges) -- an edited or reorganized table must not
     silently stop being checked against."""
     blocks = re.findall(r"```text\n(.*?)\n```", plan_text, re.DOTALL)
     candidates = [b for b in blocks
                   if RAW_EDGE_TABLE_START_ANCHOR in b and RAW_EDGE_TABLE_END_ANCHOR in b]
     if len(candidates) != 1:
         raise AssertionError(
-            f"expected exactly one fenced eleven-edge table in {PLAN_PATH}, found "
+            f"expected exactly one fenced edge table in {PLAN_PATH}, found "
             f"{len(candidates)} -- the raw-edge table's anchors have moved or been duplicated"
         )
     block = candidates[0]
     edges = {(m.group(1), m.group(2))
              for m in re.finditer(r"^\((\d)\)[^\n]*?→[^\n]*?\((\d)\)", block, re.MULTILINE)}
-    if len(edges) != 11:
+    if len(edges) != DECLARED_EDGE_COUNT:
         raise AssertionError(
-            f"parsed {len(edges)} edges from the plan's eleven-edge table, expected exactly 11 "
-            f"-- {sorted(edges)}"
+            f"parsed {len(edges)} edges from the plan's edge table, expected exactly "
+            f"{DECLARED_EDGE_COUNT} -- {sorted(edges)}"
         )
     return edges
 
@@ -381,6 +411,7 @@ DIRECT_WITH_PRIMITIVE = {
     "_plan_approval_guard_lock": "7",
     "owner_mutation": "5",
     "plan_approval_guarded_mutation": "1",
+    "lifecycle_lock": "9",
 }
 
 # `lease = acquire_X(...)` ... `release_X(..., lease, ...)` in the same
@@ -605,17 +636,18 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
     undeclared = discovered - CODE_DERIVABLE
     stale = CODE_DERIVABLE - discovered
     if undeclared:
-        failures.append(f"code-discovered edges not among the seven declared code-derivable "
-                         f"edges: {sorted(undeclared)}")
+        failures.append(f"code-discovered edges not among the {len(CODE_DERIVABLE)} declared "
+                         f"code-derivable edges: {sorted(undeclared)}")
     if stale:
         failures.append(f"declared code-derivable edges not rediscovered live in the code: "
                          f"{sorted(stale)}")
     if verbose:
-        print(f"\n-- Bidirectional comparison against the seven declared code-derivable edges --")
+        print(f"\n-- Bidirectional comparison against the {len(CODE_DERIVABLE)} declared "
+              f"code-derivable edges --")
         if not failures:
             print(f"  {len(discovered)} discovered == {len(CODE_DERIVABLE)} declared. PASS.")
         print(f"\n-- Tier-2 command-orchestrated edges (not mechanically checked against code; "
-              f"compared bidirectionally against the plan's own independently-parsed eleven-edge "
+              f"compared bidirectionally against the plan's own independently-parsed {DECLARED_EDGE_COUNT}-edge "
               f"table below) --")
         for edge in sorted(COMMAND_ORCHESTRATED):
             print(f"  ({edge[0]}) -> ({edge[1]})  -- declared, command-file-orchestrated or "
@@ -632,7 +664,7 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
     stale_in_script = plan_declared_edges - script_total
     if undeclared_in_plan:
         failures.append(f"script-derived edges (code-discovered ∪ COMMAND_ORCHESTRATED) not "
-                         f"present in the plan's own declared eleven-edge table: "
+                         f"present in the plan's own declared {DECLARED_EDGE_COUNT}-edge table: "
                          f"{sorted(undeclared_in_plan)}")
     if stale_in_script:
         failures.append(f"plan-declared edges not tracked by the script's CODE_DERIVABLE/"
@@ -640,8 +672,9 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
 
     blocking = {e for e in plan_declared_edges if is_blocking(e)}
     non_blocking = plan_declared_edges - blocking
-    if len(blocking) != 6 or len(non_blocking) != 5:
-        failures.append(f"blocking/non-blocking split is not 6/5: "
+    if len(blocking) != DECLARED_BLOCKING_COUNT or len(non_blocking) != DECLARED_NON_BLOCKING_COUNT:
+        failures.append(f"blocking/non-blocking split is not "
+                         f"{DECLARED_BLOCKING_COUNT}/{DECLARED_NON_BLOCKING_COUNT}: "
                          f"{len(blocking)} blocking, {len(non_blocking)} non-blocking")
     sources = {e[0] for e in blocking}
     targets = {e[1] for e in blocking}
@@ -649,7 +682,7 @@ def compare_to_declared(discovered: set[tuple[str, str]], plan_declared_edges: s
         failures.append(f"blocking sub-order is not acyclic -- sources/targets overlap at "
                          f"{sorted(sources & targets)}")
     elif verbose:
-        print(f"\n-- Blocking sub-order acyclicity (six edges) --")
+        print(f"\n-- Blocking sub-order acyclicity ({len(blocking)} edges) --")
         print(f"  blocking edges: {sorted(blocking)}")
         print(f"  sources {sorted(sources)}, targets {sorted(targets)}, disjoint. Acyclic. PASS.")
     return failures
@@ -716,12 +749,41 @@ MUTATION_REMOVE_6_TO_8 = (
     # window). Under the prior context-free over-approximation, (6)->(8)
     # stayed "discovered" anyway, satisfied by (6)->(5)'s own evidence for
     # the shared `_publish_claim_exclusive` statement (`OPUS-R120-001`).
+    # Re-anchored, workflow-2.6.0: the block now sits inside adopt_claim's
+    # `with lifecycle_lock(...):`, one indentation level deeper.
+    "        with guard_mutation_lock(repo_root, work_item_id):\n"
+    "            checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)\n"
+    "            return _claim_or_refuse(repo_root, work_item_id, record)\n",
+    "        with guard_mutation_lock(repo_root, work_item_id):\n"
+    "            checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)\n"
+    "        return _claim_or_refuse(repo_root, work_item_id, record)\n",
+)
+
+MUTATION_REMOVE_9_TO_8_CLAIM = (
+    # workflow-2.6.0, CP6: (9)->(8) has *two* independent evidence paths --
+    # claim_checkpoint and adopt_claim both publish (8) under (9). Removing
+    # both is what proves the check is not vacuous (the lesson
+    # MUTATION_REMOVE_5_TO_3's own comment records). First path:
+    # claim_checkpoint's publication moved out of both windows.
+    "                    )\n"
+    "            return _claim_or_refuse(repo_root, work_item_id, record)\n",
+    "                    )\n"
+    "    return _claim_or_refuse(repo_root, work_item_id, record)\n",
+)
+
+MUTATION_REMOVE_9_TO_8_ADOPT = (
+    # Second path: adopt_claim's lifecycle window closes before its
+    # guard_mutation_lock block (which keeps (6)->(8) intact).
+    "    with lifecycle_lock(repo_root, work_item_id):\n"
+    "        _enforce_claim_lifecycle(repo_root, work_item_id)\n"
+    "        with guard_mutation_lock(repo_root, work_item_id):\n"
+    "            checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)\n"
+    "            return _claim_or_refuse(repo_root, work_item_id, record)\n",
+    "    with lifecycle_lock(repo_root, work_item_id):\n"
+    "        _enforce_claim_lifecycle(repo_root, work_item_id)\n"
     "    with guard_mutation_lock(repo_root, work_item_id):\n"
     "        checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)\n"
     "        return _claim_or_refuse(repo_root, work_item_id, record)\n",
-    "    with guard_mutation_lock(repo_root, work_item_id):\n"
-    "        checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)\n"
-    "    return _claim_or_refuse(repo_root, work_item_id, record)\n",
 )
 
 MUTATION_REMOVE_6_TO_5 = (
@@ -793,7 +855,7 @@ def run_regression_checks(base_src: str, plan_declared_edges: set[tuple[str, str
             failures.append(f"mutation (b) base pass unexpectedly failed: {mfail}")
         elif ("3", "2") in discovered:
             cmp_failures = compare_to_declared(discovered, plan_declared_edges, verbose=False)
-            if any("not among the seven declared" in f for f in cmp_failures):
+            if any("declared code-derivable edges:" in f and "not among" in f for f in cmp_failures):
                 print("regression (b) (inject spurious (3)->(2)): new edge discovered and "
                       "the forward-direction check names it. PASS.")
             else:
@@ -842,6 +904,25 @@ def run_regression_checks(base_src: str, plan_declared_edges: set[tuple[str, str
                 "REGRESSION FAILURE: dedenting acquire_guard's _acquire_guard_locked call out "
                 "of its guard_mutation_lock window did not drop (6)->(5) -- the shared os.link "
                 "statement's caller-aware attribution is vacuous for this edge (OPUS-R120-001)"
+            )
+
+    old_9a, new_9a = MUTATION_REMOVE_9_TO_8_CLAIM
+    old_9b, new_9b = MUTATION_REMOVE_9_TO_8_ADOPT
+    if old_9a not in base_src or old_9b not in base_src:
+        failures.append("mutation (a4) anchor text not found -- source has drifted, update the mutation")
+    else:
+        mutated_src = base_src.replace(old_9a, new_9a, 1).replace(old_9b, new_9b, 1)
+        discovered, mfail = run_pass(parse_module(mutated_src), verbose=False)
+        if mfail:
+            failures.append(f"mutation (a4) base pass unexpectedly failed: {mfail}")
+        elif ("9", "8") not in discovered and ("6", "8") in discovered:
+            print("regression (a4) (remove both (9)->(8) evidence paths, claim_checkpoint and "
+                  "adopt_claim): edge absent, (6)->(8) intact, as required. PASS.")
+        else:
+            failures.append(
+                "REGRESSION FAILURE: moving claim_checkpoint's and adopt_claim's claim publication "
+                "out of their lifecycle_lock windows did not drop (9)->(8) (or also dropped "
+                "(6)->(8)) -- the (9) window rule is vacuous"
             )
 
     dropped = plan_declared_edges - {("5", "3")}
@@ -922,12 +1003,13 @@ def main() -> int:
             print(f"  - {f}")
         return 1
 
-    print("\nAll checks passed: the seven code-derivable raw edges are mechanically "
-          "rediscovered, exactly, bidirectionally, with the shared os.link statement "
+    print(f"\nAll checks passed: the {len(CODE_DERIVABLE)} code-derivable raw edges are "
+          "mechanically rediscovered, exactly, bidirectionally, with the shared os.link statement "
           "attributed caller-aware; the four command-orchestrated edges are compared "
-          "bidirectionally against the plan's own independently-parsed eleven-edge table; the "
-          "single-attempt discriminator is call-chain-aware; the blocking sub-order (six "
-          "edges) is acyclic; all required regressions (a missing edge, a spurious extra "
+          f"bidirectionally against the plan's own independently-parsed {DECLARED_EDGE_COUNT}-edge "
+          "table; the single-attempt discriminator is call-chain-aware; the blocking sub-order "
+          f"({DECLARED_BLOCKING_COUNT} edges) is acyclic; all required regressions (a missing edge, "
+          "the lifecycle lock's (9)->(8) evidence, a spurious extra "
           "edge, each shared-statement edge independently, both plan-table divergence "
           "directions, and a call-chain-only retry wrapper) are caught.")
     return 0

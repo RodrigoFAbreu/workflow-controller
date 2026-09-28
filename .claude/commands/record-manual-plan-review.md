@@ -36,8 +36,13 @@ work item with nothing under `.ai-review/<work_item_id>/` yet (a
 brand-new milestone's first plan bundle, or the first
 `/milestone-plan <child-id>` on a remediation child), while the generator
 writes and validates the scoped one. `<feedback_dir>` takes no stage
-argument: `feedback/` is stage-agnostic and keeps the scoped-else-flat
-rule for every stage alike.
+argument: `feedback/` is stage-agnostic and resolves by the item's durable
+`feedback_layout` for every stage alike (`D-Feedback-Layout`,
+workflow-2.6.0): `.ai-review/<work_item_id>/feedback/` unconditionally, by
+construction, for a `feedback_layout: "scoped"` item (every item created
+under workflow-2.6.0); the unchanged legacy scoped-else-flat rule for an
+item without the field. `REVIEW_PROTOCOL.md`'s "Bundle location" is the
+normative definition.
 
 1. **Resolve the work item**: `$ARGUMENTS`, if given, names the
    `work_item_id`; otherwise use `active_work_item_id`
@@ -56,6 +61,20 @@ rule for every stage alike.
    `manual_external_plan_review` is also accepted), `<bundle_dir>/MANIFEST.md`,
    `<bundle_dir>/REVIEW_REQUEST.md`, and the ledger's existing
    `LOCAL_MODEL_PLAN_REVIEW` entry.
+   **Resolved paste path, printed** (`D-Feedback-Layout`, workflow-2.6.0):
+   `<feedback_dir>` is `workflow_fingerprint.resolve_feedback_dir(repo_root,
+   work_item_id)` (equivalently the `review_feedback_path` field of
+   `python3 scripts/workflow_fingerprint.py --resolve-feedback-path
+   <work_item_id>`); if no `REVIEW_FEEDBACK.md` sits there, stop and print
+   that exact resolved path as the one the user must paste into -- never a
+   hard-coded flat `.ai-review/feedback/` path. **Foreign-`Work item:`
+   refusal, before any state write**: call
+   `workflow_fingerprint.assert_manual_feedback_names_work_item(<the pasted
+   file's content>, work_item_id=work_item_id)` -- a pasted file whose
+   `Work item:` field is present and names a different work item stops the
+   command (`ManualFeedbackForeignWorkItemError`, naming both ids); a file
+   without that field is not refused here, since step 6's hard
+   `review_content_id` check still binds it.
 5. **Recompute fresh**: the current `bundle_id` and plan-stage
    `review_content_id`, identical in mechanism to `/review-plan`'s own
    (staleness/wrong-worktree handling included) — which means the same
@@ -66,6 +85,23 @@ rule for every stage alike.
    `workflow_fingerprint.assert_bundle_not_rejected(repo_root,
    work_item_id)` here; a `BundleRejectedError` stops the command, naming
    the marker path and its recorded detail.
+   **Bundle-bound check** (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0,
+   section 5.3 item 4): call
+   `workflow_state.assert_plan_review_bundle_bound(repo_root,
+   work_item_id)`, which re-runs the bundle verifier and requires a
+   `BOUND` `plan_review_binding` record for exactly the bundle's
+   `review_content_id` (a `2.5.1` item at this phase with no record is
+   accepted when its bundle verifies; nothing is written, and the phase is
+   never touched). Report its returned advisory, if any: a `bundle_id`
+   differing from `current_bundle_id` -- a wrapper-only regeneration after
+   the bind -- is advisory only and never blocks ingestion, exactly like
+   step 6's own `bundle_id` advisory. On a refusal, stop and report the
+   error's message, which names the remedy: `ReviewedContentDriftError`
+   (row 4a: restore the bound bytes from `<bundle_dir>/files/<path>`, or
+   withdraw with `/milestone-plan <id>`), `PlanReviewBundleUnverifiedError`
+   (rows 4b/4c: regenerate, or withdraw),
+   `PlanReviewBindingInconsistentError` (row 4d: withdraw with
+   `/milestone-plan <id>`).
 6. **Validate before writing anything**
    (`workflow_state.validate_manual_plan_review_preconditions`), in order:
    - the feedback's declared role is either the canonical
@@ -104,7 +140,10 @@ rule for every stage alike.
      `AWAITING_PLAN_APPROVAL`.
    - `REVISE`: only the phase transition to `REVISING_PLAN`
      (`record_manual_plan_review(..., verdict="REVISE", ...)` — no ledger
-     write).
+     write), plus, in the same write, the `CONSUMED` `plan_review_binding`
+     record for this `review_content_id` (workflow-2.6.0,
+     `D-Plan-Review-Bundle-Binding`), so the reviewed content can never
+     re-bind without an edit.
    - `BLOCK`: nothing (`record_manual_plan_review(..., verdict="BLOCK",
      ...)` is a true no-op; the work item stays at
      `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`).
@@ -114,5 +153,8 @@ rule for every stage alike.
    is next and that only the user can invoke `/approve-review plan`. For a
    `REVISE`: state that `/apply-plan-review` is next. For a `BLOCK`: state
    that explicit user resolution is required before any further command
-   runs. **Never** auto-continue to `/apply-plan-review` or
+   runs -- then either re-review the unchanged content, or edit the plan
+   and withdraw it with `/milestone-plan <work_item_id>`;
+   `/apply-plan-review` never applies a plan-stage `BLOCK`
+   (workflow-2.6.0). **Never** auto-continue to `/apply-plan-review` or
    `/approve-review` in this same invocation.

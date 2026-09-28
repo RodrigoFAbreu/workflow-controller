@@ -92,6 +92,11 @@ never a substitute for either of those.)
 `<bundle_dir>`/`<feedback_dir>` below resolve per
 `docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location"
 (`workflow_fingerprint.resolve_bundle_dir`/`resolve_feedback_dir`).
+`resolve_feedback_dir` decides `<feedback_dir>` by the item's durable
+`feedback_layout` (`D-Feedback-Layout`, workflow-2.6.0):
+`.ai-review/<work_item_id>/feedback/` unconditionally, by construction, for
+a `feedback_layout: "scoped"` item; the unchanged legacy scoped-else-flat
+rule for an item without the field.
 
 **The steps below (1-8) are this command's `"1"`/`"2.1"` advisory branch,
 also used for a `"2.2"` item outside `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`
@@ -271,17 +276,36 @@ end of this file for the `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` case.
      `resolve_feedback_dir(repo_root, work_item_id)`, read whatever
      `REVIEW_FEEDBACK.md` already sits there (`None` if nothing does), and
      call `workflow_fingerprint.assert_feedback_not_owned_by_other_work_item(
-     existing_content, work_item_id=work_item_id)` against it — the
+     existing_content, work_item_id=work_item_id, state=<the parsed
+     docs/ai-workflow/WORKFLOW_STATE.json>)` against it — the
      ownership guard runs immediately before the write, against this same
      unmodified `resolve_feedback_dir(repo_root, work_item_id)` path.
+     **Bounded terminal-owner relaxation** (`D-Feedback-Layout`,
+     workflow-2.6.0): for a legacy writer only (an entry without
+     `feedback_layout`), a foreign owner whose own `state` entry sits at
+     the terminal phase `MILESTONE_COMPLETE` does not block — terminal
+     state proves no consumer of that file remains, and this write replaces
+     it whole with this item's own binding fields, never reinterpreting it
+     as this item's. A non-terminal owner, an owner absent from `state`, or
+     any foreign file in a `feedback_layout: "scoped"` writer's (private,
+     by construction) directory still refuses.
      **On a `FeedbackOwnedByOtherWorkItemError` here, still print the
      composed report in full**, exactly as before this checkpoint, and
      state the refusal alongside it, naming both work item ids — the
      operator loses only the write, not the completed review.
-   - **Recovery from an ownership refusal**: hand-creating a scoped
+   - **Recovery from an ownership refusal**: for a legacy item (no
+     `feedback_layout`), hand-creating a scoped
      `.ai-review/<work_item_id>/feedback/` directory is **not** an endorsed
      remedy — it would reproduce, by hand, the same silent-shadowing hazard
-     this guard exists to prevent. The blocking file's own `Work item:`
+     this guard exists to prevent, moving the item's resolution mid-round.
+     A `feedback_layout: "scoped"` item never needs it: its
+     `<feedback_dir>` is already scoped by construction (`D-Feedback-Layout`,
+     workflow-2.6.0), so it can only be refused by a foreign file inside its
+     own directory. A blocker whose owner already sits at
+     `MILESTONE_COMPLETE` in current state no longer refuses a legacy writer
+     at all (the relaxation above), so the manual deletion below is needed
+     only when the guard ran without that owner being terminal in `state`.
+     The blocking file's own `Work item:`
      value names a work item A. If A is tracked in
      `docs/ai-workflow/WORKFLOW_STATE.json` and live (its `phase` still
      advancing toward `MILESTONE_COMPLETE` on some scheduled cause, not
@@ -318,7 +342,10 @@ end of this file for the `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` case.
      implementation` binds against): fix the composed text and re-run this
      check before writing — never write text that fails its own
      self-check.
-   - Once both guards pass and the self-check above succeeds, write
+   - Once both guards pass and the self-check above succeeds, call
+     `workflow_fingerprint.ensure_feedback_dir(repo_root, work_item_id)`
+     (`D-Feedback-Layout`, workflow-2.6.0 -- a scoped item's directory is
+     created by no earlier step), then write
      `<feedback_dir>/REVIEW_FEEDBACK.md` unconditionally, overwriting
      whatever same-work-item feedback (if any) currently sits there. This
      write is now the authoritative round the moment it lands — no
@@ -443,10 +470,15 @@ A6. **Write set, exact.** **`REJECTED`-bundle refusal, second of two, under
     whatever `REVIEW_FEEDBACK.md` already sits there (`None` if nothing
     does), and call
     `workflow_fingerprint.assert_feedback_not_owned_by_other_work_item(
-    existing_content, work_item_id=work_item_id)` against it — identical in
-    kind to the advisory branch's own step 7 ownership guard above, since
-    this branch's write is exactly as capable of destroying another work
-    item's unconsumed feedback at the same scoped-else-flat path. On a
+    existing_content, work_item_id=work_item_id, state=<the parsed
+    docs/ai-workflow/WORKFLOW_STATE.json>)` against it — identical in
+    kind to the advisory branch's own step 7 ownership guard above
+    (including its bounded legacy-writer terminal-owner relaxation,
+    `D-Feedback-Layout`), since this branch's write is exactly as capable of
+    destroying another work item's unconsumed feedback at a legacy item's
+    same scoped-else-flat path. Once the guard passes, call
+    `workflow_fingerprint.ensure_feedback_dir(repo_root, work_item_id)`
+    before the first write below. On a
     `FeedbackOwnedByOtherWorkItemError` here, stop naming both work item
     ids and commit no phase transition — see step 7's own "Recovery from an
     ownership refusal" for the disposition (wait for the blocking work item
@@ -484,7 +516,10 @@ A7. **Report and stop.** For an `APPROVE`: state the exact bundle path,
     `bundle_id`, and `review_content_id` the user must hand to the manual
     external reviewer -- the same values just recorded in the ledger -- and
     that `/record-manual-implementation-review` is the next command, after
-    the user pastes that reviewer's feedback into `REVIEW_FEEDBACK.md`. For
+    the user pastes that reviewer's feedback into `REVIEW_FEEDBACK.md` --
+    print the exact resolved path, `<feedback_dir>/REVIEW_FEEDBACK.md` from
+    `resolve_feedback_dir(repo_root, work_item_id)` (`D-Feedback-Layout`,
+    workflow-2.6.0), never a hard-coded flat path. For
     a `REVISE`: state that `/apply-implementation-review` is next. For a
     `BLOCK`: state that explicit user resolution is required before any
     further command runs. **Never** auto-continue to

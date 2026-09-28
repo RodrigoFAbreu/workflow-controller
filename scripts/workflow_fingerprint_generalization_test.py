@@ -31,6 +31,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import workflow_fingerprint as fingerprint
 import workflow_state as ws
@@ -1332,6 +1333,433 @@ class TestPrepareAiReviewShPlanStageRequiredArgument(unittest.TestCase):
             self.assertTrue((repo.root / ".ai-review" / "prod-item" / "review-bundle.tar.gz").is_file())
 
 
+class TestPrepareAiReviewShAmendmentDiffWorkingTreeAnchor(unittest.TestCase):
+    """workflow-2.6.0 CP2 (`D-Plan-Amendment-5` revision, `v2.4.0-003`):
+    `AMENDMENT_DIFF.patch` is `git diff <amendment_base_commit> --
+    <pathspec>`, anchored at the working tree, over the union of the
+    declaration at `amendment_base_commit`, the declaration now, and
+    `<id>-artifacts.json` itself, behind a provenance preamble. Driven
+    end to end through the real `prepare-ai-review.sh`, the same fixture
+    pattern `TestPrepareAiReviewShPlanStageRequiredArgument` uses. The
+    amended plan is never committed here -- exactly the state
+    `/request-plan-amendment` leaves it in until `/approve-review plan`
+    commits it, and the one the `..HEAD` form could never show."""
+
+    ITEM = "amend-item"
+    PLAN = "docs/ai-workflow/WORKFLOW_V2_PLAN.md"
+    AUDIT = "docs/ai-workflow/WORKFLOW_V2_AUDIT.md"
+    ARTIFACTS = f"docs/ai-workflow/registry/{ITEM}-artifacts.json"
+
+    def _install_scripts(self, repo):
+        scripts_dir = repo.root / "scripts"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+            shutil.copy(_REAL_SCRIPTS_DIR / name, scripts_dir / name)
+        script_path = scripts_dir / "prepare-ai-review.sh"
+        script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
+        return script_path
+
+    def _git(self, repo, *args):
+        # Scrubbed the way the product scrubs its own diff (round 3, O3): a
+        # runner-side `GIT_DIFF_OPTS` or global pathspec mode must not move
+        # the oracle away from the product output.
+        env = {key: value for key, value in fingerprint.literal_pathspec_env().items()
+               if key != "GIT_DIFF_OPTS"}
+        return subprocess.run(
+            ["git", *args], cwd=repo.root, check=True, capture_output=True, text=True, env=env,
+        ).stdout
+
+    def _state_path(self, repo):
+        return repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+
+    def _seed_open_amendment(self, repo, *, amendment_base=None):
+        """Seeds the item with a line-per-entry `<id>-artifacts.json` (so a
+        declaration edit is visible per path), commits it with the item's
+        declared `base_commit` corrected, then opens an amendment at that
+        commit (or at `amendment_base`) in the working-tree state only --
+        `WORKFLOW_STATE.json` is excluded, so this never touches plan-stage
+        identity. Returns `(script_path, amendment_base_commit)`."""
+        script_path = self._install_scripts(repo)
+        _write_second_item(repo, self.ITEM)
+        artifacts_path = repo.root / self.ARTIFACTS
+        artifacts_path.write_text(json.dumps(json.loads(artifacts_path.read_text()), indent=2) + "\n")
+        repo.commit_plan_docs_as_base()
+        state = json.loads(self._state_path(repo).read_text())
+        state["work_items"][self.ITEM]["base_commit"] = repo.base
+        self._state_path(repo).write_text(json.dumps(state))
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", "fix declared base_commit")
+        base = amendment_base or repo.head()
+        state = json.loads(self._state_path(repo).read_text())
+        state["work_items"][self.ITEM]["amendment_history"] = [
+            {"amendment_id": "0", "resolved_at_plan_revision": None},
+        ]
+        state["work_items"][self.ITEM]["amendment_base_commit"] = base
+        self._state_path(repo).write_text(json.dumps(state))
+        return script_path, base
+
+    def _edit_declaration(self, repo, *, drop=(), add=(), exclude=()):
+        artifacts_path = repo.root / self.ARTIFACTS
+        artifacts = json.loads(artifacts_path.read_text())
+        plan_stage = artifacts["plan_stage"]
+        plan_stage["protected_paths"] = sorted(
+            (set(plan_stage["protected_paths"]) - set(drop)) | set(add)
+        )
+        for path in exclude:
+            plan_stage["excluded_paths"][path] = "dropped from the design set by this amendment"
+        artifacts_path.write_text(json.dumps(artifacts, indent=2) + "\n")
+
+    def _amend_plan(self, repo, line="amended design line"):
+        plan_path = repo.root / self.PLAN
+        plan_path.write_text(plan_path.read_text() + f"{line}\n")
+
+    def _generate(self, repo, script_path, *, as_bytes=False, env=None):
+        """Writes the two author-written plan-stage preconditions for the
+        current working tree, runs the real script, and returns the
+        patch's text (its bytes with `as_bytes`), or `None` when the
+        script wrote none. `env`, when given, replaces the script's own
+        environment -- the preconditions above are always computed under
+        the caller's."""
+        digest, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(
+            repo.root, self.ITEM,
+        )
+        bundle_dir = repo.root / ".ai-review" / self.ITEM / "current"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        (bundle_dir / "REVIEW_REQUEST.md").write_text(f"stage: plan\nreview_content_id: {digest}\n")
+        _, current_head = fingerprint.current_worktree_root_and_head(repo.root)
+        (bundle_dir / "TEST_RESULTS.md").write_text(f"stage: plan (revision 1)\nhead: {current_head}\n")
+        result = subprocess.run(
+            ["bash", str(script_path), repo.base, "plan", self.ITEM],
+            cwd=repo.root, capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        patch_path = repo.root / ".ai-review" / self.ITEM / "AMENDMENT_DIFF.patch"
+        if not patch_path.is_file():
+            return None
+        return patch_path.read_bytes() if as_bytes else patch_path.read_text()
+
+    def _file_section(self, patch, path):
+        """The patch's own section for `path` (header through the next
+        `diff --git`), or `None` when it has none."""
+        marker = f"diff --git a/{path} b/{path}\n"
+        if marker not in patch:
+            return None
+        section = patch.split(marker, 1)[1]
+        return section.split("diff --git ", 1)[0]
+
+    def _preamble(self, patch):
+        fields = {}
+        for line in patch.split("diff --git ", 1)[0].splitlines():
+            if line.startswith("# ") and ": " in line:
+                key, value = line[2:].split(": ", 1)
+                fields[key] = value
+        return fields
+
+    def _assert_applies_at(self, repo, commit, patch):
+        worktree = Path(tempfile.mkdtemp(prefix="wf-amendment-apply-"))
+        try:
+            self._git(repo, "worktree", "add", "-q", "--detach", str(worktree / "wt"), commit)
+            patch_file = worktree / "AMENDMENT_DIFF.patch"
+            if isinstance(patch, bytes):
+                patch_file.write_bytes(patch)
+            else:
+                patch_file.write_text(patch)
+            result = subprocess.run(
+                ["git", "apply", "--check", str(patch_file)],
+                cwd=worktree / "wt", capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree / "wt")],
+                cwd=repo.root, capture_output=True,
+            )
+            shutil.rmtree(worktree, ignore_errors=True)
+
+    def test_uncommitted_plan_edit_gives_a_non_empty_patch_containing_it(self):
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            patch = self._generate(repo, script_path)
+            section = self._file_section(patch, self.PLAN)
+            self.assertIsNotNone(section, patch)
+            self.assertIn("+amended design line\n", section)
+            # 2.5.1 control arm: the `..HEAD` form this replaces is empty
+            # for the very same, uncommitted amendment.
+            self.assertEqual(self._git(repo, "diff", f"{base}..HEAD", "--", self.PLAN), "")
+
+    def test_new_untracked_protected_file_is_a_new_file_and_the_index_is_restored(self):
+        new_path = "docs/ai-workflow/AMENDED_DESIGN.md"
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._edit_declaration(repo, add=[new_path])
+            (repo.root / new_path).write_text("new design content\n")
+            patch = self._generate(repo, script_path)
+            section = self._file_section(patch, new_path)
+            self.assertIsNotNone(section, patch)
+            self.assertIn("new file mode", section)
+            self.assertIn("+new design content\n", section)
+            # No lingering intent-to-add: the path is untracked again.
+            self.assertEqual(self._git(repo, "ls-files", "--cached", "--", new_path), "")
+            self.assertIn(f"?? {new_path}\n", self._git(repo, "status", "--porcelain", "--", new_path))
+
+    def test_path_dropped_from_the_declaration_and_deleted_is_a_deleted_file(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._edit_declaration(repo, drop=[self.AUDIT], exclude=[self.AUDIT])
+            (repo.root / self.AUDIT).unlink()
+            patch = self._generate(repo, script_path)
+            section = self._file_section(patch, self.AUDIT)
+            self.assertIsNotNone(section, patch)
+            self.assertIn("deleted file mode", section)
+
+    def test_rename_is_a_deleted_file_plus_a_new_file_and_applies_at_the_base(self):
+        renamed = "docs/ai-workflow/WORKFLOW_V2_AUDIT_RENAMED.md"
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            self._edit_declaration(repo, drop=[self.AUDIT], add=[renamed], exclude=[self.AUDIT])
+            (repo.root / self.AUDIT).rename(repo.root / renamed)
+            self._amend_plan(repo)
+            patch = self._generate(repo, script_path)
+            self.assertIn("deleted file mode", self._file_section(patch, self.AUDIT) or "")
+            self.assertIn("new file mode", self._file_section(patch, renamed) or "")
+            self.assertNotIn("rename from", patch)
+            self._assert_applies_at(repo, base, patch)
+
+    def test_dropped_but_kept_path_changed_since_the_base_shows_its_content_diff(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._edit_declaration(repo, drop=[self.AUDIT], exclude=[self.AUDIT])
+            (repo.root / self.AUDIT).write_text("audit v2\n")
+            patch = self._generate(repo, script_path)
+            section = self._file_section(patch, self.AUDIT)
+            self.assertIsNotNone(section, patch)
+            self.assertNotIn("deleted file mode", section)
+            self.assertIn("-audit v1\n", section)
+            self.assertIn("+audit v2\n", section)
+
+    def test_dropped_but_kept_path_unchanged_since_the_base_shows_only_the_declaration_hunk(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._edit_declaration(repo, drop=[self.AUDIT])
+            patch = self._generate(repo, script_path)
+            self.assertIsNone(self._file_section(patch, self.AUDIT), patch)
+            declaration = self._file_section(patch, self.ARTIFACTS)
+            self.assertIsNotNone(declaration, patch)
+            self.assertIn(f'-      "{self.AUDIT}",\n', declaration)
+
+    def test_artifacts_absent_at_the_amendment_base_gives_the_current_only_form(self):
+        with h.ScratchRepo() as repo:
+            root_commit = repo.base  # the harness's own initial commit: no declaration yet
+            script_path, base = self._seed_open_amendment(repo, amendment_base=root_commit)
+            self.assertEqual(self._git(repo, "ls-tree", "--name-only", base, "--", self.ARTIFACTS), "")
+            self._amend_plan(repo)
+            patch = self._generate(repo, script_path)
+            current_only = sorted(h.plan_stage_protected_paths(self.ITEM) | {self.ARTIFACTS})
+            # The oracle pins the implementation's own diff options, so a
+            # configured external diff or context width cannot fail it
+            # while the product output is correct (round 2, O2).
+            expected = self._git(
+                repo, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-color",
+                "--src-prefix=a/", "--dst-prefix=b/", "--no-renames", "--binary", "-U3",
+                base, "--", *current_only,
+            )
+            self.assertEqual(patch.split("diff --git ", 1)[1], expected.split("diff --git ", 1)[1])
+            self.assertTrue(patch.endswith(expected))
+
+    def test_an_edit_to_a_non_protected_path_is_absent(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            (repo.root / ".gitignore").write_text(".ai-review/\nnot-design-content/\n")
+            (repo.root / "scripts" / "helper.py").write_text("print('tooling')\n")
+            patch = self._generate(repo, script_path)
+            self.assertIsNotNone(self._file_section(patch, self.PLAN), patch)
+            self.assertNotIn(".gitignore", patch)
+            self.assertNotIn("scripts/", patch)
+            self.assertNotIn("not-design-content", patch)
+
+    def test_archive_member_is_byte_identical_to_the_on_disk_patch(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            patch = self._generate(repo, script_path)
+            archive = repo.root / ".ai-review" / self.ITEM / "review-bundle.tar.gz"
+            with tarfile.open(archive, "r:gz") as tar:
+                member = tar.extractfile("AMENDMENT_DIFF.patch").read()
+            self.assertEqual(member, patch.encode())
+
+    def test_bundle_id_is_identical_with_and_without_the_patch(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            root_dir = repo.root / ".ai-review" / self.ITEM
+            bundle_dir = root_dir / "current"
+            self.assertIsNotNone(self._generate(repo, script_path))
+            recorded = fingerprint.read_manifest_identifiers(bundle_dir / "MANIFEST.md")["bundle_id"]
+            self.assertEqual(fingerprint.compute_bundle_id(bundle_dir)[0], recorded)
+            with tempfile.TemporaryDirectory() as tmp:
+                with tarfile.open(root_dir / "review-bundle.tar.gz", "r:gz") as tar:
+                    self.assertIn("AMENDMENT_DIFF.patch", tar.getnames())
+                    tar.extractall(tmp, filter="data")
+                self.assertEqual(fingerprint.compute_bundle_id(Path(tmp) / "current")[0], recorded)
+            (root_dir / "AMENDMENT_DIFF.patch").unlink()
+            self.assertEqual(fingerprint.compute_bundle_id(bundle_dir)[0], recorded)
+
+    def test_after_resolution_the_patch_is_removed_and_leaves_the_archive(self):
+        with h.ScratchRepo() as repo:
+            script_path, _ = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            root_dir = repo.root / ".ai-review" / self.ITEM
+            self.assertIsNotNone(self._generate(repo, script_path))
+            state = json.loads(self._state_path(repo).read_text())
+            state["work_items"][self.ITEM]["amendment_history"][-1]["resolved_at_plan_revision"] = 1
+            self._state_path(repo).write_text(json.dumps(state))
+            self.assertIsNone(self._generate(repo, script_path))
+            self.assertFalse((root_dir / "AMENDMENT_DIFF.patch").exists())
+            with tarfile.open(root_dir / "review-bundle.tar.gz", "r:gz") as tar:
+                self.assertNotIn("AMENDMENT_DIFF.patch", tar.getnames())
+
+    def test_preamble_fields_equal_the_manifest_and_state(self):
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            patch = self._generate(repo, script_path)
+            self.assertTrue(patch.startswith("# AMENDMENT_DIFF.patch"))
+            preamble = self._preamble(patch)
+            manifest_text = (repo.root / ".ai-review" / self.ITEM / "current" / "MANIFEST.md").read_text()
+            manifest = dict(
+                line.split(": ", 1) for line in manifest_text.splitlines()
+                if line.split(": ", 1)[0] in ("work_item_id", "plan_revision", "review_content_id")
+            )
+            self.assertEqual(len(manifest), 3, manifest_text)
+            for key, value in manifest.items():
+                self.assertEqual(preamble.get(key), value, key)
+            self.assertEqual(preamble.get("amendment_base_commit"), base)
+            self.assertEqual(preamble.get("amendment_id"), "0")
+
+    def test_git_apply_check_accepts_the_patch_against_the_amendment_base(self):
+        new_path = "docs/ai-workflow/AMENDED_DESIGN.md"
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            self._amend_plan(repo)
+            self._edit_declaration(repo, add=[new_path])
+            (repo.root / new_path).write_text("new design content\n")
+            patch = self._generate(repo, script_path)
+            self._assert_applies_at(repo, base, patch)
+
+    def test_non_utf8_and_binary_protected_content_generates_an_applicable_patch(self):
+        """Implementation review round 1, Important 4: a protected file
+        that is not valid UTF-8 aborted the whole plan-stage generation
+        while an amendment was open (`text=True` capture). The patch is
+        bytes end to end now, and `--binary` keeps a binary protected
+        file applicable."""
+        binary_path = "docs/ai-workflow/AMENDED_DIAGRAM.bin"
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            # The plan itself must stay UTF-8 (its title line is parsed);
+            # any other protected file carries no such constraint.
+            audit_path = repo.root / self.AUDIT
+            audit_path.write_bytes(audit_path.read_bytes() + b"caf\xe9 latin-1 design line\n")
+            self._edit_declaration(repo, add=[binary_path])
+            (repo.root / binary_path).write_bytes(bytes(range(256)) * 4)
+            patch = self._generate(repo, script_path, as_bytes=True)
+            self.assertIsNotNone(patch)
+            self.assertTrue(patch.startswith(b"# AMENDMENT_DIFF.patch"))
+            self.assertIn(b"+caf\xe9 latin-1 design line\n", patch)
+            self.assertIn(f"diff --git a/{binary_path} b/{binary_path}\n".encode(), patch)
+            self.assertIn(b"GIT binary patch", patch)
+            self._assert_applies_at(repo, base, patch)
+
+    def test_patch_is_byte_stable_under_a_hostile_global_git_config(self):
+        """Implementation review round 1, Important 5: every git option
+        that shapes the patch is pinned on the command line, so a user's
+        `diff.noprefix`, `diff.mnemonicPrefix`, `color.ui=always`,
+        `diff.external` or `diff.renames` changes nothing -- byte for
+        byte -- and `git apply --check` still accepts it."""
+        renamed = "docs/ai-workflow/WORKFLOW_V2_AUDIT_RENAMED.md"
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            self._edit_declaration(repo, drop=[self.AUDIT], add=[renamed], exclude=[self.AUDIT])
+            (repo.root / self.AUDIT).rename(repo.root / renamed)
+            self._amend_plan(repo)
+            baseline = self._generate(repo, script_path, as_bytes=True)
+            self.assertIsNotNone(baseline)
+
+            config_dir = Path(tempfile.mkdtemp(prefix="wf-hostile-git-config-"))
+            try:
+                external = config_dir / "external-diff.sh"
+                external.write_text("#!/bin/sh\necho EXTERNAL-DIFF-RAN\n")
+                external.chmod(0o755)
+                hostile = config_dir / "gitconfig"
+                hostile.write_text(
+                    "[diff]\n"
+                    "\tnoprefix = true\n"
+                    "\tmnemonicPrefix = true\n"
+                    "\trenames = copies\n"
+                    f"\texternal = {external}\n"
+                    "[color]\n"
+                    "\tui = always\n"
+                    "\tdiff = always\n"
+                )
+                env = dict(os.environ, GIT_CONFIG_GLOBAL=str(hostile))
+                hostile_patch = self._generate(repo, script_path, as_bytes=True, env=env)
+            finally:
+                shutil.rmtree(config_dir, ignore_errors=True)
+            self.assertEqual(hostile_patch, baseline)
+            self.assertNotIn(b"EXTERNAL-DIFF-RAN", hostile_patch)
+            self.assertNotIn(b"\x1b[", hostile_patch)
+            self._assert_applies_at(repo, base, hostile_patch)
+
+    def test_mid_file_edit_keeps_context_under_a_zero_context_config_and_environment(self):
+        """Implementation review round 2, O1: `diff.context=0` and
+        `GIT_DIFF_OPTS=--unified=0` would give a mid-file edit a
+        zero-context hunk `git apply --check` rejects; the pinned `-U3`
+        and the scrubbed environment keep the patch byte-identical and
+        applicable."""
+        with h.ScratchRepo() as repo:
+            script_path, base = self._seed_open_amendment(repo)
+            plan_path = repo.root / self.PLAN
+            state_bytes = self._state_path(repo).read_bytes()
+            plan_path.write_text(plan_path.read_text() + "".join(f"design line {i}\n" for i in range(12)))
+            self._git(repo, "add", "--", self.PLAN)
+            self._git(repo, "commit", "-q", "-m", "a multi-line plan at the amendment base")
+            base = repo.head()
+            state = json.loads(state_bytes)
+            state["work_items"][self.ITEM]["amendment_base_commit"] = base
+            self._state_path(repo).write_text(json.dumps(state))
+            plan_path.write_text(plan_path.read_text().replace(
+                "design line 6\n", "design line 6, amended mid-file\n"))
+            baseline = self._generate(repo, script_path, as_bytes=True)
+            self.assertIn(b" design line 5\n-design line 6\n+design line 6, amended mid-file\n", baseline)
+
+            config_dir = Path(tempfile.mkdtemp(prefix="wf-zero-context-git-config-"))
+            try:
+                hostile = config_dir / "gitconfig"
+                hostile.write_text("[diff]\n\tcontext = 0\n")
+                env = dict(os.environ, GIT_CONFIG_GLOBAL=str(hostile), GIT_DIFF_OPTS="--unified=0")
+                zero_context = subprocess.run(
+                    ["git", "diff", base, "--", self.PLAN], cwd=repo.root, env=env,
+                    check=True, capture_output=True,
+                ).stdout
+                self.assertNotIn(b"\n design line 5\n", zero_context)  # the hazard is real
+                hostile_patch = self._generate(repo, script_path, as_bytes=True, env=env)
+            finally:
+                shutil.rmtree(config_dir, ignore_errors=True)
+            self.assertEqual(hostile_patch, baseline)
+            self._assert_applies_at(repo, base, hostile_patch)
+
+    def test_runner_diff_opts_and_global_pathspec_modes_move_neither_product_nor_oracle(self):
+        """Implementation review round 3, O1/O3: a `GIT_DIFF_OPTS` or a
+        global glob/icase pathspec mode in the runner's own environment
+        neither aborts generation (Git refuses `--literal-pathspecs`
+        alongside those modes) nor shifts the oracle off the product."""
+        for hostile in ({"GIT_DIFF_OPTS": "--unified=0"}, {"GIT_GLOB_PATHSPECS": "1"},
+                        {"GIT_ICASE_PATHSPECS": "1"}, {"GIT_NOGLOB_PATHSPECS": "1"}):
+            with self.subTest(env=hostile), mock.patch.dict(os.environ, hostile):
+                self.test_artifacts_absent_at_the_amendment_base_gives_the_current_only_form()
+
+
 class TestPrepareAiReviewShImplementationStageHeadGuard(unittest.TestCase):
     """GPT-R42-001: an implementation/post-fix bundle must not be
     finalized while `WORKFLOW_STATE.json`'s own
@@ -1466,6 +1894,41 @@ class TestPrepareAiReviewShImplementationStageHeadGuard(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest_text = (bundle_dir / "MANIFEST.md").read_text()
             self.assertIn(f"reviewed_implementation_head: {impl_head}", manifest_text)
+
+    def test_stale_amendment_diff_patch_is_never_archived_at_the_implementation_stage(self):
+        """Implementation review round 1, Optional 1: once an amendment has
+        resolved, the plan stage's last `AMENDMENT_DIFF.patch` can still
+        sit next to `current/`. The archive includes it only at the plan
+        stage, so an implementation or post-fix archive never ships that
+        stale plan-stage copy."""
+        with h.ScratchRepo() as repo:
+            work_item_id = "wi"
+            impl_head = self._seed_and_implement(repo, work_item_id)
+            self._write_review_request(repo, work_item_id, repo.base, impl_head)
+            entry = ws.default_work_item(
+                work_item_id=work_item_id, work_item_type="process", work_item_kind="process",
+                plan_path="docs/ai-workflow/WORKFLOW_V2_PLAN.md",
+                registry_path=f"docs/ai-workflow/registry/{work_item_id}-registry.json",
+                mapping_path=f"docs/ai-workflow/requirements/{work_item_id}-mapping.json",
+                base_commit=repo.base, governing_workflow_version="1",
+                plan_revision=1, last_transition="t0",
+            )
+            entry["reviewed_implementation_head"] = impl_head
+            entry["implementation_revision"] = 1
+            repo.write_workflow_state(active_work_item_id=work_item_id, **{work_item_id: entry})
+            root_dir = repo.root / ".ai-review" / work_item_id
+            (root_dir / "AMENDMENT_DIFF.patch").write_text("# stale plan-stage patch\n")
+
+            script_path = self._install_scripts(repo)
+            result = subprocess.run(
+                ["bash", str(script_path), repo.base, "post-fix", work_item_id],
+                cwd=repo.root, capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with tarfile.open(root_dir / "review-bundle.tar.gz", "r:gz") as tar:
+                names = tar.getnames()
+            self.assertIn("current", names)
+            self.assertNotIn("AMENDMENT_DIFF.patch", names)
 
     def test_interrupted_after_durability_commit_resumes_without_a_second_commit(self):
         """Item 227 (`WF8c`): a simulated interruption after the
@@ -2104,6 +2567,226 @@ class TestBundleRelocation(unittest.TestCase):
             (dest_dir / "a.txt").write_bytes(b"same")
             source_snapshot = {"a.txt": hashlib.sha256(b"same").hexdigest()}
             fingerprint.verify_relocation_file_set_complete(source_snapshot, dest_dir)  # must not raise
+
+
+
+class TestPrepareAiReviewShPlanStageStaging(unittest.TestCase):
+    """workflow-2.6.0 CP4 (`D-Plan-Review-Bundle-Binding` item 5, the
+    revised `WFR-67`): the plan stage assembles into
+    `.ai-review/<id>/current.staging-<token>/` with a staging pin and
+    archive, reads its author inputs from `plan-inputs/`, and renames into
+    place only after the closing checks pass. A failed generation discards
+    the staging area and leaves the previous `current/`, archive and
+    `.pin` byte-identical -- no withdrawal, no `REJECTED` marker. Driven
+    end to end through the real `prepare-ai-review.sh`."""
+
+    ITEM = "stage-item"
+
+    def _install_scripts(self, repo):
+        scripts_dir = repo.root / "scripts"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+            shutil.copy(_REAL_SCRIPTS_DIR / name, scripts_dir / name)
+        script_path = scripts_dir / "prepare-ai-review.sh"
+        script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
+        return script_path
+
+    def _seed(self, repo):
+        script_path = self._install_scripts(repo)
+        _write_second_item(repo, self.ITEM)
+        repo.commit_plan_docs_as_base()
+        state_path = repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+        state = json.loads(state_path.read_text())
+        state["work_items"][self.ITEM]["base_commit"] = repo.base
+        state_path.write_text(json.dumps(state))
+        subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "fix declared base_commit"], cwd=repo.root, check=True)
+        return script_path
+
+    def _item_root(self, repo):
+        return repo.root / ".ai-review" / self.ITEM
+
+    def _write_inputs(self, repo, *, where="plan-inputs", test_results=None, review_request=None):
+        target = self._item_root(repo) / where
+        target.mkdir(parents=True, exist_ok=True)
+        digest, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(repo.root, self.ITEM)
+        _, head = fingerprint.current_worktree_root_and_head(repo.root)
+        (target / "REVIEW_REQUEST.md").write_text(
+            review_request if review_request is not None else f"stage: plan\nreview_content_id: {digest}\n"
+        )
+        (target / "TEST_RESULTS.md").write_text(
+            test_results if test_results is not None else f"stage: plan (revision 1)\nhead: {head}\n"
+        )
+        (target / "CONTEXT_FILES.txt").write_text("")
+        return target
+
+    def _run(self, repo, script_path):
+        return subprocess.run(
+            ["bash", str(script_path), repo.base, "plan", self.ITEM],
+            cwd=repo.root, capture_output=True, text=True,
+        )
+
+    def _tree_digest(self, path: Path) -> dict:
+        if path.is_file():
+            return {"": hashlib.sha256(path.read_bytes()).hexdigest()}
+        return {
+            p.relative_to(path).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(path.rglob("*")) if p.is_file()
+        }
+
+    def _published_snapshot(self, repo):
+        root = self._item_root(repo)
+        return {
+            name: self._tree_digest(root / name)
+            for name in ("current", "review-bundle.tar.gz", ".pin")
+        }
+
+    def _assert_no_staging_left(self, repo):
+        names = sorted(p.name for p in self._item_root(repo).iterdir())
+        leftovers = [n for n in names if n.startswith(("current.staging-", ".pin.staging-", "current.old-", ".pin.old-"))]
+        self.assertEqual(leftovers, [], names)
+
+    def _assert_bundle_self_consistent(self, repo):
+        bundle = self._item_root(repo) / "current"
+        recorded = fingerprint.read_manifest_identifiers(bundle / "MANIFEST.md")["bundle_id"]
+        self.assertEqual(fingerprint.compute_bundle_id(bundle)[0], recorded)
+        self.assertEqual(
+            fingerprint.compute_archived_bundle_id(self._item_root(repo) / "review-bundle.tar.gz"), recorded,
+        )
+
+    def test_success_promotes_the_staging_generation_from_plan_inputs(self):
+        with h.ScratchRepo() as repo:
+            script_path = self._seed(repo)
+            inputs = self._write_inputs(repo)
+            before_inputs = self._tree_digest(inputs)
+            result = self._run(repo, script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("current.staging-", result.stdout)
+            bundle = self._item_root(repo) / "current"
+            self.assertEqual((bundle / "REVIEW_REQUEST.md").read_bytes(), (inputs / "REVIEW_REQUEST.md").read_bytes())
+            self.assertEqual((bundle / "TEST_RESULTS.md").read_bytes(), (inputs / "TEST_RESULTS.md").read_bytes())
+            self.assertEqual((bundle / "IMPLEMENTATION_SUMMARY.md").read_bytes(), b"")
+            self.assertTrue((self._item_root(repo) / ".pin").is_dir())
+            self.assertEqual(self._tree_digest(inputs), before_inputs, "plan-inputs/ is never written")
+            self._assert_bundle_self_consistent(repo)
+            self._assert_no_staging_left(repo)
+
+    def test_a_failed_generation_leaves_the_previous_bundle_byte_identical(self):
+        """Section 3.3's two variants: a stale `TEST_RESULTS.md` (fails at
+        finalization) and a stale `REVIEW_REQUEST.md` (fails inside
+        `--write-manifest`, before finalization -- the variant that used to
+        leave a mixed bundle)."""
+        for variant in ("stale TEST_RESULTS.md", "stale REVIEW_REQUEST.md"):
+            with self.subTest(variant=variant), h.ScratchRepo() as repo:
+                script_path = self._seed(repo)
+                self._write_inputs(repo)
+                self.assertEqual(self._run(repo, script_path).returncode, 0)
+                before = self._published_snapshot(repo)
+                plan_path = repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md"
+                plan_path.write_text(plan_path.read_text() + "an edit the next round publishes\n")
+                if variant == "stale TEST_RESULTS.md":
+                    self._write_inputs(repo, test_results="stage: implementation\n")
+                else:
+                    self._write_inputs(repo, review_request="stage: plan\nreview_content_id: " + "0" * 64 + "\n")
+                result = self._run(repo, script_path)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self._published_snapshot(repo), before)
+                self.assertFalse((self._item_root(repo) / "REJECTED").exists())
+                self.assertEqual(list(self._item_root(repo).glob("current.rejected-*")), [])
+                self._assert_no_staging_left(repo)
+                fingerprint.assert_bundle_not_rejected(repo.root, self.ITEM)
+
+    def test_a_pre_existing_rejected_marker_survives_failure_and_is_cleared_by_success(self):
+        with h.ScratchRepo() as repo:
+            script_path = self._seed(repo)
+            self._write_inputs(repo)
+            self.assertEqual(self._run(repo, script_path).returncode, 0)
+            marker = self._item_root(repo) / "REJECTED"
+            marker.write_text("REJECTED: left by an earlier withdrawal\n")
+            self._write_inputs(repo, test_results="")
+            self.assertNotEqual(self._run(repo, script_path).returncode, 0)
+            with self.assertRaises(fingerprint.BundleRejectedError):
+                fingerprint.assert_bundle_not_rejected(repo.root, self.ITEM)
+            self._write_inputs(repo)
+            self.assertEqual(self._run(repo, script_path).returncode, 0)
+            self.assertFalse(marker.exists())
+
+    def test_inputs_seed_from_current_when_plan_inputs_has_none(self):
+        """The migration path: an author who still writes into `current/`
+        (read-only to the generator) gets exactly those bytes, and the
+        resulting `bundle_id` equals the one the same bytes produce from
+        `plan-inputs/` -- the bundle hashes content by relative path, never
+        by where the author file came from (INV-8)."""
+        with h.ScratchRepo() as repo:
+            script_path = self._seed(repo)
+            inputs = self._write_inputs(repo)
+            self.assertEqual(self._run(repo, script_path).returncode, 0)
+            from_inputs = fingerprint.read_manifest_identifiers(
+                self._item_root(repo) / "current" / "MANIFEST.md")["bundle_id"]
+            shutil.rmtree(inputs)
+            self.assertEqual(self._run(repo, script_path).returncode, 0)
+            from_current = fingerprint.read_manifest_identifiers(
+                self._item_root(repo) / "current" / "MANIFEST.md")["bundle_id"]
+            self.assertEqual(from_current, from_inputs)
+            self._assert_bundle_self_consistent(repo)
+
+    def test_seed_plan_review_inputs_sources_and_refusals(self):
+        with h.ScratchRepo() as repo:
+            _write_second_item(repo, self.ITEM)
+            item_root = self._item_root(repo)
+            (item_root / "plan-inputs").mkdir(parents=True)
+            (item_root / "current").mkdir()
+            (item_root / "plan-inputs" / "REVIEW_REQUEST.md").write_text("from inputs\n")
+            (item_root / "current" / "REVIEW_REQUEST.md").write_text("from current\n")
+            (item_root / "current" / "TEST_RESULTS.md").write_text("seeded\n")
+            script = item_root / "current" / "CONTEXT_FILES.txt"
+            script.write_text("")
+            script.chmod(0o755)
+            dest = Path(tempfile.mkdtemp(prefix="wf-seed-"))
+            self.addCleanup(shutil.rmtree, dest, True)
+            sources = fingerprint.seed_plan_review_inputs(repo.root, self.ITEM, dest)
+            self.assertEqual(sources, {
+                "REVIEW_REQUEST.md": "plan-inputs", "TEST_RESULTS.md": "current",
+                "CONTEXT_FILES.txt": "current", "IMPLEMENTATION_SUMMARY.md": "stub",
+            })
+            self.assertEqual((dest / "REVIEW_REQUEST.md").read_text(), "from inputs\n")
+            self.assertEqual((dest / "TEST_RESULTS.md").read_text(), "seeded\n")
+            self.assertTrue(os.access(dest / "CONTEXT_FILES.txt", os.X_OK), "the executable bit is hashed")
+            self.assertEqual((dest / "IMPLEMENTATION_SUMMARY.md").read_bytes(), b"")
+            self.assertEqual((item_root / "current" / "REVIEW_REQUEST.md").read_text(), "from current\n")
+            (item_root / "plan-inputs" / "TEST_RESULTS.md").symlink_to(item_root / "current" / "TEST_RESULTS.md")
+            with self.assertRaises(fingerprint.PlanReviewInputPathError):
+                fingerprint.seed_plan_review_inputs(repo.root, self.ITEM, dest)
+
+    def test_leftovers_of_an_interrupted_generation_are_removed_by_the_next(self):
+        with h.ScratchRepo() as repo:
+            script_path = self._seed(repo)
+            self._write_inputs(repo)
+            item_root = self._item_root(repo)
+            for name in ("current.staging-" + "a" * 32, ".pin.staging-" + "a" * 32, "current.old-" + "b" * 32):
+                (item_root / name / "current").mkdir(parents=True)
+            self.assertEqual(self._run(repo, script_path).returncode, 0)
+            self._assert_no_staging_left(repo)
+
+    def test_staging_paths_validate_the_token(self):
+        with h.ScratchRepo() as repo:
+            for bad in ("", "../x", "A" * 32, "a" * 31):
+                with self.subTest(token=bad), self.assertRaises(fingerprint.InvalidStagingTokenError):
+                    fingerprint.plan_stage_staging_paths(repo.root, self.ITEM, bad)
+            paths = fingerprint.plan_stage_staging_paths(repo.root, self.ITEM, "f" * 32)
+            self.assertEqual(paths["bundle_dir"].name, "current")
+            self.assertEqual(paths["root"].parent, paths["pin_dir"].parent)
+
+    def test_resolve_plan_review_inputs_dir_is_a_sibling_of_current(self):
+        with h.ScratchRepo() as repo:
+            self.assertEqual(
+                fingerprint.resolve_plan_review_inputs_dir(repo.root, self.ITEM),
+                Path(".ai-review") / self.ITEM / "plan-inputs",
+            )
+            self.assertEqual(
+                fingerprint.resolve_plan_review_inputs_dir(repo.root, self.ITEM).parent,
+                fingerprint.resolve_bundle_dir(repo.root, self.ITEM, stage="plan").parent,
+            )
 
 
 if __name__ == "__main__":

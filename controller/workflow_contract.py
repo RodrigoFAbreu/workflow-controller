@@ -122,6 +122,12 @@ _OPERATOR_GIT_SCOPES = frozenset({"system", "global", "command"})
 #: A test installs every hook githooks(5) names and runs Workflow's queries
 #: in place to check this.
 _QUERY_HOOK_EVENTS = ("post-index-change",)
+#: The first Git release that reads a boolean ``core.fsmonitor`` as its
+#: built-in daemon (on) or as none (off). An earlier Git, the 2.35
+#: maintenance releases included, runs any value but an empty one as the
+#: path of an fsmonitor program, ``true`` and ``false`` among them, and
+#: fails on the key written without a value.
+_GIT_BOOLEAN_FSMONITOR = (2, 36)
 #: The probe that stands in for a refused filter driver's program
 #: (:func:`_filter_probe`) finds the private directory in this environment
 #: variable, so no byte of the directory's path goes through Git's ``%``
@@ -636,8 +642,9 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
 
     Hooks for other events are switched off as well; the query's Git never
     fires them. Git's built-in fsmonitor daemon (``core.fsmonitor`` a
-    boolean) is Git's own code and reports what a full stat check finds, so
-    switching it off leaves the answer unchanged.
+    boolean, from Git 2.36 on) is Git's own code and reports what a full
+    stat check finds, so switching it off leaves the answer unchanged. An
+    older Git runs a boolean as a program's path, so there it is refused.
 
     The configuration is read again under that environment, and each
     setting must be in force as the last, command-scope value."""
@@ -885,17 +892,37 @@ def _refuse_fsmonitor_programs(run: _PreflightGit, env: dict[str, str],
     environment's ``GIT_TEST_FSMONITOR``. The program decides which paths
     Git re-checks, and may edit the files Workflow hashes. Git decides
     what is a boolean: ``git config --type=bool`` exits 0 for one and 1 for
-    an unset key."""
+    an unset key. A Git older than :data:`_GIT_BOOLEAN_FSMONITOR` reads no
+    boolean there, so under it every value but an empty one is refused."""
     completed = run.completed(["config", "--type=bool", "--get", "core.fsmonitor"], env)
+    value = next((value for _scope, key, value in reversed(entries) if key == "core.fsmonitor"), "")
     if completed.returncode == 0:
-        return
+        if value == "":
+            return
+        release, version = _git_release(run, env)
+        if version >= _GIT_BOOLEAN_FSMONITOR:
+            return
+        if value is None:
+            raise _not_isolated(
+                context, "fsmonitor",
+                f"core.fsmonitor is set without a value, which Git {release} cannot read (Git reads a "
+                f"boolean there from 2.36 on), so Workflow's Git fails where the Controller's would not",
+                program=None, git_release=release,
+            )
+        raise _not_isolated(
+            context, "fsmonitor",
+            f"core.fsmonitor {value!r} is a boolean from Git 2.36 on, but Git {release} runs it as the "
+            f"fsmonitor program {value!r} during the query, and the Controller cannot know what it "
+            f"reports or changes",
+            program=value, git_release=release,
+        )
     if completed.returncode == 1:
         program: str | None = env.get("GIT_TEST_FSMONITOR", "")
         if not program:
             return
         source = "the environment's GIT_TEST_FSMONITOR"
     else:
-        program = next((value for _scope, key, value in reversed(entries) if key == "core.fsmonitor"), None)
+        program = value
         source = f"core.fsmonitor, which Git reads as no boolean ({_last_line(completed.stderr) or 'no output'}),"
     raise _not_isolated(
         context, "fsmonitor",
@@ -903,6 +930,19 @@ def _refuse_fsmonitor_programs(run: _PreflightGit, env: dict[str, str],
         f"query, and the Controller cannot know what it reports or changes",
         program=program,
     )
+
+
+def _git_release(run: _PreflightGit, env: dict[str, str]) -> tuple[str, tuple[int, int]]:
+    """The release ``git version`` names, which is the query's Git (the same
+    ``git`` on the same ``PATH``), and its major and minor numbers:
+    ``(0, 0)``, older than every release, when it does not start with
+    them."""
+    release = os.fsdecode(run(["version"], env)).strip().removeprefix("git version ")
+    major, _, rest = release.partition(".")
+    minor = rest.partition(".")[0]
+    if major.isascii() and major.isdecimal() and minor.isascii() and minor.isdecimal():
+        return release, (int(major), int(minor))
+    return release, (0, 0)
 
 
 def _refuse_populated_submodules(root: Path, run: _PreflightGit, env: dict[str, str], context: dict) -> None:

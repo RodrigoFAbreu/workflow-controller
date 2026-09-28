@@ -600,6 +600,10 @@ DOCUMENTED_HOOKS = (
     "update",
 )
 
+#: A Git older than 2.36, for the live check that it runs a boolean
+#: ``core.fsmonitor`` as a program. Opt-in: no such Git is installed here.
+OLD_GIT = os.environ.get("CONTROLLER_TEST_OLD_GIT")
+
 
 class GitIsolationTest(_SeededTargets):
     """Each plant is shown live first: Git run in place, as the Workflow
@@ -620,6 +624,14 @@ class GitIsolationTest(_SeededTargets):
 
     def git_config(self, *args: str) -> None:
         _git(self.root, "config", *args)
+
+    def git_reporting(self, release: str) -> dict[str, str]:
+        """``PATH`` with a ``git`` first that names ``release`` for ``git
+        version`` and runs the real Git for everything else."""
+        shim = _executable(self.root.parent / "git-shim" / "git",
+                           f'[ "$1" = version ] && {{ echo "git version {release}"; exit 0; }}\n'
+                           f'exec "{shutil.which("git")}" "$@"')
+        return {"PATH": f"{shim.parent}{os.pathsep}{os.environ['PATH']}"}
 
     def attributes(self, line: str) -> None:
         info = self.root / ".git" / "info"
@@ -908,14 +920,66 @@ class GitIsolationTest(_SeededTargets):
         self.assert_workflow_drifts_where_the_controller_refuses(plant, "fsmonitor")
 
     def test_the_builtin_fsmonitor_is_switched_off(self) -> None:
-        # A boolean is Git's own daemon, not a program the target chooses:
-        # it reports what a full stat check finds, so switching it off
-        # leaves the answer Workflow's, and no daemon starts in the target.
+        # From Git 2.36, a boolean is Git's own daemon, not a program the
+        # target chooses: it reports what a full stat check finds, so
+        # switching it off leaves the answer Workflow's, and no daemon
+        # starts in the target.
         for value in ("true", "false", "1"):
             with self.subTest(value=value):
                 self.fresh()
                 self.git_config("core.fsmonitor", value)
                 self.assert_queries_run_nothing()
+
+    def test_a_boolean_fsmonitor_is_refused_under_a_git_before_2_36(self) -> None:
+        # The external review's finding (round 4): before 2.36, Git runs a
+        # boolean as the path of the fsmonitor program (`true` runs the first
+        # `true` on PATH), and fails on the key without a value. Shown live
+        # by the opt-in test below.
+        for release, value in (("2.35.8", "true"), ("2.35.1", "false"), ("2.31.0", "1"),
+                               ("2.35.1.windows.2", "yes"), ("unknown", "true"), ("2.35.8", None)):
+            with self.subTest(release=release, value=value):
+                root = self.fresh()
+                if value is None:
+                    with (root / ".git" / "config").open("a") as handle:
+                        handle.write("[core]\n\tfsmonitor\n")
+                else:
+                    self.git_config("core.fsmonitor", value)
+                with mock.patch.dict(os.environ, self.git_reporting(release)):
+                    error = self.assert_refused("fsmonitor")
+                self.assertEqual((error.evidence["program"], error.evidence["git_release"]), (value, release))
+
+    def test_an_empty_fsmonitor_or_a_git_from_2_36_leaves_the_answer_workflows(self) -> None:
+        # An empty value is no fsmonitor in every release, and from 2.36 a
+        # boolean is the built-in daemon, switched off as above.
+        for release, value in (("2.35.8", ""), ("2.36.0", "true"), ("2.36.0", "false")):
+            with self.subTest(release=release, value=value):
+                self.fresh()
+                self.git_config("core.fsmonitor", value)
+                with mock.patch.dict(os.environ, self.git_reporting(release)):
+                    self.assert_queries_run_nothing()
+
+    @unittest.skipUnless(OLD_GIT, "set CONTROLLER_TEST_OLD_GIT to a Git older than 2.36 to run this live check")
+    def test_a_boolean_fsmonitor_a_git_before_2_36_runs_is_refused_where_workflow_drifts(self) -> None:
+        # Live: `core.fsmonitor = true` under that Git runs the first `true`
+        # on PATH, here one that edits the plan, so Workflow's query answers
+        # row 4a where the Controller, switching it off, answered row 2.
+        release = fixtures.run([OLD_GIT, "version"]).stdout.strip().removeprefix("git version ")
+        self.assertLess(tuple(int(part) for part in release.split(".")[:2]), (2, 36), release)
+        scratch = Path(tempfile.mkdtemp(prefix="old-git-", dir=self._scratch))
+        (scratch / "git").mkdir()
+        (scratch / "git" / "git").symlink_to(OLD_GIT)
+        _executable(scratch / "plant" / "true", f"echo planted edit >> {self.PLAN}; exit 1")
+        old_git = {**os.environ, "PATH": f"{scratch / 'git'}{os.pathsep}{os.environ['PATH']}"}
+
+        def plant(root: Path) -> None:
+            # The target's own Git records the fsmonitor extension in the
+            # index, as any use of it does, before the planted `true` is on
+            # its PATH.
+            fixtures.run(["git", "config", "core.fsmonitor", "true"], cwd=root, env=old_git)
+            fixtures.run(["git", "status", "--porcelain"], cwd=root, env=old_git)
+
+        with mock.patch.dict(os.environ, {"PATH": f"{scratch / 'plant'}{os.pathsep}{old_git['PATH']}"}):
+            self.assert_workflow_drifts_where_the_controller_refuses(plant, "fsmonitor")
 
     def test_no_diff_driver_runs(self) -> None:
         # The queries never ask Git for a patch, so a textconv or external

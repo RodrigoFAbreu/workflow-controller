@@ -27,10 +27,9 @@ and the result is released as 1.3.0.
 
 ## Functional review checklist
 
-Technical approval: not current. Implementation revision 5's approval (`6151258`, reviewed head
-`0624a71`) was marked stale at `bf8f0c9` by functional review round 1's bounded fix. Revision 6
-(reviewed head `bf8f0c9`) needs both implementation-review stages and `/approve-review
-implementation` before this checklist is re-tested. Put findings in
+Technical approval: `930e1bc` (implementation revision 6, reviewed head `bf8f0c9`). Revision 5's
+approval (`6151258`) was marked stale at `bf8f0c9` by functional review round 1's bounded fix; both
+implementation-review stages then approved revision 6. Put findings in
 `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
 
 **Round 1 and what to re-test.** Round 1 ran against checklist `eeeb4fa`. Every flow passed but
@@ -41,8 +40,9 @@ I: PR #5's CI was red (F1, a test-only defect). The bounded fix:
   the system and the global scope;
 - `81b50af` rewords the 1.3.0 notes' sentence on a hook command, a submodule and an old Git.
 
-No production code changed. Re-test I (CI was green at `56fdba4`: runs `36454058586` and
-`36454057768`), H (`GitIsolationTest` changed) and J (the reworded sentence). A-G are unaffected.
+No production code changed. Re-test I (CI was green at `56fdba4`, runs `36454058586` and
+`36454057768`, and at `0938a87`, after the checklist fix `720ad48`, runs `36457502102` and
+`36457501602`), H (`GitIsolationTest` changed) and J (the reworded sentence). A-G are unaffected.
 
 **Setup.**
 

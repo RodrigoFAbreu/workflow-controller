@@ -120,42 +120,69 @@ every Workflow-derived test to the new release at once.
   an fsmonitor. The implementation review reproduced a clean filter running
   during the status query. So every Git command of a query inherits an
   environment with a private copy of the target's index (the target is never
-  written, `.git` included), no transport (`GIT_ALLOW_PROTOCOL` empty), and
+  written, `.git` included, though Git's read moves a split index's shared
+  file's modification time on), no transport (`GIT_ALLOW_PROTOCOL` empty), and
   command-scope settings (`GIT_CONFIG_COUNT`, which override every file):
   `core.hooksPath` is `/dev/null`, fsmonitor, split-index writes and
   signature checks are off, every filter driver any configuration file
   defines has empty `clean`/`smudge`/`process`, and every configured hook is
   disabled. The Controller reads the configuration back and requires each
-  setting to be in force. What it cannot switch off refuses the query before
-  it runs (`query_git_not_isolated`): a `hook.<name>.command` in the
-  target's own configuration (a Git that runs configured hooks may not honour
-  disabling them), a populated submodule (its Git reads its own
-  configuration), or a Git that does not apply the settings (before 2.31).
-  Diff drivers, signature programs and transports stay configured but idle:
-  the 2.6.0 queries never ask for a patch, a log, a checkout or a fetch, and
-  admitting a later release re-checks that.
-- **Isolation never changes an answer.** A query must give Workflow's answer
-  or none. Switching a facility off is safe only where that holds. The
-  second implementation review round showed that it did not hold for
-  filters: a clean filter changes the bytes `git hash-object` hashes. An
-  uppercasing filter made the Controller report a drifted plan bundle
-  `BOUND` (rows 2/3) where Workflow reports row 4a/4c. So a driver with a
-  `clean` or `process` program is also marked `required`, and Git fails
-  wherever it would run the program, which fails the query
-  (`query_failed`). Git decides where a filter applies, so the query fails
-  exactly when Workflow's answer would depend on the program, and answers
-  as usual otherwise. A check of attributes before the query could not
-  list every path `git hash-object` may be given (ignored files, files in
-  an untracked nested repository). It would also refuse every repository
-  that uses Git LFS. This relies on the query letting a failing Git command
-  fail it, which 2.6.0's does, and admitting a later release re-checks it.
-  The other facilities were checked the same way:
-  - hooks, split-index writes and signature checks feed nothing the queries
-    read;
-  - without fsmonitor, Git stat-checks every path. It can only find more
-    changed paths, which Workflow's classification gate refuses, never
-    fewer;
-  - no transport only turns a lazy fetch into a failure.
+  setting to be in force. A Git that does not apply the settings (before
+  2.31) refuses the query before it runs (`query_git_not_isolated`), as do
+  a `hook.<name>.command` in the target's own configuration (a Git that
+  runs configured hooks may not honour disabling them) and a populated
+  submodule (its Git reads its own configuration). Diff drivers, signature
+  programs and transports stay configured but idle: the 2.6.0 queries never
+  ask for a patch, a log, a checkout or a fetch, and admitting a later
+  release re-checks that.
+- **A query gives Workflow's answer or none.** Switching a program off is
+  safe only where Workflow's answer cannot change, and the implementation
+  reviews showed three kinds of program for which it can. The second round
+  found filters: a clean filter changes the bytes `git hash-object`
+  hashes, and an uppercasing filter made the Controller report a drifted
+  plan bundle `BOUND` (rows 2/3) where Workflow reports row 4a/4c. The
+  third round found hooks and fsmonitor: an fsmonitor program, or a
+  `post-index-change` hook, that edits the plan when Workflow's Git runs it
+  made Workflow report row 4a/4c while the Controller, having switched it
+  off, reported `BOUND`. An fsmonitor program also decides which paths Git
+  re-checks. So each such program refuses the query
+  (`query_git_not_isolated`):
+  - **a hook the query's Git fires**: an executable hook file for
+    `post-index-change` in the hooks directory Workflow's Git uses
+    (`core.hooksPath` or `.git/hooks`), or a hook any configuration file
+    sets for that event. It is the only event the 2.6.0 queries fire: they
+    run `rev-parse`, `config`, `ls-files`, `hash-object` and `diff
+    --name-only`, and a test installs every hook githooks(5) names and runs
+    Workflow's queries in place to confirm it. Refused before the query
+    runs. Hooks for other events stay switched off, since the query's Git
+    never fires them;
+  - **an fsmonitor program**: `core.fsmonitor` set to anything Git does
+    not read as a boolean (Git itself decides, through `git config
+    --type=bool`), or `GIT_TEST_FSMONITOR` with it unset. Refused before
+    the query runs. Git's built-in daemon (`core.fsmonitor` a boolean) is
+    Git's own code and reports what a full stat check finds, so it stays
+    switched off and the query runs;
+  - **a filter program Git would run**: a driver with a `clean` or
+    `process` program gets a probe of the Controller's as its `process`
+    and is made `required`. Where Git would run the program, it starts the
+    probe, which leaves a mark in the private directory and fails, and so
+    does Git. The Controller finds the mark after the query and refuses,
+    whatever the query answered or failed with. Where Git would not run the
+    program, the answer is Workflow's own. Only Git knows where a filter
+    applies: a check of attributes before the query could not list every
+    path `git hash-object` may be given (ignored files, files in an
+    untracked nested repository), and would refuse every repository that
+    uses Git LFS. This is the one refusal made after the query has run;
+    the program still never runs, and the answer is discarded. (The second
+    round made Git fail without a probe, which gave `query_failed`, a
+    generic traceback, and relied on the query letting that failure fail
+    it.)
+
+  The other facilities keep Workflow's answer when switched off:
+  - split-index writes change only how the private index is stored, and
+    the queries read no signature;
+  - no transport only turns a lazy fetch into a failure, and a failing Git
+    command fails the 2.6.0 query rather than become an answer.
 
   The private index copy keeps the index file's mtime. Git re-hashes an
   entry no older than the index (a racily clean entry), and a fresh copy

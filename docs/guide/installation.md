@@ -17,7 +17,7 @@
 |---|---|
 | Python 3.12 or newer | `requires-python = ">=3.12"` |
 | [pipx](https://pipx.pypa.io/) | installs the Controller into its own virtual environment, so it never runs from a checkout |
-| `git` | every target repository is a Git worktree |
+| `git`, 2.31 or newer for a Workflow 2.6.0 target | every target repository is a Git worktree; a 2.6.0 query's Git is isolated through `GIT_CONFIG_COUNT`, which older Git ignores, so an older Git refuses the query ([Workflow's queries](automation.md#workflows-queries-260-and-later)) |
 | `claude` (Claude Code CLI) | every worker is a `claude` session; `--claude-binary` points at a different one |
 | `workflow-manager` | the Controller asks it whether a target's Workflow installation is sound before doing anything |
 | `gh`, authenticated | only for repositories with a `.workflow-controller/policy.json` (milestone branches, pull requests, releases) |

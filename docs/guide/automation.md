@@ -143,25 +143,46 @@ directory nor a configured hook), no filter driver (a `filter=` attribute's
 defines it) and no fsmonitor. The Controller checks that Git applies each
 setting before the query runs.
 
-Switching a filter off is not enough on its own. A clean filter changes the
-bytes `git hash-object` hashes, and Workflow's content identity is that
-hash. So a driver with a `clean` or `process` program is also marked
-`required`. Wherever Git would run the program, it fails instead, and so
-does the query (`WORKFLOW_QUERY_FAILED`, reason `query_failed`). The query
-never answers differently from Workflow: a filter that changes content
-could otherwise make a drifted plan bundle look `BOUND`. A driver that no
-path the query hashes selects changes nothing, and the query answers as
-usual.
+A query gives Workflow's answer or none, so a program is switched off only
+where that cannot change the answer. Three kinds of program can change it:
+a hook or an fsmonitor program may edit the files Workflow hashes, an
+fsmonitor program decides which paths Git re-checks, and a clean filter
+changes the bytes `git hash-object` hashes, which are Workflow's content
+identity. Where Git would run one, the Controller refuses the query
+(`WORKFLOW_QUERY_FAILED`, reason `query_git_not_isolated`):
 
-The Controller refuses the query
-(`WORKFLOW_QUERY_FAILED`, reason `query_git_not_isolated`) when it cannot
-switch something off: a hook command in the target's own Git configuration,
-a populated submodule, or a Git that ignores the settings (before 2.31). The
+- **A hook the query fires.** `git diff` fires `post-index-change` when it
+  refreshes the index, and that is the only hook the queries' Git fires. An
+  executable `post-index-change` hook in the hooks directory (`.git/hooks`,
+  or `core.hooksPath`), or a configured hook for that event from any
+  configuration file, refuses the query before it runs. Hooks for other
+  events are switched off, and the query runs.
+- **An fsmonitor program.** `core.fsmonitor` naming a program, from any
+  configuration file, refuses the query before it runs. Git's built-in
+  daemon (`core.fsmonitor = true`) is Git's own code and finds what a full
+  check finds, so it is switched off and the query runs.
+- **A filter program Git would run.** A driver with a `clean` or `process`
+  program gets a probe of the Controller's in its place and is marked
+  `required`. Where Git would run the program, it starts the probe instead,
+  which records the driver and fails, and so does Git. The Controller then
+  refuses, whatever the query answered. A driver that no path the query
+  hashes selects is never started, and the query answers as usual, so Git
+  LFS installed for every repository does not refuse a query that hashes
+  no LFS file. Only Git knows which paths a filter applies to, so this is
+  the one refusal made after the query has run. The program still never
+  runs.
+
+The Controller also refuses the query before it runs when it cannot switch
+something off: a hook command in the target's own Git configuration, a
+populated submodule, or a Git that ignores the settings (before 2.31). The
 queries never ask Git for a patch, a log, a checkout or a fetch, so diff
 drivers, signature programs and transports have nothing to run.
 
-The query writes nothing to the target, `.git` included. The private
-directory is removed whatever the outcome.
+The query writes nothing to the target, `.git` included. The one exception
+is a timestamp: in a repository with a split index (`core.splitIndex`),
+Git's read of the shared index moves the modification time of
+`.git/sharedindex.<hash>` on, even through the private copy, and never its
+content. The private directory is removed whatever the outcome.
 
 **A query that fails is never answered by the old rule.** At a decision it
 refuses (`WORKFLOW_QUERY_FAILED`, exit `20`) and nothing is launched. During

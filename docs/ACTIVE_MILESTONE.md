@@ -883,3 +883,62 @@ Controller reported rows 2/3 `BOUND` and let the phase handler act.
   - `tools/workflow_releases.py check` and `tools/ci_workflows.py --check`: exit 0;
   - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK;
   - goldens `--check`: current, except the known 2.5.1 plan-stage `AMENDING_PLAN` difference.
+
+## Implementation review round 3 -- fsmonitor, hooks, and the filter refusal's reason (manual external review `REVISE`)
+
+The local review approved round 3 with five optional findings. The manual external review
+returned `REVISE` with one blocking and one important finding, both about the property round 2
+named: a query gives Workflow's answer or none.
+
+- **B1: switching a hook or an fsmonitor program off can change the answer.** An fsmonitor
+  program, or an executable `post-index-change` hook, that edits the plan when Workflow's Git
+  runs it makes Workflow answer row 4a, while the Controller, having switched it off, answered
+  row 2 `BOUND`.
+  - **Reproduced** on seeded 2.6.0 targets for both: Workflow in place 4a, the Controller 2.
+  - **Census.** With every hook githooks(5) names installed, Workflow's two queries run in place
+    at every seed stage (route, publish, generate, ready, revise) fire only
+    `post-index-change`. Traced under `GIT_TRACE`, they run only `rev-parse --show-toplevel`,
+    `rev-parse --verify`, `config --type=bool core.fileMode`, `ls-files --error-unmatch`,
+    `ls-files --others`, `hash-object` and `diff --name-only`.
+  - **Fix** (`60fcebd`). Refused before the query runs (`query_git_not_isolated`): an
+    executable `post-index-change` hook file in the hooks directory Workflow's Git uses
+    (`hook`), a hook any configuration file sets for that event (`hook.<name>.event`), and
+    an fsmonitor program (`fsmonitor`: `core.fsmonitor` that `git config --type=bool` does not
+    read as a boolean, or `GIT_TEST_FSMONITOR` with it unset). The configuration these checks
+    read is Workflow's view, without the Controller's settings. Git's built-in daemon and hooks
+    for other events stay switched off.
+- **I1: the filter refusals gave `query_failed`.** Fixed in `1f8ec78`: a driver with a program
+  gets a Controller probe as its `process`, which leaves a mark in the private directory and
+  fails. After the query, whatever it did, a mark refuses it with `query_git_not_isolated`
+  (facility `filter`, drivers in `filters`). Found on the way: an empty `process`, as round 2
+  set, makes Git skip `clean` altogether, so the probe has to be the `process`. The check no
+  longer relies on the query letting a failing Git command fail it.
+- **Audit of the rest.** Split-index writes change only how the private index is stored. The
+  queries read no signature. No transport only turns a lazy fetch into a failure, and the 2.6.0
+  query path catches only Workflow's own drift and unverified errors, never a Git failure.
+- **Tests.**
+  - `GitIsolationTest` (18 tests): the hook census; each refused hook and fsmonitor variant
+    (hooks directory, absolute and relative `core.hooksPath`, operator-configured hook; local,
+    operator and environment fsmonitor) shown live in place first; direct-versus-Controller
+    regressions for a plan-editing hook and fsmonitor (Workflow 4a, the Controller refuses, runs
+    nothing, writes nothing); hooks Git never fires, a non-executable `post-index-change` and
+    the built-in daemon still answer `BOUND`; both filter regressions now require
+    `query_git_not_isolated`.
+  - `RealManagerMigrationTest`: the filter case requires `query_git_not_isolated` for the query
+    and the decision; a new case runs the plan-editing fsmonitor and hook on a migrated target
+    (Workflow 4c, the Controller refuses both queries and the decision, target unchanged).
+  - Each new test fails with its refusal removed (mutation-checked).
+- **Local review optional findings.** Resolved: `_query_failed` no longer appends the filter
+  note to every failure (`1f8ec78`); the troubleshooting remedy covers a stale index entry
+  whose content is unchanged; the installation guide states Git 2.31; the submodule remedy is
+  `git submodule deinit`; the guide, ADR and release notes note a split index's timestamp.
+- **Docs.** ADR 0006 (a query gives Workflow's answer or none), automation, troubleshooting
+  (the new facilities and remedies; `query_failed` no longer covers filters), development (the
+  hook census when admitting a release), installation and the 1.3.0 release notes.
+- **Verification.**
+  - `python3 tools/run_tests.py`: PASS, 2247 tests in 8 shards, exact coverage, 90.7 s, under
+    the reaping-subreaper wrapper;
+  - `tools/workflow_releases.py check` and `tools/ci_workflows.py --check`: exit 0;
+  - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK;
+  - goldens `--check`: current, except the known 2.5.1 plan-stage `AMENDING_PLAN` difference
+    (same exit at the previous head; its permitted-difference test passes).

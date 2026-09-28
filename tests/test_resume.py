@@ -3652,9 +3652,9 @@ class VerificationWorkflowFailureTest(_ContractTargetCase):
         postcondition tests below."""
         real = workflow_contract._execute_query
 
-        def execute(argv, *, cwd, timeout):
+        def execute(argv, *, cwd, env, timeout):
             if not argv[5].startswith("--plan-review-publication-status="):
-                return real(argv, cwd=cwd, timeout=timeout)
+                return real(argv, cwd=cwd, env=env, timeout=timeout)
             answer = {"work_item_id": lifecycle.WI, "phase": "AWAITING_LOCAL_PLAN_REVIEW", "row": "2",
                       "status": "BOUND", "remedy": "nothing to do", "bundle_id": "b" * 64,
                       "fresh_review_content_id": "c" * 64, "advisory": None}

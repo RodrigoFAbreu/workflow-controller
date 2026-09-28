@@ -2856,9 +2856,9 @@ class DecisionTimeWorkflowQueryTest(_ContractTargetCase):
         real = workflow_contract._execute_query
         calls: list[list[str]] = []
 
-        def second_fails(argv, *, cwd, timeout):
+        def second_fails(argv, *, cwd, env, timeout):
             calls.append(argv)
-            return _failed_query(argv) if len(calls) == 2 else real(argv, cwd=cwd, timeout=timeout)
+            return _failed_query(argv) if len(calls) == 2 else real(argv, cwd=cwd, env=env, timeout=timeout)
 
         with unittest.mock.patch.object(workflow_contract, "_execute_query", second_fails), \
                 self.assertRaises(WorkflowQueryError) as caught:

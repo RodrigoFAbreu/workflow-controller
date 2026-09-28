@@ -65,6 +65,27 @@ def _pycache_dirs(root: Path) -> list[Path]:
     return sorted(root.rglob("__pycache__"))
 
 
+#: A tracked file of every seeded target that is unchanged since the work
+#: item's base, so a ``git diff`` against the base finds it stat-dirty but
+#: equal and rewrites the index (firing ``post-index-change``).
+UNCHANGED_TRACKED = ".claude/commands/milestone-plan.md"
+
+
+def _stat_dirty(root: Path, *rel_paths: str) -> None:
+    """Move each path's mtime on, so the next ``git diff`` must re-hash it:
+    ``UNCHANGED_TRACKED`` by default."""
+    for rel_path in rel_paths or (UNCHANGED_TRACKED,):
+        path = root / rel_path
+        stat_result = path.stat()
+        os.utime(path, ns=(stat_result.st_atime_ns, stat_result.st_mtime_ns + 10 ** 10))
+
+
+def _tree_snapshot(root: Path) -> dict[str, tuple[bytes, int]]:
+    """Every regular file under ``root``, ``.git`` included: bytes and mtime."""
+    return {str(path.relative_to(root)): (path.read_bytes(), path.stat().st_mtime_ns)
+            for path in sorted(root.rglob("*")) if path.is_file() and not path.is_symlink()}
+
+
 class _SeededTargets(unittest.TestCase):
     """Seeds each fixture repository once per class, under a class-owned
     scratch directory; :meth:`target` hands each test its own copy."""
@@ -92,22 +113,24 @@ class _SeededTargets(unittest.TestCase):
 
 class _PrivateDirSpy:
     """A private-runner-hook wrapper that runs the real execution step and
-    records, at execution time, the argv and the private directory's
-    entries and bytes."""
+    records, at execution time, the argv, the environment, and the entries
+    and bytes of the private directory's scripts directory (the query's
+    ``sys.path[0]``)."""
 
     def __init__(self) -> None:
         self.calls: list[dict] = []
         self._real = workflow_contract._execute_query
 
-    def __call__(self, argv, *, cwd, timeout):
-        private_dir = Path(argv[4]).parent
+    def __call__(self, argv, *, cwd, env, timeout):
+        scripts_dir = Path(argv[4]).parent
         self.calls.append({
-            "argv": list(argv), "cwd": cwd, "private_dir": private_dir,
-            "entries": sorted(os.listdir(private_dir)),
-            "bytes": {name: (private_dir / name).read_bytes() for name in os.listdir(private_dir)},
+            "argv": list(argv), "cwd": cwd, "env": dict(env), "scripts_dir": scripts_dir,
+            "private_dir": scripts_dir.parent, "private_entries": sorted(os.listdir(scripts_dir.parent)),
+            "entries": sorted(os.listdir(scripts_dir)),
+            "bytes": {name: (scripts_dir / name).read_bytes() for name in os.listdir(scripts_dir)},
         })
-        completed = self._real(argv, cwd=cwd, timeout=timeout)
-        self.calls[-1]["entries_after"] = sorted(os.listdir(private_dir))
+        completed = self._real(argv, cwd=cwd, env=env, timeout=timeout)
+        self.calls[-1]["entries_after"] = sorted(os.listdir(scripts_dir))
         return completed
 
 
@@ -391,12 +414,18 @@ class PublicationStatusTest(_SeededTargets):
 
     def test_the_query_writes_nothing_to_the_target(self) -> None:
         root = self.target("bound")
-        before = _git(root, "status", "--porcelain", "--ignored", "--untracked-files=all")
-        state_before = (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes()
-        self._status(root)
+        base = _entry(root)["base_commit"]
+        # Control: in place, the query's `git diff` rewrites a stale index.
+        _stat_dirty(root)
+        index_before = (root / ".git" / "index").stat().st_mtime_ns
+        _git(root, "diff", "--name-only", "-z", base)
+        self.assertNotEqual((root / ".git" / "index").stat().st_mtime_ns, index_before,
+                            "control: git diff did not refresh the index")
+        _stat_dirty(root)
+        before = _tree_snapshot(root)
+        self.assertEqual(self._status(root).row, "2")
         workflow_contract.resolve_feedback_path(root, CONTRACT, WORK_ITEM_ID)
-        self.assertEqual(_git(root, "status", "--porcelain", "--ignored", "--untracked-files=all"), before)
-        self.assertEqual((root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes(), state_before)
+        self.assertEqual(_tree_snapshot(root), before, "a query wrote to the target, .git included")
         self.assertEqual(_pycache_dirs(root), [])
 
 
@@ -536,11 +565,228 @@ class QueryIsolationTest(_SeededTargets):
                 private_dir = call["private_dir"]
                 self.assertTrue(private_dir.name.startswith("workflow-controller-query-"))
                 self.assertFalse(private_dir.resolve().is_relative_to(root.resolve()))
+                # sys.path[0] holds only the two verified scripts; beside it
+                # is the private copy of the target's index.
+                self.assertEqual(call["argv"][4], str(private_dir / "scripts" / Path(call["argv"][4]).name))
                 self.assertEqual(call["entries"], ["workflow_fingerprint.py", "workflow_state.py"])
+                self.assertEqual(call["private_entries"], ["index", "scripts"])
                 self.assertEqual(call["entries_after"], call["entries"], "the query wrote into the private directory")
                 for script in workflow_contract.QUERY_SCRIPTS:
                     self.assertEqual(call["bytes"][Path(script).name], (vendored / script).read_bytes())
                 self.assertFalse(private_dir.exists(), "the private directory outlived the query")
+
+
+# ---------------------------------------------------------------------------
+# I6: the query's Git runs no program the target configures, and writes
+# nothing to the target.
+# ---------------------------------------------------------------------------
+
+
+def _executable(path: Path, body: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\n{body}\n")
+    path.chmod(0o755)
+    return path
+
+
+class GitIsolationTest(_SeededTargets):
+    """Each plant is shown live first: Git run in place, as the Workflow
+    scripts run it without the Controller, starts the planted program. The
+    queries then answer as before, start nothing and write nothing, or
+    refuse (``query_git_not_isolated``) before the query runs."""
+
+    SEEDS = {"bound": ("2.6.0", "ready", {})}
+    PLAN = f"docs/ai-workflow/{WORK_ITEM_ID}-PLAN.md"
+
+    def fresh(self) -> Path:
+        self.root = self.target("bound")
+        # Outside the target, so it is never a path the query classifies.
+        self.sentinel = self.root.parent / "git-program-ran"
+        self.touch = f"touch {self.sentinel}"
+        return self.root
+
+    def git_config(self, *args: str) -> None:
+        _git(self.root, "config", *args)
+
+    def attributes(self, line: str) -> None:
+        info = self.root / ".git" / "info"
+        info.mkdir(exist_ok=True)
+        (info / "attributes").write_text(line + "\n")
+
+    def assert_live(self, *args: str, root: Path | None = None) -> None:
+        root = root or self.root
+        _stat_dirty(root, UNCHANGED_TRACKED, self.PLAN)
+        subprocess.run(["git", *args], cwd=root, capture_output=True, check=False)
+        self.assertTrue(self.sentinel.exists(), f"control: git {' '.join(args)} did not start the plant")
+        self.sentinel.unlink()
+
+    def assert_queries_run_nothing(self) -> None:
+        _stat_dirty(self.root, UNCHANGED_TRACKED, self.PLAN)
+        before = _tree_snapshot(self.root)
+        feedback = workflow_contract.resolve_feedback_path(self.root, CONTRACT, WORK_ITEM_ID)
+        status = workflow_contract.plan_review_publication_status(self.root, CONTRACT, WORK_ITEM_ID)
+        self.assertEqual(feedback.layout, "scoped")
+        self.assertEqual((status.row, status.status), ("2", "BOUND"))
+        self.assertFalse(self.sentinel.exists(), "a program the target configures ran during a query")
+        self.assertEqual(_tree_snapshot(self.root), before, "a query wrote to the target")
+
+    def assert_refused(self, facility: str) -> WorkflowQueryError:
+        query_tmp = Path(tempfile.mkdtemp(prefix="query-tmp-", dir=self._scratch))
+        for run_query in (workflow_contract.resolve_feedback_path, workflow_contract.plan_review_publication_status):
+            with mock.patch.object(tempfile, "tempdir", str(query_tmp)), \
+                    mock.patch.object(workflow_contract, "_execute_query") as hook, \
+                    self.assertRaises(WorkflowQueryError) as caught:
+                run_query(self.root, CONTRACT, WORK_ITEM_ID)
+            hook.assert_not_called()
+            evidence = caught.exception.evidence
+            self.assertEqual((evidence["reason"], evidence["facility"]), ("query_git_not_isolated", facility),
+                             evidence)
+            self.assertIsNone(evidence["argv"])
+            self.assertIn("isolated", str(caught.exception))
+        self.assertFalse(self.sentinel.exists())
+        self.assertEqual(os.listdir(query_tmp), [], "a refusal left its private directory")
+        return caught.exception
+
+    def test_a_clean_filter_never_runs(self) -> None:
+        # The external review's reproduction: `.git/info/attributes` names a
+        # clean filter that `.git/config` defines; `git hash-object` in the
+        # status query ran it.
+        for variant in ("clean", "process", "included", "operator"):
+            with self.subTest(variant=variant):
+                root = self.fresh()
+                self.attributes("* filter=evil")
+                environment = {}
+                if variant == "clean":
+                    self.git_config("filter.evil.clean", f"{self.touch} && cat")
+                elif variant == "process":
+                    self.git_config("filter.evil.process", f"sh -c '{self.touch}; exit 1'")
+                elif variant == "included":
+                    included = root.parent / "included.gitconfig"
+                    included.write_text(f'[filter "evil"]\n\tclean = {self.touch} && cat\n')
+                    self.git_config("include.path", str(included))
+                else:
+                    operator = root.parent / "operator.gitconfig"
+                    operator.write_text(f'[filter "evil"]\n\tclean = {self.touch} && cat\n')
+                    environment = {"GIT_CONFIG_GLOBAL": str(operator)}
+                with mock.patch.dict(os.environ, environment):
+                    self.assert_live("hash-object", "--", self.PLAN)
+                    self.assert_queries_run_nothing()
+
+    def test_no_hook_runs(self) -> None:
+        for variant in ("hooks-directory", "hooks-path", "operator-configured"):
+            with self.subTest(variant=variant):
+                root = self.fresh()
+                hook = _executable(root.parent / "hook", self.touch)
+                environment = {}
+                if variant == "hooks-directory":
+                    shutil.copy(hook, root / ".git" / "hooks" / "post-index-change")
+                elif variant == "hooks-path":
+                    shutil.copy(hook, root.parent / "post-index-change")
+                    self.git_config("core.hooksPath", str(root.parent))
+                else:
+                    operator = root.parent / "operator.gitconfig"
+                    operator.write_text(f'[hook "planted"]\n\tcommand = {hook}\n\tevent = post-index-change\n')
+                    environment = {"GIT_CONFIG_GLOBAL": str(operator)}
+                with mock.patch.dict(os.environ, environment):
+                    self.assert_live("diff", "--name-only", "-z", _entry(root)["base_commit"])
+                    self.assert_queries_run_nothing()
+
+    def test_no_fsmonitor_runs(self) -> None:
+        self.fresh()
+        self.git_config("core.fsmonitor", str(_executable(self.root.parent / "fsmonitor", f"{self.touch}; exit 1")))
+        self.assert_live("diff", "--name-only", "-z", _entry(self.root)["base_commit"])
+        self.assert_queries_run_nothing()
+
+    def test_no_diff_driver_runs(self) -> None:
+        # The queries never ask Git for a patch, so a textconv or external
+        # diff never runs; shown live on a copy whose content changed.
+        root = self.fresh()
+        self.attributes("* diff=evil")
+        self.git_config("diff.evil.textconv", str(_executable(root.parent / "textconv", f"{self.touch}; cat \"$1\"")))
+        self.git_config("diff.external", str(_executable(root.parent / "external", self.touch)))
+        changed = root.parent / "changed"
+        shutil.copytree(root, changed, symlinks=True)
+        (changed / self.PLAN).write_text("changed\n")
+        self.assert_live("diff", "HEAD", root=changed)
+        self.assert_live("diff", "--no-ext-diff", "HEAD", root=changed)
+        self.assert_queries_run_nothing()
+
+    def test_a_hook_command_in_the_targets_own_configuration_is_refused(self) -> None:
+        for variant in ("local", "included"):
+            with self.subTest(variant=variant):
+                root = self.fresh()
+                hook = _executable(root.parent / "hook", self.touch)
+                if variant == "local":
+                    self.git_config("hook.planted.command", str(hook))
+                    self.git_config("hook.planted.event", "post-index-change")
+                else:
+                    included = root.parent / "included.gitconfig"
+                    included.write_text(f'[hook "planted"]\n\tcommand = {hook}\n\tevent = post-index-change\n')
+                    self.git_config("include.path", str(included))
+                self.assert_live("diff", "--name-only", "-z", _entry(root)["base_commit"])
+                error = self.assert_refused("hook.planted.command")
+                self.assertEqual(error.evidence["scope"], "local")
+
+    def test_a_populated_submodule_is_refused(self) -> None:
+        root = self.fresh()
+        source = root.parent / "submodule-source"
+        fixtures.run(["git", "init", "-q", str(source)])
+        fixtures.run(["git", "-C", str(source), "-c", "user.email=s@example.invalid", "-c", "user.name=s",
+                      "commit", "-q", "--allow-empty", "-m", "seed"])
+        _git(root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(source), "vendor/sub")
+        error = self.assert_refused("submodule")
+        self.assertEqual(error.evidence["path"], "vendor/sub")
+
+    def test_a_setting_git_does_not_apply_is_refused(self) -> None:
+        self.fresh()
+        # A later command-scope value wins over the Controller's, as an older
+        # Git that ignores GIT_CONFIG_COUNT would leave the target's in force.
+        with mock.patch.dict(os.environ, {"GIT_CONFIG_PARAMETERS": "'core.hooksPath'='/elsewhere'"}):
+            error = self.assert_refused("core.hookspath")
+        self.assertIn("2.31", error.evidence["detail"])
+        with mock.patch.dict(os.environ, {"GIT_CONFIG_COUNT": "many"}):
+            self.assert_refused("GIT_CONFIG_COUNT")
+
+    def test_an_index_that_is_not_a_regular_file_is_refused_without_waiting(self) -> None:
+        self.fresh()
+        index = self.root / ".git" / "index"
+        index.unlink()
+        os.mkfifo(index)
+        self.assert_refused("index")
+
+    def test_a_configuration_git_cannot_read_is_refused(self) -> None:
+        self.fresh()
+        with (self.root / ".git" / "config").open("a") as handle:
+            handle.write("[unterminated\n")
+        error = self.assert_refused("git")
+        self.assertEqual(error.evidence["git_argv"][0], "git")
+
+    def test_the_querys_git_environment(self) -> None:
+        root = self.fresh()
+        remote = root.parent / "remote.git"
+        fixtures.run(["git", "init", "-q", "--bare", str(remote)])
+        self.git_config("protocol.file.allow", "always")
+        spy = _PrivateDirSpy()
+        operator = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "user.name", "GIT_CONFIG_VALUE_0": "Operator"}
+        with mock.patch.dict(os.environ, operator), mock.patch.object(workflow_contract, "_execute_query", spy):
+            workflow_contract.plan_review_publication_status(root, CONTRACT, WORK_ITEM_ID)
+        (call,) = spy.calls
+        env = call["env"]
+        self.assertEqual(env["GIT_INDEX_FILE"], str(call["private_dir"] / "index"))
+        self.assertEqual(env["GIT_ALLOW_PROTOCOL"], "")
+        # The operator's own entry is kept, ahead of the Controller's.
+        self.assertEqual((env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]), ("user.name", "Operator"))
+        pinned = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]
+                  for i in range(1, int(env["GIT_CONFIG_COUNT"]))}
+        self.assertEqual(pinned, {"core.hookspath": os.devnull, "core.fsmonitor": "", "core.splitindex": "false",
+                                  "log.showsignature": "false"})
+        run = lambda *args: subprocess.run(["git", *args], cwd=root, env=env, capture_output=True, text=True)  # noqa: E731
+        self.assertEqual(run("config", "core.hooksPath").stdout, f"{os.devnull}\n")
+        self.assertEqual(run("config", "user.name").stdout, "Operator\n")
+        # No transport, whatever the target allows.
+        fetch = run("ls-remote", str(remote))
+        self.assertNotEqual(fetch.returncode, 0)
+        self.assertIn("transport 'file' not allowed", fetch.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +834,7 @@ class RunnerFailureTest(_SeededTargets):
                 lambda: workflow_contract.resolve_feedback_path(root, CONTRACT, WORK_ITEM_ID), "query_timeout",
             )
         self.assertEqual(error.evidence["stdout_tail"], "partial")
-        timed_out_dir = Path(hook.call_args.args[0][4]).parent
+        timed_out_dir = Path(hook.call_args.args[0][4]).parent.parent
         self.assertEqual(len(spy.calls), 2)
         for private_dir in [call["private_dir"] for call in spy.calls] + [timed_out_dir]:
             self.assertEqual(private_dir.parent, self.query_tmp)
@@ -737,9 +983,8 @@ class OutputValidationTest(_SeededTargets):
             stdout = (json.dumps(stdout, sort_keys=True) + "\n").encode()
         seen: list[list[str]] = []
 
-        def hook(argv, *, cwd, timeout):
-            private_dir = Path(argv[4]).parent
-            seen.append(sorted(os.listdir(private_dir)))
+        def hook(argv, *, cwd, env, timeout):
+            seen.append(sorted(os.listdir(Path(argv[4]).parent)))
             return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
 
         with mock.patch.object(workflow_contract, "_execute_query", hook):

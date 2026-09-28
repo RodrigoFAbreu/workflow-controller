@@ -232,9 +232,9 @@ class QuerySpy:
         self.queries: list[str] = []
         real = workflow_contract._execute_query
 
-        def execute(argv, *, cwd, timeout):
+        def execute(argv, *, cwd, env, timeout):
             self.queries.append(argv[5].split("=", 1)[0])
-            return real(argv, cwd=cwd, timeout=timeout)
+            return real(argv, cwd=cwd, env=env, timeout=timeout)
 
         patcher = unittest.mock.patch.object(workflow_contract, "_execute_query", execute)
         patcher.start()

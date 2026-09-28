@@ -3350,9 +3350,9 @@ class _CountingRunner:
         self.real = workflow_contract._execute_query
         self.queries: list[str] = []
 
-    def __call__(self, argv, *, cwd, timeout):
+    def __call__(self, argv, *, cwd, env, timeout):
         self.queries.append(argv[5].split("=", 1)[0])
-        return self.real(argv, cwd=cwd, timeout=timeout)
+        return self.real(argv, cwd=cwd, env=env, timeout=timeout)
 
 
 class WorkflowQueryFeedbackPathTest(unittest.TestCase):
@@ -4291,7 +4291,7 @@ class PublicationStatusCellsTest(unittest.TestCase):
         from controller import workflow_contract
         from controller.errors import WorkflowQueryError
 
-        def times_out(argv, *, cwd, timeout):
+        def times_out(argv, *, cwd, env, timeout):
             raise subprocess.TimeoutExpired(argv, timeout)
 
         work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version="2.2")

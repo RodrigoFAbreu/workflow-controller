@@ -91,7 +91,11 @@ def _direct_calls(func_node: ast.AST) -> list[ast.Call]:
 #: (`workflow-controller-automatic-lifecycle-orchestration` CP5): ``lock.py``
 #: opens the target's git directory with ``os.O_RDONLY | os.O_DIRECTORY |
 #: os.O_CLOEXEC``, because Python's ``open()`` cannot open a directory.
-_READ_ONLY_OS_OPEN_FLAGS = {"os.O_RDONLY", "os.O_DIRECTORY", "os.O_CLOEXEC"}
+#: ``workflow_contract._copy_index`` reads the target's index with
+#: ``os.O_RDONLY | os.O_NONBLOCK``, so a planted FIFO is refused rather than
+#: waited on (`workflow-controller-workflow-2-6-integration`, implementation
+#: review round 1). None of these flags can create, truncate or write.
+_READ_ONLY_OS_OPEN_FLAGS = {"os.O_RDONLY", "os.O_DIRECTORY", "os.O_CLOEXEC", "os.O_NONBLOCK"}
 
 
 def _or_operands(node: ast.AST) -> list[ast.AST]:
@@ -103,7 +107,8 @@ def _or_operands(node: ast.AST) -> list[ast.AST]:
 def _is_read_only_os_open(callee: str, node: ast.Call) -> bool:
     """The scan's one ``os.open`` acceptance: a flags argument that is
     ``os.O_RDONLY`` alone, or a ``|``-combination of ``os.O_RDONLY`` with
-    only ``os.O_DIRECTORY`` and ``os.O_CLOEXEC``. ``O_WRONLY``, ``O_RDWR``,
+    only ``os.O_DIRECTORY``, ``os.O_CLOEXEC`` and ``os.O_NONBLOCK``.
+    ``O_WRONLY``, ``O_RDWR``,
     ``O_CREAT``, ``O_TRUNC``, ``O_APPEND`` or a non-literal flags name is
     still flagged."""
     if callee != "os.open" or len(node.args) < 2:
@@ -259,9 +264,11 @@ class SyntheticInstantiationTest(unittest.TestCase):
 
     def test_a_read_only_os_open_is_a_read(self) -> None:
         """Automatic-lifecycle-orchestration CP5: ``lock.py``'s own form,
-        and a lone ``os.O_RDONLY``, are accepted."""
+        and a lone ``os.O_RDONLY``, are accepted; so is
+        ``workflow_contract``'s non-blocking index read."""
         for flags in ("os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC", "os.O_RDONLY",
-                      "os.O_RDONLY | os.O_CLOEXEC", "os.O_DIRECTORY | os.O_RDONLY"):
+                      "os.O_RDONLY | os.O_CLOEXEC", "os.O_DIRECTORY | os.O_RDONLY",
+                      "os.O_RDONLY | os.O_NONBLOCK"):
             with self.subTest(flags=flags):
                 source = f"def f(path):\n    return os.open(path, {flags})\n"
                 self.assertEqual(scan_module(source, exempt=False), [])
@@ -269,7 +276,7 @@ class SyntheticInstantiationTest(unittest.TestCase):
     def test_a_writing_or_non_literal_os_open_is_still_flagged(self) -> None:
         for flags in ("os.O_WRONLY", "os.O_RDWR", "os.O_RDONLY | os.O_CREAT", "os.O_CREAT",
                       "os.O_RDONLY | os.O_TRUNC", "os.O_RDONLY | os.O_APPEND", "flags",
-                      "os.O_DIRECTORY | os.O_CLOEXEC"):
+                      "os.O_DIRECTORY | os.O_CLOEXEC", "os.O_NONBLOCK", "os.O_WRONLY | os.O_NONBLOCK"):
             with self.subTest(flags=flags):
                 source = f"def f(path, flags):\n    return os.open(path, {flags})\n"
                 self.assertEqual(len(scan_module(source, exempt=False)), 1, flags)

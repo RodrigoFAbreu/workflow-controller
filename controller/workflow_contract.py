@@ -23,11 +23,17 @@ of :func:`_run_query`:
    against the contract's digests. Nothing is executed on a mismatch;
 2. writes exactly those bytes into a fresh private temporary directory,
    through ``runtime.write_bytes``, and removes it when the query ends;
-3. runs ``sys.executable -B -E -s <private dir>/<script> ...`` with ``cwd``
-   the target root, stdin closed and a timeout. The target's ``scripts/``
-   directory is never on the query's ``sys.path``, so a planted
-   ``scripts/uuid.py`` or ``scripts/__pycache__/*.pyc`` never runs, and
-   ``-B`` writes no bytecode anywhere.
+3. prepares the Git every command of the query runs (:func:`_git_isolation`):
+   a private copy of the target's index, so the target is never written,
+   no transport, and command-scope configuration that switches off every
+   hook, filter driver and fsmonitor, verified to be in force. It refuses,
+   before the query runs, what it cannot switch off: a hook command in the
+   target's own configuration, or a populated submodule;
+4. runs ``sys.executable -B -E -s <private dir>/scripts/<script> ...`` with
+   ``cwd`` the target root, stdin closed and one timeout for all of it. The
+   target's ``scripts/`` directory is never on the query's ``sys.path``, so
+   a planted ``scripts/uuid.py`` or ``scripts/__pycache__/*.pyc`` never
+   runs, and ``-B`` writes no bytecode anywhere.
 
 Every failure of these steps, and every answer that does not validate, is a
 :class:`~controller.errors.WorkflowQueryError`: nothing else leaves the
@@ -48,10 +54,12 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
@@ -80,7 +88,30 @@ QUERY_SCRIPTS = (STATE_SCRIPT, FINGERPRINT_SCRIPT)
 QUERY_TIMEOUT_SECONDS = 120.0
 
 _PRIVATE_DIR_PREFIX = "workflow-controller-query-"
+#: Inside the private directory: the verified scripts (the query's
+#: ``sys.path[0]``, holding nothing else) and the private copy of the
+#: target's index.
+_PRIVATE_SCRIPTS_DIR = "scripts"
+_PRIVATE_INDEX = "index"
 _OUTPUT_TAIL_CHARS = 4000
+
+#: Configuration every Git command of a query runs under, as command-scope
+#: entries, which take precedence over every configuration file: no hook
+#: file runs (the target's ``.git/hooks`` or any ``core.hooksPath``), no
+#: fsmonitor hook or daemon starts, a refreshed private index never writes
+#: a shared index into the target, and no commit signature is verified.
+#: :func:`_git_named_overrides` adds the filter drivers and configured
+#: hooks, by name.
+_GIT_PINNED_CONFIG: tuple[tuple[str, str], ...] = (
+    ("core.hookspath", os.devnull),
+    ("core.fsmonitor", ""),
+    ("core.splitindex", "false"),
+    ("log.showsignature", "false"),
+)
+#: ``git config --show-scope`` scopes whose files are the operator's. Every
+#: other scope (``local``, ``worktree``, and the files they include) is the
+#: target's own.
+_OPERATOR_GIT_SCOPES = frozenset({"system", "global", "command"})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -490,23 +521,23 @@ def _copy_and_execute(
     private_dir: Path, sources: dict[str, bytes], script: str, args: list[str], *,
     root: Path, timeout: float, context: dict,
 ) -> subprocess.CompletedProcess:
-    """Steps 2 and 3: write the verified bytes under their own names into
-    ``private_dir``, then run ``script`` from there."""
+    """Steps 2 to 4: write the verified bytes under their own names into
+    ``private_dir``'s scripts directory, prepare the query's Git, then run
+    ``script`` from there. ``timeout`` bounds all of it."""
+    deadline = time.monotonic() + timeout
     for rel_path, data in sources.items():
         try:
-            runtime.write_bytes(private_dir, PurePosixPath(rel_path).name, data)
+            runtime.write_bytes(private_dir, f"{_PRIVATE_SCRIPTS_DIR}/{PurePosixPath(rel_path).name}", data)
         except (OSError, RuntimeContainmentError) as exc:
             raise _private_copy_failed(context, f"write the private copy of {rel_path}", exc) from exc
-    argv = [sys.executable, "-B", "-E", "-s", str(private_dir / PurePosixPath(script).name), *args]
+    env = _git_isolation(root, private_dir, context=context, timeout=timeout, deadline=deadline)
+    argv = [sys.executable, "-B", "-E", "-s",
+            str(private_dir / _PRIVATE_SCRIPTS_DIR / PurePosixPath(script).name), *args]
     context["argv"] = argv
     try:
-        completed = _execute_query(argv, cwd=root, timeout=timeout)
+        completed = _execute_query(argv, cwd=root, env=env, timeout=_remaining(deadline))
     except subprocess.TimeoutExpired as exc:
-        raise WorkflowQueryError(
-            f"{context['query']} did not finish within {timeout} s",
-            evidence={**context, "reason": "query_timeout", "timeout": timeout,
-                      "stdout_tail": _tail(exc.stdout), "stderr_tail": _tail(exc.stderr)},
-        ) from exc
+        raise _timed_out(context, timeout, exc) from exc
     except (OSError, ValueError) as exc:
         # `ValueError`: an argument `subprocess` cannot pass, such as a work
         # item id holding a NUL byte.
@@ -519,12 +550,229 @@ def _copy_and_execute(
     return completed
 
 
-def _execute_query(argv: list[str], *, cwd: Path, timeout: float) -> subprocess.CompletedProcess:
-    """Step 3, and the private runner hook: a test replaces only this
-    function, so the read, the digest check and the private copy still run
-    first. Output is captured as bytes; decoding is part of validation."""
-    return subprocess.run(argv, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, check=False,
-                          timeout=timeout)
+def _execute_query(argv: list[str], *, cwd: Path, env: dict[str, str], timeout: float,
+                   ) -> subprocess.CompletedProcess:
+    """Step 4, and the private runner hook: a test replaces only this
+    function, so the read, the digest check, the private copy and the Git
+    preparation still run first. Output is captured as bytes; decoding is
+    part of validation."""
+    return subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                          check=False, timeout=timeout)
+
+
+def _remaining(deadline: float) -> float:
+    """What is left of the query's timeout; never zero, which ``subprocess``
+    would read as "no wait" rather than "already late"."""
+    return max(deadline - time.monotonic(), 0.001)
+
+
+def _timed_out(context: dict, timeout: float, exc: subprocess.TimeoutExpired) -> WorkflowQueryError:
+    return WorkflowQueryError(
+        f"{context['query']} did not finish within {timeout} s",
+        evidence={**context, "reason": "query_timeout", "timeout": timeout,
+                  "stdout_tail": _tail(exc.stdout), "stderr_tail": _tail(exc.stderr)},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 3: the query's Git.
+# ---------------------------------------------------------------------------
+
+
+def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: float,
+                   deadline: float) -> dict[str, str]:
+    """The environment the query runs in, which every Git command it starts
+    inherits (invariant I6: the Workflow scripts run ``git hash-object``,
+    ``git diff --name-only`` and ``git ls-files`` in the target, and Git
+    would otherwise run the target's hooks, filters and fsmonitor).
+
+    - ``GIT_INDEX_FILE`` is a private copy of the target's index, so the
+      stat refresh ``git diff`` makes never writes the target;
+    - ``GIT_ALLOW_PROTOCOL`` is empty: no transport, so no remote helper, SSH
+      command or partial-clone fetch;
+    - command-scope configuration switches off every hook file, fsmonitor,
+      shared-index write and signature check (:data:`_GIT_PINNED_CONFIG`),
+      every filter driver and every configured hook, named from the
+      configuration Git reads for the target, whichever file defines them.
+
+    The configuration is read again under that environment, and each
+    setting must be in force as the last, command-scope value. Refused with
+    ``query_git_not_isolated`` before the query runs: a hook command in the
+    target's own configuration (not every Git release that runs one lets it
+    be switched off), a populated submodule (its Git reads its own
+    configuration), and any setting Git does not apply (Git before 2.31
+    ignores ``GIT_CONFIG_COUNT``)."""
+    base = {**os.environ, "GIT_ALLOW_PROTOCOL": ""}
+    run = _PreflightGit(root, context=context, timeout=timeout, deadline=deadline)
+    pinned = _with_git_config(base, _GIT_PINNED_CONFIG, context)
+    index = Path(os.fsdecode(run(["rev-parse", "--git-path", "index"], pinned).rstrip(b"\n")))
+    _copy_index(root / index, private_dir, context)
+    private_index = {"GIT_INDEX_FILE": str(private_dir / _PRIVATE_INDEX)}
+    entries = _git_config_entries(run, {**pinned, **private_index})
+    _refuse_target_hook_commands(entries, context)
+    _refuse_populated_submodules(root, run, {**pinned, **private_index}, context)
+    overrides = _GIT_PINNED_CONFIG + _git_named_overrides(entries)
+    env = _with_git_config({**base, **private_index}, overrides, context)
+    in_force: dict[str, tuple[str, str | None]] = {}
+    for scope, key, value in _git_config_entries(run, env):
+        in_force[key] = (scope, value)
+    for key, value in overrides:
+        if in_force.get(key) != ("command", value):
+            raise _not_isolated(
+                context, key,
+                f"Git does not apply the Controller's {key}={value!r} (it reads "
+                f"{in_force.get(key)!r}); Git 2.31 or later is required",
+            )
+    return env
+
+
+class _PreflightGit:
+    """``git <args>``'s stdout in the target, under ``env``, within what is
+    left of the query's timeout. Every failure is a
+    :class:`WorkflowQueryError`."""
+
+    def __init__(self, root: Path, *, context: dict, timeout: float, deadline: float) -> None:
+        self._root, self._context, self._timeout, self._deadline = root, context, timeout, deadline
+
+    def __call__(self, args: list[str], env: dict[str, str]) -> bytes:
+        argv = ["git", *args]
+        try:
+            completed = subprocess.run(argv, cwd=self._root, env=env, stdin=subprocess.DEVNULL,
+                                       capture_output=True, check=False, timeout=_remaining(self._deadline))
+        except subprocess.TimeoutExpired as exc:
+            error = _timed_out(self._context, self._timeout, exc)
+            error.evidence["git_argv"] = argv
+            raise error from exc
+        except OSError as exc:
+            raise _not_isolated(self._context, "git", f"{' '.join(argv)} could not be started: {exc}",
+                                git_argv=argv) from exc
+        if completed.returncode != 0:
+            raise _not_isolated(
+                self._context, "git",
+                f"{' '.join(argv)} exited {completed.returncode}: "
+                f"{_last_line(completed.stderr) or '(no output)'}",
+                git_argv=argv,
+            )
+        return completed.stdout
+
+
+def _with_git_config(env: dict[str, str], pairs: tuple[tuple[str, str], ...], context: dict) -> dict[str, str]:
+    """``env`` with ``pairs`` appended to its ``GIT_CONFIG_COUNT`` entries,
+    after any the operator's environment already has."""
+    count = env.get("GIT_CONFIG_COUNT", "0")
+    if not count.isdecimal():
+        raise _not_isolated(context, "GIT_CONFIG_COUNT",
+                            f"the environment's GIT_CONFIG_COUNT {count!r} is not a count")
+    env = dict(env)
+    for index, (key, value) in enumerate(pairs, start=int(count)):
+        env[f"GIT_CONFIG_KEY_{index}"] = key
+        env[f"GIT_CONFIG_VALUE_{index}"] = value
+    env["GIT_CONFIG_COUNT"] = str(int(count) + len(pairs))
+    return env
+
+
+def _copy_index(index: Path, private_dir: Path, context: dict) -> None:
+    """Copy the target's index into ``private_dir``. A target without one
+    has none copied: Git reads the missing private index as empty, as it
+    reads the target's. ``O_NONBLOCK``: a planted FIFO is refused, never
+    waited on."""
+    try:
+        fd = os.open(index, os.O_RDONLY | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise _not_isolated(context, "index", f"the target's index {index} cannot be read ({exc})") from exc
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise _not_isolated(context, "index", f"the target's index {index} is not a regular file")
+            data = handle.read()
+    except OSError as exc:
+        raise _not_isolated(context, "index", f"the target's index {index} cannot be read ({exc})") from exc
+    try:
+        runtime.write_bytes(private_dir, _PRIVATE_INDEX, data)
+    except (OSError, RuntimeContainmentError) as exc:
+        raise _private_copy_failed(context, "write the private copy of the index", exc) from exc
+
+
+def _git_config_entries(run: _PreflightGit, env: dict[str, str]) -> list[tuple[str, str, str | None]]:
+    """``(scope, key, value)`` for every entry Git reads for the target, in
+    Git's order (the last of a key is the one in force), includes followed.
+    ``value`` is ``None`` for a key written without ``=``."""
+    fields = run(["config", "--list", "--show-scope", "--includes", "-z"], env).split(b"\0")
+    if fields[-1] == b"":
+        fields.pop()
+    entries = []
+    for scope, item in zip(fields[0::2], fields[1::2]):
+        key, newline, value = item.partition(b"\n")
+        entries.append((os.fsdecode(scope), os.fsdecode(key), os.fsdecode(value) if newline else None))
+    return entries
+
+
+def _split_git_key(key: str) -> tuple[str, str | None, str]:
+    """``(section, subsection, variable)`` of a key as ``git config --list``
+    prints it; a subsection may itself hold dots."""
+    section, _, rest = key.partition(".")
+    subsection, dot, variable = rest.rpartition(".")
+    return section, subsection if dot else None, variable
+
+
+def _git_named_overrides(entries: list[tuple[str, str, str | None]]) -> tuple[tuple[str, str], ...]:
+    """Every filter driver's ``process``, ``clean`` and ``smudge`` set empty,
+    which Git reads as no filter, and every configured hook, and each event
+    one names, disabled."""
+    filters: set[str] = set()
+    hooks: set[str] = set()
+    for _scope, key, value in entries:
+        section, subsection, variable = _split_git_key(key)
+        if subsection is None:
+            continue
+        if section == "filter":
+            filters.add(subsection)
+        elif section == "hook":
+            hooks.add(subsection)
+            if variable == "event" and value:
+                hooks.add(value)
+    return (tuple((f"filter.{name}.{variable}", "") for name in sorted(filters)
+                  for variable in ("process", "clean", "smudge"))
+            + tuple((f"hook.{name}.enabled", "false") for name in sorted(hooks)))
+
+
+def _refuse_target_hook_commands(entries: list[tuple[str, str, str | None]], context: dict) -> None:
+    for scope, key, _value in entries:
+        section, subsection, variable = _split_git_key(key)
+        if (scope not in _OPERATOR_GIT_SCOPES and section == "hook" and subsection is not None
+                and variable == "command"):
+            raise _not_isolated(
+                context, key,
+                f"the target's own Git configuration ({scope}) defines the hook command {key}, "
+                f"which the Controller cannot switch off in every Git release",
+                scope=scope,
+            )
+
+
+def _refuse_populated_submodules(root: Path, run: _PreflightGit, env: dict[str, str], context: dict) -> None:
+    """A gitlink whose directory holds a ``.git``: ``git diff`` would run Git
+    inside it, under that repository's own configuration."""
+    for record in run(["ls-files", "--stage", "-z"], env).split(b"\0"):
+        if not record.startswith(b"160000 "):
+            continue
+        path = os.fsdecode(record.partition(b"\t")[2])
+        if os.path.lexists(root / path / ".git"):
+            raise _not_isolated(
+                context, "submodule",
+                f"the target has a populated submodule at {path!r}, whose own Git configuration "
+                f"a query's Git would read",
+                path=path,
+            )
+
+
+def _not_isolated(context: dict, facility: str, detail: str, **evidence) -> WorkflowQueryError:
+    return WorkflowQueryError(
+        f"{context['query']} was not run: its Git cannot be isolated from the target ({detail})",
+        evidence={**context, "reason": "query_git_not_isolated", "facility": facility, "detail": detail,
+                  **evidence},
+    )
 
 
 def _json_object(context: dict, completed: subprocess.CompletedProcess) -> dict:

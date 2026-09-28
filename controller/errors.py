@@ -726,6 +726,13 @@ class WorkflowQueryError(ControllerError):
     - ``query_private_copy_failed``: the private directory could not be
       created, written or removed. Nothing was executed after a creation or
       write failure, and a removal failure discards the answer;
+    - ``query_git_not_isolated``: the Git the query would run cannot be
+      kept from starting a program the target configures: a hook command in
+      the target's own Git configuration, a populated submodule, a setting
+      of the Controller's that Git does not apply (Git before 2.31), an
+      index that is not a regular file, or a Git command that fails while
+      the Controller prepares the query. ``facility`` names which, and
+      ``detail`` says what was found. Nothing was executed;
     - ``query_launch_failed`` and ``query_timeout``: the interpreter could
       not be started, or the query did not finish in time;
     - ``query_failed``: an exit status the query's contract does not
@@ -736,7 +743,8 @@ class WorkflowQueryError(ControllerError):
 
     ``evidence`` also carries the release, the query, the work item, the
     ``argv``, ``cwd``, ``returncode`` and the ``stdout``/``stderr`` tails
-    where they exist, and the path and both digests for a modified script.
+    where they exist, the path and both digests for a modified script, and
+    ``git_argv`` for a Git command the preparation ran.
     """
 
     code = "WORKFLOW_QUERY_FAILED"

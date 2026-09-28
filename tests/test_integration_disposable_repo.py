@@ -447,6 +447,41 @@ class RealManagerMigrationTest(unittest.TestCase):
             _managed, revised = self.decide(target)
             self.assertEqual((revised.action.command, revised.automatic), (migration.APPLY_PLAN_REVIEW, True))
 
+    def test_a_verified_2_6_0_target_never_runs_its_git_clean_filter(self) -> None:
+        # The manual external implementation review's reproduction (round
+        # 1): a target the real Manager verifies at 2.6.0 whose
+        # `.git/info/attributes` names a clean filter its `.git/config`
+        # defines. The status query's `git hash-object` ran it.
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td).resolve() / "target"
+            target.mkdir()
+            fixtures.run(["git", "init", "-q"], cwd=target)
+            fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
+            fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
+            (target / "README.md").write_text("disposable migration fixture\n")
+            fixtures.commit_all(target, "seed")
+            self.manager("--release-version", migration.LEGACY, "bootstrap", str(target), "--profile", "full")
+            config_path = target / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json"
+            config = json.loads(config_path.read_text())
+            config["supported_versions"] = sorted(set(config["supported_versions"]) | {"2.2"})
+            config_path.write_text(json.dumps(config, indent=2) + "\n")
+            base = fixtures.commit_all(target, "Bootstrap Workflow 2.5.1")
+            fixtures.run_workflow_seed(target, "ready", work_item_id=migration.WI, base_commit=base)
+            self.manager("--release-version", migration.UPDATED, "update", str(target))
+
+            sentinel = Path(td) / "QUERY_FILTER_EXECUTED"
+            (target / ".git" / "info").mkdir(exist_ok=True)
+            (target / ".git" / "info" / "attributes").write_text("* filter=evil\n")
+            fixtures.run(["git", "config", "filter.evil.clean", f"touch {sentinel} && cat"], cwd=target)
+            self.manager("verify", str(target))
+            # The Manager's own verification runs Git in place, and so the filter.
+            sentinel.unlink(missing_ok=True)
+
+            status = migration.publication_status(target)
+            self.assertEqual((status.row, status.status), ("3", "BOUND"))
+            self.assertEqual(migration.feedback_path(target).layout, "legacy-flat")
+            self.assertFalse(sentinel.exists(), "the target's clean filter ran during a query")
+
 
 class ControllerSourceTreeDigestVerificationTest(unittest.TestCase):
     """Default-suite coverage for `_expected_controller_source_tree_digest`

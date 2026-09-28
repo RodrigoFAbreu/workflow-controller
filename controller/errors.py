@@ -733,15 +733,14 @@ class WorkflowQueryError(ControllerError):
       configuration, a populated submodule, a setting of the Controller's
       that Git does not apply (Git before 2.31), an index that is not a
       regular file, or a Git command that fails while the Controller
-      prepares the query. ``facility`` names which, and ``detail`` says what
-      was found. Nothing was executed;
+      prepares the query; nothing was executed. Or a filter program Git
+      would have run: the query ran, Git started the Controller's probe
+      instead (``filters``), and the answer is discarded. ``facility``
+      names which, and ``detail`` says what was found;
     - ``query_launch_failed`` and ``query_timeout``: the interpreter could
       not be started, or the query did not finish in time;
     - ``query_failed``: an exit status the query's contract does not
-      document for an answer. This includes a Git command of the query that
-      failed rather than run a filter program: the Controller makes each
-      filter driver with a ``clean`` or ``process`` program
-      (``refused_filters``) fail wherever Git would run it;
+      document for an answer;
     - ``query_output_invalid``: output that does not decode, parse or
       validate as the documented shape (contract drift, never absorbed);
     - ``no_workflow_query``: the release's contract runs no query.
@@ -750,7 +749,8 @@ class WorkflowQueryError(ControllerError):
     ``argv``, ``cwd``, ``returncode`` and the ``stdout``/``stderr`` tails
     where they exist, the path and both digests for a modified script,
     ``git_argv`` for a Git command the preparation ran, and, once the
-    query's Git is prepared, ``refused_filters``.
+    query's Git is prepared, ``refused_filters``: the drivers with a
+    ``clean`` or ``process`` program, whose program the probe replaces.
     """
 
     code = "WORKFLOW_QUERY_FAILED"

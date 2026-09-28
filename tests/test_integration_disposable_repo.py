@@ -454,26 +454,12 @@ class RealManagerMigrationTest(unittest.TestCase):
         # defines. Round 1: the status query's `git hash-object` ran it.
         # Round 2: with the filter switched off instead, an uppercasing
         # filter made the Controller answer row 3 `BOUND` where Workflow
-        # answers row 4c. The query now fails, and so does the decision.
+        # answers row 4c. Round 3: the query is refused
+        # (`query_git_not_isolated`), and so is the decision.
         from controller.errors import WorkflowQueryError
 
         with tempfile.TemporaryDirectory() as td:
-            target = Path(td).resolve() / "target"
-            target.mkdir()
-            fixtures.run(["git", "init", "-q"], cwd=target)
-            fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
-            fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
-            (target / "README.md").write_text("disposable migration fixture\n")
-            fixtures.commit_all(target, "seed")
-            self.manager("--release-version", migration.LEGACY, "bootstrap", str(target), "--profile", "full")
-            config_path = target / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json"
-            config = json.loads(config_path.read_text())
-            config["supported_versions"] = sorted(set(config["supported_versions"]) | {"2.2"})
-            config_path.write_text(json.dumps(config, indent=2) + "\n")
-            base = fixtures.commit_all(target, "Bootstrap Workflow 2.5.1")
-            fixtures.run_workflow_seed(target, "ready", work_item_id=migration.WI, base_commit=base)
-            self.manager("--release-version", migration.UPDATED, "update", str(target))
-
+            target = self.migrated_target(Path(td).resolve())
             sentinel = Path(td) / "QUERY_FILTER_EXECUTED"
             (target / ".git" / "info").mkdir(exist_ok=True)
             (target / ".git" / "info" / "attributes").write_text("* filter=evil\n")
@@ -484,22 +470,21 @@ class RealManagerMigrationTest(unittest.TestCase):
                     self.manager("verify", str(target))
                     # Workflow's own query, run in place as Workflow runs it,
                     # runs the filter and answers with it.
-                    answer = json.loads(fixtures.run(
-                        [sys.executable, "scripts/workflow_state.py",
-                         f"--plan-review-publication-status={migration.WI}"], cwd=target).stdout)
-                    self.assertEqual((answer["row"], answer["status"]), released)
+                    self.assertEqual(self.status_in_place(target), released)
                     self.assertTrue(sentinel.exists(), "control: Workflow's query did not run the filter")
                     sentinel.unlink()
 
                     with self.assertRaises(WorkflowQueryError) as caught:
                         migration.publication_status(target)
                     evidence = caught.exception.evidence
-                    self.assertEqual((evidence["reason"], evidence["refused_filters"]), ("query_failed", ["evil"]))
+                    self.assertEqual((evidence["reason"], evidence["facility"], evidence["filters"]),
+                                     ("query_git_not_isolated", "filter", ["evil"]))
                     self.assertEqual(migration.feedback_path(target).layout, "legacy-flat")
                     self.assertFalse(sentinel.exists(), "the target's clean filter ran during a query")
                     # The operator gets the refusal, never the bound plan's action.
-                    with self.assertRaises(WorkflowQueryError):
+                    with self.assertRaises(WorkflowQueryError) as caught:
                         self.decide(target)
+                    self.assertEqual(caught.exception.evidence["reason"], "query_git_not_isolated")
 
     def test_a_verified_2_6_0_target_never_hides_its_fsmonitor_or_hook(self) -> None:
         # Round 3's reproductions, on a migrated target: an fsmonitor

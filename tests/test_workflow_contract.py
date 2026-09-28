@@ -605,7 +605,8 @@ class GitIsolationTest(_SeededTargets):
     """Each plant is shown live first: Git run in place, as the Workflow
     scripts run it without the Controller, starts the planted program. The
     queries then answer as before, start nothing and write nothing, or
-    refuse (``query_git_not_isolated``) before the query runs."""
+    refuse (``query_git_not_isolated``): before the query runs, or, for a
+    filter, when the query's Git would have run the program."""
 
     SEEDS = {"bound": ("2.6.0", "ready", {})}
     PLAN = f"docs/ai-workflow/{WORK_ITEM_ID}-PLAN.md"
@@ -642,19 +643,22 @@ class GitIsolationTest(_SeededTargets):
         self.assertFalse(self.sentinel.exists(), "a program the target configures ran during a query")
         self.assertEqual(_tree_snapshot(self.root), before, "a query wrote to the target")
 
-    def assert_status_fails_rather_than_filters(self) -> WorkflowQueryError:
+    def assert_status_refuses_the_filter(self) -> WorkflowQueryError:
         """The feedback query, which hashes nothing, answers; the status
-        query's Git fails where it would run the filter, so the query fails
-        too. Either way, nothing runs and nothing is written."""
+        query's Git starts the Controller's probe where it would run the
+        filter, so the query is refused, whatever it would have answered.
+        Either way, nothing runs and nothing is written."""
         _stat_dirty(self.root, UNCHANGED_TRACKED, self.PLAN)
         before = _tree_snapshot(self.root)
         self.assertEqual(workflow_contract.resolve_feedback_path(self.root, CONTRACT, WORK_ITEM_ID).layout, "scoped")
         with self.assertRaises(WorkflowQueryError) as caught:
             workflow_contract.plan_review_publication_status(self.root, CONTRACT, WORK_ITEM_ID)
         evidence = caught.exception.evidence
-        self.assertEqual((evidence["reason"], evidence["refused_filters"]), ("query_failed", ["evil"]), evidence)
-        self.assertIn("CalledProcessError", str(caught.exception))
-        self.assertIn("filter attribute names 'evil'", str(caught.exception))
+        self.assertEqual((evidence["reason"], evidence["facility"], evidence["filters"], evidence["refused_filters"]),
+                         ("query_git_not_isolated", "filter", ["evil"], ["evil"]), evidence)
+        self.assertIsNotNone(evidence["argv"], "the probe is found after the query ran")
+        self.assertIn("gave no answer the Controller may use: its Git cannot be isolated", str(caught.exception))
+        self.assertIn("filter driver 'evil'", str(caught.exception))
         self.assertFalse(self.sentinel.exists(), "a program the target configures ran during a query")
         self.assertEqual(_tree_snapshot(self.root), before, "a query wrote to the target")
         return caught.exception
@@ -710,7 +714,7 @@ class GitIsolationTest(_SeededTargets):
         # names a clean filter that `.git/config` defines; `git hash-object`
         # in the status query ran it. Even this pass-through filter is not
         # run, and the Controller cannot know it passes bytes through, so
-        # the status query fails.
+        # the status query is refused (round 3: `query_git_not_isolated`).
         for variant in ("clean", "process", "included", "operator"):
             with self.subTest(variant=variant):
                 root = self.fresh()
@@ -730,12 +734,13 @@ class GitIsolationTest(_SeededTargets):
                     environment = {"GIT_CONFIG_GLOBAL": str(operator)}
                 with mock.patch.dict(os.environ, environment):
                     self.assert_live("hash-object", "--", self.PLAN)
-                    self.assert_status_fails_rather_than_filters()
+                    self.assert_status_refuses_the_filter()
 
-    def test_a_filter_that_changes_content_fails_the_query_rather_than_bind(self) -> None:
+    def test_a_filter_that_changes_content_is_refused_rather_than_bound(self) -> None:
         # The external review's reproduction (round 2): with the filter
         # switched off, `git hash-object` hashed other bytes than Workflow's,
         # so the Controller answered row 2 `BOUND` where Workflow answers 4a.
+        # Round 3: the refusal is `query_git_not_isolated`.
         self.fresh()
         self.attributes("* filter=evil")
         self.git_config("filter.evil.clean", f"{self.touch} && tr a-z A-Z")
@@ -743,7 +748,7 @@ class GitIsolationTest(_SeededTargets):
         self.assertEqual((released["row"], released["status"]), ("4a", "CONTENT_DRIFTED"))
         self.assertTrue(self.sentinel.exists(), "control: Workflow's query did not run the filter")
         self.sentinel.unlink()
-        self.assert_status_fails_rather_than_filters()
+        self.assert_status_refuses_the_filter()
 
     def test_a_filter_no_hashed_path_selects_leaves_the_answer_workflows(self) -> None:
         # `evil` has a program but selects no path a query hashes; `idle`
@@ -767,8 +772,10 @@ class GitIsolationTest(_SeededTargets):
         self.assertEqual({key: value for key, value in overrides.items() if key.startswith("filter.")}, {
             **{f"filter.{name}.{variable}": "" for name in ("evil", "idle")
                for variable in ("process", "clean", "smudge")},
+            "filter.evil.process": workflow_contract._filter_probe(0),
             "filter.evil.required": "true",
         })
+        self.assertEqual(env[workflow_contract._FILTER_PROBE_ENV], str(call["private_dir"]))
 
     def test_the_querys_git_sees_a_racily_clean_edit_as_git_in_place_does(self) -> None:
         # An edit in the clock tick the index was written in keeps the
@@ -987,6 +994,7 @@ class GitIsolationTest(_SeededTargets):
         env = call["env"]
         self.assertEqual(env["GIT_INDEX_FILE"], str(call["private_dir"] / "index"))
         self.assertEqual(env["GIT_ALLOW_PROTOCOL"], "")
+        self.assertEqual(env[workflow_contract._FILTER_PROBE_ENV], str(call["private_dir"]))
         # The operator's own entry is kept, ahead of the Controller's.
         self.assertEqual((env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]), ("user.name", "Operator"))
         pinned = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]

@@ -1,0 +1,88 @@
+{
+  "files": {
+    ".claude/commands/accept-milestone.md": {
+      "executable": false,
+      "sha256": "ddf2f49aacd802d831602ac89673a4bba1d65960d4acad13fdad1578d5feff0a"
+    },
+    ".claude/commands/apply-functional-review.md": {
+      "executable": false,
+      "sha256": "a29cb42921d9ecadb9cfbc995896ece1a1348d4835eb2619aa385879c3cb21aa"
+    },
+    ".claude/commands/apply-implementation-review.md": {
+      "executable": false,
+      "sha256": "fd47b646eeb4d557e51f42c6fc39d8393490cd1496a5093f47c8f1d558c4c1b4"
+    },
+    ".claude/commands/apply-plan-review.md": {
+      "executable": false,
+      "sha256": "3182ff9a6239e3c4787fc3d0410a5f23daa56df26489c8588e7f71cfaa721a82"
+    },
+    ".claude/commands/approve-review.md": {
+      "executable": false,
+      "sha256": "0ff381aa856ac7a8a0d30c66cbb8204b376922599ae74aa1c02002cafb70a034"
+    },
+    ".claude/commands/bootstrap-workflow-v2.md": {
+      "executable": false,
+      "sha256": "01d5873ba807e78f0d0618eb944246783cb3827fe3e31ad253e0158f879e5cae"
+    },
+    ".claude/commands/milestone-implement.md": {
+      "executable": false,
+      "sha256": "937cd2b0fd75e87df4317a9567397294c2ff11c555974704387228745b58276f"
+    },
+    ".claude/commands/milestone-plan.md": {
+      "executable": false,
+      "sha256": "90cb51b7c0a45fefeeb19b9d300bf7d93f86e167130c4def9df6a852a725f525"
+    },
+    ".claude/commands/prepare-functional-review.md": {
+      "executable": false,
+      "sha256": "49480af8183c0f194131018fe0fc1b1296762e734252de5a5cce90f9f8046921"
+    },
+    ".claude/commands/prepare-review.md": {
+      "executable": false,
+      "sha256": "236a91d16478fa78f6afcb2033f30fdc67dbf11ae4099662a1e2228bbf679de2"
+    },
+    ".claude/commands/record-manual-implementation-review.md": {
+      "executable": false,
+      "sha256": "26feba9273dede6758b7aed8bbbd984910aa2e7bf10500fd8ff82c3d9ddc68ae"
+    },
+    ".claude/commands/record-manual-plan-review.md": {
+      "executable": false,
+      "sha256": "63d567f98bf70a39e5b1626fdf0aef37a73725a5bba065f39cf623e9c541995c"
+    },
+    ".claude/commands/recover-implementation-provenance.md": {
+      "executable": false,
+      "sha256": "5274aaeeaf340b4f2a8bf3cfc529b1baba4580f78b4e1cd416e795ce811e41fe"
+    },
+    ".claude/commands/request-plan-amendment.md": {
+      "executable": false,
+      "sha256": "ce96bcd8ed24f1989666f50a6047d5b1e97fcfbcd09bf63778520397032c58fc"
+    },
+    ".claude/commands/review-functional.md": {
+      "executable": false,
+      "sha256": "c373a7eb795e433627345b2b098b36a0c1020ddf4f80f804347b58d0ebb207af"
+    },
+    ".claude/commands/review-implementation.md": {
+      "executable": false,
+      "sha256": "df6de5ba869bfee1e6fc31cf7a07932fecb66dbb36b55a906d8d0d4b831caf62"
+    },
+    ".claude/commands/review-plan.md": {
+      "executable": false,
+      "sha256": "37d2896320c30e3039e69bd9499c88dd6d60e97bfb1189af7d35737719a831a2"
+    },
+    "scripts/prepare-ai-review.sh": {
+      "executable": true,
+      "sha256": "902c3be9b5ff54228c5635d044828af618246d6ccca81df856eac271bf495c5e"
+    },
+    "scripts/workflow_fingerprint.py": {
+      "executable": true,
+      "sha256": "212f30021551010772a3a6cf3d5a9c7ae50b8a33d7a41e5d5e9601703007ed9a"
+    },
+    "scripts/workflow_state.py": {
+      "executable": false,
+      "sha256": "1d13718567e194c9aea0be0d8f4e54656aa6146c539ee8556e558158f73be2a1"
+    }
+  },
+  "manager_commit": "136c41722d2174327ad9299250bda0a3c91c0220",
+  "manager_source": "distribution/workflow/2.5.1/payload",
+  "schema_version": 1,
+  "workflow_version": "2.5.1"
+}

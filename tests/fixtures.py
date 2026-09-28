@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,13 @@ def _controller_version() -> str:
 
 #: This checkout's Controller version: its own ``pyproject.toml``'s.
 CONTROLLER_VERSION = _controller_version()
+
+from controller.managed_repo import REFERENCE_WORKFLOW_RELEASE  # noqa: E402
+
+#: The vendored, hash-pinned Workflow release trees
+#: (``tools/workflow_releases.py``). Workflow-derived checks read these,
+#: never this repository's own installed Workflow.
+WORKFLOW_RELEASES_DIR = REPO_ROOT / "tests" / "workflow_releases"
 
 #: Set to ``"1"`` to make a missing wheel-build prerequisite a test failure
 #: instead of a skip.
@@ -321,23 +329,26 @@ def build_managed_repo(
     return dest
 
 
-def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: str = "full") -> Path:
-    """A managed-repo fixture whose ``.claude/commands/`` tree and
-    ``scripts/workflow_state.py`` are byte-identical copies of this
-    repository's own reference ``2.5.1`` tree -- so the phase set, the
-    command-file partition and the user-only set CP3/CP4 read are, by
-    construction, identical to the admitted case -- while
-    ``installation.json`` alone declares ``workflow_version`` (``REQ-T18B``,
+def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: str = "full",
+                                release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
+    """A managed-repo fixture whose ``.claude/commands/`` tree,
+    ``scripts/workflow_state.py`` and ``scripts/workflow_fingerprint.py``
+    (its sibling import from 2.6.0 on) are byte-identical copies of the
+    vendored ``release`` tree -- so the phase set, the command-file
+    partition and the user-only set CP3/CP4 read are, by construction,
+    identical to the admitted case -- while ``installation.json`` alone
+    declares ``workflow_version`` (``REQ-T18B``,
     ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``'s CP2 section). Refusing
     this fixture at CP2, without ever reaching a command-file or
     ``KNOWN_PHASES`` read, is the assertion that discriminates the
     two-tier admission rule from one that (wrongly) falls back to an
     inventory-equality check when the exact release is unrecognised."""
     build_bare_git_repo(dest)
-    copy_real_commands_dir(dest / ".claude" / "commands")
+    copy_real_commands_dir(dest / ".claude" / "commands", release=release)
     scripts_dir = dest / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / "scripts" / "workflow_state.py", scripts_dir / "workflow_state.py")
+    for name in ("workflow_state.py", "workflow_fingerprint.py"):
+        shutil.copy2(workflow_release_tree(release) / "scripts" / name, scripts_dir / name)
     write_installation_manifest(dest, workflow_version=workflow_version, profile=profile)
     run(["git", "add", "-A"], cwd=dest)
     run(["git", "commit", "-q", "-m", "line-fixture"], cwd=dest)
@@ -346,13 +357,17 @@ def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: s
 
 def write_stub_workflow_manager(
     path: Path, *, verify_exit: int = 0, status_exit: int = 0,
-    verify_stdout: str = "workflow 2.5.1 (full profile) -- clean",
-    status_stdout: str = "workflow 2.5.1 (full profile) -- clean",
+    verify_stdout: str | None = None, status_stdout: str | None = None,
+    release: str = REFERENCE_WORKFLOW_RELEASE,
 ) -> Path:
     """A hermetic, offline stand-in for the real ``workflow-manager``
     executable: an executable shell script whose ``verify``/``status``
     exit codes and stdout are the caller's own, so the drift/asymmetry
-    tests never depend on the real Manager's actual behaviour."""
+    tests never depend on the real Manager's actual behaviour. Unless given,
+    both print ``release``'s clean-installation line."""
+    clean = f"workflow {release} (full profile) -- clean"
+    verify_stdout = clean if verify_stdout is None else verify_stdout
+    status_stdout = clean if status_stdout is None else status_stdout
     script = (
         "#!/bin/sh\n"
         "sub=\"$1\"\n"
@@ -422,9 +437,6 @@ def write_target_registry(root: Path, rel_path: str, registry: dict) -> Path:
 # CP4 -- decision-engine fixtures.
 # ---------------------------------------------------------------------------
 
-REAL_COMMANDS_DIR = REPO_ROOT / ".claude" / "commands"
-
-
 def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
                           governing_workflow_version: str | None = "2.1", **overrides):
     """A real ``controller.target_state.WorkItemView`` with every field
@@ -462,17 +474,311 @@ def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
     return WorkItemView(**defaults)
 
 
-def copy_real_commands_dir(dest: Path) -> Path:
-    """A real, on-disk copy of this repository's own
-    ``.claude/commands/`` -- this repository is itself a frozen Workflow
-    installation (2.5.1 since revision 64's baseline update), so its
-    seventeen command files are the same external artifact a target
-    managed repository carries. Copying rather than pointing at
-    ``REAL_COMMANDS_DIR`` directly keeps a fixture that mutates a file
-    (the extra-file / discriminating-recogniser tests) from ever touching
-    this repository's own working tree."""
+def workflow_release_tree(release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
+    """The vendored tree of the released Workflow ``release``: its
+    seventeen command files and three scripts at their target-relative
+    paths, hash-pinned by its ``RELEASE.json``. Read it, never write it."""
+    tree = WORKFLOW_RELEASES_DIR / release
+    if not (tree / "RELEASE.json").is_file():
+        raise FileNotFoundError(f"no vendored Workflow tree for {release!r} under {WORKFLOW_RELEASES_DIR}")
+    return tree
+
+
+def workflow_release_files(release: str = REFERENCE_WORKFLOW_RELEASE) -> dict[str, dict]:
+    """``release``'s vendored files, from its ``RELEASE.json``:
+    ``{target path: {"sha256", "executable"}}``."""
+    return json.loads((workflow_release_tree(release) / "RELEASE.json").read_text())["files"]
+
+
+def evaluate_in_workflow_release(release: str, expression: str):
+    """Evaluate ``expression`` against the vendored ``release``'s own
+    ``workflow_state`` module and return its JSON-decoded value. It runs in
+    a fresh interpreter per call (``sys.executable -B -E -s -c``, with the
+    vendored ``scripts/`` directory as ``cwd``): every release's scripts
+    share module names, so importing two releases in one process would
+    collide in ``sys.modules``. ``-B`` keeps bytecode out of the vendored
+    tree."""
+    code = f"import json\nimport workflow_state\nprint(json.dumps({expression}))\n"
+    result = subprocess.run(
+        [sys.executable, "-B", "-E", "-s", "-c", code], cwd=workflow_release_tree(release) / "scripts",
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"evaluating {expression!r} against Workflow {release} failed "
+                             f"(exit {result.returncode}): {result.stderr}")
+    return json.loads(result.stdout)
+
+
+def reference_binding():
+    """The reference release's bound Workflow contract (2.5.1: the
+    Controller's own rules, no query) -- what a test that calls a
+    feedback-reading helper or a verification clause directly passes as its
+    ``bound`` argument (workflow-2-6-integration CP3)."""
+    from controller import workflow_contract
+
+    return workflow_contract.bind_release(REFERENCE_WORKFLOW_RELEASE)
+
+
+def install_workflow_release(root: Path, release: str, *, profile: str = "full") -> Path:
+    """Install the vendored ``release`` tree into the target ``root``: every
+    vendored file at its target path, with its mode, and an
+    ``installation.json`` declaring ``release`` (written through
+    :func:`write_installation_manifest`). Commits nothing."""
+    tree = workflow_release_tree(release)
+    for rel_path in workflow_release_files(release):
+        dest = root / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(tree / rel_path, dest)
+    write_installation_manifest(root, workflow_version=release, profile=profile)
+    return root
+
+
+#: Seeds one work item inside a target, through the target's own installed
+#: Workflow scripts, up to ``stage`` (``workflow-controller-workflow-2-6-
+#: integration`` CP2, moved here for CP4):
+#: - ``route``: the item is created (2.6.0 stamps ``feedback_layout``);
+#: - ``publish``: the plan, registry, mapping and declarations exist
+#:   (intent-to-add) and the revision is published: a ``PUBLISHED`` record at
+#:   ``PLANNING`` under 2.6.0, ``AWAITING_LOCAL_PLAN_REVIEW`` under 2.5.1;
+#: - ``generate``: the real generator has built the plan bundle (under
+#:   2.6.0 not bound yet: row 9, "bind only");
+#: - ``ready``: as ``generate``, and under 2.6.0 ``bind_plan_review_bundle``
+#:   has bound it;
+#: - ``revise``: a local ``REVISE`` has been recorded (``REVISING_PLAN``).
+#: ``extra_protected_paths`` (already committed) join the declarations'
+#: ``plan_stage.protected_paths``; the registry holds ``checkpoint_ids``
+#: (default ``["CP1"]``). It runs with ``-B`` so no bytecode lands in the
+#: target.
+WORKFLOW_SEED_SCRIPT = r"""
+import datetime
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path.cwd()
+sys.path.insert(0, str(root / "scripts"))
+import workflow_fingerprint as fingerprint  # noqa: E402
+import workflow_state as ws  # noqa: E402
+
+args = json.loads(sys.argv[1])
+wid = args["work_item_id"]
+base_commit = args["base_commit"]
+stages = ["route", "publish", "generate", "ready", "revise"]
+reach = stages.index(args["stage"])
+binds = hasattr(ws, "bind_plan_review_bundle")
+plan_path = f"docs/ai-workflow/{wid}-PLAN.md"
+registry_path = f"docs/ai-workflow/registry/{wid}-registry.json"
+mapping_path = f"docs/ai-workflow/requirements/{wid}-mapping.json"
+artifacts_path = f"docs/ai-workflow/registry/{wid}-artifacts.json"
+
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def git(*git_args):
+    return subprocess.run(["git", *git_args], cwd=root, check=True, capture_output=True, text=True).stdout
+
+
+def tx(mutator):
+    return ws.state_transaction(root, mutator)
+
+
+config = json.loads((root / "docs/ai-workflow/WORKFLOW_CONFIG.json").read_text())
+config["default_workflow_version"] = args["governing_workflow_version"]
+tx(lambda state: ws.route_work_item(
+    state, config, work_item_id=wid, work_item_type="product", work_item_kind="product",
+    plan_path=plan_path, registry_path=registry_path, plan_revision=1, now=now(),
+    mapping_path=mapping_path, base_commit=base_commit, repo_root=root,
+))
+if reach < 1:
+    raise SystemExit(0)
+checkpoint_ids = args.get("checkpoint_ids", ["CP1"])
+checkpoints = [{"id": cid, "name": "one checkpoint" if len(checkpoint_ids) == 1 else f"checkpoint {cid}",
+                "depends_on": [], "complexity": 1, "session_target": 1} for cid in checkpoint_ids]
+registry = ws.generate_registry(wid, 1, checkpoints)
+mapping = ws.generate_mapping(wid, {"R1": {"description": "one requirement", "checkpoint_ids": checkpoint_ids}},
+                              registry=registry)
+ws.write_registry_and_mapping(root, Path(registry_path), Path(mapping_path), registry, mapping)
+declarations = ws.generate_artifacts_declarations(wid, plan_path, registry_path, mapping_path,
+                                                  work_item_type="product")
+declarations["plan_stage"]["protected_paths"] += args["extra_protected_paths"]
+(root / artifacts_path).write_text(json.dumps(declarations, indent=2) + "\n")
+(root / plan_path).write_text(f"# {wid} plan (Revision 1)\n\nA disposable fixture plan.\n"
+                              + ws.render_registry_markdown(registry) + "\n")
+git("add", "-N", "--", plan_path, registry_path, mapping_path, artifacts_path)
+review_content_id, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(root, wid)
+if binds:
+    tx(lambda state: ws.publish_plan_revision(state, wid, 1, now(), review_content_id=review_content_id))
+else:
+    tx(lambda state: ws.publish_plan_revision(state, wid, 1, now()))
+if reach < 2:
+    raise SystemExit(0)
+inputs = root / (fingerprint.resolve_plan_review_inputs_dir(root, wid) if binds
+                 else fingerprint.resolve_bundle_dir(root, wid, stage="plan"))
+inputs.mkdir(parents=True, exist_ok=True)
+(inputs / "REVIEW_REQUEST.md").write_text(
+    f"# Review request\n\nstage: plan\nwork item: {wid}\nreview_content_id: {review_content_id}\n"
+)
+(inputs / "TEST_RESULTS.md").write_text(
+    f"stage: plan (revision 1)\nhead: {git('rev-parse', 'HEAD').strip()}\n\nNo checks at the plan stage.\n"
+)
+(inputs / "CONTEXT_FILES.txt").write_text("README.md\n")
+subprocess.run(["./scripts/prepare-ai-review.sh", base_commit, "plan", wid], cwd=root, check=True,
+               capture_output=True, text=True)
+if reach < 3:
+    raise SystemExit(0)
+binding = ws.verify_plan_review_bundle(root, wid) if binds else None
+bundle_dir = root / fingerprint.resolve_bundle_dir(root, wid, stage="plan")
+bundle_id = fingerprint.read_manifest_identifiers(bundle_dir / "MANIFEST.md")["bundle_id"]
+if binds:
+    tx(lambda state: ws.bind_plan_review_bundle(state, wid, binding=binding, now=now()))
+if reach < 4:
+    raise SystemExit(0)
+tx(lambda state: ws.record_local_plan_review(
+    state, wid, verdict="REVISE", bundle_id=bundle_id, review_content_id=review_content_id, round=1, now=now(),
+))
+"""
+
+
+def run_workflow_python(root: Path, code: str, *args: str) -> subprocess.CompletedProcess:
+    """Run ``code`` in a fresh interpreter inside the target ``root``, with
+    the target's own ``scripts/`` importable (``import workflow_state as
+    ws``, ``import workflow_fingerprint as fingerprint`` are prepended).
+    ``-B`` and ``PYTHONDONTWRITEBYTECODE`` keep bytecode out of the target,
+    including from any generator the code runs. Raises on a non-zero exit."""
+    prelude = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path.cwd() / 'scripts'))\n"
+               "import workflow_fingerprint as fingerprint\nimport workflow_state as ws\n")
+    result = subprocess.run(
+        [sys.executable, "-B", "-E", "-s", "-c", prelude + code, *args], cwd=root, stdin=subprocess.DEVNULL,
+        capture_output=True, text=True, check=False, timeout=120,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"Workflow code in {root} failed (exit {result.returncode}):\n"
+                             f"{result.stdout}\n{result.stderr}")
+    return result
+
+
+def run_workflow_seed(root: Path, stage: str, *, work_item_id: str, base_commit: str,
+                      governing_workflow_version: str = "2.2",
+                      extra_protected_paths: tuple[str, ...] | list[str] = (),
+                      checkpoint_ids: tuple[str, ...] = ("CP1",)) -> None:
+    """Run :data:`WORKFLOW_SEED_SCRIPT` in the existing target ``root``,
+    through whatever Workflow release it has installed: ``work_item_id`` is
+    created with ``base_commit`` and seeded up to ``stage``. The target's
+    ``WORKFLOW_CONFIG.json`` must list ``governing_workflow_version``."""
+    result = subprocess.run(
+        [sys.executable, "-B", "-E", "-s", "-c", WORKFLOW_SEED_SCRIPT, json.dumps({
+            "work_item_id": work_item_id, "base_commit": base_commit, "stage": stage,
+            "governing_workflow_version": governing_workflow_version,
+            "extra_protected_paths": list(extra_protected_paths), "checkpoint_ids": list(checkpoint_ids),
+        })],
+        cwd=root, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+        # The generator runs a plain `python3`: keep its bytecode out of the
+        # target too, so a `__pycache__` found later was written by a query.
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"seeding {work_item_id} to {stage} in {root} failed (exit {result.returncode}):\n"
+                             f"{result.stdout}\n{result.stderr}")
+
+
+def seed_workflow_item(root: Path, release: str, stage: str, *, work_item_id: str,
+                       upgrade_to: str | None = None, governing_workflow_version: str = "2.2",
+                       extra_protected_paths: dict[str, str] | None = None) -> Path:
+    """A disposable managed repository at ``root`` running the vendored
+    ``release``, with ``work_item_id`` seeded up to ``stage`` by
+    :data:`WORKFLOW_SEED_SCRIPT`, then (``upgrade_to``) moved to another
+    release by overwriting the vendored tree, which is all Workflow
+    Manager's ``update`` does to these files. ``extra_protected_paths``
+    (path -> text) are committed at ``base_commit`` and declared as further
+    plan-stage protected paths. ``.ai-review/`` is ignored."""
+    root.mkdir(parents=True)
+    run(["git", "init", "-q"], cwd=root)
+    run(["git", "config", "user.email", "workflow-seed@example.invalid"], cwd=root)
+    run(["git", "config", "user.name", "Workflow Seed"], cwd=root)
+    (root / "README.md").write_text("disposable Workflow fixture\n")
+    (root / ".gitignore").write_text(".ai-review/\n")
+    for rel_path, text in (extra_protected_paths or {}).items():
+        (root / rel_path).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel_path).write_text(text)
+    install_workflow_release(root, release)
+    ai_workflow = root / "docs" / "ai-workflow"
+    ai_workflow.mkdir(parents=True, exist_ok=True)
+    (ai_workflow / "WORKFLOW_CONFIG.json").write_text(json.dumps(
+        {"schema_version": 1, "default_workflow_version": "2.2", "supported_versions": ["1", "2.1", "2.2"]},
+    ) + "\n")
+    (ai_workflow / "WORKFLOW_STATE.json").write_text(json.dumps(
+        {"schema_version": 1, "active_work_item_id": None, "work_items": {}},
+    ) + "\n")
+    base_commit = commit_all(root, "seed")
+    run_workflow_seed(root, stage, work_item_id=work_item_id, base_commit=base_commit,
+                      governing_workflow_version=governing_workflow_version,
+                      extra_protected_paths=sorted(extra_protected_paths or {}))
+    if upgrade_to is not None:
+        install_workflow_release(root, upgrade_to)
+    written = sorted(root.rglob("__pycache__"))
+    if written:
+        raise AssertionError(f"seeding wrote bytecode into the target: {written}")
+    return root
+
+def carry_out_plan_recovery_steps(root: Path, work_item_id: str, steps: tuple[str, ...]) -> None:
+    """Carry out the Controller's plan-bundle recovery steps
+    (``evidence._plan_bundle_recovery_steps``, numbered ``0.``-``3.``)
+    exactly as written, with the target's own installed Workflow: each
+    author file at the path the step names -- ``CONTEXT_FILES.txt`` copied
+    from the quarantine the step names, if any, ``REVIEW_REQUEST.md`` with
+    the fresh plan-stage ``review_content_id``, ``TEST_RESULTS.md`` with the
+    revision the step names and the current ``HEAD`` -- then the generator
+    command it names. Raises on a step it cannot carry out, and on a
+    generator that exits non-zero."""
+    for step in steps:
+        context = re.match(r"^0\. write (\S+)/CONTEXT_FILES\.txt(?:, restoring the previous round's author "
+                           r"files from (\S+)/)?$", step)
+        request = re.match(r"^\d\. (?:write|refresh) (\S+)/REVIEW_REQUEST\.md", step)
+        results = re.match(r"^\d\. (?:write|refresh) (\S+)/TEST_RESULTS\.md .*`stage: plan \(revision (\d+)\)`",
+                           step)
+        generator = re.match(r"^\d\. run (scripts/prepare-ai-review\.sh) (\S+) plan (\S+) -- ", step)
+        if context:
+            target = root / context.group(1) / "CONTEXT_FILES.txt"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = root / context.group(2) / "CONTEXT_FILES.txt" if context.group(2) else None
+            target.write_bytes(source.read_bytes() if source is not None and source.is_file() else b"")
+        elif request:
+            content_id = run_workflow_python(
+                root, "print(fingerprint.compute_review_content_id_plan_stage_for_work_item(Path.cwd(), "
+                      "sys.argv[1])[0])", work_item_id).stdout.strip()
+            target = root / request.group(1) / "REVIEW_REQUEST.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"# Review request\n\nstage: plan\nwork item: {work_item_id}\n"
+                              f"review_content_id: {content_id}\n")
+        elif results:
+            target = root / results.group(1) / "TEST_RESULTS.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"stage: plan (revision {results.group(2)})\nhead: {current_head(root)}\n\n"
+                              "No checks at the plan stage.\n")
+        elif generator:
+            result = subprocess.run(
+                [f"./{generator.group(1)}", generator.group(2), "plan", generator.group(3)], cwd=root,
+                stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            )
+            if result.returncode != 0:
+                raise AssertionError(f"{step}\n(exit {result.returncode})\n{result.stdout}\n{result.stderr}")
+        else:
+            raise AssertionError(f"a recovery step this helper cannot carry out: {step!r}")
+
+
+def copy_real_commands_dir(dest: Path, *, release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
+    """A real, on-disk copy of the released Workflow ``release``'s
+    seventeen command files, from its vendored tree -- the same external
+    artifact a target managed repository carries. Copying rather than
+    pointing at the vendored tree keeps a fixture that mutates a file (the
+    extra-file / discriminating-recogniser tests) from ever touching it."""
     dest.mkdir(parents=True, exist_ok=True)
-    for path in REAL_COMMANDS_DIR.glob("*.md"):
+    for path in (workflow_release_tree(release) / ".claude" / "commands").glob("*.md"):
         shutil.copy2(path, dest / path.name)
     return dest
 
@@ -1028,13 +1334,31 @@ def perform_script_actions(root: Path, actions: list[dict]) -> None:
 def build_target_managed_repository(root: Path):
     """A minimal, real ``managed_repo.ManagedRepository`` pointed at
     ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so
-    the other fields are inert placeholders rather than a real Workflow
-    Manager inspection."""
+    ``verify``/``status`` are inert placeholders rather than a real Workflow
+    Manager inspection.
+
+    ``workflow_version`` is the release ``root``'s
+    ``.workflow-manager/installation.json`` declares. With no manifest
+    there, one declaring the reference release (an admitted one) is written
+    first: every step re-reads the installed release before deciding, and
+    every verification before judging (workflow-2-6-integration CP3, I3).
+    When ``root`` is a Git repository the written manifest is added to its
+    ``.git/info/exclude``, so it never shows in ``git status`` or a
+    worker's ``git add -A``."""
     from controller.managed_repo import ManagedRepository
 
     root.mkdir(parents=True, exist_ok=True)
+    manifest_path = root / ".workflow-manager" / "installation.json"
+    if not manifest_path.exists():
+        write_installation_manifest(root, workflow_version=REFERENCE_WORKFLOW_RELEASE)
+        exclude = root / ".git" / "info" / "exclude"
+        if (root / ".git").is_dir():
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a") as handle:
+                handle.write("/.workflow-manager/\n")
+    manifest = json.loads(manifest_path.read_text())
     return ManagedRepository(
-        root=root, manifest={}, workflow_version="2.3.1", profile="full",
+        root=root, manifest=manifest, workflow_version=manifest["workflow_version"], profile="full",
         verify={"returncode": 0, "stdout": "", "stderr": ""},
         status={"returncode": 0, "stdout": "", "stderr": ""},
     )

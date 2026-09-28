@@ -169,12 +169,15 @@ class DriftedInstallationError(ControllerError):
 
 class UnsupportedWorkflowVersionError(ControllerError):
     """The manifest's ``workflow_version`` fails the Controller's two-tier
-    baseline rule (``managed_repo.SUPPORTED_WORKFLOW_LINE`` then
+    baseline rule (``managed_repo.SUPPORTED_WORKFLOW_LINES`` then
     ``managed_repo.VALIDATED_WORKFLOW_RELEASES``), regardless of
-    ``profile``. ``evidence['reason']`` distinguishes a version outside the
-    supported line entirely (``"outside_supported_line"``) from one inside
-    the line that has not been individually validated
-    (``"unvalidated_release"``)."""
+    ``profile``. ``evidence['reason']`` distinguishes a version outside
+    every supported line (``"outside_supported_line"``) from one inside a
+    supported line that has not been individually validated
+    (``"unvalidated_release"``); both carry the sorted list
+    ``supported_workflow_lines``. ``workflow_contract.contract_for`` raises it
+    too, with ``"no_workflow_contract"``, for a release the Controller holds
+    no Workflow contract for."""
 
     code = "UNSUPPORTED_WORKFLOW_VERSION"
 
@@ -700,3 +703,81 @@ class BranchInvariantViolatedError(ControllerError):
     Controller does not repair it; a human inspects."""
 
     code = "BRANCH_INVARIANT_VIOLATED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP2 -- the Workflow contract
+# and its two query clients (``controller.workflow_contract``).
+# ---------------------------------------------------------------------------
+
+
+class WorkflowQueryError(ControllerError):
+    """A Workflow query (``--resolve-feedback-path`` or
+    ``--plan-review-publication-status``) could not give an answer the
+    Controller may act on. It is the only exception the query runner lets
+    out, whatever step failed, and it is never a fallback to the 2.5.1 rule:
+    the caller fails closed (exit ``20``).
+
+    ``evidence['reason']`` names the failed step:
+
+    - ``query_script_modified``: a script is missing, unreadable, not a
+      regular file, or its bytes do not have the contract's digest. Nothing
+      was executed;
+    - ``query_private_copy_failed``: the private directory could not be
+      created, written or removed. Nothing was executed after a creation or
+      write failure, and a removal failure discards the answer;
+    - ``query_git_not_isolated``: the Git the query would run cannot be
+      kept from starting a program the target configures without the
+      answer perhaps changing: a hook the query's Git would fire, an
+      fsmonitor program, a hook command in the target's own Git
+      configuration, a populated submodule, a setting of the Controller's
+      that Git does not apply (Git before 2.31), an index that is not a
+      regular file, or a Git command that fails while the Controller
+      prepares the query; nothing was executed. Or a filter program Git
+      would have run: the query ran, Git started the Controller's probe
+      instead (``filters``), and the answer is discarded. ``facility``
+      names which, and ``detail`` says what was found;
+    - ``query_launch_failed`` and ``query_timeout``: the interpreter could
+      not be started, or the query did not finish in time;
+    - ``query_failed``: an exit status the query's contract does not
+      document for an answer;
+    - ``query_output_invalid``: output that does not decode, parse or
+      validate as the documented shape (contract drift, never absorbed);
+    - ``no_workflow_query``: the release's contract runs no query.
+
+    ``evidence`` also carries the release, the query, the work item, the
+    ``argv``, ``cwd``, ``returncode`` and the ``stdout``/``stderr`` tails
+    where they exist, the path and both digests for a modified script,
+    ``git_argv`` for a Git command the preparation ran, and, once the
+    query's Git is prepared, ``refused_filters``: the drivers with a
+    ``clean`` or ``process`` program, whose program the probe replaces.
+    """
+
+    code = "WORKFLOW_QUERY_FAILED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP3 -- the installed-release
+# re-check (``controller.job``).
+# ---------------------------------------------------------------------------
+
+
+class WorkflowReleaseChangedError(ControllerError):
+    """The target's installed Workflow release is not the one the Controller
+    is acting under, or cannot be established: its
+    ``.workflow-manager/installation.json`` names another release, or is
+    missing or unreadable.
+
+    Raised before a decision, right after the repository preflight, when the
+    installed release differs from the one ``managed_repo.inspect``
+    admitted. Nothing is decided or launched and no job record is written;
+    ``evidence`` carries ``admitted``, ``installed`` (``null`` when the
+    manifest cannot be read, with the parser error's ``code`` and
+    ``message`` under ``manifest_error``) and what the preflight did
+    (``preflight_action``, ``preflight_gate``, ``preflight_events``).
+
+    At job verification the same condition, against the release the job
+    record carries, is a terminal ``FAILED`` job with reason
+    ``workflow_release_changed``, never a raise."""
+
+    code = "WORKFLOW_RELEASE_CHANGED"

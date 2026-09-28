@@ -8,9 +8,10 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-09-27).** Controller 1.2.1 is the latest release. Every milestone
-through adaptive test sharding (1.2.1 below) is complete. Workflow 2.6.0 is released by Workflow
-Manager; the Controller still admits only Workflow 2.5.1.
+**Where things stand (2026-09-28).** Controller 1.2.1 is the latest release. Every milestone
+through the Workflow 2.6 integration (1.6 below, accepted 2026-09-28) is complete. That milestone
+admits Workflow 2.6.0 beside 2.5.1 and ships as Controller 1.3.0 once its pull request (#5) is
+merged into `main`. This repository's own Workflow installation stays on 2.5.1 until then.
 
 **Where this is heading.** Each roadmap item becomes one autonomous Controller run: fresh workers
 for implementation, independent review and remediation, automated evidence where it suffices, a
@@ -21,7 +22,7 @@ a fresh run for the next item. Human gates stay only where a decision needs huma
 
 | # | Step | Repository | Roadmap section |
 |---|---|---|---|
-| 1 | Integrate the released Workflow 2.6, kept minimal | Controller | 1.6 |
+| 1 | Integrate the released Workflow 2.6, kept minimal (complete) | Controller | 1.6 |
 | 2 | Squash merges, with the release version derived from pull request titles | Controller | new; the first slice of automatic merging (1.8/1.9) |
 | 3 | Operational cleanup and telemetry v0 (token, cache, cost and timing per job) | Controller | 1.4, plus 8 |
 | 4 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | Controller | new; the base of automated functional evidence (1.8) |
@@ -258,7 +259,7 @@ Requirements:
 accepted 2026-09-26 under Workflow 2.5.1; the narrative is archived at
 `docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`). The four patches
 below remain open; they are step 3 of [At a glance](#at-a-glance), after the Workflow 2.6
-integration (1.6, now unblocked) and the squash-merge versioning change
+integration (1.6, complete) and the squash-merge versioning change
 
 **Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
 plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR
@@ -313,6 +314,14 @@ Required end state:
 This milestone must finish independently under Workflow 2.5.1. It must not wait for Workflow 2.6.x.
 
 ## 1.6 Post-Workflow-2.6 compatibility integration
+
+**Status:** Complete (`workflow-controller-workflow-2-6-integration`, accepted 2026-09-28 under
+Workflow 2.5.1; plan `docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md`, ADR
+`docs/adr/0006-workflow-release-admission-and-per-release-contracts.md`; the narrative is archived
+at `docs/milestones/completed/workflow-controller-workflow-2-6-integration.md`). It admits Workflow
+2.6.0 beside 2.5.1 by exact release and ships as Controller 1.3.0. E1-E5 are answered in ADR 0006:
+`gitrepo.merge_trunk` stays unwired, and the ADR names the Workflow follow-up. Moving this
+repository's own installation to 2.6.0 is a separate change after 1.3.0 is released.
 
 **Priority:** Immediately after both parallel milestones complete.
 
@@ -1009,6 +1018,7 @@ The current order is the table in [At a glance](#at-a-glance). Completed so far,
 1.5    Trunk/branch/PR/release orchestration                 COMPLETE (first automatic release 1.2.0)
 1.4    Worker lifecycle ownership hotfix                     COMPLETE (in 1.2.0)
 1.2.1  Adaptive test sharding                                COMPLETE (released as 1.2.1)
+1.6    Workflow 2.6 compatibility integration                COMPLETE (ships as 1.3.0)
 ```
 
 ---

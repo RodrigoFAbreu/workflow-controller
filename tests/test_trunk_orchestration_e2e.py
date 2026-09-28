@@ -3,8 +3,8 @@
 
 Every lifecycle scenario runs a real ``"2.2"`` target through the real
 ``cli.main``: a clone of a disposable bare origin whose trunk carries the
-real Workflow 2.5.1 tree (``fixtures.build_workflow_line_fixture``: this
-repository's own ``.claude/commands/`` and ``scripts/workflow_state.py``),
+real Workflow 2.5.1 tree (``fixtures.build_workflow_line_fixture``: the
+vendored release's ``.claude/commands/`` and two Workflow scripts),
 the executable fake ``gh`` (``tests/fake_gh.py``) first on ``PATH``, and the
 scripted fake worker (``tests/fake_claude.py``), with the identity pin and
 the Workflow Manager stubbed exactly as in

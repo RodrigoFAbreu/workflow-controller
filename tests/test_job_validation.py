@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import evidence, job  # noqa: E402
 from controller.decision import Action, Decision  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
+from controller.managed_repo import VALIDATED_WORKFLOW_RELEASES  # noqa: E402
 from tests import fixtures  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
@@ -45,11 +46,11 @@ FAKE_IDENTITY = ControllerIdentity(
     pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
 )
 
-#: This repository's own checkout -- itself a frozen Workflow
-#: installation (2.5.1 since revision 64's baseline update), per
-#: ``tests/fixtures.copy_real_commands_dir``'s own docstring -- is what
-#: property 5 checks its declared branches/calls against.
-REPO_ROOT = fixtures.REPO_ROOT
+#: The vendored reference-release tree: what property 5's single-row
+#: tests check their declared branches/calls against. The real table is
+#: checked against every admitted release's tree
+#: (``DeclarationAgainstArtifactTest``).
+REFERENCE_TREE = fixtures.workflow_release_tree()
 
 
 class _WriteSpy:
@@ -258,7 +259,7 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
         # The negative direction: property 5 is silent about the same row,
         # which is why property 3 has to speak.
         self.assertEqual(
-            job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,)), [],
+            job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,)), [],
         )
 
     def test_real_table_rows_each_derive_a_single_consistent_branch(self) -> None:
@@ -455,8 +456,12 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
     is restated to point at step 5's own text directly (a locatable
     numbered-step span), never a "steps N-M execute" cross-reference."""
 
-    def test_real_table_passes_against_the_frozen_command_files(self) -> None:
-        self.assertEqual(job.property_declaration_against_artifact_violations(REPO_ROOT), [])
+    def test_real_table_passes_against_every_admitted_release(self) -> None:
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                self.assertEqual(job.property_declaration_against_artifact_violations(
+                    fixtures.workflow_release_tree(release), job.expected_outcomes_for(release),
+                ), [])
 
     def test_row5_branch_is_step5s_own_span(self) -> None:
         row5 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/apply-plan-review"
@@ -476,14 +481,14 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         bad_branch = job.BranchSpec(kind="bullet", label="NO_SUCH_VERDICT")
         bad_wc = dataclasses.replace(row3.writer_calls[0], branch=bad_branch)
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("declared branch" in v and "not found" in v for v in violations), violations)
 
     def test_call_not_found_in_branch_fails(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         bad_wc = dataclasses.replace(row3.writer_calls[0], match_text="no_such_writer_call_at_all(")
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("no call found" in v for v in violations), violations)
 
     def test_a_further_different_durable_write_after_the_call_fails(self) -> None:
@@ -498,14 +503,14 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
             row1.writer_calls[0], function="generate_registry", match_text="generate_registry(",
         )
         broken = dataclasses.replace(row1, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("a further durable write" in v for v in violations), violations)
 
     def test_unreadable_file_fails_naming_the_row_and_file(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         bad_wc = dataclasses.replace(row3.writer_calls[0], file="no-such-command-file.md")
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("could not be read" in v for v in violations), violations)
 
 
@@ -527,21 +532,21 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         )
         for _fn, why in row12.writer_calls[0].trailing_calls:
             self.assertTrue(why.strip())
-        self.assertEqual(job.property_declaration_against_artifact_violations(REPO_ROOT, (row12,)), [])
+        self.assertEqual(job.property_declaration_against_artifact_violations(REFERENCE_TREE, (row12,)), [])
 
     def test_an_undeclared_trailing_write_still_fails(self) -> None:
         """Without the allowlist, step 1f's two later calls are reported;
         allowlisting one leaves the other reported -- the property is
         never weakened to pass."""
         violations = job.property_declaration_against_artifact_violations(
-            REPO_ROOT, (self._row12_with_trailing(()),),
+            REFERENCE_TREE, (self._row12_with_trailing(()),),
         )
         self.assertEqual(len(violations), 2, violations)
         self.assertTrue(any("'committed_checkpoint_status' occurs after it" in v for v in violations))
         self.assertTrue(any("'release_checkpoint' occurs after it" in v for v in violations))
 
         only_read = self._row12_with_trailing((("committed_checkpoint_status", "a read"),))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (only_read,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (only_read,))
         self.assertEqual(len(violations), 1, violations)
         self.assertIn("a further durable write to 'release_checkpoint'", violations[0])
 
@@ -549,7 +554,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         stale = self._row12_with_trailing(
             job._STEP_1F_TRAILING_CALLS + (("record_bundle_generation", "not in step 1f at all"),),
         )
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (stale,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (stale,))
         self.assertEqual(len(violations), 1, violations)
         self.assertIn("trailing_calls names 'record_bundle_generation'", violations[0])
         self.assertIn("stale allowlist entry", violations[0])
@@ -560,7 +565,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         before = self._row12_with_trailing(
             job._STEP_1F_TRAILING_CALLS + (("owner_mutation", "precedes the declared call"),),
         )
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (before,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (before,))
         self.assertEqual(len(violations), 1, violations)
         self.assertIn("trailing_calls names 'owner_mutation'", violations[0])
 
@@ -590,7 +595,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         row16 = job._EXPECTED_OUTCOMES_BY_KEY[
             ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation")
         ]
-        lines = (REPO_ROOT / ".claude" / "commands" / "review-implementation.md").read_text().splitlines()
+        lines = (REFERENCE_TREE / ".claude" / "commands" / "review-implementation.md").read_text().splitlines()
         start, _end = job._branch_span(lines, row16.writer_calls[0].branch)
         a6 = next(i for i, line in enumerate(lines) if line.startswith("A6."))
         a7 = next(i for i, line in enumerate(lines) if line.startswith("A7."))
@@ -607,7 +612,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         ):
             with self.subTest(key=key):
                 wc = job._EXPECTED_OUTCOMES_BY_KEY[key].writer_calls[0]
-                lines = (REPO_ROOT / ".claude" / "commands" / wc.file).read_text().splitlines()
+                lines = (REFERENCE_TREE / ".claude" / "commands" / wc.file).read_text().splitlines()
                 start, _end = job._branch_span(lines, wc.branch)
                 self.assertTrue(lines[start].startswith(first_line), lines[start])
 
@@ -1358,7 +1363,7 @@ class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
     def test_postcondition_with_zero_or_two_new_keys_is_not_satisfied(self) -> None:
         fixtures.write_plan_manifest(self.root, "wi-a", 1)
         pre_state = {"pre_work_item_keys": []}
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state)
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("found 0", detail)
 
@@ -1366,28 +1371,247 @@ class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
         env = _write_new_work_items_env(self.root, "wi-a", "wi-b")
         state_path.write_text(env["FAKE_CLAUDE_WRITE_TEXT"])
         fixtures.write_plan_manifest(self.root, "wi-b", 1)
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state)
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("found 2", detail)
 
         # Positive control: the same two-key state, with one key already
         # pre-existing, resolves the single new key and is satisfied.
         satisfied, _detail = job._postcondition_plan_bundle_coherent(
-            self.root, None, {"pre_work_item_keys": ["wi-a"]},
+            self.root, None, {"pre_work_item_keys": ["wi-a"]}, fixtures.reference_binding(),
         )
         self.assertTrue(satisfied)
 
     def test_postcondition_with_an_unreadable_post_state_is_not_satisfied(self) -> None:
         (self.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-1", {})
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-1", {}, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("post-state could not be read", detail)
 
     def test_postcondition_for_an_absent_work_item_is_not_satisfied(self) -> None:
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-missing", {})
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-missing", {}, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("absent from the post-state", detail)
 
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-workflow-2-6-integration` CP4 -- per-release writer
+# declarations (Design D) and the plan-stage postcondition under the query
+# contract.
+# ---------------------------------------------------------------------------
+
+_QUERY_RELEASE = "2.6.0"
+
+#: The rows whose writer declarations Workflow 2.6.0 moved, and what each
+#: now declares: the bind for the six two-stage rows, and the "1" row's
+#: publish with the step-6 bind calls it precedes allowlisted.
+_SUBSTITUTED_2_6_0 = {
+    ("PLANNING", "2.1", "/milestone-plan"): ("bind_plan_review_bundle", "milestone-plan.md"),
+    ("PLANNING", "2.2", "/milestone-plan"): ("bind_plan_review_bundle", "milestone-plan.md"),
+    (job.NO_PHASE, None, "/milestone-plan"): ("bind_plan_review_bundle", "milestone-plan.md"),
+    ("PLANNING", "1", "/milestone-plan"): ("publish_plan_revision", "milestone-plan.md"),
+    ("REVISING_PLAN", "2.1", "/apply-plan-review"): ("bind_plan_review_bundle", "apply-plan-review.md"),
+    ("REVISING_PLAN", "2.2", "/apply-plan-review"): ("bind_plan_review_bundle", "apply-plan-review.md"),
+}
+
+
+def _key(eo) -> tuple:
+    return (eo.from_phase, eo.governing_version, eo.action)
+
+
+class PerReleaseWriterDeclarationTest(unittest.TestCase):
+    """``job.expected_outcomes_for(release)``: property 5 is clean for both
+    releases -- every contracted release, whether or not it is admitted."""
+
+    def test_property_5_is_clean_for_every_contracted_release(self) -> None:
+        from controller import workflow_contract
+
+        self.assertEqual(set(job._WRITER_CALLS_BY_RELEASE), set(workflow_contract.RELEASE_CONTRACTS))
+        for release in sorted(workflow_contract.RELEASE_CONTRACTS):
+            with self.subTest(release=release):
+                outcomes = job.expected_outcomes_for(release)
+                self.assertEqual(job.property_declaration_against_artifact_violations(
+                    fixtures.workflow_release_tree(release), outcomes), [])
+                self.assertEqual(job.property_table_violations(outcomes), [])
+                self.assertEqual(job.property_record_completeness_violations(outcomes), [])
+
+    def test_the_2_5_1_table_against_2_6_0_is_the_fourteen_measured_violations(self) -> None:
+        """The substitution is needed, and exactly where the plan measured
+        it: three further writes after each of the four publishes, and the
+        retired phase flip found nowhere in the two ``REVISING_PLAN`` rows."""
+        violations = job.property_declaration_against_artifact_violations(
+            fixtures.workflow_release_tree(_QUERY_RELEASE), job.EXPECTED_OUTCOMES)
+        self.assertEqual(len(violations), 14, violations)
+        publishes = [key for key, (function, _file) in _SUBSTITUTED_2_6_0.items() if key[2] == "/milestone-plan"]
+        for key in publishes:
+            for function in ("verify_plan_review_bundle", "state_transaction", "bind_plan_review_bundle"):
+                self.assertEqual(sum(v.startswith(repr(key)) and f"further durable write to {function!r}" in v
+                                     for v in violations), 1, (key, function))
+        for version in ("2.1", "2.2"):
+            key = ("REVISING_PLAN", version, "/apply-plan-review")
+            self.assertEqual([v for v in violations if v.startswith(repr(key))], [
+                f"{key!r} ('transition_to_awaiting_local_plan_review'): no call found in apply-plan-review.md's "
+                "declared branch (lines 1-319)"])
+
+    def test_2_5_1_is_the_table_itself(self) -> None:
+        outcomes = job.expected_outcomes_for("2.5.1")
+        self.assertEqual(len(outcomes), len(job.EXPECTED_OUTCOMES))
+        for mine, table in zip(outcomes, job.EXPECTED_OUTCOMES):
+            self.assertIs(mine, table)
+
+    def test_only_the_writer_calls_of_the_measured_rows_differ(self) -> None:
+        """Phases, predicates, postconditions, triples and each row's branch
+        are the same for both releases, so verification -- which reads
+        ``EXPECTED_OUTCOMES`` -- is release-independent."""
+        outcomes = job.expected_outcomes_for(_QUERY_RELEASE)
+        self.assertEqual([_key(eo) for eo in outcomes], [_key(eo) for eo in job.EXPECTED_OUTCOMES])
+        changed = {}
+        for mine, table in zip(outcomes, job.EXPECTED_OUTCOMES):
+            for field in dataclasses.fields(table):
+                if field.name != "writer_calls":
+                    self.assertEqual(getattr(mine, field.name), getattr(table, field.name), (_key(table), field.name))
+            self.assertEqual(job._row_branch(mine), job._row_branch(table), _key(table))
+            if mine.writer_calls != table.writer_calls:
+                changed[_key(mine)] = (mine.writer_calls[0].function, mine.writer_calls[0].file)
+        self.assertEqual(changed, _SUBSTITUTED_2_6_0)
+
+    def test_the_1_row_allowlists_exactly_the_three_step_6_bind_calls(self) -> None:
+        row = {_key(eo): eo for eo in job.expected_outcomes_for(_QUERY_RELEASE)}[("PLANNING", "1", "/milestone-plan")]
+        trailing = row.writer_calls[0].trailing_calls
+        self.assertEqual([function for function, _why in trailing],
+                         ["verify_plan_review_bundle", "state_transaction", "bind_plan_review_bundle"])
+        for _function, why in trailing:
+            self.assertIn("never reaches", why)
+        # Dropping one entry reports that call again: the allowlist never
+        # weakens the property.
+        wc = dataclasses.replace(row.writer_calls[0], trailing_calls=trailing[:2])
+        violations = job.property_declaration_against_artifact_violations(
+            fixtures.workflow_release_tree(_QUERY_RELEASE), (dataclasses.replace(row, writer_calls=(wc,)),))
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("further durable write to 'bind_plan_review_bundle'", violations[0])
+
+    def test_an_undeclared_release_is_refused(self) -> None:
+        from controller.errors import UnsupportedWorkflowVersionError
+
+        with self.assertRaises(UnsupportedWorkflowVersionError) as caught:
+            job.expected_outcomes_for("2.7.0")
+        self.assertEqual(caught.exception.evidence["reason"], "no_writer_declarations")
+
+
+class _StubPublicationAnswers:
+    """An answers provider replaying one publication-status answer (or
+    raising it), recording each query; a feedback read is a test error."""
+
+    def __init__(self, answer) -> None:
+        self.answer = answer
+        self.asked: list[str] = []
+
+    def feedback_path(self, root, work_item_id):
+        raise AssertionError("the plan-stage postcondition read the feedback path")
+
+    def publication_status(self, root, work_item_id):
+        self.asked.append(work_item_id)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+def _query_binding(answer):
+    from controller import workflow_contract
+
+    return workflow_contract.BoundContract(contract=workflow_contract.contract_for(_QUERY_RELEASE),
+                                           answers=_StubPublicationAnswers(answer))
+
+
+def _publication_status(status: str, row: str, *, phase: str = "AWAITING_LOCAL_PLAN_REVIEW"):
+    from controller import workflow_contract
+
+    return workflow_contract.PublicationStatus(work_item_id="wi-1", phase=phase, row=row, status=status,
+                                               remedy="the remedy")
+
+
+class PlanStagePostconditionQueryContractTest(unittest.TestCase):
+    """Under the 2.6.0 contract the plan-stage postcondition is Workflow's
+    answer (Design D): the item is at ``AWAITING_LOCAL_PLAN_REVIEW`` and
+    reported ``BOUND`` there. No plan bundle is on disk in these targets, so
+    a satisfied postcondition never came from revision coherence."""
+
+    def setUp(self) -> None:
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / "target"
+        fixtures.build_target_git_repo(self.root)
+
+    def at(self, phase: str, version: str = "2.2", work_item_id: str = "wi-1") -> None:
+        fixtures.write_workflow_state(self.root, {"schema_version": 1, "active_work_item_id": work_item_id,
+                                                  "work_items": {work_item_id: {
+            "work_item_type": "product", "work_item_kind": "product", "work_item_id": work_item_id,
+            "governing_workflow_version": version, "phase": phase, "plan_revision": 1,
+            "implementation_revision": None, "state_revision": 1, "checkpoints": {}, "current_bundle_id": None,
+            "base_commit": "0" * 40, "parent_work_item_id": None}}})
+
+    def postcondition(self, bound, work_item_id: str | None = "wi-1", pre_state: dict | None = None):
+        return job._postcondition_plan_bundle_coherent(self.root, work_item_id, pre_state or {}, bound)
+
+    def test_bound_at_awaiting_local_plan_review_is_satisfied(self) -> None:
+        self.at("AWAITING_LOCAL_PLAN_REVIEW")
+        bound = _query_binding(_publication_status("BOUND", "2"))
+        self.assertEqual(self.postcondition(bound),
+                         (True, "plan-review publication status: row 2 (BOUND) at AWAITING_LOCAL_PLAN_REVIEW"))
+        self.assertEqual(bound.answers.asked, ["wi-1"])
+        # The 2.5.1 rule on the same target: no bundle, not coherent.
+        self.assertFalse(self.postcondition(fixtures.reference_binding())[0])
+
+    def test_every_other_answer_is_not_satisfied(self) -> None:
+        from controller import workflow_contract
+
+        self.at("AWAITING_LOCAL_PLAN_REVIEW")
+        refusal = workflow_contract.PublicationRefusal(
+            work_item_id="wi-1", error="PlanReviewBindingInconsistentError", message="row 4d")
+        cases = {
+            "4b": (_publication_status("BUNDLE_UNVERIFIED", "4b"), "row 4b (BUNDLE_UNVERIFIED), not BOUND"),
+            "9": (_publication_status("PUBLISHED_UNBOUND", "9"), "row 9 (PUBLISHED_UNBOUND), not BOUND"),
+            "refusal": (refusal, "Workflow refuses the plan-review publication status"),
+            "another phase": (_publication_status("BOUND", "2", phase="AWAITING_PLAN_APPROVAL"),
+                              "answered for phase 'AWAITING_PLAN_APPROVAL'"),
+        }
+        for name, (answer, detail) in cases.items():
+            with self.subTest(case=name):
+                satisfied, found = self.postcondition(_query_binding(answer))
+                self.assertFalse(satisfied)
+                self.assertIn(detail, found)
+
+    def test_another_phase_is_not_satisfied_and_asks_nothing(self) -> None:
+        self.at("REVISING_PLAN")
+        bound = _query_binding(_publication_status("BOUND", "2"))
+        self.assertEqual(self.postcondition(bound),
+                         (False, "phase 'REVISING_PLAN' is not 'AWAITING_LOCAL_PLAN_REVIEW'"))
+        self.assertEqual(bound.answers.asked, [])
+
+    def test_a_query_failure_propagates(self) -> None:
+        from controller.errors import WorkflowQueryError
+
+        self.at("AWAITING_LOCAL_PLAN_REVIEW")
+        failure = WorkflowQueryError("the query failed", evidence={"reason": "query_failed"})
+        with self.assertRaises(WorkflowQueryError):
+            self.postcondition(_query_binding(failure))
+
+    def test_the_row_7_postcondition_asks_about_the_new_work_item(self) -> None:
+        self.at("AWAITING_LOCAL_PLAN_REVIEW", work_item_id="wi-new")
+        bound = _query_binding(_publication_status("BOUND", "2"))
+        self.assertTrue(self.postcondition(bound, None, {"pre_work_item_keys": []})[0])
+        self.assertEqual(bound.answers.asked, ["wi-new"])
+
+    def test_a_1_governed_item_keeps_revision_coherence(self) -> None:
+        self.at("AWAITING_EXTERNAL_PLAN_REVIEW", version="1")
+        bound = _query_binding(AssertionError("a \"1\" item was queried"))
+        satisfied, detail = self.postcondition(bound)
+        self.assertFalse(satisfied)
+        self.assertIn("is absent (withdrawn or never generated)", detail)
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self.assertTrue(self.postcondition(bound)[0])
+        self.assertEqual(bound.answers.asked, [])
 
 
 # ---------------------------------------------------------------------------
@@ -1475,12 +1699,12 @@ class Row3BlockPredicateBundleIdRegressionTest(unittest.TestCase):
                 ),
             )
             predicate = job._predicate_row3_block_feedback_current
-            self.assertTrue(predicate(root, "wi-1", {"bundle_manifest_bundle_id": "b" * 64}))
+            self.assertTrue(predicate(root, "wi-1", {"bundle_manifest_bundle_id": "b" * 64}, fixtures.reference_binding()))
             # The pre-CP2 input alone no longer satisfies it, and a record
             # written before the field existed is "not satisfied".
-            self.assertFalse(predicate(root, "wi-1", {"bundle_id": "b" * 64, "bundle_manifest_readable": True}))
-            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": None}))
-            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": ""}))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_id": "b" * 64, "bundle_manifest_readable": True}, fixtures.reference_binding()))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": None}, fixtures.reference_binding()))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": ""}, fixtures.reference_binding()))
 
 
 # ---------------------------------------------------------------------------
@@ -1768,8 +1992,8 @@ class CheckpointProgressDetailUnitTest(_ImplementationRowTestCase):
     names none."""
 
     def _assert_detail(self, root: Path, pre_state: dict, detail: "str | None") -> None:
-        self.assertEqual(job._checkpoint_completion_failure(root, "wi-1", pre_state), detail)
-        self.assertIs(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state), detail is None)
+        self.assertEqual(job._checkpoint_completion_failure(root, "wi-1", pre_state, fixtures.reference_binding()), detail)
+        self.assertIs(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()), detail is None)
         if detail is not None:
             self.assertIn(detail, job.CHECKPOINT_PROGRESS_DETAILS)
 
@@ -1871,24 +2095,31 @@ class SelfLoopPredicateSingleSiteTest(unittest.TestCase):
             finally:
                 depth[0] -= 1
 
-        def detail(_root, _wid, _pre):
+        def detail(_root, _wid, _pre, _bound):
             seen.append(depth[0])
             return "head_unchanged"
 
         row = dataclasses.replace(eo, predicate_detail=detail)
+        # The installed-release re-check (workflow-2-6-integration CP3) runs
+        # before every clause, so the root carries the reference manifest.
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        fixtures.write_installation_manifest(root)
+        release = fixtures.REFERENCE_WORKFLOW_RELEASE
         with unittest.mock.patch.object(job, "_row_clauses_failure", clauses):
             verified, ev = job._verify_transition(
-                root=Path("/nonexistent"), work_item_id="wi-1", outcome=row, pre_state={},
-                observed_phase_after="IMPLEMENTING", worker_outcome="SUCCESS",
+                root=root, work_item_id="wi-1", outcome=row, pre_state={},
+                observed_phase_after="IMPLEMENTING", worker_outcome="SUCCESS", release=release,
             )
             self.assertFalse(verified)
             self.assertEqual(ev["predicate_detail"], "head_unchanged")
             for status, outcome in ((job.STATUS_LAUNCHED, None), (job.STATUS_COMPLETED, "SUCCESS")):
                 result = job._row2_verified(
-                    root=Path("/nonexistent"), work_item_id="wi-1", outcome=row, pre_state={},
-                    observed_phase_after="IMPLEMENTING", status=status, worker_outcome=outcome,
+                    root=root, work_item_id="wi-1", outcome=row, pre_state={},
+                    observed_phase_after="IMPLEMENTING", status=status, worker_outcome=outcome, release=release,
                 )
-                self.assertEqual(result, (False, "predicate_not_satisfied", None, "head_unchanged"))
+                self.assertEqual(result, (False, "predicate_not_satisfied", None, "head_unchanged", None))
         self.assertEqual(seen, [1, 1, 1])
 
     def test_predicate_detail_without_a_predicate_is_a_violation(self) -> None:
@@ -1915,15 +2146,15 @@ class CheckpointPredicateUnitTest(_ImplementationRowTestCase):
         root = self._repo()
         head = fixtures.current_head(root)
         pre_state = {"target_head": head, "checkpoints": {"CP1": {"status": "IN_PROGRESS"}}}
-        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
         # Positive control: the same facts with HEAD having moved since.
         moved = {**pre_state, "target_head": "0" * 40}
-        self.assertTrue(job._predicate_checkpoint_completed_durably(root, "wi-1", moved))
+        self.assertTrue(job._predicate_checkpoint_completed_durably(root, "wi-1", moved, fixtures.reference_binding()))
 
     def test_a_checkpoint_already_complete_in_the_pre_state_does_not_count(self) -> None:
         root = self._repo()
         pre_state = {"target_head": "0" * 40, "checkpoints": {"CP1": {"status": "COMPLETE"}}}
-        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
 
     def test_absent_or_malformed_inputs_are_not_satisfied(self) -> None:
         root = self._repo()
@@ -1934,18 +2165,18 @@ class CheckpointPredicateUnitTest(_ImplementationRowTestCase):
             {"target_head": "0" * 40, "checkpoints": ["CP1"]},
         ):
             with self.subTest(pre_state=pre_state):
-                self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+                self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
 
     def test_an_unreadable_post_state_is_not_satisfied(self) -> None:
         root = self._repo()
         (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
         pre_state = {"target_head": "0" * 40, "checkpoints": {}}
-        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
 
     def test_the_self_review_postcondition_reads_an_unreadable_post_state_as_not_satisfied(self) -> None:
         root = self._repo()
         (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
-        satisfied, detail = job._postcondition_self_review_entered_durably(root, "wi-1", {})
+        satisfied, detail = job._postcondition_self_review_entered_durably(root, "wi-1", {}, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("post-state could not be read", detail)
 

@@ -7,9 +7,32 @@ decision engine and human-gate classification").
 "Dependency direction" section has ``job -> {managed_repo, target_state,
 evidence, worker, handoff} -> decision``, so ``evidence`` sits *beside*
 ``managed_repo``/``target_state``, never imported by either, and imports
-only ``controller.decision`` -- never the reverse). For every phase this
-module does not itself refine, it is a pure pass-through to
-:func:`controller.decision.decide`.
+only ``controller.decision`` and ``controller.workflow_contract`` -- never
+the reverse). For every phase this module does not itself refine, it is a
+pure pass-through to :func:`controller.decision.decide`.
+
+**The Workflow contract** (``workflow-controller-workflow-2-6-integration``
+CP3). :func:`decide` binds the admitted release's contract once
+(``workflow_contract.bind_release(managed_repo.workflow_version)``) and
+passes that ``BoundContract`` explicitly to every reader of the feedback
+path (:func:`resolve_feedback_dir` and the ``FUNCTIONAL_REVIEW.md``
+helpers). Under the 2.5.1 contract the path is this module's own rule,
+byte for byte; under a ``workflow_query`` contract it is Workflow's answer
+to ``--resolve-feedback-path``, and a ``WorkflowQueryError`` propagates
+(exit 20), never a fallback to the 2.5.1 rule.
+
+**Plan-review publication status** (the same milestone, CP4). For a
+``"2.1"``/``"2.2"`` item under a ``workflow_query`` contract, whether a
+plan-review bundle is current is Workflow's answer to
+``--plan-review-publication-status``, read at every plan phase
+(:func:`_plan_review_publication`): one outcome per (phase class, status
+class), and :func:`plan_bundle_coherence` is not consulted. The Controller
+reads only the answer's ``status``, ``row``, ``phase``, ``remedy``,
+``detail``, ``advisory`` and ``fresh_review_content_id``, never the item's
+``plan_review_binding`` record. ``"1"``-governed items, and every 2.5.1
+target, keep :func:`plan_bundle_coherence` exactly as before. No gate
+names Workflow's withdrawal (``/milestone-plan`` at a plan-review-ready
+phase) as its ``safe_resume_command``, and no decision dispatches it.
 
 **Automatic-lifecycle-orchestration CP4** gives the implementation-review
 phases their evidence handlers: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``
@@ -74,13 +97,16 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
+import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from controller import decision as _decision
+from controller import workflow_contract
 from controller.decision import Action, Decision, HumanGate
+from controller.workflow_contract import BoundContract
 
 # ---------------------------------------------------------------------------
 # The text model for every labelled-line read (revision 47, local round
@@ -167,8 +193,17 @@ def _scoped_else_flat(root: Path, work_item_id: str, *, leaf: str) -> Path:
     return Path(".ai-review") / leaf
 
 
-def resolve_feedback_dir(root: Path, work_item_id: str) -> Path:
-    """``<feedback_dir>``, at every stage: scoped-else-flat, taking no
+def resolve_feedback_dir(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    """``<feedback_dir>``, at every stage, under ``bound``'s contract.
+
+    A ``workflow_query`` contract (Workflow 2.6.0) asks Workflow
+    (``--resolve-feedback-path``) and returns its ``feedback_dir``: a
+    stamped ``scoped`` item's directory whether or not it exists yet, which
+    no existence rule can know. A query failure raises
+    ``WorkflowQueryError``; it is never answered by the rule below.
+
+    The ``controller_rule`` contract (2.5.1) keeps this function's own
+    rule, unchanged: scoped-else-flat, taking no
     stage argument -- but keyed on the feedback leaf's **own** existence
     (``.ai-review/<work_item_id>/feedback/``), never on the work item's
     root directory the way ``resolve_bundle_dir``/``resolve_rejected_marker_path``
@@ -188,6 +223,8 @@ def resolve_feedback_dir(root: Path, work_item_id: str) -> Path:
     commands that actually write/read feedback resolved to the flat one,
     so a human gate's reported ``artifact_path`` named a location nothing
     downstream ever reads."""
+    if bound.contract.feedback_path_source == workflow_contract.WORKFLOW_QUERY:
+        return Path(bound.answers.feedback_path(root, work_item_id).feedback_dir)
     scoped = _scoped_root(work_item_id) / "feedback"
     if (root / scoped).is_dir():
         return scoped
@@ -569,25 +606,27 @@ def functional_checklist_evidence(
     return None
 
 
-def functional_review_findings_path(root: Path, work_item_id: str) -> Path:
-    return resolve_feedback_dir(root, work_item_id) / "FUNCTIONAL_REVIEW.md"
+def functional_review_findings_path(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    return resolve_feedback_dir(root, work_item_id, bound) / "FUNCTIONAL_REVIEW.md"
 
 
-def functional_review_consumed_marker_path(root: Path, work_item_id: str) -> Path:
-    return resolve_feedback_dir(root, work_item_id) / "FUNCTIONAL_REVIEW.consumed"
+def functional_review_consumed_marker_path(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    """Beside ``FUNCTIONAL_REVIEW.md``, under Workflow's own name. Workflow
+    2.6.0's feedback query does not return it; the name is unchanged."""
+    return resolve_feedback_dir(root, work_item_id, bound) / "FUNCTIONAL_REVIEW.consumed"
 
 
-def functional_review_findings_consumed(root: Path, work_item_id: str) -> bool | None:
+def functional_review_findings_consumed(root: Path, work_item_id: str, bound: BoundContract) -> bool | None:
     """``None`` if ``FUNCTIONAL_REVIEW.md`` does not exist yet (there is
     nothing to have consumed). ``True`` if the consumed-marker's recorded
     hash equals the findings file's current git blob hash -- mirroring
     ``workflow_fingerprint.assert_functional_review_not_already_consumed``'s
     own presence-then-content read shape. ``False`` for a missing marker
     or a hash mismatch (genuinely new, unconsumed findings)."""
-    findings_path = root / functional_review_findings_path(root, work_item_id)
+    findings_path = root / functional_review_findings_path(root, work_item_id, bound)
     if not findings_path.is_file():
         return None
-    marker_path = root / functional_review_consumed_marker_path(root, work_item_id)
+    marker_path = root / functional_review_consumed_marker_path(root, work_item_id, bound)
     try:
         recorded = marker_path.read_text().strip()
     except OSError:
@@ -1285,9 +1324,11 @@ def evaluate_apply_implementation_review_admissibility(
 # ---------------------------------------------------------------------------
 
 
-def _decide_awaiting_local_plan_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
+def _decide_awaiting_local_plan_review(
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
+) -> Decision:
     phase = "AWAITING_LOCAL_PLAN_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback = read_feedback_fields(root, feedback_dir)
     if feedback is not None:
         role = _normalize_role(feedback.get("reviewer_role"))
@@ -1324,10 +1365,10 @@ def _decide_awaiting_local_plan_review(root: Path, work_item_id: str, work_item:
 
 
 def _decide_awaiting_manual_external_plan_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
     feedback = read_feedback_fields(root, feedback_dir)
 
@@ -1405,9 +1446,11 @@ def _decide_awaiting_manual_external_plan_review(
     )
 
 
-def _decide_awaiting_external_plan_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
+def _decide_awaiting_external_plan_review(
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
+) -> Decision:
     phase = "AWAITING_EXTERNAL_PLAN_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
     feedback = read_feedback_fields(root, feedback_dir)
 
@@ -1486,14 +1529,14 @@ def _explain_command(work_item_id: str) -> str:
 
 
 def _decide_awaiting_external_implementation_review_legacy(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """The ``"1"``/``"2.1"`` handler (and any version other than
     ``"2.2"``), byte-identical to the one before automatic-lifecycle-
     orchestration CP4 -- pinned by ``tests/golden/external_implementation_
     review_decisions.json``."""
     phase = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
     feedback = read_feedback_fields(root, feedback_dir)
     manifest = read_manifest_fields(root, bundle_dir)
@@ -1562,7 +1605,7 @@ def _pinned_bundle(work_item: Any, bundle_id: str | None) -> bool:
 
 
 def _decide_awaiting_external_implementation_review_two_stage(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """The ``"2.2"`` handler. This phase is reached only through a recorded
     manual ``APPROVE`` (``record_manual_implementation_review``), so "no
@@ -1587,7 +1630,7 @@ def _decide_awaiting_external_implementation_review_two_stage(
     Clauses the Controller cannot see (an uncommitted protected-content
     edit) stay ``/approve-review``'s own recomputation to refuse on."""
     phase = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
     bundle_dir = implementation_bundle_dir(root, work_item_id)
     feedback = read_feedback_fields(root, feedback_dir)
@@ -1696,19 +1739,19 @@ def _decide_awaiting_external_implementation_review_two_stage(
 
 
 def _decide_awaiting_external_implementation_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """``"2.2"`` is ledger-, feedback- and pin-aware
     (:func:`_decide_awaiting_external_implementation_review_two_stage`);
     every other version keeps its pre-CP4 decision, byte for byte
     (:func:`_decide_awaiting_external_implementation_review_legacy`)."""
     if getattr(work_item, "governing_workflow_version", None) == "2.2":
-        return _decide_awaiting_external_implementation_review_two_stage(root, work_item_id, work_item)
-    return _decide_awaiting_external_implementation_review_legacy(root, work_item_id, work_item)
+        return _decide_awaiting_external_implementation_review_two_stage(root, work_item_id, work_item, bound)
+    return _decide_awaiting_external_implementation_review_legacy(root, work_item_id, work_item, bound)
 
 
 def _decide_awaiting_local_implementation_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """A ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` ``BLOCK`` on file gates:
     ``review-implementation.md`` A7 requires explicit user resolution
@@ -1719,7 +1762,7 @@ def _decide_awaiting_local_implementation_review(
     Otherwise ``/review-implementation <id>`` is selected (automatic by the
     dispatch rule at ``"2.2"``)."""
     phase = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback = read_feedback_fields(root, feedback_dir)
     if (
         feedback is not None and feedback.get("status") == "BLOCK"
@@ -1752,7 +1795,7 @@ def _decide_awaiting_local_implementation_review(
 
 
 def _decide_awaiting_manual_external_implementation_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """The ``"2.2"`` manual stage, mirroring the plan stage's
     ``/record-manual-plan-review`` ingestion. Every sub-case but the last is
@@ -1775,7 +1818,7 @@ def _decide_awaiting_manual_external_implementation_review(
     The Controller never writes ``REVIEW_FEEDBACK.md``: ingestion launches
     only once a human has placed the verdict there."""
     phase = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = implementation_bundle_dir(root, work_item_id)
     feedback = read_feedback_fields(root, feedback_dir)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
@@ -1858,9 +1901,11 @@ def _decide_awaiting_manual_external_implementation_review(
     )
 
 
-def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
+def _decide_awaiting_functional_review(
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
+) -> Decision:
     phase = "AWAITING_FUNCTIONAL_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     current_head = _current_head(root)
     checklist = functional_checklist_evidence(
         root, work_item_id, getattr(work_item, "base_commit", None), current_head,
@@ -1882,7 +1927,7 @@ def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item:
             reason=f"{phase}: no current-round Workflow-Functional-Checklist evidence found",
         )
 
-    findings_path = functional_review_findings_path(root, work_item_id)
+    findings_path = functional_review_findings_path(root, work_item_id, bound)
     if not (root / findings_path).is_file():
         return Decision(
             observed_phase=phase, evidence=(f"checklist evidence commit {checklist['commit_sha']}",),
@@ -1899,7 +1944,7 @@ def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item:
             reason=f"{phase}: checklist is current and no FUNCTIONAL_REVIEW.md exists yet",
         )
 
-    consumed = functional_review_findings_consumed(root, work_item_id)
+    consumed = functional_review_findings_consumed(root, work_item_id, bound)
     if consumed is False:
         return Decision(
             observed_phase=phase, evidence=("unconsumed FUNCTIONAL_REVIEW.md findings",),
@@ -2017,7 +2062,25 @@ def _newest_quarantine_dir(root: Path, work_item_id: str) -> Path | None:
     return parent / max(candidates)[2].name
 
 
-def _plan_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
+def plan_author_inputs_dir(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    """The directory the plan-stage author files are written to, as the
+    plan-bundle recovery steps name it (root-relative).
+
+    Under the 2.5.1 contract it is ``<bundle_dir>`` (``.ai-review/<id>/
+    current/``), unchanged. Under a ``workflow_query`` contract it is the
+    directory the 2.6.0 generator reads: that generator takes each author
+    file from ``.ai-review/<id>/plan-inputs/`` when present, else from
+    ``current/`` (``workflow_fingerprint.seed_plan_review_inputs``), so the
+    steps name ``plan-inputs/`` when that directory exists and ``current/``
+    when it does not (the residue a 2.5.1 withdrawal leaves)."""
+    bundle_dir = resolve_bundle_dir(root, work_item_id, phase="AWAITING_LOCAL_PLAN_REVIEW")
+    if bound.contract.plan_review_publication_source != workflow_contract.WORKFLOW_QUERY:
+        return bundle_dir
+    inputs_dir = _scoped_root(work_item_id) / "plan-inputs"
+    return inputs_dir if (root / inputs_dir).is_dir() else bundle_dir
+
+
+def _plan_bundle_recovery_steps(root: Path, work_item: Any, bound: BoundContract) -> tuple[str, ...]:
     """The ordered human steps that actually regenerate a coherent plan
     bundle after ``publish_plan_revision`` ran but bundle generation did
     not complete. The bare generator is not enough on its own: its closing
@@ -2026,15 +2089,16 @@ def _plan_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
     command performs these refreshes once the item is past
     ``REVISING_PLAN``. Controller performs none of the steps itself.
 
-    When ``<bundle_dir>`` or any author file is absent or zero bytes (a
-    completed withdrawal, a first-round generator failure, or the empty
-    stubs a later generator run left behind before refusing or
+    When the author-input directory (:func:`plan_author_inputs_dir`:
+    ``<bundle_dir>`` under 2.5.1) or any author file in it is absent or
+    zero bytes (a completed withdrawal, a first-round generator failure, or
+    the empty stubs a later generator run left behind before refusing or
     withdrawing -- :func:`_author_file_has_content`) the steps say "write"
     rather than "refresh", name the protocol's request format, and a step
     0 restoring ``CONTEXT_FILES.txt`` is prepended -- naming the newest
     quarantine directory, when one exists, as the previous round's source."""
     work_item_id = work_item.work_item_id
-    bundle_dir = resolve_bundle_dir(root, work_item_id, phase="AWAITING_LOCAL_PLAN_REVIEW")
+    bundle_dir = plan_author_inputs_dir(root, work_item_id, bound)
     base_commit = work_item.base_commit or "<base-sha>"
     revision = work_item.plan_revision if work_item.plan_revision is not None else "<plan_revision>"
     absent = not (root / bundle_dir).is_dir() or any(
@@ -2072,11 +2136,20 @@ def _plan_bundle_recovery_steps(root: Path, work_item: Any) -> tuple[str, ...]:
     return tuple(f"{number}. {step}" for number, step in enumerate(steps, start=first))
 
 
-def _stale_plan_bundle_gate(root: Path, work_item: Any, detail: str) -> Decision:
+def _stale_plan_bundle_gate(
+    root: Path, work_item: Any, bound: BoundContract, *, detail: str | None = None,
+    answer: workflow_contract.PublicationStatus | None = None,
+) -> Decision:
+    """The stale-plan-bundle gate. Under the 2.5.1 contract ``detail`` is
+    :func:`plan_bundle_coherence`'s. Under a ``workflow_query`` contract
+    ``answer`` is Workflow's S2 answer (rows 4a-4c,
+    :func:`_published_stale_plan_bundle_gate`)."""
+    if answer is not None:
+        return _published_stale_plan_bundle_gate(root, work_item, bound, answer)
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
-    steps = _plan_bundle_recovery_steps(root, work_item)
+    steps = _plan_bundle_recovery_steps(root, work_item, bound)
     return Decision(
         observed_phase=phase,
         evidence=(f"plan bundle is not coherent with the work item's state: {detail}",),
@@ -2094,6 +2167,313 @@ def _stale_plan_bundle_gate(root: Path, work_item: Any, detail: str) -> Decision
         declined=False,
         reason=f"{phase}: the current plan bundle is stale or withdrawn ({detail}), checked "
                "ahead of the per-phase handlers",
+    )
+
+
+# ---------------------------------------------------------------------------
+# The plan-review publication status (workflow-controller-workflow-2-6-
+# integration CP4, Design D). Under a `workflow_query` contract, for a
+# "2.1"/"2.2" item, every plan phase reads Workflow's
+# `--plan-review-publication-status` answer and takes exactly one outcome per
+# (phase class, status class).
+# ---------------------------------------------------------------------------
+
+#: Workflow 2.6.0's ``PLAN_REVIEW_READY_PHASES``: a reviewer acts on a
+#: bound bundle here. ``/milestone-plan <id>`` at one of them withdraws the
+#: item, discarding both recorded review stages, so no decision ever
+#: selects it here and no gate names it (invariant I4).
+PLAN_REVIEW_READY_PHASES: frozenset[str] = frozenset({
+    "AWAITING_LOCAL_PLAN_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+    "AWAITING_PLAN_APPROVAL",
+})
+
+#: Workflow 2.6.0's ``PLAN_REVIEW_NON_READY_PHASES``: the author edits,
+#: publishes and binds here.
+PLAN_REVIEW_NON_READY_PHASES: frozenset[str] = frozenset({"PLANNING", "REVISING_PLAN", "AMENDING_PLAN"})
+
+#: The governing versions the publication status applies to (Workflow's
+#: ``TWO_STAGE_PLAN_REVIEW_VERSIONS``). A ``"1"`` item's query fails.
+_PUBLICATION_STATUS_VERSIONS: frozenset[str] = frozenset({"2.1", "2.2"})
+
+#: S1: a bound bundle the existing phase handler acts on (rows 2 and 3).
+_PUBLICATION_BOUND_ROWS: frozenset[str] = frozenset({"2", "3"})
+#: S2: the stale-plan-bundle gate (rows 4a-4c).
+_PUBLICATION_STALE_ROWS: frozenset[str] = frozenset({"4a", "4b", "4c"})
+#: Row 4a, whose remedy restores the bound bytes: the no-restore gate.
+_PUBLICATION_CONTENT_DRIFTED_ROW = "4a"
+#: N1: the rows a non-ready phase dispatches on, as before.
+_PUBLICATION_NON_READY_ROWS: frozenset[str] = frozenset({"5", "7", "8", "9", "10", "11"})
+
+_WITHDRAWAL_CONSEQUENCE = (
+    "Workflow's alternative, withdrawing with /milestone-plan at this phase, discards both recorded "
+    "review stages; the Controller never runs it"
+)
+
+
+def queries_plan_review_publication_status(bound: BoundContract, governing_workflow_version: Any) -> bool:
+    """Whether a work item governed by ``governing_workflow_version`` reads
+    Workflow's publication status under ``bound``'s contract: a
+    ``workflow_query`` contract and a ``"2.1"``/``"2.2"`` item."""
+    return (
+        bound.contract.plan_review_publication_source == workflow_contract.WORKFLOW_QUERY
+        and governing_workflow_version in _PUBLICATION_STATUS_VERSIONS
+    )
+
+
+def plan_review_publication_status_evidence(answer: workflow_contract.PublicationStatus) -> str:
+    """The evidence line naming a publication-status answer's row and
+    status, shared by every outcome that reports one."""
+    return f"plan-review publication status: row {answer.row} ({answer.status})"
+
+
+def plan_review_bound(root: Path, work_item_id: str, phase: str, bound: BoundContract) -> tuple[bool, str]:
+    """``(satisfied, detail)``: the plan-stage postcondition under a
+    ``workflow_query`` contract -- the work item is at
+    ``AWAITING_LOCAL_PLAN_REVIEW`` and Workflow reports its bundle
+    ``BOUND`` there. A refusal, another status or another echoed phase is
+    "not satisfied"; a ``WorkflowQueryError`` propagates."""
+    if phase != "AWAITING_LOCAL_PLAN_REVIEW":
+        return False, f"phase {phase!r} is not 'AWAITING_LOCAL_PLAN_REVIEW'"
+    answer = bound.answers.publication_status(root, work_item_id)
+    if isinstance(answer, workflow_contract.PublicationRefusal):
+        return False, f"Workflow refuses the plan-review publication status ({answer.error}): {answer.message}"
+    if answer.phase != phase:
+        return False, f"Workflow answered for phase {answer.phase!r}, not {phase!r}"
+    if answer.status != "BOUND":
+        return False, f"{plan_review_publication_status_evidence(answer)}, not BOUND: {answer.remedy}"
+    return True, f"{plan_review_publication_status_evidence(answer)} at {phase}"
+
+
+def _explain_gate_command(root: Path, work_item_id: str) -> str:
+    """The ``safe_resume_command`` of a gate with no automatic
+    continuation that this milestone adds: a valid ``explain`` invocation,
+    which changes nothing (Decision 12). The older
+    :func:`_explain_command` form is left as it is, since every gate using
+    it is reachable at 2.5.1."""
+    return f"workflow-controller --work-item {shlex.quote(work_item_id)} explain {shlex.quote(str(root))}"
+
+
+def _with_evidence(decision: Decision, extra: tuple[str, ...]) -> Decision:
+    """``decision`` with ``extra`` appended to its evidence. Built field
+    by field, so the write-containment scan has no ``.replace(`` call to
+    adjudicate."""
+    if not extra:
+        return decision
+    return Decision(
+        observed_phase=decision.observed_phase, evidence=decision.evidence + extra, action=decision.action,
+        automatic=decision.automatic, gate=decision.gate, declined=decision.declined, reason=decision.reason,
+    )
+
+
+def _plan_review_publication(root: Path, work_item: Any, bound: BoundContract) -> Decision | tuple[str, ...]:
+    """Design D's table for one plan phase: a gate, or the evidence the
+    phase's own decision carries on.
+
+    At a ready phase (:data:`PLAN_REVIEW_READY_PHASES`):
+
+    - S1, ``BOUND`` (rows 2, 3): the existing handler decides, with the row
+      and any advisory in its evidence;
+    - S2 (rows 4a-4c): the stale-plan-bundle gate;
+    - S3, a refusal (row 4d): the binding-inconsistent gate;
+    - S4, any other status, or an answer for another phase: the
+      unexpected-status gate.
+
+    At a non-ready phase (:data:`PLAN_REVIEW_NON_READY_PHASES`):
+
+    - N1, a non-ready row (5, 7-11) for this phase: dispatch as before,
+      with the row and status in the evidence;
+    - N2, a refusal (row 6): the binding-inconsistent gate;
+    - N4, any other status, or an answer for another phase: the
+      unexpected-status gate.
+
+    S5/N3, a ``WorkflowQueryError``, propagates: the decision is refused
+    (exit 20)."""
+    phase = work_item.phase
+    answer = bound.answers.publication_status(root, work_item.work_item_id)
+    if isinstance(answer, workflow_contract.PublicationRefusal):
+        return _plan_review_binding_inconsistent_gate(root, work_item, answer)
+    ready = phase in PLAN_REVIEW_READY_PHASES
+    if answer.phase != phase:
+        return _unexpected_plan_review_status_gate(root, work_item, answer)
+    if ready and answer.row in _PUBLICATION_BOUND_ROWS:
+        advisory = (f"plan-review publication advisory: {answer.advisory}",) if answer.advisory is not None else ()
+        return (plan_review_publication_status_evidence(answer),) + advisory
+    if ready and answer.row in _PUBLICATION_STALE_ROWS:
+        return _stale_plan_bundle_gate(root, work_item, bound, answer=answer)
+    if not ready and answer.row in _PUBLICATION_NON_READY_ROWS:
+        return (plan_review_publication_status_evidence(answer),)
+    return _unexpected_plan_review_status_gate(root, work_item, answer)
+
+
+def _published_stale_plan_bundle_gate(
+    root: Path, work_item: Any, bound: BoundContract, answer: workflow_contract.PublicationStatus,
+) -> Decision:
+    """S2 under a ``workflow_query`` contract: the stale-plan-bundle gate at
+    a ready phase, from Workflow's answer. ``what_is_required`` quotes
+    Workflow's ``remedy`` and ``detail`` verbatim; the evidence names the row
+    and status, and ``fresh_review_content_id`` only when the answer carries
+    a value. The recovery is keyed on the row, never on the remedy text:
+
+    - rows 4b and 4c, whose remedy regenerates the bundle: the author-file
+      steps ahead of the generator (:func:`_plan_bundle_recovery_steps`),
+      because the bare generator cannot succeed while the author files are
+      absent or describe an earlier round;
+    - row 4a, whose remedy restores the bound bytes: no step at all
+      (:func:`_content_drifted_gate`).
+
+    At ``AWAITING_PLAN_APPROVAL`` this gate replaces the approval gate:
+    Workflow's ``/approve-review plan`` refuses every one of these rows."""
+    if answer.row == _PUBLICATION_CONTENT_DRIFTED_ROW:
+        return _content_drifted_gate(root, work_item, answer)
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
+    steps = _plan_bundle_recovery_steps(root, work_item, bound)
+    return Decision(
+        observed_phase=phase,
+        evidence=_stale_publication_evidence(answer),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"Workflow reports this work item's plan-review bundle as {answer.status} (row "
+                f"{answer.row}){_quoted_detail(answer)}. Workflow's remedy: {answer.remedy}. Regenerating "
+                "alone cannot succeed while the author files are absent or describe an earlier round, so "
+                "before anything else runs, perform in order: " + " ".join(steps)
+                + f". {_WITHDRAWAL_CONSEQUENCE}."
+            ),
+            artifact_path=str(bundle_dir / "MANIFEST.md"),
+            safe_resume_command="; ".join(steps),
+        ),
+        declined=False,
+        reason=f"{phase}: Workflow reports the plan-review bundle {answer.status} (row {answer.row}), "
+               "checked ahead of the per-phase handlers",
+    )
+
+
+def _content_drifted_gate(root: Path, work_item: Any, answer: workflow_contract.PublicationStatus) -> Decision:
+    """Row 4a's no-restore diagnostic gate, a function of the answer and the
+    work item's id alone: it reads no file of the target.
+
+    The Controller authors no restore. It cannot establish that
+    ``.ai-review/<id>/current/files/`` still holds the bound state
+    (Workflow's bundle verification is not in the answer), and nothing
+    keeps a path's shape from changing between a printed step and its
+    execution. Workflow's remedy text is not used as the command either:
+    it carries the withdrawal. So the ``safe_resume_command`` is
+    :func:`_explain_gate_command`, which changes nothing, and a human
+    decides."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    item_root = _scoped_root(work_item_id)
+    manifest = item_root / "current" / "MANIFEST.md"
+    declarations = Path("docs") / "ai-workflow" / "registry" / f"{work_item_id}-artifacts.json"
+    return Decision(
+        observed_phase=phase,
+        evidence=_stale_publication_evidence(answer),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"Workflow reports this work item's plan-stage content as {answer.status} (row "
+                f"{answer.row}): the working tree no longer matches the bound content"
+                f"{_quoted_detail(answer)}. Workflow's remedy: {answer.remedy}. The Controller offers no "
+                f"restore: it cannot establish that {item_root / 'current' / 'files'}/ still holds the bound "
+                "state, and it cannot keep a path's shape from changing between a printed step and its "
+                "execution. The bound state covers the existence, mode and bytes of each path listed under "
+                f"`## Protected paths` in {manifest}, and the plan-stage classification sets of "
+                f"{declarations}. A restore overwrites the working tree's post-binding edits, which may "
+                "exist nowhere else: keep them first, and re-apply them at the next editing phase. "
+                "Workflow's alternative, the withdrawal, discards both recorded review stages. A human "
+                "decides; the next Controller step reads the status again, which is row 2 (BOUND) once the "
+                "working tree matches the bound state."
+            ),
+            artifact_path=str(manifest),
+            safe_resume_command=_explain_gate_command(root, work_item_id),
+        ),
+        declined=False,
+        reason=f"{phase}: Workflow reports the plan-stage content drifted from the bound content (row "
+               f"{answer.row}); the Controller offers no restore, checked ahead of the per-phase handlers",
+    )
+
+
+def _stale_publication_evidence(answer: workflow_contract.PublicationStatus) -> tuple[str, ...]:
+    fresh = (
+        (f"fresh_review_content_id: {answer.fresh_review_content_id}",)
+        if answer.fresh_review_content_id is not None else ()
+    )
+    detail = (f"Workflow's detail: {answer.detail}",) if answer.detail is not None else ()
+    return (plan_review_publication_status_evidence(answer),) + fresh + detail
+
+
+def _quoted_detail(answer: workflow_contract.PublicationStatus) -> str:
+    return f" (Workflow's detail: {answer.detail})" if answer.detail is not None else ""
+
+
+def _plan_review_binding_inconsistent_gate(
+    root: Path, work_item: Any, refusal: workflow_contract.PublicationRefusal,
+) -> Decision:
+    """S3/N2, the ``plan_review_binding_inconsistent`` gate: Workflow refuses
+    the status because the item's binding record contradicts its phase
+    (rows 4d and 6). Its message is quoted, nothing runs, and a human
+    decides."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    withdrawal = f" {_WITHDRAWAL_CONSEQUENCE}." if phase in PLAN_REVIEW_READY_PHASES else ""
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"plan-review publication status refused: {refusal.error}: {refusal.message}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"Workflow refuses to report this work item's plan-review publication status "
+                f"({refusal.error}): {refusal.message}. Its plan_review_binding record contradicts its "
+                f"phase, so the Controller fails closed and runs nothing.{withdrawal} A human decides; the "
+                "next Controller step reads the status again."
+            ),
+            artifact_path=_STATE_REL_PATH,
+            safe_resume_command=_explain_gate_command(root, work_item_id),
+        ),
+        declined=False,
+        reason=f"{phase}: plan_review_binding_inconsistent -- Workflow refuses the plan-review publication "
+               f"status ({refusal.error}); fail closed",
+    )
+
+
+def _unexpected_plan_review_status_gate(
+    root: Path, work_item: Any, answer: workflow_contract.PublicationStatus,
+) -> Decision:
+    """S4/N4, the ``unexpected_plan_review_status`` gate: Workflow answered a
+    status that does not belong to this phase class, or answered for
+    another phase. Workflow 2.6.0 never does either, so this is a contract
+    change the Controller does not act on; it fails closed."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    phase_class = "a plan-review-ready phase" if phase in PLAN_REVIEW_READY_PHASES else "a non-ready plan phase"
+    if answer.phase != phase:
+        mismatch = f"for phase {answer.phase!r}, while the Controller read phase {phase!r}"
+    else:
+        mismatch = f"at {phase!r}, which is {phase_class}"
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"{plan_review_publication_status_evidence(answer)} for phase {answer.phase}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"Workflow answered the plan-review publication status row {answer.row} ({answer.status}) "
+                f"{mismatch}: an answer outside the Workflow contract the Controller acts on (Workflow's "
+                f"remedy: {answer.remedy}). The Controller fails closed and runs nothing. A human decides; "
+                "the next Controller step reads the status again."
+            ),
+            artifact_path=_STATE_REL_PATH,
+            safe_resume_command=_explain_gate_command(root, work_item_id),
+        ),
+        declined=False,
+        reason=f"{phase}: unexpected_plan_review_status -- row {answer.row} ({answer.status}) {mismatch}; "
+               "fail closed",
     )
 
 
@@ -2509,15 +2889,19 @@ def _marker_clearing_clause(marker_path: Path, detail: str | None) -> str:
     )
 
 
-def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Decision:
+def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None, bound: BoundContract) -> Decision:
     """The withdrawn-bundle gate, by version and phase (CP4, four branches
     in order):
 
     1. ``"2.2"``, at a phase of :data:`IMPLEMENTATION_BUNDLE_CONSUMING_PHASES`:
        the marker-clearing clause, then the ordered implementation-bundle
        recovery steps (:func:`_implementation_bundle_recovery_steps`);
-    2. a phase of :data:`PLAN_BUNDLE_CONSUMING_PHASES`: the clause, then the
-       plan-bundle recovery steps, unchanged;
+    2. a phase of :data:`PLAN_BUNDLE_CONSUMING_PHASES` -- and, for a
+       ``"2.1"``/``"2.2"`` item under a ``workflow_query`` contract, every
+       phase of :data:`PLAN_REVIEW_READY_PHASES`, ``AWAITING_PLAN_APPROVAL``
+       included (workflow-2-6-integration CP4) -- the clause, then the
+       plan-bundle recovery steps in the author-input directory
+       (:func:`plan_author_inputs_dir`);
     3. ``"1"``/``"2.1"`` ``APPLYING_REVIEW_FEEDBACK`` (newly bundle-bearing,
        so no earlier text binds): the clause, then the facts -- the reviewed
        bundle was withdrawn, and ``/apply-implementation-review``'s step 1
@@ -2545,8 +2929,10 @@ def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None) -> Dec
             "implementation review runs, perform in order: " + " ".join(steps)
         )
         safe_resume_command = "; ".join((clear,) + steps)
-    elif phase in PLAN_BUNDLE_CONSUMING_PHASES:
-        steps = _plan_bundle_recovery_steps(root, work_item)
+    elif phase in PLAN_BUNDLE_CONSUMING_PHASES or (
+        phase in PLAN_REVIEW_READY_PHASES and queries_plan_review_publication_status(bound, version)
+    ):
+        steps = _plan_bundle_recovery_steps(root, work_item, bound)
         what_is_required = (
             f"the current bundle was withdrawn ({detail}); {clear}; then, before any plan "
             "review runs, perform in order: " + " ".join(steps)
@@ -2772,7 +3158,8 @@ def relaunch_bound_applies(job: LaunchedJobView | None, manifest_bundle_id: str 
 
 
 def _decide_applying_review_feedback_two_stage(
-    root: Path, work_item_id: str, work_item: Any, *, last_apply_job: LaunchedJobView | None,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract, *,
+    last_apply_job: LaunchedJobView | None,
 ) -> Decision:
     """``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` (CP4B), after the ``REJECTED``
     and implementation-bundle gates, in front of CP4's corrected gate:
@@ -2792,7 +3179,7 @@ def _decide_applying_review_feedback_two_stage(
        exactly when ``HEAD`` does not yet record ``APPLYING_REVIEW_FEEDBACK``."""
     phase = _APPLYING_REVIEW_FEEDBACK
     corrected_what, corrected_resume = _decision._STATIC_GATES[phase]
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
     bundle_dir = implementation_bundle_dir(root, work_item_id)
     manifest = read_manifest_fields(root, bundle_dir)
@@ -2907,7 +3294,12 @@ def decide(
     no ``.ai-review/`` read at all. At the two plan-bundle-consuming
     phases, a plan bundle incoherent with the state's ``plan_revision``
     (:func:`plan_bundle_coherence`) gates next -- still ahead of the
-    per-phase handlers, so ahead of the local-review BLOCK gate. At a
+    per-phase handlers, so ahead of the local-review BLOCK gate. Under a
+    ``workflow_query`` contract, for a ``"2.1"``/``"2.2"`` item, Workflow's
+    plan-review publication status takes that place at every plan phase,
+    ready and non-ready (:func:`_plan_review_publication`): a gate, or the
+    phase's own decision with the answer's row in its evidence
+    (workflow-2-6-integration CP4). At a
     ``"2.2"`` implementation-bundle-consuming phase, an implementation
     bundle incoherent with the state's implementation round
     (:func:`implementation_bundle_coherence`) gates in the same position
@@ -2927,20 +3319,53 @@ def decide(
     ``controller.job.last_launched_apply_job_view``, which this module
     cannot import. Both callers (``job.execute_step`` and ``cli``'s
     ``explain``) pass it, so both see the same J and make the same
-    decision; it is read at no other phase."""
+    decision; it is read at no other phase.
+
+    The Workflow contract is bound here, once per decision, from the
+    release ``managed_repo.inspect`` admitted (``managed_repo.
+    workflow_version``), and passed explicitly to every handler that reads
+    the feedback path (``workflow-controller-workflow-2-6-integration``
+    CP3). No caller can pass another provider."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     root = managed_repo.root
+    bound = workflow_contract.bind_release(managed_repo.workflow_version)
 
     if phase in BUNDLE_BEARING_PHASES:
         rejected, detail = rejected_marker_detail(root, work_item_id)
         if rejected:
-            return _rejected_marker_gate(root, work_item, detail)
+            return _rejected_marker_gate(root, work_item, detail, bound)
 
-    if phase in PLAN_BUNDLE_CONSUMING_PHASES:
+    publication_evidence: tuple[str, ...] = ()
+    if (
+        phase in PLAN_REVIEW_READY_PHASES | PLAN_REVIEW_NON_READY_PHASES
+        and queries_plan_review_publication_status(bound, work_item.governing_workflow_version)
+    ):
+        publication = _plan_review_publication(root, work_item, bound)
+        if isinstance(publication, Decision):
+            return publication
+        publication_evidence = publication
+    elif phase in PLAN_BUNDLE_CONSUMING_PHASES:
         coherent, detail = plan_bundle_coherence(root, work_item_id, work_item.plan_revision)
         if not coherent:
-            return _stale_plan_bundle_gate(root, work_item, detail)
+            return _stale_plan_bundle_gate(root, work_item, bound, detail=detail)
+
+    return _with_evidence(
+        _decide_after_bundle_gates(managed_repo, snapshot, work_item, bound, last_apply_job=last_apply_job),
+        publication_evidence,
+    )
+
+
+def _decide_after_bundle_gates(
+    managed_repo: Any, snapshot: Any, work_item: Any, bound: BoundContract, *,
+    last_apply_job: LaunchedJobView | None,
+) -> Decision:
+    """:func:`decide` past its withdrawn-bundle and plan-bundle gates: the
+    implementation-bundle gate, the durable-state gate, and the per-phase
+    handlers."""
+    phase = work_item.phase
+    work_item_id = work_item.work_item_id
+    root = managed_repo.root
 
     if (
         work_item.governing_workflow_version in _IMPLEMENTATION_BUNDLE_GATED_VERSIONS
@@ -2965,7 +3390,7 @@ def decide(
     if phase == _APPLYING_REVIEW_FEEDBACK and work_item.governing_workflow_version in _APPLY_AUTOMATION_VERSIONS:
         return _decision.apply_dispatch_rule(
             _decide_applying_review_feedback_two_stage(
-                root, work_item_id, work_item, last_apply_job=last_apply_job,
+                root, work_item_id, work_item, bound, last_apply_job=last_apply_job,
             ),
             work_item.governing_workflow_version,
         )
@@ -2977,7 +3402,7 @@ def decide(
         # launches is decided by the same rule `decision.decide` applies to
         # its own handlers' output.
         return _decision.apply_dispatch_rule(
-            handler(root, work_item_id, work_item), work_item.governing_workflow_version,
+            handler(root, work_item_id, work_item, bound), work_item.governing_workflow_version,
         )
 
     return _decision.decide(managed_repo, snapshot, work_item)

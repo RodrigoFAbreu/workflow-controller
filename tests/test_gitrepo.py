@@ -304,6 +304,16 @@ class MergeTrunkTest(_Case):
             gitrepo.merge_trunk(self.clone, "origin", "main", runner=spy)
         self.assertNotIn("merge", spy.subcommands())
 
+    def test_it_is_wired_into_no_lifecycle_path(self) -> None:
+        """Neither admitted Workflow release (2.5.1, 2.6.0) has a transition
+        that moves a work item's base after an integration merge (E1-E5,
+        ``docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``), so
+        no Controller module but its own names it."""
+        package = Path(gitrepo.__file__).resolve().parent
+        callers = sorted(path.name for path in package.glob("*.py")
+                         if path.name != "gitrepo.py" and "merge_trunk" in path.read_text())
+        self.assertEqual(callers, [])
+
 
 class RunnerTest(unittest.TestCase):
     def test_a_missing_git_is_a_git_operation_error(self) -> None:

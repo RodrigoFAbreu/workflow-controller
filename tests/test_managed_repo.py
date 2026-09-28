@@ -20,6 +20,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -54,12 +55,18 @@ class CleanManagedRepositoryTest(unittest.TestCase):
 
     @unittest.skipUnless(REAL_WORKFLOW_MANAGER, "no real workflow-manager installed")
     def test_real_workflow_manager_admits_this_repository(self) -> None:
-        # This repository is itself a real, currently-clean Workflow
-        # v2.5.1 (full profile) managed repository -- the disposable
-        # integration fixture every other case in this file avoids
-        # needing.
+        # This repository is itself a real, currently-clean, full-profile
+        # Workflow managed repository -- the disposable integration fixture
+        # every other case in this file avoids needing. Its release is
+        # whatever its own installation.json declares, never a literal:
+        # an admitted one, and the one whose vendored tree
+        # tests/test_workflow_releases.py checks its installed files against.
+        declared = json.loads(
+            (fixtures.REPO_ROOT / ".workflow-manager" / "installation.json").read_text(),
+        )["workflow_version"]
         result = managed_repo.inspect(fixtures.REPO_ROOT)
-        self.assertEqual(result.workflow_version, "2.5.1")
+        self.assertIn(result.workflow_version, managed_repo.VALIDATED_WORKFLOW_RELEASES)
+        self.assertEqual(result.workflow_version, declared)
         self.assertEqual(result.profile, "full")
         self.assertEqual(result.verify["returncode"], 0)
         self.assertEqual(result.status["returncode"], 0)
@@ -183,10 +190,17 @@ class DriftedInstallationTest(unittest.TestCase):
 
 
 class UnsupportedWorkflowVersionTest(unittest.TestCase):
-    """The baseline predicate's own seven cases (revision 64, widened to
-    seven at revision 68, manual external round 67's ``I1``, ``REQ-T18B``):
-    a bare line predicate, a bare closed set and the two-tier rule each
-    agree on a different subset of them."""
+    """The baseline predicate's own cases (revision 64, widened at
+    revision 68, manual external round 67's ``I1``, ``REQ-T18B``, and for
+    the admission of 2.6.0 in Controller 1.3.0): a bare line predicate, a
+    bare closed set and the two-tier rule each agree on a different subset
+    of them."""
+
+    def test_supported_lines_and_validated_releases(self) -> None:
+        self.assertEqual(managed_repo.SUPPORTED_WORKFLOW_LINES, frozenset({"2.5", "2.6"}))
+        self.assertEqual(managed_repo.VALIDATED_WORKFLOW_RELEASES, frozenset({"2.5.1", "2.6.0"}))
+        self.assertEqual(managed_repo.REFERENCE_WORKFLOW_RELEASE, "2.5.1")
+        self.assertFalse(hasattr(managed_repo, "SUPPORTED_WORKFLOW_LINE"))
 
     def test_reference_release_2_5_1_is_admitted(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -194,6 +208,44 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
             result = managed_repo.inspect(repo, manager_bin=str(stub))
             self.assertEqual(result.workflow_version, "2.5.1")
+
+    def test_2_6_0_is_admitted(self) -> None:
+        """Was ``test_2_6_0_refuses_outside_supported_line`` until 2.6.0 was
+        admitted (Controller 1.3.0)."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.6.0")
+            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager", release="2.6.0")
+            result = managed_repo.inspect(repo, manager_bin=str(stub))
+            self.assertEqual(result.workflow_version, "2.6.0")
+            self.assertEqual(result.profile, "full")
+            self.assertIn("workflow 2.6.0", result.verify["stdout"])
+
+    def test_2_7_0_refuses_outside_supported_line(self) -> None:
+        """Keeps the line predicate a set of lines rather than a floor."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.7.0")
+            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
+            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+                managed_repo.inspect(repo, manager_bin=str(stub))
+            evidence = ctx.exception.evidence
+            self.assertEqual(evidence["observed_workflow_version"], "2.7.0")
+            self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
+            self.assertEqual(evidence["reason"], "outside_supported_line")
+            self.assertNotIn("supported_workflow_line", evidence)
+
+    def test_2_6_1_refuses_unvalidated(self) -> None:
+        """Inside the newly supported 2.6 line, but never measured."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.6.1")
+            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
+            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+                managed_repo.inspect(repo, manager_bin=str(stub))
+            evidence = ctx.exception.evidence
+            self.assertEqual(evidence["observed_workflow_version"], "2.6.1")
+            self.assertEqual(evidence["reason"], "unvalidated_release")
+            self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
+            self.assertEqual(evidence["validated_workflow_releases"], ["2.5.1", "2.6.0"])
+            self.assertIn("supported line '2.6'", str(ctx.exception))
 
     def test_2_4_0_refuses_outside_supported_line(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -203,7 +255,7 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
                 managed_repo.inspect(repo, manager_bin=str(stub))
             evidence = ctx.exception.evidence
             self.assertEqual(evidence["observed_workflow_version"], "2.4.0")
-            self.assertEqual(evidence["supported_workflow_line"], "2.5")
+            self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
             self.assertEqual(evidence["reference_workflow_release"], "2.5.1")
             self.assertEqual(evidence["reason"], "outside_supported_line")
 
@@ -212,15 +264,6 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
         designed on -- a stated, tested fact rather than a side effect."""
         with tempfile.TemporaryDirectory() as td:
             repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.3.1")
-            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
-            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
-                managed_repo.inspect(repo, manager_bin=str(stub))
-            self.assertEqual(ctx.exception.evidence["reason"], "outside_supported_line")
-
-    def test_2_6_0_refuses_outside_supported_line(self) -> None:
-        """Keeps the line predicate a line rather than a floor."""
-        with tempfile.TemporaryDirectory() as td:
-            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.6.0")
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
             with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
                 managed_repo.inspect(repo, manager_bin=str(stub))
@@ -248,7 +291,8 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
             evidence = ctx.exception.evidence
             self.assertEqual(evidence["observed_workflow_version"], "2.5.0")
             self.assertEqual(evidence["reason"], "unvalidated_release")
-            self.assertEqual(evidence["validated_workflow_releases"], ["2.5.1"])
+            self.assertEqual(evidence["validated_workflow_releases"], ["2.5.1", "2.6.0"])
+            self.assertIn("supported line '2.5'", str(ctx.exception))
 
     def test_req_t18b_same_inventory_unvalidated_release_refuses_before_any_inventory_read(self) -> None:
         """`REQ-T18B`: a fixture whose ``.claude/commands/`` tree and
@@ -330,6 +374,37 @@ class InstallProfilePairTest(unittest.TestCase):
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
             with self.assertRaises(UnsupportedInstallProfileError):
                 managed_repo.inspect(repo, manager_bin=str(stub))
+
+
+
+class InstalledWorkflowVersionTest(unittest.TestCase):
+    """``installed_workflow_version`` (workflow-2-6-integration CP3): a plain
+    manifest read, never a Workflow Manager call, whose only failures are
+    the parser's own two refusals."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def test_it_reads_the_declared_release_without_the_manager(self) -> None:
+        fixtures.write_installation_manifest(self.root, workflow_version="2.6.0")
+        with unittest.mock.patch.object(managed_repo, "_run", side_effect=AssertionError("the Manager ran")):
+            self.assertEqual(managed_repo.installed_workflow_version(self.root), "2.6.0")
+
+    def test_a_missing_or_malformed_manifest_is_the_parser_s_own_refusal(self) -> None:
+        with self.assertRaises(UnmanagedRepositoryError):
+            managed_repo.installed_workflow_version(self.root)
+        fixtures.write_installation_manifest(self.root, schema_version=2)
+        with self.assertRaises(MalformedInstallationManifestError):
+            managed_repo.installed_workflow_version(self.root)
+
+    def test_an_os_error_the_parser_does_not_map_is_a_malformed_manifest(self) -> None:
+        with unittest.mock.patch.object(managed_repo, "_read_manifest",
+                                        side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaises(MalformedInstallationManifestError) as caught:
+                managed_repo.installed_workflow_version(self.root)
+        self.assertIn("Permission denied", caught.exception.message)
 
 
 if __name__ == "__main__":

@@ -29,9 +29,9 @@ main -- /milestone-plan -- bind milestone/<id> -- plan reviews -- plan approval 
 - **Bind.** After `/milestone-plan` has written the plan, and before
   anything about it is committed, the Controller creates
   `milestone/<id>` at `main`'s tip and switches to it, carrying the
-  uncommitted plan along. Workflow 2.5.1 derives the work-item id itself,
-  so the branch cannot be created earlier. A plan approval commit that
-  already sits on `main` refuses with manual-recovery guidance.
+  uncommitted plan along. Workflow (2.5.1 and 2.6.0) derives the work-item
+  id itself, so the branch cannot be created earlier. A plan approval
+  commit that already sits on `main` refuses with manual-recovery guidance.
 - **Draft PR.** As soon as the branch has a commit beyond `origin/main`
   (normally the plan approval commit), the Controller pushes it and
   opens one Draft PR titled with the work-item id, whose body carries a
@@ -80,16 +80,19 @@ main -- /milestone-plan -- bind milestone/<id> -- plan reviews -- plan approval 
   switch, and blocks nothing afterwards. With `HEAD` still on a finished
   milestone's branch, every step gates `switch_to_trunk`.
 
-**`integration_required` is the normal path, not an error.** Under
-Workflow 2.5.1 there is no Workflow transition that re-establishes review
-against a moved base, so the Controller never integrates `main` into a
-milestone branch. Whenever anything lands on `main` during a milestone --
-including this repository's own post-acceptance release commits -- the
+**`integration_required` is the normal path, not an error.** Workflow
+2.5.1 and 2.6.0 have no transition that moves a work item's base and
+re-establishes review against it, so the Controller never integrates
+`main` into a milestone branch. Whenever anything lands on `main` during a
+milestone -- including this repository's own post-acceptance release commits -- the
 milestone ends at `integration_required`, and the supported procedure is:
 on GitHub, mark the PR ready and merge it with "Create a merge commit".
 Close-out then converges as for any merge. This stays the contract until
-the follow-up integration milestone binds integration to the released
-Workflow 2.6.x (`docs/ROADMAP.md`). This is why this repository's ruleset
+a Workflow release provides the narrow follow-up that
+[ADR 0006](../adr/0006-workflow-release-admission-and-per-release-contracts.md#e1-e5-the-released-contract-has-no-integration-transition)
+names (an integration record, a base-moving transition, merge-admitting
+provenance, legal phases and a mergeable state model), and a Controller
+milestone binds integration to it. This is why this repository's ruleset
 does not require a pull request to be up to date before merging (see
 [Repository settings](ci-and-releases.md#repository-settings)).
 
@@ -129,8 +132,8 @@ touch a ref or a pull request:
   3. `workflow-controller --work-item <id> milestone-binding --abandon <repo>`:
      retire the binding. Admitted only while `origin/main`'s committed
      `WORKFLOW_STATE.json` has no unfinished entry for the work item:
-     Workflow 2.5.1 cannot retire a work item whose state already reached
-     trunk.
+     neither Workflow 2.5.1 nor 2.6.0 can retire a work item whose state
+     already reached trunk.
 - **`merged_before_acceptance`**: the PR was merged before the
   `/accept-milestone` commit. Later branch commits would never reach
   `main`. The exit is `--new-pr`, which continues the work item on the

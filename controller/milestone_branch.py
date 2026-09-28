@@ -116,7 +116,8 @@ PLAN_STAGE_PHASES = frozenset({
     "PLANNING", "SELF_REVIEWING_PLAN", "AWAITING_EXTERNAL_PLAN_REVIEW", "AWAITING_LOCAL_PLAN_REVIEW",
     "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "REVISING_PLAN", "AWAITING_PLAN_APPROVAL",
 })
-#: Workflow 2.5.1's ``TERMINAL_PHASES`` (``scripts/workflow_state.py:321``).
+#: Workflow's ``TERMINAL_PHASES``, the same in 2.5.1 and 2.6.0
+#: (``scripts/workflow_state.py:321`` and ``:342``).
 MILESTONE_COMPLETE = "MILESTONE_COMPLETE"
 
 TRAILER_WORK_ITEM = "Workflow-Work-Item"
@@ -177,13 +178,20 @@ class Context:
     """Where a preflight runs: the target worktree (``repo_root``, its
     top level), the Controller runtime root, the Git runner, a forge factory
     (``repository -> Forge``; default :class:`~controller.forge.GhForge`)
-    and a clock."""
+    and a clock.
+
+    ``events``, when a list is given, receives the name of every binding
+    event :func:`_event` writes through this context, in order (a plain
+    append, never a file write). ``controller.job`` passes a fresh one per
+    step, so a refusal after the preflight can say what it did
+    (workflow-2-6-integration CP3)."""
 
     repo_root: Path
     runtime_root: Path
     runner: gitrepo.Runner | None = None
     forge_factory: Callable[[str], forge_mod.Forge] | None = None
     clock: Callable[[], str] = _utc_now
+    events: list[str] | None = None
 
     def forge(self, repository: str) -> forge_mod.Forge:
         return (self.forge_factory or forge_mod.GhForge)(repository)
@@ -350,6 +358,8 @@ def _event(ctx: Context, key: str, record: Mapping[str, Any], event: str, **deta
     runtime.append_jsonl(ctx.runtime_root, events_rel(key, record["work_item_id"]), {
         "at": ctx.clock(), "event": event, "binding_generation": record["binding_generation"],
         "state": record["state"], **details})
+    if ctx.events is not None:
+        ctx.events.append(event)
 
 
 def _write(ctx: Context, key: str, record: dict, event: str | None = None, **details: Any) -> dict:
@@ -1147,10 +1157,10 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     if not _ancestor(ctx, remote_trunk, a):
         behind = observation["behind"]
         return Gate(GATE_INTEGRATION_REQUIRED, work_item_id, branch,
-                    f"{remote}/{trunk} has moved {behind} commit(s) past {branch}'s base. Workflow 2.5.1 has no "
-                    f"transition that re-establishes review against an integrated base, so the Controller does "
-                    f"not integrate. The manual procedure: on GitHub, mark pull request #{number} ready and merge "
-                    f"it with \"Create a merge commit\"",
+                    f"{remote}/{trunk} has moved {behind} commit(s) past {branch}'s base. Workflow 2.5.1 and 2.6.0 "
+                    f"have no transition that moves a work item's base, so the Controller does not integrate. "
+                    f"The manual procedure: on GitHub, mark pull request #{number} ready and merge it with "
+                    f"\"Create a merge commit\"",
                     (f"mark pull request #{number} ready and merge it on GitHub with \"Create a merge commit\"",))
     # 7. green checks, when the binding's policy requires them.
     if binding_policy(record).milestone_branches.ready_requires_green_checks:
@@ -1690,7 +1700,7 @@ def abandon_problems(ctx: Context, record: Mapping[str, Any], head: gitrepo.Head
         problems.append(f"{remote} has no {trunk} branch")
     elif _non_terminal(committed_state(ctx, refs[trunk]), work_item_id):
         problems.append(f"{remote}/{trunk} already carries {work_item_id}'s non-terminal state, and Workflow "
-                        f"2.5.1 has no abandonment transition")
+                        f"2.5.1 and 2.6.0 have no abandonment transition")
     if state in REFUSAL_STATES:
         return problems
     local = _local_branch(ctx, branch)

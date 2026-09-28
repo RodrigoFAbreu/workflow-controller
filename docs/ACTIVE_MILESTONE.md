@@ -27,8 +27,22 @@ and the result is released as 1.3.0.
 
 ## Functional review checklist
 
-Technical approval: `6151258` (implementation revision 5, reviewed head `0624a71`). Put findings
-in `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+Technical approval: not current. Implementation revision 5's approval (`6151258`, reviewed head
+`0624a71`) was marked stale at `bf8f0c9` by functional review round 1's bounded fix. Revision 6
+(reviewed head `bf8f0c9`) needs both implementation-review stages and `/approve-review
+implementation` before this checklist is re-tested. Put findings in
+`.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+
+**Round 1 and what to re-test.** Round 1 ran against checklist `eeeb4fa`. Every flow passed but
+I: PR #5's CI was red (F1, a test-only defect). The bounded fix:
+
+- `ff5a5cd` keeps the host's Git configuration out of `GitIsolationTest` (`GIT_CONFIG_NOSYSTEM=1`
+  and an empty `GIT_CONFIG_GLOBAL`), and adds a regression that plants an ambient `lfs` filter at
+  the system and the global scope;
+- `81b50af` rewords the 1.3.0 notes' sentence on a hook command, a submodule and an old Git.
+
+No production code changed. Re-test I (CI was green at `56fdba4`: runs `36454058586` and
+`36454057768`), H (`GitIsolationTest` changed) and J (the reworded sentence). A-G are unaffected.
 
 **Setup.**
 
@@ -59,21 +73,11 @@ Nothing in this repository is changed.
 | F | `python3 -m unittest tests.test_workflow_release_migration` | `OK`, 10 tests, about 20 s. These are the migration scenarios M1-M5 on disposable repositories with the real 2.5.1 and 2.6.0 scripts: in-flight items keep their decision across the update, a new `scoped` item resolves its not-yet-created feedback directory, a job whose Workflow release changes before verification fails as `workflow_release_changed`. |
 | G | `python3 -m unittest -v tests.test_integration_disposable_repo 2>&1 \| grep RealManagerMigrationTest` | Three `ok` lines: M1 through the real `workflow-manager` update, a 2.6.0 target's clean filter never runs, and its fsmonitor or hook is never hidden. |
 | H | Optional: `CONTROLLER_TEST_OLD_GIT=<a Git 2.31–2.35 binary> python3 -m unittest tests.test_workflow_contract.GitIsolationTest` | `OK`. The old-Git live check runs instead of being skipped. |
-| I | Open PR #5's checks | Every required check green. **Known to fail today**: see the limitation below. |
+| I | Open PR #5's checks | Every required check green: `validate` (`plan`, `package`, the five `tests` shards, `tests-result`) and `workflow-conformance`. This is F1's re-test. |
 | J | Read `docs/releases/1.3.0.md`, and the "Supported Workflow releases" section of `docs/guide/installation.md` | They describe what A-G showed: 2.5.1 and 2.6.0 admitted by exact release, Workflow's two queries for 2.6.0 targets, the Git version rules, and the move of a target to 2.6.0. |
 
 **Known limitations and out of scope.**
 
-- **CI is red on PR #5 (found while preparing this checklist).** `validate / tests` shard 2 has
-  failed since `0d7ecce` in four `tests.test_workflow_contract.GitIsolationTest` tests
-  (`test_a_clean_filter_never_runs`, `test_a_filter_no_hashed_path_selects_leaves_the_answer_workflows`,
-  `test_a_filter_that_changes_content_is_refused_rather_than_bound`,
-  `test_the_querys_git_environment`). The GitHub runner configures a `git-lfs` filter in its
-  system Git configuration, and the tests assert the exact set of filters the query sees. The
-  Controller switches that filter off too, which is correct. Reproduced locally by adding a
-  `[filter "lfs"]` section to a `GIT_CONFIG_GLOBAL` file: the same four tests fail and the other
-  2246 pass, including the migration suites. It is a test-only defect, but it blocks the merge,
-  so it should be recorded as a finding for `/apply-functional-review`.
 - A target whose tracked files select a filter driver (for example Git LFS files) is refused for
   2.6.0 queries (`query_git_not_isolated`). This is by design, and is documented in
   `docs/guide/automation.md` ("Workflow's queries").

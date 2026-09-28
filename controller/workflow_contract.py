@@ -684,10 +684,13 @@ def _with_git_config(env: dict[str, str], pairs: tuple[tuple[str, str], ...], co
 
 
 def _copy_index(index: Path, private_dir: Path, context: dict) -> None:
-    """Copy the target's index into ``private_dir``. A target without one
-    has none copied: Git reads the missing private index as empty, as it
-    reads the target's. ``O_NONBLOCK``: a planted FIFO is refused, never
-    waited on."""
+    """Copy the target's index into ``private_dir``, with the index's own
+    mtime: Git re-hashes an entry no older than the index file (a "racily
+    clean" entry), and a fresh copy would let an edit made in the same
+    clock tick as the index pass as unchanged where Workflow's Git sees it.
+    A target without an index has none copied: Git reads the missing
+    private index as empty, as it reads the target's. ``O_NONBLOCK``: a
+    planted FIFO is refused, never waited on."""
     try:
         fd = os.open(index, os.O_RDONLY | os.O_NONBLOCK)
     except FileNotFoundError:
@@ -696,13 +699,15 @@ def _copy_index(index: Path, private_dir: Path, context: dict) -> None:
         raise _not_isolated(context, "index", f"the target's index {index} cannot be read ({exc})") from exc
     try:
         with os.fdopen(fd, "rb") as handle:
-            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            status = os.fstat(handle.fileno())
+            if not stat.S_ISREG(status.st_mode):
                 raise _not_isolated(context, "index", f"the target's index {index} is not a regular file")
             data = handle.read()
     except OSError as exc:
         raise _not_isolated(context, "index", f"the target's index {index} cannot be read ({exc})") from exc
     try:
-        runtime.write_bytes(private_dir, _PRIVATE_INDEX, data)
+        copy = runtime.write_bytes(private_dir, _PRIVATE_INDEX, data)
+        os.utime(copy, ns=(status.st_atime_ns, status.st_mtime_ns))
     except (OSError, RuntimeContainmentError) as exc:
         raise _private_copy_failed(context, "write the private copy of the index", exc) from exc
 

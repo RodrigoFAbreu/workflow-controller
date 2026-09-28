@@ -736,6 +736,35 @@ class GitIsolationTest(_SeededTargets):
             "filter.evil.required": "true",
         })
 
+    def test_the_querys_git_sees_a_racily_clean_edit_as_git_in_place_does(self) -> None:
+        # An edit in the clock tick the index was written in keeps the
+        # entry's stat data; Git re-hashes only entries no older than the
+        # index file. The private copy keeps the index's mtime, so the
+        # query's `git diff` lists the edit exactly as Workflow's does.
+        root = self.fresh()
+        self.git_config("core.trustctime", "false")
+        _git(root, "update-index", "-q", "--refresh")
+        edited, index = root / UNCHANGED_TRACKED, root / ".git" / "index"
+        mtime = edited.stat().st_mtime_ns
+        edited.write_bytes(edited.read_bytes().swapcase())
+        os.utime(edited, ns=(mtime, mtime))
+        os.utime(index, ns=(mtime, mtime))
+        diff = ["diff", "--name-only", "-z", _entry(root)["base_commit"]]
+        seen: list[tuple[int, bytes]] = []
+        real = workflow_contract._execute_query
+
+        def hook(argv, *, cwd, env, timeout):
+            private_index = Path(env["GIT_INDEX_FILE"])
+            seen.append((private_index.stat().st_mtime_ns,
+                         subprocess.run(["git", *diff], cwd=cwd, env=env, capture_output=True, check=True).stdout))
+            return real(argv, cwd=cwd, env=env, timeout=timeout)
+
+        with mock.patch.object(workflow_contract, "_execute_query", hook):
+            workflow_contract.plan_review_publication_status(root, CONTRACT, WORK_ITEM_ID)
+        in_place = subprocess.run(["git", *diff], cwd=root, capture_output=True, check=True).stdout
+        self.assertIn(UNCHANGED_TRACKED.encode(), in_place.split(b"\0"), "control: Git in place missed the edit")
+        self.assertEqual(seen, [(mtime, in_place)])
+
     def test_no_hook_runs(self) -> None:
         for variant in ("hooks-directory", "hooks-path", "operator-configured"):
             with self.subTest(variant=variant):

@@ -128,9 +128,15 @@ branches on governing version, unchanged.
 
 *Vocabulary state — never persisted (see "Vocabulary states" above).*
 `/milestone-plan` does this work inside its own step 4 and then writes
-`AWAITING_LOCAL_PLAN_REVIEW` (`TWO_STAGE_PLAN_REVIEW_VERSIONS` --
-`"2.1"`/`"2.2"` alike, `workflow-2.5.0`) or `AWAITING_EXTERNAL_PLAN_REVIEW`
-(`"1"`) directly, through `publish_plan_revision`.
+`AWAITING_EXTERNAL_PLAN_REVIEW` (`"1"`) directly, through
+`publish_plan_revision`, or `AWAITING_LOCAL_PLAN_REVIEW`
+(`TWO_STAGE_PLAN_REVIEW_VERSIONS` -- `"2.1"`/`"2.2"` alike, `workflow-2.5.0`).
+Under `workflow-2.6.0` (`D-Plan-Review-Bundle-Binding`) the latter is
+written by the **bind**, not the publish: `/milestone-plan` publishes
+(mirror-only, phase unchanged) at its publication point after steps 4-5,
+generates the bundle in step 6, and then `bind_plan_review_bundle` writes
+`AWAITING_LOCAL_PLAN_REVIEW` only for a verified bundle of the published
+content.
 
 - **Entry**: a draft plan exists.
 - **Allowed actions**: critically review the plan for missing requirements,
@@ -152,13 +158,13 @@ branches on governing version, unchanged.
 - **Artifacts**: `.ai-review/<work_item_id>/current/` (plan stage) and
   `.ai-review/<work_item_id>/review-bundle.tar.gz`.
 - **Exit**: external reviewer places feedback at
-  `.ai-review/feedback/REVIEW_FEEDBACK.md` (feedback stays flat, stage-
-  agnostic, unlike the plan-stage bundle directory itself).
+  `<feedback_dir>/REVIEW_FEEDBACK.md` (stage-agnostic; see "Feedback file
+  locations" below for what `<feedback_dir>` resolves to).
 - **Stop for user/reviewer?** Yes — hard gate. Claude must stop here.
 
 ### REVISING_PLAN
 
-- **Entry**: `.ai-review/feedback/REVIEW_FEEDBACK.md` exists.
+- **Entry**: `<feedback_dir>/REVIEW_FEEDBACK.md` exists.
 - **Allowed actions**: validate every finding against the repository; apply
   accepted findings to the plan; document evidence-based rejections.
 - **Artifacts**: revised plan; rejection rationale (inline in the plan or
@@ -188,7 +194,12 @@ that was `"2.1"` alone through `workflow-v2-1-core`/`workflow-2.4.0`) — a
 - **Entry**: `REVISING_PLAN`'s exit condition is met, or `/apply-plan-review`
   has just applied an accepted plan edit (its `TWO_STAGE_PLAN_REVIEW_VERSIONS`-only
   revised exit step, below -- widened `workflow-2.5.0` from a bare `"2.1"`
-  check).
+  check). Since `workflow-2.6.0` (`D-Plan-Review-Bundle-Binding`) the one
+  writer of this phase is `bind_plan_review_bundle`, called by
+  `/milestone-plan` step 6 and `/apply-plan-review` step 7' straight after
+  a successful plan-stage generation: it writes the phase only for a
+  verified bundle of the content `publish_plan_revision` last published,
+  never for content already reviewed or withdrawn (`CONSUMED`).
 - **Allowed actions**: run `/review-plan` (recommended in a fresh session,
   for genuine independence from the session that wrote the plan — strongly
   recommended operational guidance, not a verified precondition).
@@ -204,6 +215,10 @@ that was `"2.1"` alone through `workflow-v2-1-core`/`workflow-2.4.0`) — a
     then required.
   - **`BLOCK`**: no ledger write, no transition; remains at
     `AWAITING_LOCAL_PLAN_REVIEW` — explicit user resolution required.
+    Under `workflow-2.6.0` it is then resolved at this phase: by
+    re-reviewing the unchanged content, or by editing the plan and
+    withdrawing it with `/milestone-plan <id>` (below);
+    `/apply-plan-review` never applies a plan-stage `BLOCK`.
 - **Stop for user/reviewer?** Yes — the current session's turn ends here. A
   fresh, independent session is strongly recommended before running
   `/review-plan`.
@@ -233,7 +248,9 @@ that was `"2.1"` alone through `workflow-v2-1-core`/`workflow-2.4.0`) — a
     handling).
   - **`BLOCK`**: no ledger write, no transition; remains at
     `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` — explicit user resolution
-    required.
+    required, then resolved as at `AWAITING_LOCAL_PLAN_REVIEW` above
+    (re-review of the unchanged content, or an edit plus withdrawal,
+    `workflow-2.6.0`).
 - **Stop for user/reviewer?** Yes — hard gate, identical in kind to the
   `"1"` state machine's own `AWAITING_EXTERNAL_PLAN_REVIEW`.
 
@@ -243,10 +260,10 @@ that was `"2.1"` alone through `workflow-v2-1-core`/`workflow-2.4.0`) — a
 |---|---|---|---|---|
 | `AWAITING_LOCAL_PLAN_REVIEW` | `APPROVE` | `/review-plan` | record local stage (`verdict: APPROVE`) against current `review_content_id` → `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | `governing_workflow_version` in `TWO_STAGE_PLAN_REVIEW_VERSIONS`; `phase == AWAITING_LOCAL_PLAN_REVIEW`; recomputed `bundle_id`/`review_content_id` match `MANIFEST.md`/`REVIEW_REQUEST.md` (not stale) |
 | `AWAITING_LOCAL_PLAN_REVIEW` | `REVISE` | `/review-plan` | write `REVIEW_FEEDBACK.md` only, no ledger write → `REVISING_PLAN`; `/apply-plan-review` required | same as above |
-| `AWAITING_LOCAL_PLAN_REVIEW` | `BLOCK` | `/review-plan` | no ledger write, no transition; remains `AWAITING_LOCAL_PLAN_REVIEW` | same as above; explicit user resolution required before any further command |
+| `AWAITING_LOCAL_PLAN_REVIEW` | `BLOCK` | `/review-plan` | no ledger write, no transition; remains `AWAITING_LOCAL_PLAN_REVIEW` | same as above; explicit user resolution required before any further command — under `workflow-2.6.0`, resolved by re-review of the unchanged content, or by an edit plus withdrawal (`/milestone-plan <id>`); `/apply-plan-review` refuses a `BLOCK` (`FeedbackStatusNotApplicableError`) |
 | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | `APPROVE` | `/record-manual-plan-review` | record manual stage (`verdict: APPROVE`, plus the feedback's own `bundle_id`) against current `review_content_id` → `AWAITING_PLAN_APPROVAL` | `governing_workflow_version` in `TWO_STAGE_PLAN_REVIEW_VERSIONS`; `phase == AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`; a current `LOCAL_MODEL_PLAN_REVIEW` `APPROVE` recorded for the same `review_content_id`; `REVIEW_FEEDBACK.md`'s `Reviewer role:` is `MANUAL_EXTERNAL_PLAN_REVIEW` or the legacy `manual_external_plan_review`; its `review_content_id` matches the current recomputed value (**hard**, blocks ingestion) — its `bundle_id` matching the current recomputed value is **advisory only** (warns, naming both, never blocks); no `MANUAL_EXTERNAL_PLAN_REVIEW` stage already recorded against this `review_content_id` (rejects duplicate ingestion) |
 | `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | `REVISE` | `/record-manual-plan-review` | no ledger write → `REVISING_PLAN`; `/apply-plan-review` required | same as above |
-| `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | `BLOCK` | `/record-manual-plan-review` | no ledger write, no transition; remains `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | same as above; explicit user resolution required |
+| `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | `BLOCK` | `/record-manual-plan-review` | no ledger write, no transition; remains `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` | same as above; explicit user resolution required — under `workflow-2.6.0`, resolved by re-review of the unchanged content, or by an edit plus withdrawal (`/milestone-plan <id>`) |
 
 Malformed, missing, or unparseable `REVIEW_FEEDBACK.md` content at either
 row is refused before any state change, naming what failed to parse.
@@ -260,6 +277,28 @@ step, below -- widened `workflow-2.5.0` from a bare `"2.1"` check),
 whether the
 edit was driven by a local-model or a manual-external `REVISE`. No path
 re-enters manual-external review without a fresh local pass first.
+
+**Withdrawal edge** (`workflow-2.6.0`, `D-Plan-Review-Bundle-Binding`,
+`TWO_STAGE_PLAN_REVIEW_VERSIONS` only). From each ready phase —
+`AWAITING_LOCAL_PLAN_REVIEW`, `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` and
+`AWAITING_PLAN_APPROVAL` — `/milestone-plan <id>` (the explicit work-item
+id is required; the no-argument and `<base-sha>`-only forms refuse with
+`PlanReviewWithdrawalNeedsExplicitIdError`) returns the item to
+`REVISING_PLAN`, or to `AMENDING_PLAN` when it has an open amendment,
+through `withdraw_plan_review`. The withdrawal decides from the phase
+alone (it never recomputes the plan-stage id, so no worktree edit can block
+it), refuses while an open plan-approval journal names the item
+(`PlanApprovalInProgressError`), discards both recorded plan-review stages,
+and marks the withdrawn content `CONSUMED`, so it can never re-bind: only
+an edit plus a fresh publish, generation and bind returns the item to
+`AWAITING_LOCAL_PLAN_REVIEW`. It is the one sanctioned way out of a ready
+phase for editing without a `REVISE` verdict; `publish_plan_revision` and
+`route_work_item` refuse at a ready phase (`PlanReviewInProgressError`),
+and outside the plan-stage phases altogether
+(`PlanReviewPhaseNotPlanStageError`). A ready item whose worktree drifted
+without a withdrawal is refused by every plan-stage reader
+(`ReviewedContentDriftError`), naming both remedies: restore the bound
+bytes from `current/files/<path>`, or withdraw.
 
 ### AWAITING_PLAN_APPROVAL
 
@@ -436,15 +475,15 @@ mirror is not exact.
   `scripts/prepare-ai-review.sh <base-sha> implementation` to export the
   bundle. No further implementation. Optionally, run `/review-implementation`
   — a non-gating, model-independent second opinion on the current bundle;
-  it writes the current `.ai-review/feedback/REVIEW_FEEDBACK.md` (or the
-  scoped equivalent) once its own pre-write guards pass, but still writes
+  it writes the current `<feedback_dir>/REVIEW_FEEDBACK.md` once its own
+  pre-write guards pass, but still writes
   no `docs/ai-workflow/WORKFLOW_STATE.json` and never advances this state,
   so it remains non-gating and adds no new gate — just no longer "writes
   nothing".
 - **Artifacts**: `.ai-review/current/` (implementation stage) with the real
   diff, changed files, tests run, decisions; `.ai-review/review-bundle.tar.gz`.
 - **Exit**: external reviewer places feedback at
-  `.ai-review/feedback/REVIEW_FEEDBACK.md`.
+  `<feedback_dir>/REVIEW_FEEDBACK.md`.
 - **Stop for user/reviewer?** Yes — hard gate. Claude must stop here. Do not
   mark the milestone accepted.
 
@@ -508,7 +547,7 @@ whether the gate is open.
 - **Artifacts**: functional-review checklist (in `docs/ACTIVE_MILESTONE.md` or a
   file it links to).
 - **Exit**: user performs functional testing and places findings at
-  `.ai-review/feedback/FUNCTIONAL_REVIEW.md`.
+  `<feedback_dir>/FUNCTIONAL_REVIEW.md`.
 - **Stop for user/reviewer?** Yes — hard gate. Claude must stop here.
 - **One acceptance command, and what to do when it refuses.** Once
   functional review is clean, `/accept-milestone` is the only acceptance
@@ -551,7 +590,7 @@ whether the gate is open.
 bounded branch's own `record_bundle_generation` is what moves the item,
 to `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`.
 
-- **Entry**: `.ai-review/feedback/FUNCTIONAL_REVIEW.md` exists.
+- **Entry**: `<feedback_dir>/FUNCTIONAL_REVIEW.md` exists.
 - **Allowed actions**: classify each finding (defect, usability issue,
   missing requirement, enhancement, expected behavior); reproduce where
   practical; fix defects/usability issues/missing requirements; add
@@ -705,8 +744,8 @@ existing gate (`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` and
 "optional action inside an existing gate, not a new one" reasoning this
 section already applies to the plan stage's two-stage refinement below.
 `/review-implementation` (`workflow-v2-3-followups`) does write a review
-artifact, `.ai-review/feedback/REVIEW_FEEDBACK.md` (or the scoped
-equivalent), once its own pre-write guards pass — but not `WORKFLOW_STATE.json`
+artifact, `<feedback_dir>/REVIEW_FEEDBACK.md`, once its own pre-write
+guards pass — but not `WORKFLOW_STATE.json`
 and not a `phase` transition, so it stays non-gating for the same reason.
 `/review-functional` writes nothing at all, unchanged.
 
@@ -743,8 +782,21 @@ operations, repeated verification failures, unrelated working-tree changes).
 
 ## Feedback file locations
 
-- Plan/implementation review: `.ai-review/feedback/REVIEW_FEEDBACK.md`
-- Functional review: `.ai-review/feedback/FUNCTIONAL_REVIEW.md`
+- Plan/implementation review: `<feedback_dir>/REVIEW_FEEDBACK.md`
+- Functional review: `<feedback_dir>/FUNCTIONAL_REVIEW.md`
+
+`<feedback_dir>`, everywhere in this document, is the one normative
+definition `docs/ai-workflow/REVIEW_PROTOCOL.md` "Feedback directory"
+gives (`D-Feedback-Layout`, workflow-2.6.0): exactly what
+`workflow_fingerprint.resolve_feedback_dir(repo_root, work_item_id)`
+returns. A work item created under `2.6.0` or later carries
+`feedback_layout: "scoped"` and resolves
+`.ai-review/<work_item_id>/feedback/` by construction; a legacy item (no
+such field, no state entry, or no state file) keeps the pre-`2.6.0` rule —
+`.ai-review/<work_item_id>/feedback/` if it already exists, else the flat
+`.ai-review/feedback/`. Print the exact path for any item with
+`python3 scripts/workflow_fingerprint.py --resolve-feedback-path
+<work-item-id>`.
 
 `REVIEW_FEEDBACK.md` is written by `/review-plan` (the
 `LOCAL_MODEL_PLAN_REVIEW` stage) and, since `workflow-v2-3-followups`, also

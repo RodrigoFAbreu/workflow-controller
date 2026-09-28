@@ -73,45 +73,33 @@ and wait.
      `workflow_state.request_plan_amendment` itself**
      (`AmendmentCheckpointActiveError`, XMODEL-R4-B1) -- this step's own
      read is for reporting the refusal early, not a separate source of
-     truth. **What actually closes the race, and its real scope
-     (corrected, round 9 external implementation review, `IMPL9-R1`,
-     superseding this step's own previous, round-4-era text)**: a
-     checkpoint claim is published to the filesystem claims directory
+     truth. **What actually closes the race, across every linked worktree**
+     (workflow-2.6.0, `D-Repo-Global-Lifecycle`, closing
+     `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md`):
+     a checkpoint claim is published to the shared claims directory
      *before* `workflow_state.transition_checkpoint_in_progress` writes
      `WORKFLOW_STATE.json` (`/milestone-implement` step 1d's documented
      ordering), so a claim can become outstanding *after* this step's own
-     read returns clean but *before* this command's own `state_transaction`
-     call below acquires the state lock. Two independent guards, not one,
-     matter here, and only one of them actually closes that window:
-     `transition_checkpoint_in_progress`'s own independent
-     `IllegalCheckpointStartPhaseError` guard *detects* a claim published
-     into the window after the fact (the claim itself has already reached
-     disk); `workflow_state.claim_checkpoint`'s own pre-publication phase
-     check, run inside the identical `WORKFLOW_STATE.lock` this command's
-     own `state_transaction` call below acquires, is what actually *closes*
-     it, by serializing claim publication with this command's own
-     supersede-and-commit so neither can complete while the other holds the
-     lock (`XMODEL-R8-B1`). **That closure is real only within one worktree
-     root, not across the repository (`XMODEL-R9-B1`)**: `WORKFLOW_STATE.lock`
-     is per-worktree, so a checkpoint claimed from a *different* linked
-     worktree of the same repository is not serialized against this
-     command's own critical section, and `claim_checkpoint`'s phase check
-     in that other worktree reads its own working-tree `WORKFLOW_STATE.json`,
-     which cannot observe an `AMENDING_PLAN` this command committed only in
-     this worktree. This step's own read of
-     `workflow_state.resolve_claim(repo_root, work_item_id)` above *is*
-     shared across worktrees (`claims_dir` is `git_common_dir`-rooted), so
-     an *already-published* foreign-worktree claim is still caught here --
-     what is not closed is a claim publication racing this command's own
-     commit from another worktree, or a claim attempted from another
-     worktree after this command's `AMENDING_PLAN` is durable in this one.
-     This residual is deliberately left open for `2.4.0`; see
-     `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md`.
-     An operator running this command and a concurrent `/milestone-implement`
-     from two different worktrees of the same work item's repository should
-     not rely on this command alone to prevent the race -- coordinate
-     out-of-band (finish or release the checkpoint claim first, from
-     whichever worktree holds it) when more than one worktree is in play.
+     read returns clean. Through `2.5.1` the only serialization was
+     `WORKFLOW_STATE.lock`, which is per worktree, and the claim side's
+     phase check read only its own worktree's state -- so a claim from a
+     *different* linked worktree raced this command undetected
+     (`XMODEL-R9-B1`). Since `2.6.0`, step 2's entry point and every claim
+     publisher (`claim_checkpoint`, `adopt_claim`, an absent-claim
+     `take_over_claim`) take the **repository-global lifecycle lock**
+     (primitive 9, `<git-common-dir>/ai-workflow/checkpoint-claims/<token>.lifecycle.lock`)
+     first, so this command's quiescence read and its publication are
+     serialized with every claim publication in every worktree. The
+     **amendment witness** it publishes (`<token>.amendment.json` beside
+     it) is readable from every worktree, so once this command has
+     published it a claim from any other worktree refuses
+     (`AmendmentInFlightError`) whatever that worktree's own local state
+     says. The guarantee is complete once every registered worktree's
+     branch has merged the `2.6.0` update. A worktree still on an older
+     release lags: its unrecorded amendments are detected and refused
+     (`LaggingWorktreeAmendmentError`), but a lagging `2.5.1` process takes
+     no lock and cannot be stopped from racing -- section 6.2's downgrade
+     and mixed-release posture.
    - **No open plan-approval transaction**: call `evidence =
      workflow_state.plan_approval_takeover_evidence(repo_root)`. A
      non-`None` `evidence["journal"]` means an `/approve-review plan`
@@ -146,21 +134,63 @@ and wait.
      (`AmendmentRegistryMissingIdError`, IMPL4-O2) -- named separately from
      the shape check above because there is no id to check the shape of.
 
-2. **Write the amendment request**: call `workflow_state.state_transaction(
-   repo_root, lambda state: workflow_state.request_plan_amendment(state,
-   work_item_id, reason, repo_root=repo_root, now=<now>))` and persist the
-   returned state to `docs/ai-workflow/WORKFLOW_STATE.json`. In one
-   transaction this: sets `plan_approval.status = "SUPERSEDED"`; appends
+2. **Write the amendment request**: call
+   `workflow_state.request_plan_amendment_transaction(repo_root,
+   work_item_id, reason, now=<now>)` (workflow-2.6.0,
+   `D-Repo-Global-Lifecycle`) -- the one entry point. It performs this
+   file's "State-writer discipline" `state_transaction` itself, nested
+   inside the repository-global lifecycle lock (9). Calling
+   `state_transaction(request_plan_amendment)` directly is refused
+   (`LifecycleLockNotHeldError`): the pure mutator asserts (9) is held.
+   Under (9), holding nothing else, it first runs the mixed-release lag
+   probe and the amendment witness's predicate list as the amendment side
+   -- self-healing a resolution whose witness advance was lost, rolling
+   back a provable orphan, or bootstrapping the witness on the first run
+   after an update from `2.5.1` -- then `state_transaction` with
+   `request_plan_amendment` as the mutator. Only after every validation
+   passes does the mutator publish the `OPEN` witness (seq = this item's
+   history length + 1, recording this worktree, its branch and
+   `amendment_base_commit`), and only then is the state published. In
+   one transaction this: sets `plan_approval.status = "SUPERSEDED"`; appends
    one entry to `amendment_history` (bounded, content-addressed --
    `pre_amendment_approval_commit` plus the blob SHAs already inside
    `superseded_plan_approval.review_content_manifest`, never a stored copy
    of the plan/registry documents themselves, `D-Plan-Amendment-3`); sets
    `amendment_base_commit` to the current `HEAD`; and writes `phase =
-   "AMENDING_PLAN"`.
+   "AMENDING_PLAN"`. For a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item it also
+   writes the `CONSUMED` `plan_review_binding` record for the approved
+   content being amended (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0),
+   so that content can never re-bind without an edit.
 
    `AmendmentApprovalCommitUnreachableError`/
    `WrongPhaseForAmendmentRequestError`: stop and report the exception's
-   own message verbatim -- neither is caught or reworded here.
+   own message verbatim -- neither is caught or reworded here. The
+   lifecycle refusals are reported the same way, with `exc.evidence`:
+   - `AmendmentInFlightError`: an amendment of this item is already open
+     (or its resolution reserved) in some worktree -- a second one would
+     fork `amendment_history`. It names the requesting worktree, branch
+     and sequence. When the requester is gone, detached, or on another
+     branch, it offers the evidence-bound literal
+     `clear amendment witness <wi> <sha256>`, which
+     `workflow_state.clear_amendment_witness` accepts, and only then;
+   - `AmendmentCheckpointActiveError`: a checkpoint claim is live in some
+     worktree -- finish or release it there first;
+   - `StaleLifecycleStateError`: the previous amendment was resolved
+     elsewhere and this worktree's `HEAD` does not show it -- merge the
+     resolved amendment first;
+   - `AmendmentResolutionConflictError`: this worktree's `HEAD` carries a
+     different resolution of an amendment than the one recorded
+     repository-wide -- discard it and merge the recorded one;
+   - `LaggingWorktreeAmendmentError`: a worktree still running a pre-`2.6.0`
+     release holds an unresolved amendment the witness does not record --
+     finish or discard it there, or merge the update into that branch;
+   - `AmendmentBootstrapConflictError`: the first run after the update
+     found worktrees whose `amendment_history` disagree -- a real fork,
+     resolved by finishing or discarding the divergent amendment or
+     approval;
+   - `AmendmentWitnessUnavailableError`/`LifecycleStateUnreadableError`:
+     a torn, symlinked or unknown-shaped witness, or an unreadable state
+     file -- refused, never guessed (INV-3).
 
 3. **Commit the state write, alone**: stage exactly
    `docs/ai-workflow/WORKFLOW_STATE.json` (never a broader `git add`) and
@@ -185,7 +215,11 @@ and wait.
    one additional file, `AMENDMENT_DIFF.patch`, alongside the ordinary
    `current/` contents -- see `docs/ai-workflow/REVIEW_PROTOCOL.md`'s
    "Bundle structure" for what it contains and how it is (and is not)
-   authoritative. **The amended plan document itself must delimit every
+   authoritative. Since `workflow-2.6.0` it is anchored at the working
+   tree, against `amendment_base_commit`, so it shows the amended plan
+   while it is still uncommitted -- which it stays until `/approve-review
+   plan` commits it; no commit is needed for the patch to show the edit.
+   **The amended plan document itself must delimit every
    registry checkpoint id with a `<!-- CPn -->`/`<!-- /CPn -->` anchor pair**
    (one or more, non-overlapping, around that checkpoint's own content;
    `n` is the same widened `CP<digits>[A-Z]?` shape named in step 1 above) --

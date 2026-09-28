@@ -47,6 +47,11 @@ a required consumer of the same guard.
 `<feedback_dir>` below resolves per
 `docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location"
 (`workflow_fingerprint.resolve_feedback_dir`).
+`resolve_feedback_dir` decides `<feedback_dir>` by the item's durable
+`feedback_layout` (`D-Feedback-Layout`, workflow-2.6.0):
+`.ai-review/<work_item_id>/feedback/` unconditionally, by construction, for
+a `feedback_layout: "scoped"` item; the unchanged legacy scoped-else-flat
+rule for an item without the field.
 
 1. **Resolve the work item**: `$ARGUMENTS`, if given, names the
    `work_item_id`; otherwise use `active_work_item_id`

@@ -44,6 +44,14 @@ Sonnet: /record-manual-implementation-review
 User: /approve-review implementation only after the complete sequence approves
 ```
 
+`REVIEW_FEEDBACK.md` here always means `<feedback_dir>/REVIEW_FEEDBACK.md`
+(`D-Feedback-Layout`, workflow-2.6.0): `.ai-review/<work_item_id>/feedback/`
+for every work item created under `2.6.0` or later, by construction; a
+legacy item may still resolve the flat `.ai-review/feedback/`
+(`REVIEW_PROTOCOL.md` "Feedback directory"). `/record-manual-implementation-review` prints the exact
+path to paste into; `python3 scripts/workflow_fingerprint.py
+--resolve-feedback-path <work-item-id>` prints it at any time.
+
 A fresh session is strongly recommended for `/review-implementation`, for
 the same genuine-independence reason the plan-side local stage recommends
 one. This is operational guidance only: no command contract, state

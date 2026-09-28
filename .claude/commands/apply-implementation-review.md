@@ -51,6 +51,11 @@ checkpoint widens is which phase this command's own
 `<bundle_dir>`/`<feedback_dir>` below resolve per
 `docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Bundle location"
 (`workflow_fingerprint.resolve_bundle_dir`/`resolve_feedback_dir`).
+`resolve_feedback_dir` decides `<feedback_dir>` by the item's durable
+`feedback_layout` (`D-Feedback-Layout`, workflow-2.6.0):
+`.ai-review/<work_item_id>/feedback/` unconditionally, by construction, for
+a `feedback_layout: "scoped"` item; the unchanged legacy scoped-else-flat
+rule for an item without the field.
 
 0. **Dual-mode branch** (Workflow v2.1, `WF4a-ii`): resolve the target work
    item first -- the id named in `$ARGUMENTS`, or `active_work_item_id` from
@@ -85,7 +90,10 @@ checkpoint widens is which phase this command's own
    for the same defensive-enumeration reason `/milestone-implement`'s and
    `/review-implementation`'s own step 0 state it.
 1. Read `<feedback_dir>/REVIEW_FEEDBACK.md`. If it does not exist, stop
-   and say so. Validate its binding fields
+   and say so, printing the exact resolved path
+   (`resolve_feedback_dir(repo_root, work_item_id)`, `D-Feedback-Layout`,
+   workflow-2.6.0) where the reviewer's feedback must be placed, never a
+   hard-coded flat path. Validate its binding fields
    (`workflow_fingerprint.parse_review_feedback_binding_fields`/
    `assert_feedback_matches_bundle` against the current recomputed
    `bundle_id`/`base_commit`/`work_item_id`, `WFR-03`) — stale or

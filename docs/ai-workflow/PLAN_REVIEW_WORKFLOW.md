@@ -38,6 +38,14 @@ Sonnet: /record-manual-plan-review
 User: /approve-review plan only after the complete sequence approves
 ```
 
+`REVIEW_FEEDBACK.md` here always means `<feedback_dir>/REVIEW_FEEDBACK.md`
+(`D-Feedback-Layout`, workflow-2.6.0): `.ai-review/<work_item_id>/feedback/`
+for every work item created under `2.6.0` or later, by construction; a
+legacy item may still resolve the flat `.ai-review/feedback/`
+(`REVIEW_PROTOCOL.md` "Feedback directory"). `/record-manual-plan-review` prints the exact
+path to paste into; `python3 scripts/workflow_fingerprint.py
+--resolve-feedback-path <work-item-id>` prints it at any time.
+
 A fresh session is strongly recommended for both `/review-plan` and any
 reviewer role generally — genuine independence from the session that wrote
 or last revised the plan is the property the local stage exists to add.
@@ -71,7 +79,55 @@ Whichever command stops, it states, in its own report:
 - **`/apply-plan-review`**: unchanged mechanism, `"2.1"`/`"2.2"`-alike
   revised exit: after an accepted edit, never self-declares plan readiness —
   always returns to `AWAITING_LOCAL_PLAN_REVIEW`, requiring a fresh local
-  pass before manual-external review can run again.
+  pass before manual-external review can run again. Since `workflow-2.6.0`
+  it applies only a `REVISE` verdict (a `BLOCK` or `APPROVE` refuses with
+  `FeedbackStatusNotApplicableError`), and it reaches
+  `AWAITING_LOCAL_PLAN_REVIEW` through the bind below.
+
+## Publication, binding and withdrawal (`workflow-2.6.0`)
+
+`docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s `D-Plan-Review-Bundle-Binding` is
+the design; operationally:
+
+- **Publish, then bind.** `/milestone-plan` (at its publication point,
+  after self-review) and `/apply-plan-review` (step 5, every round) call
+  `publish_plan_revision`, which only mirrors the revision and records the
+  content as `PUBLISHED` — the phase does not move. The plan bundle is then
+  generated, and `bind_plan_review_bundle` writes
+  `AWAITING_LOCAL_PLAN_REVIEW` only for a verified bundle of that published
+  content. Content already reviewed, amended away or withdrawn is
+  `CONSUMED` and never binds again without an edit.
+- **Author inputs live in `plan-inputs/`.** Write the plan stage's
+  `REVIEW_REQUEST.md`, `TEST_RESULTS.md` and `CONTEXT_FILES.txt` under
+  `.ai-review/<work_item_id>/plan-inputs/`, never into `current/`. The
+  generator builds the bundle in a staging directory and swaps it in only
+  on success, so a failed generation leaves the previous bundle intact and
+  writes no `REJECTED` marker.
+- **A failed generation after the publish** leaves the item at
+  `PUBLISHED_UNBOUND`. Re-run the same command with the explicit id —
+  `/milestone-plan <id>` or `/apply-plan-review <id>` — which regenerates
+  and binds without advancing the revision again. Not `/review-plan`: it
+  refuses at a non-ready phase.
+- **Readers check the binding.** `/review-plan`,
+  `/record-manual-plan-review` and `/approve-review plan` refuse a bundle
+  that is not the bound one, naming the remedy. A `bundle_id` that differs
+  from the bound one only because the bundle was regenerated with unchanged
+  content is a warning, never a block.
+- **Withdrawing from review.** To change a plan that is already at a
+  review or approval phase, run `/milestone-plan <id>` with the explicit
+  id. It returns the item to `REVISING_PLAN` (or `AMENDING_PLAN` during an
+  amendment), discards both recorded stages, and consumes the reviewed
+  content. It refuses without the explicit id, and while `/approve-review
+  plan` has an open approval transaction for the item. To undo an
+  accidental edit instead, restore the bound bytes from
+  `current/files/<path>`; no state change is needed.
+- **`BLOCK`.** A plan-stage `BLOCK` changes nothing. After resolving it
+  with the user, either re-run the review on the unchanged content, or
+  edit the plan and withdraw with `/milestone-plan <id>`.
+- **Where am I?** `python3 scripts/workflow_state.py
+  --plan-review-publication-status <work-item-id>` prints the item's
+  publication status, its row, and the remedy, as one JSON object, and
+  writes nothing.
 
 ## Staleness, in one line
 

@@ -46,8 +46,10 @@ to demonstrate, mechanically and reproducibly, that:
    answers were provably independent of the code they claimed to verify).
    "Reusable" is not evaluated here -- item 372(h) states why
    (`OPUS-R117-004`);
-4. the resulting forward-direction candidate set is exactly the eight
-   pathnames Revision 93's "The complete global partial order" declares --
+4. the resulting forward-direction candidate set is exactly the nine
+   pathnames "The complete global partial order" declares (eight through
+   workflow-2.5.1; workflow-2.6.0's `D-Repo-Global-Lifecycle` adds (9), the
+   repository-global lifecycle `flock`) --
    no more, no fewer -- and two required regression mutations (mutating
    `release_checkpoint`'s release to an unconditional unlink; mutating
    `close_plan_approval_journal` into a genuine compare-and-delete) each
@@ -70,7 +72,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 TARGET = REPO_ROOT / "scripts" / "workflow_state.py"
 
 # ---------------------------------------------------------------------------
-# The declared eight-primitive universe (Revision 93 text), for the
+# The declared nine-primitive universe (Revision 93 text, plus (9) since
+# workflow-2.6.0), for the
 # forward-direction comparison. Anchor-stripped, in the same convention
 # `PathResolver` produces: a repo_root/common_dir prefix carries no
 # information (every primitive is rooted at one or the other) so it is
@@ -87,6 +90,9 @@ DECLARED_PRIMITIVES = {
     "6": "ai-workflow/checkpoint-claims/<token>.guardlock",
     "7": ".ai-review/runtime/PLAN_APPROVAL_MUTATION.guardlock",
     "8": "ai-workflow/checkpoint-claims/<token>.json",
+    # workflow-2.6.0, `D-Repo-Global-Lifecycle` (CP6): the
+    # repository-global, per-work-item lifecycle `flock` -- a pure source.
+    "9": "ai-workflow/checkpoint-claims/<token>.lifecycle.lock",
 }
 
 # ---------------------------------------------------------------------------
@@ -991,7 +997,7 @@ def main() -> int:
     print("\nAll checks passed: discovery+resolution is complete and correct; the "
           "releasable conjunct is decided mechanically, from the unlink/comparison "
           "sites themselves, not a hardcoded table; the forward direction produces "
-          "exactly the eight declared pathnames; both required mutations flip "
+          f"exactly the {len(DECLARED_PRIMITIVES)} declared pathnames; both required mutations flip "
           "exactly the verdict they should.")
     return 0
 

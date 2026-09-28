@@ -19,6 +19,11 @@ round, so `<bundle_dir>` is resolved with **no** `stage` argument --
 compatibility rule -- exactly as `/milestone-implement` and
 `/apply-implementation-review` resolve it for the same two stages, never
 the plan stage's `stage="plan"` form.
+`resolve_feedback_dir` decides `<feedback_dir>` by the item's durable
+`feedback_layout` (`D-Feedback-Layout`, workflow-2.6.0):
+`.ai-review/<work_item_id>/feedback/` unconditionally, by construction, for
+a `feedback_layout: "scoped"` item; the unchanged legacy scoped-else-flat
+rule for an item without the field.
 
 0. **Dual-mode branch** (Workflow v2.1, `WF4c`, `D-Functional-Remediation`):
    resolve the target work item — the id named in `$ARGUMENTS`, or
@@ -37,7 +42,10 @@ the plan stage's `stage="plan"` form.
      three-way branch below; steps 1-3 and 5-7 execute unchanged.
 
 1. Read `<feedback_dir>/FUNCTIONAL_REVIEW.md`. If it does not exist,
-   stop and say so. **Already-applied refusal** (O3,
+   stop and say so, printing the exact resolved path
+   (`resolve_feedback_dir(repo_root, work_item_id)`, `D-Feedback-Layout`,
+   workflow-2.6.0) where the user's findings must be placed, never a
+   hard-coded flat path. **Already-applied refusal** (O3,
    `workflow-v2-3-followups` continued scope): call
    `workflow_fingerprint.assert_functional_review_not_already_consumed(
    repo_root, work_item_id)` — a `FunctionalReviewAlreadyAppliedError`
@@ -244,12 +252,17 @@ all in the same invocation.
      `AWAITING_LOCAL_PLAN_REVIEW` when its
      `governing_workflow_version` is `"2.1"` (the config default at
      creation) and at `AWAITING_EXTERNAL_PLAN_REVIEW` when it is `"1"` --
-     `publish_plan_revision`'s own version branch, not a special
-     remediation rule. **workflow-2.5.0**: a `"2.2"` child (the config
-     default once a repository has activated `"2.2"`) enters review at
-     `AWAITING_LOCAL_PLAN_REVIEW` identically to a `"2.1"` child --
-     `publish_plan_revision`'s own `TWO_STAGE_PLAN_REVIEW_VERSIONS` branch
-     covers both, so this is the same code path, not a third one. Only
+     the ordinary per-version writers, not a special remediation rule: for
+     a `"1"` child, `publish_plan_revision`'s `"1"` branch writes
+     `AWAITING_EXTERNAL_PLAN_REVIEW`; for a two-stage child,
+     `publish_plan_revision` is mirror-only and `/milestone-plan <child-id>`
+     step 6's `bind_plan_review_bundle` writes `AWAITING_LOCAL_PLAN_REVIEW`
+     once the child's bundle verifies (`D-Plan-Review-Bundle-Binding`,
+     workflow-2.6.0, `LPR-R1-006`). **workflow-2.5.0**: a `"2.2"` child
+     (the config default once a repository has activated `"2.2"`) enters
+     review at `AWAITING_LOCAL_PLAN_REVIEW` identically to a `"2.1"` child
+     -- the same `TWO_STAGE_PLAN_REVIEW_VERSIONS` publish-then-bind path
+     covers both, not a third one. Only
      `/accept-milestone <child-id>` clears the
      parent's `IncompleteChildWorkItemError` block, so the parent cannot
      complete until the child does.

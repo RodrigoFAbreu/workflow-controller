@@ -271,6 +271,7 @@ APPROVAL_STAGES = frozenset({"plan", "implementation", "acceptance"})
 FUNCTIONAL_CHECKLIST_PATH = "docs/ACTIVE_MILESTONE.md"
 
 _GIT_OBJECT_ID_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 # D-Plan-Review-Stages' verdict/state transition table: the only three
 # verdicts either `/review-plan` or `/record-manual-plan-review` ever
@@ -300,6 +301,26 @@ MANUAL_EXTERNAL_PLAN_REVIEW = "MANUAL_EXTERNAL_PLAN_REVIEW"
 # `_validate_plan_review_stages`. A `"2.2"` item is a `"2.1"` item for plan
 # review purposes: it runs the identical two-stage mechanism, unchanged.
 TWO_STAGE_PLAN_REVIEW_VERSIONS = frozenset({"2.1", "2.2"})
+
+# workflow-2.6.0 CP4 (D-Plan-Review-Bundle-Binding): the plan-stage phase
+# partition for a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item. "Ready" phases tell
+# a reviewer to act on a bound bundle; "non-ready" phases are where the
+# author edits, publishes and binds. Every other non-terminal phase is
+# outside the plan stage (row 1): no publish, no revision advance, no bind.
+PLAN_REVIEW_READY_PHASES = frozenset({
+    "AWAITING_LOCAL_PLAN_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+    "AWAITING_PLAN_APPROVAL",
+})
+PLAN_REVIEW_NON_READY_PHASES = frozenset({"PLANNING", "REVISING_PLAN", "AMENDING_PLAN"})
+
+# `plan_review_binding.status`'s closed vocabulary (INV-3).
+PLAN_REVIEW_BINDING_CONSUMED = "CONSUMED"
+PLAN_REVIEW_BINDING_PUBLISHED = "PUBLISHED"
+PLAN_REVIEW_BINDING_BOUND = "BOUND"
+PLAN_REVIEW_BINDING_STATUSES = frozenset({
+    PLAN_REVIEW_BINDING_CONSUMED, PLAN_REVIEW_BINDING_PUBLISHED, PLAN_REVIEW_BINDING_BOUND,
+})
 
 # Canonical, SCREAMING_SNAKE_CASE `implementation_review_stages` key casing
 # (workflow-2.5.0, D-Implementation-Review-Stages), mirroring
@@ -435,6 +456,58 @@ class PostApprovalManifestMismatchError(Exception):
     claims -- WFR-06's post-commit parity check, run once immediately
     after `/approve-review` creates the commit, never trusted on the
     record's word alone."""
+
+
+class MissingApprovalRecordError(Exception):
+    """workflow-2.6.0 (`D-Plan-Approval-Closure` item 5): the work item
+    handed to `verify_post_approval_manifest_match` carries no approval
+    record for the stage (or no usable `approved_review_content_id`) --
+    the named replacement for the `TypeError: 'NoneType' object is not
+    subscriptable` a first plan approval used to raise when the command
+    passed its own pre-commit `work_item` to the post-commit verifier. A
+    verifier-input error: never a reason to amend (INV-5)."""
+
+
+class CommittedApprovalRecordMismatchError(Exception):
+    """workflow-2.6.0 (`D-Plan-Approval-Closure` items 4-5): the approval
+    record the verifier was given names a different
+    `approved_review_content_id` than the one the plan-approval journal
+    pinned -- for example a prior `STALE`/`SUPERSEDED` record read from
+    pre-commit memory instead of the committed transaction. A record or
+    input error, distinct from `PostApprovalManifestMismatchError` (the
+    committed *tree* recomputes to something else): never a reason to
+    amend (INV-5)."""
+
+
+class PlanApprovalClosureProofError(Exception):
+    """workflow-2.6.0 (`D-Plan-Approval-Closure` item 3): the staged index,
+    written as a tree (`git write-tree`) before any commit exists, does not
+    recompute to the journal's `expected_review_content_id`, or cannot be
+    recomputed at all. Raised inside the transaction before the commit, so
+    the outcome stays `NOT_COMMITTED` and step 6b rolls back: there is no
+    commit to amend."""
+
+
+class PlanApprovalMemberSetChangedError(Exception):
+    """workflow-2.6.0 (`D-Plan-Approval-Closure` item 2): re-resolving the
+    approval-commit member set inside step 5's guarded window, immediately
+    before staging, produced a different set (members or removals) than
+    the one pinned in the journal at step 4c -- the worktree changed
+    between the two. Raised inside the window, so step 6b rolls back."""
+
+
+class CommittedProtectedContentMismatchError(Exception):
+    """workflow-2.6.0 (`D-Plan-Approval-Closure` item 4, the second side of
+    the two-sided path-set check): a protected path of the committed
+    approval record is omitted from, or differs in, the approval commit,
+    or a removal member is still present in it -- the committed tree's
+    *content* differs from the staged and pinned bytes, which 6a1's amend
+    can correct. (An *extra* path is `CommittedPathSetMismatchError`, a
+    membership defect the amend cannot correct.)"""
+
+
+POST_COMMIT_FAILURE_TREE_CONTENT = "TREE_CONTENT"
+POST_COMMIT_FAILURE_RECORD_OR_INPUT = "RECORD_OR_INPUT"
 
 
 class DirtyIndexBeforeStagingError(Exception):
@@ -755,7 +828,11 @@ class AmendmentCheckpointActiveError(Exception):
     this fix -- refusing a checkpoint's own `IN_PROGRESS` publication once
     the work item has left `IMPLEMENTING` -- is
     `IllegalCheckpointStartPhaseError` on `transition_checkpoint_in_progress`
-    itself."""
+    itself.
+
+    workflow-2.6.0 (`D-Repo-Global-Lifecycle`): also raised by
+    `open_plan_approval_journal` when an approval would resolve an open
+    amendment while a checkpoint claim for the item is live."""
 
 
 class WrongReviewerRoleError(Exception):
@@ -920,6 +997,144 @@ class TerminalPlanRevisionPublicationError(Exception):
     `WFR-65`) when the named work item's `phase` is already terminal
     (`MILESTONE_COMPLETE`) -- a plan revision can never be published
     against an item that has already reached its own terminal state."""
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.6.0 CP4: D-Plan-Review-Bundle-Binding -- the named refusals of
+# the publication split, the bind, the withdrawal and the readers. Every one
+# is raised before any write (INV-3); none applies to a `"1"`-governed item.
+# ---------------------------------------------------------------------------
+
+
+class PlanReviewPhaseNotPlanStageError(Exception):
+    """Raised for a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item whose phase is
+    neither a ready plan-review phase nor a non-ready plan-stage phase
+    (`PLANNING`/`REVISING_PLAN`/`AMENDING_PLAN`): `publish_plan_revision`,
+    `route_work_item`'s resume-branch revision advance, `bind_plan_review_bundle`,
+    and the entry of `/milestone-plan` and `/apply-plan-review` (row 1).
+    The message names `/request-plan-amendment <id>` only when the phase
+    admits an amendment."""
+
+
+class PlanReviewInProgressError(Exception):
+    """Raised by `publish_plan_revision` and `route_work_item`'s resume
+    branch at a ready plan-review phase: content under review is never
+    re-published in place. The sanctioned exit is the withdrawal
+    `/milestone-plan <id>` performs (`withdraw_plan_review`)."""
+
+
+class PlanReviewNotPublishedError(Exception):
+    """Raised by `bind_plan_review_bundle` when the record is not
+    `PUBLISHED`, or the binding is not the published content -- content
+    the author never declared complete cannot enter review."""
+
+
+class ConsumedPlanReviewContentError(Exception):
+    """Raised by `publish_plan_revision` and `bind_plan_review_bundle` when
+    the content equals the `CONSUMED` record's `review_content_id`, or --
+    for a legacy marker, whose id is null -- when `plan_revision` does not
+    exceed the marker's. Content already taken out of review never
+    re-binds."""
+
+
+class LegacyPlanReviewBindingUnknownError(Exception):
+    """Raised by `publish_plan_revision` and `bind_plan_review_bundle` for a
+    `REVISING_PLAN`/`AMENDING_PLAN` item with no `plan_review_binding`
+    record (a `2.5.1` item mid-round): nothing durable says which content
+    it already reviewed. Remedy: the entry step of `/apply-plan-review` or
+    `/milestone-plan` writes the fail-closed marker
+    (`ensure_plan_review_binding_marker`)."""
+
+
+class PlanReviewAlreadyReadyError(Exception):
+    """Raised by `bind_plan_review_bundle` at a ready phase other than an
+    idempotent re-bind at `AWAITING_LOCAL_PLAN_REVIEW` -- a bind never
+    moves a manual-stage or approval-stage item back to local review."""
+
+
+class PlanReviewBindingInconsistentError(Exception):
+    """Raised when the phase and the `plan_review_binding` record
+    contradict each other in a way no `2.6.0` writer produces (rows 4d
+    and 6): a ready phase holding a `CONSUMED`/`PUBLISHED` record, or a
+    non-ready phase holding a `BOUND` one (INV-3)."""
+
+
+class PlanApprovalPhaseError(Exception):
+    """Raised by `apply_plan_approval` for a `TWO_STAGE_PLAN_REVIEW_VERSIONS`
+    item whose phase is not `AWAITING_PLAN_APPROVAL` (workflow-2.6.0,
+    implementation review round 1, Important 1). The content-keyed
+    `plan_review_stages` ledger alone cannot decide approval: content that
+    was dual-approved, consumed, and later re-bound at
+    `AWAITING_LOCAL_PLAN_REVIEW` still reads as approved there. Only the
+    manual stage's own `APPROVE` writes `AWAITING_PLAN_APPROVAL`, so the
+    phase is the gate."""
+
+
+class PlanReviewNotReadyError(Exception):
+    """Raised by `withdraw_plan_review` and the readers at a phase that is
+    not a ready plan-review phase -- nothing is under review to withdraw
+    or to read."""
+
+
+class PlanReviewBundleUnverifiedError(Exception):
+    """`verify_plan_review_bundle`'s refusal for anything other than
+    content drift: no bundle, a rejected bundle, a stale-revision or
+    foreign manifest, or a `current/`/manifest/archive disagreement. The
+    readers also raise it for a legacy ready item whose content drifted
+    (row 4c), chaining the underlying error."""
+
+
+class ReviewedContentDriftError(Exception):
+    """The bundle is internally consistent (manifest, `current/` and
+    archive agree) but the worktree's fresh plan-stage `review_content_id`
+    differs from the one the bundle captured -- or cannot be computed at
+    all (a bumped `(Revision N)` title, a deleted or renamed protected
+    path). Remedy: restore the bound bytes from `current/files/<path>`, or
+    withdraw with `/milestone-plan <id>`."""
+
+
+class PlanReviewWithdrawalNeedsExplicitIdError(Exception):
+    """Raised by `/milestone-plan`'s entry when its target resolved to an
+    item at a ready phase without the work item being named explicitly
+    (no argument, or the one-argument base-SHA form): a withdrawal
+    consumes the bound content and discards both recorded stages, so it
+    is only ever a deliberate act (`/milestone-plan <id>`)."""
+
+
+class PlanApprovalInProgressError(Exception):
+    """Raised by `/milestone-plan`'s entry, before a withdrawal, when an
+    open plan-approval journal names this work item -- resume or take
+    over through `/approve-review plan <id>` instead."""
+
+
+class FeedbackStatusNotApplicableError(Exception):
+    """Raised by `/apply-plan-review` step 1 for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item whose feedback `Status:` is not
+    `REVISE`. A plan-stage `BLOCK` writes no transition, so it is resolved
+    at its ready phase (re-review the unchanged content, or edit and
+    withdraw with `/milestone-plan <id>`); an `APPROVE` is never applied."""
+
+
+class FeedbackNotForConsumedContentError(Exception):
+    """`/apply-plan-review` step 1's durable feedback check (rows 9 and 11):
+    the feedback does not name the content the `CONSUMED` record took out
+    of review -- its `review_content_id` differs, or, for a legacy marker
+    (null id), its `Work item:` is another item or its `Status:` is not
+    `REVISE`."""
+
+
+class InvalidPlanReviewBindingError(Exception):
+    """Raised by `validate_state` for a malformed `plan_review_binding`
+    record: an unknown `status`, a present `null`, a missing or extra key,
+    a malformed sub-object, or a status whose sub-objects contradict it
+    (INV-3)."""
+
+
+class PlanReviewWriterRetiredError(Exception):
+    """Raised by `transition_to_awaiting_local_plan_review`, retired as a
+    free-standing writer by workflow-2.6.0: `bind_plan_review_bundle` is
+    the sole writer of `AWAITING_LOCAL_PLAN_REVIEW` for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item."""
 
 
 class MissingRegistryForPlanRevisionMirrorCheckError(Exception):
@@ -1333,8 +1548,8 @@ class NonFirstParentFunctionalChecklistEvidenceError(Exception):
     first-parent transition."""
 
 
-def _run(args: list[str], cwd: Path) -> str:
-    result = subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True)
+def _run(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True, env=env)
     return result.stdout
 
 
@@ -1405,6 +1620,45 @@ def state_lock_path(repo_root: Path, path: Path = STATE_LOCK_PATH) -> Path:
 _state_lock_held: set[str] = set()
 
 
+# workflow-2.6.0, `D-Repo-Global-Lifecycle` (CP6): the **process-local
+# held-set**. Every lock-order primitive this process currently holds --
+# the `fcntl.flock`s (2), (3), (4), (6), (7) and (9) for the life of their
+# `with` block, the leases (1) and (5) from publication to release -- is
+# recorded here as `(primitive, identity)`. It exists for one assertion:
+# the lifecycle lock (9) is a *pure source*, acquired only while this
+# process holds no other primitive (`lifecycle_lock`,
+# `LifecycleLockOrderError`). Claims (8) are durable, cross-invocation
+# records, never process-held, and are not tracked. Not thread-local, for
+# the same reason `_state_lock_held` above is not.
+_held_primitives: list[tuple[str, str]] = []
+
+
+def _note_primitive_acquired(primitive: str, identity: str) -> None:
+    _held_primitives.append((primitive, identity))
+
+
+def _note_primitive_released(primitive: str, identity: str) -> None:
+    try:
+        _held_primitives.remove((primitive, identity))
+    except ValueError:
+        pass
+
+
+@contextlib.contextmanager
+def _primitive_held(primitive: str, identity: str):
+    _note_primitive_acquired(primitive, identity)
+    try:
+        yield
+    finally:
+        _note_primitive_released(primitive, identity)
+
+
+def held_primitives() -> tuple[tuple[str, str], ...]:
+    """A snapshot of the held-set, for diagnostics and tests (CP6 test 23:
+    `(9)` is never held between `/approve-review plan` steps)."""
+    return tuple(_held_primitives)
+
+
 @contextlib.contextmanager
 def state_lock(repo_root: Path, *, lock_path: Path = STATE_LOCK_PATH):
     """`D1`'s state-writer primitive (item 354(a)): the lock file is
@@ -1429,7 +1683,8 @@ def state_lock(repo_root: Path, *, lock_path: Path = STATE_LOCK_PATH):
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         try:
-            yield
+            with _primitive_held("2", key):
+                yield
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
@@ -1812,9 +2067,11 @@ def load_pre_amendment_snapshot(
     lookup by `path`, never a re-derivation of the manifest), retrieves
     each blob's bytes via `git cat-file -p <blob>`, and cross-checks each
     retrieved blob is still reachable from
-    `entry["pre_amendment_approval_commit"]` via `git ls-tree
-    <pre_amendment_approval_commit> -- <path>` reporting the identical SHA,
-    before decoding. Returns `(pre_plan_text, pre_registry)` -- the plan
+    `entry["pre_amendment_approval_commit"]` via `git --literal-pathspecs
+    ls-tree <pre_amendment_approval_commit> -- <path>` reporting the
+    identical SHA, before decoding -- literal, so a declared `plan_path`
+    such as `:plan.md` names that file, never pathspec magic for `plan.md`
+    (implementation review round 3, `I1-residual`). Returns `(pre_plan_text, pre_registry)` -- the plan
     bytes decoded as UTF-8, the registry bytes parsed as JSON.
 
     Raises `AmendmentPreSnapshotUnreproducibleError`, naming the path and
@@ -1832,7 +2089,8 @@ def load_pre_amendment_snapshot(
                 f"superseded_plan_approval.review_content_manifest"
             )
         try:
-            ls_tree_out = _run(["git", "ls-tree", commit, "--", path], cwd=repo_root)
+            ls_tree_out = _run(["git", "--literal-pathspecs", "ls-tree", commit, "--", path],
+                               cwd=repo_root, env=fingerprint.literal_pathspec_env())
         except subprocess.CalledProcessError as exc:
             raise AmendmentPreSnapshotUnreproducibleError(
                 f"{work_item_id}: could not run 'git ls-tree {commit} -- {path}' to "
@@ -1998,6 +2256,7 @@ def implementing_entry_reachable(
 
 def verify_post_approval_manifest_match(
     repo_root: Path, work_item: dict, *, stage: str, base_commit: str, commit: str,
+    expected_review_content_id: str | None = None,
 ) -> None:
     """WFR-06: "the committed plan exactly matches the reviewed working-
     tree content after the plan-approval commit", generalized to either
@@ -2005,10 +2264,35 @@ def verify_post_approval_manifest_match(
     committed content and asserts it equals the approval record's
     `approved_review_content_id` exactly -- run once, immediately after
     `/approve-review` creates the commit, never trusted on the record's
-    word alone."""
+    word alone.
+
+    workflow-2.6.0 (`D-Plan-Approval-Closure` item 5): a missing record, or
+    one without a string `approved_review_content_id`, raises
+    `MissingApprovalRecordError` at both stages instead of a raw
+    `TypeError`/`KeyError`. `expected_review_content_id`, when given, is
+    the value the committed transaction must carry (the plan stage passes
+    the journal's pin, via `verify_plan_approval_commit`): a record naming
+    a different id raises `CommittedApprovalRecordMismatchError` before any
+    recomputation, and the committed tree is then compared against the
+    explicit value. Omitted, the record's own id is the expected value --
+    the implementation stage's unchanged behavior."""
     record_field = "plan_approval" if stage == "plan" else "technical_approval"
-    record = work_item[record_field]
-    expected = record["approved_review_content_id"]
+    record = work_item.get(record_field) if isinstance(work_item, dict) else None
+    recorded = record.get("approved_review_content_id") if isinstance(record, dict) else None
+    if not isinstance(recorded, str):
+        work_item_id = work_item.get("work_item_id") if isinstance(work_item, dict) else None
+        raise MissingApprovalRecordError(
+            f"{work_item_id}/{stage}: the work item handed to the post-commit verifier carries no "
+            f"{record_field} record with an approved_review_content_id -- pass the work item "
+            f"derived from the committed state (verify_plan_approval_commit), never the "
+            f"command's own pre-commit copy"
+        )
+    if expected_review_content_id is not None and recorded != expected_review_content_id:
+        raise CommittedApprovalRecordMismatchError(
+            f"{work_item.get('work_item_id')}/{stage}: the {record_field} record names "
+            f"{recorded!r}, but the committed transaction pinned {expected_review_content_id!r}"
+        )
+    expected = recorded
     actual = approval_review_content_id(
         repo_root, stage=stage, base_commit=base_commit,
         work_item_type=work_item["work_item_type"], work_item_id=work_item["work_item_id"],
@@ -2036,6 +2320,17 @@ def _read_committed_bytes(repo_root: Path, commit: str, rel_path: str) -> bytes:
     return subprocess.run(
         ["git", "show", f"{commit}:{rel_path}"], cwd=repo_root, capture_output=True, check=True,
     ).stdout
+
+
+def _git_path_set(args: list[str], repo_root: Path) -> set[str]:
+    """The exact path set a `-z` name-listing Git command (`diff
+    --name-only -z`, `diff-tree --name-only -z`) reports: NUL-delimited
+    bytes, decoded the way Python names the same file on disk
+    (`os.fsdecode`), so a declared path compares as itself -- never as the
+    C-quoted display form `core.quotePath` gives a non-ASCII or
+    control-character path in line-oriented output (implementation review
+    round 2, `I1`)."""
+    return {os.fsdecode(raw) for raw in _run_bytes(args, cwd=repo_root).split(b"\0") if raw}
 
 
 def stage_plan_approval_commit_paths(repo_root: Path, paths: tuple[str, ...]) -> None:
@@ -2070,18 +2365,46 @@ def stage_plan_approval_commit_paths(repo_root: Path, paths: tuple[str, ...]) ->
        appear would reject a coincidentally-unchanged member for no real
        reason.
 
-    Never `git add -A`/`git add .`."""
-    dirty = _run(["git", "diff", "--name-only", "--cached", "HEAD"], cwd=repo_root)
-    already_staged = {line for line in dirty.splitlines() if line}
-    if already_staged:
-        raise DirtyIndexBeforeStagingError(
-            f"Git index already differs from HEAD before staging began: "
-            f"{sorted(already_staged)} -- resolve or unstage these first"
-        )
-    _run(["git", "add", "--", *paths], cwd=repo_root)
-    staged = _run(["git", "diff", "--name-only", "--cached", "HEAD"], cwd=repo_root)
-    actual = {line for line in staged.splitlines() if line}
-    expected = set(paths)
+    Never `git add -A`/`git add .`.
+
+    Every path is a literal: staging runs under `git --literal-pathspecs`,
+    so a declared member such as `*.md` or `:x` names exactly that file,
+    never a pathspec that also reaches (or unstages) other paths; and both
+    checks read NUL-delimited names (`_git_path_set`), so a non-ASCII
+    member compares as itself (implementation review round 2, `I1`).
+
+    workflow-2.6.0 (`D-Plan-Approval-Closure`): a member absent from the
+    worktree -- a removal member -- is staged as a deletion (`git rm
+    --cached --ignore-unmatch`, which is also a no-op for a path already
+    absent from the index, as on 6a1's re-staging after the commit already
+    deleted it); every present member goes through `git add` as before."""
+    assert_plan_approval_index_clean(repo_root)
+    present = tuple(path for path in paths if os.path.lexists(repo_root / path))
+    absent = tuple(path for path in paths if path not in present)
+    if present:
+        _run(["git", "--literal-pathspecs", "add", "--", *present], cwd=repo_root,
+             env=fingerprint.literal_pathspec_env())
+    if absent:
+        _run(["git", "--literal-pathspecs", "rm", "--cached", "-q", "--ignore-unmatch", "--", *absent],
+             cwd=repo_root, env=fingerprint.literal_pathspec_env())
+    # `--no-renames`: under rename detection (porcelain `git diff`'s default,
+    # and `diff.renames`), a staged non-member deletion paired with a
+    # similar member addition reports only the member's name -- the
+    # deletion would slip past this check to the post-commit one.
+    assert_staged_path_set_within(repo_root, paths)
+
+
+def assert_staged_path_set_within(repo_root: Path, expected_paths) -> None:
+    """The staged diff (`git diff --no-renames --name-only -z --cached
+    HEAD`, read exactly by `_git_path_set`) names no path outside
+    `expected_paths` -- a subset check; see
+    `stage_plan_approval_commit_paths`. `/approve-review` step 6.3 calls
+    it with `journal["applicable_paths"]`, so the assertion never depends
+    on reading `core.quotePath`'s display form by eye. Raises
+    `UnexpectedStagedPathSetError`."""
+    actual = _git_path_set(["git", "diff", "--no-renames", "--name-only", "-z", "--cached", "HEAD"],
+                           repo_root)
+    expected = set(expected_paths)
     unexpected = actual - expected
     if unexpected:
         raise UnexpectedStagedPathSetError(
@@ -2096,9 +2419,14 @@ def verify_staged_blob_sha256(repo_root: Path, rel_path: str, expected_sha256: s
     pinned right after resolving it -- call after
     `stage_plan_approval_commit_paths`, before creating the commit, to
     close the race window between resolution and staging. Raises
-    `StagedBlobMismatchError` on a mismatch."""
+    `StagedBlobMismatchError` on a mismatch.
+
+    Reads `:0:<path>`, never `:<path>`: Git parses `:<n>:<rest>` as index
+    stage `<n>` of `<rest>`, so a declared member named `0:notes.md` would
+    otherwise be read back as `notes.md`'s staged blob (implementation
+    review round 3, the `I1-residual` re-sweep)."""
     content = subprocess.run(
-        ["git", "show", f":{rel_path}"], cwd=repo_root, capture_output=True, check=True,
+        ["git", "show", f":0:{rel_path}"], cwd=repo_root, capture_output=True, check=True,
     ).stdout
     actual = hashlib.sha256(content).hexdigest()
     if actual != expected_sha256:
@@ -2150,8 +2478,8 @@ def assert_committed_path_set_matches(
     `git commit` writes the final tree). Raises
     `CommittedPathSetMismatchError` naming the unexpected paths and the
     full expected set on a violation."""
-    changed = _run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit], cwd=repo_root)
-    actual = {line for line in changed.splitlines() if line}
+    actual = _git_path_set(["git", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", commit],
+                           repo_root)
     expected = set(expected_paths)
     unexpected = actual - expected
     if unexpected:
@@ -2160,6 +2488,309 @@ def assert_committed_path_set_matches(
             f"{sorted(unexpected)}, outside the resolved approval-commit member "
             f"set {sorted(expected)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.6.0, `D-Plan-Approval-Closure` (section 5.4 of the
+# workflow-review-artifact-and-concurrency-hardening plan): the approval
+# commit's members are the declared protected set plus removals, each
+# proven fresh against the bound bundle before any mutation; the staged
+# index is proven to recompute to the approved identity before the commit
+# exists; and post-commit verification derives its truth from the
+# committed transaction alone, with `git commit --amend` reachable only
+# for a proven tree-content defect.
+# ---------------------------------------------------------------------------
+
+
+def assert_plan_approval_index_clean(repo_root: Path) -> None:
+    """The approval's empty-index precondition: `git diff --name-only
+    --cached HEAD` must be empty (an unstaged intent-to-add marker is not
+    reported, so `/milestone-plan`'s own markers pass). Raises
+    `DirtyIndexBeforeStagingError`, naming the staged paths and the
+    staged-`git mv` remedy -- the usual way a protected path's rename ends
+    up in the index."""
+    already_staged = sorted(_git_path_set(
+        ["git", "diff", "--no-renames", "--name-only", "-z", "--cached", "HEAD"], repo_root,
+    ))
+    if already_staged:
+        raise DirtyIndexBeforeStagingError(
+            f"Git index already differs from HEAD before staging began: {already_staged} -- "
+            f"resolve or unstage these first. A staged `git mv` of a protected path is the "
+            f"usual cause: unstage both sides (`git --literal-pathspecs restore --staged -- "
+            f"<old> <new>`), keep "
+            f"the rename in the working tree, and re-run -- the approval commit stages the "
+            f"removal and the addition itself"
+        )
+
+
+def _plan_approval_member_bytes(path: Path) -> bytes | None:
+    """A member's comparable bytes: a symlink's target string (what Git
+    stores for it), a regular file's content, `None` when absent."""
+    if path.is_symlink():
+        return os.readlink(path).encode()
+    if not path.exists():
+        return None
+    if not path.is_file():
+        raise fingerprint.UnsupportedPathTypeError(str(path))
+    return path.read_bytes()
+
+
+def assert_plan_approval_members_fresh(
+    repo_root: Path, work_item_id: str, plan: "fingerprint.PlanApprovalCommitPlan",
+) -> None:
+    """Section 5.4 item 2, per member kind, against the bound bundle
+    (`current/`, which `/approve-review plan` step 2 has already verified;
+    never `.ai-review/<id>/.pin`, a generation-time artifact):
+
+    - **protected member**: the worktree bytes must equal the bundle's
+      captured copy (`current/files/<path>`) when one exists, otherwise
+      the path's blob at the bundle's own `MANIFEST.md` `base_commit`
+      (the generator captures exactly the paths that differ from that
+      commit, so an uncaptured member was byte-equal to it at generation);
+      with neither, the member appeared after generation and refuses;
+    - **removal member**: the bound bundle must neither have captured it
+      nor list it among its `## Protected paths` -- a reviewer who saw the
+      file cannot have its deletion committed without a regeneration;
+    - the artifacts declaration keeps its own rule
+      (`resolve_plan_stage_approval_commit_paths`) and
+      `WORKFLOW_STATE.json` is not compared.
+
+    Every failure raises `ReviewedContentDriftError` naming the path and
+    the member kind. Read-only."""
+    bundle_dir = repo_root / fingerprint.resolve_bundle_dir(repo_root, work_item_id, stage="plan")
+    manifest = bundle_dir / "MANIFEST.md"
+    base_commit = fingerprint.read_plan_stage_manifest_base_commit(manifest)
+    declared = fingerprint.read_plan_stage_manifest_protected_paths(manifest)
+    if base_commit is None or declared is None:
+        raise ReviewedContentDriftError(
+            f"{manifest} records no base_commit or no '## Protected paths' section -- the "
+            f"approval members cannot be compared against what the reviewer saw; regenerate "
+            f"the bundle, or withdraw with /milestone-plan {work_item_id}"
+        )
+    for path in plan.protected_paths:
+        captured = bundle_dir / "files" / path
+        if os.path.lexists(captured):
+            expected = _plan_approval_member_bytes(captured)
+            source = f"the bound bundle's capture {captured}"
+        else:
+            snapshot = fingerprint._snapshot_commit(repo_root, base_commit, path)
+            if not snapshot["exists"]:
+                raise ReviewedContentDriftError(
+                    f"{path} (protected member): the bound bundle has no capture of it and it "
+                    f"is absent at its base_commit {base_commit} -- it appeared after the "
+                    f"bundle was generated; regenerate the bundle, or withdraw with "
+                    f"/milestone-plan {work_item_id}"
+                )
+            expected = _run_bytes(["git", "cat-file", "blob", snapshot["blob"]], cwd=repo_root)
+            source = f"its blob at the bound bundle's base_commit {base_commit}"
+        if _plan_approval_member_bytes(repo_root / path) != expected:
+            raise ReviewedContentDriftError(
+                f"{path} (protected member): the working tree differs from {source} -- "
+                f"restore the reviewed bytes, or regenerate the bundle / withdraw with "
+                f"/milestone-plan {work_item_id}"
+            )
+    for path in plan.removal_paths:
+        if os.path.lexists(bundle_dir / "files" / path) or path in declared:
+            raise ReviewedContentDriftError(
+                f"{path} (removal member): the bound bundle still captured or protected it, so "
+                f"its deletion was never reviewed -- regenerate the bundle, or withdraw with "
+                f"/milestone-plan {work_item_id}"
+            )
+
+
+def resolve_fresh_plan_approval_members(
+    repo_root: Path, work_item_id: str, *, state_path: Path = DEFAULT_STATE_PATH,
+) -> "fingerprint.PlanApprovalCommitPlan":
+    """`/approve-review plan` step 4a, before any durable mutation: the
+    empty-index precondition (`assert_plan_approval_index_clean`), the
+    member set (`fingerprint.resolve_plan_stage_approval_commit_paths`),
+    and its freshness (`assert_plan_approval_members_fresh`). A stale
+    artifacts declaration (`StaleArtifactsDeclarationError`) is reported
+    as `ReviewedContentDriftError` too, chaining it, so every member kind
+    refuses under the one name. Read-only."""
+    assert_plan_approval_index_clean(repo_root)
+    try:
+        plan = fingerprint.resolve_plan_stage_approval_commit_paths(repo_root, work_item_id, state_path)
+    except fingerprint.StaleArtifactsDeclarationError as exc:
+        raise ReviewedContentDriftError(
+            f"{fingerprint.artifacts_path_for_work_item(work_item_id).as_posix()} (artifacts "
+            f"declaration member): {exc}"
+        ) from exc
+    assert_plan_approval_members_fresh(repo_root, work_item_id, plan)
+    return plan
+
+
+def assert_plan_approval_member_set_unchanged(
+    repo_root: Path, journal: dict, *, state_path: Path = DEFAULT_STATE_PATH,
+) -> "fingerprint.PlanApprovalCommitPlan":
+    """Step 5, inside its guarded window, immediately before staging:
+    re-resolve the fresh member set and require it to equal the one the
+    journal pinned (members and removals alike), so the worktree-absence
+    condition that defines a removal is evaluated against the tree that is
+    staged. Raises `PlanApprovalMemberSetChangedError` (or whatever the
+    re-resolution raises); either way the caller rolls back. Never called
+    from 6a1's re-staging, where `HEAD` is already the approval commit."""
+    plan = resolve_fresh_plan_approval_members(repo_root, journal["work_item_id"], state_path=state_path)
+    if (sorted(plan.paths) != sorted(journal["applicable_paths"])
+            or sorted(plan.removal_paths) != sorted(journal.get("removal_paths", []))):
+        raise PlanApprovalMemberSetChangedError(
+            f"{journal['work_item_id']}: the approval-commit member set is now "
+            f"{sorted(plan.paths)} (removals {sorted(plan.removal_paths)}), but the journal "
+            f"pinned {sorted(journal['applicable_paths'])} (removals "
+            f"{sorted(journal.get('removal_paths', []))})"
+        )
+    return plan
+
+
+def prove_plan_approval_index_closure(repo_root: Path, journal: dict) -> str:
+    """Section 5.4 item 3, after every member and the state blob are
+    staged and before the commit exists: write the index as a tree (`git
+    write-tree`) and recompute the plan-stage `review_content_id` against
+    it (`compute_review_content_id_plan_stage_at_commit_for_work_item`,
+    which accepts a tree-ish), requiring the journal's
+    `expected_review_content_id`; every journal removal must also be
+    absent from the tree. Returns the tree id. Raises
+    `PlanApprovalClosureProofError` -- chaining any underlying error -- so
+    the caller takes step 6b's `NOT_COMMITTED` rollback."""
+    work_item_id = journal["work_item_id"]
+    expected = journal["expected_review_content_id"]
+    try:
+        tree = _run(["git", "write-tree"], cwd=repo_root).strip()
+        actual, _ = fingerprint.compute_review_content_id_plan_stage_at_commit_for_work_item(
+            repo_root, work_item_id, tree, base=journal["base_commit"],
+        )
+        present_removals = [
+            path for path in journal.get("removal_paths", [])
+            if fingerprint._snapshot_commit(repo_root, tree, path)["exists"]
+        ]
+    except Exception as exc:
+        raise PlanApprovalClosureProofError(
+            f"{work_item_id}: the staged index could not be recomputed as the approved "
+            f"plan-stage identity ({type(exc).__name__}: {exc}) -- nothing was committed"
+        ) from exc
+    if actual != expected:
+        raise PlanApprovalClosureProofError(
+            f"{work_item_id}: the staged index (tree {tree}) recomputes to {actual!r}, not the "
+            f"approved {expected!r} -- a protected member is missing from or differs in the "
+            f"index; nothing was committed"
+        )
+    if present_removals:
+        raise PlanApprovalClosureProofError(
+            f"{work_item_id}: removal members {present_removals} are still present in the "
+            f"staged index (tree {tree}); nothing was committed"
+        )
+    return tree
+
+
+def assert_committed_plan_approval_closure(
+    repo_root: Path, commit: str, *, review_content_manifest: list, removal_paths: tuple[str, ...] | list,
+) -> None:
+    """The second side of section 5.4 item 4's two-sided path-set check
+    (the first, "nothing outside the member set", is
+    `assert_committed_path_set_matches`): every protected path of the
+    committed approval record's `review_content_manifest` must be at
+    `commit` exactly as approved -- so one that differs from the parent is
+    necessarily in the commit -- and every removal must be absent at
+    `commit`. Raises `CommittedProtectedContentMismatchError`, naming the
+    path."""
+    for entry in review_content_manifest:
+        path = entry["path"]
+        committed = fingerprint._snapshot_commit(repo_root, commit, path)
+        approved = {"exists": entry["exists"], "mode": entry["mode"], "blob": entry["blob"]}
+        if committed != approved:
+            parent = fingerprint._snapshot_commit(repo_root, f"{commit}^", path)
+            omitted = "omitted from" if committed == parent else "differs in"
+            raise CommittedProtectedContentMismatchError(
+                f"protected path {path} is {omitted} commit {commit}: committed {committed}, "
+                f"approved {approved}"
+            )
+    for path in removal_paths:
+        if fingerprint._snapshot_commit(repo_root, commit, path)["exists"]:
+            raise CommittedProtectedContentMismatchError(
+                f"removal member {path} is still present at commit {commit}"
+            )
+
+
+def verify_plan_approval_commit(
+    repo_root: Path, journal: dict, commit: str, *, state_path: Path = DEFAULT_STATE_PATH,
+) -> dict:
+    """Section 5.4 item 4, the one post-commit verification both the
+    in-session step 6a and every resumed or taken-over step 6a run. Its
+    truth is the committed transaction, never the command's pre-commit
+    memory (the section 3.5 `TypeError` and false-mismatch fix). In order:
+
+    1. `verify_committed_plan_approval_state_blob` against the journal pin;
+    2. the work item is derived from the committed `WORKFLOW_STATE.json`
+       at `commit` (`MissingApprovalRecordError` if it cannot be);
+    3. its `plan_approval.approved_review_content_id` must equal the
+       journal's `expected_review_content_id`, and the identity recomputed
+       at `commit` must equal it too (`verify_post_approval_manifest_match`
+       with the explicit expected value);
+    4. the two-sided path-set check: nothing outside the journal's
+       members is in the commit (`assert_committed_path_set_matches`), and
+       every protected path is as approved and every removal absent
+       (`assert_committed_plan_approval_closure`);
+    5. the artifacts declaration's committed blob, when it was a member.
+
+    Returns the committed work item. On a failure, pass the exception to
+    `classify_post_commit_verification_failure` before considering 6a1."""
+    verify_committed_plan_approval_state_blob(
+        repo_root, commit, journal["expected_post_state_sha256"], state_path=state_path,
+    )
+    work_item_id = journal["work_item_id"]
+    try:
+        committed_state = json.loads(_read_committed_bytes(repo_root, commit, str(state_path)))
+    except (subprocess.CalledProcessError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MissingApprovalRecordError(
+            f"{work_item_id}/plan: {state_path} at {commit} cannot be read as JSON ({exc})"
+        ) from exc
+    work_items = committed_state.get("work_items") if isinstance(committed_state, dict) else None
+    work_item = work_items.get(work_item_id) if isinstance(work_items, dict) else None
+    if not isinstance(work_item, dict):
+        raise MissingApprovalRecordError(
+            f"{work_item_id}/plan: {state_path} at {commit} has no work_items entry for it"
+        )
+    verify_post_approval_manifest_match(
+        repo_root, work_item, stage="plan", base_commit=journal["base_commit"], commit=commit,
+        expected_review_content_id=journal["expected_review_content_id"],
+    )
+    assert_committed_path_set_matches(repo_root, commit, tuple(journal["applicable_paths"]))
+    assert_committed_plan_approval_closure(
+        repo_root, commit,
+        review_content_manifest=work_item["plan_approval"]["review_content_manifest"],
+        removal_paths=journal.get("removal_paths", []),
+    )
+    if journal["fifth_member_applies"]:
+        verify_committed_blob_sha256(
+            repo_root, commit, fingerprint.artifacts_path_for_work_item(work_item_id).as_posix(),
+            journal["fifth_member_sha256"],
+        )
+    return work_item
+
+
+def classify_post_commit_verification_failure(exc: BaseException) -> str:
+    """Section 5.4 item 6, the amend gate: `POST_COMMIT_FAILURE_TREE_CONTENT`
+    only for a proven tree-content defect of the commit just created -- a
+    committed blob differing from the staged and pinned bytes
+    (`CommittedStateBlobMismatchError`, `CommittedBlobMismatchError`,
+    `CommittedProtectedContentMismatchError`), the committed tree
+    recomputing to another identity (`PostApprovalManifestMismatchError`)
+    or missing a protected member (`AbsentProtectedPathError`) after the
+    write-tree proof passed -- each a defect re-staging the pinned bytes
+    corrects. Everything else is `POST_COMMIT_FAILURE_RECORD_OR_INPUT`,
+    and step 6a stops with `HEAD` unchanged (INV-5): a missing or
+    mismatched record, a verifier-input error, an unclassified path,
+    anything unforeseen, and an extra path in the commit
+    (`CommittedPathSetMismatchError`), which the amend cannot remove
+    ("recovery corrects content, never membership"). Pure."""
+    tree_content = (
+        CommittedStateBlobMismatchError, CommittedBlobMismatchError,
+        CommittedProtectedContentMismatchError, PostApprovalManifestMismatchError,
+        fingerprint.AbsentProtectedPathError,
+    )
+    if isinstance(exc, tree_content):
+        return POST_COMMIT_FAILURE_TREE_CONTENT
+    return POST_COMMIT_FAILURE_RECORD_OR_INPUT
 
 
 def rollback_plan_approval_write(
@@ -2281,6 +2912,7 @@ def open_plan_approval_journal(
     path: Path = PLAN_APPROVAL_JOURNAL_PATH,
     pre_registry: dict | None = None, pre_plan_text: str | None = None,
     post_registry: dict | None = None, post_plan_text: str | None = None,
+    removal_paths: tuple[str, ...] = (),
 ) -> dict:
     """Opens the durable, crash-resumable plan-approval transaction
     journal (`WFR-63`, missing-test item 349): this invocation's own
@@ -2315,7 +2947,38 @@ def open_plan_approval_journal(
     internal `apply_plan_approval` call above -- this function performs no
     read of its own to obtain them and no amendment-specific logic; it
     stays a thin, journal-writing orchestrator exactly as it already is
-    for `record`/`base_commit`/every other caller-supplied argument."""
+    for `record`/`base_commit`/every other caller-supplied argument.
+
+    workflow-2.6.0, `D-Plan-Approval-Closure`: `removal_paths` (step 4a's
+    `plan.removal_paths`, a subset of `applicable_paths`) is pinned as the
+    journal's `removal_paths`, which the write-tree proof and
+    `verify_plan_approval_commit` read. The field is optional on read: a
+    journal opened by `2.5.1`, which never staged a removal, reads as
+    `[]`.
+
+    workflow-2.6.0, `D-Repo-Global-Lifecycle`: when `pre_state`'s entry
+    for `work_item_id` has an open amendment, this refuses with
+    `AmendmentCheckpointActiveError`, before publishing anything, if any
+    checkpoint claim for the item is live -- defense in depth for a claim a
+    lagging `2.5.1` worktree published past the witness. The journal
+    records no reservation of its own; `/approve-review plan` step 4d
+    (`reserve_amendment_resolution`) is the only reservation point."""
+    if not set(removal_paths) <= set(applicable_paths):
+        raise ValueError(
+            f"removal_paths {sorted(removal_paths)} must be a subset of applicable_paths "
+            f"{sorted(applicable_paths)}"
+        )
+    pre_history = (((pre_state.get("work_items") or {}).get(work_item_id) or {})
+                   .get("amendment_history") or [])
+    if pre_history and pre_history[-1].get("resolved_at_plan_revision") is None:
+        live_claim = resolve_claim(repo_root, work_item_id)
+        if live_claim is not None:
+            raise AmendmentCheckpointActiveError(
+                f"{work_item_id!r} has an open amendment and a live checkpoint claim "
+                f"(checkpoint {live_claim.get('checkpoint_id')!r}, worktree "
+                f"{live_claim.get('worktree_root')!r}) -- refusing to open a plan-approval "
+                f"transaction that would resolve the amendment under it"
+            )
     full_path = plan_approval_journal_path(repo_root, path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     repo_root_id, git_common_dir, worktree_root = _git_identity(repo_root)
@@ -2345,6 +3008,7 @@ def open_plan_approval_journal(
         "expected_bundle_id": expected_bundle_id,
         "expected_review_content_id": expected_review_content_id,
         "applicable_paths": sorted(applicable_paths),
+        "removal_paths": sorted(removal_paths),
         "fifth_member_applies": fifth_member_applies,
         "fifth_member_sha256": fifth_member_sha256,
         "user_confirmation": user_confirmation,
@@ -2419,6 +3083,10 @@ def read_plan_approval_journal(repo_root: Path, path: Path = PLAN_APPROVAL_JOURN
     ]
     if not isinstance(journal.get("applicable_paths"), list):
         missing.append("applicable_paths")
+    # workflow-2.6.0: optional (a 2.5.1 journal has none), typed when present.
+    removal_paths = journal.get("removal_paths", [])
+    if not isinstance(removal_paths, list) or not all(isinstance(p, str) for p in removal_paths):
+        missing.append("removal_paths")
     if not isinstance(journal.get("fifth_member_applies"), bool):
         missing.append("fifth_member_applies")
     takeover_count = journal.get("takeover_count")
@@ -2710,6 +3378,7 @@ def _publish_plan_approval_guard(repo_root: Path, body: dict, path: Path) -> Non
         os.link(tmp_name, full_path)
     finally:
         Path(tmp_name).unlink(missing_ok=True)
+    _note_primitive_acquired("1", body["lease_id"])
 
 
 @contextlib.contextmanager
@@ -2727,7 +3396,8 @@ def _plan_approval_guard_lock(repo_root: Path, path: Path = PLAN_APPROVAL_GUARD_
     fd = os.open(full_path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        with _primitive_held("7", str(full_path)):
+            yield
     finally:
         os.close(fd)
 
@@ -2865,13 +3535,17 @@ def _release_plan_approval_guard_locked(repo_root: Path, lease_id: str, path: Pa
     if held is None or held.get("lease_id") != lease_id:
         return
     full_path.unlink(missing_ok=True)
+    _note_primitive_released("1", lease_id)
 
 
 def release_plan_approval_guard(
     repo_root: Path, lease: dict, path: Path = PLAN_APPROVAL_GUARD_PATH,
 ) -> None:
-    with _plan_approval_guard_lock(repo_root):
-        _release_plan_approval_guard_locked(repo_root, lease.get("lease_id"), path)
+    try:
+        with _plan_approval_guard_lock(repo_root):
+            _release_plan_approval_guard_locked(repo_root, lease.get("lease_id"), path)
+    finally:
+        _note_primitive_released("1", lease.get("lease_id"))
 
 
 def plan_approval_owner_progress_path(repo_root: Path, owner_token: str) -> Path:
@@ -3891,14 +4565,16 @@ class IllegalCheckpointStartPhaseError(Exception):
     `claim_checkpoint` itself (`XMODEL-R8-B1`): that function's own
     pre-publication phase check is this error's second, independent call
     site, closing the window this docstring's first paragraph describes
-    rather than merely detecting it after the fact -- within one worktree
-    root only; `XMODEL-R9-B1` (`docs/defects/v2.4.0-002-amendment-claim-
-    race-crosses-worktree-boundary.md`) records that the same claim
-    published from a different linked worktree of the same repository is
-    not caught by either call site -- a claim published into that window
-    would otherwise still be refused here, later, by
-    `transition_checkpoint_in_progress`, but would already have leaked
-    onto disk with nothing left to release it."""
+    rather than merely detecting it after the fact. That phase check reads
+    only this worktree's own state, so on its own it closed the window
+    within one worktree root only (`XMODEL-R9-B1`,
+    `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md`).
+    workflow-2.6.0 (`D-Repo-Global-Lifecycle`) closes it across linked
+    worktrees *before* this check runs: `claim_checkpoint` holds the
+    repository-global lifecycle lock (9) and refuses with
+    `AmendmentInFlightError` while an amendment is open anywhere in the
+    repository, whatever this worktree's local phase is. This error remains
+    the refusal for a local phase outside the legal set."""
 
 
 def transition_checkpoint_in_progress(
@@ -4148,7 +4824,8 @@ def identity_document_lock(repo_root: Path, *, lock_path: Path = WORKTREE_IDENTI
     fd = os.open(full, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        with _primitive_held("3", str(full)):
+            yield
     finally:
         os.close(fd)
 
@@ -4602,7 +5279,8 @@ def guard_mutation_lock(repo_root: Path, work_item_id: str):
     fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        with _primitive_held("6", str(path)):
+            yield
     finally:
         os.close(fd)
 
@@ -4917,95 +5595,58 @@ def claim_checkpoint(repo_root: Path, work_item_id: str, checkpoint_id: str, *, 
     **after** this worktree's own identity record is established and
     **before** `transition_checkpoint_in_progress` -- both orderings are
     load-bearing, not stylistic, per "Where the check belongs, and the
-    ordering" (future WF8b scope wires this call site; this function is
-    the primitive it will call).
+    ordering".
 
-    `XMODEL-R8-B1`: publication itself now runs inside `state_lock` --
-    the identical `WORKFLOW_STATE.lock` `state_transaction` holds across
-    `request_plan_amendment`'s complete authoritative-quiescence-read ->
-    supersede -> write critical section. Before round 8, this function
-    published the claim through `_claim_or_refuse` alone, which
-    synchronizes claim publication against other claim publications
-    (`os.link`'s own atomicity) but against nothing in the
-    `WORKFLOW_STATE.json` domain at all, so a claim could still be
-    published in the exact window between
-    `request_plan_amendment`'s own `resolve_claim(...)` read (which
-    observes no claim) and that same call's later `AMENDING_PLAN` commit
-    -- both reads/writes of `state`, and this function's own state read
-    below, are real Git-repo-relative file operations, not in-memory
-    values, so nothing but a shared lock can order them. Sharing the one
-    lock file makes the two operations strictly ordered: whichever
-    acquires it first completes its entire critical section --
-    including this function's own claim publication, or
-    `request_plan_amendment`'s entire supersede-and-commit -- before the
-    other's begins. A work item with no `WORKFLOW_STATE.json` entry at
-    all has no amendment mechanism that could race this call, so the
-    phase check below is skipped for it (matching every other
-    state-aware precondition in this module that stays silent absent an
-    entry) -- most of this module's own claim-record unit tests exercise
-    exactly that unregistered-work-item shape, by design.
+    workflow-2.6.0, `D-Repo-Global-Lifecycle` (CP6; closes `v2.4.0-002`):
+    the critical section is now
 
-    **Scoped to one worktree root, not the repository (`XMODEL-R9-B1`,
-    narrowing the claim above, round 9 external implementation review).**
-    `STATE_LOCK_PATH` resolves as `repo_root / ".ai-review/runtime/
-    WORKFLOW_STATE.lock"` -- one lock file *per worktree* -- while
-    `claims_dir(repo_root)` (this function's own claim-record home) is
-    `git_common_dir`-rooted and shared by every linked worktree of the
-    same repository. Two processes in two different worktrees therefore
-    take `flock` on two different inodes and are not serialized at all,
-    and this function's own phase check below reads `repo_root /
-    DEFAULT_STATE_PATH` -- *this worktree's own working-tree copy* of
-    `WORKFLOW_STATE.json` -- which cannot observe a phase committed only
-    to another worktree's own branch, so even perfect serialization would
-    not by itself make an amendment made from worktree A visible to a
-    claim attempted from worktree B. The guarantee above is real and
-    load-bearing *only within one worktree root*; deliberately left open
-    across linked worktrees for `2.4.0` rather than half-fixed --
-    `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-
-    boundary.md` records the residual, the two independent reasons above,
-    and what a future release closing it would need (a `claims_dir`-rooted
-    serialization primitive plus a repo-global witness for `AMENDING_PLAN`,
-    neither of which this release adds).
+        (9) lifecycle_lock -> (2) state_lock -> the lag probe and the
+        predicate list (the amendment witness) -> the local phase check
+        -> `_claim_or_refuse`
+
+    `XMODEL-R8-B1`'s `state_lock` serialization is real only within one
+    worktree root, because `WORKFLOW_STATE.lock` is per worktree and the
+    phase check reads this worktree's own `WORKFLOW_STATE.json`
+    (`XMODEL-R9-B1`). (9) is rooted at the git common dir, so it
+    serializes this publication against `request_plan_amendment_transaction`
+    in *every* linked worktree; and the witness, readable from every
+    worktree, refuses the claim while an amendment is `OPEN` or its
+    resolution `RESOLVING` anywhere (`AmendmentInFlightError`), or while
+    this worktree's `HEAD` lags a `RESOLVED` amendment
+    (`StaleLifecycleStateError`), whatever this worktree's own local phase
+    says. The residual is closed once every registered worktree's branch
+    has merged the `2.6.0` update; before that, a lagging worktree's
+    unrecorded amendment refuses (`LaggingWorktreeAmendmentError`) --
+    section 5.6's "Mixed-release worktrees".
 
     Raises `IllegalCheckpointStartPhaseError` -- naming the actual phase
     and `CHECKPOINT_START_LEGAL_PHASES` -- and publishes nothing, when a
     registered work item's current phase (re-read fresh, under the lock,
     never from a caller-supplied snapshot) is not legal for a checkpoint
-    start. This is what leaves no orphaned claim behind when the
-    amendment side of the race wins **in the same worktree**: `AMENDING_PLAN`
-    is already durable in this worktree's own working-tree state by the
-    time this function's own lock acquisition succeeds, so the claim this
-    function would otherwise publish is refused before a single byte of
-    it reaches disk.
+    start. A work item with no `WORKFLOW_STATE.json` entry skips the phase
+    check (no amendment mechanism races it), but never the witness check.
 
-    IMPL9-O3: two other functions publish a claim without this check --
-    `adopt_claim` (through `_claim_or_refuse` directly) and
-    `take_over_claim` (through `_publish_claim_replacing`). Both are safe
-    only *transitively*, and only within one worktree: `adopt_claim`
-    refuses unless this worktree's own local state already shows the
-    checkpoint `IN_PROGRESS`, and `request_plan_amendment` refuses on any
-    checkpoint `IN_PROGRESS`; `take_over_claim` requires a pre-existing
-    claim, which the amendment also refuses on. Neither argument is
-    checked here, and under `XMODEL-R9-B1` neither holds across
-    worktrees either."""
+    `adopt_claim` and `take_over_claim` of an absent claim publish a
+    claim without the phase check; since `2.6.0` both take (9) and run the
+    same witness check first, so neither can publish while an amendment is
+    in flight in any worktree."""
     record = _build_claim_record(repo_root, work_item_id, checkpoint_id, now)
-    with state_lock(repo_root):
-        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
-        work_item = state.get("work_items", {}).get(work_item_id)
-        if work_item is not None:
-            phase = work_item.get("phase")
-            if phase not in CHECKPOINT_START_LEGAL_PHASES:
-                raise IllegalCheckpointStartPhaseError(
-                    f"{work_item_id!r} is at phase {phase!r} -- a checkpoint claim can only be "
-                    f"published while phase is in {sorted(CHECKPOINT_START_LEGAL_PHASES)} "
-                    f"(checked under WORKFLOW_STATE.lock immediately before publication, "
-                    f"XMODEL-R8-B1, so a claim can never be published in the window between an "
-                    f"amendment's authoritative quiescence read and its AMENDING_PLAN commit -- "
-                    f"within one worktree root; see XMODEL-R9-B1 and "
-                    f"docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-boundary.md "
-                    f"for the cross-worktree residual this check does not close)"
-                )
-        return _claim_or_refuse(repo_root, work_item_id, record)
+    with lifecycle_lock(repo_root, work_item_id):
+        with state_lock(repo_root):
+            _enforce_claim_lifecycle(repo_root, work_item_id)
+            state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+            work_item = state.get("work_items", {}).get(work_item_id)
+            if work_item is not None:
+                phase = work_item.get("phase")
+                if phase not in CHECKPOINT_START_LEGAL_PHASES:
+                    raise IllegalCheckpointStartPhaseError(
+                        f"{work_item_id!r} is at phase {phase!r} -- a checkpoint claim can only be "
+                        f"published while phase is in {sorted(CHECKPOINT_START_LEGAL_PHASES)} "
+                        f"(checked under the repository-global lifecycle lock and "
+                        f"WORKFLOW_STATE.lock immediately before publication, after the "
+                        f"amendment witness check -- D-Repo-Global-Lifecycle, workflow-2.6.0)"
+                    )
+            return _claim_or_refuse(repo_root, work_item_id, record)
 
 
 def release_checkpoint(repo_root: Path, work_item_id: str, checkpoint_id: str, *,
@@ -5080,7 +5721,13 @@ def adopt_claim(repo_root: Path, work_item_id: str, checkpoint_id: str, *, now: 
     automatically inside the future step-1c resume wiring, and is
     separately invocable as an explicit setup operation for an
     interrupted checkpoint that must be protected *without* being
-    resumed -- exactly `S14`'s need."""
+    resumed -- exactly `S14`'s need.
+
+    workflow-2.6.0, `D-Repo-Global-Lifecycle`: publication runs under (9)
+    -- taken before (6), holding nothing else -- after the same lag probe
+    and amendment-witness predicate list `claim_checkpoint` runs, so an
+    adoption can never publish a claim while an amendment of this work item
+    is in flight in any worktree (`AmendmentInFlightError`)."""
     state_rel_path = state_rel_path or DEFAULT_STATE_PATH.as_posix()
     state = _load_json(repo_root / Path(state_rel_path)) or {}
     work_items = state.get("work_items")
@@ -5103,9 +5750,11 @@ def adopt_claim(repo_root: Path, work_item_id: str, checkpoint_id: str, *, now: 
     checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)
 
     record = _build_claim_record(repo_root, work_item_id, checkpoint_id, now, adopted=True)
-    with guard_mutation_lock(repo_root, work_item_id):
-        checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)
-        return _claim_or_refuse(repo_root, work_item_id, record)
+    with lifecycle_lock(repo_root, work_item_id):
+        _enforce_claim_lifecycle(repo_root, work_item_id)
+        with guard_mutation_lock(repo_root, work_item_id):
+            checkpoint_origination_provable(repo_root, work_item_id, checkpoint_id, state_rel_path=state_rel_path)
+            return _claim_or_refuse(repo_root, work_item_id, record)
 
 
 def committed_checkpoint_status(repo_root: Path, work_item_id: str, checkpoint_id: str,
@@ -5154,6 +5803,7 @@ def read_guard(repo_root: Path, work_item_id: str) -> dict | None:
 
 def _publish_guard(repo_root: Path, work_item_id: str, body: dict) -> None:
     _publish_claim_exclusive(guard_path(repo_root, work_item_id), body)
+    _note_primitive_acquired("5", body["lease_id"])
 
 
 def _current_owner_token(repo_root: Path, work_item_id: str) -> tuple[str | None, bool]:
@@ -5336,6 +5986,7 @@ def _release_guard_path_locked(repo_root: Path, work_item_id: str, lease_id: str
     if held.get("lease_id") != lease_id:
         return
     path.unlink(missing_ok=True)
+    _note_primitive_released("5", lease_id)
 
 
 def _release_guard_path(repo_root: Path, work_item_id: str, lease_id: str) -> None:
@@ -5415,7 +6066,10 @@ def clear_malformed_guard(repo_root: Path, work_item_id: str, *, user_authorizat
 
 
 def release_guard(repo_root: Path, work_item_id: str, lease: dict) -> None:
-    _release_guard_path(repo_root, work_item_id, lease.get("lease_id"))
+    try:
+        _release_guard_path(repo_root, work_item_id, lease.get("lease_id"))
+    finally:
+        _note_primitive_released("5", lease.get("lease_id"))
 
 
 def assert_claim_owner(repo_root: Path, work_item_id: str, owner_token: str) -> dict:
@@ -5695,7 +6349,15 @@ def take_over_claim(repo_root: Path, work_item_id: str, checkpoint_id: str, *, n
        evidence: refuse, having mutated nothing.
     5. **Rotate** by atomic replace, minting a fresh `owner_token`,
        incrementing `takeover_count`, and recording the displaced record
-       in `taken_over_from`."""
+       in `taken_over_from`.
+
+    workflow-2.6.0, `D-Repo-Global-Lifecycle`: a takeover of an **absent**
+    claim publishes a claim where none exists, exactly as
+    `claim_checkpoint` does, so it runs under (9) -- taken before (6)/(5),
+    holding nothing else -- after the same lag probe and amendment-witness
+    predicate list, and refuses while an amendment is in flight in any
+    worktree. Rotating an existing claim needs no (9): the amendment side
+    already refuses while any claim exists."""
     if evidence is None:
         evidence = takeover_evidence(repo_root, work_item_id)
     expected = takeover_authorization_literal(work_item_id, evidence, checkpoint_id)
@@ -5729,6 +6391,21 @@ def take_over_claim(repo_root: Path, work_item_id: str, checkpoint_id: str, *, n
     if evidence.get("claim_unreadable") is None:
         _assert_not_symlink(path, "claim record")
 
+    if observed_oid == ABSENT_OBSERVATION:
+        with lifecycle_lock(repo_root, work_item_id):
+            _enforce_claim_lifecycle(repo_root, work_item_id)
+            return _take_over_claim_window(repo_root, work_item_id, checkpoint_id, now=now,
+                                           evidence=evidence, observed_oid=observed_oid, guard=guard)
+    return _take_over_claim_window(repo_root, work_item_id, checkpoint_id, now=now,
+                                   evidence=evidence, observed_oid=observed_oid, guard=guard)
+
+
+def _take_over_claim_window(repo_root: Path, work_item_id: str, checkpoint_id: str, *, now: str,
+                            evidence: dict, observed_oid: str, guard: dict | None) -> dict:
+    """`take_over_claim` steps 3-5: the guarded re-verify-and-rotate
+    window, unchanged from `2.5.1` apart from being its own function so an
+    absent-claim takeover can run it under (9)."""
+    path = claim_path(repo_root, work_item_id)
     lease = acquire_guard(repo_root, work_item_id,
                           holder_owner_token=evidence.get("observed_owner_token"),
                           checkpoint_id=checkpoint_id, step="takeover", step_class=ORDINARY,
@@ -5948,6 +6625,1650 @@ def recover_abandoned_destructive_guard(repo_root: Path, work_item_id: str, chec
         return record
     finally:
         release_guard(repo_root, work_item_id, lease)
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.6.0, `D-Repo-Global-Lifecycle` (CP6; closes `v2.4.0-002`):
+# the repository-global lifecycle lock (primitive (9)) and the amendment
+# witness.
+#
+# `v2.4.0-002` had two independent causes: `WORKFLOW_STATE.lock` is
+# per-worktree, so an amendment in worktree A and a claim in worktree B
+# were never serialized; and `claim_checkpoint` read only its own
+# worktree's state, so an `AMENDING_PLAN` committed on A's branch was
+# invisible from B. This section closes both with two repository-global
+# objects under `<git-common-dir>/ai-workflow/checkpoint-claims/`:
+#
+# - `<token>.lifecycle.lock`, a per-work-item `fcntl.flock` that is never
+#   unlinked (the same shape as `guard_mutation_lock`). It serializes every
+#   claim publication, every amendment request and every resolution
+#   reservation/advance/release for the work item, in every worktree. It is
+#   a *pure source*: acquired only while this process holds no other
+#   primitive (`_held_primitives`), and never held across turns.
+# - `<token>.amendment.json`, the amendment witness: which amendment
+#   sequence is `OPEN`, `RESOLVING` (reserved by one resolver),
+#   `RESOLVED` (with the one resolution digest that is repository-valid),
+#   or `NONE` (never amended). Written by tempfile plus `os.replace`,
+#   advanced and rolled back but never deleted in ordinary operation. It is
+#   a gate, not an authority: it can only cause refusals, and committed Git
+#   state stays authoritative for every fact it records.
+#
+# Every holder of (9) first runs the mixed-release lag probe, then the
+# fixed predicate list (`_evaluate_lifecycle`), then its own side's checks.
+# The plan's section 5.6 is the normative text; the names below follow it.
+# ---------------------------------------------------------------------------
+
+AMENDMENT_WITNESS_SCHEMA_VERSION = 1
+AMENDMENT_WITNESS_OPEN = "OPEN"
+AMENDMENT_WITNESS_RESOLVING = "RESOLVING"
+AMENDMENT_WITNESS_RESOLVED = "RESOLVED"
+AMENDMENT_WITNESS_NONE = "NONE"
+AMENDMENT_WITNESS_STATUSES = frozenset({
+    AMENDMENT_WITNESS_OPEN, AMENDMENT_WITNESS_RESOLVING,
+    AMENDMENT_WITNESS_RESOLVED, AMENDMENT_WITNESS_NONE,
+})
+#: The first release whose scripts take (9) and read the witness. A
+#: worktree whose `HEAD`-committed installation record names an older (or
+#: an unorderable, or no) release "lags" (section 5.6, "Mixed-release
+#: worktrees").
+LIFECYCLE_MIN_RELEASE = "2.6.0"
+INSTALLATION_RECORD_PATH = ".workflow-manager/installation.json"
+#: The three resolution-time keys `apply_plan_approval` adds to an
+#: `amendment_history` entry. The request projection removes exactly
+#: these, so an entry's request digest is the same before and after it is
+#: resolved.
+AMENDMENT_RESOLUTION_TIME_KEYS = frozenset({
+    "resolved_at_plan_revision", "reconciliation_outcome", "resolved_review_content_id",
+})
+_AMENDMENT_WITNESS_FIELDS = (
+    "schema_version", "work_item_id", "amendment_seq", "status", "amendment_base_commit",
+    "requester_worktree_root", "requester_worktree_git_dir", "requester_branch",
+    "state_revision", "requested_at", "request_projection_sha256",
+    "resolved_at_plan_revision", "resolved_commit", "resolution_projection_sha256",
+    "resolution_reservation", "previous",
+)
+_RESOLUTION_RESERVATION_STR_FIELDS = (
+    "journal_owner_token", "resolver_worktree_root", "resolver_worktree_git_dir",
+    "pre_procedure_head", "approved_review_content_id", "resolution_projection_sha256",
+    "reserved_at",
+)
+
+LIFECYCLE_SIDE_CLAIM = "claim"
+LIFECYCLE_SIDE_AMENDMENT = "amendment"
+LIFECYCLE_SIDE_RESOLUTION = "resolution"
+LIFECYCLE_SIDE_ADVANCE = "advance"
+_LIFECYCLE_SIDES = frozenset({
+    LIFECYCLE_SIDE_CLAIM, LIFECYCLE_SIDE_AMENDMENT, LIFECYCLE_SIDE_RESOLUTION,
+    LIFECYCLE_SIDE_ADVANCE,
+})
+
+PLAN_APPROVAL_STAGING_FIRST_COMMIT = "first_commit"
+PLAN_APPROVAL_STAGING_AMEND_RECOVERY = "amend_recovery"
+PLAN_APPROVAL_STAGING_MODES = frozenset({
+    PLAN_APPROVAL_STAGING_FIRST_COMMIT, PLAN_APPROVAL_STAGING_AMEND_RECOVERY,
+})
+
+
+class LifecycleRefusalError(Exception):
+    """Base of every `D-Repo-Global-Lifecycle` refusal. `evidence` is the
+    structured report the command prints: which worktree, branch, seq and
+    digests were involved, and -- only where the plan offers one -- the
+    evidence-bound `literal` that authorizes the one in-band escape."""
+
+    def __init__(self, message: str, *, evidence: dict | None = None):
+        super().__init__(message)
+        self.evidence = evidence or {}
+
+
+class LifecycleLockOrderError(LifecycleRefusalError):
+    """(9) was requested while this process already holds another
+    lock-order primitive -- (9) is a pure source (section 5.6, "Pure
+    source"). Also raised on a nested acquisition of (9) itself."""
+
+
+class LifecycleLockNotHeldError(LifecycleRefusalError):
+    """A (9)-only operation -- the pure `request_plan_amendment` mutator --
+    was called without (9) held for its work item ("No bypass"). The only
+    sanctioned entry point is `request_plan_amendment_transaction`."""
+
+
+class LifecycleStateUnreadableError(LifecycleRefusalError):
+    """A `WORKFLOW_STATE.json` (working tree or committed), an installation
+    record's parse, or a plan-approval journal the lifecycle must read
+    could not be decided (INV-3)."""
+
+
+class AmendmentWitnessUnavailableError(LifecycleRefusalError):
+    """The witness is torn, symlinked, of an unknown schema or status, or
+    missing the fields its status requires -- refused exactly as an
+    undecidable claim is (INV-3), never read as absent."""
+
+
+class AmendmentInFlightError(LifecycleRefusalError):
+    """An amendment of this work item is open (or its resolution is
+    reserved but not yet committed) somewhere in the repository. A claim,
+    adoption or absent-claim takeover refuses, whatever its own worktree's
+    local phase says; a second amendment request refuses, since two would
+    fork `amendment_history`."""
+
+
+class StaleLifecycleStateError(LifecycleRefusalError):
+    """This worktree's committed state is behind the witness -- the
+    recorded amendment is resolved elsewhere and this `HEAD` does not show
+    it ("merge the resolved amendment first"), or the working-tree
+    amendment this operation would act on is not the one the witness
+    records."""
+
+
+class AmendmentResolutionConflictError(LifecycleRefusalError):
+    """Two different resolutions of the same amendment sequence (INV-10).
+    Never collapsed into the recorded one, and never offered a literal:
+    the remedy is to discard the divergent approval and merge the recorded
+    one."""
+
+
+class AmendmentResolutionReservedError(LifecycleRefusalError):
+    """The amendment's resolution is reserved by another open
+    `/approve-review plan` transaction (a `RESOLVING` witness whose
+    reservation is not this caller's). No second worktree can begin an
+    approval commit for the same sequence."""
+
+
+class AmendmentResolutionHeldError(LifecycleRefusalError):
+    """6a1 amend recovery's held check, or the step-5 staging entry, found
+    no reservation (or resolution) this transaction holds -- nothing is
+    staged and no amend is attempted."""
+
+
+class AmendmentBootstrapConflictError(LifecycleRefusalError):
+    """The upgrade-bootstrap scan found worktrees whose `amendment_history`
+    disagree -- a request fork, a resolution fork, or a plan approval in
+    flight at update time. Writes nothing; never chooses one side."""
+
+
+class LaggingWorktreeAmendmentError(LifecycleRefusalError):
+    """A worktree still running a pre-`2.6.0` release holds an unresolved
+    amendment the witness does not record. The remedy is to finish or
+    discard it there, or to merge the update into that worktree's
+    branch."""
+
+
+class AmendmentWitnessClearRefusedError(LifecycleRefusalError):
+    """`clear_amendment_witness`/`clear_amendment_resolution` was called
+    without the exact evidence-bound literal, against a witness that
+    changed since the literal was issued, or against a witness that is now
+    provably live."""
+
+
+# ------------------------------- paths, lock --------------------------------
+
+
+def lifecycle_lock_path(repo_root: Path, work_item_id: str) -> Path:
+    token = hashlib.sha256(work_item_id.encode()).hexdigest()
+    return claims_dir(repo_root) / f"{token}.lifecycle.lock"
+
+
+def amendment_witness_path(repo_root: Path, work_item_id: str) -> Path:
+    token = hashlib.sha256(work_item_id.encode()).hexdigest()
+    return claims_dir(repo_root) / f"{token}.amendment.json"
+
+
+@contextlib.contextmanager
+def lifecycle_lock(repo_root: Path, work_item_id: str):
+    """Primitive (9): the repository-global, per-work-item lifecycle
+    `flock`. Rooted at `git rev-parse --git-common-dir`, so every linked
+    worktree of the repository contends for the same inode (INV-6) --
+    unlike `WORKFLOW_STATE.lock`, which is per worktree. Created once and
+    never unlinked; released by the kernel on process death, so a killed
+    holder never wedges the next contender.
+
+    **Pure source.** Refuses (`LifecycleLockOrderError`) if this process
+    already holds any other lock-order primitive, (9) included: every edge
+    out of (9) is therefore (9)->X, and no edge ever targets it. Held for
+    one short, single-invocation critical section -- never across a turn,
+    and never inside a `plan_approval_guarded_mutation` window."""
+    if _held_primitives:
+        raise LifecycleLockOrderError(
+            f"the lifecycle lock for {work_item_id!r} is a pure source and may only be "
+            f"acquired while this process holds no other lock-order primitive; it holds "
+            f"{sorted({p for p, _ in _held_primitives})}"
+        )
+    path = lifecycle_lock_path(repo_root, work_item_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _assert_not_symlink(path.parent, "claims directory")
+    _assert_not_symlink(path, "lifecycle lock")
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        with _primitive_held("9", str(path)):
+            yield
+    finally:
+        os.close(fd)
+
+
+def lifecycle_lock_held(repo_root: Path, work_item_id: str) -> bool:
+    """Whether this process holds (9) for `work_item_id` right now."""
+    return ("9", str(lifecycle_lock_path(repo_root, work_item_id))) in _held_primitives
+
+
+def assert_lifecycle_lock_held(repo_root: Path, work_item_id: str) -> None:
+    if not lifecycle_lock_held(repo_root, work_item_id):
+        raise LifecycleLockNotHeldError(
+            f"{work_item_id!r}: this operation requires the repository-global lifecycle lock "
+            f"(primitive 9) -- call request_plan_amendment_transaction, never "
+            f"state_transaction(request_plan_amendment) directly"
+        )
+
+
+# ------------------------------- projections --------------------------------
+
+
+def _canonical_json_bytes(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def amendment_request_projection_sha256(entry: Mapping) -> str:
+    """The request identity of one `amendment_history` entry: the SHA-256
+    of the canonical JSON of the entry with exactly the three
+    resolution-time keys removed (section 5.6, "The request projection").
+    Identical before and after `apply_plan_approval` resolves the entry,
+    and the one function every "same entry?" question uses."""
+    if not isinstance(entry, Mapping):
+        raise LifecycleStateUnreadableError(
+            f"an amendment_history entry must be an object, got {type(entry).__name__}")
+    projected = {k: v for k, v in entry.items() if k not in AMENDMENT_RESOLUTION_TIME_KEYS}
+    return hashlib.sha256(_canonical_json_bytes(projected)).hexdigest()
+
+
+def amendment_resolution_projection_sha256(entry: Mapping) -> str:
+    """The resolution identity of a *resolved* `amendment_history` entry
+    (section 5.6, "The resolution projection"; INV-10): the SHA-256 of the
+    canonical JSON of `{request_projection_sha256, resolved_at_plan_revision,
+    reconciliation_outcome, resolved_review_content_id}`, an absent key
+    taken as `null`. Two resolutions of the same request that approved
+    different plans, reached a different revision, or reconciled
+    differently, differ. Defined only for a resolved entry."""
+    if not isinstance(entry, Mapping) or entry.get("resolved_at_plan_revision") is None:
+        raise LifecycleStateUnreadableError(
+            "the resolution projection is defined only for a resolved amendment_history entry")
+    projected = {
+        "request_projection_sha256": amendment_request_projection_sha256(entry),
+        "resolved_at_plan_revision": entry.get("resolved_at_plan_revision"),
+        "reconciliation_outcome": entry.get("reconciliation_outcome"),
+        "resolved_review_content_id": entry.get("resolved_review_content_id"),
+    }
+    return hashlib.sha256(_canonical_json_bytes(projected)).hexdigest()
+
+
+# ----------------------------- version helper -------------------------------
+
+
+def workflow_release_version_key(version) -> tuple[int, ...] | None:
+    """A payload-local reproduction of `release._version_key`'s ordering
+    for the versions it can order numerically (the payload cannot import
+    `src/workflow_manager/release.py`): dot-separated integer parts,
+    compared as integers, so `2.10.0` is above `2.6.0`. Returns `None` for
+    anything it cannot order -- a non-string, an empty part, or any
+    non-numeric part -- which the lag probe counts as lagging (section
+    5.6, "Version comparison")."""
+    if not isinstance(version, str) or not version:
+        return None
+    parts = re.split(r"[.\-_]", version)
+    if not parts or any(not part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def workflow_release_lags(version) -> bool:
+    key = workflow_release_version_key(version)
+    minimum = workflow_release_version_key(LIFECYCLE_MIN_RELEASE)
+    return key is None or key < minimum
+
+
+# ------------------------------ Git reads -----------------------------------
+
+
+def _git_probe(cwd, args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True)
+
+
+def _committed_blob(cwd, rev: str, rel_path: str) -> bytes | None:
+    """`<rev>:<rel_path>`'s bytes, or `None` when `rev` does not resolve
+    or does not contain the path. Anything else Git reports is an
+    undecidable read (INV-3)."""
+    if _git_probe(cwd, ["rev-parse", "--verify", "-q", f"{rev}^{{commit}}"]).returncode != 0:
+        return None
+    if _git_probe(cwd, ["cat-file", "-e", f"{rev}:{rel_path}"]).returncode != 0:
+        return None
+    shown = _git_probe(cwd, ["cat-file", "blob", f"{rev}:{rel_path}"])
+    if shown.returncode != 0:
+        raise LifecycleStateUnreadableError(
+            f"cannot read {rev}:{rel_path} in {cwd} ({shown.stderr.decode(errors='replace').strip()})")
+    return shown.stdout
+
+
+def _rev_sha(cwd, rev: str) -> str | None:
+    probe = _git_probe(cwd, ["rev-parse", "--verify", "-q", f"{rev}^{{commit}}"])
+    return probe.stdout.decode().strip() if probe.returncode == 0 else None
+
+
+def _symbolic_head_branch(cwd) -> str | None:
+    """The branch `HEAD` is a symbolic ref to, or `None` when detached."""
+    probe = _git_probe(cwd, ["symbolic-ref", "-q", "HEAD"])
+    ref = probe.stdout.decode().strip() if probe.returncode == 0 else ""
+    return ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else None
+
+
+def _parse_state_bytes(raw: bytes, where: str) -> dict:
+    try:
+        state = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise LifecycleStateUnreadableError(f"{where} is not readable JSON ({exc})") from exc
+    if not isinstance(state, dict):
+        raise LifecycleStateUnreadableError(f"{where} is not a JSON object")
+    return state
+
+
+def _item_view(state: dict | None, work_item_id: str, where: str) -> dict | None:
+    """`{history, amendment_base_commit, state_revision}` for the work
+    item in `state`, or `None` when the state (or the item) is absent.
+    Refuses a malformed `work_items` map or `amendment_history`."""
+    if state is None:
+        return None
+    work_items = state.get("work_items", {})
+    if not isinstance(work_items, dict):
+        raise LifecycleStateUnreadableError(f"{where}: work_items is not an object")
+    item = work_items.get(work_item_id)
+    if item is None:
+        return None
+    if not isinstance(item, dict):
+        raise LifecycleStateUnreadableError(f"{where}: work_items[{work_item_id!r}] is not an object")
+    history = item.get("amendment_history") or []
+    if not isinstance(history, list) or not all(isinstance(e, dict) for e in history):
+        raise LifecycleStateUnreadableError(
+            f"{where}: work_items[{work_item_id!r}].amendment_history is not a list of objects")
+    return {
+        "history": history,
+        "amendment_base_commit": item.get("amendment_base_commit"),
+        "state_revision": item.get("state_revision"),
+    }
+
+
+def _committed_item_view(cwd, rev: str, work_item_id: str) -> dict | None:
+    raw = _committed_blob(cwd, rev, DEFAULT_STATE_PATH.as_posix())
+    if raw is None:
+        return None
+    where = f"{cwd}:{rev}:{DEFAULT_STATE_PATH.as_posix()}"
+    return _item_view(_parse_state_bytes(raw, where), work_item_id, where)
+
+
+def _worktree_item_view(worktree_root, work_item_id: str) -> dict | None:
+    full = Path(worktree_root) / DEFAULT_STATE_PATH
+    try:
+        raw = full.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise LifecycleStateUnreadableError(f"cannot read {full} ({exc})") from exc
+    return _item_view(_parse_state_bytes(raw, str(full)), work_item_id, str(full))
+
+
+def _history(view: dict | None) -> list:
+    return view["history"] if view is not None else []
+
+
+def _entry(view: dict | None, seq: int) -> dict | None:
+    history = _history(view)
+    return history[seq - 1] if seq >= 1 and len(history) >= seq else None
+
+
+def _shows_resolved(view: dict | None, seq: int) -> bool:
+    entry = _entry(view, seq)
+    return entry is not None and entry.get("resolved_at_plan_revision") is not None
+
+
+def _journal_holds_token(worktree_root, token: str) -> bool:
+    """Whether the plan-approval journal at `worktree_root`'s own
+    worktree-local path is open and names `token` as its `owner_token` or
+    one of its `previous_owner_tokens`. An unreadable journal is
+    undecidable (`LifecycleStateUnreadableError`)."""
+    try:
+        journal = read_plan_approval_journal(Path(worktree_root))
+    except PlanApprovalJournalUnavailableError as exc:
+        raise LifecycleStateUnreadableError(
+            f"the plan-approval journal in {worktree_root} is unreadable ({exc})") from exc
+    if journal is None:
+        return False
+    return token == journal["owner_token"] or token in journal["previous_owner_tokens"]
+
+
+def _journal_tokens(journal: Mapping) -> list[str]:
+    return [journal["owner_token"], *journal.get("previous_owner_tokens", [])]
+
+
+# ------------------------------ the lag probe -------------------------------
+
+
+def _probe_worktrees(repo_root: Path) -> dict:
+    """The mixed-release lag probe (section 5.6), run by every (9) holder
+    before the predicate list: every registered worktree from `git
+    worktree list --porcelain`, with its `HEAD`-committed installation
+    record's `workflow_version`. `bare` entries have no working tree and
+    are skipped, and are not lagging; a prunable or missing worktree cannot
+    be probed and is recorded as `skipped`. A worktree lags when its record
+    is absent, unreadable, unparseable, unorderable, or below
+    `LIFECYCLE_MIN_RELEASE`."""
+    worktrees: list[dict] = []
+    skipped: list[str] = []
+    for entry in registered_worktrees(repo_root):
+        path = entry.get("worktree")
+        if path is None or "bare" in entry:
+            continue
+        if "prunable" in entry or not Path(path).is_dir():
+            skipped.append(path)
+            continue
+        branch_ref = entry.get("branch") or ""
+        record = {
+            "path": path,
+            "realpath": os.path.realpath(path),
+            "branch": branch_ref[len("refs/heads/"):] if branch_ref.startswith("refs/heads/") else None,
+            "head": entry.get("HEAD"),
+            "version": None,
+            "lagging": True,
+        }
+        try:
+            raw = _committed_blob(path, "HEAD", INSTALLATION_RECORD_PATH)
+        except LifecycleStateUnreadableError:
+            raw = None
+        if raw is not None:
+            try:
+                installed = json.loads(raw)
+                version = installed.get("workflow_version") if isinstance(installed, dict) else None
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                version = None
+            record["version"] = version
+            record["lagging"] = workflow_release_lags(version)
+        worktrees.append(record)
+    return {"worktrees": worktrees, "skipped": skipped,
+            "lagging": [w for w in worktrees if w["lagging"]]}
+
+
+def _find_probed_worktree(probe: dict, root, git_dir) -> dict | None:
+    """The registered worktree whose path or admin dir matches a recorded
+    identity (the recorded root may have moved; its admin dir survives
+    `git worktree move`)."""
+    real_root = os.path.realpath(root) if root else None
+    for worktree in probe["worktrees"]:
+        if real_root is not None and worktree["realpath"] == real_root:
+            return worktree
+    if git_dir:
+        for worktree in probe["worktrees"]:
+            probe_dir = _git_probe(worktree["path"], ["rev-parse", "--absolute-git-dir"])
+            if probe_dir.returncode == 0 and (
+                    os.path.realpath(probe_dir.stdout.decode().strip()) == os.path.realpath(git_dir)):
+                return worktree
+    return None
+
+
+# ------------------------------ the witness ---------------------------------
+
+
+def _witness_template(work_item_id: str, **fields) -> dict:
+    witness = {name: None for name in _AMENDMENT_WITNESS_FIELDS}
+    witness.update({"schema_version": AMENDMENT_WITNESS_SCHEMA_VERSION,
+                    "work_item_id": work_item_id})
+    witness.update(fields)
+    return witness
+
+
+def _none_witness(work_item_id: str) -> dict:
+    return _witness_template(work_item_id, amendment_seq=0, status=AMENDMENT_WITNESS_NONE)
+
+
+def _validate_witness(path, data, work_item_id: str) -> dict:
+    def refuse(reason: str):
+        raise AmendmentWitnessUnavailableError(
+            f"the amendment witness {path} {reason} -- refusing, as for an undecidable claim "
+            f"(INV-3)", evidence={"witness_path": str(path)})
+
+    if not isinstance(data, dict) or data.get("schema_version") != AMENDMENT_WITNESS_SCHEMA_VERSION:
+        refuse(f"has an unsupported shape/schema_version (expected {AMENDMENT_WITNESS_SCHEMA_VERSION})")
+    if data.get("work_item_id") != work_item_id:
+        refuse(f"records work item {data.get('work_item_id')!r}, not {work_item_id!r}")
+    status = data.get("status")
+    if status not in AMENDMENT_WITNESS_STATUSES:
+        refuse(f"has unknown status {status!r}")
+    seq = data.get("amendment_seq")
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq < 0:
+        refuse(f"has a malformed amendment_seq {seq!r}")
+    if (status == AMENDMENT_WITNESS_NONE) != (seq == 0):
+        refuse(f"pairs status {status!r} with amendment_seq {seq}")
+    if status != AMENDMENT_WITNESS_NONE and not isinstance(data.get("request_projection_sha256"), str):
+        refuse("is missing its request_projection_sha256")
+    if status == AMENDMENT_WITNESS_RESOLVED and not isinstance(data.get("resolution_projection_sha256"), str):
+        refuse("is RESOLVED without a resolution_projection_sha256")
+    if status == AMENDMENT_WITNESS_RESOLVING:
+        reservation = data.get("resolution_reservation")
+        if not isinstance(reservation, dict) or any(
+            not isinstance(reservation.get(field), str) for field in _RESOLUTION_RESERVATION_STR_FIELDS
+        ) or not (reservation.get("resolver_branch") is None or isinstance(reservation.get("resolver_branch"), str)):
+            refuse("is RESOLVING without a well-formed resolution_reservation")
+    if status in (AMENDMENT_WITNESS_OPEN, AMENDMENT_WITNESS_RESOLVING):
+        if not isinstance(data.get("previous"), dict):
+            refuse(f"is {status} without the previous witness it replaced")
+    return data
+
+
+def read_amendment_witness_bytes(repo_root: Path, work_item_id: str) -> bytes | None:
+    path = amendment_witness_path(repo_root, work_item_id)
+    try:
+        return _read_claim_bytes(path)
+    except CheckpointOwnershipUnavailableError as exc:
+        raise AmendmentWitnessUnavailableError(
+            f"the amendment witness {path} cannot be read ({exc}) -- refusing (INV-3)",
+            evidence={"witness_path": str(path)}) from exc
+
+
+def read_amendment_witness(repo_root: Path, work_item_id: str) -> dict | None:
+    """The witness, or `None` when none has ever been written. A torn,
+    symlinked, unknown-schema or unknown-status witness refuses
+    (`AmendmentWitnessUnavailableError`), never reads as absent."""
+    raw = read_amendment_witness_bytes(repo_root, work_item_id)
+    if raw is None:
+        return None
+    path = amendment_witness_path(repo_root, work_item_id)
+    try:
+        data = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AmendmentWitnessUnavailableError(
+            f"the amendment witness {path} is torn or unparseable ({exc}) -- refusing (INV-3)",
+            evidence={"witness_path": str(path)}) from exc
+    return _validate_witness(path, data, work_item_id)
+
+
+def _publish_amendment_witness(repo_root: Path, work_item_id: str, witness: dict) -> None:
+    """tempfile + `os.replace` in the claims directory: a complete record
+    or the previous one, never a partial one, and deliberately not an
+    `os.link` primitive. Only ever called while holding (9)."""
+    assert_lifecycle_lock_held(repo_root, work_item_id)
+    path = amendment_witness_path(repo_root, work_item_id)
+    _validate_witness(path, witness, work_item_id)
+    _assert_not_symlink(path.parent, "claims directory")
+    _assert_not_symlink(path, "amendment witness")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(witness, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".amendment-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+    # The rename itself is durable only once the directory entry is, as for
+    # the plan-approval journal's own publication.
+    dir_fd = os.open(str(path.parent), os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def _witness_without_previous(witness: dict) -> dict:
+    return {k: v for k, v in witness.items() if k != "previous"} | {"previous": None}
+
+
+def _resolved_witness_from(base: dict, *, entry: dict, commit: str | None) -> dict:
+    """`base` (an `OPEN` or `RESOLVING` witness) advanced to `RESOLVED`
+    binding `entry`'s resolution: the request identity carries forward,
+    the reservation and `previous` are dropped."""
+    resolved = dict(base)
+    resolved.update({
+        "status": AMENDMENT_WITNESS_RESOLVED,
+        "resolved_at_plan_revision": entry.get("resolved_at_plan_revision"),
+        "resolved_commit": commit,
+        "resolution_projection_sha256": amendment_resolution_projection_sha256(entry),
+        "resolution_reservation": None,
+        "previous": None,
+    })
+    return resolved
+
+
+# ------------------------------ upgrade bootstrap ---------------------------
+
+
+def _resolving_commits_trailers(cwd, head: str, seq: int, work_item_id: str) -> set[str]:
+    """The `Workflow-Plan-Approval:` trailer values of the commits
+    reachable from `head` whose committed state shows entry `seq`
+    resolved while every parent's committed state shows it unresolved or
+    absent (the commits that performed the resolution; bootstrap step 3's
+    legacy check)."""
+    listed = _git_probe(cwd, ["rev-list", "--full-history", head, "--", DEFAULT_STATE_PATH.as_posix()])
+    if listed.returncode != 0:
+        raise LifecycleStateUnreadableError(f"cannot walk {head}'s history in {cwd}")
+    trailers: set[str] = set()
+    for commit in listed.stdout.decode().split():
+        if not _shows_resolved(_committed_item_view(cwd, commit, work_item_id), seq):
+            continue
+        parents = _git_probe(cwd, ["rev-list", "--parents", "-n", "1", commit]).stdout.decode().split()[1:]
+        if any(_shows_resolved(_committed_item_view(cwd, parent, work_item_id), seq) for parent in parents):
+            continue
+        body = _git_probe(cwd, ["log", "-1", "--format=%(trailers:key=Workflow-Plan-Approval,valueonly)",
+                                commit]).stdout.decode()
+        trailers.update(line.strip() for line in body.splitlines() if line.strip())
+    return trailers
+
+
+def _scan_views(probe: dict, work_item_id: str) -> list[dict]:
+    """Bootstrap step 1: the item's entry from every probed worktree's
+    `HEAD`-committed and working-tree state."""
+    scanned = []
+    for worktree in probe["worktrees"]:
+        scanned.append({
+            "worktree": worktree,
+            "head": _committed_item_view(worktree["path"], "HEAD", work_item_id),
+            "head_sha": _rev_sha(worktree["path"], "HEAD"),
+            "working": _worktree_item_view(worktree["path"], work_item_id),
+        })
+    return scanned
+
+
+def _bootstrap_amendment_witness(repo_root: Path, work_item_id: str, probe: dict) -> dict:
+    """Upgrade bootstrap (INV-7), run when the witness file is absent:
+    one deterministic scan of every registered worktree (section 5.6,
+    steps 1-6). Returns the witness it wrote, or -- while any worktree
+    lags and the scan found no amendment -- an in-memory `NONE` it
+    deliberately did not write."""
+    scanned = _scan_views(probe, work_item_id)
+    views = []
+    for record in scanned:
+        path = record["worktree"]["path"]
+        if record["head"] is not None:
+            views.append((path, "HEAD", record["head"]))
+        if record["working"] is not None:
+            views.append((path, "working tree", record["working"]))
+    s = max((len(view["history"]) for _, _, view in views), default=0)
+    if s == 0:
+        none = _none_witness(work_item_id)
+        if not probe["lagging"]:
+            _publish_amendment_witness(repo_root, work_item_id, none)
+        return none
+
+    conflicts: list[str] = []
+    # Step 3: request agreement at every shared seq, `amendment_base_commit`
+    # agreement where entry S is unresolved, and resolution agreement.
+    for k in range(1, s + 1):
+        holders = [(path, where, view, _entry(view, k)) for path, where, view in views if _entry(view, k)]
+        digests = {(path, where): amendment_request_projection_sha256(entry)
+                   for path, where, _, entry in holders}
+        if len(set(digests.values())) > 1:
+            conflicts.append(f"seq {k}: request projections differ -- {digests}")
+        resolved_heads = {path: amendment_resolution_projection_sha256(entry)
+                          for path, where, _, entry in holders
+                          if where == "HEAD" and entry.get("resolved_at_plan_revision") is not None}
+        if len(set(resolved_heads.values())) > 1:
+            conflicts.append(f"seq {k}: resolution projections differ across HEADs -- {resolved_heads}")
+        legacy_heads = [(path, entry) for path, where, _, entry in holders
+                        if where == "HEAD" and entry.get("resolved_at_plan_revision") is not None
+                        and entry.get("resolved_review_content_id") is None]
+        if len(legacy_heads) >= 2 and len(set(resolved_heads.values())) == 1:
+            trailer_sets = {}
+            for record in scanned:
+                path = record["worktree"]["path"]
+                if path in {p for p, _ in legacy_heads} and record["head_sha"]:
+                    trailer_sets[path] = _resolving_commits_trailers(
+                        path, record["head_sha"], k, work_item_id)
+            paths = sorted(trailer_sets)
+            for i, a in enumerate(paths):
+                for b in paths[i + 1:]:
+                    if trailer_sets[a] and trailer_sets[b] and not trailer_sets[a] & trailer_sets[b]:
+                        conflicts.append(
+                            f"seq {k}: {a} and {b} resolved it in different approval commits "
+                            f"(Workflow-Plan-Approval {sorted(trailer_sets[a])} vs "
+                            f"{sorted(trailer_sets[b])})")
+        for record in scanned:
+            if _shows_resolved(record["working"], k) and not _shows_resolved(record["head"], k):
+                conflicts.append(
+                    f"seq {k}: {record['worktree']['path']}'s working tree shows it resolved but its "
+                    f"HEAD does not -- a plan approval was in flight at update time (section 6.1)")
+    unresolved_bases = {(path, where): view.get("amendment_base_commit")
+                        for path, where, view in views
+                        if _entry(view, s) is not None and not _shows_resolved(view, s)}
+    if len(set(unresolved_bases.values())) > 1:
+        conflicts.append(f"seq {s}: unresolved holders disagree on amendment_base_commit -- "
+                         f"{unresolved_bases}")
+    if conflicts:
+        raise AmendmentBootstrapConflictError(
+            f"{work_item_id!r}: the upgrade-bootstrap scan found diverging amendment_history "
+            f"across worktrees and wrote no witness -- finish or discard the divergent amendment "
+            f"or approval on all but one branch: " + "; ".join(conflicts),
+            evidence={"conflicts": conflicts, "skipped_worktrees": probe["skipped"]})
+
+    entry_s = next(_entry(view, s) for _, _, view in views if _entry(view, s))
+    request_digest = amendment_request_projection_sha256(entry_s)
+    # Step 4: any HEAD shows S resolved -> RESOLVED at S.
+    resolved_at = sorted(
+        (record["worktree"]["path"], record) for record in scanned if _shows_resolved(record["head"], s))
+    if resolved_at:
+        path, record = resolved_at[0]
+        entry = _entry(record["head"], s)
+        witness = _witness_template(
+            work_item_id, amendment_seq=s, status=AMENDMENT_WITNESS_RESOLVED,
+            amendment_base_commit=record["head"].get("amendment_base_commit"),
+            state_revision=record["head"].get("state_revision"),
+            requested_at=entry.get("requested_at"),
+            request_projection_sha256=request_digest,
+            resolved_at_plan_revision=entry.get("resolved_at_plan_revision"),
+            resolved_commit=record["head_sha"],
+            resolution_projection_sha256=amendment_resolution_projection_sha256(entry),
+        )
+        _publish_amendment_witness(repo_root, work_item_id, witness)
+        return witness
+    # Step 5: OPEN at S, with a deterministic requester.
+    working_holders = sorted(
+        ((0 if _entry(r["head"], s) else 1), r["worktree"]["path"], r)
+        for r in scanned if _entry(r["working"], s) is not None)
+    head_holders = sorted((r["worktree"]["path"], r) for r in scanned if _entry(r["head"], s) is not None)
+    if working_holders:
+        requester = working_holders[0][2]
+        requester_view = requester["working"]
+    else:
+        requester = head_holders[0][1]
+        requester_view = requester["head"]
+    if s == 1:
+        previous = _none_witness(work_item_id)
+    else:
+        prior = _entry(requester_view, s - 1)
+        if prior is None or prior.get("resolved_at_plan_revision") is None:
+            raise AmendmentBootstrapConflictError(
+                f"{work_item_id!r}: {requester['worktree']['path']} holds unresolved amendment "
+                f"seq {s} but its seq {s - 1} is not resolved -- wrote no witness",
+                evidence={"skipped_worktrees": probe["skipped"]})
+        previous = _witness_template(
+            work_item_id, amendment_seq=s - 1, status=AMENDMENT_WITNESS_RESOLVED,
+            request_projection_sha256=amendment_request_projection_sha256(prior),
+            requested_at=prior.get("requested_at"),
+            resolved_at_plan_revision=prior.get("resolved_at_plan_revision"),
+            resolution_projection_sha256=amendment_resolution_projection_sha256(prior),
+        )
+    requester_dir = _git_probe(requester["worktree"]["path"], ["rev-parse", "--absolute-git-dir"])
+    witness = _witness_template(
+        work_item_id, amendment_seq=s, status=AMENDMENT_WITNESS_OPEN,
+        amendment_base_commit=requester_view.get("amendment_base_commit"),
+        requester_worktree_root=requester["worktree"]["path"],
+        requester_worktree_git_dir=(requester_dir.stdout.decode().strip()
+                                    if requester_dir.returncode == 0 else None),
+        requester_branch=requester["worktree"]["branch"],
+        state_revision=requester_view.get("state_revision"),
+        requested_at=entry_s.get("requested_at"),
+        request_projection_sha256=request_digest,
+        previous=previous,
+    )
+    _publish_amendment_witness(repo_root, work_item_id, witness)
+    return witness
+
+
+# ------------------------------ orphan tests --------------------------------
+
+
+def _witness_sha256(repo_root: Path, work_item_id: str) -> str:
+    raw = read_amendment_witness_bytes(repo_root, work_item_id)
+    return hashlib.sha256(raw or b"").hexdigest()
+
+
+def amendment_witness_clear_literal(work_item_id: str, witness_sha256: str) -> str:
+    return f"clear amendment witness {work_item_id} {witness_sha256}"
+
+
+def amendment_resolution_clear_literal(work_item_id: str, witness_sha256: str) -> str:
+    return f"clear amendment resolution {work_item_id} {witness_sha256}"
+
+
+def _open_witness_liveness(repo_root: Path, work_item_id: str, witness: dict, probe: dict) -> tuple[str, str]:
+    """The provable-orphan test for an `OPEN` witness (crash table, first
+    row). Returns `("orphan", _)`, `("live", <who holds seq N>)`, or
+    `("undecidable", <why>)` -- the last offers the evidence-bound literal.
+    (c) and (d) run first: a seq N found on the requester branch's tip or
+    in any registered worktree is live, whatever state the requester
+    worktree itself is in, so a branch switch never rolls back a committed
+    amendment's witness."""
+    seq = witness["amendment_seq"]
+    digest = witness["request_projection_sha256"]
+    branch = witness.get("requester_branch")
+    unreadable: list[str] = []
+    if branch is not None:
+        tip = _rev_sha(repo_root, f"refs/heads/{branch}")
+        if tip is not None:
+            try:
+                tip_view = _committed_item_view(repo_root, tip, work_item_id)
+            except LifecycleStateUnreadableError as exc:
+                unreadable.append(str(exc))
+                tip_view = None
+            if _entry(tip_view, seq) is not None:
+                return "live", f"the tip of refs/heads/{branch} ({tip}) holds amendment seq {seq}"
+    for worktree in probe["worktrees"]:
+        for where, read in (("working tree", lambda: _worktree_item_view(worktree["path"], work_item_id)),
+                            ("HEAD", lambda: _committed_item_view(worktree["path"], "HEAD", work_item_id))):
+            try:
+                view = read()
+            except LifecycleStateUnreadableError as exc:
+                unreadable.append(str(exc))
+                continue
+            entry = _entry(view, seq)
+            if entry is not None and amendment_request_projection_sha256(entry) == digest:
+                return "live", (f"worktree {worktree['path']} (branch {worktree['branch']!r}) holds "
+                                f"amendment seq {seq} in its {where}")
+    # A state file that cannot be read is a test that cannot be completed
+    # (the crash table's "unreadable" case): undecidable, so the literal is
+    # offered -- never a bare refusal with no in-band escape.
+    if unreadable:
+        return "undecidable", "a worktree's state cannot be read: " + "; ".join(unreadable)
+    if branch is None:
+        return "undecidable", "the requester's HEAD was detached, so its branch cannot be checked"
+    requester = _find_probed_worktree(probe, witness.get("requester_worktree_root"),
+                                      witness.get("requester_worktree_git_dir"))
+    if requester is None:
+        return "undecidable", (f"the requester worktree {witness.get('requester_worktree_root')!r} is "
+                               f"no longer registered, or cannot be read")
+    if _symbolic_head_branch(requester["path"]) != branch:
+        return "undecidable", (f"the requester worktree {requester['path']} is no longer on "
+                               f"refs/heads/{branch}")
+    try:
+        requester_holds = (
+            _entry(_worktree_item_view(requester["path"], work_item_id), seq) is not None
+            or _entry(_committed_item_view(requester["path"], "HEAD", work_item_id), seq) is not None
+        )
+    except LifecycleStateUnreadableError as exc:
+        return "undecidable", f"the requester worktree's state cannot be read: {exc}"
+    if requester_holds:
+        return "live", f"the requester worktree {requester['path']} holds amendment seq {seq}"
+    return "orphan", ""
+
+
+def _resolution_visible_anywhere(
+    repo_root: Path, work_item_id: str, witness: dict, probe: dict,
+) -> tuple[list[tuple[str, dict, str | None]], list[str]]:
+    """`(found, unreadable)`: every `(source, entry, commit)` whose
+    committed state shows the witness's seq resolved -- every registered
+    worktree's `HEAD`, plus the resolver branch's tip for a reservation --
+    and the reason for every one of those committed states that could not
+    be read. An unreadable view is a test that cannot be completed, never
+    a refusal of its own (the crash table's "unreadable" case): the caller
+    decides, and offers the evidence-bound literal."""
+    seq = witness["amendment_seq"]
+    found = []
+    unreadable: list[str] = []
+    for worktree in probe["worktrees"]:
+        sha = _rev_sha(worktree["path"], "HEAD")
+        try:
+            view = _committed_item_view(worktree["path"], "HEAD", work_item_id)
+        except LifecycleStateUnreadableError as exc:
+            unreadable.append(str(exc))
+            continue
+        if _shows_resolved(view, seq):
+            found.append((f"worktree {worktree['path']} HEAD", _entry(view, seq), sha))
+    reservation = witness.get("resolution_reservation") or {}
+    branch = reservation.get("resolver_branch")
+    if branch is not None:
+        tip = _rev_sha(repo_root, f"refs/heads/{branch}")
+        try:
+            view = _committed_item_view(repo_root, tip, work_item_id) if tip else None
+        except LifecycleStateUnreadableError as exc:
+            unreadable.append(str(exc))
+            view = None
+        if _shows_resolved(view, seq):
+            found.append((f"refs/heads/{branch} tip", _entry(view, seq), tip))
+    return found, unreadable
+
+
+def _reservation_liveness(repo_root: Path, work_item_id: str, witness: dict, probe: dict) -> tuple[str, str]:
+    """The provable-orphan test for a `RESOLVING` witness (crash table,
+    "Witness `RESOLVING`, the approval not committed"). A resolution
+    visible anywhere is not this test's to judge (predicate step 1 handles
+    it); the caller has already ruled that out."""
+    reservation = witness["resolution_reservation"]
+    token = reservation["journal_owner_token"]
+    branch = reservation.get("resolver_branch")
+    resolver = _find_probed_worktree(probe, reservation.get("resolver_worktree_root"),
+                                     reservation.get("resolver_worktree_git_dir"))
+    if resolver is not None:
+        try:
+            if _journal_holds_token(resolver["path"], token):
+                return "live", (f"the resolver worktree {resolver['path']} still has the open "
+                                f"plan-approval transaction that reserved it")
+        except LifecycleStateUnreadableError as exc:
+            return "undecidable", str(exc)
+    if branch is None:
+        return "undecidable", "the resolver's HEAD was detached, so its branch cannot be checked"
+    if resolver is None:
+        return "undecidable", (f"the resolver worktree {reservation.get('resolver_worktree_root')!r} is "
+                               f"no longer registered, or cannot be read")
+    if _symbolic_head_branch(resolver["path"]) != branch:
+        return "undecidable", (f"the resolver worktree {resolver['path']} is no longer on "
+                               f"refs/heads/{branch}")
+    return "orphan", ""
+
+
+def _rollback_witness(repo_root: Path, work_item_id: str, witness: dict, probe: dict) -> dict:
+    """Rewrite `witness` to the `previous` object it replaced -- never to
+    "absent" (bootstrap step 6), so a rollback cannot re-trigger the
+    bootstrap scan. A `NONE` restored this way while a worktree lags hides
+    nothing: the lagging checks run on every acquisition regardless of the
+    witness."""
+    previous = dict(witness["previous"])
+    _publish_amendment_witness(repo_root, work_item_id, previous)
+    return previous
+
+
+# ------------------------------ the predicate list --------------------------
+
+
+def _bootstrap_derivable_entries(probe: dict, here: dict | None, work_item_id: str) -> frozenset:
+    """`(seq, amendment_request_projection_sha256, amendment_base_commit)`
+    of every unresolved `amendment_history` entry the upgrade bootstrap
+    would record from a worktree that runs `2.6.0`: every non-lagging
+    worktree's working-tree and `HEAD`-committed state, plus the evaluating
+    worktree's own (whatever its committed installation record says, the
+    process evaluating it is a `2.6.0` process). Consulted only while the
+    witness is absent (implementation review round 1, Important 3): an
+    amendment opened before the update and carried into a worktree that
+    has not merged it yet is the same amendment the bootstrap is about to
+    record -- not an unrecorded `2.5.1` amendment -- and so is an
+    amendment in an evaluating worktree whose update is applied but not
+    yet committed. An entry held only by lagging worktrees stays
+    unrecorded (plan test 13g)."""
+    derivable = set()
+    for worktree in probe["worktrees"]:
+        if worktree["lagging"] and (here is None or worktree["realpath"] != here["realpath"]):
+            continue
+        for view in (_worktree_item_view(worktree["path"], work_item_id),
+                     _committed_item_view(worktree["path"], "HEAD", work_item_id)):
+            for index, entry in enumerate(_history(view), start=1):
+                if entry.get("resolved_at_plan_revision") is None:
+                    derivable.add((index, amendment_request_projection_sha256(entry),
+                                   view.get("amendment_base_commit")))
+    return frozenset(derivable)
+
+
+def _working_tree_release_is_current(worktree_root) -> bool:
+    """Whether `worktree_root`'s *working-tree* installation record already
+    names a release at or above `LIFECYCLE_MIN_RELEASE` -- `workflow_manager
+    update` applied there but not committed, so the remedy for its lag is
+    to commit the update, not to merge it."""
+    try:
+        installed = json.loads((Path(worktree_root) / INSTALLATION_RECORD_PATH).read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    version = installed.get("workflow_version") if isinstance(installed, dict) else None
+    return not workflow_release_lags(version)
+
+
+def _lagging_checks(repo_root: Path, work_item_id: str, witness: dict | None, probe: dict, *,
+                    derivable: frozenset = frozenset()) -> None:
+    """While any worktree lags (section 5.6): an unresolved amendment in a
+    lagging worktree that the witness does not record refuses
+    (`LaggingWorktreeAmendmentError`), and a lagging `HEAD` carrying a
+    different resolution of the witness's seq refuses
+    (`AmendmentResolutionConflictError`). The witness is never changed.
+    `derivable` (`_bootstrap_derivable_entries`, witness absent only)
+    counts an entry the bootstrap is about to record as recorded."""
+    status = witness.get("status") if witness else None
+    seq = witness.get("amendment_seq", 0) if witness else 0
+    for worktree in probe["lagging"]:
+        head_view = _committed_item_view(worktree["path"], "HEAD", work_item_id)
+        for where, view in (("working tree", _worktree_item_view(worktree["path"], work_item_id)),
+                            ("HEAD", head_view)):
+            for index, entry in enumerate(_history(view), start=1):
+                if entry.get("resolved_at_plan_revision") is not None:
+                    continue
+                recorded = (
+                    status not in (None, AMENDMENT_WITNESS_NONE) and (
+                        index < seq or (
+                            index == seq
+                            and amendment_request_projection_sha256(entry) == witness["request_projection_sha256"]
+                            and view.get("amendment_base_commit") == witness.get("amendment_base_commit")
+                        )
+                    )
+                ) or (
+                    (index, amendment_request_projection_sha256(entry),
+                     view.get("amendment_base_commit")) in derivable
+                )
+                if not recorded:
+                    remedy = (
+                        f"commit the {LIFECYCLE_MIN_RELEASE} update in that worktree -- its working "
+                        f"tree already carries it, but its committed installation record does not"
+                        if _working_tree_release_is_current(worktree["path"]) else
+                        f"finish or discard it there, or merge the {LIFECYCLE_MIN_RELEASE} update "
+                        f"into that branch")
+                    raise LaggingWorktreeAmendmentError(
+                        f"{work_item_id!r}: worktree {worktree['path']} (branch "
+                        f"{worktree['branch']!r}, installed Workflow {worktree['version']!r}) holds "
+                        f"an unresolved amendment seq {index} in its {where} that the amendment "
+                        f"witness does not record -- {remedy}",
+                        evidence={"worktree": worktree["path"], "branch": worktree["branch"],
+                                  "installed_version": worktree["version"], "seq": index})
+        if status in (AMENDMENT_WITNESS_RESOLVED, AMENDMENT_WITNESS_RESOLVING) and _shows_resolved(head_view, seq):
+            expected = (witness["resolution_projection_sha256"] if status == AMENDMENT_WITNESS_RESOLVED
+                        else witness["resolution_reservation"]["resolution_projection_sha256"])
+            actual = amendment_resolution_projection_sha256(_entry(head_view, seq))
+            if actual != expected:
+                raise AmendmentResolutionConflictError(
+                    f"{work_item_id!r}: lagging worktree {worktree['path']} (branch "
+                    f"{worktree['branch']!r}, installed Workflow {worktree['version']!r}) carries a "
+                    f"different resolution of amendment seq {seq} ({actual}) than the witness "
+                    f"records ({expected}) -- discard that approval and merge the recorded one",
+                    evidence={"worktree": worktree["path"], "seq": seq,
+                              "recorded": expected, "divergent": actual})
+
+
+def _evaluate_lifecycle(repo_root: Path, work_item_id: str, side: str, *,
+                        journal: Mapping | None = None) -> tuple[dict, dict]:
+    """The lag probe, then the fixed predicate list (section 5.6, steps
+    1-5), identical for every side, so self-heal always runs before an
+    `OPEN`/`RESOLVING` refusal. Must be called holding (9). Returns
+    `(witness, probe)` -- the witness as it stands after any self-heal,
+    rollback or bootstrap this evaluation wrote -- once the side may
+    proceed to its own checks; raises otherwise."""
+    if side not in _LIFECYCLE_SIDES:
+        raise ValueError(f"unknown lifecycle side {side!r}")
+    assert_lifecycle_lock_held(repo_root, work_item_id)
+    probe = _probe_worktrees(repo_root)
+    here = _find_probed_worktree(probe, _git_identity(repo_root)[2], _worktree_git_dir(repo_root))
+    here_path = here["path"] if here is not None else str(repo_root)
+    witness = read_amendment_witness(repo_root, work_item_id)
+    if probe["lagging"]:
+        derivable = (_bootstrap_derivable_entries(probe, here, work_item_id)
+                     if witness is None else frozenset())
+        _lagging_checks(repo_root, work_item_id, witness, probe, derivable=derivable)
+    if witness is None:
+        witness = _bootstrap_amendment_witness(repo_root, work_item_id, probe)
+
+    for _ in range(8):  # every re-entry strictly retreats; bounded defensively
+        status, seq = witness["status"], witness["amendment_seq"]
+        head_view = _committed_item_view(repo_root, "HEAD", work_item_id)
+        if status in (AMENDMENT_WITNESS_OPEN, AMENDMENT_WITNESS_RESOLVING):
+            # Step 1: a committed resolution of seq N is visible.
+            visible = []
+            if _shows_resolved(head_view, seq):
+                visible.append(("evaluating HEAD", _entry(head_view, seq), _rev_sha(repo_root, "HEAD"),
+                                False))
+            resolver = None
+            # Another worktree's committed state that cannot be read is a
+            # test that cannot be completed, not a refusal of its own: it
+            # can only make step 2a's orphan test undecidable, which offers
+            # the evidence-bound literal (crash table, "unreadable").
+            unreadable: list[str] = []
+            if status == AMENDMENT_WITNESS_RESOLVING:
+                reservation = witness["resolution_reservation"]
+                resolver = _find_probed_worktree(probe, reservation["resolver_worktree_root"],
+                                                 reservation["resolver_worktree_git_dir"])
+                if resolver is not None:
+                    is_here = resolver["realpath"] == os.path.realpath(here_path)
+                    if is_here and visible:
+                        visible = [(src, entry, sha, True) for src, entry, sha, _ in visible]
+                    elif not is_here:
+                        try:
+                            view = _committed_item_view(resolver["path"], "HEAD", work_item_id)
+                        except LifecycleStateUnreadableError as exc:
+                            unreadable.append(str(exc))
+                            view = None
+                        if _shows_resolved(view, seq):
+                            visible.append((f"resolver worktree {resolver['path']} HEAD",
+                                            _entry(view, seq), _rev_sha(resolver["path"], "HEAD"), True))
+                branch = reservation.get("resolver_branch")
+                if branch is not None:
+                    tip = _rev_sha(repo_root, f"refs/heads/{branch}")
+                    try:
+                        view = _committed_item_view(repo_root, tip, work_item_id) if tip else None
+                    except LifecycleStateUnreadableError as exc:
+                        unreadable.append(str(exc))
+                        view = None
+                    if _shows_resolved(view, seq):
+                        visible.append((f"refs/heads/{branch} tip", _entry(view, seq), tip, True))
+            if visible:
+                if status == AMENDMENT_WITNESS_OPEN:
+                    source, entry, sha, _ = visible[0]
+                    witness = _resolved_witness_from(witness, entry=entry, commit=sha)
+                    _publish_amendment_witness(repo_root, work_item_id, witness)
+                    continue
+                reserved = witness["resolution_reservation"]["resolution_projection_sha256"]
+                matching = [v for v in visible if amendment_resolution_projection_sha256(v[1]) == reserved]
+                if matching:
+                    source, entry, sha, _ = matching[0]
+                    witness = _resolved_witness_from(witness, entry=entry, commit=sha)
+                    _publish_amendment_witness(repo_root, work_item_id, witness)
+                    continue
+                digests = {src: amendment_resolution_projection_sha256(entry) for src, entry, _, _ in visible}
+                token = witness["resolution_reservation"]["journal_owner_token"]
+                own_pending = False
+                if all(from_resolver for *_, from_resolver in visible) and resolver is not None:
+                    try:
+                        own_pending = _journal_holds_token(resolver["path"], token)
+                    except LifecycleStateUnreadableError:
+                        own_pending = False
+                if own_pending:
+                    raise AmendmentResolutionReservedError(
+                        f"{work_item_id!r}: amendment seq {seq}'s resolution is reserved by the open "
+                        f"plan-approval transaction in {resolver['path']}, whose commit is awaiting "
+                        f"amend recovery (6a1) -- wait for it to finish, or resume it there",
+                        evidence={"seq": seq, "resolver_worktree": resolver["path"],
+                                  "reserved": reserved, "visible": digests})
+                raise AmendmentResolutionConflictError(
+                    f"{work_item_id!r}: amendment seq {seq} is reserved for resolution {reserved}, but "
+                    f"a different resolution is committed ({digests}) -- discard the unreserved "
+                    f"approval and merge the recorded one",
+                    evidence={"seq": seq, "reserved": reserved, "visible": digests})
+            if status == AMENDMENT_WITNESS_OPEN:
+                # Step 2.
+                verdict, detail = _open_witness_liveness(repo_root, work_item_id, witness, probe)
+                if verdict == "orphan":
+                    witness = _rollback_witness(repo_root, work_item_id, witness, probe)
+                    continue
+                if side in (LIFECYCLE_SIDE_RESOLUTION, LIFECYCLE_SIDE_ADVANCE):
+                    return witness, probe
+                evidence = {"seq": seq, "requester_worktree": witness.get("requester_worktree_root"),
+                            "requester_branch": witness.get("requester_branch"), "holder": detail,
+                            "skipped_worktrees": probe["skipped"]}
+                message = (
+                    f"{work_item_id!r}: amendment seq {seq} is open (requested from worktree "
+                    f"{witness.get('requester_worktree_root')!r}, branch "
+                    f"{witness.get('requester_branch')!r}): {detail} -- "
+                    + ("a checkpoint cannot start until it is resolved"
+                       if side == LIFECYCLE_SIDE_CLAIM else
+                       "a second amendment request would fork amendment_history"))
+                if verdict == "undecidable":
+                    evidence["literal"] = amendment_witness_clear_literal(
+                        work_item_id, _witness_sha256(repo_root, work_item_id))
+                    message += (f"; if that amendment was abandoned, clear the witness with the "
+                                f"literal {evidence['literal']!r}")
+                if probe["skipped"]:
+                    message += f" (unprobeable worktrees: {probe['skipped']})"
+                raise AmendmentInFlightError(message, evidence=evidence)
+            # Step 2a: RESOLVING, no resolution visible.
+            reservation = witness["resolution_reservation"]
+            if side in (LIFECYCLE_SIDE_RESOLUTION, LIFECYCLE_SIDE_ADVANCE) and journal is not None and (
+                    reservation["journal_owner_token"] in _journal_tokens(journal)):
+                return witness, probe
+            elsewhere, unreadable_elsewhere = _resolution_visible_anywhere(
+                repo_root, work_item_id, witness, probe)
+            unreadable.extend(u for u in unreadable_elsewhere if u not in unreadable)
+            if elsewhere:
+                reserved = reservation["resolution_projection_sha256"]
+                matching = [v for v in elsewhere if amendment_resolution_projection_sha256(v[1]) == reserved]
+                if matching:
+                    source, entry, sha = matching[0]
+                    witness = _resolved_witness_from(witness, entry=entry, commit=sha)
+                    _publish_amendment_witness(repo_root, work_item_id, witness)
+                    continue
+                digests = {src: amendment_resolution_projection_sha256(entry) for src, entry, _ in elsewhere}
+                raise AmendmentResolutionConflictError(
+                    f"{work_item_id!r}: amendment seq {seq} is reserved for resolution {reserved}, but "
+                    f"a different resolution is committed ({digests})",
+                    evidence={"seq": seq, "reserved": reserved, "visible": digests})
+            verdict, detail = _reservation_liveness(repo_root, work_item_id, witness, probe)
+            if verdict == "orphan" and unreadable:
+                verdict, detail = "undecidable", (
+                    "a worktree's committed state cannot be read, so no resolution of this seq "
+                    "can be ruled out: " + "; ".join(unreadable))
+            if verdict == "orphan":
+                witness = _rollback_witness(repo_root, work_item_id, witness, probe)
+                continue
+            if side == LIFECYCLE_SIDE_ADVANCE and journal is None:
+                return witness, probe
+            evidence = {"seq": seq, "resolver_worktree": reservation["resolver_worktree_root"],
+                        "resolver_branch": reservation.get("resolver_branch"),
+                        "approved_review_content_id": reservation["approved_review_content_id"],
+                        "reserved_at": reservation["reserved_at"], "holder": detail}
+            if verdict == "undecidable":
+                evidence["literal"] = amendment_resolution_clear_literal(
+                    work_item_id, _witness_sha256(repo_root, work_item_id))
+            suffix = (f"; if that approval was abandoned, clear the reservation with the literal "
+                      f"{evidence['literal']!r}" if "literal" in evidence else "")
+            if side in (LIFECYCLE_SIDE_RESOLUTION, LIFECYCLE_SIDE_ADVANCE):
+                raise AmendmentResolutionReservedError(
+                    f"{work_item_id!r}: amendment seq {seq}'s resolution is reserved by worktree "
+                    f"{reservation['resolver_worktree_root']!r} (branch "
+                    f"{reservation.get('resolver_branch')!r}) for approved review_content_id "
+                    f"{reservation['approved_review_content_id']} at {reservation['reserved_at']}: "
+                    f"{detail}{suffix}", evidence=evidence)
+            raise AmendmentInFlightError(
+                f"{work_item_id!r}: amendment seq {seq} is still unresolved -- its resolution is "
+                f"reserved by worktree {reservation['resolver_worktree_root']!r} (branch "
+                f"{reservation.get('resolver_branch')!r}): {detail}{suffix}", evidence=evidence)
+        if status == AMENDMENT_WITNESS_RESOLVED:
+            # Step 3.
+            if not _shows_resolved(head_view, seq):
+                raise StaleLifecycleStateError(
+                    f"{work_item_id!r}: amendment seq {seq} is resolved in this repository (resolution "
+                    f"{witness['resolution_projection_sha256']}, commit "
+                    f"{witness.get('resolved_commit')!r}) but this worktree's HEAD does not show it -- "
+                    f"merge the resolved amendment first",
+                    evidence={"seq": seq, "resolved_commit": witness.get("resolved_commit"),
+                              "recorded": witness["resolution_projection_sha256"]})
+            actual = amendment_resolution_projection_sha256(_entry(head_view, seq))
+            if actual != witness["resolution_projection_sha256"]:
+                raise AmendmentResolutionConflictError(
+                    f"{work_item_id!r}: this worktree's HEAD carries a different resolution of "
+                    f"amendment seq {seq} ({actual}) than the one recorded repository-wide "
+                    f"({witness['resolution_projection_sha256']}) -- discard the divergent approval "
+                    f"on this branch and merge the recorded one",
+                    evidence={"seq": seq, "recorded": witness["resolution_projection_sha256"],
+                              "divergent": actual})
+            return witness, probe
+        # Step 4: NONE.
+        return witness, probe
+    raise AmendmentWitnessUnavailableError(
+        f"{work_item_id!r}: the amendment witness did not settle -- refusing (INV-3)")
+
+
+# ------------------------------ entry points --------------------------------
+
+
+def _unrecorded_local_amendment(repo_root: Path, work_item_id: str, witness: dict) -> str | None:
+    """A description of an unresolved `amendment_history` entry in this
+    worktree's own working-tree state that the witness does not record
+    (its seq is beyond the witness's), or `None`. Such an entry was written
+    by a pre-`2.6.0` release; once this worktree has merged the update it
+    no longer lags, so nothing else detects it."""
+    history = _history(_worktree_item_view(repo_root, work_item_id))
+    recorded = 0 if witness["status"] == AMENDMENT_WITNESS_NONE else witness["amendment_seq"]
+    for index, entry in enumerate(history, start=1):
+        if index > recorded and entry.get("resolved_at_plan_revision") is None:
+            return (f"this worktree's own state holds unresolved amendment seq {index}, which the "
+                    f"amendment witness ({witness['status']} at seq {witness['amendment_seq']}) does "
+                    f"not record -- it was requested by a pre-{LIFECYCLE_MIN_RELEASE} release and "
+                    f"cannot be resolved under this one; discard it (restore this worktree's "
+                    f"WORKFLOW_STATE.json to its pre-amendment committed state) and request the "
+                    f"amendment again")
+    return None
+
+
+def _here_identity(repo_root: Path) -> dict:
+    _, _, worktree_root = _git_identity(repo_root)
+    return {"root": worktree_root, "git_dir": _worktree_git_dir(repo_root),
+            "branch": _symbolic_head_branch(repo_root)}
+
+
+def request_plan_amendment_transaction(repo_root: Path, work_item_id: str, reason: str, *,
+                                       now: str) -> dict:
+    """`/request-plan-amendment`'s one entry point (section 5.6): under
+    (9), holding nothing else, the lag probe and the predicate list as the
+    amendment side, then `state_transaction(request_plan_amendment)` whose
+    mutator -- after every validation `request_plan_amendment` performs,
+    including its `resolve_claim` quiescence read, now serialized with
+    every claim publication in every worktree -- publishes the `OPEN`
+    witness (seq = the history length + 1) and only then lets the state
+    publish. Both inside (9). Returns the published state.
+
+    If the state publish fails after the witness was published, the
+    witness is rolled back to its `previous` before the error propagates
+    (implementation review round 1, Optional 8) -- unless the working-tree
+    state already holds the published entry, or cannot be read, in which
+    case it is left for the orphan test and its evidence-bound literal."""
+    with lifecycle_lock(repo_root, work_item_id):
+        witness, probe = _evaluate_lifecycle(repo_root, work_item_id, LIFECYCLE_SIDE_AMENDMENT)
+        here = _here_identity(repo_root)
+        head_len = len(_history(_committed_item_view(repo_root, "HEAD", work_item_id)))
+        published: dict = {}
+
+        def mutator(state: dict) -> dict:
+            new_state = request_plan_amendment(state, work_item_id, reason, repo_root=repo_root, now=now)
+            item = new_state["work_items"][work_item_id]
+            history = item["amendment_history"]
+            seq = len(history)
+            expected_previous_seq = 0 if witness["status"] == AMENDMENT_WITNESS_NONE else witness["amendment_seq"]
+            if seq != expected_previous_seq + 1 or head_len > seq - 1:
+                unrecorded = _unrecorded_local_amendment(repo_root, work_item_id, witness)
+                if unrecorded is not None:
+                    raise StaleLifecycleStateError(f"{work_item_id!r}: {unrecorded}",
+                                                   evidence={"seq": seq, "witness_seq": witness["amendment_seq"]})
+                raise StaleLifecycleStateError(
+                    f"{work_item_id!r}: this request would be amendment seq {seq}, but the witness "
+                    f"records seq {witness['amendment_seq']} ({witness['status']}) and this "
+                    f"worktree's HEAD holds {head_len} -- merge the recorded amendment first",
+                    evidence={"seq": seq, "witness_seq": witness["amendment_seq"]})
+            opened = _witness_template(
+                work_item_id, amendment_seq=seq, status=AMENDMENT_WITNESS_OPEN,
+                amendment_base_commit=item.get("amendment_base_commit"),
+                requester_worktree_root=here["root"], requester_worktree_git_dir=here["git_dir"],
+                requester_branch=here["branch"], state_revision=item.get("state_revision"),
+                requested_at=history[-1].get("requested_at"),
+                request_projection_sha256=amendment_request_projection_sha256(history[-1]),
+                previous=_witness_without_previous(witness),
+            )
+            _publish_amendment_witness(repo_root, work_item_id, opened)
+            published["witness"] = opened
+            return new_state
+
+        try:
+            return state_transaction(repo_root, mutator)
+        except BaseException:
+            opened = published.get("witness")
+            if opened is not None:
+                try:
+                    entry = _entry(_worktree_item_view(repo_root, work_item_id), opened["amendment_seq"])
+                except LifecycleStateUnreadableError:
+                    entry = {}  # undecidable: leave the witness to the orphan test
+                if entry is None or (entry and amendment_request_projection_sha256(entry)
+                                     != opened["request_projection_sha256"]):
+                    _rollback_witness(repo_root, work_item_id, opened, probe)
+            raise
+
+
+def _enforce_claim_lifecycle(repo_root: Path, work_item_id: str) -> None:
+    """The claim side's witness check (`claim_checkpoint`, `adopt_claim`,
+    absent-claim `take_over_claim`), run under (9) before the side's own
+    checks."""
+    _evaluate_lifecycle(repo_root, work_item_id, LIFECYCLE_SIDE_CLAIM)
+
+
+def _pinned_resolution(journal: Mapping) -> tuple[int, dict, str] | None:
+    """`(seq, resolved entry, digest)` of the amendment the journal's
+    pinned `expected_post_state` resolves, or `None` when the journal's
+    pinned pre-state has no open amendment (every lifecycle call is then
+    skipped, section 5.6's entry table)."""
+    work_item_id = journal["work_item_id"]
+    pre = _parse_state_bytes(base64.b64decode(journal["pre_procedure_state_b64"]), "journal pre-state")
+    pre_view = _item_view(pre, work_item_id, "journal pre-state")
+    history = _history(pre_view)
+    if not history or history[-1].get("resolved_at_plan_revision") is not None:
+        return None
+    post = _parse_state_bytes(base64.b64decode(journal["expected_post_state_b64"]), "journal post-state")
+    entry = _entry(_item_view(post, work_item_id, "journal post-state"), len(history))
+    if entry is None or entry.get("resolved_at_plan_revision") is None:
+        raise LifecycleStateUnreadableError(
+            f"{work_item_id!r}: the journal's expected post-state does not resolve amendment "
+            f"seq {len(history)} (INV-3)")
+    return len(history), entry, amendment_resolution_projection_sha256(entry)
+
+
+def reserve_amendment_resolution(repo_root: Path, work_item_id: str, journal: Mapping, *,
+                                 now: str) -> dict | None:
+    """`/approve-review plan` step 4d: reserve this transaction's
+    resolution of the open amendment, repository-globally, before any
+    commit exists (INV-10). Under (9) alone, outside every guarded window:
+    the lag probe and the predicate list as the resolution side, then --
+    the working-tree state's last entry must be seq N, unresolved, with the
+    witness's request digest; the journal's pinned post-state must resolve
+    that same entry -- `OPEN` becomes `RESOLVING` with the reservation.
+    A `RESOLVING` witness already reserved by this journal with the same
+    digest and approved id is a no-op. Returns the witness, or `None` for
+    an item with no open amendment."""
+    pinned = _pinned_resolution(journal)
+    if pinned is None:
+        return None
+    seq, _entry_n, digest = pinned
+    with lifecycle_lock(repo_root, work_item_id):
+        witness, _probe = _evaluate_lifecycle(repo_root, work_item_id, LIFECYCLE_SIDE_RESOLUTION,
+                                              journal=journal)
+        working = _worktree_item_view(repo_root, work_item_id)
+        last = _history(working)[-1] if _history(working) else None
+        if (witness["status"] not in (AMENDMENT_WITNESS_OPEN, AMENDMENT_WITNESS_RESOLVING)
+                or witness["amendment_seq"] != seq or last is None
+                or len(_history(working)) != seq or last.get("resolved_at_plan_revision") is not None
+                or amendment_request_projection_sha256(last) != witness["request_projection_sha256"]):
+            unrecorded = (_unrecorded_local_amendment(repo_root, work_item_id, witness)
+                          if witness["status"] in (AMENDMENT_WITNESS_NONE, AMENDMENT_WITNESS_RESOLVED) else None)
+            if unrecorded is not None:
+                raise StaleLifecycleStateError(
+                    f"{work_item_id!r}: {unrecorded}",
+                    evidence={"seq": seq, "witness_status": witness["status"],
+                              "witness_seq": witness["amendment_seq"]})
+            raise StaleLifecycleStateError(
+                f"{work_item_id!r}: this approval would resolve amendment seq {seq}, but the witness "
+                f"is {witness['status']} at seq {witness['amendment_seq']} and this worktree's "
+                f"last amendment entry is "
+                f"{'absent' if last is None else ('resolved' if last.get('resolved_at_plan_revision') is not None else 'a different request')}"
+                f" -- merge the resolved amendment first",
+                evidence={"seq": seq, "witness_status": witness["status"],
+                          "witness_seq": witness["amendment_seq"]})
+        if witness["status"] == AMENDMENT_WITNESS_RESOLVING:
+            reservation = witness["resolution_reservation"]
+            if (reservation["resolution_projection_sha256"] != digest
+                    or reservation["approved_review_content_id"] != journal["expected_review_content_id"]):
+                raise AmendmentWitnessUnavailableError(
+                    f"{work_item_id!r}: this transaction's reservation of amendment seq {seq} records "
+                    f"resolution {reservation['resolution_projection_sha256']}, but its pinned "
+                    f"post-state resolves to {digest} -- the witness and the journal disagree; "
+                    f"refusing (INV-3)",
+                    evidence={"seq": seq, "reserved": reservation["resolution_projection_sha256"],
+                              "pinned": digest})
+            return witness
+        here = _here_identity(repo_root)
+        reserved = dict(witness)
+        reserved.update({
+            "status": AMENDMENT_WITNESS_RESOLVING,
+            "resolution_reservation": {
+                "journal_owner_token": journal["owner_token"],
+                "resolver_worktree_root": here["root"],
+                "resolver_worktree_git_dir": here["git_dir"],
+                "resolver_branch": here["branch"],
+                "pre_procedure_head": journal["pre_procedure_head"],
+                "approved_review_content_id": journal["expected_review_content_id"],
+                "resolution_projection_sha256": digest,
+                "reserved_at": now,
+            },
+            # The full `OPEN` witness, its own `previous` included, so a
+            # rolled-back reservation is again a complete `OPEN` witness.
+            "previous": dict(witness),
+        })
+        _publish_amendment_witness(repo_root, work_item_id, reserved)
+        return reserved
+
+
+def assert_amendment_resolution_held(repo_root: Path, work_item_id: str, journal: Mapping) -> dict:
+    """6a1 amend recovery's precondition (revision 8, `LPR-R7-001`). Takes
+    (9) alone, outside every guarded window, **runs no predicate list and
+    never writes the witness**. The digest is the journal's pinned
+    post-state entry N, never whatever `HEAD`'s committed state blob says
+    (that blob may be the very defect 6a1 repairs). Accepts exactly a
+    `RESOLVING` witness at N reserved by this journal's `owner_token` or a
+    `previous_owner_tokens` entry with the pinned digest and approved id,
+    or a `RESOLVED` witness at N with the pinned digest. Anything else is
+    `AmendmentResolutionHeldError`. Returns the proof the
+    `amend_recovery` staging mode requires."""
+    pinned = _pinned_resolution(journal)
+    proof = {"work_item_id": work_item_id, "owner_token": journal["owner_token"],
+             "seq": None, "resolution_projection_sha256": None}
+    if pinned is None:
+        return proof
+    seq, _entry_n, digest = pinned
+    with lifecycle_lock(repo_root, work_item_id):
+        witness = read_amendment_witness(repo_root, work_item_id)
+    held = False
+    if witness is not None and witness["amendment_seq"] == seq:
+        if witness["status"] == AMENDMENT_WITNESS_RESOLVING:
+            reservation = witness["resolution_reservation"]
+            held = (reservation["journal_owner_token"] in _journal_tokens(journal)
+                    and reservation["resolution_projection_sha256"] == digest
+                    and reservation["approved_review_content_id"] == journal["expected_review_content_id"])
+        elif witness["status"] == AMENDMENT_WITNESS_RESOLVED:
+            held = witness["resolution_projection_sha256"] == digest
+    if not held:
+        raise AmendmentResolutionHeldError(
+            f"{work_item_id!r}: this transaction does not hold the resolution of amendment seq {seq} "
+            f"(witness: {None if witness is None else (witness['status'], witness['amendment_seq'])}) "
+            f"-- 6a1 stops: no amend, HEAD and the journal are left as found",
+            evidence={"seq": seq, "pinned": digest,
+                      "witness_status": None if witness is None else witness["status"]})
+    proof.update({"seq": seq, "resolution_projection_sha256": digest})
+    return proof
+
+
+def advance_amendment_witness(repo_root: Path, work_item_id: str, *, journal: Mapping | None = None,
+                              commit: str | None = None) -> dict:
+    """The advance between 6c and 6d (and every self-heal): under (9),
+    holding nothing else, the predicate list, whose step 1 advances
+    `RESOLVING` to `RESOLVED` when a visible `HEAD` carries the reserved
+    digest. Idempotent: `RESOLVED` with the same digest is a no-op. With
+    `journal` (the owner's call), the witness must end `RESOLVED` at the
+    journal's seq with its pinned digest (`AmendmentResolutionHeldError`
+    otherwise), and `resolved_commit` -- a label no check reads -- is
+    refreshed to `commit` when it names another commit (a holder that
+    advanced from the pre-amend commit)."""
+    pinned = _pinned_resolution(journal) if journal is not None else None
+    if journal is not None and pinned is None:
+        return {}
+    with lifecycle_lock(repo_root, work_item_id):
+        witness, _probe = _evaluate_lifecycle(repo_root, work_item_id, LIFECYCLE_SIDE_ADVANCE,
+                                              journal=journal)
+        if pinned is None:
+            return witness
+        seq, _entry_n, digest = pinned
+        if (witness["status"] != AMENDMENT_WITNESS_RESOLVED or witness["amendment_seq"] != seq
+                or witness["resolution_projection_sha256"] != digest):
+            raise AmendmentResolutionHeldError(
+                f"{work_item_id!r}: after the approval commit, the witness is {witness['status']} at "
+                f"seq {witness['amendment_seq']} rather than RESOLVED with this transaction's "
+                f"resolution {digest} -- the journal stays open",
+                evidence={"seq": seq, "pinned": digest, "witness_status": witness["status"]})
+        if commit is not None and witness.get("resolved_commit") != commit:
+            witness = dict(witness)
+            witness["resolved_commit"] = commit
+            _publish_amendment_witness(repo_root, work_item_id, witness)
+        return witness
+
+
+def release_amendment_resolution(repo_root: Path, work_item_id: str,
+                                 journal_tokens: list[str] | tuple[str, ...]) -> dict | None:
+    """After step 6b's rollback: under (9), rewrite a `RESOLVING` witness
+    whose reservation's `journal_owner_token` is in `journal_tokens` (the
+    rolled-back journal's `owner_token` plus every `previous_owner_tokens`
+    entry, captured *before* the rollback closed the journal) back to its
+    `previous` (`OPEN`) -- only if neither the resolver's `HEAD` nor the
+    `resolver_branch` tip shows a resolution of seq N. Otherwise a no-op.
+    Needs no orphan test and no literal, on a detached `HEAD` too."""
+    with lifecycle_lock(repo_root, work_item_id):
+        witness = read_amendment_witness(repo_root, work_item_id)
+        if witness is None or witness["status"] != AMENDMENT_WITNESS_RESOLVING:
+            return witness
+        reservation = witness["resolution_reservation"]
+        if reservation["journal_owner_token"] not in set(journal_tokens):
+            return witness
+        seq = witness["amendment_seq"]
+        resolver_root = reservation["resolver_worktree_root"]
+        if Path(resolver_root).is_dir() and _shows_resolved(
+                _committed_item_view(resolver_root, "HEAD", work_item_id), seq):
+            return witness
+        branch = reservation.get("resolver_branch")
+        if branch is not None:
+            tip = _rev_sha(repo_root, f"refs/heads/{branch}")
+            if tip and _shows_resolved(_committed_item_view(repo_root, tip, work_item_id), seq):
+                return witness
+        previous = dict(witness["previous"])
+        _publish_amendment_witness(repo_root, work_item_id, previous)
+        return previous
+
+
+def _clear_witness(repo_root: Path, work_item_id: str, *, user_authorization: str | None,
+                   expected_status: str, literal_fn) -> dict:
+    with lifecycle_lock(repo_root, work_item_id):
+        raw = read_amendment_witness_bytes(repo_root, work_item_id)
+        witness = read_amendment_witness(repo_root, work_item_id)
+        if witness is None or witness["status"] != expected_status:
+            raise AmendmentWitnessClearRefusedError(
+                f"{work_item_id!r}: the amendment witness is "
+                f"{None if witness is None else witness['status']}, not {expected_status} -- nothing "
+                f"to clear")
+        expected = literal_fn(work_item_id, hashlib.sha256(raw).hexdigest())
+        if user_authorization != expected:
+            raise AmendmentWitnessClearRefusedError(
+                f"clearing {work_item_id!r}'s amendment witness requires the literal {expected!r}, "
+                f"bound to the exact witness bytes presented -- refusing on any other text",
+                evidence={"literal": expected})
+        probe = _probe_worktrees(repo_root)
+        if expected_status == AMENDMENT_WITNESS_OPEN:
+            verdict, detail = _open_witness_liveness(repo_root, work_item_id, witness, probe)
+        else:
+            # An unreadable committed view only makes the test undecidable,
+            # which is exactly what the literal presented here resolves.
+            if _resolution_visible_anywhere(repo_root, work_item_id, witness, probe)[0]:
+                verdict, detail = "live", "a resolution of this seq is committed"
+            else:
+                verdict, detail = _reservation_liveness(repo_root, work_item_id, witness, probe)
+        if verdict == "live":
+            raise AmendmentWitnessClearRefusedError(
+                f"{work_item_id!r}: the witness is provably live ({detail}) -- refusing to clear it")
+        return _rollback_witness(repo_root, work_item_id, witness, probe)
+
+
+def clear_amendment_witness(repo_root: Path, work_item_id: str, *, user_authorization: str | None) -> dict:
+    """The evidence-bound escape for an `OPEN` witness the orphan test
+    cannot decide (the requester worktree gone, unreadable, detached, or
+    switched branch): the literal `clear amendment witness <wi> <sha256 of
+    the witness bytes>`, the `take_over_claim` pattern. Re-checks under
+    (9) that nothing holds the amendment, then rewrites the witness to its
+    `previous`."""
+    return _clear_witness(repo_root, work_item_id, user_authorization=user_authorization,
+                          expected_status=AMENDMENT_WITNESS_OPEN,
+                          literal_fn=amendment_witness_clear_literal)
+
+
+def clear_amendment_resolution(repo_root: Path, work_item_id: str, *,
+                               user_authorization: str | None) -> dict:
+    """The evidence-bound escape for a `RESOLVING` witness the reservation
+    orphan test cannot decide: the literal `clear amendment resolution
+    <wi> <sha256 of the witness bytes>`. Rewrites the witness to its
+    `previous` (`OPEN`)."""
+    return _clear_witness(repo_root, work_item_id, user_authorization=user_authorization,
+                          expected_status=AMENDMENT_WITNESS_RESOLVING,
+                          literal_fn=amendment_resolution_clear_literal)
+
+
+def stage_plan_approval_members(repo_root: Path, journal: Mapping, *, mode: str,
+                                resolution_held: Mapping | None = None) -> None:
+    """The step-5 staging entry (and 6a1's re-staging), with an explicit
+    mode (section 5.6, "No bypass"; revision 8, `LPR-R7-001`). Stages every
+    `journal["applicable_paths"]` member except `WORKFLOW_STATE.json` in
+    one `stage_plan_approval_commit_paths` call, then verifies the pinned
+    artifacts-declaration blob when it is a member.
+
+    On an item whose pinned pre-state has an open amendment, the mode's
+    evidence is asserted first, reading the witness without taking (9)
+    (this runs inside a guarded window):
+    - `first_commit`: a `RESOLVING` witness at the journal's seq whose
+      reservation `reserve_amendment_resolution` wrote at 4d for this
+      journal's *current* `owner_token`, with the pinned digest;
+    - `amend_recovery`: `resolution_held`, the proof a passing
+      `assert_amendment_resolution_held` for this journal returned.
+    Either missing is `AmendmentResolutionHeldError`, before anything is
+    staged."""
+    if mode not in PLAN_APPROVAL_STAGING_MODES:
+        raise ValueError(f"unknown plan-approval staging mode {mode!r}")
+    work_item_id = journal["work_item_id"]
+    pinned = _pinned_resolution(journal)
+    if pinned is not None:
+        seq, _entry_n, digest = pinned
+        if mode == PLAN_APPROVAL_STAGING_FIRST_COMMIT:
+            witness = read_amendment_witness(repo_root, work_item_id)
+            reservation = (witness or {}).get("resolution_reservation") or {}
+            if not (witness is not None and witness["status"] == AMENDMENT_WITNESS_RESOLVING
+                    and witness["amendment_seq"] == seq
+                    and reservation.get("journal_owner_token") == journal["owner_token"]
+                    and reservation.get("resolution_projection_sha256") == digest):
+                raise AmendmentResolutionHeldError(
+                    f"{work_item_id!r}: first-commit staging requires this transaction's own 4d "
+                    f"reservation of amendment seq {seq} -- none is recorded; nothing staged",
+                    evidence={"seq": seq, "mode": mode})
+        else:
+            if not (resolution_held is not None
+                    and resolution_held.get("work_item_id") == work_item_id
+                    and resolution_held.get("owner_token") == journal["owner_token"]
+                    and resolution_held.get("seq") == seq
+                    and resolution_held.get("resolution_projection_sha256") == digest):
+                raise AmendmentResolutionHeldError(
+                    f"{work_item_id!r}: amend-recovery staging requires a passing "
+                    f"assert_amendment_resolution_held for this journal -- nothing staged",
+                    evidence={"seq": seq, "mode": mode})
+    ordinary = tuple(p for p in journal["applicable_paths"] if p != DEFAULT_STATE_PATH.as_posix())
+    stage_plan_approval_commit_paths(repo_root, ordinary)
+    if journal["fifth_member_applies"]:
+        verify_staged_blob_sha256(
+            repo_root, fingerprint.artifacts_path_for_work_item(work_item_id).as_posix(),
+            journal["fifth_member_sha256"],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -6476,7 +8797,8 @@ def identity_gap_lock(repo_root: Path):
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        with _primitive_held("4", str(path)):
+            yield
     finally:
         os.close(fd)
 
@@ -7680,8 +10002,17 @@ def route_work_item(
       facts still `null` (e.g. `v2-1-dry-run`, created with only
       `plan_path` set) -- the same call this function's caller makes for
       a fresh id also works, idempotently, for a resumed one.
+    - A fresh id is stamped `feedback_layout: "scoped"`
+      (`D-Feedback-Layout`, workflow-2.6.0); the resume branch never
+      writes that field.
     - An id naming an existing *terminal* entry is a hard error: ids are
       not reused after `MILESTONE_COMPLETE`.
+    - **For a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item, the resume branch runs
+      only at `PLANNING`, `REVISING_PLAN` or `AMENDING_PLAN`**
+      (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0, `LPR-R4-002`): at a
+      ready phase it refuses with `PlanReviewInProgressError`, at any other
+      phase with `PlanReviewPhaseNotPlanStageError`, before any write. A
+      `"1"`-governed item is unchanged.
     - `active_work_item_id` is set to this id only if no other item is
       currently active (or this item already is) -- routing never steals
       focus from unrelated in-flight, non-terminal work (D1's "resume-focus
@@ -7724,7 +10055,15 @@ def route_work_item(
             plan_revision=plan_revision, last_transition=now,
             mapping_path=mapping_path, base_commit=base_commit,
         )
+        # D-Feedback-Layout (workflow-2.6.0): stamped at creation only --
+        # never on resume, never changed, never back-filled. Absent means
+        # legacy (`fingerprint.resolve_feedback_layout`).
+        work_items[work_item_id]["feedback_layout"] = fingerprint.FEEDBACK_LAYOUT_SCOPED
     else:
+        # D-Plan-Review-Bundle-Binding (workflow-2.6.0, LPR-R4-002): the
+        # resume branch advances the revision only at a non-ready
+        # plan-stage phase, before any field is touched.
+        assert_plan_stage_non_ready_phase(existing, work_item_id, action="advance its plan revision")
         for field_name, supplied in (
             ("plan_path", plan_path), ("registry_path", registry_path),
             ("mapping_path", mapping_path), ("base_commit", base_commit),
@@ -7752,29 +10091,57 @@ def route_work_item(
     return new_state
 
 
-def publish_plan_revision(state: dict, work_item_id: str, plan_revision: int, now: str) -> dict:
+def publish_plan_revision(
+    state: dict, work_item_id: str, plan_revision: int, now: str,
+    *, review_content_id: str | None = None,
+) -> dict:
     """`D-Plan-Revision-Publication`'s single sanctioned writer of a
     plan-revision bump (`WFR-65`): the operation that writes a new
     `plan_revision` into a work item's registry must, in the same
     operation and before any bundle is generated, publish that same value
     to `WORKFLOW_STATE.json`'s non-authoritative mirror through this one
-    entry point -- never as a plain JSON edit. Sets `plan_revision` to the
-    given value and `phase` to `AWAITING_EXTERNAL_PLAN_REVIEW` for a
-    `"1"`-governed item or `AWAITING_LOCAL_PLAN_REVIEW` for a
-    `TWO_STAGE_PLAN_REVIEW_VERSIONS`-governed (`"2.1"`/`"2.2"`) one
-    (`D-Plan-Review-Stages` enters local review first; workflow-2.5.0
-    widens this from a bare `"2.1"` literal to the membership constant --
-    a `"2.2"` item is a `"2.1"` item for plan review purposes).
+    entry point -- never as a plain JSON edit.
 
-    Exhaustive call sites (named, not left to convention): `/milestone-plan`
-    step 3's `[2.1]` registry write; `/apply-plan-review` step 5, on both
-    branches, whenever the revision counter advances as part of applying
-    feedback; `/bootstrap-workflow-v2`'s step 1 state-sync, for a
-    self-discovered revision of the permanently-`"1"`-governed
-    `workflow-v2-1-core` opened while `IMPLEMENTING`.
+    **`"1"`-governed item** (unchanged): sets `plan_revision` to the given
+    value and `phase` to `AWAITING_EXTERNAL_PLAN_REVIEW`.
+    `review_content_id` is ignored.
+
+    **`TWO_STAGE_PLAN_REVIEW_VERSIONS` item** (`D-Plan-Review-Bundle-
+    Binding`, workflow-2.6.0): **mirror-only**. Sets `plan_revision`,
+    `state_revision` and `last_transition`, **leaves `phase` unchanged**,
+    and writes the `PUBLISHED` record -- `published = {review_content_id,
+    plan_revision}`, `consumed` carried forward, `bound` cleared. This call
+    is the author's "edits declared complete" act; `bind_plan_review_bundle`
+    is the only writer of `AWAITING_LOCAL_PLAN_REVIEW`. `review_content_id`
+    (required) is the fresh plan-stage id, computed through
+    `REVIEW_PROTOCOL.md`'s canonical entry point inside the same
+    `state_transaction` mutator, after the registry regeneration, the
+    table re-embed and the intent-to-add staging step. Refuses, before any
+    write:
+    - at a ready phase, `PlanReviewInProgressError`; at any phase outside
+      `PLANNING`/`REVISING_PLAN`/`AMENDING_PLAN`,
+      `PlanReviewPhaseNotPlanStageError` (the plan-stage allow-list);
+    - at `REVISING_PLAN`/`AMENDING_PLAN` with no record,
+      `LegacyPlanReviewBindingUnknownError`; with a `BOUND` record,
+      `PlanReviewBindingInconsistentError`;
+    - content equal to `consumed.review_content_id`, or -- for a legacy
+      marker -- a `plan_revision` not greater than the marker's,
+      `ConsumedPlanReviewContentError` (an early refusal that only saves a
+      wasted generation; `bind` repeats it).
+
+    Exhaustive call sites (named, not left to convention): `/milestone-plan`'s
+    `[2.1]` publication point between its steps 5 and 6 (workflow-2.6.0:
+    moved out of step 3, so every self-review edit precedes it);
+    `/apply-plan-review` step 5, on **every** `2.x` round (the revision
+    counter's advance now governs only the registry regeneration), and
+    for a `"1"` item whenever the revision advances; `/bootstrap-workflow-v2`'s
+    step 1 state-sync, for a self-discovered revision of the
+    permanently-`"1"`-governed `workflow-v2-1-core` opened while
+    `IMPLEMENTING`.
 
     Idempotent: re-running with the same `plan_revision` and the resulting
-    phase already reached is a true no-op -- no `state_revision`/
+    state already reached (`"1"`: the target phase; `2.x`: a `PUBLISHED`
+    record for the same content) is a true no-op -- no `state_revision`/
     `last_transition` bump -- so an interrupted revision is retried rather
     than repaired. Refuses a terminal-phase item
     (`TerminalPlanRevisionPublicationError`) and, by construction, touches
@@ -7787,7 +10154,9 @@ def publish_plan_revision(state: dict, work_item_id: str, plan_revision: int, no
         )
     governing_version = work_item.get("governing_workflow_version")
     if governing_version in TWO_STAGE_PLAN_REVIEW_VERSIONS:
-        target_phase = "AWAITING_LOCAL_PLAN_REVIEW"
+        return _publish_plan_revision_two_stage(
+            state, work_item_id, plan_revision, now, review_content_id=review_content_id,
+        )
     elif governing_version == "1":
         target_phase = "AWAITING_EXTERNAL_PLAN_REVIEW"
     else:
@@ -7803,6 +10172,45 @@ def publish_plan_revision(state: dict, work_item_id: str, plan_revision: int, no
     new_work_item = new_state["work_items"][work_item_id]
     new_work_item["plan_revision"] = plan_revision
     new_work_item["phase"] = target_phase
+    new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
+    new_work_item["last_transition"] = now
+    return new_state
+
+
+def _publish_plan_revision_two_stage(
+    state: dict, work_item_id: str, plan_revision: int, now: str, *, review_content_id: str | None,
+) -> dict:
+    """`publish_plan_revision`'s `TWO_STAGE_PLAN_REVIEW_VERSIONS` branch --
+    see that function's docstring."""
+    work_item = state["work_items"][work_item_id]
+    assert_plan_stage_non_ready_phase(work_item, work_item_id, action="publish a plan revision")
+    if not isinstance(review_content_id, str) or not _SHA256_HEX_RE.match(review_content_id):
+        raise TypeError(
+            f"publish_plan_revision({work_item_id!r}): a TWO_STAGE_PLAN_REVIEW_VERSIONS item "
+            f"requires review_content_id=<the fresh plan-stage id>, got {review_content_id!r}"
+        )
+    record = _plan_review_binding_for_write(work_item, work_item_id)
+    _assert_not_consumed(record, work_item_id, review_content_id, plan_revision)
+
+    published = {"review_content_id": review_content_id, "plan_revision": plan_revision}
+    if (
+        work_item.get("plan_revision") == plan_revision
+        and record is not None
+        and record["status"] == PLAN_REVIEW_BINDING_PUBLISHED
+        and record["published"] == published
+    ):
+        return state
+
+    new_state = copy.deepcopy(state)
+    new_work_item = new_state["work_items"][work_item_id]
+    new_work_item["plan_revision"] = plan_revision
+    new_work_item["plan_review_binding"] = {
+        "status": PLAN_REVIEW_BINDING_PUBLISHED,
+        "at": now,
+        "consumed": copy.deepcopy(record["consumed"]) if record is not None else None,
+        "published": published,
+        "bound": None,
+    }
     new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
     new_work_item["last_transition"] = now
     return new_state
@@ -10266,6 +12674,10 @@ def create_remediation_child_work_item(
     )
     child["parent_work_item_id"] = parent_work_item_id
     child["base_commit"] = base_commit
+    # D-Feedback-Layout (workflow-2.6.0): a remediation child is a new
+    # work item, stamped at creation exactly as `route_work_item`'s
+    # fresh-id branch stamps one.
+    child["feedback_layout"] = fingerprint.FEEDBACK_LAYOUT_SCOPED
     work_items[child_id] = child
     return new_state, child_id
 
@@ -10801,7 +13213,10 @@ def apply_plan_approval(
     `amendment_history[-1]["resolved_at_plan_revision"]` set to this work
     item's own live `plan_revision`, and (`IMPL6-B1`) that same
     reconciliation call's own `{id: outcome}` map recorded verbatim as
-    `amendment_history[-1]["reconciliation_outcome"]` -- into the state
+    `amendment_history[-1]["reconciliation_outcome"]`, and
+    (workflow-2.6.0, `D-Repo-Global-Lifecycle`) the approval record's
+    `approved_review_content_id` recorded as
+    `amendment_history[-1]["resolved_review_content_id"]` -- into the state
     this function returns, alongside its own unchanged write set
     (`plan_approval`, `phase`, `state_revision`, `last_transition`).
     `reconciliation_outcome`'s tokens already distinguish a direct
@@ -10840,6 +13255,20 @@ def apply_plan_approval(
     validate_approval_record(record, stage="plan")
     new_state = copy.deepcopy(state)
     work_item = new_state["work_items"][work_item_id]
+    # workflow-2.6.0 (implementation review round 1, Important 1): a
+    # two-stage item is approvable only at AWAITING_PLAN_APPROVAL -- never
+    # from AWAITING_LOCAL_PLAN_REVIEW, even when re-bound, previously
+    # consumed content still reads as dual-approved in the ledger. A "1"
+    # item has no such phase writer and is unchanged.
+    if (
+        work_item.get("governing_workflow_version") in TWO_STAGE_PLAN_REVIEW_VERSIONS
+        and work_item.get("phase") != "AWAITING_PLAN_APPROVAL"
+    ):
+        raise PlanApprovalPhaseError(
+            f"{work_item_id!r} is at {work_item.get('phase')!r}, not AWAITING_PLAN_APPROVAL -- "
+            f"a two-stage plan approval is applied only after the manual external stage's own "
+            f"APPROVE for the current content; nothing was written"
+        )
     amendment_history = work_item.get("amendment_history") or []
     pre_side_supplied = pre_registry is not None or pre_plan_text is not None
     if (
@@ -10912,6 +13341,12 @@ def apply_plan_approval(
         # did X" rather than only the new phase. Recorded verbatim; this
         # function performs no further summarization of it.
         resolved_entry["reconciliation_outcome"] = reconciliation["outcome"]
+        # workflow-2.6.0, `D-Repo-Global-Lifecycle` (INV-10): the approved
+        # plan's identity joins the resolution, so two resolutions of the
+        # same request that approved different amended plans have
+        # different `amendment_resolution_projection_sha256` digests even
+        # when their revision and reconciliation outcome agree.
+        resolved_entry["resolved_review_content_id"] = record["approved_review_content_id"]
         work_item["amendment_history"] = amendment_history[:-1] + [resolved_entry]
     work_item["plan_approval"] = record
     work_item["phase"] = "IMPLEMENTING"
@@ -11009,13 +13444,26 @@ def request_plan_amendment(
     a stored copy of the documents themselves); sets `amendment_base_commit`
     to the current `HEAD`; and writes `phase = "AMENDING_PLAN"` as a direct
     string literal (never through a local name), so the AST-derived phase
-    census resolves it without a third hardcoded compensation entry.
+    census resolves it without a third hardcoded compensation entry. For a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item it also writes the `CONSUMED`
+    `plan_review_binding` record from `plan_approval.approved_review_content_id`
+    and the current mirror (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0).
 
     This function performs one read of Git identity (`HEAD`'s own SHA, and
     the reachability check above) -- both are needed to compute the exact
     `amendment_history` entry this function itself writes, the same
     narrow exception to pure-`state`-only mutators D-Plan-Amendment-3
-    grants this one writer and no other."""
+    grants this one writer and no other.
+
+    workflow-2.6.0, `D-Repo-Global-Lifecycle` ("No bypass"): refuses
+    first, with `LifecycleLockNotHeldError`, unless this process holds the
+    repository-global lifecycle lock (9) for `work_item_id`. The only
+    sanctioned caller is `request_plan_amendment_transaction`, which takes
+    (9), runs the amendment side of the witness predicate list, and
+    publishes the `OPEN` witness inside this mutator's `state_transaction`
+    before the state -- so the `resolve_claim` quiescence read below is
+    serialized with every claim publication in every linked worktree."""
+    assert_lifecycle_lock_held(repo_root, work_item_id)
     work_item = state["work_items"][work_item_id]
     phase = work_item.get("phase")
     if phase not in _AMENDMENT_REQUEST_ALLOWED_PHASES:
@@ -11122,6 +13570,15 @@ def request_plan_amendment(
     new_work_item["plan_approval"]["status"] = "SUPERSEDED"
     new_work_item["amendment_base_commit"] = head
     new_work_item["phase"] = "AMENDING_PLAN"
+    # D-Plan-Review-Bundle-Binding (workflow-2.6.0): the approved content
+    # being amended is taken out of approval -- it can never re-bind. A
+    # `"1"`-governed item has no binding record; an approval with no
+    # recorded id gets the fail-closed legacy marker instead.
+    if new_work_item.get("governing_workflow_version") in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        _write_consumed_plan_review_binding(
+            new_work_item, review_content_id=plan_approval.get("approved_review_content_id"),
+            plan_revision=new_work_item.get("plan_revision"), now=now,
+        )
     new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
     new_work_item["last_transition"] = now
     return new_state
@@ -12395,6 +14852,10 @@ def record_local_plan_review(
       `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`.
     - `REVISE`: no ledger write; transitions to `REVISING_PLAN`. Can never
       reach `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` (missing-test item 94).
+      Also writes the `CONSUMED` `plan_review_binding` record from this
+      call's own `review_content_id` and the current mirror
+      (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0): the reviewed
+      content can never re-bind.
     - `BLOCK`: no ledger write, no phase transition -- a true no-op
       (missing-test item 95); the returned state is unchanged.
     """
@@ -12416,6 +14877,10 @@ def record_local_plan_review(
         work_item["phase"] = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
     elif verdict == "REVISE":
         work_item["phase"] = "REVISING_PLAN"
+        _write_consumed_plan_review_binding(
+            work_item, review_content_id=review_content_id,
+            plan_revision=work_item.get("plan_revision"), now=now,
+        )
     else:  # BLOCK
         return state
 
@@ -12514,7 +14979,10 @@ def record_manual_plan_review(
       of whether it matches the current recomputed one, so the ledger
       records what the reviewer actually saw (`OPUS-R14-005`, missing-test
       item 113) -- and transitions to `AWAITING_PLAN_APPROVAL`.
-    - `REVISE`: no ledger write; transitions to `REVISING_PLAN`.
+    - `REVISE`: no ledger write; transitions to `REVISING_PLAN`, writing
+      the `CONSUMED` `plan_review_binding` record from
+      `current_review_content_id` (equal to the feedback's, by the
+      preconditions) and the current mirror (workflow-2.6.0).
     - `BLOCK`: no ledger write, no phase transition -- a true no-op
       (missing-test item 99); the returned state is unchanged.
     """
@@ -12535,6 +15003,10 @@ def record_manual_plan_review(
         work_item["phase"] = "AWAITING_PLAN_APPROVAL"
     elif verdict == "REVISE":
         work_item["phase"] = "REVISING_PLAN"
+        _write_consumed_plan_review_binding(
+            work_item, review_content_id=current_review_content_id,
+            plan_revision=work_item.get("plan_revision"), now=now,
+        )
     else:  # BLOCK
         return state
 
@@ -12545,28 +15017,805 @@ def record_manual_plan_review(
 
 
 def transition_to_awaiting_local_plan_review(state: dict, work_item_id: str, now: str) -> dict:
-    """`/apply-plan-review`'s revised exit step for a `TWO_STAGE_PLAN_
-    REVIEW_VERSIONS`-governed (`"2.1"`/`"2.2"`) item alike (D-Plan-Review-
-    Stages, resolves `GPT-R11-003`/`-007`; corrected workflow-2.5.0 from
-    describing this as `"2.1"`-only -- the exit step is identical for
-    `"2.2"`, D-Implementation-Review-Version-Activation's inheritance
-    rule): after every accepted plan edit, the work item transitions to
-    `AWAITING_LOCAL_PLAN_REVIEW` -- never
-    self-declaring plan readiness. The stale `plan_review_stages` ledger
-    (if any) is left as-is, never explicitly cleared: its own
-    `review_content_id` no longer matches the freshly recomputed one the
-    moment the edit lands, so both stages already read as absent by the
-    recomputation rule (`plan_approval_gate_reachable`). This is the sole
-    path back to `AWAITING_LOCAL_PLAN_REVIEW`, whether the edit was driven
-    by a local-model `REVISE` or a manual-external `REVISE` (missing-test
-    item 89) -- no path re-enters manual-external review without a fresh
-    local pass first."""
+    """**Retired as a free-standing writer** (workflow-2.6.0,
+    `D-Plan-Review-Bundle-Binding` item 3). Through `2.5.1` this was
+    `/apply-plan-review`'s exit step for a `TWO_STAGE_PLAN_REVIEW_VERSIONS`
+    item: a bare phase flip to `AWAITING_LOCAL_PLAN_REVIEW` that no bundle
+    had to back. `bind_plan_review_bundle` is now the sole writer of that
+    phase, and it writes it only for a verified bundle of the published
+    content (INV-2). Every `2.x` round still returns to a fresh local
+    review -- no path re-enters manual-external review without one -- but
+    through the bind. Always raises `PlanReviewWriterRetiredError`, writing
+    nothing."""
+    raise PlanReviewWriterRetiredError(
+        f"transition_to_awaiting_local_plan_review({work_item_id!r}) is retired "
+        f"(workflow-2.6.0, D-Plan-Review-Bundle-Binding): verify the published bundle "
+        f"with verify_plan_review_bundle and write the phase with bind_plan_review_bundle"
+    )
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.6.0 CP4: D-Plan-Review-Bundle-Binding -- "the revision exists"
+# is separated from "the revision is review-ready". `publish_plan_revision`
+# is mirror-only for a two-stage item and records the author's "edits
+# complete" act (`PUBLISHED`); `bind_plan_review_bundle` is the sole writer
+# of `AWAITING_LOCAL_PLAN_REVIEW`, legitimate only against the freshly
+# re-read `plan_review_binding` record; `withdraw_plan_review` is the one
+# sanctioned exit from a ready phase without a verdict. The record's three
+# facts -- `consumed` (taken out of review), `published` (declared
+# complete), `bound` (bundle last bound) -- are the durable discriminator
+# a verifying bundle alone cannot be (section 5.3 item 2).
+# ---------------------------------------------------------------------------
+
+PLAN_REVIEW_BINDING_KEYS = frozenset({"status", "at", "consumed", "published", "bound"})
+_PLAN_REVIEW_BINDING_CONSUMED_KEYS = frozenset({"review_content_id", "plan_revision", "legacy"})
+_PLAN_REVIEW_BINDING_PUBLISHED_KEYS = frozenset({"review_content_id", "plan_revision"})
+_PLAN_REVIEW_BINDING_BOUND_KEYS = frozenset({"review_content_id", "bundle_id", "plan_revision"})
+
+# `plan_review_publication_status`'s status vocabulary, one per row group of
+# section 5.3 item 6's decision table (rows 4d and 6 refuse instead).
+PLAN_REVIEW_STATUS_NOT_PLAN_STAGE = "NOT_PLAN_STAGE"
+PLAN_REVIEW_STATUS_BOUND = "BOUND"
+PLAN_REVIEW_STATUS_CONTENT_DRIFTED = "CONTENT_DRIFTED"
+PLAN_REVIEW_STATUS_BUNDLE_UNVERIFIED = "BUNDLE_UNVERIFIED"
+PLAN_REVIEW_STATUS_LEGACY_UNVERIFIED = "LEGACY_UNVERIFIED"
+PLAN_REVIEW_STATUS_LEGACY_UNMARKED = "LEGACY_UNMARKED"
+PLAN_REVIEW_STATUS_NEEDS_EDIT = "NEEDS_EDIT"
+PLAN_REVIEW_STATUS_NEEDS_REVISION = "NEEDS_REVISION"
+PLAN_REVIEW_STATUS_PUBLISHED_UNBOUND = "PUBLISHED_UNBOUND"
+PLAN_REVIEW_STATUS_EDIT_IN_PROGRESS = "EDIT_IN_PROGRESS"
+
+# The two statuses under which `/apply-plan-review` step 1 checks feedback
+# against the durable `CONSUMED` record instead of the on-disk bundle, which
+# may already have been regenerated (rows 9 and 11, `LPR-R2-007`).
+PLAN_REVIEW_DURABLE_FEEDBACK_CHECK_STATUSES = frozenset({
+    PLAN_REVIEW_STATUS_PUBLISHED_UNBOUND, PLAN_REVIEW_STATUS_EDIT_IN_PROGRESS,
+})
+
+
+def _plan_review_remedy_withdraw(work_item_id: str) -> str:
+    return f"withdraw with /milestone-plan {work_item_id} (it consumes this content and discards both recorded stages)"
+
+
+def _plan_review_remedy_rerun(command: str, work_item_id: str) -> str:
+    return (
+        f"re-run {command} {work_item_id} with the explicit work-item id: its entry resumes at "
+        f"PUBLISHED_UNBOUND (row 9), regenerates if no bundle verifies for the published "
+        f"content, then binds -- never re-advancing the revision"
+    )
+
+
+def _not_plan_stage_message(work_item_id: str, phase: str | None, action: str) -> str:
+    message = (
+        f"{work_item_id!r} is at phase {phase!r}, outside the plan stage (PLANNING/"
+        f"REVISING_PLAN/AMENDING_PLAN, or a ready plan-review phase) -- refusing to {action}"
+    )
+    if phase in _AMENDMENT_REQUEST_ALLOWED_PHASES:
+        return message + f"; the route back to planning is /request-plan-amendment {work_item_id}"
+    return message + "; this release sanctions no plan re-entry from this phase"
+
+
+def assert_plan_stage_non_ready_phase(work_item: dict, work_item_id: str, *, action: str) -> None:
+    """The plan-stage allow-list (`LPR-R3-001`/`LPR-R4-002`) shared by
+    `publish_plan_revision` and `route_work_item`'s resume branch: for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item, `action` runs only at
+    `PLANNING`, `REVISING_PLAN` or `AMENDING_PLAN`. A ready phase refuses
+    with `PlanReviewInProgressError` (naming the withdrawal), any other
+    phase with `PlanReviewPhaseNotPlanStageError`. A `"1"`-governed item,
+    or one with any other governing version, is not checked here."""
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        return
+    phase = work_item.get("phase")
+    if phase in PLAN_REVIEW_NON_READY_PHASES:
+        return
+    if phase in PLAN_REVIEW_READY_PHASES:
+        raise PlanReviewInProgressError(
+            f"{work_item_id!r} is under plan review at {phase!r} -- refusing to {action} "
+            f"in place; the sanctioned exit is to {_plan_review_remedy_withdraw(work_item_id)}"
+        )
+    raise PlanReviewPhaseNotPlanStageError(_not_plan_stage_message(work_item_id, phase, action))
+
+
+def assert_plan_review_entry_phase(work_item: dict, work_item_id: str, *, command: str) -> None:
+    """Row 1 of section 5.3 item 6's table, checked at the entry of
+    `/milestone-plan` and `/apply-plan-review` for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item, before any write -- including
+    `route_work_item`'s mirror advance: a phase that is neither ready nor
+    non-ready refuses with `PlanReviewPhaseNotPlanStageError`."""
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        return
+    phase = work_item.get("phase")
+    if phase in PLAN_REVIEW_READY_PHASES or phase in PLAN_REVIEW_NON_READY_PHASES:
+        return
+    raise PlanReviewPhaseNotPlanStageError(_not_plan_stage_message(work_item_id, phase, f"run {command}"))
+
+
+def _validate_plan_review_binding(work_item_id: str, work_item: dict) -> None:
+    """`validate_state`'s shape check for `plan_review_binding` (INV-3):
+    absent means no record; a present value must be an object with exactly
+    `PLAN_REVIEW_BINDING_KEYS`, a known `status`, well-formed sub-objects,
+    and sub-objects consistent with that status -- `CONSUMED` has
+    `consumed` and neither of the others, `PUBLISHED` has `published` and
+    no `bound`, `BOUND` has `bound`. A legacy `consumed` carries a null id;
+    a non-legacy one a 64-hex id."""
+    if "plan_review_binding" not in work_item:
+        return
+    record = work_item["plan_review_binding"]
+    where = f"work_items[{work_item_id!r}].plan_review_binding"
+
+    def _bad(detail: str) -> InvalidPlanReviewBindingError:
+        return InvalidPlanReviewBindingError(f"{where} {detail}: {record!r}")
+
+    def _revision_ok(value) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+    def _id_ok(value) -> bool:
+        return isinstance(value, str) and bool(_SHA256_HEX_RE.match(value))
+
+    if not isinstance(record, dict) or set(record) != PLAN_REVIEW_BINDING_KEYS:
+        raise _bad(f"must be an object with exactly the keys {sorted(PLAN_REVIEW_BINDING_KEYS)}")
+    status = record["status"]
+    if not isinstance(status, str) or status not in PLAN_REVIEW_BINDING_STATUSES:
+        raise _bad(f"has unknown status {status!r}")
+    if not isinstance(record["at"], str) or not record["at"]:
+        raise _bad("has a missing or non-string 'at'")
+    consumed, published, bound = record["consumed"], record["published"], record["bound"]
+    if consumed is not None:
+        if not isinstance(consumed, dict) or set(consumed) != _PLAN_REVIEW_BINDING_CONSUMED_KEYS:
+            raise _bad("has a malformed 'consumed'")
+        if not isinstance(consumed["legacy"], bool) or not _revision_ok(consumed["plan_revision"]):
+            raise _bad("has a malformed 'consumed'")
+        if consumed["legacy"] != (consumed["review_content_id"] is None):
+            raise _bad("has a 'consumed' whose legacy flag disagrees with its id")
+        if consumed["review_content_id"] is not None and not _id_ok(consumed["review_content_id"]):
+            raise _bad("has a malformed 'consumed.review_content_id'")
+    if published is not None:
+        if not isinstance(published, dict) or set(published) != _PLAN_REVIEW_BINDING_PUBLISHED_KEYS:
+            raise _bad("has a malformed 'published'")
+        if not _id_ok(published["review_content_id"]) or not _revision_ok(published["plan_revision"]):
+            raise _bad("has a malformed 'published'")
+    if bound is not None:
+        if not isinstance(bound, dict) or set(bound) != _PLAN_REVIEW_BINDING_BOUND_KEYS:
+            raise _bad("has a malformed 'bound'")
+        if (
+            not _id_ok(bound["review_content_id"]) or not _id_ok(bound["bundle_id"])
+            or not _revision_ok(bound["plan_revision"])
+        ):
+            raise _bad("has a malformed 'bound'")
+    if status == PLAN_REVIEW_BINDING_CONSUMED and (consumed is None or published is not None or bound is not None):
+        raise _bad("is CONSUMED but does not carry exactly a 'consumed' fact")
+    if status == PLAN_REVIEW_BINDING_PUBLISHED and (published is None or bound is not None):
+        raise _bad("is PUBLISHED but does not carry a 'published' fact without a 'bound' one")
+    if status == PLAN_REVIEW_BINDING_BOUND and bound is None:
+        raise _bad("is BOUND but carries no 'bound' fact")
+
+
+def _plan_review_binding_record(work_item: dict, work_item_id: str) -> dict | None:
+    """The item's `plan_review_binding`, shape-checked, or `None`."""
+    _validate_plan_review_binding(work_item_id, work_item)
+    return work_item.get("plan_review_binding")
+
+
+def _plan_review_binding_for_write(work_item: dict, work_item_id: str) -> dict | None:
+    """The record the two non-ready-phase writers (`publish_plan_revision`,
+    `bind_plan_review_bundle`) act on. Refuses a legacy mid-round item
+    with no record (`LegacyPlanReviewBindingUnknownError`, row 5 before
+    its entry marker exists) and a non-ready phase holding a `BOUND`
+    record (`PlanReviewBindingInconsistentError`, row 6). `None` only at
+    `PLANNING`."""
+    record = _plan_review_binding_record(work_item, work_item_id)
+    phase = work_item.get("phase")
+    if record is None:
+        if phase in ("REVISING_PLAN", "AMENDING_PLAN"):
+            raise LegacyPlanReviewBindingUnknownError(
+                f"{work_item_id!r} is at {phase!r} with no plan_review_binding record (an item "
+                f"that entered this round before workflow-2.6.0): nothing durable says which "
+                f"content it already reviewed. Re-run /apply-plan-review {work_item_id} or "
+                f"/milestone-plan {work_item_id}: its entry writes the fail-closed marker "
+                f"(ensure_plan_review_binding_marker), after which one revision advance binds"
+            )
+        return None
+    if record["status"] == PLAN_REVIEW_BINDING_BOUND:
+        raise PlanReviewBindingInconsistentError(
+            f"{work_item_id!r} is at non-ready phase {phase!r} but its plan_review_binding is "
+            f"BOUND -- every exit from a ready phase writes CONSUMED, so this record was not "
+            f"written by workflow-2.6.0 (row 6); refusing rather than guessing"
+        )
+    return record
+
+
+def _assert_not_consumed(record: dict | None, work_item_id: str, review_content_id: str, plan_revision: int) -> None:
+    consumed = record.get("consumed") if record is not None else None
+    if consumed is None:
+        return
+    if consumed["review_content_id"] is not None and consumed["review_content_id"] == review_content_id:
+        raise ConsumedPlanReviewContentError(
+            f"{work_item_id!r}: review_content_id {review_content_id!r} is the content already "
+            f"taken out of review (plan_review_binding.consumed, plan_revision "
+            f"{consumed['plan_revision']}) -- it never re-binds; edit the plan, then regenerate"
+        )
+    if consumed["legacy"] and plan_revision <= consumed["plan_revision"]:
+        raise ConsumedPlanReviewContentError(
+            f"{work_item_id!r}: the fail-closed legacy marker records no review_content_id, so "
+            f"plan_revision {plan_revision} must exceed the marker's {consumed['plan_revision']} "
+            f"-- advance the revision once (an edit plus the registry regeneration), then regenerate"
+        )
+
+
+def _write_consumed_plan_review_binding(
+    work_item: dict, *, review_content_id: str | None, plan_revision: int, now: str,
+) -> None:
+    """In-place `CONSUMED` write shared by every transition that takes
+    content out of review for editing, from that transition's own inputs.
+    A null id writes the fail-closed legacy marker (`legacy: true`)."""
+    work_item["plan_review_binding"] = {
+        "status": PLAN_REVIEW_BINDING_CONSUMED,
+        "at": now,
+        "consumed": {
+            "review_content_id": review_content_id,
+            "plan_revision": plan_revision,
+            "legacy": review_content_id is None,
+        },
+        "published": None,
+        "bound": None,
+    }
+
+
+def _plan_amendment_is_open(work_item: dict) -> bool:
+    """The same open-amendment test `apply_plan_approval` uses: the last
+    `amendment_history` entry is unresolved."""
+    history = work_item.get("amendment_history") or []
+    return bool(history) and history[-1].get("resolved_at_plan_revision") is None
+
+
+def ensure_plan_review_binding_marker(state: dict, work_item_id: str, now: str) -> dict:
+    """Row 5's entry write (INV-7), run by the first `state_transaction` of
+    `/apply-plan-review` and `/milestone-plan` for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item at `REVISING_PLAN`/`AMENDING_PLAN`
+    with no `plan_review_binding` record -- a `2.5.1` item mid-round.
+
+    - An `AMENDING_PLAN` item whose open amendment recorded, at request
+      time, the approved `review_content_id` it took out of approval gets
+      the non-legacy `CONSUMED` record from
+      `superseded_plan_approval.approved_review_content_id` and
+      `superseded_plan_revision` (`LPR-R3-006`) -- exactly what `2.6.0`'s
+      own `request_plan_amendment` writes.
+    - Otherwise, the fail-closed legacy marker at the current mirror: the
+      next publish and bind need one revision advance.
+
+    A true no-op (the input state returned) in every other case: a record
+    already exists, another phase, or another governing version."""
+    work_item = state["work_items"][work_item_id]
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        return state
+    if work_item.get("phase") not in ("REVISING_PLAN", "AMENDING_PLAN"):
+        return state
+    if _plan_review_binding_record(work_item, work_item_id) is not None:
+        return state
+    review_content_id = None
+    plan_revision = work_item.get("plan_revision")
+    if work_item.get("phase") == "AMENDING_PLAN" and _plan_amendment_is_open(work_item):
+        entry = work_item["amendment_history"][-1]
+        superseded = entry.get("superseded_plan_approval") or {}
+        approved_id = superseded.get("approved_review_content_id")
+        superseded_revision = entry.get("superseded_plan_revision")
+        if isinstance(approved_id, str) and isinstance(superseded_revision, int):
+            review_content_id, plan_revision = approved_id, superseded_revision
     new_state = copy.deepcopy(state)
-    work_item = new_state["work_items"][work_item_id]
-    work_item["phase"] = "AWAITING_LOCAL_PLAN_REVIEW"
-    work_item["state_revision"] = work_item.get("state_revision", 1) + 1
-    work_item["last_transition"] = now
+    new_work_item = new_state["work_items"][work_item_id]
+    _write_consumed_plan_review_binding(
+        new_work_item, review_content_id=review_content_id, plan_revision=plan_revision, now=now,
+    )
+    new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
+    new_work_item["last_transition"] = now
     return new_state
+
+
+def bind_plan_review_bundle(state: dict, work_item_id: str, *, binding: dict, now: str) -> dict:
+    """The **sole writer** of `AWAITING_LOCAL_PLAN_REVIEW` for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item (INV-2): a pure mutator run
+    inside `state_transaction`. `binding` is `verify_plan_review_bundle`'s
+    return value -- `{review_content_id, bundle_id, plan_revision}` of a
+    bundle that verified on disk.
+
+    Legitimacy is decided here, against the freshly re-read state, never
+    by a caller's reading of the status. It succeeds only when:
+    - the phase is `PLANNING`, `REVISING_PLAN` or `AMENDING_PLAN`;
+    - the record is `PUBLISHED`, and the binding's `review_content_id` and
+      `plan_revision` equal `published`'s and the latter equals the
+      current mirror (`PlanReviewNotPublishedError` otherwise);
+    - the binding's id differs from a non-null `consumed.review_content_id`
+      and, for a legacy marker, its `plan_revision` exceeds the marker's
+      (`ConsumedPlanReviewContentError`).
+    A legacy mid-round item with no record refuses
+    (`LegacyPlanReviewBindingUnknownError`), as does a non-ready `BOUND`
+    record (`PlanReviewBindingInconsistentError`).
+
+    On success: `phase = AWAITING_LOCAL_PLAN_REVIEW`, `current_bundle_id`
+    written (a reader-facing pointer, compared advisorily only), and the
+    `BOUND` record with `bound` filled in and `consumed`/`published`
+    carried forward.
+
+    Idempotent: already `BOUND` to the same `review_content_id` at
+    `AWAITING_LOCAL_PLAN_REVIEW` is a no-op, even for a different
+    `bundle_id` (a wrapper-only regeneration; the caller reports it as
+    advisory). Never regresses a phase: at any other ready phase it
+    refuses with `PlanReviewAlreadyReadyError` and writes nothing."""
+    work_item = state["work_items"][work_item_id]
+    _require_v2_1_plan_review(work_item)
+    if not isinstance(binding, dict) or set(binding) != _PLAN_REVIEW_BINDING_BOUND_KEYS:
+        raise TypeError(f"bind_plan_review_bundle: malformed binding {binding!r}")
+    phase = work_item.get("phase")
+    if phase in PLAN_REVIEW_READY_PHASES:
+        record = _plan_review_binding_record(work_item, work_item_id)
+        if (
+            phase == "AWAITING_LOCAL_PLAN_REVIEW" and record is not None
+            and record["status"] == PLAN_REVIEW_BINDING_BOUND
+            and record["bound"]["review_content_id"] == binding["review_content_id"]
+        ):
+            return state
+        raise PlanReviewAlreadyReadyError(
+            f"{work_item_id!r} is already at ready phase {phase!r} -- a bind never moves an "
+            f"item back to local review; nothing was written"
+        )
+    if phase not in PLAN_REVIEW_NON_READY_PHASES:
+        raise PlanReviewPhaseNotPlanStageError(_not_plan_stage_message(work_item_id, phase, "bind a plan-review bundle"))
+    record = _plan_review_binding_for_write(work_item, work_item_id)
+    if record is None:
+        raise PlanReviewNotPublishedError(
+            f"{work_item_id!r} has no PUBLISHED plan_review_binding record -- publish the "
+            f"completed content (publish_plan_revision) before binding a bundle of it"
+        )
+    _assert_not_consumed(record, work_item_id, binding["review_content_id"], binding["plan_revision"])
+    expected = {"review_content_id": binding["review_content_id"], "plan_revision": binding["plan_revision"]}
+    if (
+        record["status"] != PLAN_REVIEW_BINDING_PUBLISHED
+        or record["published"] != expected
+        or work_item.get("plan_revision") != binding["plan_revision"]
+    ):
+        raise PlanReviewNotPublishedError(
+            f"{work_item_id!r}: the bundle's content (review_content_id "
+            f"{binding['review_content_id']!r}, plan_revision {binding['plan_revision']}) is not "
+            f"the published content (record {record['status']}, published {record['published']!r}, "
+            f"mirror {work_item.get('plan_revision')!r}) -- content the author never declared "
+            f"complete cannot enter review"
+        )
+    new_state = copy.deepcopy(state)
+    new_work_item = new_state["work_items"][work_item_id]
+    new_work_item["phase"] = "AWAITING_LOCAL_PLAN_REVIEW"
+    new_work_item["current_bundle_id"] = binding["bundle_id"]
+    new_work_item["plan_review_binding"] = {
+        "status": PLAN_REVIEW_BINDING_BOUND,
+        "at": now,
+        "consumed": copy.deepcopy(record["consumed"]),
+        "published": copy.deepcopy(record["published"]),
+        "bound": dict(binding),
+    }
+    new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
+    new_work_item["last_transition"] = now
+    return new_state
+
+
+def withdraw_plan_review(state: dict, work_item_id: str, now: str) -> dict:
+    """The one sanctioned way for a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item to
+    leave a ready phase for editing without a `REVISE` verdict (section
+    5.3 item 7); `/milestone-plan <id>`'s entry is its only command
+    caller. A pure mutator that reads only the phase, the
+    `plan_review_binding` record and `amendment_history` -- it computes no
+    fresh id and reads no plan-stage file, so no worktree state can make
+    it raise. In one write it:
+    - moves the phase to `AMENDING_PLAN` if the last `amendment_history`
+      entry is unresolved, else `REVISING_PLAN`;
+    - writes `CONSUMED` from a `BOUND` record's own `bound` fields
+      (`legacy: false`); any other record, or none (a `2.5.1` ready item,
+      or row 4d), gets the fail-closed legacy marker at the current mirror;
+    - leaves `plan_review_stages`, `current_bundle_id`, the bundle, the pin
+      and `plan-inputs/` untouched.
+    Refuses at any non-ready phase (`PlanReviewNotReadyError`), writing
+    nothing -- so a re-run after a crash that followed the withdrawal
+    simply finds the non-ready row."""
+    work_item = state["work_items"][work_item_id]
+    _require_v2_1_plan_review(work_item)
+    phase = work_item.get("phase")
+    if phase not in PLAN_REVIEW_READY_PHASES:
+        raise PlanReviewNotReadyError(
+            f"{work_item_id!r} is at {phase!r}, not a ready plan-review phase -- nothing is "
+            f"under review to withdraw"
+        )
+    record = work_item.get("plan_review_binding")
+    bound = None
+    if isinstance(record, dict) and record.get("status") == PLAN_REVIEW_BINDING_BOUND:
+        bound = record.get("bound")
+    new_state = copy.deepcopy(state)
+    new_work_item = new_state["work_items"][work_item_id]
+    if _plan_amendment_is_open(work_item):
+        new_work_item["phase"] = "AMENDING_PLAN"
+    else:
+        new_work_item["phase"] = "REVISING_PLAN"
+    if isinstance(bound, dict) and isinstance(bound.get("review_content_id"), str):
+        _write_consumed_plan_review_binding(
+            new_work_item, review_content_id=bound["review_content_id"],
+            plan_revision=bound["plan_revision"], now=now,
+        )
+    else:
+        _write_consumed_plan_review_binding(
+            new_work_item, review_content_id=None,
+            plan_revision=new_work_item.get("plan_revision"), now=now,
+        )
+    new_work_item["state_revision"] = new_work_item.get("state_revision", 1) + 1
+    new_work_item["last_transition"] = now
+    return new_state
+
+
+def assert_plan_review_withdrawal_allowed(repo_root: Path, work_item_id: str, *, explicit_id: bool) -> None:
+    """`/milestone-plan`'s entry guards before a ready-phase withdrawal,
+    run before any write:
+    - `explicit_id` is `False` unless the command's argument was a
+      `work_items` key (the `<id>` or `<id> <base-sha>` forms): a run with
+      no argument, or with the one-argument base-SHA form, refuses with
+      `PlanReviewWithdrawalNeedsExplicitIdError` (`LPR-R4-006`/`LPR-R5-004`);
+    - an open plan-approval journal naming this item refuses with
+      `PlanApprovalInProgressError`; an unreadable one propagates
+      `PlanApprovalJournalUnavailableError` -- an undecidable journal is
+      never read as "no transaction in progress" (`LPR-R4-004`). A journal
+      for a different item does not block."""
+    if not explicit_id:
+        raise PlanReviewWithdrawalNeedsExplicitIdError(
+            f"{work_item_id!r} is under plan review; /milestone-plan was not given its id "
+            f"explicitly, and a withdrawal consumes the bound content and discards both recorded "
+            f"stages -- run /milestone-plan {work_item_id} to withdraw deliberately. Nothing was written"
+        )
+    journal = read_plan_approval_journal(repo_root)
+    if journal is not None and journal.get("work_item_id") == work_item_id:
+        raise PlanApprovalInProgressError(
+            f"an open plan-approval journal names {work_item_id!r} -- resume or take it over "
+            f"through /approve-review plan {work_item_id}; nothing was withdrawn"
+        )
+
+
+def compute_fresh_plan_review_content_id(repo_root: Path, work_item_id: str) -> str | None:
+    """The fresh plan-stage id `F`, through `REVIEW_PROTOCOL.md`'s canonical
+    entry point, or `None` (`F = ⊥`) when a plan-stage protected path is
+    absent (`AbsentProtectedPathError`) or the document's `(Revision N)`
+    marker disagrees with the registry (`PlanRevisionMismatchError`). Any
+    other failure propagates (INV-3)."""
+    try:
+        digest, _projection = fingerprint.compute_review_content_id_plan_stage_for_work_item(
+            repo_root, work_item_id,
+        )
+    except (fingerprint.AbsentProtectedPathError, fingerprint.PlanRevisionMismatchError):
+        return None
+    return digest
+
+
+def verify_plan_review_bundle(repo_root: Path, work_item_id: str, *, state: dict | None = None) -> dict:
+    """Read-only. Returns the binding `{review_content_id, bundle_id,
+    plan_revision}` of `.ai-review/<id>/current/` only when:
+    - `MANIFEST.md` is present, is a plan-stage manifest for this item,
+      and its `plan_revision` equals the state mirror;
+    - the bundle is not `REJECTED`;
+    - the recomputed `bundle_id` of `current/` equals the manifest's and
+      the archive's;
+    - the manifest's `review_content_id` equals a fresh recomputation.
+
+    The last condition failing -- or the fresh id being unreadable -- on an
+    otherwise consistent bundle raises `ReviewedContentDriftError`;
+    everything else raises `PlanReviewBundleUnverifiedError`, chaining the
+    underlying error where there is one. `state`, if given, supplies the
+    mirror; otherwise it is read from the worktree."""
+    if state is None:
+        state = _load_json(Path(repo_root) / DEFAULT_STATE_PATH)
+    work_item = state["work_items"][work_item_id]
+    mirror = work_item.get("plan_revision")
+    bundle_rel = fingerprint.resolve_bundle_dir(repo_root, work_item_id, stage="plan")
+    bundle_dir = Path(repo_root) / bundle_rel
+    manifest_path = bundle_dir / fingerprint.MANIFEST_FILENAME
+    archive_path = bundle_dir.parent / "review-bundle.tar.gz"
+
+    def _unverified(detail: str) -> PlanReviewBundleUnverifiedError:
+        return PlanReviewBundleUnverifiedError(f"{work_item_id!r}'s plan-review bundle ({bundle_rel}) does not verify: {detail}")
+
+    if not manifest_path.is_file():
+        raise _unverified("no MANIFEST.md -- no bundle has been generated, or it was withdrawn")
+    try:
+        fingerprint.assert_bundle_not_rejected(repo_root, work_item_id)
+    except fingerprint.BundleRejectedError as exc:
+        raise _unverified(f"the bundle is REJECTED ({exc})") from exc
+    fields = fingerprint.read_plan_stage_manifest_fields(manifest_path)
+    if fields.get("stage") != "plan" or fields.get("work_item_id") != work_item_id:
+        raise _unverified(
+            f"MANIFEST.md is not a plan-stage manifest for this item (stage "
+            f"{fields.get('stage')!r}, work_item_id {fields.get('work_item_id')!r})"
+        )
+    if fields.get("plan_revision") != mirror:
+        raise _unverified(
+            f"MANIFEST.md's plan_revision {fields.get('plan_revision')!r} is not the state "
+            f"mirror {mirror!r} -- a stale-revision bundle"
+        )
+    recorded_bundle_id = fields.get("bundle_id")
+    recorded_content_id = fields.get("review_content_id")
+    if recorded_bundle_id is None or recorded_content_id is None:
+        raise _unverified("MANIFEST.md records no bundle_id or no review_content_id")
+    try:
+        ondisk_bundle_id, _ = fingerprint.compute_bundle_id(bundle_dir)
+        archived_bundle_id = fingerprint.compute_archived_bundle_id(archive_path)
+    except Exception as exc:  # noqa: BLE001 -- every recomputation failure is "does not verify"
+        raise _unverified(f"bundle_id recomputation failed ({type(exc).__name__}: {exc})") from exc
+    if not (recorded_bundle_id == ondisk_bundle_id == archived_bundle_id):
+        raise _unverified(
+            f"bundle_id disagreement: manifest={recorded_bundle_id} current/={ondisk_bundle_id} "
+            f"archive={archived_bundle_id} (a mixed bundle, or an interrupted promotion)"
+        )
+    try:
+        fresh_digest, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(repo_root, work_item_id)
+    except (fingerprint.AbsentProtectedPathError, fingerprint.PlanRevisionMismatchError) as exc:
+        raise ReviewedContentDriftError(
+            f"{work_item_id!r}: the worktree's plan-stage review_content_id cannot be computed "
+            f"({type(exc).__name__}: {exc}) -- the protected content drifted from the bundle's "
+            f"{recorded_content_id!r}"
+        ) from exc
+    if fresh_digest != recorded_content_id:
+        raise ReviewedContentDriftError(
+            f"{work_item_id!r}: the worktree's plan-stage review_content_id {fresh_digest!r} is "
+            f"not the bundle's {recorded_content_id!r} -- the protected content drifted"
+        )
+    return {"review_content_id": recorded_content_id, "bundle_id": recorded_bundle_id, "plan_revision": mirror}
+
+
+def _registry_plan_revision_or_none(repo_root: Path, work_item: dict, work_item_id: str) -> int | None:
+    """The registry's own `plan_revision` (`R`), or `None` when the item
+    declares no registry or its file does not exist yet (row 7). A present
+    but unreadable or malformed registry refuses (INV-3)."""
+    registry_path = work_item.get("registry_path")
+    if registry_path is None:
+        return None
+    full_path = Path(repo_root) / registry_path
+    if not full_path.exists():
+        return None
+    registry = _load_json(full_path)
+    revision = registry.get("plan_revision") if isinstance(registry, dict) else None
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+        raise CorruptJsonError(f"{registry_path} declares no valid plan_revision for {work_item_id!r}")
+    return revision
+
+
+def plan_review_publication_status(repo_root: Path, state: dict, work_item_id: str) -> dict:
+    """Section 5.3 item 6's total decision table, read-only: the first
+    matching row wins. Inputs are the durable facts (phase, the registry's
+    revision `R`, the mirror `M`, the `plan_review_binding` record) plus
+    the fresh plan-stage id `F`, computed only in rows that need it
+    (`compute_fresh_plan_review_content_id`; `None` is `⊥`).
+
+    Returns `{work_item_id, phase, row, status, remedy}` plus, where the
+    row computed them, `fresh_review_content_id`, `bundle_id`,
+    `bundle_verifies`, `advisory` and `detail`; the underlying exception of
+    a refusing row is kept under the private key `_error` (never
+    serialized). Rows 4d and 6 raise `PlanReviewBindingInconsistentError`
+    instead (INV-3). The status only routes -- legitimacy is decided by
+    `bind_plan_review_bundle` -- so a routing error can at worst send a run
+    to a refusal."""
+    work_item = state["work_items"][work_item_id]
+    _require_v2_1_plan_review(work_item)
+    phase = work_item.get("phase")
+    record = _plan_review_binding_record(work_item, work_item_id)
+    result = {"work_item_id": work_item_id, "phase": phase}
+
+    def _row(row: str, status: str, remedy: str, **extra) -> dict:
+        result.update(row=row, status=status, remedy=remedy, **extra)
+        return result
+
+    if phase not in PLAN_REVIEW_READY_PHASES and phase not in PLAN_REVIEW_NON_READY_PHASES:
+        return _row("1", PLAN_REVIEW_STATUS_NOT_PLAN_STAGE, _not_plan_stage_message(work_item_id, phase, "resume plan review"))
+
+    if phase in PLAN_REVIEW_READY_PHASES:
+        withdraw = _plan_review_remedy_withdraw(work_item_id)
+        if record is None:
+            try:
+                binding = verify_plan_review_bundle(repo_root, work_item_id, state=state)
+            except (PlanReviewBundleUnverifiedError, ReviewedContentDriftError) as exc:
+                return _row(
+                    "4c", PLAN_REVIEW_STATUS_LEGACY_UNVERIFIED,
+                    f"regenerate the bundle (./scripts/prepare-ai-review.sh <base> plan {work_item_id}), "
+                    f"after which the legacy ready item is accepted as-is; or {withdraw}",
+                    detail=str(exc), _error=exc,
+                )
+            return _row("3", PLAN_REVIEW_STATUS_BOUND, "nothing to do", bundle_id=binding["bundle_id"],
+                        fresh_review_content_id=binding["review_content_id"], advisory=None)
+        if record["status"] != PLAN_REVIEW_BINDING_BOUND:
+            raise PlanReviewBindingInconsistentError(
+                f"{work_item_id!r} is at ready phase {phase!r} with a {record['status']} "
+                f"plan_review_binding record -- no workflow-2.6.0 call leaves a ready phase holding "
+                f"anything but BOUND (row 4d); {withdraw}, which writes the fail-closed marker"
+            )
+        bound_id = record["bound"]["review_content_id"]
+        fresh = compute_fresh_plan_review_content_id(repo_root, work_item_id)
+        restore = (
+            f"restore the bound bytes from .ai-review/{work_item_id}/current/files/<path> "
+            f"(and the plan's (Revision N) title), which returns to row 2"
+        )
+        if fresh is None or fresh != bound_id:
+            try:
+                verify_plan_review_bundle(repo_root, work_item_id, state=state)
+                cause = None
+            except (PlanReviewBundleUnverifiedError, ReviewedContentDriftError) as exc:
+                cause = exc
+            detail = (
+                f"the worktree's fresh plan-stage review_content_id is "
+                f"{'unreadable' if fresh is None else repr(fresh)}, not the bound {bound_id!r}"
+            )
+            return _row("4a", PLAN_REVIEW_STATUS_CONTENT_DRIFTED, f"{restore}; or {withdraw} and take the normal path",
+                        fresh_review_content_id=fresh, detail=detail, _error=cause)
+        try:
+            binding = verify_plan_review_bundle(repo_root, work_item_id, state=state)
+        except (PlanReviewBundleUnverifiedError, ReviewedContentDriftError) as exc:
+            return _row(
+                "4b", PLAN_REVIEW_STATUS_BUNDLE_UNVERIFIED,
+                f"regenerate the bundle (./scripts/prepare-ai-review.sh <base> plan {work_item_id}); "
+                f"the content is unchanged, so row 2 then matches and the new bundle_id is advisory; "
+                f"or {withdraw}",
+                fresh_review_content_id=fresh, detail=str(exc), _error=exc,
+            )
+        return _row(
+            "2", PLAN_REVIEW_STATUS_BOUND, "nothing to do", fresh_review_content_id=fresh,
+            bundle_id=binding["bundle_id"],
+            advisory=_plan_review_bundle_id_advisory(work_item.get("current_bundle_id"), binding["bundle_id"]),
+        )
+
+    # Non-ready phase.
+    if record is None and phase in ("REVISING_PLAN", "AMENDING_PLAN"):
+        return _row("5", PLAN_REVIEW_STATUS_LEGACY_UNMARKED,
+                    "the entry state_transaction writes the marker (ensure_plan_review_binding_marker), then re-evaluates")
+    if record is not None and record["status"] == PLAN_REVIEW_BINDING_BOUND:
+        raise PlanReviewBindingInconsistentError(
+            f"{work_item_id!r} is at non-ready phase {phase!r} with a BOUND plan_review_binding "
+            f"record -- every exit from a ready phase writes CONSUMED (row 6); refusing"
+        )
+    registry_revision = _registry_plan_revision_or_none(repo_root, work_item, work_item_id)
+    normal = "the normal path"
+    if registry_revision is None:
+        return _row("7", PLAN_REVIEW_STATUS_NEEDS_EDIT, normal)
+    mirror = work_item.get("plan_revision")
+    if isinstance(mirror, int) and mirror < registry_revision:
+        return _row(
+            "8", PLAN_REVIEW_STATUS_NEEDS_REVISION,
+            "re-run the command's own publication step at the registry's revision "
+            "(/apply-plan-review step 5, or /milestone-plan's publication point), then publish",
+        )
+    fresh = compute_fresh_plan_review_content_id(repo_root, work_item_id)
+    if record is not None and record["status"] == PLAN_REVIEW_BINDING_PUBLISHED:
+        published = record["published"]
+        if mirror == registry_revision == published["plan_revision"] and fresh == published["review_content_id"]:
+            try:
+                binding = verify_plan_review_bundle(repo_root, work_item_id, state=state)
+                verifies = binding["review_content_id"] == fresh
+            except (PlanReviewBundleUnverifiedError, ReviewedContentDriftError):
+                verifies = False
+            return _row(
+                "9", PLAN_REVIEW_STATUS_PUBLISHED_UNBOUND,
+                ("bind only" if verifies else "regenerate, then bind") + "; never re-advance the revision",
+                fresh_review_content_id=fresh, bundle_verifies=verifies,
+            )
+    if record is not None and record["status"] == PLAN_REVIEW_BINDING_CONSUMED and not record["consumed"]["legacy"]:
+        consumed = record["consumed"]
+        if mirror == registry_revision == consumed["plan_revision"] and fresh == consumed["review_content_id"]:
+            return _row("10", PLAN_REVIEW_STATUS_NEEDS_EDIT, normal, fresh_review_content_id=fresh)
+    return _row("11", PLAN_REVIEW_STATUS_EDIT_IN_PROGRESS, normal, fresh_review_content_id=fresh)
+
+
+def _plan_review_bundle_id_advisory(current_bundle_id: str | None, bundle_id: str) -> str | None:
+    """A `bundle_id` differing from `current_bundle_id` is advisory only (a
+    wrapper-only regeneration after the bind), reported the way
+    `check_manual_stage_bundle_id_advisory` reports one. A null pointer (a
+    `2.5.1` item) has nothing to compare."""
+    if current_bundle_id is None:
+        return None
+    return check_manual_stage_bundle_id_advisory(bundle_id, current_bundle_id)
+
+
+def assert_plan_review_bundle_bound(repo_root: Path, work_item_id: str, *, state: dict | None = None) -> str | None:
+    """The readers' binding check (section 5.3 item 4), called by
+    `validate_local_plan_review_preconditions_bound` (`/review-plan`),
+    `/record-manual-plan-review` and `/approve-review plan` step 2 for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item at a ready phase. Re-runs the
+    verifier through `plan_review_publication_status` and requires a
+    `BOUND` record whose `bound.review_content_id` equals the bundle's --
+    or, for a `2.5.1` ready item with no record, a verifying bundle (INV-7;
+    nothing is back-filled, the phase is never touched). Returns the
+    advisory string for a `bundle_id` differing from `current_bundle_id`,
+    else `None`; never requires them equal.
+
+    Refuses with the row's remedy text: `ReviewedContentDriftError` (row
+    4a, including an unreadable fresh id), `PlanReviewBundleUnverifiedError`
+    (rows 4b and 4c), `PlanReviewBindingInconsistentError` (row 4d), and
+    `PlanReviewNotReadyError` at a non-ready phase. Never the bare
+    `PlanRevisionMismatchError`/`AbsentProtectedPathError`."""
+    if state is None:
+        state = _load_json(Path(repo_root) / DEFAULT_STATE_PATH)
+    work_item = state["work_items"][work_item_id]
+    if work_item.get("phase") not in PLAN_REVIEW_READY_PHASES:
+        raise PlanReviewNotReadyError(
+            f"{work_item_id!r} is at {work_item.get('phase')!r}, not a ready plan-review phase -- "
+            f"no bound bundle to read"
+        )
+    status = plan_review_publication_status(repo_root, state, work_item_id)
+    if status["status"] == PLAN_REVIEW_STATUS_BOUND:
+        return status.get("advisory")
+    message = f"{status['detail']} (row {status['row']}). Remedy: {status['remedy']}"
+    if status["status"] == PLAN_REVIEW_STATUS_CONTENT_DRIFTED:
+        raise ReviewedContentDriftError(message) from status.get("_error")
+    raise PlanReviewBundleUnverifiedError(message) from status.get("_error")
+
+
+def validate_local_plan_review_preconditions_bound(repo_root: Path, work_item: dict) -> str | None:
+    """The repo-aware wrapper `/review-plan` calls:
+    `validate_local_plan_review_preconditions` (version and phase), then
+    `assert_plan_review_bundle_bound`. Returns the latter's advisory."""
+    validate_local_plan_review_preconditions(work_item)
+    return assert_plan_review_bundle_bound(repo_root, work_item["work_item_id"])
+
+
+def assert_apply_plan_review_feedback(
+    work_item: dict, work_item_id: str, *, feedback_content: str, publication_status: str,
+) -> str:
+    """`/apply-plan-review` step 1's `TWO_STAGE_PLAN_REVIEW_VERSIONS`
+    acceptance rule, before any write:
+
+    - Only `Status: REVISE` applies. `BLOCK` and `APPROVE` refuse with
+      `FeedbackStatusNotApplicableError`: a plan-stage `BLOCK` writes no
+      transition, so it is resolved at its ready phase -- re-review the
+      unchanged content (row 2), or edit and withdraw with
+      `/milestone-plan <id>` (row 4a).
+    - Under `PUBLISHED_UNBOUND`/`EDIT_IN_PROGRESS` (rows 9 and 11) the
+      on-disk bundle may already have been regenerated, so the feedback is
+      checked against the durable `CONSUMED` fact instead
+      (`FeedbackNotForConsumedContentError`): its `review_content_id` must
+      equal `consumed.review_content_id`; for a legacy marker (null id) its
+      `Work item:` must name this item and its `Status:` be `REVISE`, with
+      no revision comparison. Returns `"durable"`.
+    - Under any other status, returns `"bundle"`: the caller runs step 1's
+      unchanged binding against the on-disk bundle, which is still the
+      reviewed one (row 10).
+    A `"1"`-governed item returns `"bundle"` unconditionally."""
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        return "bundle"
+    fields = fingerprint.parse_review_feedback_binding_fields(feedback_content)
+    status = fields.get("status")
+    if status != "REVISE":
+        routes = (
+            f"a plan-stage BLOCK is resolved at its ready phase: after the blocking issue is "
+            f"resolved, re-review the unchanged content (/review-plan {work_item_id}), or edit the "
+            f"plan and withdraw with /milestone-plan {work_item_id}"
+            if status == "BLOCK" else
+            "only a REVISE verdict is ever applied by /apply-plan-review for a two-stage item"
+        )
+        raise FeedbackStatusNotApplicableError(
+            f"{work_item_id!r}: the feedback's Status is {status!r}, not REVISE -- {routes}. "
+            f"Nothing was written"
+        )
+    if publication_status not in PLAN_REVIEW_DURABLE_FEEDBACK_CHECK_STATUSES:
+        return "bundle"
+    record = _plan_review_binding_record(work_item, work_item_id)
+    consumed = record.get("consumed") if record is not None else None
+    if consumed is None:
+        raise FeedbackNotForConsumedContentError(
+            f"{work_item_id!r} records no consumed content (plan_review_binding "
+            f"{record['status'] if record else None}) -- there is no reviewed round for this "
+            f"feedback to belong to"
+        )
+    if consumed["legacy"]:
+        if fields.get("work_item") != work_item_id:
+            raise FeedbackNotForConsumedContentError(
+                f"the feedback names work item {fields.get('work_item')!r}, not {work_item_id!r}"
+            )
+        return "durable"
+    feedback_content_id = fingerprint.parse_feedback_review_content_id(feedback_content)
+    if feedback_content_id != consumed["review_content_id"]:
+        raise FeedbackNotForConsumedContentError(
+            f"{work_item_id!r}: the feedback's review_content_id {feedback_content_id!r} is not "
+            f"the consumed content {consumed['review_content_id']!r} -- it does not belong to the "
+            f"round being applied"
+        )
+    return "durable"
 
 
 # ---------------------------------------------------------------------------
@@ -13110,6 +16359,15 @@ def _validate_work_item(work_item_id: str, work_item: dict) -> None:
     phase = work_item.get("phase")
     if phase not in KNOWN_PHASES:
         raise UnknownPhaseError(f"work_items[{work_item_id!r}].phase == {phase!r}")
+    # D-Feedback-Layout (workflow-2.6.0, INV-3): absent means legacy; any
+    # present value outside the known set -- `null` included -- refuses.
+    if "feedback_layout" in work_item and not (
+        isinstance(work_item["feedback_layout"], str)
+        and work_item["feedback_layout"] in fingerprint.FEEDBACK_LAYOUT_VALUES
+    ):
+        raise fingerprint.UnknownFeedbackLayoutError(
+            f"work_items[{work_item_id!r}].feedback_layout == {work_item['feedback_layout']!r}"
+        )
 
     in_progress = []
     for checkpoint_id, entry in work_item.get("checkpoints", {}).items():
@@ -13126,6 +16384,7 @@ def _validate_work_item(work_item_id: str, work_item: dict) -> None:
     _validate_plan_review_stages(work_item)
     _validate_implementation_review_stages(work_item)
     _validate_technical_review_block_pins(work_item)
+    _validate_plan_review_binding(work_item_id, work_item)
 
     # I2 (workflow-v2-3-followups continued scope, external cross-model
     # review rounds 2 and 4): validate_approval_record's shape check
@@ -13992,3 +17251,30 @@ def sweep_applying_review_feedback_version_claims(
     for path, text in paths_and_texts.items():
         findings.extend(find_applying_review_feedback_version_claims(path, text))
     return findings
+
+
+def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
+    """Read-only CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0): print
+    `plan_review_publication_status` for one work item as a single JSON
+    object -- the contract Controller consumes instead of re-deriving the
+    table. Rows 4d and 6 print `{"error": <name>, "message": ...}` and exit
+    1. Writes nothing."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description=_plan_review_publication_status_cli.__doc__)
+    parser.add_argument("--plan-review-publication-status", metavar="WORK_ITEM_ID", required=True)
+    args = parser.parse_args(argv)
+    repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+    work_item_id = args.plan_review_publication_status
+    state = _load_json(repo_root / DEFAULT_STATE_PATH)
+    try:
+        status = plan_review_publication_status(repo_root, state, work_item_id)
+    except PlanReviewBindingInconsistentError as exc:
+        print(json.dumps({"error": type(exc).__name__, "message": str(exc)}, sort_keys=True))
+        return 1
+    print(json.dumps({k: v for k, v in status.items() if not k.startswith("_")}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_plan_review_publication_status_cli())

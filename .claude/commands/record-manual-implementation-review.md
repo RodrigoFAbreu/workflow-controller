@@ -33,6 +33,11 @@ command writes, as a restated invariant, not a second ingestion path.
 **implementation** stage, so `resolve_bundle_dir` is called with **no**
 `stage` argument -- the scoped-else-flat compatibility rule -- never the
 plan stage's `stage="plan"` form.
+`resolve_feedback_dir` decides `<feedback_dir>` by the item's durable
+`feedback_layout` (`D-Feedback-Layout`, workflow-2.6.0):
+`.ai-review/<work_item_id>/feedback/` unconditionally, by construction, for
+a `feedback_layout: "scoped"` item; the unchanged legacy scoped-else-flat
+rule for an item without the field.
 
 1. **Resolve the work item**: `$ARGUMENTS`, if given, names the
    `work_item_id`; otherwise use `active_work_item_id`
@@ -60,6 +65,20 @@ plan stage's `stage="plan"` form.
    does not match this exact spelling is refused outright, never silently
    normalized), `<bundle_dir>/MANIFEST.md`, `<bundle_dir>/REVIEW_REQUEST.md`,
    and the ledger's existing `LOCAL_MODEL_IMPLEMENTATION_REVIEW` entry.
+   **Resolved paste path, printed** (`D-Feedback-Layout`, workflow-2.6.0):
+   `<feedback_dir>` is `workflow_fingerprint.resolve_feedback_dir(repo_root,
+   work_item_id)` (equivalently the `review_feedback_path` field of
+   `python3 scripts/workflow_fingerprint.py --resolve-feedback-path
+   <work_item_id>`); if no `REVIEW_FEEDBACK.md` sits there, stop and print
+   that exact resolved path as the one the user must paste into -- never a
+   hard-coded flat `.ai-review/feedback/` path. **Foreign-`Work item:`
+   refusal, before any state write**: call
+   `workflow_fingerprint.assert_manual_feedback_names_work_item(<the pasted
+   file's content>, work_item_id=work_item_id)` -- a pasted file whose
+   `Work item:` field is present and names a different work item stops the
+   command (`ManualFeedbackForeignWorkItemError`, naming both ids); a file
+   without that field is not refused here, since step 6's hard
+   `review_content_id` check still binds it.
 5. **Recompute fresh**: the current `bundle_id` and implementation-stage
    `review_content_id`, identical in mechanism to `/review-implementation`'s
    own (staleness/wrong-worktree handling included) — the same single

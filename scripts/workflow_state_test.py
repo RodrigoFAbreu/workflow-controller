@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -1719,7 +1720,9 @@ class TestWorkItemRouting(unittest.TestCase):
         self.assertEqual(state, _base_state())
 
     def test_resuming_existing_non_terminal_entry_only_advances_revision_fields(self):
-        state = _base_state(wi=_base_work_item(governing_workflow_version="2.1"))
+        # workflow-2.6.0: a two-stage item's resume branch runs only at a
+        # non-ready plan-stage phase (`D-Plan-Review-Bundle-Binding`).
+        state = _base_state(wi=_base_work_item(governing_workflow_version="2.1", phase="PLANNING"))
         config = ws.default_config()
         new_state = ws.route_work_item(
             state, config, work_item_id="wi", work_item_type="process",
@@ -1815,15 +1818,24 @@ class TestPublishPlanRevision(unittest.TestCase):
         registry = {"work_item_id": "wi", "plan_revision": 63, "checkpoints": []}
         ws.validate_state(new_state, registry=registry)
 
-    def test_v21_governed_enters_awaiting_local_plan_review(self):
-        """Item 371(d): a `"2.1"`-governed item's target phase is
-        `AWAITING_LOCAL_PLAN_REVIEW`, never `AWAITING_EXTERNAL_PLAN_REVIEW`
-        -- `D-Plan-Review-Stages` always enters local review first."""
+    def test_v21_governed_publish_is_mirror_only(self):
+        """Item 371(d), re-pointed by workflow-2.6.0
+        (`D-Plan-Review-Bundle-Binding` item 1): a `"2.1"`-governed item's
+        publish advances the mirror and records `PUBLISHED`, but leaves the
+        phase alone -- `bind_plan_review_bundle` alone writes
+        `AWAITING_LOCAL_PLAN_REVIEW`, and never `AWAITING_EXTERNAL_PLAN_REVIEW`
+        (`D-Plan-Review-Stages` always enters local review first)."""
         wi = _v21_work_item(phase="REVISING_PLAN", plan_revision=4, state_revision=2)
-        new_state = ws.publish_plan_revision(_base_state(wi=wi), "wi", 5, "t1")
+        wi["plan_review_binding"] = {
+            "status": "CONSUMED", "at": "t0", "published": None, "bound": None,
+            "consumed": {"review_content_id": "b" * 64, "plan_revision": 4, "legacy": False},
+        }
+        new_state = ws.publish_plan_revision(_base_state(wi=wi), "wi", 5, "t1", review_content_id="a" * 64)
         item = new_state["work_items"]["wi"]
         self.assertEqual(item["plan_revision"], 5)
-        self.assertEqual(item["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(item["phase"], "REVISING_PLAN")
+        self.assertEqual(item["plan_review_binding"]["status"], "PUBLISHED")
+        self.assertEqual(item["plan_review_binding"]["published"], {"review_content_id": "a" * 64, "plan_revision": 5})
 
     def test_idempotent_retry_is_a_true_no_op(self):
         """Item 371(b): re-running with the same `plan_revision` and the
@@ -3542,6 +3554,92 @@ class TestImplementingEntryReachableSecondItem(unittest.TestCase):
             self.assertNotEqual(approval_sha, repo.head())
 
 
+class TestImplementingEntryReachableAfterInstallationRecordUpdate(unittest.TestCase):
+    """workflow-2.6.0, `D-Tooling-Ambient-Classification` (the legacy-item
+    half of `v2.4.0-001`): a 2.3.1-shaped item -- whose plan-stage
+    declaration predates `.workflow-manager/` and so never classifies it --
+    stays `implementing_entry_reachable` after a committed `workflow_manager
+    update` that rewrote only `.workflow-manager/installation.json`. Under
+    `2.5.1` the same call raised `UnclassifiedPathError` (control arm)."""
+
+    INSTALLATION = ".workflow-manager/installation.json"
+
+    def test_legacy_item_stays_reachable_after_committed_installation_record_change(self):
+        from unittest import mock
+
+        with ScratchRepo() as repo:
+            installation = repo.root / self.INSTALLATION
+            installation.parent.mkdir(parents=True)
+            installation.write_text('{"release": "2.3.1"}\n')
+            _run(["git", "add", self.INSTALLATION], cwd=repo.root)
+            _run(["git", "commit", "-q", "-m", "workflow_manager install"], cwd=repo.root)
+            repo.base = repo.head()
+
+            work_item_id = "legacy-item"
+            plan_path_rel = f"docs/ai-workflow/{work_item_id}-plan.md"
+            registry_rel = f"docs/ai-workflow/registry/{work_item_id}-registry.json"
+            mapping_rel = f"docs/ai-workflow/requirements/{work_item_id}-mapping.json"
+            artifacts_rel = f"docs/ai-workflow/registry/{work_item_id}-artifacts.json"
+            state_rel = "docs/ai-workflow/WORKFLOW_STATE.json"
+            protected = frozenset({plan_path_rel, registry_rel, mapping_rel})
+            excluded_paths = {state_rel: "runtime-mutable state", artifacts_rel: "non-immutable registry artifact"}
+            excluded_prefixes = {"scripts/": "checkpoint scaffolding"}
+            for rel, content in (
+                (plan_path_rel, "# Plan (Revision 1)\n\nplan v1\n"),
+                (registry_rel, json.dumps({"work_item_id": work_item_id, "plan_revision": 1, "checkpoints": []})),
+                (mapping_rel, json.dumps({"work_item_id": work_item_id, "requirements": {}})),
+                (artifacts_rel, json.dumps({
+                    "schema_version": 2, "work_item_id": work_item_id,
+                    "plan_stage": {
+                        "protected_paths": sorted(protected),
+                        "excluded_paths": excluded_paths,
+                        "excluded_prefixes": excluded_prefixes,
+                    },
+                })),
+                (state_rel, json.dumps({
+                    "schema_version": 1, "active_work_item_id": work_item_id,
+                    "work_items": {
+                        work_item_id: {
+                            "work_item_id": work_item_id, "work_item_type": "process",
+                            "plan_path": plan_path_rel, "registry_path": registry_rel,
+                            "mapping_path": mapping_rel, "base_commit": repo.base,
+                        },
+                    },
+                })),
+            ):
+                full = repo.root / rel
+                full.parent.mkdir(parents=True, exist_ok=True)
+                full.write_text(content)
+                _run(["git", "add", rel], cwd=repo.root)
+
+            review_content_id, _ = fingerprint.compute_review_content_id_plan_stage(
+                repo.root, repo.base, "process", work_item_id, 1, protected, excluded_paths, excluded_prefixes,
+            )
+            _run(
+                ["git", "commit", "-q", "-m",
+                 f"approve plan\n\nWorkflow-Plan-Approval: {review_content_id}\n"
+                 f"Workflow-Work-Item: {work_item_id}"],
+                cwd=repo.root,
+            )
+            work_item = {
+                "work_item_id": work_item_id, "work_item_type": "process", "plan_revision": 1,
+                "plan_approval": {"status": "CURRENT", "approved_review_content_id": review_content_id},
+            }
+            self.assertTrue(ws.implementing_entry_reachable(repo.root, work_item, repo.base))
+
+            installation.write_text('{"release": "2.5.1"}\n')
+            _run(["git", "add", self.INSTALLATION], cwd=repo.root)
+            _run(["git", "commit", "-q", "-m", "chore(workflow): update installed workflow"], cwd=repo.root)
+
+            self.assertTrue(
+                ws.implementing_entry_reachable(repo.root, work_item, repo.base),
+                "the committed installation-record change must neither raise nor stale the approval",
+            )
+            with mock.patch.object(fingerprint, "TOOLING_AMBIENT_EXCLUDED_PATHS", frozenset()):
+                with self.assertRaises(fingerprint.UnclassifiedPathError):
+                    ws.implementing_entry_reachable(repo.root, work_item, repo.base)
+
+
 # ---------------------------------------------------------------------------
 # WF4a-iii: "no protected path is dirty" gate condition (D-States;
 # missing-test item 16)
@@ -3913,13 +4011,26 @@ class TestTransitionToAwaitingLocalPlanReview(unittest.TestCase):
         """Missing-test item 89: whether the edit was driven by a local or
         manual-external REVISE, the next required stage is always
         AWAITING_LOCAL_PLAN_REVIEW -- never directly back to manual-external
-        review or to AWAITING_PLAN_APPROVAL."""
+        review or to AWAITING_PLAN_APPROVAL.
+
+        workflow-2.6.0: `transition_to_awaiting_local_plan_review` is
+        retired (it refuses, writing nothing); the same edge is now written
+        by `bind_plan_review_bundle` for the published content, which is
+        what this test drives."""
         wi = _v21_work_item(phase="REVISING_PLAN", state_revision=3, plan_review_stages={
             "review_content_id": "stale",
             "LOCAL_MODEL_PLAN_REVIEW": {"bundle_id": "b1", "verdict": "APPROVE", "round": 1, "completed_at": "t1"},
             "MANUAL_EXTERNAL_PLAN_REVIEW": None,
+        }, plan_revision=2, plan_review_binding={
+            "status": "PUBLISHED", "at": "t1", "bound": None,
+            "consumed": {"review_content_id": "b" * 64, "plan_revision": 1, "legacy": False},
+            "published": {"review_content_id": "a" * 64, "plan_revision": 2},
         })
-        new_state = ws.transition_to_awaiting_local_plan_review(_base_state(wi=wi), "wi", now="t2")
+        with self.assertRaises(ws.PlanReviewWriterRetiredError):
+            ws.transition_to_awaiting_local_plan_review(_base_state(wi=wi), "wi", now="t2")
+        new_state = ws.bind_plan_review_bundle(_base_state(wi=wi), "wi", binding={
+            "review_content_id": "a" * 64, "bundle_id": "c" * 64, "plan_revision": 2,
+        }, now="t2")
         item = new_state["work_items"]["wi"]
         self.assertEqual(item["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
         self.assertEqual(item["state_revision"], 4)
@@ -7502,7 +7613,9 @@ class TestRemediationChildWorkItem(unittest.TestCase):
         version `create_remediation_child_work_item` fixed from the config
         default at creation. Under this repository's own default (`"2.1"`)
         that is `AWAITING_LOCAL_PLAN_REVIEW`; only a `"1"` default produces
-        the phase the diagram named."""
+        the phase the diagram named. workflow-2.6.0: for `"2.1"` the
+        publish is mirror-only, and the bind of the published bundle writes
+        that phase."""
         for default_version, expected_phase in (
             ("2.1", "AWAITING_LOCAL_PLAN_REVIEW"),
             ("1", "AWAITING_EXTERNAL_PLAN_REVIEW"),
@@ -7518,7 +7631,12 @@ class TestRemediationChildWorkItem(unittest.TestCase):
                 child = created["work_items"][child_id]
                 self.assertEqual(child["governing_workflow_version"], default_version)
                 self.assertEqual(child["phase"], "PLANNING")
-                planned = ws.publish_plan_revision(created, child_id, 1, "t2")
+                planned = ws.publish_plan_revision(created, child_id, 1, "t2", review_content_id="a" * 64)
+                if default_version == "2.1":
+                    self.assertEqual(planned["work_items"][child_id]["phase"], "PLANNING")
+                    planned = ws.bind_plan_review_bundle(planned, child_id, binding={
+                        "review_content_id": "a" * 64, "bundle_id": "c" * 64, "plan_revision": 1,
+                    }, now="t3")
                 self.assertEqual(planned["work_items"][child_id]["phase"], expected_phase)
                 # And planning the child never repoints focus away from the
                 # parent, which is why every command driving it needs an
@@ -8673,11 +8791,15 @@ class TestCheckpointMutationGuard(unittest.TestCase):
         with ScratchRepo() as repo:
             claim = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")
             token = claim["owner_token"]
-            ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
-                             step="1f-commit", step_class=ws.DESTRUCTIVE, now="t2")
+            lease = ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                     step="1f-commit", step_class=ws.DESTRUCTIVE, now="t2")
             with self.assertRaises(ws.CheckpointOwnershipUnavailableError):
                 ws.acquire_guard(repo.root, "wi", holder_owner_token="a-different-token",
                                  checkpoint_id="CP", step="1d", step_class=ws.ORDINARY, now="t3")
+            # workflow-2.6.0: release the lease this process acquired to stand
+            # in for a live holder, so the process-local held-set
+            # (`D-Repo-Global-Lifecycle`) does not carry it into later tests.
+            ws.release_guard(repo.root, "wi", lease)
 
     def test_unknown_step_class_refuses(self):
         with ScratchRepo() as repo:
@@ -9046,7 +9168,9 @@ class TestGlobalLockOrderItem372h(unittest.TestCase):
         )
 
     def test_completeness_arm_discovery_resolution_and_predicate_are_correct(self):
-        """The eight-primitive forward-direction comparison (discovery +
+        """The nine-primitive forward-direction comparison (eight through
+        workflow-2.5.1; (9), the lifecycle lock, since workflow-2.6.0 --
+        discovery +
         pathname resolution + the mechanically-decided `releasable`
         conjunct), plus both required non-vacuousness regressions
         (`release_checkpoint` made an unconditional release,
@@ -9063,10 +9187,12 @@ class TestGlobalLockOrderItem372h(unittest.TestCase):
         self.assertEqual(failures, [], "\n".join(failures))
 
     def test_graph_arm_edges_acyclicity_and_single_attempt_discriminator(self):
-        """The six code-derivable raw edges rediscovered exactly and
-        bidirectionally (shared `os.link` statement attributed
-        caller-aware), the four command-orchestrated edges checked against
-        the plan's own independently-parsed ten-edge table, the blocking
+        """The code-derivable raw edges (twelve since workflow-2.6.0's five
+        `(9)` edges) rediscovered exactly and bidirectionally (shared
+        `os.link` statement attributed caller-aware), the four
+        command-orchestrated edges checked against the plan's own
+        independently-parsed sixteen-edge table (9 blocking, 7
+        non-blocking), the blocking
         sub-order's acyclicity, the call-chain-aware single-attempt
         discriminator, and all required non-vacuousness regressions --
         `verify_372h_raw_edge_derivation.main()`'s own checks, as
@@ -9401,13 +9527,18 @@ class TestExplicitTakeover(unittest.TestCase):
     def test_takeover_refuses_on_destructive_guard(self):
         with ScratchRepo() as repo:
             claim = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")
-            ws.acquire_guard(repo.root, "wi", holder_owner_token=claim["owner_token"],
-                             checkpoint_id="CP", step="1f-commit", step_class=ws.DESTRUCTIVE, now="t2")
+            lease = ws.acquire_guard(repo.root, "wi", holder_owner_token=claim["owner_token"],
+                                     checkpoint_id="CP", step="1f-commit", step_class=ws.DESTRUCTIVE,
+                                     now="t2")
             wt2 = repo.worktree("b")
             evidence = ws.takeover_evidence(wt2, "wi")
             literal = ws.takeover_authorization_literal("wi", evidence, "CP")
             with self.assertRaises(ws.CheckpointClaimTakeoverRefusedError):
                 ws.take_over_claim(wt2, "wi", "CP", now="t3", user_authorization=literal, evidence=evidence)
+            # workflow-2.6.0: release the lease this process acquired to stand
+            # in for a live holder, so the process-local held-set
+            # (`D-Repo-Global-Lifecycle`) does not carry it into later tests.
+            ws.release_guard(repo.root, "wi", lease)
 
     def test_takeover_refuses_on_stale_evidence(self):
         """Item 369(b): a claim that changes between the evidence
@@ -9598,26 +9729,36 @@ class TestAbandonedDestructiveGuardRecovery(unittest.TestCase):
     def test_recovery_refuses_while_holder_still_registered(self):
         with ScratchRepo() as repo:
             claim = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")
-            ws.acquire_guard(repo.root, "wi", holder_owner_token=claim["owner_token"],
-                             checkpoint_id="CP", step="1f-commit", step_class=ws.DESTRUCTIVE, now="t2")
+            lease = ws.acquire_guard(repo.root, "wi", holder_owner_token=claim["owner_token"],
+                                     checkpoint_id="CP", step="1f-commit", step_class=ws.DESTRUCTIVE,
+                                     now="t2")
             wt2 = repo.worktree("b")
             evidence = ws.takeover_evidence(wt2, "wi")
             literal = ws.abandoned_guard_recovery_authorization_literal("wi", evidence)
             with self.assertRaises(ws.CheckpointClaimTakeoverRefusedError):
                 ws.recover_abandoned_destructive_guard(wt2, "wi", "CP", now="t3",
                                                         user_authorization=literal, evidence=evidence)
+            # workflow-2.6.0: release the lease this process acquired to stand
+            # in for a live holder, so the process-local held-set
+            # (`D-Repo-Global-Lifecycle`) does not carry it into later tests.
+            ws.release_guard(repo.root, "wi", lease)
 
     def test_recovery_refuses_on_non_destructive_guard(self):
         with ScratchRepo() as repo:
             claim = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")
-            ws.acquire_guard(repo.root, "wi", holder_owner_token=claim["owner_token"],
-                             checkpoint_id="CP", step="1d", step_class=ws.ORDINARY, now="t2")
+            lease = ws.acquire_guard(repo.root, "wi", holder_owner_token=claim["owner_token"],
+                                     checkpoint_id="CP", step="1d", step_class=ws.ORDINARY, now="t2")
             wt2 = repo.worktree("b")
             evidence = ws.takeover_evidence(wt2, "wi")
             literal = ws.abandoned_guard_recovery_authorization_literal("wi", evidence)
             with self.assertRaises(ws.CheckpointClaimTakeoverRefusedError):
                 ws.recover_abandoned_destructive_guard(wt2, "wi", "CP", now="t3",
                                                         user_authorization=literal, evidence=evidence)
+            # workflow-2.6.0: this process genuinely holds the lease it
+            # acquired to stand in for a live holder; release it, so the
+            # process-local held-set (`D-Repo-Global-Lifecycle`) does not
+            # carry it into later tests' lifecycle-lock acquisitions.
+            ws.release_guard(repo.root, "wi", lease)
 
     def test_recovery_succeeds_once_holder_worktree_is_deregistered(self):
         with ScratchRepo() as repo:
@@ -10409,11 +10550,14 @@ class TestPersistedPhaseWriterCensus(unittest.TestCase):
     EXPECTED_WRITERS = {
         "PLANNING": {"default_work_item"},
         "AWAITING_EXTERNAL_PLAN_REVIEW": {"publish_plan_revision"},
-        "AWAITING_LOCAL_PLAN_REVIEW": {
-            "publish_plan_revision", "transition_to_awaiting_local_plan_review",
-        },
+        # workflow-2.6.0 (D-Plan-Review-Bundle-Binding): the bind is the sole
+        # writer -- `publish_plan_revision` is mirror-only for a two-stage
+        # item and `transition_to_awaiting_local_plan_review` is retired.
+        "AWAITING_LOCAL_PLAN_REVIEW": {"bind_plan_review_bundle"},
         "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW": {"record_local_plan_review"},
-        "REVISING_PLAN": {"record_local_plan_review", "record_manual_plan_review"},
+        "REVISING_PLAN": {
+            "record_local_plan_review", "record_manual_plan_review", "withdraw_plan_review",
+        },
         "AWAITING_PLAN_APPROVAL": {"record_manual_plan_review"},
         "IMPLEMENTING": {"apply_plan_approval"},
         "SELF_REVIEWING_IMPLEMENTATION": {
@@ -10440,7 +10584,7 @@ class TestPersistedPhaseWriterCensus(unittest.TestCase):
         # DECLARED_BUT_UNWRITTEN's four -- the mechanism must survive an
         # interruption between the request and the first post-request
         # /milestone-plan call.
-        "AMENDING_PLAN": {"request_plan_amendment"},
+        "AMENDING_PLAN": {"request_plan_amendment", "withdraw_plan_review"},
     }
 
     def test_every_write_site_resolves_to_a_named_phase(self):
@@ -10805,8 +10949,32 @@ class TestReconcileCheckpointsAfterAmendment(unittest.TestCase):
         self.assertEqual(result["checkpoints"]["CP1"]["status"], "IN_PROGRESS")
 
 
+def _request_plan_amendment_holding_lifecycle_lock(state, work_item_id, reason, *, repo_root, now):
+    """The pure `request_plan_amendment` mutator, called the one way it
+    accepts since workflow-2.6.0: with the repository-global lifecycle
+    lock (9) held for the work item (`D-Repo-Global-Lifecycle`, "No
+    bypass"). Unit tests of the mutator's own preconditions use this; the
+    production entry point is `request_plan_amendment_transaction`."""
+    with ws.lifecycle_lock(repo_root, work_item_id):
+        return ws.request_plan_amendment(state, work_item_id, reason, repo_root=repo_root, now=now)
+
+
 class TestRequestPlanAmendment(unittest.TestCase):
-    """`/request-plan-amendment`'s sole writer (D-Plan-Amendment-1/2/3)."""
+    """`/request-plan-amendment`'s sole writer (D-Plan-Amendment-1/2/3).
+
+    workflow-2.6.0 (`D-Repo-Global-Lifecycle`): the pure mutator refuses
+    unless the lifecycle lock (9) is held, so every unit test here calls it
+    through `_request_plan_amendment_holding_lifecycle_lock`; the
+    no-bypass refusal itself is asserted below and in
+    `TestRepoGlobalLifecycleClaimAndAmendment`."""
+
+    def test_the_pure_mutator_refuses_without_the_lifecycle_lock(self):
+        with ScratchRepo() as repo:
+            state, _ = self._state_with_approved_plan(repo)
+            with self.assertRaises(ws.LifecycleLockNotHeldError):
+                ws.request_plan_amendment(
+                    state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
+                )
 
     @staticmethod
     def _state_with_approved_plan(repo, work_item_id="wi", phase="IMPLEMENTING",
@@ -10830,7 +10998,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
         with ScratchRepo() as repo:
             state, approval_commit = self._state_with_approved_plan(repo)
             head = repo.head()
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "amend for a real reason", repo_root=repo.root,
                 now="2026-01-01T00:00:00Z",
             )
@@ -10849,7 +11017,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
     def test_self_reviewing_implementation_is_also_an_allowed_phase(self):
         with ScratchRepo() as repo:
             state, _ = self._state_with_approved_plan(repo, phase="SELF_REVIEWING_IMPLEMENTATION")
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
             )
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
@@ -10858,7 +11026,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
         with ScratchRepo() as repo:
             state, _ = self._state_with_approved_plan(repo, phase="PLANNING")
             with self.assertRaises(ws.WrongPhaseForAmendmentRequestError):
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
                 )
 
@@ -10867,7 +11035,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
             state, _ = self._state_with_approved_plan(repo, review_content_id="rc-real")
             state["work_items"]["wi"]["plan_approval"]["approved_review_content_id"] = "rc-nonexistent"
             with self.assertRaises(ws.AmendmentApprovalCommitUnreachableError):
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
                 )
             self.assertEqual(state["work_items"]["wi"]["plan_approval"]["status"], "CURRENT")
@@ -10875,11 +11043,11 @@ class TestRequestPlanAmendment(unittest.TestCase):
     def test_a_second_request_against_an_already_amending_item_is_refused(self):
         with ScratchRepo() as repo:
             state, _ = self._state_with_approved_plan(repo)
-            amended = ws.request_plan_amendment(
+            amended = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "first", repo_root=repo.root, now="2026-01-01T00:00:00Z",
             )
             with self.assertRaises(ws.WrongPhaseForAmendmentRequestError):
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     amended, "wi", "second", repo_root=repo.root, now="2026-01-01T00:00:01Z",
                 )
 
@@ -10905,7 +11073,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
             )
             state = _base_state(wi=work_item)
             with self.assertRaises(ws.AmendmentCheckpointIdShapeError) as ctx:
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
                 )
             self.assertIn("WF4a-i", str(ctx.exception))
@@ -10935,7 +11103,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
                 checkpoints={}, current_checkpoint_id=None, last_completed_checkpoint_id=None,
             )
             state = _base_state(wi=work_item)
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
             )
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
@@ -10969,7 +11137,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
                 checkpoints={}, current_checkpoint_id=None, last_completed_checkpoint_id=None,
             )
             state = _base_state(wi=work_item)
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
             )
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
@@ -10995,7 +11163,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
                     )
                     state = _base_state(wi=work_item)
                     with self.assertRaises(ws.AmendmentCheckpointIdShapeError) as ctx:
-                        ws.request_plan_amendment(
+                        _request_plan_amendment_holding_lifecycle_lock(
                             state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
                         )
                     self.assertIn(bad_id, str(ctx.exception))
@@ -11041,7 +11209,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
             # uncommitted -- the exact IMPL3-R1 scenario.
             (repo.root / plan_path).write_text("edited, not yet committed\n")
 
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
             )
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
@@ -11079,7 +11247,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
                 checkpoints={}, current_checkpoint_id=None, last_completed_checkpoint_id=None,
             )
             state = _base_state(wi=work_item)
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
             )
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
@@ -11109,7 +11277,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
             )
             state = _base_state(wi=work_item)
             with self.assertRaises(ws.AmendmentRegistryMissingIdError) as ctx:
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
                 )
             self.assertIn("no 'id' key", str(ctx.exception))
@@ -11127,7 +11295,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
             }
             state["work_items"]["wi"]["current_checkpoint_id"] = "CP2"
             with self.assertRaises(ws.AmendmentCheckpointActiveError):
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z",
                 )
             self.assertEqual(state["work_items"]["wi"]["plan_approval"]["status"], "CURRENT")
@@ -11151,7 +11319,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
             # started in state" window.
             ws.claim_checkpoint(repo.root, "wi", "CP2", now="2026-01-01T00:00:00Z")
             with self.assertRaises(ws.AmendmentCheckpointActiveError):
-                ws.request_plan_amendment(
+                _request_plan_amendment_holding_lifecycle_lock(
                     state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:01Z",
                 )
             self.assertEqual(state["work_items"]["wi"]["plan_approval"]["status"], "CURRENT")
@@ -11169,7 +11337,7 @@ class TestRequestPlanAmendment(unittest.TestCase):
                 repo.root, "wi", "CP2", owner_token=claim["owner_token"],
                 now="2026-01-01T00:00:01Z",
             )
-            new_state = ws.request_plan_amendment(
+            new_state = _request_plan_amendment_holding_lifecycle_lock(
                 state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:02Z",
             )
             self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
@@ -11234,11 +11402,16 @@ while not go_path.exists():
         sys.exit(0)
     time.sleep(0.001)
 
+# workflow-2.6.0: a claim refused because an amendment is in flight
+# anywhere in the repository raises `AmendmentInFlightError` (a
+# `LifecycleRefusalError`) before the local phase check that raises
+# `IllegalCheckpointStartPhaseError`; both are refusals.
 try:
     claim = ws.claim_checkpoint(repo_root, work_item_id, checkpoint_id, now=now)
     out_path.write_text(json.dumps({"outcome": "success", "owner_token": claim["owner_token"]}))
-except ws.IllegalCheckpointStartPhaseError as exc:
-    out_path.write_text(json.dumps({"outcome": "refused", "detail": str(exc)}))
+except (ws.IllegalCheckpointStartPhaseError, ws.LifecycleRefusalError) as exc:
+    out_path.write_text(json.dumps({"outcome": "refused", "error": type(exc).__name__,
+                                    "detail": str(exc)}))
 """
 
 _AMENDMENT_RACE_AMENDER_SOURCE = """
@@ -11266,24 +11439,30 @@ while not go_path.exists():
         sys.exit(0)
     time.sleep(0.001)
 
+# workflow-2.6.0: the only sanctioned entry point is
+# `request_plan_amendment_transaction` (lifecycle lock (9), then
+# `state_transaction`). The pure mutator it calls by module-global name is
+# wrapped so it sleeps for `hold_seconds` before doing any of its own work,
+# inside both locks -- simulating the real, non-zero wall-clock time its
+# git/registry reads take, so a concurrent claim_checkpoint issued during
+# this window has a real chance to block on the shared locks rather than
+# merely run before or after them.
+_real_request_plan_amendment = ws.request_plan_amendment
 
-def mutator(state):
-    # Holds WORKFLOW_STATE.lock (state_transaction's own, acquired before
-    # this function is ever called) for `hold_seconds` before doing any of
-    # request_plan_amendment's own work -- simulating the real, non-zero
-    # wall-clock time that function's own git/registry reads take, so a
-    # concurrent claim_checkpoint call issued during this window has a real
-    # chance to actually block on the shared lock rather than merely run
-    # before or after it.
+
+def _slow_request_plan_amendment(state, *args, **kwargs):
     time.sleep(hold_seconds)
-    return ws.request_plan_amendment(state, work_item_id, reason, repo_root=repo_root, now=now)
+    return _real_request_plan_amendment(state, *args, **kwargs)
 
+
+ws.request_plan_amendment = _slow_request_plan_amendment
 
 try:
-    ws.state_transaction(repo_root, mutator)
+    ws.request_plan_amendment_transaction(repo_root, work_item_id, reason, now=now)
     out_path.write_text(json.dumps({"outcome": "success"}))
-except ws.AmendmentCheckpointActiveError as exc:
-    out_path.write_text(json.dumps({"outcome": "refused", "detail": str(exc)}))
+except (ws.AmendmentCheckpointActiveError, ws.LifecycleRefusalError) as exc:
+    out_path.write_text(json.dumps({"outcome": "refused", "error": type(exc).__name__,
+                                    "detail": str(exc)}))
 """
 
 _AMENDMENT_RACE_AMENDER_POST_RESOLVE_CLAIM_SOURCE = """
@@ -11302,23 +11481,23 @@ hold_seconds = float(sys.argv[5])
 ready_path = Path(sys.argv[6])
 go_path = Path(sys.argv[7])
 out_path = Path(sys.argv[8])
+paused_path = Path(sys.argv[9]) if len(sys.argv) > 9 else None
 
-# Cross-worktree reproduction (`XMODEL-R9-B1`): unlike
-# `_AMENDMENT_RACE_AMENDER_SOURCE` above (whose `mutator` sleeps *before*
-# calling `request_plan_amendment` at all -- fine for the same-worktree
-# case, since the identical shared lock is held for the whole sleep
-# either way), this worker places the delay exactly where the external
-# review placed it: immediately after `request_plan_amendment`'s own
-# authoritative `resolve_claim(...)` read returns, standing in for the
-# git rev-parse / discover_plan_approval_commit / registry-load work that
-# really follows it. That is the genuine window a claim published from a
-# *different* worktree (a different `WORKFLOW_STATE.lock` file entirely)
-# can land in undetected.
+# Places the delay exactly where `XMODEL-R9-B1`'s external review placed
+# it: immediately after `request_plan_amendment`'s own authoritative
+# `resolve_claim(...)` read returns, standing in for the git rev-parse /
+# discover_plan_approval_commit / registry-load work that really follows
+# it -- the genuine window a claim from another worktree landed in
+# undetected before workflow-2.6.0. `paused_path`, when given, is written
+# the moment that pause begins, so the parent starts the contender
+# provably inside the window.
 _real_resolve_claim = ws.resolve_claim
 
 
 def _slow_resolve_claim(repo_root_arg, work_item_id_arg):
     result = _real_resolve_claim(repo_root_arg, work_item_id_arg)
+    if paused_path is not None:
+        paused_path.write_text("paused")
     time.sleep(hold_seconds)
     return result
 
@@ -11334,13 +11513,11 @@ while not go_path.exists():
     time.sleep(0.001)
 
 try:
-    ws.state_transaction(
-        repo_root,
-        lambda state: ws.request_plan_amendment(state, work_item_id, reason, repo_root=repo_root, now=now),
-    )
+    ws.request_plan_amendment_transaction(repo_root, work_item_id, reason, now=now)
     out_path.write_text(json.dumps({"outcome": "success"}))
-except ws.AmendmentCheckpointActiveError as exc:
-    out_path.write_text(json.dumps({"outcome": "refused", "detail": str(exc)}))
+except (ws.AmendmentCheckpointActiveError, ws.LifecycleRefusalError) as exc:
+    out_path.write_text(json.dumps({"outcome": "refused", "error": type(exc).__name__,
+                                    "detail": str(exc)}))
 """
 
 _AMENDMENT_RACE_SLOW_CLAIMER_SOURCE = """
@@ -11360,25 +11537,21 @@ hold_seconds = float(sys.argv[5])
 ready_path = Path(sys.argv[6])
 go_path = Path(sys.argv[7])
 out_path = Path(sys.argv[8])
+paused_path = Path(sys.argv[9]) if len(sys.argv) > 9 else None
 
-# Missing-test item 1 (round 9 external implementation review): the
-# claimer-wins-the-lock ordering, under real contention rather than the
-# pre-existing deterministic unit test's claim-already-present setup.
-# `claim_checkpoint` has no `hold_seconds` parameter of its own (unlike
-# `request_plan_amendment`'s caller-supplied `mutator`, which the amender
-# worker already sleeps inside), so this worker holds the real, shared
-# `WORKFLOW_STATE.lock` for `hold_seconds` itself, standing in for the
-# real wall-clock work `claim_checkpoint`'s own critical section does --
-# by wrapping `state_lock`, the exact context manager `claim_checkpoint`
-# acquires by bare name, so the real production function still runs, only
-# with its held interval extended to something a concurrent process can
-# reliably observe blocking on.
+# Holds the real `state_lock` -- which `claim_checkpoint` acquires by bare
+# name, nested inside the lifecycle lock (9) since workflow-2.6.0 -- for
+# `hold_seconds`, so the claimer's whole critical section (both locks) is
+# extended to something a concurrent process can reliably observe blocking
+# on, while the real production function still runs.
 _real_state_lock = ws.state_lock
 
 
 @contextlib.contextmanager
 def _slow_state_lock(*a, **kw):
     with _real_state_lock(*a, **kw):
+        if paused_path is not None:
+            paused_path.write_text("paused")
         time.sleep(hold_seconds)
         yield
 
@@ -11396,27 +11569,206 @@ while not go_path.exists():
 try:
     claim = ws.claim_checkpoint(repo_root, work_item_id, checkpoint_id, now=now)
     out_path.write_text(json.dumps({"outcome": "success", "owner_token": claim["owner_token"]}))
-except ws.IllegalCheckpointStartPhaseError as exc:
-    out_path.write_text(json.dumps({"outcome": "refused", "detail": str(exc)}))
+except (ws.IllegalCheckpointStartPhaseError, ws.LifecycleRefusalError) as exc:
+    out_path.write_text(json.dumps({"outcome": "refused", "error": type(exc).__name__,
+                                    "detail": str(exc)}))
 """
+
+_LIFECYCLE_KILL_BEFORE_STATE_PUBLISH_SOURCE = """
+import os
+import signal
+import sys
+from pathlib import Path
+
+import workflow_state as ws
+
+repo_root = Path(sys.argv[1])
+work_item_id = sys.argv[2]
+now = sys.argv[3]
+
+
+def _die_before_publishing(*_args, **_kwargs):
+    # CP6 test 7: SIGKILL between the OPEN witness publication and the
+    # state publication -- the witness is on disk, WORKFLOW_STATE.json is
+    # not, and nothing runs after this line.
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+ws._publish_state_file = _die_before_publishing
+ws.request_plan_amendment_transaction(repo_root, work_item_id, "reason", now=now)
+"""
+
+_LIFECYCLE_LOCK_HOLDER_SOURCE = """
+import sys
+import time
+from pathlib import Path
+
+import workflow_state as ws
+
+repo_root = Path(sys.argv[1])
+work_item_id = sys.argv[2]
+ready_path = Path(sys.argv[3])
+
+with ws.lifecycle_lock(repo_root, work_item_id):
+    ready_path.write_text("held")
+    time.sleep(60)
+"""
+
+
+def _spawn_worker(source: str, *args) -> subprocess.Popen:
+    """One real OS process running `source` with this directory's
+    `workflow_state` importable -- two holders of one `fcntl.flock` must be
+    two processes, since a single process cannot contend with itself."""
+    worker_dir = Path(tempfile.mkdtemp(prefix="wf-lifecycle-worker-"))
+    worker = worker_dir / "_worker.py"
+    worker.write_text(source)
+    env = dict(os.environ)
+    scripts_dir = Path(__file__).resolve().parent
+    env["PYTHONPATH"] = str(scripts_dir) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    return subprocess.Popen([sys.executable, str(worker), *[str(a) for a in args]], env=env)
+
+
+def _wait_for_path(path: Path, what: str, timeout: float = 15) -> None:
+    deadline = time.monotonic() + timeout
+    while not path.exists():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"{what} did not become ready in time")
+        time.sleep(0.001)
+
+
+def _reap(*procs) -> None:
+    for proc in procs:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+# --- workflow-2.6.0, `D-Repo-Global-Lifecycle` (CP6) shared fixtures -------
+
+_STATE_REL = "docs/ai-workflow/WORKFLOW_STATE.json"
+
+
+def _git_in(root, *args) -> str:
+    return subprocess.run(["git", *args], cwd=str(root), check=True, capture_output=True,
+                          text=True).stdout
+
+
+def _primary_branch(root) -> str:
+    """The branch `ScratchRepo`'s `git init` checked out in `root`. Never
+    hardcoded: `git init` names it from `init.defaultBranch`, which the
+    conformance harness isolates away (`GIT_CONFIG_GLOBAL=/dev/null`)."""
+    return _git_in(root, "symbolic-ref", "--short", "HEAD").strip()
+
+
+def _install_release(root, version="2.6.0"):
+    """Commit a `.workflow-manager/installation.json` naming `version` on
+    `root`'s current branch -- the record the lag probe reads from each
+    worktree's `HEAD`. `2.6.0` makes the worktree current; anything older
+    (or no record at all) makes it lag."""
+    path = Path(root) / ".workflow-manager" / "installation.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema_version": 1, "workflow_version": version}) + "\n")
+    _git_in(root, "add", ".workflow-manager/installation.json")
+    _git_in(root, "commit", "-q", "-m", f"install workflow {version}")
+
+
+def _approved_state(repo, approval_commit, *, phase="IMPLEMENTING"):
+    return {
+        "schema_version": 1, "active_work_item_id": "wi",
+        "work_items": {"wi": {
+            "work_item_id": "wi", "work_item_type": "process", "phase": phase,
+            "plan_revision": 1, "base_commit": repo.base,
+            "plan_approval": {"status": "CURRENT", "approved_review_content_id": "rc-1"},
+            "checkpoints": {"CP1": {"status": "COMPLETE", "start_commit": approval_commit}},
+            "current_checkpoint_id": None, "last_completed_checkpoint_id": "CP1",
+        }},
+    }
+
+
+def _write_state(root, state) -> Path:
+    path = Path(root) / _STATE_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2) + "\n")
+    return path
+
+
+def _read_state(root) -> dict:
+    return json.loads((Path(root) / _STATE_REL).read_text())
+
+
+def _commit_lifecycle_state(root, subject="state", trailers=None) -> str:
+    _git_in(root, "add", _STATE_REL)
+    body = subject
+    if trailers:
+        body += "\n\n" + "\n".join(f"{k}: {v}" for k, v in trailers.items())
+    _git_in(root, "commit", "-q", "-m", body)
+    return _git_in(root, "rev-parse", "HEAD").strip()
+
+
+def _lifecycle_repo(repo, *, install="2.6.0", commit_state=True):
+    """The shared starting point: an installed release (`install=None`
+    leaves every worktree lagging), a discoverable plan-approval commit,
+    and an `IMPLEMENTING` state for `wi` -- committed, so every linked
+    worktree created afterwards carries it on its own branch."""
+    if install is not None:
+        _install_release(repo.root, install)
+    approval_commit = repo.commit(
+        "approve plan", trailers={"Workflow-Plan-Approval": "rc-1", "Workflow-Work-Item": "wi"},
+    )
+    _write_state(repo.root, _approved_state(repo, approval_commit))
+    if commit_state:
+        _commit_lifecycle_state(repo.root, "record the approved state")
+    return approval_commit
+
+
+def _witness_bytes(root, work_item_id="wi"):
+    return ws.read_amendment_witness_bytes(Path(root), work_item_id)
+
+
+def _amend(root, *, now="2026-01-01T00:00:00Z", commit=True):
+    """`/request-plan-amendment` steps 2-3: the transaction, then the state
+    write committed alone on the requester's branch."""
+    ws.request_plan_amendment_transaction(Path(root), "wi", "amend for a reason", now=now)
+    if commit:
+        _commit_lifecycle_state(root, "request plan amendment", {"Workflow-Work-Item": "wi"})
+
+
+def _resolve_in_head(root, *, revision=2, outcome=None, review_content_id="rc-2",
+                     legacy=False, trailer=None):
+    """Commit a resolution of `wi`'s last amendment_history entry on
+    `root`'s branch, as an approval commit would -- `legacy=True` omits
+    `resolved_review_content_id`, as `2.5.1` did. Returns the commit."""
+    state = _read_state(root)
+    item = state["work_items"]["wi"]
+    entry = item["amendment_history"][-1]
+    entry["resolved_at_plan_revision"] = revision
+    entry["reconciliation_outcome"] = outcome if outcome is not None else {"CP1": "retained"}
+    if not legacy:
+        entry["resolved_review_content_id"] = review_content_id
+    item["phase"] = "IMPLEMENTING"
+    item["plan_revision"] = revision
+    item["plan_approval"] = {"status": "CURRENT", "approved_review_content_id": review_content_id}
+    _write_state(root, state)
+    trailers = {"Workflow-Plan-Approval": trailer or review_content_id, "Workflow-Work-Item": "wi"}
+    return _commit_lifecycle_state(root, "plan-stage approval", trailers)
 
 
 class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
     """`XMODEL-R8-B1`: `request_plan_amendment`'s authoritative
-    `resolve_claim(...)` read and `claim_checkpoint`'s own publication now
-    share one real, on-disk lock (`WORKFLOW_STATE.lock`, `state_lock`), run
-    as genuinely separate OS processes racing on it -- a single-process or
-    threaded fixture cannot reproduce two independent holders contending for
-    the same `fcntl.flock` (`TestRealProcessConcurrentTakeover`'s own
-    reasoning, applied to this pair). Proves the specific window the finding
-    named: the amendment worker is made to hold the lock for a real,
-    measurable interval (`mutator`'s own `time.sleep`, standing in for
-    `request_plan_amendment`'s own git/registry work) before it does
-    anything else, while a concurrent `claim_checkpoint` call is issued
-    against the identical lock file -- and confirms it does not merely run
-    before or after unrelated to the amendment, but genuinely blocks for the
-    held duration and only then resolves, correctly, against whatever the
-    amendment committed."""
+    `resolve_claim(...)` read and `claim_checkpoint`'s own publication are
+    serialized, run as genuinely separate OS processes racing on it -- a
+    single-process or threaded fixture cannot reproduce two independent
+    holders contending for the same `fcntl.flock` (`TestRealProcessConcurrentTakeover`'s
+    own reasoning, applied to this pair).
+
+    workflow-2.6.0 (CP6 test 16): the same-worktree behavior still holds
+    through the new entry point. Both sides now take the repository-global
+    lifecycle lock (9) first and `WORKFLOW_STATE.lock` inside it; exactly
+    one side wins, the other genuinely blocks for the held interval and
+    then correctly refuses. A claim refused because the amendment won now
+    names the in-flight amendment (`AmendmentInFlightError`, the witness
+    check that runs before the local phase check)."""
 
     @classmethod
     def setUpClass(cls):
@@ -11444,30 +11796,13 @@ class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
 
     @staticmethod
     def _wait_for(path: Path, what: str) -> None:
-        deadline = time.monotonic() + 15
-        while not path.exists():
-            if time.monotonic() > deadline:
-                raise AssertionError(f"{what} did not become ready in time")
-            time.sleep(0.001)
+        _wait_for_path(path, what)
 
     def _state_with_approved_plan(self, repo):
         approval_commit = repo.commit(
             "approve plan", trailers={"Workflow-Plan-Approval": "rc-1", "Workflow-Work-Item": "wi"},
         )
-        state = {
-            "schema_version": 1, "active_work_item_id": "wi",
-            "work_items": {"wi": {
-                "work_item_id": "wi", "phase": "IMPLEMENTING", "plan_revision": 1,
-                "base_commit": repo.base,
-                "plan_approval": {"status": "CURRENT", "approved_review_content_id": "rc-1"},
-                "checkpoints": {"CP1": {"status": "COMPLETE", "start_commit": approval_commit}},
-                "current_checkpoint_id": None, "last_completed_checkpoint_id": "CP1",
-            }},
-        }
-        state_path = repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps(state))
-        return state_path
+        return _write_state(repo.root, _approved_state(repo, approval_commit))
 
     def test_amendment_holds_the_lock_and_the_concurrent_claim_genuinely_blocks_then_correctly_refuses(self):
         with ScratchRepo() as repo:
@@ -11510,24 +11845,19 @@ class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
 
                     self.assertEqual(amend_result["outcome"], "success", amend_result)
                     self.assertEqual(claim_result["outcome"], "refused", claim_result)
+                    self.assertEqual(claim_result["error"], "AmendmentInFlightError", claim_result)
 
                     # The claimer, released 0.2s into the amender's 1.0s
                     # held interval, could not have resolved in a few
-                    # milliseconds the way an unheld `os.link` acquisition
-                    # would -- proof it genuinely blocked on the shared lock
-                    # rather than racing past an unheld one. A generous
-                    # threshold, well under the ~0.8s actually expected,
-                    # avoids flaking on process-startup jitter while still
-                    # clearly distinguishing "blocked" from "raced past."
+                    # milliseconds the way an unheld acquisition would --
+                    # proof it genuinely blocked on the shared lock rather
+                    # than racing past an unheld one.
                     self.assertGreaterEqual(
                         blocked_for, 0.5,
                         "the claimer resolved too quickly to have actually blocked on the "
-                        "shared WORKFLOW_STATE.lock")
+                        "shared lifecycle lock")
                 finally:
-                    for p in (amender, claimer):
-                        if p.poll() is None:
-                            p.kill()
-                            p.wait(timeout=5)
+                    _reap(amender, claimer)
 
             final_state = json.loads(state_path.read_text())
             final_phase = final_state["work_items"]["wi"]["phase"]
@@ -11539,20 +11869,12 @@ class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
                 "exactly the XMODEL-R8-B1 defect this fix closes")
 
     def test_claimer_wins_the_lock_and_the_concurrent_amendment_genuinely_blocks_then_correctly_refuses(self):
-        """Round 8's own acceptance criterion 6, completed (missing-test
-        item 1, round 9 external implementation review): the claimer-wins
-        ordering under real contention. The pre-existing deterministic unit
-        test (`claim_checkpoint` called with a claim already present before
-        `request_plan_amendment` runs) does not prove mutual exclusion when
-        claim *publication* races the amendment's authoritative claim
-        *read* itself -- exactly the gap round 8's own feedback named. Here
-        the claimer is released first and made to hold the real,
-        shared `WORKFLOW_STATE.lock` for a real, measurable interval before
-        it does anything else, while a concurrent `request_plan_amendment`
-        call is issued against the identical lock file -- confirming it
-        genuinely blocks for the held duration, then correctly refuses
-        rather than superseding a plan approval a live claim already
-        stands against."""
+        """The claimer-wins ordering under real contention: the claimer is
+        released first and holds the real shared locks for a measurable
+        interval; a concurrent amendment issued against the identical
+        locks genuinely blocks for the held duration, then correctly
+        refuses rather than superseding a plan approval a live claim
+        already stands against."""
         with ScratchRepo() as repo:
             state_path = self._state_with_approved_plan(repo)
             with tempfile.TemporaryDirectory(prefix="wf-amend-race-io-") as scratch:
@@ -11575,10 +11897,6 @@ class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
                     self._wait_for(ready_claim, "claimer")
                     self._wait_for(ready_amend, "amender")
 
-                    # Release the claimer first, and give it a moment to
-                    # actually win the flock acquisition and enter its
-                    # held interval -- then release the amender while the
-                    # claimer is provably still inside its critical section.
                     go_claim.write_text("go")
                     time.sleep(0.2)
                     started_blocking_at = time.monotonic()
@@ -11593,16 +11911,14 @@ class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
 
                     self.assertEqual(claim_result["outcome"], "success", claim_result)
                     self.assertEqual(amend_result["outcome"], "refused", amend_result)
+                    self.assertEqual(amend_result["error"], "AmendmentCheckpointActiveError", amend_result)
 
                     self.assertGreaterEqual(
                         blocked_for, 0.5,
                         "the amender resolved too quickly to have actually blocked on the "
-                        "shared WORKFLOW_STATE.lock")
+                        "shared lifecycle lock")
                 finally:
-                    for p in (claimer, amender):
-                        if p.poll() is None:
-                            p.kill()
-                            p.wait(timeout=5)
+                    _reap(claimer, amender)
 
             final_state = json.loads(state_path.read_text())
             final_item = final_state["work_items"]["wi"]
@@ -11612,168 +11928,1470 @@ class TestAmendmentClaimRaceRealProcesses(unittest.TestCase):
             self.assertEqual(final_item["plan_approval"]["status"], "CURRENT")
             self.assertIsNotNone(
                 claim, "the claim published first must survive an amendment that lost the race "
-                "for the shared WORKFLOW_STATE.lock")
+                "for the shared lifecycle lock")
 
 
-class TestCrossWorktreeAmendmentClaimResidualXModelR9B1(unittest.TestCase):
-    """`XMODEL-R9-B1` (round 9 external implementation review,
-    `docs/defects/v2.4.0-002-amendment-claim-race-crosses-worktree-
-    boundary.md`): round 8's fix (`TestAmendmentClaimRaceRealProcesses`
-    above) closes the amendment-versus-claim-start race only *within one
-    worktree root*. These tests pin the documented residual across linked
-    worktrees of the same repository -- not a regression to silently
-    worsen, and not (yet) a bug to silently fix either: a future change to
-    either direction of this behavior must also update the defect
-    record above, which is exactly what a test failure here is meant to
-    surface. Missing-test item 2, round 9 external implementation review."""
+class TestCrossWorktreeAmendmentClaimRaceIsClosed(unittest.TestCase):
+    """`v2.4.0-002` / `XMODEL-R9-B1`, closed by workflow-2.6.0's
+    `D-Repo-Global-Lifecycle` (CP6 tests 1-4). Through `2.5.1` this class
+    was `TestCrossWorktreeAmendmentClaimResidualXModelR9B1` and pinned the
+    open boundary -- an amendment in worktree A and a claim in worktree B
+    both succeeding. Inverted here: each test now asserts the closed
+    property, for both of the defect's independent causes.
 
-    def _write_state(self, repo_root: Path, *, phase: str, checkpoint_id: str | None = None,
-                     checkpoints: dict | None = None) -> Path:
-        state = {
-            "schema_version": 1, "active_work_item_id": "wi",
-            "work_items": {"wi": {
-                "work_item_id": "wi", "phase": phase, "plan_revision": 1,
-                "base_commit": "0" * 40,
-                "plan_approval": {"status": "CURRENT" if phase != "AMENDING_PLAN" else "SUPERSEDED",
-                                  "approved_review_content_id": "rc-1"},
-                "checkpoints": checkpoints or {},
-                "current_checkpoint_id": checkpoint_id,
-                "last_completed_checkpoint_id": None,
-            }},
-        }
-        state_path = repo_root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps(state))
-        return state_path
+    - Cause 2 (B cannot see A's `AMENDING_PLAN`): the amendment witness,
+      readable from every worktree, refuses B's claim while B's own local
+      state still says `IMPLEMENTING`.
+    - Cause 1 (the per-worktree `WORKFLOW_STATE.lock` serializes nothing
+      across worktrees): the lifecycle lock (9) lives under the git common
+      dir; racing the two sides from two worktrees, exactly one succeeds
+      and the other genuinely blocks on (9)."""
 
-    def test_deterministic_a_durable_amending_plan_in_one_worktree_does_not_block_a_claim_from_another(self):
-        """The second, independent reason named in `XMODEL-R9-B1`: no
-        concurrency at all is needed to reproduce this half. Worktree A's
-        own working-tree `WORKFLOW_STATE.json` durably records
-        `AMENDING_PLAN`; worktree B's own copy still says `IMPLEMENTING`
-        (as it would if B's branch has not merged A's amendment commit).
-        `claim_checkpoint` reads only its own worktree's copy, so it
-        succeeds from B even though the work item is, in worktree A,
-        already `AMENDING_PLAN`."""
+    def test_amendment_first_refuses_the_other_worktrees_claim_while_its_local_state_says_implementing(self):
+        """CP6 test 1."""
         with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
             wt_b = repo.worktree("b")
-            self._write_state(repo.root, phase="AMENDING_PLAN")
-            self._write_state(wt_b, phase="IMPLEMENTING")
+            _amend(repo.root, commit=False)
+            witness_before = _witness_bytes(repo.root)
+            self.assertEqual(_read_state(wt_b)["work_items"]["wi"]["phase"], "IMPLEMENTING")
 
-            claim = ws.claim_checkpoint(wt_b, "wi", "CP2", now="t1")
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(wt_b, "wi", "CP2", now="t1")
 
-            self.assertEqual(claim["checkpoint_id"], "CP2")
-            a_state = json.loads((repo.root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())
-            self.assertEqual(a_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
+            self.assertEqual(refused.exception.evidence["seq"], 1)
+            self.assertNotIn("literal", refused.exception.evidence)
+            self.assertIsNone(ws.resolve_claim(wt_b, "wi"), "nothing may be published")
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            self.assertEqual(_read_state(repo.root)["work_items"]["wi"]["phase"], "AMENDING_PLAN")
 
-    def test_racing_an_amendment_in_one_worktree_and_a_claim_in_another_are_not_serialized(self):
-        """The first, independent reason named in `XMODEL-R9-B1`, under
-        real contention: `WORKFLOW_STATE.lock` is per-worktree
-        (`repo_root`-scoped), so an amendment racing a claim start from a
-        *different* worktree take `flock` on two different inodes and are
-        not ordered by it at all -- both sides may succeed, unlike the
-        same race within one worktree (`TestAmendmentClaimRaceRealProcesses`
-        above), where exactly one must win and the other must be refused."""
+    def test_claim_first_refuses_the_other_worktrees_amendment_naming_the_foreign_claim(self):
+        """CP6 test 2."""
         with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
             wt_b = repo.worktree("b")
-            approval_commit = repo.commit(
-                "approve plan", trailers={"Workflow-Plan-Approval": "rc-1", "Workflow-Work-Item": "wi"},
-            )
-            state = {
-                "schema_version": 1, "active_work_item_id": "wi",
-                "work_items": {"wi": {
-                    "work_item_id": "wi", "phase": "IMPLEMENTING", "plan_revision": 1,
-                    "base_commit": repo.base,
-                    "plan_approval": {"status": "CURRENT", "approved_review_content_id": "rc-1"},
-                    "checkpoints": {"CP1": {"status": "COMPLETE", "start_commit": approval_commit}},
-                    "current_checkpoint_id": None, "last_completed_checkpoint_id": "CP1",
-                }},
-            }
-            for root in (repo.root, wt_b):
-                state_path = root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
-                state_path.parent.mkdir(parents=True, exist_ok=True)
-                state_path.write_text(json.dumps(state))
+            ws.claim_checkpoint(wt_b, "wi", "CP2", now="t1")
+            witness_before = _witness_bytes(repo.root)
 
-            scripts_dir = Path(__file__).resolve().parent
-            worker_dir = Path(tempfile.mkdtemp(prefix="wf-amend-race-xwt-worker-"))
-            amender = worker_dir / "_amend_race_amender_xwt.py"
-            amender.write_text(_AMENDMENT_RACE_AMENDER_POST_RESOLVE_CLAIM_SOURCE)
-            claimer = worker_dir / "_amend_race_claimer_xwt.py"
-            claimer.write_text(_AMENDMENT_RACE_CLAIMER_SOURCE)
+            with self.assertRaises(ws.AmendmentCheckpointActiveError) as refused:
+                ws.request_plan_amendment_transaction(repo.root, "wi", "reason", now="t2")
 
-            def spawn(worker: Path, *args) -> subprocess.Popen:
-                env = dict(os.environ)
-                env["PYTHONPATH"] = str(scripts_dir) + (
-                    os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-                return subprocess.Popen(
-                    [sys.executable, str(worker), *[str(a) for a in args]], env=env,
-                )
+            self.assertIn(os.path.realpath(wt_b), str(refused.exception))
+            self.assertEqual(_read_state(repo.root)["work_items"]["wi"]["phase"], "IMPLEMENTING")
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"], ws.AMENDMENT_WITNESS_NONE)
 
-            def wait_for(path: Path, what: str) -> None:
-                deadline = time.monotonic() + 15
-                while not path.exists():
-                    if time.monotonic() > deadline:
-                        raise AssertionError(f"{what} did not become ready in time")
-                    time.sleep(0.001)
-
+    def _race(self, repo, first, second, *, expect_first, expect_second):
+        """Start `first`, wait until it is provably paused inside its (9)
+        critical section, start `second`, and require exactly the given
+        outcomes -- with `second` genuinely blocked for the held interval."""
+        with tempfile.TemporaryDirectory(prefix="wf-xwt-race-io-") as scratch:
+            io = Path(scratch)
+            hold = 1.0
+            procs = []
             try:
-                with tempfile.TemporaryDirectory(prefix="wf-amend-race-xwt-io-") as scratch:
-                    scratch_path = Path(scratch)
-                    ready_amend, go_amend, out_amend = (
-                        scratch_path / "ready_amend", scratch_path / "go_amend", scratch_path / "out_amend.json")
-                    ready_claim, go_claim, out_claim = (
-                        scratch_path / "ready_claim", scratch_path / "go_claim", scratch_path / "out_claim.json")
-
-                    hold_seconds = 1.0
-                    amender_proc = spawn(
-                        amender, repo.root, "wi", "reason", "2026-01-01T00:00:00Z", hold_seconds,
-                        ready_amend, go_amend, out_amend,
-                    )
-                    claimer_proc = spawn(
-                        claimer, wt_b, "wi", "CP2", "2026-01-01T00:00:01Z",
-                        ready_claim, go_claim, out_claim,
-                    )
-                    try:
-                        wait_for(ready_amend, "amender")
-                        wait_for(ready_claim, "claimer")
-
-                        go_amend.write_text("go")
-                        time.sleep(0.2)
-                        go_claim.write_text("go")
-
-                        self.assertEqual(amender_proc.wait(timeout=15), 0)
-                        self.assertEqual(claimer_proc.wait(timeout=15), 0)
-
-                        amend_result = json.loads(out_amend.read_text())
-                        claim_result = json.loads(out_claim.read_text())
-
-                        # Both succeed: the amender's own authoritative
-                        # `resolve_claim(...)` read (released at t=0) finds
-                        # nothing yet and is not re-checked, so the claimer
-                        # (released at t=0.2, into the genuine window the
-                        # sleep stands in for) publishes into the shared
-                        # claims directory undetected -- the claimer never
-                        # blocks on the amender's own lock either, since it
-                        # is a different `repo_root`'s own
-                        # `WORKFLOW_STATE.lock` file. Unlike the
-                        # same-worktree race above, where exactly one of
-                        # these two outcomes must occur, both succeeding is
-                        # the documented `XMODEL-R9-B1` residual, not a
-                        # flake.
-                        self.assertEqual(amend_result["outcome"], "success", amend_result)
-                        self.assertEqual(claim_result["outcome"], "success", claim_result)
-                    finally:
-                        for p in (amender_proc, claimer_proc):
-                            if p.poll() is None:
-                                p.kill()
-                                p.wait(timeout=5)
+                source, root, argv = first
+                p1 = _spawn_worker(source, root, *argv(hold, io / "r1", io / "g1", io / "o1.json",
+                                                    io / "paused1"))
+                procs.append(p1)
+                source2, root2, argv2 = second
+                p2 = _spawn_worker(source2, root2, *argv2(0.0, io / "r2", io / "g2", io / "o2.json",
+                                                       None))
+                procs.append(p2)
+                _wait_for_path(io / "r1", "first worker")
+                _wait_for_path(io / "r2", "second worker")
+                (io / "g1").write_text("go")
+                _wait_for_path(io / "paused1", "first worker's held window")
+                started = time.monotonic()
+                (io / "g2").write_text("go")
+                self.assertEqual(p1.wait(timeout=20), 0)
+                self.assertEqual(p2.wait(timeout=20), 0)
+                blocked_for = time.monotonic() - started
+                r1 = json.loads((io / "o1.json").read_text())
+                r2 = json.loads((io / "o2.json").read_text())
+                self.assertEqual((r1["outcome"], r1.get("error")), expect_first, r1)
+                self.assertEqual((r2["outcome"], r2.get("error")), expect_second, r2)
+                self.assertGreaterEqual(
+                    blocked_for, 0.5, "the second worker did not block on the lifecycle lock")
             finally:
-                import shutil
-                shutil.rmtree(worker_dir, ignore_errors=True)
+                _reap(*procs)
 
-            a_state = json.loads((repo.root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())
-            self.assertEqual(a_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
+    def test_racing_an_amendment_in_one_worktree_and_a_claim_in_another_serializes_on_the_lifecycle_lock(self):
+        """CP6 test 3: the amender is paused right after its `resolve_claim`
+        quiescence read (the exact `XMODEL-R9-B1` window) and the claimer
+        is started in another worktree inside that pause. Exactly one
+        succeeds -- the amender -- and the claimer blocks on (9), then
+        refuses on the witness the amender published."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            self._race(
+                repo,
+                (_AMENDMENT_RACE_AMENDER_POST_RESOLVE_CLAIM_SOURCE, repo.root,
+                 lambda hold, r, g, o, p: ["wi", "reason", "2026-01-01T00:00:00Z", hold, r, g, o, p]),
+                (_AMENDMENT_RACE_CLAIMER_SOURCE, wt_b,
+                 lambda hold, r, g, o, p: ["wi", "CP2", "2026-01-01T00:00:01Z", r, g, o]),
+                expect_first=("success", None),
+                expect_second=("refused", "AmendmentInFlightError"),
+            )
+            self.assertEqual(_read_state(repo.root)["work_items"]["wi"]["phase"], "AMENDING_PLAN")
+            self.assertIsNone(ws.resolve_claim(wt_b, "wi"))
+
+    def test_racing_a_claim_in_one_worktree_and_an_amendment_in_another_serializes_on_the_lifecycle_lock(self):
+        """CP6 test 4: the reverse order. The claimer in B holds (9) (its
+        whole critical section extended), the amender in A is started
+        inside it, blocks on (9), then refuses on the claim B published."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            self._race(
+                repo,
+                (_AMENDMENT_RACE_SLOW_CLAIMER_SOURCE, wt_b,
+                 lambda hold, r, g, o, p: ["wi", "CP2", "2026-01-01T00:00:00Z", hold, r, g, o, p]),
+                (_AMENDMENT_RACE_AMENDER_SOURCE, repo.root,
+                 lambda hold, r, g, o, p: ["wi", "reason", "2026-01-01T00:00:01Z", hold, r, g, o]),
+                expect_first=("success", None),
+                expect_second=("refused", "AmendmentCheckpointActiveError"),
+            )
+            self.assertEqual(_read_state(repo.root)["work_items"]["wi"]["phase"], "IMPLEMENTING")
             self.assertIsNotNone(ws.resolve_claim(wt_b, "wi"))
+
+
+class TestRepoGlobalLifecycleClaimAndAmendment(unittest.TestCase):
+    """`D-Repo-Global-Lifecycle`'s claim and amendment sides across real
+    linked worktrees (CP6 tests 5, 6, 11, 12, 13a, 13e)."""
+
+    def test_a_stale_worktree_is_refused_until_it_merges_the_resolved_amendment(self):
+        """CP6 test 5."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _amend(repo.root)
+            _resolve_in_head(repo.root)
+            # The first (9) holder that sees the resolution binds it.
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual(witness["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+
+            with self.assertRaises(ws.StaleLifecycleStateError) as refused:
+                ws.claim_checkpoint(wt_b, "wi", "CP3", now="t2")
+            self.assertIn("merge the resolved amendment first", str(refused.exception))
+            self.assertIsNotNone(ws.resolve_claim(repo.root, "wi"))
+
+            ws.release_checkpoint(repo.root, "wi", "CP2",
+                                  owner_token=ws.resolve_claim(repo.root, "wi")["owner_token"])
+            _git_in(wt_b, "merge", "-q", "--no-edit", _primary_branch(repo.root))
+            claim = ws.claim_checkpoint(wt_b, "wi", "CP3", now="t3")
+            self.assertEqual(claim["checkpoint_id"], "CP3")
+
+    def test_two_worktrees_requesting_amendments_concurrently_exactly_one_succeeds(self):
+        """CP6 test 6, real processes: the first requester is paused inside
+        its (9) critical section; the second, started inside that pause,
+        blocks on (9) and then refuses, since two amendments would fork
+        `amendment_history`."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            with tempfile.TemporaryDirectory(prefix="wf-two-amenders-") as scratch:
+                io = Path(scratch)
+                first = _spawn_worker(_AMENDMENT_RACE_AMENDER_POST_RESOLVE_CLAIM_SOURCE, repo.root, "wi",
+                                      "from A", "2026-01-01T00:00:00Z", 1.0,
+                                      io / "r1", io / "g1", io / "o1.json", io / "p1")
+                second = _spawn_worker(_AMENDMENT_RACE_AMENDER_POST_RESOLVE_CLAIM_SOURCE, wt_b, "wi",
+                                       "from B", "2026-01-01T00:00:01Z", 0.0,
+                                       io / "r2", io / "g2", io / "o2.json")
+                try:
+                    _wait_for_path(io / "r1", "first amender")
+                    _wait_for_path(io / "r2", "second amender")
+                    (io / "g1").write_text("go")
+                    _wait_for_path(io / "p1", "first amender's held window")
+                    (io / "g2").write_text("go")
+                    self.assertEqual(first.wait(timeout=20), 0)
+                    self.assertEqual(second.wait(timeout=20), 0)
+                    outcomes = sorted(json.loads((io / name).read_text())["outcome"]
+                                      for name in ("o1.json", "o2.json"))
+                    self.assertEqual(outcomes, ["refused", "success"])
+                    self.assertEqual(json.loads((io / "o2.json").read_text())["error"],
+                                     "AmendmentInFlightError")
+                finally:
+                    _reap(first, second)
+            self.assertEqual(_read_state(repo.root)["work_items"]["wi"]["phase"], "AMENDING_PLAN")
+            self.assertEqual(_read_state(wt_b)["work_items"]["wi"]["phase"], "IMPLEMENTING")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual((witness["status"], witness["amendment_seq"]), (ws.AMENDMENT_WITNESS_OPEN, 1))
+
+    def test_absent_claim_takeover_and_adoption_refuse_while_an_amendment_is_open(self):
+        """CP6 test 11: the two other claim publishers take (9) and run the
+        witness check too."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _amend(repo.root, commit=False)
+            witness_before = _witness_bytes(repo.root)
+
+            evidence = ws.takeover_evidence(wt_b, "wi")
+            self.assertIsNone(evidence["claim"])
+            literal = ws.takeover_authorization_literal("wi", evidence, "CP2")
+            with self.assertRaises(ws.AmendmentInFlightError):
+                ws.take_over_claim(wt_b, "wi", "CP2", now="t1", user_authorization=literal,
+                                   evidence=evidence)
+            self.assertIsNone(ws.resolve_claim(wt_b, "wi"))
+
+            ws.write_worktree_identity(wt_b, "wi", now="t2")
+            state_b = _read_state(wt_b)
+            state_b["work_items"]["wi"]["checkpoints"]["CP2"] = {"status": "IN_PROGRESS"}
+            state_b["work_items"]["wi"]["current_checkpoint_id"] = "CP2"
+            _write_state(wt_b, state_b)
+            with self.assertRaises(ws.AmendmentInFlightError):
+                ws.adopt_claim(wt_b, "wi", "CP2", now="t3")
+            self.assertIsNone(ws.resolve_claim(wt_b, "wi"))
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+    def test_a_direct_state_transaction_of_the_pure_mutator_refuses_without_the_lifecycle_lock(self):
+        """CP6 test 12 ("No bypass")."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            before = (repo.root / _STATE_REL).read_bytes()
+            with self.assertRaises(ws.LifecycleLockNotHeldError):
+                ws.state_transaction(repo.root, lambda state: ws.request_plan_amendment(
+                    state, "wi", "reason", repo_root=repo.root, now="t1"))
+            self.assertEqual((repo.root / _STATE_REL).read_bytes(), before)
+            self.assertIsNone(_witness_bytes(repo.root))
+
+    def test_self_heal_advances_open_to_resolved_before_any_in_flight_refusal(self):
+        """CP6 test 13a: the witness is `OPEN` at seq N and the evaluating
+        `HEAD` shows N resolved (a resolution landed but its witness
+        advance was lost). A claim advances it to `RESOLVED` and proceeds;
+        before that, a worktree whose `HEAD` lacks the resolution refuses
+        the ordinary way."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _amend(repo.root)
+            _resolve_in_head(repo.root)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"], ws.AMENDMENT_WITNESS_OPEN)
+            with self.assertRaises(ws.AmendmentInFlightError):
+                ws.claim_checkpoint(wt_b, "wi", "CP2", now="t1")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"], ws.AMENDMENT_WITNESS_OPEN)
+
+            claim = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            self.assertEqual(claim["checkpoint_id"], "CP2")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual(witness["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+            head_entry = _read_state(repo.root)["work_items"]["wi"]["amendment_history"][0]
+            self.assertEqual(witness["resolution_projection_sha256"],
+                             ws.amendment_resolution_projection_sha256(head_entry))
+
+    def test_self_heal_also_runs_first_on_the_amendment_side(self):
+        """CP6 test 13a, amendment side: the next request advances the lost
+        witness advance first, then publishes seq N+1."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            _amend(repo.root)
+            _resolve_in_head(repo.root)
+            _amend(repo.root, now="2026-01-02T00:00:00Z", commit=False)
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual((witness["status"], witness["amendment_seq"]), (ws.AMENDMENT_WITNESS_OPEN, 2))
+            self.assertEqual(witness["previous"]["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+            self.assertEqual(witness["previous"]["amendment_seq"], 1)
+
+    def test_the_amendment_side_reads_head_not_the_working_tree_under_a_resolved_witness(self):
+        """CP6 test 13e: a worktree whose working tree shows seq N resolved
+        but whose `HEAD` does not is refused under a `RESOLVED` witness."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _amend(repo.root)
+            _resolve_in_head(repo.root)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")  # binds RESOLVED
+            # B copies the resolved state into its working tree without
+            # merging it.
+            _write_state(wt_b, _read_state(repo.root))
+            with self.assertRaises(ws.StaleLifecycleStateError):
+                ws.request_plan_amendment_transaction(wt_b, "wi", "reason", now="t2")
+
+
+class TestAmendmentWitnessCrashRecovery(unittest.TestCase):
+    """The witness's crash table (CP6 tests 7, 7a, 9, 10)."""
+
+    def test_sigkill_between_witness_and_state_publication_is_a_provable_orphan_rolled_back(self):
+        """CP6 test 7: the requester is killed after publishing the `OPEN`
+        witness and before publishing the state. The next (9) holder proves
+        the orphan -- the requester worktree is registered, still on its
+        branch, and neither it, its branch tip nor any worktree holds seq 1
+        -- and rolls the witness back to its `previous` (`NONE`)."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            worker = _spawn_worker(_LIFECYCLE_KILL_BEFORE_STATE_PUBLISH_SOURCE, wt_a, "wi", "t1")
+            self.assertEqual(worker.wait(timeout=30), -9)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"], ws.AMENDMENT_WITNESS_OPEN)
+            self.assertEqual(_read_state(wt_a)["work_items"]["wi"]["phase"], "IMPLEMENTING")
+
+            claim = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            self.assertEqual(claim["checkpoint_id"], "CP2")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"], ws.AMENDMENT_WITNESS_NONE)
+
+    def test_a_state_publish_that_raises_rolls_the_open_witness_back(self):
+        """Implementation review round 1, Optional 8: the state publish
+        raising (not a SIGKILL) after the `OPEN` witness was published
+        rolls the witness back to its `previous` in-process, so no orphan
+        is left for the next holder -- and the state is unchanged."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            ws.release_checkpoint(repo.root, "wi", "CP2", owner_token=ws.claim_checkpoint(
+                repo.root, "wi", "CP2", now="t0")["owner_token"])  # writes NONE
+            state_before = (repo.root / _STATE_REL).read_bytes()
+
+            def refuse_to_publish(*_args, **_kwargs):
+                raise OSError("disk full")
+
+            original = ws._publish_state_file
+            ws._publish_state_file = refuse_to_publish
+            try:
+                with self.assertRaises(OSError):
+                    ws.request_plan_amendment_transaction(repo.root, "wi", "reason", now="t1")
+            finally:
+                ws._publish_state_file = original
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi"), ws._none_witness("wi"))
+            self.assertEqual((repo.root / _STATE_REL).read_bytes(), state_before)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+
+    def test_sigkill_orphan_with_the_requester_worktree_removed_requires_the_literal(self):
+        """CP6 test 7, second half: the test cannot complete, so it refuses
+        and offers `clear amendment witness <wi> <sha256>`; a wrong digest
+        refuses; the right one restores `previous`."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            worker = _spawn_worker(_LIFECYCLE_KILL_BEFORE_STATE_PUBLISH_SOURCE, wt_a, "wi", "t1")
+            self.assertEqual(worker.wait(timeout=30), -9)
+            repo.remove_worktree(wt_a)
+            witness_before = _witness_bytes(repo.root)
+
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            literal = refused.exception.evidence["literal"]
+            self.assertEqual(literal, ws.amendment_witness_clear_literal(
+                "wi", hashlib.sha256(witness_before).hexdigest()))
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+            with self.assertRaises(ws.AmendmentWitnessClearRefusedError):
+                ws.clear_amendment_witness(repo.root, "wi",
+                                           user_authorization=f"clear amendment witness wi {'0' * 64}")
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            ws.clear_amendment_witness(repo.root, "wi", user_authorization=literal)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"], ws.AMENDMENT_WITNESS_NONE)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t3")
+
+    def test_an_unreadable_requester_state_offers_the_literal_and_the_literal_clears_it(self):
+        """Review finding (crash table, row 1): a state file that cannot be
+        read is a test that cannot be completed -- the literal is offered,
+        never a bare refusal, and the literal itself can clear."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            _amend(wt_a, commit=False)
+            (wt_a / _STATE_REL).write_text("{torn")
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            literal = refused.exception.evidence["literal"]
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            ws.clear_amendment_witness(repo.root, "wi", user_authorization=literal)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_NONE)
+
+    def test_an_unreadable_committed_state_in_an_unrelated_worktree_offers_the_literal(self):
+        """Implementation review round 1, Important 2 (`OPEN`): a worktree
+        that has nothing to do with the amendment commits an unreadable
+        `WORKFLOW_STATE.json`. The orphan test cannot be completed, so the
+        claim refuses with the evidence-bound literal -- never a bare
+        `LifecycleStateUnreadableError` -- and the literal clears it."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            wt_b = repo.worktree("b")
+            _amend(wt_a, commit=False)
+            _git_in(wt_a, "checkout", "--", _STATE_REL)  # the request is abandoned
+            (wt_b / _STATE_REL).write_text("{torn")
+            _commit_lifecycle_state(wt_b, "an unrelated, broken state")
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            literal = refused.exception.evidence["literal"]
+            self.assertEqual(literal, ws.amendment_witness_clear_literal(
+                "wi", hashlib.sha256(witness_before).hexdigest()))
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            ws.clear_amendment_witness(repo.root, "wi", user_authorization=literal)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_NONE)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+
+    def test_an_unreadable_requester_branch_tip_offers_the_literal(self):
+        """Implementation review round 1, Important 2 (`OPEN`, the
+        branch-tip read that runs before the per-worktree scan): the
+        requester's branch tip commits an unreadable state. Undecidable,
+        so the literal is offered, and it clears."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            _amend(wt_a, commit=False)
+            (wt_a / _STATE_REL).write_text("{torn")
+            _commit_lifecycle_state(wt_a, "a broken state on the requester branch")
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            literal = refused.exception.evidence["literal"]
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            ws.clear_amendment_witness(repo.root, "wi", user_authorization=literal)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_NONE)
+
+    def test_a_branch_switch_never_rolls_back_a_live_amendment(self):
+        """CP6 test 7a: A requests an amendment, commits it on its branch
+        (`request-plan-amendment.md` step 3), then checks out another
+        branch. B's claim refuses naming the branch that holds seq N,
+        offers no literal, and the witness bytes are unchanged."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            _amend(wt_a)
+            _git_in(wt_a, "checkout", "-q", "-b", "elsewhere", _primary_branch(repo.root))
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIn("refs/heads/a", refused.exception.evidence["holder"])
+            self.assertNotIn("literal", refused.exception.evidence)
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+    def test_a_branch_switch_with_the_branch_checked_out_in_a_third_worktree_is_still_live(self):
+        """CP6 test 7a, variant (d): A's branch is checked out in a third
+        worktree instead; separately, a third worktree holds the committed
+        amendment while A's branch tip no longer does."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            _amend(wt_a)
+            _git_in(wt_a, "checkout", "-q", "-b", "elsewhere", _primary_branch(repo.root))
+            wt_c = repo.root.parent / f"{repo.root.name}-c"
+            _git_in(repo.root, "worktree", "add", "-q", str(wt_c), "a")
+            repo._extra_worktrees.append(wt_c)
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertNotIn("literal", refused.exception.evidence)
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+            # Isolate condition (d): rewind branch `a` below the amendment;
+            # only worktree C's own HEAD (detached at it) still holds seq 1.
+            _git_in(wt_c, "checkout", "-q", "--detach")
+            _git_in(repo.root, "branch", "-f", "a", _primary_branch(repo.root))
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            self.assertIn(os.path.realpath(wt_c), refused.exception.evidence["holder"])
+            self.assertNotIn("literal", refused.exception.evidence)
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+    def test_a_requester_left_on_a_detached_head_offers_the_literal_and_never_rolls_back(self):
+        """CP6 test 7a, detached variant: no branch records the requester,
+        so the orphan test cannot complete -- the literal is offered, and
+        there is still no automatic rollback."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            _git_in(wt_a, "checkout", "-q", "--detach")
+            _amend(wt_a)
+            self.assertIsNone(ws.read_amendment_witness(repo.root, "wi")["requester_branch"])
+            _git_in(wt_a, "checkout", "-q", "-b", "elsewhere", _primary_branch(repo.root))
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIn("literal", refused.exception.evidence)
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+    def test_sigkill_of_a_lifecycle_lock_holder_lets_the_next_contender_proceed(self):
+        """CP6 test 9: the kernel releases a killed holder's `flock`."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            with tempfile.TemporaryDirectory(prefix="wf-lifecycle-holder-") as scratch:
+                ready = Path(scratch) / "held"
+                holder = _spawn_worker(_LIFECYCLE_LOCK_HOLDER_SOURCE, repo.root, "wi", ready)
+                try:
+                    _wait_for_path(ready, "lifecycle lock holder")
+                    holder.send_signal(9)
+                    holder.wait(timeout=10)
+                    started = time.monotonic()
+                    claim = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+                    self.assertLess(time.monotonic() - started, 10)
+                    self.assertEqual(claim["checkpoint_id"], "CP2")
+                finally:
+                    _reap(holder)
+
+    def test_a_symlinked_torn_or_unknown_schema_witness_refuses(self):
+        """CP6 test 10 (INV-3): never read as absent."""
+        cases = {
+            "torn": b'{"schema_version": 1, "status": "OP',
+            "unknown schema": json.dumps({"schema_version": 99, "work_item_id": "wi"}).encode(),
+            "unknown status": json.dumps(dict(ws._none_witness("wi"), status="PAUSED")).encode(),
+            "RESOLVING without a reservation": json.dumps(dict(
+                ws._none_witness("wi"), status="RESOLVING", amendment_seq=1,
+                request_projection_sha256="a" * 64, previous=ws._none_witness("wi"))).encode(),
+            "RESOLVED without a digest": json.dumps(dict(
+                ws._none_witness("wi"), status="RESOLVED", amendment_seq=1,
+                request_projection_sha256="a" * 64)).encode(),
+        }
+        for label, raw in cases.items():
+            with self.subTest(label), ScratchRepo() as repo:
+                _lifecycle_repo(repo)
+                path = ws.amendment_witness_path(repo.root, "wi")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+                with self.assertRaises(ws.AmendmentWitnessUnavailableError):
+                    ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+                self.assertIsNone(ws.resolve_claim(repo.root, "wi"))
+                self.assertEqual(path.read_bytes(), raw)
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            path = ws.amendment_witness_path(repo.root, "wi")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            target = repo.root / "elsewhere.json"
+            target.write_text(json.dumps(ws._none_witness("wi")))
+            path.symlink_to(target)
+            with self.assertRaises(ws.AmendmentWitnessUnavailableError):
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIsNone(ws.resolve_claim(repo.root, "wi"))
+
+
+class TestLifecycleLockIsAPureSource(unittest.TestCase):
+    """(9) is acquired only while this process holds no other primitive,
+    and is never left held (CP6 test 23, the state-module half; the
+    `/approve-review plan` step-boundary half is in the acceptance
+    matrix)."""
+
+    def test_taking_the_lifecycle_lock_inside_any_other_primitive_is_refused(self):
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            claim = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            holders = {
+                "state_lock (2)": lambda: ws.state_lock(repo.root),
+                "identity_document_lock (3)": lambda: ws.identity_document_lock(repo.root),
+                "guard_mutation_lock (6)": lambda: ws.guard_mutation_lock(repo.root, "wi"),
+                "owner_mutation (5)": lambda: ws.owner_mutation(
+                    repo.root, "wi", claim["owner_token"], checkpoint_id="CP2", step="1d",
+                    step_class=ws.ORDINARY, now="t2"),
+                "lifecycle_lock (9)": lambda: ws.lifecycle_lock(repo.root, "wi"),
+            }
+            for label, open_window in holders.items():
+                with self.subTest(label):
+                    with open_window():
+                        with self.assertRaises(ws.LifecycleLockOrderError):
+                            with ws.lifecycle_lock(repo.root, "wi"):
+                                pass
+                    self.assertEqual(ws.held_primitives(), ())
+
+    def test_no_primitive_is_left_held_after_the_lifecycle_entry_points(self):
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            claim = ws.claim_checkpoint(wt_b, "wi", "CP2", now="t1")
+            self.assertEqual(ws.held_primitives(), ())
+            with self.assertRaises(ws.AmendmentCheckpointActiveError):
+                ws.request_plan_amendment_transaction(repo.root, "wi", "reason", now="t2")
+            self.assertEqual(ws.held_primitives(), ())
+            ws.release_checkpoint(wt_b, "wi", "CP2", owner_token=claim["owner_token"])
+            ws.request_plan_amendment_transaction(repo.root, "wi", "reason", now="t3")
+            self.assertEqual(ws.held_primitives(), ())
+            with self.assertRaises(ws.AmendmentInFlightError):
+                ws.claim_checkpoint(wt_b, "wi", "CP2", now="t4")
+            self.assertEqual(ws.held_primitives(), ())
+
+
+def _amend_without_witness(root, *, now="2026-01-01T00:00:00Z", reason="amend for a reason",
+                           commit=True):
+    """An amendment exactly as `2.5.1` wrote one: the same pure mutator,
+    the same `amendment_history` entry, and no witness (a `2.5.1` process
+    never takes (9) and never writes one)."""
+    root = Path(root)
+    with ws.lifecycle_lock(root, "wi"):
+        ws.state_transaction(root, lambda state: ws.request_plan_amendment(
+            state, "wi", reason, repo_root=root, now=now))
+    if commit:
+        _commit_lifecycle_state(root, "request plan amendment (2.5.1)", {"Workflow-Work-Item": "wi"})
+
+
+def _reference_version_key(name: str) -> tuple:
+    """A verbatim copy of `src/workflow_manager/release.py`'s
+    `_version_key`, which the payload cannot import. CP6 pins the
+    payload-local helper against it on a table of versions (and against
+    the real one too, when `workflow_manager` is importable)."""
+    import re
+    return tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.split(r"[.\-_]", name)
+    )
+
+
+class TestAmendmentWitnessUpgradeBootstrap(unittest.TestCase):
+    """The upgrade-bootstrap scan, the lag probe and the `NONE` sentinel
+    (INV-7; CP6 tests 13, 13b-13i, 20)."""
+
+    def test_an_amending_item_with_no_witness_in_another_worktree_is_discovered_and_refused(self):
+        """CP6 test 13."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_a = repo.worktree("a")
+            _amend_without_witness(wt_a, commit=False)
+            self.assertIsNone(_witness_bytes(repo.root))
+            with self.assertRaises(ws.AmendmentInFlightError):
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual((witness["status"], witness["amendment_seq"]), (ws.AMENDMENT_WITNESS_OPEN, 1))
+            self.assertEqual(os.path.realpath(witness["requester_worktree_root"]), os.path.realpath(wt_a))
+            self.assertEqual(witness["requester_branch"], "a")
+            self.assertEqual(witness["previous"], ws._none_witness("wi"))
+
+    def test_a_stale_linked_worktree_bootstraps_to_resolved_and_refuses_as_stale(self):
+        """CP6 test 13b: a `2.5.1` amendment resolved on main, and a stale
+        linked worktree whose `HEAD` still shows it unresolved. The scan
+        writes `RESOLVED`, not `OPEN`, so there is no orphan wedge."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            _amend_without_witness(repo.root)
+            wt_b = repo.worktree("b")
+            main_head = _resolve_in_head(repo.root, legacy=True)
+            with self.assertRaises(ws.StaleLifecycleStateError):
+                ws.claim_checkpoint(wt_b, "wi", "CP2", now="t1")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual(witness["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+            self.assertEqual(witness["resolved_commit"], main_head)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+
+    def test_disagreeing_amendment_base_commits_refuse_and_write_nothing(self):
+        """CP6 test 13c, first case."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _amend_without_witness(repo.root, commit=False)
+            forked = _read_state(repo.root)
+            forked["work_items"]["wi"]["amendment_base_commit"] = repo.base
+            _write_state(wt_b, forked)
+            with self.assertRaises(ws.AmendmentBootstrapConflictError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIn("amendment_base_commit", str(refused.exception))
+            self.assertIn(os.path.realpath(wt_b), str(refused.exception))
+            self.assertIsNone(_witness_bytes(repo.root))
+
+    def test_a_resolved_head_and_a_different_unresolved_entry_is_a_fork_not_a_stale_worktree(self):
+        """CP6 test 13c, second case: reported as the fork it is, never as
+        `StaleLifecycleStateError` (whose remedy would be wrong)."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _amend_without_witness(repo.root)
+            _resolve_in_head(repo.root, legacy=True)
+            _amend_without_witness(wt_b, reason="a different amendment",
+                                   now="2026-01-05T00:00:00Z", commit=False)
+            with self.assertRaises(ws.AmendmentBootstrapConflictError):
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIsNone(_witness_bytes(repo.root))
+
+    def test_the_none_sentinel_is_written_once_and_later_holders_read_no_other_state(self):
+        """CP6 test 13d."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            claim = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi"), ws._none_witness("wi"))
+            ws.release_checkpoint(repo.root, "wi", "CP2", owner_token=claim["owner_token"])
+
+            reads = []
+            real_worktree_view, real_committed_view = ws._worktree_item_view, ws._committed_item_view
+            real_bootstrap = ws._bootstrap_amendment_witness
+            bootstraps = []
+            ws._worktree_item_view = lambda root, *a: reads.append(("working", str(root))) or real_worktree_view(root, *a)
+            ws._committed_item_view = lambda cwd, *a: reads.append(("committed", str(cwd))) or real_committed_view(cwd, *a)
+            ws._bootstrap_amendment_witness = lambda *a: bootstraps.append(a) or real_bootstrap(*a)
+            try:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            finally:
+                ws._worktree_item_view, ws._committed_item_view = real_worktree_view, real_committed_view
+                ws._bootstrap_amendment_witness = real_bootstrap
+            self.assertEqual(bootstraps, [])
+            other = os.path.realpath(wt_b)
+            self.assertEqual([r for r in reads if os.path.realpath(r[1]) == other], [],
+                             "a later (9) holder must not read another worktree's state file")
+            ws.release_checkpoint(repo.root, "wi", "CP2",
+                                  owner_token=ws.resolve_claim(repo.root, "wi")["owner_token"])
+
+            # The first amendment replaces the sentinel with OPEN at seq 1 ...
+            _amend(repo.root, commit=False)
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual((witness["status"], witness["amendment_seq"]), (ws.AMENDMENT_WITNESS_OPEN, 1))
+            self.assertEqual(witness["previous"], ws._none_witness("wi"))
+            # ... and an orphan rollback (the state write discarded)
+            # restores NONE, never "absent".
+            _git_in(repo.root, "checkout", "-q", "--", _STATE_REL)
+            ws.claim_checkpoint(wt_b, "wi", "CP2", now="t3")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi"), ws._none_witness("wi"))
+
+    def test_a_lagging_worktree_suppresses_the_sentinel_until_it_merges_the_update(self):
+        """CP6 test 13f."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _install_release(wt_b, "2.5.1")
+            bootstraps = []
+            real_bootstrap = ws._bootstrap_amendment_witness
+            ws._bootstrap_amendment_witness = lambda *a: bootstraps.append(a) or real_bootstrap(*a)
+            try:
+                first = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+                self.assertIsNone(_witness_bytes(repo.root), "no sentinel while a worktree lags")
+                ws.release_checkpoint(repo.root, "wi", "CP2", owner_token=first["owner_token"])
+                second = ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+                self.assertEqual(len(bootstraps), 2, "the scan runs again on the next (9) holder")
+                ws.release_checkpoint(repo.root, "wi", "CP2", owner_token=second["owner_token"])
+            finally:
+                ws._bootstrap_amendment_witness = real_bootstrap
+            _install_release(wt_b, "2.6.0")
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t3")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi"), ws._none_witness("wi"))
+
+    def test_a_worktree_whose_head_has_no_installation_record_lags(self):
+        """CP6 test 13f: an absent record counts as lagging."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _git_in(wt_b, "rm", "-q", ".workflow-manager/installation.json")
+            _git_in(wt_b, "commit", "-q", "-m", "no record")
+            probe = ws._probe_worktrees(repo.root)
+            lagging = {os.path.realpath(w["path"]) for w in probe["lagging"]}
+            self.assertEqual(lagging, {os.path.realpath(wt_b)})
+
+    def test_a_lagging_worktrees_unrecorded_amendment_refuses_and_leaves_the_witness(self):
+        """CP6 test 13g: witness absent, and witness `RESOLVED` at seq 1,
+        each with a lagging worktree holding an unresolved amendment the
+        witness does not record."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _install_release(wt_b, "2.5.1")
+            _amend_without_witness(wt_b, commit=False)
+            with self.assertRaises(ws.LaggingWorktreeAmendmentError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertEqual(os.path.realpath(refused.exception.evidence["worktree"]), os.path.realpath(wt_b))
+            self.assertEqual(refused.exception.evidence["branch"], "b")
+            self.assertEqual(refused.exception.evidence["installed_version"], "2.5.1")
+            self.assertIsNone(_witness_bytes(repo.root))
+
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            _amend(repo.root)
+            _resolve_in_head(repo.root)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")  # binds RESOLVED at 1
+            ws.release_checkpoint(repo.root, "wi", "CP2",
+                                  owner_token=ws.resolve_claim(repo.root, "wi")["owner_token"])
+            wt_b = repo.worktree("b")
+            _install_release(wt_b, "2.5.1")
+            _amend_without_witness(wt_b, now="2026-01-03T00:00:00Z", commit=False)
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.LaggingWorktreeAmendmentError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            self.assertEqual(refused.exception.evidence["seq"], 2)
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+    def test_an_updated_worktree_names_its_own_unrecorded_amendment(self):
+        """Review finding (a plan-level gap, recorded in
+        docs/ACTIVE_MILESTONE.md): once a worktree holding a `2.5.1`
+        amendment merges the update it no longer lags, and a `NONE` witness
+        does not record its amendment. Its own request and reservation
+        refuse naming that amendment, never the misleading "merge the
+        resolved amendment first"."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            ws.release_checkpoint(repo.root, "wi", "CP2", owner_token=ws.claim_checkpoint(
+                repo.root, "wi", "CP2", now="t0")["owner_token"])
+            _install_release(wt_b, "2.5.1")
+            _amend_without_witness(wt_b)
+            _install_release(wt_b, "2.6.0")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi"), ws._none_witness("wi"))
+            with self.assertRaises(ws.StaleLifecycleStateError) as refused:
+                ws.reserve_amendment_resolution(wt_b, "wi", _open_amendment_approval(repo, wt_b),
+                                                now="t1")
+            self.assertIn("does not record", str(refused.exception))
+            self.assertNotIn("merge the resolved amendment first", str(refused.exception))
+
+    def test_an_amendment_predating_the_update_carried_into_a_lagging_worktree_does_not_wedge(self):
+        """Implementation review round 1, Important 3, first topology: under
+        `2.5.1`, an amendment is opened and committed on the primary branch;
+        worktree `b` branches afterwards and so carries the same entry.
+        The `2.6.0` update is then committed on the primary branch only, so
+        `b` lags while holding that entry. The primary worktree's own
+        resolution must reach the bootstrap -- which records exactly that
+        entry -- rather than refuse as an unrecorded `2.5.1` amendment in
+        `b` (whose "finish or discard it there" remedy would be wrong: it
+        is the same amendment)."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo, install="2.5.1")
+            _amend_without_witness(repo.root)
+            wt_b = repo.worktree("b")
+            _install_release(repo.root, "2.6.0")
+            self.assertIsNone(_witness_bytes(repo.root))
+            journal = _open_amendment_approval(repo, repo.root)
+            ws.reserve_amendment_resolution(repo.root, "wi", journal, now="t1")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual((witness["status"], witness["amendment_seq"]),
+                             (ws.AMENDMENT_WITNESS_RESOLVING, 1))
+            entry = _read_state(wt_b)["work_items"]["wi"]["amendment_history"][0]
+            self.assertEqual(witness["request_projection_sha256"],
+                             ws.amendment_request_projection_sha256(entry))
+            commit = _commit_journal_approval(repo.root, journal)
+            ws.advance_amendment_witness(repo.root, "wi", journal=journal, commit=commit)
+            ws.close_plan_approval_journal(repo.root)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_RESOLVED)
+            # `b` still lags and still holds the (now resolved elsewhere)
+            # entry unresolved: recorded, so a claim here is not refused
+            # as lagging.
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+
+    def test_an_uncommitted_update_in_the_amending_worktree_does_not_wedge_it(self):
+        """Important 3, single-worktree topology: `workflow_manager update`
+        does not commit, so the amending worktree's committed installation
+        record still says `2.5.1` while its working tree (and the process
+        evaluating it) runs `2.6.0`. It lags against itself, but its own
+        amendment is exactly what the bootstrap records -- never "merge the
+        update into that branch"."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo, install="2.5.1")
+            _amend_without_witness(repo.root)
+            record = repo.root / ".workflow-manager" / "installation.json"
+            record.write_text(json.dumps({"schema_version": 1, "workflow_version": "2.6.0"}) + "\n")
+            self.assertTrue(ws._probe_worktrees(repo.root)["lagging"])
+            journal = _open_amendment_approval(repo, repo.root)
+            ws.reserve_amendment_resolution(repo.root, "wi", journal, now="t1")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_RESOLVING)
+
+    def test_a_lagging_worktree_with_an_uncommitted_update_is_told_to_commit_it(self):
+        """Important 3, the remedy text: a lagging worktree whose working
+        tree already carries the update, holding an amendment of its own
+        that nothing else records, still refuses (plan test 13g) -- but
+        names committing the update, not merging it."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _install_release(wt_b, "2.5.1")
+            _amend_without_witness(wt_b, commit=False)
+            (wt_b / ".workflow-manager" / "installation.json").write_text(
+                json.dumps({"schema_version": 1, "workflow_version": "2.6.0"}) + "\n")
+            with self.assertRaises(ws.LaggingWorktreeAmendmentError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIn("commit the 2.6.0 update in that worktree", str(refused.exception))
+            self.assertIsNone(_witness_bytes(repo.root))
+
+    def test_a_lagging_worktree_without_an_unresolved_amendment_does_not_block(self):
+        """CP6 test 13g: a lagging worktree alone is not a refusal."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            wt_b = repo.worktree("b")
+            _install_release(wt_b, "2.5.1")
+            self.assertEqual(ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")["checkpoint_id"], "CP2")
+
+    def test_a_same_seq_fork_in_a_lagging_worktree_refuses_and_the_same_entry_does_not(self):
+        """CP6 test 13g, same-seq fork: the witness is `OPEN` at seq 2 from
+        an updated worktree; a lagging worktree holding a *different*
+        unresolved entry 2 refuses as lagging, and one holding the *same*
+        entry 2 refuses only as the ordinary in-flight amendment."""
+        for same in (False, True):
+            with self.subTest(same_entry=same), ScratchRepo() as repo:
+                _lifecycle_repo(repo)
+                _amend(repo.root)
+                _resolve_in_head(repo.root)
+                wt_b = repo.worktree("b")
+                wt_c = repo.worktree("c")
+                _install_release(wt_b, "2.5.1")
+                _amend(repo.root, now="2026-01-02T00:00:00Z", commit=False)  # OPEN at 2
+                if same:
+                    _write_state(wt_b, _read_state(repo.root))
+                else:
+                    _amend_without_witness(wt_b, reason="lagging fork", now="2026-01-04T00:00:00Z",
+                                           commit=False)
+                expected = ws.AmendmentInFlightError if same else ws.LaggingWorktreeAmendmentError
+                with self.assertRaises(expected) as refused:
+                    ws.claim_checkpoint(wt_c, "wi", "CP2", now="t1")
+                self.assertIs(type(refused.exception), expected)
+
+    def test_predicate_totality_bare_entries_and_the_version_helper(self):
+        """CP6 test 13h."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            ws.release_checkpoint(repo.root, "wi", "CP2",
+                                  owner_token=ws.resolve_claim(repo.root, "wi")["owner_token"])
+            _amend(repo.root, commit=False)
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual((witness["status"], witness["amendment_seq"]), (ws.AMENDMENT_WITNESS_OPEN, 1))
+            self.assertEqual(witness["previous"], ws._none_witness("wi"))
+
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            bare = repo.root.parent / f"{repo.root.name}-bare.git"
+            linked = repo.root.parent / f"{repo.root.name}-bare-linked"
+            repo._extra_worktrees.extend([bare, linked])
+            _git_in(repo.root.parent, "clone", "-q", "--bare", str(repo.root), str(bare))
+            _git_in(bare, "worktree", "add", "-q", str(linked), _primary_branch(repo.root))
+            entries = ws.registered_worktrees(linked)
+            self.assertTrue(any("bare" in entry for entry in entries))
+            probe = ws._probe_worktrees(linked)
+            self.assertEqual([os.path.realpath(w["path"]) for w in probe["worktrees"]], [os.path.realpath(linked)])
+            self.assertEqual(probe["lagging"], [])
+            ws.claim_checkpoint(linked, "wi", "CP2", now="t1")
+            self.assertEqual(ws.read_amendment_witness(linked, "wi"), ws._none_witness("wi"))
+
+        table = ["2.3.1", "2.4.0", "2.5.0", "2.5.1", "2.6.0", "2.6.1", "2.9.9", "2.10.0", "3.0.0", "10.0.0"]
+        by_helper = sorted(table, key=ws.workflow_release_version_key)
+        self.assertEqual(by_helper, sorted(table, key=_reference_version_key))
+        self.assertLess(ws.workflow_release_version_key("2.6.0"), ws.workflow_release_version_key("2.10.0"))
+        self.assertFalse(ws.workflow_release_lags("2.10.0"))
+        self.assertFalse(ws.workflow_release_lags("2.6.0"))
+        self.assertTrue(ws.workflow_release_lags("2.5.1"))
+        for unorderable in (None, "", "2.6.0-rc1", "two", "2..6", 260, "2.6.x"):
+            with self.subTest(unorderable=unorderable):
+                self.assertIsNone(ws.workflow_release_version_key(unorderable))
+                self.assertTrue(ws.workflow_release_lags(unorderable))
+
+    def test_the_version_helper_agrees_with_the_real_release_version_key(self):
+        """CP6 test 13h, against `release._version_key` itself -- runnable
+        only where `workflow_manager` is importable (this repository's own
+        test runs); a target repository has only the reference copy."""
+        try:
+            from workflow_manager import release
+        except ImportError:
+            self.skipTest("workflow_manager is not importable here")
+        table = ["2.3.1", "2.4.0", "2.5.0", "2.5.1", "2.6.0", "2.6.1", "2.9.9", "2.10.0", "3.0.0", "10.0.0"]
+        self.assertEqual(sorted(table, key=ws.workflow_release_version_key),
+                         sorted(table, key=release._version_key))
+        for version in table:
+            self.assertEqual(release._version_key(version), _reference_version_key(version))
+
+    def test_one_request_projection_function_ignores_exactly_the_resolution_keys(self):
+        """CP6 test 13i."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            _amend(repo.root, commit=False)
+            entry = _read_state(repo.root)["work_items"]["wi"]["amendment_history"][0]
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            digest = ws.amendment_request_projection_sha256(entry)
+            self.assertEqual(witness["request_projection_sha256"], digest)
+            resolved = dict(entry, resolved_at_plan_revision=2, reconciliation_outcome={"CP1": "retained"},
+                            resolved_review_content_id="rc-2")
+            self.assertEqual(ws.amendment_request_projection_sha256(resolved), digest)
+            self.assertEqual(ws.AMENDMENT_RESOLUTION_TIME_KEYS,
+                             {"resolved_at_plan_revision", "reconciliation_outcome",
+                              "resolved_review_content_id"})
+            for key in entry:
+                if key in ws.AMENDMENT_RESOLUTION_TIME_KEYS:
+                    continue
+                with self.subTest(key=key):
+                    changed = dict(entry, **{key: "changed"})
+                    self.assertNotEqual(ws.amendment_request_projection_sha256(changed), digest)
+
+
+def _resolution_fork_repo(repo, resolve_a, resolve_b):
+    """No witness; worktrees `a` and `b` share one unresolved `2.5.1`
+    amendment, and each commits its own resolution of it."""
+    _lifecycle_repo(repo)
+    _amend_without_witness(repo.root)
+    wt_a, wt_b = repo.worktree("a"), repo.worktree("b")
+    resolve_a(wt_a)
+    resolve_b(wt_b)
+    return wt_a, wt_b
+
+
+class TestAmendmentBootstrapResolutionFork(unittest.TestCase):
+    """CP6 test 20: request agreement is not resolution agreement. The
+    scan compares resolutions at every shared seq, writes nothing on a
+    fork, and never chooses one resolution."""
+
+    def _assert_fork(self, repo, *names):
+        with self.assertRaises(ws.AmendmentBootstrapConflictError) as refused:
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="t9")
+        for name in names:
+            self.assertIn(os.path.realpath(name), str(refused.exception))
+        self.assertIsNone(_witness_bytes(repo.root))
+
+    def test_different_reconciliation_outcomes(self):
+        with ScratchRepo() as repo:
+            wt_a, wt_b = _resolution_fork_repo(
+                repo, lambda wt: _resolve_in_head(wt, outcome={"CP1": "retained"}),
+                lambda wt: _resolve_in_head(wt, outcome={"CP1": "needs_revalidation"}))
+            self._assert_fork(repo, wt_a, wt_b)
+
+    def test_different_resolved_revisions(self):
+        with ScratchRepo() as repo:
+            wt_a, wt_b = _resolution_fork_repo(
+                repo, lambda wt: _resolve_in_head(wt, revision=2),
+                lambda wt: _resolve_in_head(wt, revision=3))
+            self._assert_fork(repo, wt_a, wt_b)
+
+    def test_equal_legacy_resolutions_with_disjoint_approval_trailers(self):
+        with ScratchRepo() as repo:
+            wt_a, wt_b = _resolution_fork_repo(
+                repo, lambda wt: _resolve_in_head(wt, legacy=True, trailer="rc-plan-a"),
+                lambda wt: _resolve_in_head(wt, legacy=True, trailer="rc-plan-b"))
+            self._assert_fork(repo, wt_a, wt_b)
+
+    def test_a_divergence_at_an_older_seq_with_agreeing_latest_entries(self):
+        with ScratchRepo() as repo:
+            wt_a, wt_b = _resolution_fork_repo(
+                repo, lambda wt: _resolve_in_head(wt, outcome={"CP1": "retained"}),
+                lambda wt: _resolve_in_head(wt, outcome={"CP1": "needs_revalidation"}))
+            # An identical, unresolved seq 2 on both branches.
+            seq2 = {"amendment_id": "1", "requested_at": "t2", "requested_from_phase": "IMPLEMENTING",
+                    "reason": "second", "superseded_plan_revision": 2, "superseded_plan_approval": None,
+                    "checkpoints_snapshot": {}, "pre_amendment_approval_commit": repo.base,
+                    "resolved_at_plan_revision": None}
+            for wt in (wt_a, wt_b):
+                state = _read_state(wt)
+                state["work_items"]["wi"]["amendment_history"].append(copy.deepcopy(seq2))
+                state["work_items"]["wi"]["amendment_base_commit"] = repo.base
+                state["work_items"]["wi"]["phase"] = "AMENDING_PLAN"
+                _write_state(wt, state)
+                _commit_lifecycle_state(wt, "second amendment")
+            self._assert_fork(repo, wt_a, wt_b)
+
+    def test_a_working_tree_resolution_its_head_does_not_show_refuses(self):
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            _amend_without_witness(repo.root)
+            state = _read_state(repo.root)
+            entry = state["work_items"]["wi"]["amendment_history"][0]
+            entry.update(resolved_at_plan_revision=2, reconciliation_outcome={"CP1": "retained"},
+                         resolved_review_content_id="rc-2")
+            _write_state(repo.root, state)
+            with self.assertRaises(ws.AmendmentBootstrapConflictError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t1")
+            self.assertIn("in flight at update time", str(refused.exception))
+            self.assertIsNone(_witness_bytes(repo.root))
+
+    def test_one_resolution_visible_in_many_worktrees_bootstraps_to_resolved(self):
+        """CP6 test 21's bootstrap half: the same approval commit, merged
+        into one branch and cherry-picked onto another, is one resolution."""
+        with ScratchRepo() as repo:
+            _lifecycle_repo(repo)
+            _amend_without_witness(repo.root)
+            wt_b, wt_c = repo.worktree("b"), repo.worktree("c")
+            approval = _resolve_in_head(repo.root)
+            _git_in(wt_b, "merge", "-q", "--no-edit", _primary_branch(repo.root))
+            _git_in(wt_c, "cherry-pick", approval)
+            ws.claim_checkpoint(wt_c, "wi", "CP2", now="t1")
+            witness = ws.read_amendment_witness(repo.root, "wi")
+            self.assertEqual(witness["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+            head_entry = _read_state(repo.root)["work_items"]["wi"]["amendment_history"][0]
+            self.assertEqual(witness["resolution_projection_sha256"],
+                             ws.amendment_resolution_projection_sha256(head_entry))
+            ws.release_checkpoint(wt_c, "wi", "CP2",
+                                  owner_token=ws.resolve_claim(wt_c, "wi")["owner_token"])
+            for root in (repo.root, wt_b):
+                claim = ws.claim_checkpoint(root, "wi", "CP2", now="t2")
+                ws.release_checkpoint(root, "wi", "CP2", owner_token=claim["owner_token"])
+
+
+_AMENDMENT_PLAN_TEXT = "<!-- CP1 -->\nCP1 -- first.\n<!-- /CP1 -->\n"
+_AMENDMENT_REGISTRY = {"checkpoints": [
+    {"id": "CP1", "name": "first", "depends_on": [], "complexity": 1, "session_target": 1},
+]}
+
+
+def _open_amendment_approval(repo, root, *, review_content_id="rc-2"):
+    """`/approve-review plan` step 4c on an item with an open amendment:
+    the real journal, whose pinned `expected_post_state` resolves the
+    amendment exactly as the eventual approval commit will."""
+    record = ws.build_approval_record(
+        basis="EXTERNAL_APPROVE", stage="plan", user_confirmation="approve wi",
+        now="2026-01-09T00:00:00Z", reviewed_bundle_id="b" * 64,
+        approved_review_content_id=review_content_id,
+        review_content_manifest=[{"path": "docs/plan.md", "sha256": "d" * 64}],
+    )
+    return ws.open_plan_approval_journal(
+        Path(root), work_item_id="wi", base_commit=repo.base, pre_state=_read_state(root),
+        record=record, approval_now="2026-01-09T00:00:00Z", expected_bundle_id="b" * 64,
+        expected_review_content_id=review_content_id, applicable_paths=(_STATE_REL,),
+        fifth_member_applies=False, fifth_member_sha256=None, user_confirmation="approve wi",
+        quiescence_authorization="lifecycle unit test",
+        pre_registry=_AMENDMENT_REGISTRY, pre_plan_text=_AMENDMENT_PLAN_TEXT,
+        post_registry=_AMENDMENT_REGISTRY, post_plan_text=_AMENDMENT_PLAN_TEXT,
+    )
+
+
+def _commit_journal_approval(root, journal) -> str:
+    """The approval commit the journal describes: its pinned post-state,
+    with the plan-approval trailers."""
+    import base64
+    (Path(root) / _STATE_REL).write_bytes(base64.b64decode(journal["expected_post_state_b64"]))
+    return _commit_lifecycle_state(root, "plan-stage approval", {
+        "Workflow-Plan-Approval": journal["expected_review_content_id"], "Workflow-Work-Item": "wi"})
+
+
+def _plant_witness(root, witness: dict) -> bytes:
+    path = ws.amendment_witness_path(Path(root), "wi")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raw = (json.dumps(witness, indent=2, sort_keys=True) + "\n").encode()
+    path.write_bytes(raw)
+    return raw
+
+
+class TestAmendmentResolutionReservation(unittest.TestCase):
+    """One resolution per amendment sequence (INV-10): the reservation, the
+    advance, the release, 6a1's held check and the staging modes, driven
+    against real plan-approval journals in real linked worktrees (CP6 tests
+    8, 13i, 19, 21, 22(c)-(e), 24, 27, 28; the command-flow halves are in
+    the acceptance matrix)."""
+
+    def _amended(self, repo):
+        """`a` is the resolver's linked worktree; both it and `main` carry
+        the committed, unresolved amendment seq 1 (witness `OPEN`)."""
+        _lifecycle_repo(repo)
+        _amend(repo.root)
+        wt_a = repo.worktree("a")
+        return wt_a
+
+    def test_apply_plan_approval_records_the_approved_identity_and_the_digests_agree(self):
+        """CP6 test 24, and 13i's "identical before and after
+        `apply_plan_approval` resolves it". The `2.5.1` half -- its
+        `validate_state` has no `amendment_history` entry-key check and
+        ignores `resolved_review_content_id` -- cannot run here (a target
+        repository has no `2.5.1` payload); it was established against
+        `distribution/workflow/2.5.1/` and is recorded in the
+        milestone's CP6 pre-edit evidence."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            before = _read_state(wt_a)["work_items"]["wi"]["amendment_history"][0]
+            journal = _open_amendment_approval(repo, wt_a, review_content_id="rc-approved")
+            import base64
+            post = json.loads(base64.b64decode(journal["expected_post_state_b64"]))
+            entry = post["work_items"]["wi"]["amendment_history"][0]
+            self.assertEqual(entry["resolved_review_content_id"], "rc-approved")
+            ws.validate_state(post)
+            self.assertEqual(ws.amendment_request_projection_sha256(entry),
+                             ws.amendment_request_projection_sha256(before))
+            ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+            _commit_journal_approval(wt_a, journal)
+            committed = json.loads(_git_in(wt_a, "show", f"HEAD:{_STATE_REL}"))
+            committed_entry = committed["work_items"]["wi"]["amendment_history"][0]
+            reserved = ws.read_amendment_witness(wt_a, "wi")["resolution_reservation"]
+            self.assertEqual(ws.amendment_resolution_projection_sha256(committed_entry),
+                             reserved["resolution_projection_sha256"])
+
+    def test_an_unreadable_committed_state_elsewhere_offers_the_resolution_literal(self):
+        """Implementation review round 1, Important 2 (`RESOLVING`): the
+        approval that reserved the resolution was abandoned, and an
+        unrelated worktree `b` commits an unreadable `WORKFLOW_STATE.json`.
+        The reservation's orphan test cannot be completed (`b` might hold
+        the resolution), so a claim refuses with the evidence-bound
+        `clear amendment resolution` literal -- never a bare
+        `LifecycleStateUnreadableError` with empty evidence -- and the
+        literal clears the reservation back to `OPEN`."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            wt_b = repo.worktree("b")
+            (wt_b / _STATE_REL).write_text("{torn")
+            _commit_lifecycle_state(wt_b, "an unrelated, broken state")
+            journal = _open_amendment_approval(repo, wt_a)
+            ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+            ws.close_plan_approval_journal(wt_a)  # the approval is abandoned
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            literal = refused.exception.evidence["literal"]
+            self.assertEqual(literal, ws.amendment_resolution_clear_literal(
+                "wi", hashlib.sha256(witness_before).hexdigest()))
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            ws.clear_amendment_resolution(repo.root, "wi", user_authorization=literal)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_OPEN)
+
+    def test_an_unreadable_resolver_head_offers_the_resolution_literal(self):
+        """Important 2, predicate step 1's own read: the resolver
+        worktree's `HEAD` itself commits an unreadable state after its
+        approval was abandoned."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            journal = _open_amendment_approval(repo, wt_a)
+            ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+            ws.close_plan_approval_journal(wt_a)
+            (wt_a / _STATE_REL).write_text("{torn")
+            _commit_lifecycle_state(wt_a, "a broken state on the resolver branch")
+            witness_before = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+            literal = refused.exception.evidence["literal"]
+            self.assertEqual(_witness_bytes(repo.root), witness_before)
+            ws.clear_amendment_resolution(repo.root, "wi", user_authorization=literal)
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_OPEN)
+
+    def test_reserve_and_advance_are_idempotent_byte_for_byte(self):
+        """CP6 test 21: re-running `reserve_amendment_resolution` on its own
+        journal's token before the commit, and `advance_amendment_witness`
+        after it, change no witness byte."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            journal = _open_amendment_approval(repo, wt_a)
+            ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+            reserved = _witness_bytes(wt_a)
+            ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t2")
+            self.assertEqual(_witness_bytes(wt_a), reserved)
+            commit = _commit_journal_approval(wt_a, journal)
+            ws.advance_amendment_witness(wt_a, "wi", journal=journal, commit=commit)
+            advanced = _witness_bytes(wt_a)
+            self.assertEqual(ws.read_amendment_witness(wt_a, "wi")["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+            ws.advance_amendment_witness(wt_a, "wi", journal=journal, commit=commit)
+            ws.advance_amendment_witness(wt_a, "wi")
+            self.assertEqual(_witness_bytes(wt_a), advanced)
+            self.assertEqual(ws.held_primitives(), ())
+
+    def test_a_lost_advance_self_heals_from_the_resolvers_head_or_its_branch_tip(self):
+        """CP6 test 8 (the claim-side half; the resolver's own resumed run
+        is in the acceptance matrix): the approval is committed but the
+        witness is still `RESOLVING`. A claim in another worktree advances
+        it from the resolver's `HEAD` -- and, with the resolver worktree
+        switched away, from the `resolver_branch` tip -- before refusing
+        as stale (its own `HEAD` lacks the resolution)."""
+        for via in ("resolver HEAD", "branch tip"):
+            with self.subTest(via=via), ScratchRepo() as repo:
+                wt_a = self._amended(repo)
+                journal = _open_amendment_approval(repo, wt_a)
+                ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+                _commit_journal_approval(wt_a, journal)
+                ws.close_plan_approval_journal(wt_a)
+                if via == "branch tip":
+                    _git_in(wt_a, "checkout", "-q", "--detach", _primary_branch(repo.root))
+                reserved = ws.read_amendment_witness(repo.root, "wi")["resolution_reservation"]
+                with self.assertRaises(ws.StaleLifecycleStateError):
+                    ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+                witness = ws.read_amendment_witness(repo.root, "wi")
+                self.assertEqual(witness["status"], ws.AMENDMENT_WITNESS_RESOLVED)
+                self.assertEqual(witness["resolution_projection_sha256"],
+                                 reserved["resolution_projection_sha256"])
+
+    def test_a_divergent_resolution_is_never_collapsed_into_the_recorded_one(self):
+        """CP6 test 19: a committed, unreserved divergent resolution on
+        another branch refuses with `AmendmentResolutionConflictError`
+        naming both digests -- under `RESOLVED`, and under `RESOLVING`,
+        where predicate step 1 refuses rather than advancing. The witness
+        bytes are unchanged in both cases."""
+        for status in ("RESOLVED", "RESOLVING"):
+            with self.subTest(witness=status), ScratchRepo() as repo:
+                wt_a = self._amended(repo)
+                wt_b = repo.worktree("b")
+                journal = _open_amendment_approval(repo, wt_a)
+                ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+                if status == "RESOLVED":
+                    commit = _commit_journal_approval(wt_a, journal)
+                    ws.advance_amendment_witness(wt_a, "wi", journal=journal, commit=commit)
+                    ws.close_plan_approval_journal(wt_a)
+                _resolve_in_head(wt_b, review_content_id="rc-divergent")
+                witness_before = _witness_bytes(repo.root)
+                with self.assertRaises(ws.AmendmentResolutionConflictError) as refused:
+                    ws.claim_checkpoint(wt_b, "wi", "CP2", now="t2")
+                divergent = ws.amendment_resolution_projection_sha256(
+                    _read_state(wt_b)["work_items"]["wi"]["amendment_history"][0])
+                self.assertIn(divergent, str(refused.exception))
+                recorded = (ws.read_amendment_witness(repo.root, "wi").get("resolution_projection_sha256")
+                            or ws.read_amendment_witness(repo.root, "wi")["resolution_reservation"][
+                                "resolution_projection_sha256"])
+                self.assertIn(recorded, str(refused.exception))
+                self.assertEqual(_witness_bytes(repo.root), witness_before)
+
+    def test_a_second_reservation_refuses_while_the_first_is_live(self):
+        """CP6 test 17's deterministic core: one reservation per seq."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            wt_b = repo.worktree("b")
+            journal_a = _open_amendment_approval(repo, wt_a, review_content_id="rc-a")
+            journal_b = _open_amendment_approval(repo, wt_b, review_content_id="rc-b")
+            ws.reserve_amendment_resolution(wt_a, "wi", journal_a, now="t1")
+            reserved = _witness_bytes(repo.root)
+            with self.assertRaises(ws.AmendmentResolutionReservedError) as refused:
+                ws.reserve_amendment_resolution(wt_b, "wi", journal_b, now="t2")
+            self.assertEqual(refused.exception.evidence["approved_review_content_id"], "rc-a")
+            self.assertEqual(os.path.realpath(refused.exception.evidence["resolver_worktree"]),
+                             os.path.realpath(wt_a))
+            self.assertEqual(_witness_bytes(repo.root), reserved)
+
+    def test_a_rollback_crash_before_the_release_is_a_provable_orphan_reservation(self):
+        """CP6 test 22(c): the journal is gone (6b's rollback closed it)
+        and no resolution exists anywhere, so the next (9) holder rolls
+        the reservation back to `OPEN`, after which another worktree can
+        reserve."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            wt_b = repo.worktree("b")
+            journal_a = _open_amendment_approval(repo, wt_a, review_content_id="rc-a")
+            ws.reserve_amendment_resolution(wt_a, "wi", journal_a, now="t1")
+            ws.close_plan_approval_journal(wt_a)  # 6b completed; the release was lost
+            journal_b = _open_amendment_approval(repo, wt_b, review_content_id="rc-b")
+            witness = ws.reserve_amendment_resolution(wt_b, "wi", journal_b, now="t2")
+            self.assertEqual(witness["status"], ws.AMENDMENT_WITNESS_RESOLVING)
+            self.assertEqual(witness["resolution_reservation"]["approved_review_content_id"], "rc-b")
+
+    def test_an_undecidable_orphan_reservation_requires_the_literal(self):
+        """CP6 test 22(d): the resolver worktree removed, or left on a
+        detached `HEAD` -- the literal `clear amendment resolution <wi>
+        <sha256>` is required, and a wrong digest refuses."""
+        for how in ("removed", "detached"):
+            with self.subTest(resolver=how), ScratchRepo() as repo:
+                wt_a = self._amended(repo)
+                if how == "detached":
+                    _git_in(wt_a, "checkout", "-q", "--detach")
+                journal_a = _open_amendment_approval(repo, wt_a)
+                ws.reserve_amendment_resolution(wt_a, "wi", journal_a, now="t1")
+                ws.close_plan_approval_journal(wt_a)
+                if how == "removed":
+                    repo.remove_worktree(wt_a)
+                witness_before = _witness_bytes(repo.root)
+                with self.assertRaises(ws.AmendmentInFlightError) as refused:
+                    ws.claim_checkpoint(repo.root, "wi", "CP2", now="t2")
+                literal = refused.exception.evidence["literal"]
+                self.assertEqual(literal, ws.amendment_resolution_clear_literal(
+                    "wi", hashlib.sha256(witness_before).hexdigest()))
+                with self.assertRaises(ws.AmendmentWitnessClearRefusedError):
+                    ws.clear_amendment_resolution(
+                        repo.root, "wi", user_authorization=f"clear amendment resolution wi {'0' * 64}")
+                self.assertEqual(_witness_bytes(repo.root), witness_before)
+                restored = ws.clear_amendment_resolution(repo.root, "wi", user_authorization=literal)
+                self.assertEqual(restored["status"], ws.AMENDMENT_WITNESS_OPEN)
+
+    def test_a_taken_over_journal_keeps_its_reservation_live_through_previous_owner_tokens(self):
+        """CP6 test 22(e), reservation half: after a takeover of A's
+        journal the reservation's token is only in `previous_owner_tokens`,
+        and it still refuses B (predicate step 2a, orphan test (b))."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            wt_b = repo.worktree("b")
+            journal_a = _open_amendment_approval(repo, wt_a, review_content_id="rc-a")
+            ws.reserve_amendment_resolution(wt_a, "wi", journal_a, now="t1")
+            evidence = ws.plan_approval_takeover_evidence(wt_a)
+            new_token = ws.take_over_plan_approval_transaction(
+                wt_a, work_item_id="wi", now="t2",
+                user_authorization=ws.plan_approval_takeover_authorization_literal(evidence),
+                evidence=evidence)
+            self.assertNotEqual(new_token, journal_a["owner_token"])
+            journal_b = _open_amendment_approval(repo, wt_b, review_content_id="rc-b")
+            with self.assertRaises(ws.AmendmentResolutionReservedError):
+                ws.reserve_amendment_resolution(wt_b, "wi", journal_b, now="t3")
+            with self.assertRaises(ws.AmendmentInFlightError):
+                ws.claim_checkpoint(repo.root, "wi", "CP2", now="t4")
+            self.assertEqual(ws.read_amendment_witness(repo.root, "wi")["status"],
+                             ws.AMENDMENT_WITNESS_RESOLVING)
+            # The taken-over transaction still holds it for 6a1.
+            proof = ws.assert_amendment_resolution_held(wt_a, "wi", ws.read_plan_approval_journal(wt_a))
+            self.assertEqual(proof["seq"], 1)
+
+    def test_the_held_check_refuses_any_witness_it_cannot_hold_and_writes_nothing(self):
+        """CP6 test 27: `OPEN`, `NONE`, another seq, a foreign token's
+        `RESOLVING`, and a `RESOLVED` with a different digest each raise
+        `AmendmentResolutionHeldError`; the witness bytes, `HEAD`, the
+        index and the journal are unchanged. The step-5 staging entry
+        refuses the same way in `first_commit` mode without a 4d
+        reservation and in `amend_recovery` mode without a passing held
+        check."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            journal = _open_amendment_approval(repo, wt_a)
+            ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+            reserving = ws.read_amendment_witness(wt_a, "wi")
+            open_witness = reserving["previous"]
+            foreign = copy.deepcopy(reserving)
+            foreign["resolution_reservation"]["journal_owner_token"] = "f" * 32
+            other_seq = dict(open_witness, amendment_seq=2)
+            resolved_elsewhere = ws._resolved_witness_from(
+                open_witness, entry=dict(_read_state(wt_a)["work_items"]["wi"]["amendment_history"][0],
+                                         resolved_at_plan_revision=9,
+                                         reconciliation_outcome={}, resolved_review_content_id="rc-x"),
+                commit=None)
+            planted = {"OPEN": open_witness, "NONE": ws._none_witness("wi"), "another seq": other_seq,
+                       "foreign RESOLVING": foreign, "RESOLVED, other digest": resolved_elsewhere}
+            head = _git_in(wt_a, "rev-parse", "HEAD")
+            journal_bytes = ws.plan_approval_journal_path(wt_a).read_bytes()
+            for label, witness in planted.items():
+                with self.subTest(label):
+                    raw = _plant_witness(wt_a, witness)
+                    with self.assertRaises(ws.AmendmentResolutionHeldError):
+                        ws.assert_amendment_resolution_held(wt_a, "wi", journal)
+                    self.assertEqual(_witness_bytes(wt_a), raw)
+            _plant_witness(wt_a, open_witness)
+            with self.assertRaises(ws.AmendmentResolutionHeldError):
+                ws.stage_plan_approval_members(wt_a, journal, mode=ws.PLAN_APPROVAL_STAGING_FIRST_COMMIT)
+            _plant_witness(wt_a, reserving)
+            with self.assertRaises(ws.AmendmentResolutionHeldError):
+                ws.stage_plan_approval_members(wt_a, journal, mode=ws.PLAN_APPROVAL_STAGING_AMEND_RECOVERY)
+            with self.assertRaises(ws.AmendmentResolutionHeldError):
+                ws.stage_plan_approval_members(
+                    wt_a, journal, mode=ws.PLAN_APPROVAL_STAGING_AMEND_RECOVERY,
+                    resolution_held={"work_item_id": "wi", "owner_token": "f" * 32, "seq": 1,
+                                     "resolution_projection_sha256": "0" * 64})
+            self.assertEqual(_git_in(wt_a, "rev-parse", "HEAD"), head)
+            self.assertEqual(_git_in(wt_a, "diff", "--name-only", "--cached", "HEAD"), "")
+            self.assertEqual(ws.plan_approval_journal_path(wt_a).read_bytes(), journal_bytes)
+            # With the evidence each mode requires, both stage.
+            ws.stage_plan_approval_members(wt_a, journal, mode=ws.PLAN_APPROVAL_STAGING_FIRST_COMMIT)
+            proof = ws.assert_amendment_resolution_held(wt_a, "wi", journal)
+            ws.stage_plan_approval_members(wt_a, journal, mode=ws.PLAN_APPROVAL_STAGING_AMEND_RECOVERY,
+                                           resolution_held=proof)
+            self.assertEqual(ws.held_primitives(), ())
+
+    def test_a_takeover_then_not_committed_rollback_releases_in_band(self):
+        """CP6 test 28: the release matches the reservation's token among
+        the `journal_tokens` captured before the rollback closed the
+        journal, and restores `OPEN` -- on an attached branch and on a
+        detached `HEAD` alike, with no orphan test and no literal. Passing
+        only the current token (revision 7's defect) leaves `RESOLVING`
+        behind."""
+        for detached in (False, True):
+            for only_current in (False, True):
+                with self.subTest(detached=detached, only_current_token=only_current), \
+                        ScratchRepo() as repo:
+                    wt_a = self._amended(repo)
+                    if detached:
+                        _git_in(wt_a, "checkout", "-q", "--detach")
+                    journal = _open_amendment_approval(repo, wt_a)
+                    ws.reserve_amendment_resolution(wt_a, "wi", journal, now="t1")
+                    evidence = ws.plan_approval_takeover_evidence(wt_a)
+                    new_token = ws.take_over_plan_approval_transaction(
+                        wt_a, work_item_id="wi", now="t2",
+                        user_authorization=ws.plan_approval_takeover_authorization_literal(evidence),
+                        evidence=evidence)
+                    taken = ws.read_plan_approval_journal(wt_a)
+                    self.assertEqual(ws.classify_plan_approval_outcome(wt_a, taken),
+                                     ws.PLAN_APPROVAL_OUTCOME_NOT_COMMITTED)
+                    tokens = [new_token] if only_current else [taken["owner_token"],
+                                                               *taken["previous_owner_tokens"]]
+                    ws.rollback_plan_approval_transaction(wt_a, owner_token=new_token)
+                    ws.release_amendment_resolution(wt_a, "wi", tokens)
+                    status = ws.read_amendment_witness(wt_a, "wi")["status"]
+                    self.assertEqual(status, ws.AMENDMENT_WITNESS_RESOLVING if only_current
+                                     else ws.AMENDMENT_WITNESS_OPEN)
+                    if not only_current:
+                        wt_b = repo.worktree("b")
+                        journal_b = _open_amendment_approval(repo, wt_b, review_content_id="rc-b")
+                        ws.reserve_amendment_resolution(wt_b, "wi", journal_b, now="t3")
+
+    def test_the_journal_refuses_to_open_over_a_live_claim_on_an_open_amendment(self):
+        """Defense in depth (section 5.6, resolution side): a claim a
+        lagging worktree published past the witness is caught at
+        approval."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            with ws.lifecycle_lock(repo.root, "wi"):
+                ws._claim_or_refuse(repo.root, "wi",
+                                    ws._build_claim_record(repo.root, "wi", "CP2", "t1"))
+            with self.assertRaises(ws.AmendmentCheckpointActiveError):
+                _open_amendment_approval(repo, wt_a)
+            self.assertIsNone(ws.read_plan_approval_journal(wt_a))
 
 
 class TestApplyPlanApprovalAmendmentBranch(unittest.TestCase):
@@ -12360,15 +13978,18 @@ class TestTwoStagePlanReviewVersionsInheritance(unittest.TestCase):
     "2.1" stay byte-unchanged."""
 
     def test_publish_plan_revision_target_phase_per_version(self):
+        """workflow-2.6.0: `"1"` is unchanged; a two-stage item's publish is
+        mirror-only, so its phase stays `PLANNING` (the bind writes
+        `AWAITING_LOCAL_PLAN_REVIEW`)."""
         expected = {
             "1": "AWAITING_EXTERNAL_PLAN_REVIEW",
-            "2.1": "AWAITING_LOCAL_PLAN_REVIEW",
-            "2.2": "AWAITING_LOCAL_PLAN_REVIEW",
+            "2.1": "PLANNING",
+            "2.2": "PLANNING",
         }
         for version, target_phase in expected.items():
             with self.subTest(version=version):
                 wi = _base_work_item(governing_workflow_version=version, phase="PLANNING", plan_revision=1)
-                new_state = ws.publish_plan_revision(_base_state(wi=wi), "wi", 2, "t1")
+                new_state = ws.publish_plan_revision(_base_state(wi=wi), "wi", 2, "t1", review_content_id="a" * 64)
                 self.assertEqual(new_state["work_items"]["wi"]["phase"], target_phase)
 
     def test_publish_plan_revision_rejects_unsupported_version(self):
@@ -12435,8 +14056,19 @@ class TestTwoStagePlanReviewVersionsInheritance(unittest.TestCase):
             ws.validate_state(_base_state(wi=wi))
 
     def test_transition_to_awaiting_local_plan_review_works_for_2_2(self):
-        wi = _base_work_item(governing_workflow_version="2.2", phase="REVISING_PLAN")
-        new_state = ws.transition_to_awaiting_local_plan_review(_base_state(wi=wi), "wi", "t1")
+        """workflow-2.6.0: the retired writer refuses for `"2.2"` exactly as
+        for `"2.1"`; the bind is the `"2.2"` writer of the same edge."""
+        wi = _base_work_item(governing_workflow_version="2.2", phase="REVISING_PLAN", plan_revision=2,
+                             plan_review_binding={
+                                 "status": "PUBLISHED", "at": "t0", "bound": None,
+                                 "consumed": {"review_content_id": "b" * 64, "plan_revision": 1, "legacy": False},
+                                 "published": {"review_content_id": "a" * 64, "plan_revision": 2},
+                             })
+        with self.assertRaises(ws.PlanReviewWriterRetiredError):
+            ws.transition_to_awaiting_local_plan_review(_base_state(wi=wi), "wi", "t1")
+        new_state = ws.bind_plan_review_bundle(_base_state(wi=wi), "wi", binding={
+            "review_content_id": "a" * 64, "bundle_id": "c" * 64, "plan_revision": 2,
+        }, now="t1")
         self.assertEqual(new_state["work_items"]["wi"]["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
 
 
@@ -12543,7 +14175,8 @@ class TestActivatingDoesNotMutateExistingWorkItems(unittest.TestCase):
         self.assertEqual(new_state["work_items"]["fresh"]["governing_workflow_version"], "2.2")
 
     def test_route_work_item_resume_branch_also_leaves_governing_version_untouched(self):
-        existing = _base_work_item(governing_workflow_version="2.1", phase="IMPLEMENTING", plan_revision=1)
+        # workflow-2.6.0: the resume branch runs at a plan-stage phase.
+        existing = _base_work_item(governing_workflow_version="2.1", phase="REVISING_PLAN", plan_revision=1)
         state = _base_state(existing=existing)
         config_2_2_default = {
             "schema_version": ws.SCHEMA_VERSION,
@@ -14657,6 +16290,821 @@ class GeneratedDeclarationsWorkflowManagerImplementationStageWideningTest(unitte
         self.assertIn(
             ".workflow-manager/", declarations["plan_stage"]["excluded_prefixes"],
         )
+
+
+
+class TestFeedbackLayoutStamp(unittest.TestCase):
+    """`D-Feedback-Layout` (workflow-2.6.0, CP3; REQ-1): the durable
+    `feedback_layout: "scoped"` stamp is written only at creation --
+    `route_work_item`'s fresh-id branch and
+    `create_remediation_child_work_item` -- never on resume, never
+    back-filled; `validate_state` accepts the one known value and refuses
+    any other (INV-3). The resolver side is
+    `workflow_fingerprint_test.TestFeedbackLayout`."""
+
+    def _route(self, state, work_item_id, *, plan_revision=1, now="t1"):
+        return ws.route_work_item(
+            state, ws.default_config(), work_item_id=work_item_id, work_item_type="process",
+            work_item_kind="process", plan_path="p", registry_path="r",
+            plan_revision=plan_revision, now=now,
+        )
+
+    def test_fresh_item_is_stamped_scoped(self):
+        new_state = self._route(_base_state(), "milestone-9")
+        self.assertEqual(new_state["work_items"]["milestone-9"]["feedback_layout"], "scoped")
+        ws.validate_state(new_state)
+
+    def test_remediation_child_is_stamped_scoped(self):
+        state = _base_state(parent=_base_work_item(
+            work_item_id="parent", work_item_type="product", work_item_kind="product",
+        ))
+        new_state, child_id = ws.create_remediation_child_work_item(
+            state, ws.default_config(), parent_work_item_id="parent", plan_path="p",
+            registry_path="r", base_commit="feedcafe", now="t1",
+        )
+        self.assertEqual(new_state["work_items"][child_id]["feedback_layout"], "scoped")
+        self.assertNotIn("feedback_layout", new_state["work_items"]["parent"], "the parent is never back-filled")
+
+    def test_resume_never_stamps_a_legacy_item(self):
+        state = _base_state(wi=_base_work_item(governing_workflow_version="2.2", phase="REVISING_PLAN"))
+        self.assertNotIn("feedback_layout", state["work_items"]["wi"])
+        resumed = self._route(state, "wi", plan_revision=2, now="t2")
+        self.assertNotIn("feedback_layout", resumed["work_items"]["wi"])
+
+    def test_resume_leaves_a_scoped_stamp_unchanged(self):
+        created = self._route(_base_state(), "milestone-9")
+        resumed = self._route(created, "milestone-9", plan_revision=2, now="t2")
+        self.assertEqual(resumed["work_items"]["milestone-9"]["feedback_layout"], "scoped")
+
+    def test_validate_state_accepts_absent_and_scoped(self):
+        state = _base_state(wi=_base_work_item())
+        ws.validate_state(state)  # absent: legacy
+        state["work_items"]["wi"]["feedback_layout"] = "scoped"
+        ws.validate_state(state)
+
+    def test_validate_state_refuses_an_unknown_layout(self):
+        for value in ("flat", "legacy-flat", "", None, 1, ["scoped"]):
+            with self.subTest(value=value):
+                state = _base_state(wi=_base_work_item())
+                state["work_items"]["wi"]["feedback_layout"] = value
+                with self.assertRaises(fingerprint.UnknownFeedbackLayoutError):
+                    ws.validate_state(state)
+
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.6.0 CP4: D-Plan-Review-Bundle-Binding -- dict-level coverage of
+# the publication split, the `plan_review_binding` record's writers and
+# validator, the bind, the withdrawal and step 1's feedback rule. The
+# real-repository scenarios (verifier, status table, generator staging,
+# command order) live in workflow_acceptance_matrix_test.py and
+# workflow_fingerprint_generalization_test.py.
+# ---------------------------------------------------------------------------
+
+_CP4_A, _CP4_B, _CP4_C, _CP4_D = "a" * 64, "b" * 64, "c" * 64, "d" * 64
+
+
+def _cp4_record(status, *, consumed=None, published=None, bound=None, at="t0"):
+    return {"status": status, "at": at, "consumed": consumed, "published": published, "bound": bound}
+
+
+def _cp4_consumed(review_content_id=_CP4_B, plan_revision=1):
+    return {"review_content_id": review_content_id, "plan_revision": plan_revision,
+            "legacy": review_content_id is None}
+
+
+def _cp4_item(version="2.2", phase="REVISING_PLAN", plan_revision=1, record="default", **overrides):
+    wi = _base_work_item(governing_workflow_version=version, phase=phase, plan_revision=plan_revision, **overrides)
+    if record == "default":
+        record = _cp4_record("CONSUMED", consumed=_cp4_consumed(plan_revision=plan_revision))
+    if record is not None:
+        wi["plan_review_binding"] = record
+    return wi
+
+
+def _cp4_binding(review_content_id=_CP4_A, bundle_id=_CP4_C, plan_revision=2):
+    return {"review_content_id": review_content_id, "bundle_id": bundle_id, "plan_revision": plan_revision}
+
+
+class TestPlanReviewBindingValidation(unittest.TestCase):
+    """`validate_state` accepts every well-formed record and refuses every
+    malformed one by name (INV-3)."""
+
+    def _validate(self, record):
+        wi = _cp4_item(record=None)
+        wi["plan_review_binding"] = record
+        ws.validate_state(_base_state(wi=wi))
+
+    def test_absent_record_is_valid(self):
+        ws.validate_state(_base_state(wi=_cp4_item(record=None)))
+
+    def test_each_well_formed_status_is_valid(self):
+        for record in (
+            _cp4_record("CONSUMED", consumed=_cp4_consumed()),
+            _cp4_record("CONSUMED", consumed=_cp4_consumed(None, 3)),
+            _cp4_record("PUBLISHED", published={"review_content_id": _CP4_A, "plan_revision": 2}),
+            _cp4_record("PUBLISHED", consumed=_cp4_consumed(),
+                        published={"review_content_id": _CP4_A, "plan_revision": 2}),
+            _cp4_record("BOUND", consumed=_cp4_consumed(),
+                        published={"review_content_id": _CP4_A, "plan_revision": 2},
+                        bound=_cp4_binding()),
+        ):
+            with self.subTest(status=record["status"], legacy=bool(record["consumed"] and record["consumed"]["legacy"])):
+                self._validate(record)
+
+    def test_malformed_records_refuse_by_name(self):
+        good_published = {"review_content_id": _CP4_A, "plan_revision": 2}
+        cases = {
+            "present null": None,
+            "not an object": ["CONSUMED"],
+            "unknown status": _cp4_record("REVIEWED", consumed=_cp4_consumed()),
+            "unhashable status": dict(_cp4_record("CONSUMED", consumed=_cp4_consumed()), status=["CONSUMED"]),
+            "missing key": {"status": "CONSUMED", "at": "t0", "consumed": _cp4_consumed(), "published": None},
+            "extra key": dict(_cp4_record("CONSUMED", consumed=_cp4_consumed()), extra=1),
+            "empty at": _cp4_record("CONSUMED", consumed=_cp4_consumed(), at=""),
+            "legacy flag disagrees": _cp4_record("CONSUMED", consumed={
+                "review_content_id": _CP4_B, "plan_revision": 1, "legacy": True}),
+            "non-hex consumed id": _cp4_record("CONSUMED", consumed={
+                "review_content_id": "stale", "plan_revision": 1, "legacy": False}),
+            "bool revision": _cp4_record("CONSUMED", consumed={
+                "review_content_id": _CP4_B, "plan_revision": True, "legacy": False}),
+            "zero revision": _cp4_record("PUBLISHED", published={"review_content_id": _CP4_A, "plan_revision": 0}),
+            "malformed bound": _cp4_record("BOUND", bound={"review_content_id": _CP4_A, "plan_revision": 2}),
+            "CONSUMED without consumed": _cp4_record("CONSUMED"),
+            "CONSUMED with published": _cp4_record("CONSUMED", consumed=_cp4_consumed(), published=good_published),
+            "PUBLISHED without published": _cp4_record("PUBLISHED", consumed=_cp4_consumed()),
+            "PUBLISHED with bound": _cp4_record("PUBLISHED", published=good_published, bound=_cp4_binding()),
+            "BOUND without bound": _cp4_record("BOUND", published=good_published),
+        }
+        for name, record in cases.items():
+            with self.subTest(case=name):
+                with self.assertRaises(ws.InvalidPlanReviewBindingError):
+                    self._validate(record)
+
+
+class TestPublishPlanRevisionTwoStage(unittest.TestCase):
+    """Section 5.3 item 1: mirror-only publication with the `PUBLISHED`
+    record, the plan-stage allow-list, and the early consumed refusal."""
+
+    def test_phase_unchanged_at_each_non_ready_phase(self):
+        for version in ("2.1", "2.2"):
+            for phase, record in (
+                ("PLANNING", None),
+                ("REVISING_PLAN", "default"),
+                ("AMENDING_PLAN", "default"),
+            ):
+                with self.subTest(version=version, phase=phase):
+                    wi = _cp4_item(version=version, phase=phase, record=record, state_revision=4)
+                    state = _base_state(wi=wi)
+                    new_state = ws.publish_plan_revision(state, "wi", 2, "t1", review_content_id=_CP4_A)
+                    item = new_state["work_items"]["wi"]
+                    self.assertEqual(item["phase"], phase)
+                    self.assertEqual(item["plan_revision"], 2)
+                    self.assertEqual(item["state_revision"], 5)
+                    self.assertEqual(item["plan_review_binding"], {
+                        "status": "PUBLISHED", "at": "t1",
+                        "consumed": None if record is None else _cp4_consumed(),
+                        "published": {"review_content_id": _CP4_A, "plan_revision": 2},
+                        "bound": None,
+                    })
+                    self.assertNotIn("plan_review_binding", state["work_items"]["wi"]) if record is None else None
+                    ws.validate_state(new_state)
+
+    def test_same_round_republish_after_further_edits_replaces_published(self):
+        state = _base_state(wi=_cp4_item())
+        first = ws.publish_plan_revision(state, "wi", 2, "t1", review_content_id=_CP4_A)
+        second = ws.publish_plan_revision(first, "wi", 2, "t2", review_content_id=_CP4_D)
+        record = second["work_items"]["wi"]["plan_review_binding"]
+        self.assertEqual(record["published"], {"review_content_id": _CP4_D, "plan_revision": 2})
+        self.assertEqual(record["consumed"], _cp4_consumed())
+
+    def test_republishing_the_same_content_is_a_true_no_op(self):
+        state = ws.publish_plan_revision(_base_state(wi=_cp4_item()), "wi", 2, "t1", review_content_id=_CP4_A)
+        again = ws.publish_plan_revision(state, "wi", 2, "t9", review_content_id=_CP4_A)
+        self.assertIs(again, state)
+
+    def test_review_content_id_is_required(self):
+        for bad in (None, "stale", _CP4_A.upper()):
+            with self.subTest(review_content_id=bad):
+                with self.assertRaises(TypeError):
+                    ws.publish_plan_revision(_base_state(wi=_cp4_item()), "wi", 2, "t1", review_content_id=bad)
+
+    def test_consumed_content_refused_early(self):
+        with self.assertRaises(ws.ConsumedPlanReviewContentError):
+            ws.publish_plan_revision(_base_state(wi=_cp4_item()), "wi", 1, "t1", review_content_id=_CP4_B)
+
+    def test_legacy_marker_needs_one_revision_advance(self):
+        wi = _cp4_item(plan_revision=3, record=_cp4_record("CONSUMED", consumed=_cp4_consumed(None, 3)))
+        with self.assertRaises(ws.ConsumedPlanReviewContentError):
+            ws.publish_plan_revision(_base_state(wi=wi), "wi", 3, "t1", review_content_id=_CP4_A)
+        published = ws.publish_plan_revision(_base_state(wi=wi), "wi", 4, "t1", review_content_id=_CP4_A)
+        self.assertEqual(published["work_items"]["wi"]["plan_review_binding"]["status"], "PUBLISHED")
+
+    def test_legacy_mid_round_item_without_record_refuses(self):
+        for phase in ("REVISING_PLAN", "AMENDING_PLAN"):
+            with self.subTest(phase=phase):
+                with self.assertRaises(ws.LegacyPlanReviewBindingUnknownError) as refused:
+                    ws.publish_plan_revision(
+                        _base_state(wi=_cp4_item(phase=phase, record=None)), "wi", 2, "t1",
+                        review_content_id=_CP4_A,
+                    )
+                self.assertIn("ensure_plan_review_binding_marker", str(refused.exception))
+
+    def test_bound_record_at_a_non_ready_phase_is_inconsistent(self):
+        wi = _cp4_item(record=_cp4_record("BOUND", bound=_cp4_binding(plan_revision=1)))
+        with self.assertRaises(ws.PlanReviewBindingInconsistentError):
+            ws.publish_plan_revision(_base_state(wi=wi), "wi", 2, "t1", review_content_id=_CP4_A)
+
+    def test_ready_phases_refuse_in_place_republication(self):
+        for phase in sorted(ws.PLAN_REVIEW_READY_PHASES):
+            with self.subTest(phase=phase):
+                state = _base_state(wi=_cp4_item(phase=phase, record=None))
+                with self.assertRaises(ws.PlanReviewInProgressError) as refused:
+                    ws.publish_plan_revision(state, "wi", 2, "t1", review_content_id=_CP4_A)
+                self.assertIn("/milestone-plan wi", str(refused.exception))
+
+    def test_phases_outside_the_plan_stage_refuse(self):
+        for phase, names_amendment in (
+            ("IMPLEMENTING", True), ("SELF_REVIEWING_IMPLEMENTATION", True),
+            ("AWAITING_FUNCTIONAL_REVIEW", False), ("APPLYING_REVIEW_FEEDBACK", False),
+            ("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", False),
+        ):
+            with self.subTest(phase=phase):
+                with self.assertRaises(ws.PlanReviewPhaseNotPlanStageError) as refused:
+                    ws.publish_plan_revision(
+                        _base_state(wi=_cp4_item(phase=phase, record=None)), "wi", 2, "t1",
+                        review_content_id=_CP4_A,
+                    )
+                self.assertEqual("/request-plan-amendment wi" in str(refused.exception), names_amendment)
+
+    def test_v1_behavior_is_unchanged(self):
+        """`"1"` stays byte-for-byte `2.5.1`'s: the target phase, no record,
+        `review_content_id` ignored, the same no-op rule."""
+        for phase in ("PLANNING", "IMPLEMENTING", "REVISING_PLAN"):
+            with self.subTest(phase=phase):
+                wi = _base_work_item(governing_workflow_version="1", phase=phase, plan_revision=1,
+                                     state_revision=2, last_transition="t0")
+                expected = dict(wi, plan_revision=2, phase="AWAITING_EXTERNAL_PLAN_REVIEW",
+                                state_revision=3, last_transition="t1")
+                for kwargs in ({}, {"review_content_id": _CP4_A}):
+                    new_state = ws.publish_plan_revision(_base_state(wi=wi), "wi", 2, "t1", **kwargs)
+                    self.assertEqual(new_state["work_items"]["wi"], expected)
+                done = _base_state(wi=expected)
+                self.assertIs(ws.publish_plan_revision(done, "wi", 2, "t2"), done)
+
+
+class TestRouteWorkItemPlanStageAllowList(unittest.TestCase):
+    """`LPR-R4-002`: the resume branch's revision advance runs only at a
+    non-ready plan-stage phase for a two-stage item."""
+
+    def _route(self, state):
+        return ws.route_work_item(
+            state, ws.default_config(), work_item_id="wi", work_item_type="process",
+            work_item_kind="process", plan_path="p", registry_path="r",
+            plan_revision=2, now="t1",
+        )
+
+    def test_refuses_at_ready_and_outside_phases_writing_nothing(self):
+        for phase, error in (
+            ("AWAITING_LOCAL_PLAN_REVIEW", ws.PlanReviewInProgressError),
+            ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", ws.PlanReviewInProgressError),
+            ("AWAITING_PLAN_APPROVAL", ws.PlanReviewInProgressError),
+            ("IMPLEMENTING", ws.PlanReviewPhaseNotPlanStageError),
+            ("AWAITING_FUNCTIONAL_REVIEW", ws.PlanReviewPhaseNotPlanStageError),
+        ):
+            with self.subTest(phase=phase):
+                state = _base_state(wi=_cp4_item(phase=phase, record=None))
+                snapshot = json.dumps(state, sort_keys=True)
+                with self.assertRaises(error):
+                    self._route(state)
+                self.assertEqual(json.dumps(state, sort_keys=True), snapshot)
+
+    def test_advances_at_each_non_ready_phase(self):
+        for phase in sorted(ws.PLAN_REVIEW_NON_READY_PHASES):
+            with self.subTest(phase=phase):
+                routed = self._route(_base_state(wi=_cp4_item(phase=phase, record=None)))
+                self.assertEqual(routed["work_items"]["wi"]["plan_revision"], 2)
+                self.assertEqual(routed["work_items"]["wi"]["phase"], phase)
+
+    def test_v1_item_is_unchanged(self):
+        state = _base_state(wi=_base_work_item(governing_workflow_version="1", phase="IMPLEMENTING"))
+        self.assertEqual(self._route(state)["work_items"]["wi"]["plan_revision"], 2)
+
+
+class TestBindPlanReviewBundle(unittest.TestCase):
+    """Section 5.3 item 3: the sole writer of `AWAITING_LOCAL_PLAN_REVIEW`,
+    legitimate only against the freshly re-read record."""
+
+    def _published(self, phase="REVISING_PLAN", consumed="default", plan_revision=2):
+        consumed = _cp4_consumed() if consumed == "default" else consumed
+        return _cp4_item(phase=phase, plan_revision=plan_revision, record=_cp4_record(
+            "PUBLISHED", consumed=consumed,
+            published={"review_content_id": _CP4_A, "plan_revision": plan_revision},
+        ), state_revision=7)
+
+    def test_success_writes_the_ready_phase_pointer_and_bound_record(self):
+        for phase in sorted(ws.PLAN_REVIEW_NON_READY_PHASES):
+            with self.subTest(phase=phase):
+                new_state = ws.bind_plan_review_bundle(
+                    _base_state(wi=self._published(phase=phase)), "wi", binding=_cp4_binding(), now="t2",
+                )
+                item = new_state["work_items"]["wi"]
+                self.assertEqual(item["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+                self.assertEqual(item["current_bundle_id"], _CP4_C)
+                self.assertEqual(item["state_revision"], 8)
+                self.assertEqual(item["plan_review_binding"], {
+                    "status": "BOUND", "at": "t2", "consumed": _cp4_consumed(),
+                    "published": {"review_content_id": _CP4_A, "plan_revision": 2},
+                    "bound": _cp4_binding(),
+                })
+                ws.validate_state(new_state)
+
+    def test_idempotent_rebind_at_local_review_even_for_a_new_bundle_id(self):
+        bound = ws.bind_plan_review_bundle(_base_state(wi=self._published()), "wi", binding=_cp4_binding(), now="t2")
+        again = ws.bind_plan_review_bundle(bound, "wi", binding=_cp4_binding(bundle_id=_CP4_D), now="t3")
+        self.assertIs(again, bound)
+
+    def test_never_regresses_a_later_ready_phase(self):
+        bound = ws.bind_plan_review_bundle(_base_state(wi=self._published()), "wi", binding=_cp4_binding(), now="t2")
+        for phase in ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_PLAN_APPROVAL"):
+            with self.subTest(phase=phase):
+                state = copy.deepcopy(bound)
+                state["work_items"]["wi"]["phase"] = phase
+                with self.assertRaises(ws.PlanReviewAlreadyReadyError):
+                    ws.bind_plan_review_bundle(state, "wi", binding=_cp4_binding(), now="t3")
+        with self.assertRaises(ws.PlanReviewAlreadyReadyError):
+            ws.bind_plan_review_bundle(bound, "wi", binding=_cp4_binding(review_content_id=_CP4_D), now="t3")
+
+    def test_unpublished_content_never_binds(self):
+        cases = {
+            "consumed record": (_cp4_item(plan_revision=2), _cp4_binding()),
+            "planning, no record": (_cp4_item(phase="PLANNING", plan_revision=2, record=None), _cp4_binding()),
+            "different content": (self._published(), _cp4_binding(review_content_id=_CP4_D)),
+            "different revision": (self._published(), _cp4_binding(plan_revision=3)),
+            "mirror moved on": (dict(self._published(), plan_revision=3), _cp4_binding()),
+        }
+        for name, (wi, binding) in cases.items():
+            with self.subTest(case=name):
+                with self.assertRaises(ws.PlanReviewNotPublishedError):
+                    ws.bind_plan_review_bundle(_base_state(wi=wi), "wi", binding=binding, now="t2")
+
+    def test_consumed_content_never_binds(self):
+        wi = self._published(consumed=_cp4_consumed(_CP4_A, 1))
+        with self.assertRaises(ws.ConsumedPlanReviewContentError):
+            ws.bind_plan_review_bundle(_base_state(wi=wi), "wi", binding=_cp4_binding(), now="t2")
+        legacy = self._published(consumed=_cp4_consumed(None, 2))
+        with self.assertRaises(ws.ConsumedPlanReviewContentError):
+            ws.bind_plan_review_bundle(_base_state(wi=legacy), "wi", binding=_cp4_binding(), now="t2")
+
+    def test_legacy_inconsistent_and_out_of_stage_refusals(self):
+        with self.assertRaises(ws.LegacyPlanReviewBindingUnknownError):
+            ws.bind_plan_review_bundle(_base_state(wi=_cp4_item(record=None)), "wi", binding=_cp4_binding(), now="t")
+        with self.assertRaises(ws.PlanReviewBindingInconsistentError):
+            ws.bind_plan_review_bundle(_base_state(wi=_cp4_item(record=_cp4_record(
+                "BOUND", bound=_cp4_binding()))), "wi", binding=_cp4_binding(), now="t")
+        with self.assertRaises(ws.PlanReviewPhaseNotPlanStageError):
+            ws.bind_plan_review_bundle(_base_state(wi=self._published(phase="IMPLEMENTING")),
+                                       "wi", binding=_cp4_binding(), now="t")
+        with self.assertRaises(ws.WrongGoverningVersionForPlanReviewStageError):
+            ws.bind_plan_review_bundle(_base_state(wi=_base_work_item(phase="REVISING_PLAN")),
+                                       "wi", binding=_cp4_binding(), now="t")
+        with self.assertRaises(TypeError):
+            ws.bind_plan_review_bundle(_base_state(wi=self._published()), "wi",
+                                       binding=dict(_cp4_binding(), extra=1), now="t")
+
+
+class TestWithdrawPlanReview(unittest.TestCase):
+    """Section 5.3 item 7: the verdict-free exit from a ready phase."""
+
+    def _bound(self, phase, **overrides):
+        return _cp4_item(phase=phase, plan_revision=2, record=_cp4_record(
+            "BOUND", consumed=_cp4_consumed(),
+            published={"review_content_id": _CP4_A, "plan_revision": 2}, bound=_cp4_binding(),
+        ), current_bundle_id=_CP4_C, plan_review_stages={"review_content_id": _CP4_A}, **overrides)
+
+    def test_each_ready_phase_withdraws_to_revising_plan_consuming_the_bound_content(self):
+        for phase in sorted(ws.PLAN_REVIEW_READY_PHASES):
+            with self.subTest(phase=phase):
+                state = _base_state(wi=self._bound(phase))
+                new_state = ws.withdraw_plan_review(state, "wi", "t5")
+                item = new_state["work_items"]["wi"]
+                self.assertEqual(item["phase"], "REVISING_PLAN")
+                self.assertEqual(item["plan_review_binding"], _cp4_record(
+                    "CONSUMED", consumed=_cp4_consumed(_CP4_A, 2), at="t5"))
+                # Untouched: the stages ledger and the bundle pointer.
+                self.assertEqual(item["plan_review_stages"], {"review_content_id": _CP4_A})
+                self.assertEqual(item["current_bundle_id"], _CP4_C)
+                # And the withdrawn content can never re-publish.
+                with self.assertRaises(ws.ConsumedPlanReviewContentError):
+                    ws.publish_plan_revision(new_state, "wi", 2, "t6", review_content_id=_CP4_A)
+
+    def test_an_open_amendment_withdraws_to_amending_plan(self):
+        wi = self._bound("AWAITING_LOCAL_PLAN_REVIEW", amendment_history=[
+            {"amendment_id": "0", "resolved_at_plan_revision": None},
+        ])
+        new_state = ws.withdraw_plan_review(_base_state(wi=wi), "wi", "t5")
+        self.assertEqual(new_state["work_items"]["wi"]["phase"], "AMENDING_PLAN")
+
+    def test_no_record_or_an_inconsistent_one_gets_the_legacy_marker(self):
+        for record in (None, _cp4_record("PUBLISHED", published={"review_content_id": _CP4_A, "plan_revision": 2})):
+            with self.subTest(record=None if record is None else record["status"]):
+                wi = _cp4_item(phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", plan_revision=4, record=record)
+                item = ws.withdraw_plan_review(_base_state(wi=wi), "wi", "t5")["work_items"]["wi"]
+                self.assertEqual(item["plan_review_binding"]["consumed"], _cp4_consumed(None, 4))
+
+    def test_a_non_ready_phase_refuses_writing_nothing(self):
+        for phase in ("REVISING_PLAN", "PLANNING", "IMPLEMENTING"):
+            with self.subTest(phase=phase):
+                state = _base_state(wi=_cp4_item(phase=phase))
+                with self.assertRaises(ws.PlanReviewNotReadyError):
+                    ws.withdraw_plan_review(state, "wi", "t5")
+
+
+class TestPlanApprovalStagedDiffIgnoresRenames(unittest.TestCase):
+    """Implementation review round 1, Optional 5: the empty-index
+    precondition and the post-staging member-set check read the staged
+    diff with `--no-renames`, so a staged non-member deletion that Git
+    would pair with a similar member addition as a rename is still named."""
+
+    _CONTENT = "".join(f"design line {i}\n" for i in range(40))
+
+    def _seed(self, repo):
+        (repo.root / "old.md").write_text(self._CONTENT)
+        _git_in(repo.root, "add", "old.md")
+        _git_in(repo.root, "commit", "-q", "-m", "seed old.md")
+        _git_in(repo.root, "rm", "--cached", "-q", "old.md")
+        (repo.root / "new.md").write_text(self._CONTENT)
+
+    def test_the_index_clean_check_names_the_deleted_side(self):
+        with ScratchRepo() as repo:
+            self._seed(repo)
+            _git_in(repo.root, "add", "new.md")
+            with self.assertRaises(ws.DirtyIndexBeforeStagingError) as refused:
+                ws.assert_plan_approval_index_clean(repo.root)
+            self.assertIn("old.md", str(refused.exception))
+
+    def test_the_post_staging_check_names_a_non_member_deletion(self):
+        with ScratchRepo() as repo:
+            self._seed(repo)
+            original = ws.assert_plan_approval_index_clean
+            ws.assert_plan_approval_index_clean = lambda _root: None  # the deletion got past it
+            try:
+                with self.assertRaises(ws.UnexpectedStagedPathSetError) as refused:
+                    ws.stage_plan_approval_commit_paths(repo.root, ("new.md",))
+            finally:
+                ws.assert_plan_approval_index_clean = original
+            self.assertIn("old.md", str(refused.exception))
+
+
+class TestPlanApprovalPhaseGate(unittest.TestCase):
+    """Implementation review round 1, Important 1: `consumed` is a single
+    slot, and neither the withdrawal nor a `REVISE` discards
+    `plan_review_stages` (section 5.3 item 7). So dual-approved content A,
+    withdrawn, displaced from the slot by a detour through B, and restored
+    byte for byte, publishes and binds again -- and the content-keyed
+    ledger reads A's two `APPROVE`s as live at `AWAITING_LOCAL_PLAN_REVIEW`.
+    `apply_plan_approval` refuses a two-stage item anywhere but
+    `AWAITING_PLAN_APPROVAL`, so that ledger read never reaches approval."""
+
+    @staticmethod
+    def _record(review_content_id=_CP4_A):
+        return ws.build_approval_record(
+            basis="EXTERNAL_APPROVE", stage="plan", user_confirmation="approve wi plan",
+            now="t9", reviewed_bundle_id=_CP4_C, approved_review_content_id=review_content_id,
+            review_content_manifest=[],
+        )
+
+    def _dual_approved(self, version):
+        stages = {
+            "review_content_id": _CP4_A,
+            ws.LOCAL_MODEL_PLAN_REVIEW: {"bundle_id": _CP4_C, "verdict": "APPROVE",
+                                         "round": 1, "completed_at": "t1"},
+            ws.MANUAL_EXTERNAL_PLAN_REVIEW: {"bundle_id": _CP4_C, "verdict": "APPROVE",
+                                             "round": 1, "completed_at": "t2"},
+        }
+        return _base_state(wi=_cp4_item(
+            version=version, phase="AWAITING_PLAN_APPROVAL", plan_revision=2,
+            record=_cp4_record("BOUND", consumed=None,
+                               published={"review_content_id": _CP4_A, "plan_revision": 2},
+                               bound=_cp4_binding(_CP4_A, _CP4_C, 2)),
+            current_bundle_id=_CP4_C, plan_review_stages=stages,
+        ))
+
+    def test_withdraw_detour_restore_never_reaches_plan_approval(self):
+        for version in sorted(ws.TWO_STAGE_PLAN_REVIEW_VERSIONS):
+            with self.subTest(version=version):
+                state = ws.withdraw_plan_review(self._dual_approved(version), "wi", "t3")
+                state = ws.publish_plan_revision(state, "wi", 3, "t4", review_content_id=_CP4_B)
+                state = ws.bind_plan_review_bundle(
+                    state, "wi", binding=_cp4_binding(_CP4_B, _CP4_D, 3), now="t5")
+                state = ws.withdraw_plan_review(state, "wi", "t6")
+                # A is no longer the consumed slot, so it publishes and binds again.
+                state = ws.publish_plan_revision(state, "wi", 4, "t7", review_content_id=_CP4_A)
+                state = ws.bind_plan_review_bundle(
+                    state, "wi", binding=_cp4_binding(_CP4_A, _CP4_C, 4), now="t8")
+                item = state["work_items"]["wi"]
+                self.assertEqual(item["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+                # The ledger alone still reads as dual-approved for A ...
+                self.assertTrue(ws.plan_approval_gate_reachable(
+                    latest_round_status="APPROVE", governing_workflow_version=version,
+                    plan_review_stages=item["plan_review_stages"],
+                    current_review_content_id=_CP4_A,
+                ))
+                # ... but the approval itself refuses, writing nothing.
+                with self.assertRaises(ws.PlanApprovalPhaseError):
+                    ws.apply_plan_approval(state, "wi", self._record(), "t9")
+
+    def test_every_other_phase_refuses_and_awaiting_plan_approval_applies(self):
+        for version in sorted(ws.TWO_STAGE_PLAN_REVIEW_VERSIONS):
+            for phase in sorted(ws.KNOWN_PHASES - {"AWAITING_PLAN_APPROVAL"}):
+                with self.subTest(version=version, phase=phase):
+                    state = self._dual_approved(version)
+                    state["work_items"]["wi"]["phase"] = phase
+                    with self.assertRaises(ws.PlanApprovalPhaseError):
+                        ws.apply_plan_approval(state, "wi", self._record(), "t9")
+            with self.subTest(version=version, phase="AWAITING_PLAN_APPROVAL"):
+                new_state = ws.apply_plan_approval(self._dual_approved(version), "wi", self._record(), "t9")
+                self.assertEqual(new_state["work_items"]["wi"]["phase"], "IMPLEMENTING")
+
+    def test_a_version_1_item_is_unchanged(self):
+        state = self._dual_approved("1")
+        state["work_items"]["wi"]["phase"] = "AWAITING_EXTERNAL_PLAN_REVIEW"
+        new_state = ws.apply_plan_approval(state, "wi", self._record(), "t9")
+        self.assertEqual(new_state["work_items"]["wi"]["phase"], "IMPLEMENTING")
+
+
+class TestConsumedPlanReviewBindingWriters(unittest.TestCase):
+    """Section 5.3 item 2: every transition that takes reviewed content out
+    of review writes `CONSUMED` from its own inputs."""
+
+    def test_local_revise_consumes_its_own_review_content_id(self):
+        wi = _cp4_item(phase="AWAITING_LOCAL_PLAN_REVIEW", plan_revision=3, record=None)
+        item = ws.record_local_plan_review(
+            _base_state(wi=wi), "wi", verdict="REVISE", bundle_id="b1",
+            review_content_id=_CP4_A, round=1, now="t1",
+        )["work_items"]["wi"]
+        self.assertEqual(item["plan_review_binding"], _cp4_record("CONSUMED", consumed=_cp4_consumed(_CP4_A, 3), at="t1"))
+
+    def test_manual_revise_consumes_the_current_review_content_id(self):
+        wi = _cp4_item(phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", plan_revision=3, record=None,
+                       plan_review_stages={
+                           "review_content_id": _CP4_A,
+                           "LOCAL_MODEL_PLAN_REVIEW": {"bundle_id": "b1", "verdict": "APPROVE",
+                                                       "round": 1, "completed_at": "t0"},
+                           "MANUAL_EXTERNAL_PLAN_REVIEW": None,
+                       })
+        item = ws.record_manual_plan_review(
+            _base_state(wi=wi), "wi", verdict="REVISE", bundle_id="b1", round=1, now="t1",
+            current_review_content_id=_CP4_A, feedback_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+            feedback_review_content_id=_CP4_A,
+        )["work_items"]["wi"]
+        self.assertEqual(item["plan_review_binding"]["consumed"], _cp4_consumed(_CP4_A, 3))
+
+    def test_approve_and_block_leave_the_record_alone(self):
+        record = _cp4_record("BOUND", consumed=_cp4_consumed(), bound=_cp4_binding(plan_revision=1),
+                             published={"review_content_id": _CP4_A, "plan_revision": 1})
+        wi = _cp4_item(phase="AWAITING_LOCAL_PLAN_REVIEW", record=record)
+        for verdict in ("APPROVE", "BLOCK"):
+            with self.subTest(verdict=verdict):
+                item = ws.record_local_plan_review(
+                    _base_state(wi=copy.deepcopy(wi)), "wi", verdict=verdict, bundle_id="b1",
+                    review_content_id=_CP4_A, round=1, now="t1",
+                )["work_items"]["wi"]
+                self.assertEqual(item["plan_review_binding"], record)
+
+
+class TestEnsurePlanReviewBindingMarker(unittest.TestCase):
+    """Row 5's entry write (INV-7, `LPR-R3-006`)."""
+
+    def test_legacy_revising_plan_item_gets_the_null_id_marker(self):
+        wi = _cp4_item(phase="REVISING_PLAN", plan_revision=4, record=None, state_revision=2)
+        item = ws.ensure_plan_review_binding_marker(_base_state(wi=wi), "wi", "t1")["work_items"]["wi"]
+        self.assertEqual(item["plan_review_binding"], _cp4_record("CONSUMED", consumed=_cp4_consumed(None, 4), at="t1"))
+        self.assertEqual(item["state_revision"], 3)
+
+    def test_legacy_amending_plan_item_uses_its_open_amendment_record(self):
+        entry = {"amendment_id": "0", "resolved_at_plan_revision": None, "superseded_plan_revision": 2,
+                 "superseded_plan_approval": {"approved_review_content_id": _CP4_D}}
+        wi = _cp4_item(phase="AMENDING_PLAN", plan_revision=3, record=None, amendment_history=[entry])
+        item = ws.ensure_plan_review_binding_marker(_base_state(wi=wi), "wi", "t1")["work_items"]["wi"]
+        self.assertEqual(item["plan_review_binding"]["consumed"], _cp4_consumed(_CP4_D, 2))
+        without_id = copy.deepcopy(wi)
+        without_id["amendment_history"][0]["superseded_plan_approval"]["approved_review_content_id"] = None
+        item = ws.ensure_plan_review_binding_marker(_base_state(wi=without_id), "wi", "t1")["work_items"]["wi"]
+        self.assertEqual(item["plan_review_binding"]["consumed"], _cp4_consumed(None, 3))
+
+    def test_no_op_everywhere_else(self):
+        for wi in (
+            _cp4_item(),                                         # record already exists
+            _cp4_item(phase="PLANNING", record=None),            # first round
+            _cp4_item(phase="AWAITING_LOCAL_PLAN_REVIEW", record=None),
+            _base_work_item(governing_workflow_version="1", phase="REVISING_PLAN"),
+        ):
+            with self.subTest(phase=wi["phase"], version=wi["governing_workflow_version"]):
+                state = _base_state(wi=wi)
+                self.assertIs(ws.ensure_plan_review_binding_marker(state, "wi", "t1"), state)
+
+
+class TestAssertApplyPlanReviewFeedback(unittest.TestCase):
+    """`/apply-plan-review` step 1 for a two-stage item: `REVISE` only, and
+    the durable feedback check under rows 9 and 11."""
+
+    @staticmethod
+    def _feedback(status="REVISE", work_item="wi", review_content_id=_CP4_B):
+        lines = [f"Status: {status}", f"Work item: {work_item}"]
+        if review_content_id is not None:
+            lines.append(f"review_content_id: {review_content_id}")
+        return "\n".join(lines) + "\n"
+
+    def test_block_and_approve_are_never_applied(self):
+        for status in ("BLOCK", "APPROVE", None):
+            with self.subTest(status=status):
+                content = self._feedback(status=status) if status else "Work item: wi\n"
+                with self.assertRaises(ws.FeedbackStatusNotApplicableError) as refused:
+                    ws.assert_apply_plan_review_feedback(
+                        _cp4_item(), "wi", feedback_content=content, publication_status="NEEDS_EDIT",
+                    )
+                if status == "BLOCK":
+                    self.assertIn("/milestone-plan wi", str(refused.exception))
+                    self.assertIn("/review-plan wi", str(refused.exception))
+
+    def test_durable_check_binds_to_the_consumed_content(self):
+        for status in sorted(ws.PLAN_REVIEW_DURABLE_FEEDBACK_CHECK_STATUSES):
+            with self.subTest(status=status):
+                self.assertEqual(ws.assert_apply_plan_review_feedback(
+                    _cp4_item(), "wi", feedback_content=self._feedback(), publication_status=status,
+                ), "durable")
+                for bad in (_CP4_A, None):
+                    with self.assertRaises(ws.FeedbackNotForConsumedContentError):
+                        ws.assert_apply_plan_review_feedback(
+                            _cp4_item(), "wi", feedback_content=self._feedback(review_content_id=bad),
+                            publication_status=status,
+                        )
+
+    def test_legacy_marker_checks_work_item_and_status_only(self):
+        legacy = _cp4_item(record=_cp4_record("CONSUMED", consumed=_cp4_consumed(None, 1)))
+        self.assertEqual(ws.assert_apply_plan_review_feedback(
+            legacy, "wi", feedback_content=self._feedback(review_content_id=None),
+            publication_status="EDIT_IN_PROGRESS",
+        ), "durable")
+        with self.assertRaises(ws.FeedbackNotForConsumedContentError):
+            ws.assert_apply_plan_review_feedback(
+                legacy, "wi", feedback_content=self._feedback(work_item="other"),
+                publication_status="EDIT_IN_PROGRESS",
+            )
+
+    def test_other_statuses_defer_to_the_on_disk_bundle_binding(self):
+        self.assertEqual(ws.assert_apply_plan_review_feedback(
+            _cp4_item(), "wi", feedback_content=self._feedback(review_content_id=_CP4_A),
+            publication_status="NEEDS_EDIT",
+        ), "bundle")
+        v1 = _base_work_item(governing_workflow_version="1", phase="REVISING_PLAN")
+        self.assertEqual(ws.assert_apply_plan_review_feedback(
+            v1, "wi", feedback_content=self._feedback(status="BLOCK"), publication_status="NEEDS_EDIT",
+        ), "bundle")
+
+
+
+class TestPlanApprovalClosureUnits(unittest.TestCase):
+    """workflow-2.6.0 CP5, `D-Plan-Approval-Closure`: the pure pieces. The
+    command-shaped scenarios live in `workflow_acceptance_matrix_test.py`
+    (`PlanApprovalClosure*`, `PlanApprovalCommittedTruth`)."""
+
+    def _journal_dict(self, **overrides):
+        journal = {field: "x" for field in ws._PLAN_APPROVAL_JOURNAL_REQUIRED_STR_FIELDS}
+        journal.update({
+            "schema_version": ws.PLAN_APPROVAL_JOURNAL_SCHEMA_VERSION,
+            "applicable_paths": ["a.md"], "fifth_member_applies": False,
+            "takeover_count": 0, "previous_owner_tokens": [],
+        })
+        journal.update(overrides)
+        return journal
+
+    def _write_journal(self, root, journal):
+        path = ws.plan_approval_journal_path(root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(journal))
+
+    def test_amend_gate_admits_only_tree_content_defects(self):
+        tree_content = (
+            ws.CommittedStateBlobMismatchError("x"), ws.CommittedBlobMismatchError("x"),
+            ws.CommittedProtectedContentMismatchError("x"), ws.PostApprovalManifestMismatchError("x"),
+            fingerprint.AbsentProtectedPathError("x"),
+        )
+        for exc in tree_content:
+            self.assertEqual(ws.classify_post_commit_verification_failure(exc),
+                             ws.POST_COMMIT_FAILURE_TREE_CONTENT, type(exc).__name__)
+        record_or_input = (
+            ws.MissingApprovalRecordError("x"), ws.CommittedApprovalRecordMismatchError("x"),
+            ws.CommittedPathSetMismatchError("x"), fingerprint.UnclassifiedPathError("x"),
+            TypeError("'NoneType' object is not subscriptable"), KeyError("x"), ValueError("x"),
+            subprocess.CalledProcessError(1, ["git"]),
+        )
+        for exc in record_or_input:
+            self.assertEqual(ws.classify_post_commit_verification_failure(exc),
+                             ws.POST_COMMIT_FAILURE_RECORD_OR_INPUT, type(exc).__name__)
+
+    def test_protected_content_mismatch_is_not_a_path_set_mismatch(self):
+        """The amend corrects content, never membership: the two must stay
+        distinguishable by type."""
+        self.assertFalse(issubclass(ws.CommittedProtectedContentMismatchError,
+                                    ws.CommittedPathSetMismatchError))
+
+    def test_missing_record_is_a_named_error_at_both_stages(self):
+        cases = (None, {}, {"plan_approval": None}, {"plan_approval": {}},
+                 {"plan_approval": {"approved_review_content_id": None}},
+                 {"technical_approval": None}, {"technical_approval": "not a dict"})
+        for stage in ("plan", "implementation"):
+            for work_item in cases:
+                with self.subTest(stage=stage, work_item=work_item):
+                    with self.assertRaises(ws.MissingApprovalRecordError):
+                        ws.verify_post_approval_manifest_match(
+                            Path("/nonexistent"), work_item, stage=stage,
+                            base_commit="HEAD", commit="HEAD",
+                        )
+
+    def test_explicit_expected_id_refuses_a_different_record_before_recomputing(self):
+        work_item = {"work_item_id": "x", "work_item_type": "process",
+                     "plan_approval": {"approved_review_content_id": "a" * 64}}
+        with self.assertRaises(ws.CommittedApprovalRecordMismatchError) as ctx:
+            ws.verify_post_approval_manifest_match(
+                Path("/nonexistent"), work_item, stage="plan", base_commit="HEAD",
+                commit="HEAD", expected_review_content_id="b" * 64,
+            )
+        self.assertIn("a" * 64, str(ctx.exception))
+        self.assertIn("b" * 64, str(ctx.exception))
+
+    def test_journal_removal_paths_must_be_a_subset_of_the_members(self):
+        with ScratchRepo() as repo:
+            with self.assertRaises(ValueError):
+                ws.open_plan_approval_journal(
+                    repo.root, work_item_id="x", base_commit=repo.base, pre_state={},
+                    record={}, approval_now="2026-01-01T00:00:00Z", expected_bundle_id="b",
+                    expected_review_content_id="r", applicable_paths=("a.md",),
+                    removal_paths=("gone.md",), fifth_member_applies=False,
+                    fifth_member_sha256=None, user_confirmation="u", quiescence_authorization="q",
+                )
+            self.assertIsNone(ws.read_plan_approval_journal(repo.root))
+
+    def test_a_2_5_1_journal_without_removal_paths_still_reads(self):
+        with ScratchRepo() as repo:
+            self._write_journal(repo.root, self._journal_dict())
+            journal = ws.read_plan_approval_journal(repo.root)
+            self.assertNotIn("removal_paths", journal)
+            self.assertEqual(journal.get("removal_paths", []), [])
+
+    def test_a_malformed_removal_paths_field_fails_closed(self):
+        for bad in ("a.md", [1], None, {"a.md": 1}):
+            with self.subTest(bad=bad), ScratchRepo() as repo:
+                self._write_journal(repo.root, self._journal_dict(removal_paths=bad))
+                with self.assertRaises(ws.PlanApprovalJournalUnavailableError) as ctx:
+                    ws.read_plan_approval_journal(repo.root)
+                self.assertIn("removal_paths", str(ctx.exception))
+
+    def test_manifest_protected_path_reader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "MANIFEST.md"
+            self.assertIsNone(fingerprint.read_plan_stage_manifest_protected_paths(manifest))
+            self.assertIsNone(fingerprint.read_plan_stage_manifest_base_commit(manifest))
+            manifest.write_text(
+                "# Bundle Manifest\n\nstage: plan\nbase_commit: " + "c" * 40 + "\n\n"
+                "## Protected paths\n- docs/a.md\n- docs/b.md\n\n"
+                "## Excluded paths (exact match)\n- `x` — y\n"
+            )
+            self.assertEqual(fingerprint.read_plan_stage_manifest_protected_paths(manifest),
+                             frozenset({"docs/a.md", "docs/b.md"}))
+            self.assertEqual(fingerprint.read_plan_stage_manifest_base_commit(manifest), "c" * 40)
+            manifest.write_text("# Bundle Manifest\n\nstage: plan\n")
+            self.assertIsNone(fingerprint.read_plan_stage_manifest_protected_paths(manifest))
+
+    def test_commit_plan_defaults_keep_hand_built_plans_working(self):
+        plan = fingerprint.PlanApprovalCommitPlan(("a",), None, None)
+        self.assertEqual(plan.protected_paths, ())
+        self.assertEqual(plan.removal_paths, ())
+
+    def test_staging_stages_an_absent_member_as_a_deletion(self):
+        with ScratchRepo() as repo:
+            (repo.root / "keep.md").write_text("keep\n")
+            (repo.root / "gone.md").write_text("gone\n")
+            _run(["git", "add", "keep.md", "gone.md"], cwd=repo.root)
+            _run(["git", "commit", "-q", "-m", "two files"], cwd=repo.root)
+            (repo.root / "gone.md").unlink()
+            (repo.root / "keep.md").write_text("keep, edited\n")
+            ws.stage_plan_approval_commit_paths(repo.root, ("keep.md", "gone.md", "never-existed.md"))
+            staged = subprocess.run(
+                ["git", "diff", "--cached", "--name-status", "HEAD"], cwd=repo.root,
+                capture_output=True, text=True, check=True,
+            ).stdout.split("\n")
+            self.assertIn("D\tgone.md", staged)
+            self.assertIn("M\tkeep.md", staged)
+
+    def test_dirty_index_refusal_names_the_git_mv_remedy(self):
+        with ScratchRepo() as repo:
+            _run(["git", "mv", "README.md", "RENAMED.md"], cwd=repo.root)
+            with self.assertRaises(ws.DirtyIndexBeforeStagingError) as ctx:
+                ws.assert_plan_approval_index_clean(repo.root)
+            self.assertIn("git mv", str(ctx.exception))
+            self.assertIn("git --literal-pathspecs restore --staged", str(ctx.exception))
 
 
 if __name__ == "__main__":

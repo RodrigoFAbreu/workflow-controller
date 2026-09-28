@@ -1947,6 +1947,203 @@ class TestImplementationStageClassification(unittest.TestCase):
             self.assertEqual(digest_before, digest_after)
 
 
+class TestToolingAmbientExcludedPaths(unittest.TestCase):
+    """workflow-2.6.0, `D-Tooling-Ambient-Classification` (closes the
+    legacy-item half of `v2.4.0-001`): `.workflow-manager/installation.json`
+    is excluded by a release-derived, exact-path terminal fallback that both
+    classifiers consult only after every declared classification has
+    failed. It never overrides a declaration, never enters a hashed
+    classification set, and leaves every digest `2.5.1` could compute
+    byte-identical. "Without the fallback" below means the constant
+    patched to the empty set -- exactly `2.5.1`'s classifier behavior."""
+
+    INSTALLATION = ".workflow-manager/installation.json"
+    WORK_ITEM_ID = "legacy-item"
+    PLAN_REL = "docs/ai-workflow/legacy-item-plan.md"
+    # A 2.3.1-shaped declaration: nothing under `.workflow-manager/`.
+    PLAN_PROTECTED = frozenset({PLAN_REL})
+    PLAN_EXCLUDED_PATHS = {"docs/ai-workflow/WORKFLOW_STATE.json": "runtime-mutable state"}
+    PLAN_EXCLUDED_PREFIXES = {"docs/ai-workflow/registry/": "declarations", "scripts/": "implementation"}
+    IMPL_PROTECTED_PATHS: dict = {}
+    IMPL_PROTECTED_PREFIXES = {"scripts/": "implementation"}
+    IMPL_EXCLUDED_PATHS = {"docs/ai-workflow/WORKFLOW_STATE.json": "runtime-mutable state"}
+    IMPL_EXCLUDED_PREFIXES = {"docs/": "design docs"}
+
+    def _without_fallback(self):
+        return mock.patch.object(wf, "TOOLING_AMBIENT_EXCLUDED_PATHS", frozenset())
+
+    def _classify_plan(self, path, protected=None, excluded_paths=None):
+        return wf.classify_path(
+            path,
+            self.PLAN_PROTECTED if protected is None else protected,
+            self.PLAN_EXCLUDED_PATHS if excluded_paths is None else excluded_paths,
+            self.PLAN_EXCLUDED_PREFIXES,
+        )
+
+    def _classify_impl(self, path, protected_paths=None):
+        return wf.classify_path_implementation_stage(
+            path,
+            self.IMPL_PROTECTED_PATHS if protected_paths is None else protected_paths,
+            self.IMPL_PROTECTED_PREFIXES, self.IMPL_EXCLUDED_PATHS, self.IMPL_EXCLUDED_PREFIXES,
+        )
+
+    def test_constant_is_the_exact_installation_record_path(self):
+        self.assertEqual(wf.TOOLING_AMBIENT_EXCLUDED_PATHS, frozenset({self.INSTALLATION}))
+
+    def test_legacy_declaration_classifies_installation_record_excluded_at_both_stages(self):
+        self.assertEqual(self._classify_plan(self.INSTALLATION), "excluded")
+        self.assertEqual(self._classify_impl(self.INSTALLATION), "excluded")
+        # Control arm: 2.5.1's classifier raised on the identical input.
+        with self._without_fallback():
+            with self.assertRaises(wf.UnclassifiedPathError):
+                self._classify_plan(self.INSTALLATION)
+            with self.assertRaises(wf.UnclassifiedPathError):
+                self._classify_impl(self.INSTALLATION)
+
+    def test_explicit_protected_declaration_still_wins(self):
+        self.assertEqual(
+            self._classify_plan(self.INSTALLATION, protected=self.PLAN_PROTECTED | {self.INSTALLATION}),
+            "protected",
+        )
+        self.assertEqual(
+            self._classify_impl(self.INSTALLATION, protected_paths={self.INSTALLATION: "declared"}),
+            "protected",
+        )
+
+    def test_siblings_still_fail_closed(self):
+        for path in (
+            ".workflow-manager/installation.json.tmp",
+            ".workflow-manager/other.json",
+            ".workflow-manager/",
+            "installation.json",
+            "nested/.workflow-manager/installation.json",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaises(wf.UnclassifiedPathError):
+                    self._classify_plan(path)
+                with self.assertRaises(wf.UnclassifiedPathError):
+                    self._classify_impl(path)
+
+    def _seed_legacy_repo(self, repo):
+        """Base commit already carries the installation record (a managed
+        repository), the legacy item's plan, and one implementation file."""
+        (repo.root / ".workflow-manager").mkdir()
+        (repo.root / self.INSTALLATION).write_text('{"release": "2.3.1"}\n')
+        (repo.root / self.PLAN_REL).write_text("# Plan\n\nplan v1\n")
+        (repo.root / "scripts").mkdir()
+        (repo.root / "scripts" / "tool.py").write_text("print('v1')\n")
+        _run(["git", "add", "-A"], cwd=repo.root)
+        _run(["git", "commit", "-q", "-m", "managed repository base"], cwd=repo.root)
+        repo.base = repo.head()
+        # An implementation-stage change, so that projection is non-empty.
+        (repo.root / "scripts" / "tool.py").write_text("print('v2')\n")
+        _run(["git", "add", "-A"], cwd=repo.root)
+        _run(["git", "commit", "-q", "-m", "implement"], cwd=repo.root)
+
+    def _plan_worktree(self, repo):
+        return wf.compute_review_content_id_plan_stage(
+            repo.root, repo.base, "process", self.WORK_ITEM_ID, 1,
+            self.PLAN_PROTECTED, self.PLAN_EXCLUDED_PATHS, self.PLAN_EXCLUDED_PREFIXES,
+        )
+
+    def _plan_commit(self, repo, commit):
+        return wf.compute_review_content_id_plan_stage_at_commit(
+            repo.root, repo.base, commit, "process", self.WORK_ITEM_ID, 1,
+            self.PLAN_PROTECTED, self.PLAN_EXCLUDED_PATHS, self.PLAN_EXCLUDED_PREFIXES,
+        )
+
+    def _impl_worktree(self, repo):
+        return wf.compute_review_content_id_implementation_stage(
+            repo.root, repo.base, "process", self.WORK_ITEM_ID,
+            self.IMPL_PROTECTED_PATHS, self.IMPL_PROTECTED_PREFIXES,
+            self.IMPL_EXCLUDED_PATHS, self.IMPL_EXCLUDED_PREFIXES,
+        )
+
+    def _impl_commit(self, repo, commit):
+        return wf.compute_review_content_id_implementation_stage_at_commit(
+            repo.root, repo.base, commit, "process", self.WORK_ITEM_ID,
+            self.IMPL_PROTECTED_PATHS, self.IMPL_PROTECTED_PREFIXES,
+            self.IMPL_EXCLUDED_PATHS, self.IMPL_EXCLUDED_PREFIXES,
+        )
+
+    def _all_digests(self, repo, commit):
+        return {
+            "plan_worktree": self._plan_worktree(repo),
+            "plan_commit": self._plan_commit(repo, commit),
+            "impl_worktree": self._impl_worktree(repo),
+            "impl_commit": self._impl_commit(repo, commit),
+        }
+
+    def test_hashed_classification_sets_are_invariant(self):
+        """Hashed-set invariance: every projection (not only its digest)
+        is identical with and without the fallback, and the constant's
+        path appears nowhere in any projection."""
+        with ScratchRepo() as repo:
+            self._seed_legacy_repo(repo)
+            head = repo.head()
+            with_fallback = self._all_digests(repo, head)
+            with self._without_fallback():
+                without_fallback = self._all_digests(repo, head)
+            self.assertEqual(with_fallback, without_fallback)
+            for name, (_, projection) in with_fallback.items():
+                with self.subTest(projection=name):
+                    self.assertNotIn(self.INSTALLATION, json.dumps(projection, sort_keys=True))
+
+    def test_digest_invariance_when_installation_record_is_unchanged(self):
+        with ScratchRepo() as repo:
+            self._seed_legacy_repo(repo)
+            head = repo.head()
+            with self._without_fallback():
+                recorded = {k: v[0] for k, v in self._all_digests(repo, head).items()}
+            self.assertEqual({k: v[0] for k, v in self._all_digests(repo, head).items()}, recorded)
+
+    def test_previously_raising_digests_equal_the_pre_change_recorded_values(self):
+        """The `v2.4.0-001` reproduction: a committed `workflow_manager
+        update` rewrites only the installation record. Under `2.5.1` every
+        digest then raised; now each returns and equals the value recorded
+        before the update, both uncommitted (worktree source) and
+        committed (worktree and commit source)."""
+        with ScratchRepo() as repo:
+            self._seed_legacy_repo(repo)
+            pre_update_head = repo.head()
+            with self._without_fallback():
+                recorded = {k: v[0] for k, v in self._all_digests(repo, pre_update_head).items()}
+
+            (repo.root / self.INSTALLATION).write_text('{"release": "2.5.1"}\n')
+            with self._without_fallback():
+                with self.assertRaises(wf.UnclassifiedPathError):
+                    self._plan_worktree(repo)
+                with self.assertRaises(wf.UnclassifiedPathError):
+                    self._impl_worktree(repo)
+            self.assertEqual(self._plan_worktree(repo)[0], recorded["plan_worktree"])
+            self.assertEqual(self._impl_worktree(repo)[0], recorded["impl_worktree"])
+
+            _run(["git", "add", "-A"], cwd=repo.root)
+            _run(["git", "commit", "-q", "-m", "chore(workflow): update installed workflow"], cwd=repo.root)
+            update_head = repo.head()
+            with self._without_fallback():
+                for name, compute in (
+                    ("plan_worktree", lambda: self._plan_worktree(repo)),
+                    ("plan_commit", lambda: self._plan_commit(repo, update_head)),
+                    ("impl_worktree", lambda: self._impl_worktree(repo)),
+                    ("impl_commit", lambda: self._impl_commit(repo, update_head)),
+                ):
+                    with self.subTest(control=name):
+                        with self.assertRaises(wf.UnclassifiedPathError):
+                            compute()
+            after = {k: v[0] for k, v in self._all_digests(repo, update_head).items()}
+            self.assertEqual(after, recorded)
+
+    def test_temp_sibling_still_raises_through_the_digest(self):
+        with ScratchRepo() as repo:
+            self._seed_legacy_repo(repo)
+            (repo.root / ".workflow-manager" / "installation.json.tmp").write_text("{}\n")
+            with self.assertRaises(wf.UnclassifiedPathError):
+                self._plan_worktree(repo)
+            with self.assertRaises(wf.UnclassifiedPathError):
+                self._impl_worktree(repo)
+
+
 class TestApprovalRecordManifestUsesTheRealComputeFunctions(unittest.TestCase):
     """`workflow-v2-3-followups` continued scope, self-discovered during
     this item's own `/accept-milestone` pre-flight:
@@ -2050,7 +2247,13 @@ class TestApprovalRecordManifestUsesTheRealComputeFunctions(unittest.TestCase):
 class TestBundleLayoutResolver(unittest.TestCase):
     """WF5's `.ai-review/<work_item_id>/{current,feedback}/` relayout
     resolver, with the stated compatibility fallback (resolves
-    `OPUS-R6-021`)."""
+    `OPUS-R6-021`).
+
+    Re-pointed by `D-Feedback-Layout` (workflow-2.6.0): every scratch repo
+    here has no `WORKFLOW_STATE.json`, so the feedback assertions pin the
+    **legacy** rule (scoped-else-flat) that an item without a
+    `feedback_layout` stamp keeps. A scoped item's resolution is pinned by
+    `TestFeedbackLayout`."""
 
     def test_falls_back_to_flat_layout_when_scoped_dir_absent(self):
         with ScratchRepo() as repo:
@@ -2222,7 +2425,10 @@ class TestBundleLayoutResolverStageAwareness(unittest.TestCase):
 
     def test_resolve_feedback_dir_is_deliberately_not_stage_aware(self):
         """`feedback/` is stage-agnostic by contract (`REVIEW_PROTOCOL.md`,
-        `REQ-21`); this repair leaves it completely untouched."""
+        `REQ-21`); this repair leaves it completely untouched. (No state
+        file here, so the flat answer is the legacy rule's --
+        `D-Feedback-Layout` keeps the signature stage-free for every
+        layout.)"""
         with ScratchRepo() as repo:
             self.assertEqual(
                 wf.resolve_feedback_dir(repo.root, "milestone-9"), Path(".ai-review/feedback"),
@@ -2382,7 +2588,12 @@ class TestFunctionalReviewConsumedMarker(unittest.TestCase):
     functional-review`'s own checklist-evidence content-hash binding --
     that prevents an already-applied `FUNCTIONAL_REVIEW.md` from being
     re-read as fresh findings on a later `/apply-functional-review` pass,
-    without any lifecycle/review-stage/ledger-stage/quorum addition."""
+    without any lifecycle/review-stage/ledger-stage/quorum addition.
+
+    Re-pointed by `D-Feedback-Layout` (workflow-2.6.0): these scratch repos
+    have no `WORKFLOW_STATE.json`, so the marker follows the **legacy**
+    rule and is shared across legacy items resolving flat. For scoped
+    items the marker is per item (`TestFeedbackLayout`)."""
 
     def _write_feedback(self, repo, work_item_id, content):
         feedback_dir = repo.root / wf.resolve_feedback_dir(repo.root, work_item_id)
@@ -2975,7 +3186,13 @@ class TestReviewImplementationWritebackCrossWorkItemIsolation(unittest.TestCase)
     guard exists to prevent -- two work items resolving the identical flat
     `resolve_feedback_dir` path, since neither yet has its own scoped
     `.ai-review/<work_item_id>/feedback/` directory. Drives the real
-    resolver, not a stand-in path."""
+    resolver, not a stand-in path.
+
+    Re-pointed by `D-Feedback-Layout` (workflow-2.6.0): the shared flat
+    path, and so the "creates no scoped dir" assertion, now applies to
+    **legacy** items only -- this fixture has no `WORKFLOW_STATE.json`,
+    so neither item carries a `feedback_layout` stamp. Two scoped items
+    never share a path at all (`TestFeedbackLayout`)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -3815,6 +4032,247 @@ class TestGeneratorSideStageDocumentBinding(unittest.TestCase):
             self.assertEqual(result["status"], "mismatch")
             self.assertIn("active_work_item_id", result["message"])
             self.assertTrue(bundle_dir.exists())
+
+
+
+class TestFeedbackLayout(unittest.TestCase):
+    """`D-Feedback-Layout` (workflow-2.6.0, CP3; REQ-1/REQ-2): one
+    authoritative resolver keyed on the durable `feedback_layout` stamp,
+    scoped by construction for new items, the unchanged legacy rule for
+    everything else, fail-closed on an undecidable state file (INV-3), the
+    bounded terminal-owner relaxation, the per-item consumed marker, the
+    `--resolve-feedback-path` CLI contract and the manual-record
+    `Work item:` binding. `workflow_state_test.TestFeedbackLayoutStamp`
+    pins the stamp's writers."""
+
+    SCOPED = "scoped-item"
+    OTHER_SCOPED = "other-scoped-item"
+    LEGACY = "legacy-item"
+    COMPLETED = "completed-legacy-item"
+
+    def _state(self, repo, work_items):
+        path = repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+        path.write_text(json.dumps({"schema_version": 1, "work_items": work_items}, indent=2) + "\n")
+        return json.loads(path.read_text())
+
+    def _entry(self, work_item_id, *, phase="IMPLEMENTING", **extra):
+        return {"work_item_id": work_item_id, "phase": phase, **extra}
+
+    def _standard_state(self, repo):
+        return self._state(repo, {
+            self.SCOPED: self._entry(self.SCOPED, feedback_layout="scoped"),
+            self.OTHER_SCOPED: self._entry(self.OTHER_SCOPED, feedback_layout="scoped"),
+            self.LEGACY: self._entry(self.LEGACY),
+            self.COMPLETED: self._entry(self.COMPLETED, phase="MILESTONE_COMPLETE"),
+        })
+
+    def _feedback(self, work_item):
+        return (
+            f"# Review Decision\n\nStatus: APPROVE\n\n"
+            f"Reviewed bundle ID: {FAKE_ID_A}\n"
+            f"Reviewed base commit: {'a' * 40}\n"
+            f"Work item: {work_item}\n"
+        )
+
+    def _write_flat_feedback(self, repo, owner):
+        flat = repo.root / ".ai-review" / "feedback"
+        flat.mkdir(parents=True, exist_ok=True)
+        (flat / "REVIEW_FEEDBACK.md").write_text(self._feedback(owner))
+        return flat / "REVIEW_FEEDBACK.md"
+
+    # -- resolution -------------------------------------------------------
+
+    def test_scoped_item_resolves_scoped_with_no_directory_present(self):
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            scoped = Path(".ai-review") / self.SCOPED / "feedback"
+            self.assertFalse((repo.root / scoped).exists())
+            self.assertEqual(wf.resolve_feedback_layout(repo.root, self.SCOPED), "scoped")
+            self.assertEqual(wf.resolve_feedback_dir(repo.root, self.SCOPED), scoped)
+            self.assertFalse((repo.root / scoped).exists(), "resolution alone creates nothing")
+
+    def test_ensure_feedback_dir_creates_the_scoped_directory(self):
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            created = wf.ensure_feedback_dir(repo.root, self.SCOPED)
+            self.assertEqual(created, Path(".ai-review") / self.SCOPED / "feedback")
+            self.assertTrue((repo.root / created).is_dir())
+            self.assertEqual(wf.ensure_feedback_dir(repo.root, self.SCOPED), created)  # idempotent
+
+    def test_legacy_entry_no_entry_and_no_state_file_keep_the_unchanged_rule(self):
+        cases = {
+            "legacy entry": lambda repo: self._standard_state(repo) and self.LEGACY,
+            "no entry": lambda repo: self._standard_state(repo) and "never-routed-item",
+            "no state file": lambda repo: "never-routed-item",
+        }
+        for name, arrange in cases.items():
+            with self.subTest(case=name), ScratchRepo() as repo:
+                work_item_id = arrange(repo)
+                self.assertEqual(wf.resolve_feedback_layout(repo.root, work_item_id), "legacy-flat")
+                self.assertEqual(wf.resolve_feedback_dir(repo.root, work_item_id), Path(".ai-review/feedback"))
+                scoped = Path(".ai-review") / work_item_id / "feedback"
+                (repo.root / scoped).mkdir(parents=True)
+                self.assertEqual(wf.resolve_feedback_layout(repo.root, work_item_id), "legacy-scoped")
+                self.assertEqual(wf.resolve_feedback_dir(repo.root, work_item_id), scoped)
+
+    def test_ensure_feedback_dir_never_flips_a_legacy_flat_item_to_scoped(self):
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            self.assertEqual(wf.ensure_feedback_dir(repo.root, self.LEGACY), Path(".ai-review/feedback"))
+            self.assertFalse((repo.root / ".ai-review" / self.LEGACY).exists())
+            self.assertEqual(wf.resolve_feedback_layout(repo.root, self.LEGACY), "legacy-flat")
+
+    def test_undecidable_state_file_refuses_rather_than_falling_back(self):
+        state_rel = Path("docs/ai-workflow/WORKFLOW_STATE.json")
+        cases = {
+            "not json": b"{not json",
+            "not utf-8": b"\xff\xfe\x00",
+            "top level not an object": b"[]",
+            "work_items not an object": b'{"work_items": []}',
+            "entry not an object": b'{"work_items": {"scoped-item": "scoped"}}',
+        }
+        for name, content in cases.items():
+            with self.subTest(case=name), ScratchRepo() as repo:
+                (repo.root / state_rel).write_bytes(content)
+                with self.assertRaises(wf.FeedbackLayoutUndecidableError):
+                    wf.resolve_feedback_dir(repo.root, self.SCOPED)
+        with ScratchRepo() as repo:
+            real = repo.root / "elsewhere.json"
+            real.write_text(json.dumps({"work_items": {}}))
+            (repo.root / state_rel).symlink_to(real)
+            with self.assertRaises(wf.FeedbackLayoutUndecidableError):
+                wf.resolve_feedback_dir(repo.root, self.SCOPED)
+
+    def test_unknown_layout_value_refuses(self):
+        for value in ("flat", "Scoped", "", None, 1, ["scoped"]):
+            with self.subTest(value=value), ScratchRepo() as repo:
+                self._state(repo, {self.SCOPED: self._entry(self.SCOPED, feedback_layout=value)})
+                with self.assertRaises(wf.UnknownFeedbackLayoutError):
+                    wf.resolve_feedback_dir(repo.root, self.SCOPED)
+                with self.assertRaises(wf.UnknownFeedbackLayoutError):
+                    wf.ensure_feedback_dir(repo.root, self.SCOPED)
+
+    def test_two_scoped_items_never_collide(self):
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            a = wf.ensure_feedback_dir(repo.root, self.SCOPED)
+            b = wf.ensure_feedback_dir(repo.root, self.OTHER_SCOPED)
+            self.assertNotEqual(a, b)
+            (repo.root / a / "REVIEW_FEEDBACK.md").write_text(self._feedback(self.SCOPED))
+            self.assertFalse((repo.root / b / "REVIEW_FEEDBACK.md").exists())
+
+    def test_completed_legacy_flat_file_never_affects_a_scoped_item(self):
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            flat_file = self._write_flat_feedback(repo, self.COMPLETED)
+            flat_bytes = flat_file.read_bytes()
+            feedback_dir = wf.ensure_feedback_dir(repo.root, self.SCOPED)
+            self.assertNotEqual(feedback_dir, Path(".ai-review/feedback"))
+            target = repo.root / feedback_dir / "REVIEW_FEEDBACK.md"
+            self.assertFalse(target.exists(), "the scoped item never sees the flat file")
+            wf.assert_feedback_not_owned_by_other_work_item(None, work_item_id=self.SCOPED)
+            target.write_text(self._feedback(self.SCOPED))
+            self.assertEqual(flat_file.read_bytes(), flat_bytes, "nor is the flat file touched")
+
+    # -- ownership guard ---------------------------------------------------
+
+    def test_legacy_writer_may_replace_a_terminal_owners_flat_file(self):
+        with ScratchRepo() as repo:
+            state = self._standard_state(repo)
+            existing = self._write_flat_feedback(repo, self.COMPLETED).read_text()
+            wf.assert_feedback_not_owned_by_other_work_item(
+                existing, work_item_id=self.LEGACY, state=state,
+            )
+            # the unrelaxed call (no state) is 2.5.1's behavior, unchanged
+            with self.assertRaises(wf.FeedbackOwnedByOtherWorkItemError):
+                wf.assert_feedback_not_owned_by_other_work_item(existing, work_item_id=self.LEGACY)
+
+    def test_non_terminal_or_unknown_owner_still_refuses(self):
+        with ScratchRepo() as repo:
+            state = self._standard_state(repo)
+            for owner in (self.SCOPED, "owner-absent-from-state"):
+                with self.subTest(owner=owner):
+                    with self.assertRaises(wf.FeedbackOwnedByOtherWorkItemError):
+                        wf.assert_feedback_not_owned_by_other_work_item(
+                            self._feedback(owner), work_item_id=self.LEGACY, state=state,
+                        )
+
+    def test_scoped_writer_is_never_relaxed(self):
+        """A scoped directory is private by construction: a foreign file
+        inside it is an anomaly, refused even when its owner is terminal."""
+        with ScratchRepo() as repo:
+            state = self._standard_state(repo)
+            with self.assertRaises(wf.FeedbackOwnedByOtherWorkItemError):
+                wf.assert_feedback_not_owned_by_other_work_item(
+                    self._feedback(self.COMPLETED), work_item_id=self.SCOPED, state=state,
+                )
+
+    def test_terminal_phase_set_matches_workflow_state(self):
+        self.assertEqual(wf.FEEDBACK_OWNER_TERMINAL_PHASES, ws.TERMINAL_PHASES)
+
+    # -- consumed marker ---------------------------------------------------
+
+    def test_consumed_marker_is_per_item_for_scoped_items(self):
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            for work_item_id in (self.SCOPED, self.OTHER_SCOPED):
+                self.assertEqual(
+                    wf.resolve_functional_review_consumed_marker_path(repo.root, work_item_id),
+                    Path(".ai-review") / work_item_id / "feedback" / "FUNCTIONAL_REVIEW.consumed",
+                )
+            feedback_dir = wf.ensure_feedback_dir(repo.root, self.SCOPED)
+            (repo.root / feedback_dir / "FUNCTIONAL_REVIEW.md").write_text("findings\n")
+            wf.mark_functional_review_consumed(repo.root, self.SCOPED)
+            with self.assertRaises(wf.FunctionalReviewAlreadyAppliedError):
+                wf.assert_functional_review_not_already_consumed(repo.root, self.SCOPED)
+            other_dir = wf.ensure_feedback_dir(repo.root, self.OTHER_SCOPED)
+            (repo.root / other_dir / "FUNCTIONAL_REVIEW.md").write_text("findings\n")
+            wf.assert_functional_review_not_already_consumed(repo.root, self.OTHER_SCOPED)  # must not raise
+
+    # -- CLI contract ------------------------------------------------------
+
+    def test_cli_json_matches_the_function_for_all_three_layouts(self):
+        script = Path(__file__).resolve().parent / "workflow_fingerprint.py"
+        with ScratchRepo() as repo:
+            self._standard_state(repo)
+            (repo.root / ".ai-review" / "legacy-scoped-item" / "feedback").mkdir(parents=True)
+            expected_layouts = {
+                self.SCOPED: "scoped", "legacy-scoped-item": "legacy-scoped", self.LEGACY: "legacy-flat",
+            }
+            for work_item_id, layout in expected_layouts.items():
+                with self.subTest(work_item_id=work_item_id):
+                    result = subprocess.run(
+                        [sys.executable, str(script), "--resolve-feedback-path", work_item_id],
+                        cwd=repo.root, check=True, capture_output=True, text=True,
+                    )
+                    lines = result.stdout.strip().splitlines()
+                    self.assertEqual(len(lines), 1, "exactly one JSON object")
+                    printed = json.loads(lines[0])
+                    self.assertEqual(printed, wf.resolve_feedback_path_contract(repo.root, work_item_id))
+                    feedback_dir = wf.resolve_feedback_dir(repo.root, work_item_id).as_posix()
+                    self.assertEqual(printed, {
+                        "work_item_id": work_item_id,
+                        "layout": layout,
+                        "feedback_dir": feedback_dir,
+                        "review_feedback_path": f"{feedback_dir}/REVIEW_FEEDBACK.md",
+                        "functional_review_path": f"{feedback_dir}/FUNCTIONAL_REVIEW.md",
+                    })
+            self.assertFalse((repo.root / ".ai-review" / self.SCOPED).exists(), "the CLI creates nothing")
+
+    # -- manual-record binding ---------------------------------------------
+
+    def test_manual_record_refuses_a_foreign_work_item_field(self):
+        with self.assertRaises(wf.ManualFeedbackForeignWorkItemError) as ctx:
+            wf.assert_manual_feedback_names_work_item(self._feedback(self.COMPLETED), work_item_id=self.SCOPED)
+        self.assertIn(self.COMPLETED, str(ctx.exception))
+        self.assertIn(self.SCOPED, str(ctx.exception))
+
+    def test_manual_record_accepts_its_own_or_an_absent_work_item_field(self):
+        wf.assert_manual_feedback_names_work_item(self._feedback(self.SCOPED), work_item_id=self.SCOPED)
+        wf.assert_manual_feedback_names_work_item(
+            "# Review Decision\n\nStatus: APPROVE\n\nreview_content_id: " + FAKE_ID_B + "\n",
+            work_item_id=self.SCOPED,
+        )
 
 
 if __name__ == "__main__":

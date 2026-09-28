@@ -818,21 +818,6 @@ class GitIsolationTest(_SeededTargets):
         self.assertIn(UNCHANGED_TRACKED.encode(), in_place.split(b"\0"), "control: Git in place missed the edit")
         self.assertEqual(seen, [(mtime, in_place)])
 
-    def test_the_querys_git_fires_no_hook_but_post_index_change(self) -> None:
-        # What `_QUERY_HOOK_EVENTS` rests on: every documented hook
-        # installed, Workflow's two queries run in place fire only the
-        # events the Controller refuses. The index refresh that fires
-        # `post-index-change` is forced, so the census is not empty.
-        root = self.fresh()
-        fired = root.parent / "fired"
-        for name in DOCUMENTED_HOOKS:
-            _executable(root / ".git" / "hooks" / name, f"echo {name} >> {fired}")
-        _stat_dirty(root, UNCHANGED_TRACKED, self.PLAN)
-        self.released_status_in_place()
-        fixtures.run([sys.executable, workflow_contract.FINGERPRINT_SCRIPT,
-                      f"--resolve-feedback-path={WORK_ITEM_ID}"], cwd=root)
-        self.assertEqual(set(fired.read_text().split()), set(workflow_contract._QUERY_HOOK_EVENTS))
-
     def test_a_hook_the_querys_git_fires_is_refused(self) -> None:
         # The external review's reproduction (round 3): with the hook
         # switched off, the Controller answered row 2 where Workflow, whose
@@ -1072,6 +1057,36 @@ class GitIsolationTest(_SeededTargets):
         fetch = run("ls-remote", str(remote))
         self.assertNotEqual(fetch.returncode, 0)
         self.assertIn("transport 'file' not allowed", fetch.stderr)
+
+
+class QueryHookCensusTest(_SeededTargets):
+    """What ``_QUERY_HOOK_EVENTS`` rests on: every documented hook
+    installed, Workflow's two queries run in place at each seeded stage
+    fire only the events the Controller refuses."""
+
+    SEEDS = {stage: ("2.6.0", stage, {}) for stage in ("route", "publish", "generate", "ready", "revise")}
+    PLAN = f"docs/ai-workflow/{WORK_ITEM_ID}-PLAN.md"
+
+    def test_the_querys_git_fires_no_hook_but_post_index_change(self) -> None:
+        # The index refresh that fires `post-index-change` is forced, so the
+        # census is not empty. At `route` there is no plan yet, the status
+        # query hashes nothing, and no hook fires.
+        fired_at_any_stage: set[str] = set()
+        for stage in self.SEEDS:
+            with self.subTest(stage=stage):
+                root = self.target(stage)
+                fired = root.parent / "fired"
+                for name in DOCUMENTED_HOOKS:
+                    _executable(root / ".git" / "hooks" / name, f"echo {name} >> {fired}")
+                _stat_dirty(root, *(path for path in (UNCHANGED_TRACKED, self.PLAN) if (root / path).exists()))
+                fixtures.run([sys.executable, workflow_contract.STATE_SCRIPT,
+                              f"--plan-review-publication-status={WORK_ITEM_ID}"], cwd=root)
+                fixtures.run([sys.executable, workflow_contract.FINGERPRINT_SCRIPT,
+                              f"--resolve-feedback-path={WORK_ITEM_ID}"], cwd=root)
+                events = set(fired.read_text().split()) if fired.exists() else set()
+                self.assertLessEqual(events, set(workflow_contract._QUERY_HOOK_EVENTS))
+                fired_at_any_stage |= events
+        self.assertEqual(fired_at_any_stage, set(workflow_contract._QUERY_HOOK_EVENTS))
 
 
 # ---------------------------------------------------------------------------

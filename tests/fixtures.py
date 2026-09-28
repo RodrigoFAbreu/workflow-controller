@@ -35,6 +35,13 @@ def _controller_version() -> str:
 #: This checkout's Controller version: its own ``pyproject.toml``'s.
 CONTROLLER_VERSION = _controller_version()
 
+from controller.managed_repo import REFERENCE_WORKFLOW_RELEASE  # noqa: E402
+
+#: The vendored, hash-pinned Workflow release trees
+#: (``tools/workflow_releases.py``). Workflow-derived checks read these,
+#: never this repository's own installed Workflow.
+WORKFLOW_RELEASES_DIR = REPO_ROOT / "tests" / "workflow_releases"
+
 #: Set to ``"1"`` to make a missing wheel-build prerequisite a test failure
 #: instead of a skip.
 REQUIRE_PACKAGING_TESTS_ENV = "CONTROLLER_REQUIRE_PACKAGING_TESTS"
@@ -321,23 +328,26 @@ def build_managed_repo(
     return dest
 
 
-def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: str = "full") -> Path:
-    """A managed-repo fixture whose ``.claude/commands/`` tree and
-    ``scripts/workflow_state.py`` are byte-identical copies of this
-    repository's own reference ``2.5.1`` tree -- so the phase set, the
-    command-file partition and the user-only set CP3/CP4 read are, by
-    construction, identical to the admitted case -- while
-    ``installation.json`` alone declares ``workflow_version`` (``REQ-T18B``,
+def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: str = "full",
+                                release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
+    """A managed-repo fixture whose ``.claude/commands/`` tree,
+    ``scripts/workflow_state.py`` and ``scripts/workflow_fingerprint.py``
+    (its sibling import from 2.6.0 on) are byte-identical copies of the
+    vendored ``release`` tree -- so the phase set, the command-file
+    partition and the user-only set CP3/CP4 read are, by construction,
+    identical to the admitted case -- while ``installation.json`` alone
+    declares ``workflow_version`` (``REQ-T18B``,
     ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``'s CP2 section). Refusing
     this fixture at CP2, without ever reaching a command-file or
     ``KNOWN_PHASES`` read, is the assertion that discriminates the
     two-tier admission rule from one that (wrongly) falls back to an
     inventory-equality check when the exact release is unrecognised."""
     build_bare_git_repo(dest)
-    copy_real_commands_dir(dest / ".claude" / "commands")
+    copy_real_commands_dir(dest / ".claude" / "commands", release=release)
     scripts_dir = dest / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / "scripts" / "workflow_state.py", scripts_dir / "workflow_state.py")
+    for name in ("workflow_state.py", "workflow_fingerprint.py"):
+        shutil.copy2(workflow_release_tree(release) / "scripts" / name, scripts_dir / name)
     write_installation_manifest(dest, workflow_version=workflow_version, profile=profile)
     run(["git", "add", "-A"], cwd=dest)
     run(["git", "commit", "-q", "-m", "line-fixture"], cwd=dest)
@@ -346,13 +356,17 @@ def build_workflow_line_fixture(dest: Path, *, workflow_version: str, profile: s
 
 def write_stub_workflow_manager(
     path: Path, *, verify_exit: int = 0, status_exit: int = 0,
-    verify_stdout: str = "workflow 2.5.1 (full profile) -- clean",
-    status_stdout: str = "workflow 2.5.1 (full profile) -- clean",
+    verify_stdout: str | None = None, status_stdout: str | None = None,
+    release: str = REFERENCE_WORKFLOW_RELEASE,
 ) -> Path:
     """A hermetic, offline stand-in for the real ``workflow-manager``
     executable: an executable shell script whose ``verify``/``status``
     exit codes and stdout are the caller's own, so the drift/asymmetry
-    tests never depend on the real Manager's actual behaviour."""
+    tests never depend on the real Manager's actual behaviour. Unless given,
+    both print ``release``'s clean-installation line."""
+    clean = f"workflow {release} (full profile) -- clean"
+    verify_stdout = clean if verify_stdout is None else verify_stdout
+    status_stdout = clean if status_stdout is None else status_stdout
     script = (
         "#!/bin/sh\n"
         "sub=\"$1\"\n"
@@ -422,9 +436,6 @@ def write_target_registry(root: Path, rel_path: str, registry: dict) -> Path:
 # CP4 -- decision-engine fixtures.
 # ---------------------------------------------------------------------------
 
-REAL_COMMANDS_DIR = REPO_ROOT / ".claude" / "commands"
-
-
 def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
                           governing_workflow_version: str | None = "2.1", **overrides):
     """A real ``controller.target_state.WorkItemView`` with every field
@@ -462,17 +473,63 @@ def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
     return WorkItemView(**defaults)
 
 
-def copy_real_commands_dir(dest: Path) -> Path:
-    """A real, on-disk copy of this repository's own
-    ``.claude/commands/`` -- this repository is itself a frozen Workflow
-    installation (2.5.1 since revision 64's baseline update), so its
-    seventeen command files are the same external artifact a target
-    managed repository carries. Copying rather than pointing at
-    ``REAL_COMMANDS_DIR`` directly keeps a fixture that mutates a file
-    (the extra-file / discriminating-recogniser tests) from ever touching
-    this repository's own working tree."""
+def workflow_release_tree(release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
+    """The vendored tree of the released Workflow ``release``: its
+    seventeen command files and three scripts at their target-relative
+    paths, hash-pinned by its ``RELEASE.json``. Read it, never write it."""
+    tree = WORKFLOW_RELEASES_DIR / release
+    if not (tree / "RELEASE.json").is_file():
+        raise FileNotFoundError(f"no vendored Workflow tree for {release!r} under {WORKFLOW_RELEASES_DIR}")
+    return tree
+
+
+def workflow_release_files(release: str = REFERENCE_WORKFLOW_RELEASE) -> dict[str, dict]:
+    """``release``'s vendored files, from its ``RELEASE.json``:
+    ``{target path: {"sha256", "executable"}}``."""
+    return json.loads((workflow_release_tree(release) / "RELEASE.json").read_text())["files"]
+
+
+def evaluate_in_workflow_release(release: str, expression: str):
+    """Evaluate ``expression`` against the vendored ``release``'s own
+    ``workflow_state`` module and return its JSON-decoded value. It runs in
+    a fresh interpreter per call (``sys.executable -B -E -s -c``, with the
+    vendored ``scripts/`` directory as ``cwd``): every release's scripts
+    share module names, so importing two releases in one process would
+    collide in ``sys.modules``. ``-B`` keeps bytecode out of the vendored
+    tree."""
+    code = f"import json\nimport workflow_state\nprint(json.dumps({expression}))\n"
+    result = subprocess.run(
+        [sys.executable, "-B", "-E", "-s", "-c", code], cwd=workflow_release_tree(release) / "scripts",
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"evaluating {expression!r} against Workflow {release} failed "
+                             f"(exit {result.returncode}): {result.stderr}")
+    return json.loads(result.stdout)
+
+
+def install_workflow_release(root: Path, release: str, *, profile: str = "full") -> Path:
+    """Install the vendored ``release`` tree into the target ``root``: every
+    vendored file at its target path, with its mode, and an
+    ``installation.json`` declaring ``release`` (written through
+    :func:`write_installation_manifest`). Commits nothing."""
+    tree = workflow_release_tree(release)
+    for rel_path in workflow_release_files(release):
+        dest = root / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(tree / rel_path, dest)
+    write_installation_manifest(root, workflow_version=release, profile=profile)
+    return root
+
+
+def copy_real_commands_dir(dest: Path, *, release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
+    """A real, on-disk copy of the released Workflow ``release``'s
+    seventeen command files, from its vendored tree -- the same external
+    artifact a target managed repository carries. Copying rather than
+    pointing at the vendored tree keeps a fixture that mutates a file (the
+    extra-file / discriminating-recogniser tests) from ever touching it."""
     dest.mkdir(parents=True, exist_ok=True)
-    for path in REAL_COMMANDS_DIR.glob("*.md"):
+    for path in (workflow_release_tree(release) / ".claude" / "commands").glob("*.md"):
         shutil.copy2(path, dest / path.name)
     return dest
 
@@ -1029,12 +1086,13 @@ def build_target_managed_repository(root: Path):
     """A minimal, real ``managed_repo.ManagedRepository`` pointed at
     ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so
     the other fields are inert placeholders rather than a real Workflow
-    Manager inspection."""
+    Manager inspection. ``workflow_version`` is the reference release, an
+    admitted one."""
     from controller.managed_repo import ManagedRepository
 
     root.mkdir(parents=True, exist_ok=True)
     return ManagedRepository(
-        root=root, manifest={}, workflow_version="2.3.1", profile="full",
+        root=root, manifest={}, workflow_version=REFERENCE_WORKFLOW_RELEASE, profile="full",
         verify={"returncode": 0, "stdout": "", "stderr": ""},
         status={"returncode": 0, "stdout": "", "stderr": ""},
     )

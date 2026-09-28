@@ -54,12 +54,18 @@ class CleanManagedRepositoryTest(unittest.TestCase):
 
     @unittest.skipUnless(REAL_WORKFLOW_MANAGER, "no real workflow-manager installed")
     def test_real_workflow_manager_admits_this_repository(self) -> None:
-        # This repository is itself a real, currently-clean Workflow
-        # v2.5.1 (full profile) managed repository -- the disposable
-        # integration fixture every other case in this file avoids
-        # needing.
+        # This repository is itself a real, currently-clean, full-profile
+        # Workflow managed repository -- the disposable integration fixture
+        # every other case in this file avoids needing. Its release is
+        # whatever its own installation.json declares, never a literal:
+        # an admitted one, and the one whose vendored tree
+        # tests/test_workflow_releases.py checks its installed files against.
+        declared = json.loads(
+            (fixtures.REPO_ROOT / ".workflow-manager" / "installation.json").read_text(),
+        )["workflow_version"]
         result = managed_repo.inspect(fixtures.REPO_ROOT)
-        self.assertEqual(result.workflow_version, "2.5.1")
+        self.assertIn(result.workflow_version, managed_repo.VALIDATED_WORKFLOW_RELEASES)
+        self.assertEqual(result.workflow_version, declared)
         self.assertEqual(result.profile, "full")
         self.assertEqual(result.verify["returncode"], 0)
         self.assertEqual(result.status["returncode"], 0)

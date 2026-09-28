@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import evidence, job  # noqa: E402
 from controller.decision import Action, Decision  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
+from controller.managed_repo import VALIDATED_WORKFLOW_RELEASES  # noqa: E402
 from tests import fixtures  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
@@ -45,11 +46,11 @@ FAKE_IDENTITY = ControllerIdentity(
     pinned_at="2024-01-01T00:00:00Z", version=fixtures.CONTROLLER_VERSION,
 )
 
-#: This repository's own checkout -- itself a frozen Workflow
-#: installation (2.5.1 since revision 64's baseline update), per
-#: ``tests/fixtures.copy_real_commands_dir``'s own docstring -- is what
-#: property 5 checks its declared branches/calls against.
-REPO_ROOT = fixtures.REPO_ROOT
+#: The vendored reference-release tree: what property 5's single-row
+#: tests check their declared branches/calls against. The real table is
+#: checked against every admitted release's tree
+#: (``DeclarationAgainstArtifactTest``).
+REFERENCE_TREE = fixtures.workflow_release_tree()
 
 
 class _WriteSpy:
@@ -258,7 +259,7 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
         # The negative direction: property 5 is silent about the same row,
         # which is why property 3 has to speak.
         self.assertEqual(
-            job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,)), [],
+            job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,)), [],
         )
 
     def test_real_table_rows_each_derive_a_single_consistent_branch(self) -> None:
@@ -455,8 +456,12 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
     is restated to point at step 5's own text directly (a locatable
     numbered-step span), never a "steps N-M execute" cross-reference."""
 
-    def test_real_table_passes_against_the_frozen_command_files(self) -> None:
-        self.assertEqual(job.property_declaration_against_artifact_violations(REPO_ROOT), [])
+    def test_real_table_passes_against_every_admitted_release(self) -> None:
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                self.assertEqual(job.property_declaration_against_artifact_violations(
+                    fixtures.workflow_release_tree(release), job.EXPECTED_OUTCOMES,
+                ), [])
 
     def test_row5_branch_is_step5s_own_span(self) -> None:
         row5 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/apply-plan-review"
@@ -476,14 +481,14 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         bad_branch = job.BranchSpec(kind="bullet", label="NO_SUCH_VERDICT")
         bad_wc = dataclasses.replace(row3.writer_calls[0], branch=bad_branch)
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("declared branch" in v and "not found" in v for v in violations), violations)
 
     def test_call_not_found_in_branch_fails(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         bad_wc = dataclasses.replace(row3.writer_calls[0], match_text="no_such_writer_call_at_all(")
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("no call found" in v for v in violations), violations)
 
     def test_a_further_different_durable_write_after_the_call_fails(self) -> None:
@@ -498,14 +503,14 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
             row1.writer_calls[0], function="generate_registry", match_text="generate_registry(",
         )
         broken = dataclasses.replace(row1, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("a further durable write" in v for v in violations), violations)
 
     def test_unreadable_file_fails_naming_the_row_and_file(self) -> None:
         row3 = next(eo for eo in job.EXPECTED_OUTCOMES if eo.action == "/review-plan")
         bad_wc = dataclasses.replace(row3.writer_calls[0], file="no-such-command-file.md")
         broken = dataclasses.replace(row3, writer_calls=(bad_wc,))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (broken,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (broken,))
         self.assertTrue(any("could not be read" in v for v in violations), violations)
 
 
@@ -527,21 +532,21 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         )
         for _fn, why in row12.writer_calls[0].trailing_calls:
             self.assertTrue(why.strip())
-        self.assertEqual(job.property_declaration_against_artifact_violations(REPO_ROOT, (row12,)), [])
+        self.assertEqual(job.property_declaration_against_artifact_violations(REFERENCE_TREE, (row12,)), [])
 
     def test_an_undeclared_trailing_write_still_fails(self) -> None:
         """Without the allowlist, step 1f's two later calls are reported;
         allowlisting one leaves the other reported -- the property is
         never weakened to pass."""
         violations = job.property_declaration_against_artifact_violations(
-            REPO_ROOT, (self._row12_with_trailing(()),),
+            REFERENCE_TREE, (self._row12_with_trailing(()),),
         )
         self.assertEqual(len(violations), 2, violations)
         self.assertTrue(any("'committed_checkpoint_status' occurs after it" in v for v in violations))
         self.assertTrue(any("'release_checkpoint' occurs after it" in v for v in violations))
 
         only_read = self._row12_with_trailing((("committed_checkpoint_status", "a read"),))
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (only_read,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (only_read,))
         self.assertEqual(len(violations), 1, violations)
         self.assertIn("a further durable write to 'release_checkpoint'", violations[0])
 
@@ -549,7 +554,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         stale = self._row12_with_trailing(
             job._STEP_1F_TRAILING_CALLS + (("record_bundle_generation", "not in step 1f at all"),),
         )
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (stale,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (stale,))
         self.assertEqual(len(violations), 1, violations)
         self.assertIn("trailing_calls names 'record_bundle_generation'", violations[0])
         self.assertIn("stale allowlist entry", violations[0])
@@ -560,7 +565,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         before = self._row12_with_trailing(
             job._STEP_1F_TRAILING_CALLS + (("owner_mutation", "precedes the declared call"),),
         )
-        violations = job.property_declaration_against_artifact_violations(REPO_ROOT, (before,))
+        violations = job.property_declaration_against_artifact_violations(REFERENCE_TREE, (before,))
         self.assertEqual(len(violations), 1, violations)
         self.assertIn("trailing_calls names 'owner_mutation'", violations[0])
 
@@ -590,7 +595,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         row16 = job._EXPECTED_OUTCOMES_BY_KEY[
             ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2", "/review-implementation")
         ]
-        lines = (REPO_ROOT / ".claude" / "commands" / "review-implementation.md").read_text().splitlines()
+        lines = (REFERENCE_TREE / ".claude" / "commands" / "review-implementation.md").read_text().splitlines()
         start, _end = job._branch_span(lines, row16.writer_calls[0].branch)
         a6 = next(i for i, line in enumerate(lines) if line.startswith("A6."))
         a7 = next(i for i, line in enumerate(lines) if line.startswith("A7."))
@@ -607,7 +612,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         ):
             with self.subTest(key=key):
                 wc = job._EXPECTED_OUTCOMES_BY_KEY[key].writer_calls[0]
-                lines = (REPO_ROOT / ".claude" / "commands" / wc.file).read_text().splitlines()
+                lines = (REFERENCE_TREE / ".claude" / "commands" / wc.file).read_text().splitlines()
                 start, _end = job._branch_span(lines, wc.branch)
                 self.assertTrue(lines[start].startswith(first_line), lines[start])
 

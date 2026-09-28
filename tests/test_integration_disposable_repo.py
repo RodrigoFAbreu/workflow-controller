@@ -227,20 +227,16 @@ def _seed_target(target: Path) -> None:
             )
     else:
         # Fallback fixture detail, not a reimplementation of install
-        # semantics: copy this repository's own installed Workflow tree and
-        # manifest. CP2 still asks the real Manager to verify the result at
-        # `step` time; if the Manager refuses this fixture, the test fails
-        # rather than proceeding. The copied `installation.json`'s own
-        # `workflow_version` is validated below by
-        # `_assert_target_installation_admissible` (REQ-T18C) -- if it is
-        # not a member of `VALIDATED_WORKFLOW_RELEASES`, the fallback does
-        # not silently produce an unvalidated fixture and does not rewrite
-        # the manifest to claim a release it did not copy: this call fails
-        # with that named assertion instead.
-        shutil.copytree(REPO_ROOT / ".claude" / "commands", target / ".claude" / "commands",
-                         dirs_exist_ok=True)
-        shutil.copytree(REPO_ROOT / "scripts", target / "scripts", dirs_exist_ok=True,
-                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".ai-review"))
+        # semantics: install the vendored tree of `release` (its command
+        # files and three scripts, never this repository's own installed
+        # Workflow) with an `installation.json` declaring that release, and
+        # copy this repository's `docs/ai-workflow/` documents. CP2 still
+        # asks the real Manager to verify the result at `step` time; if the
+        # Manager refuses this fixture, the test fails rather than
+        # proceeding. The written `installation.json`'s own
+        # `workflow_version` is still validated below by
+        # `_assert_target_installation_admissible` (REQ-T18C).
+        fixtures.install_workflow_release(target, release)
         shutil.copytree(REPO_ROOT / "docs" / "ai-workflow", target / "docs" / "ai-workflow",
                          dirs_exist_ok=True)
         (target / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text(
@@ -262,8 +258,6 @@ def _seed_target(target: Path) -> None:
             )
             + "\n"
         )
-        shutil.copytree(REPO_ROOT / ".workflow-manager", target / ".workflow-manager",
-                         dirs_exist_ok=True)
 
     # Step 3b (`REQ-T18C`): assert the target's own installation is
     # admissible before anything is launched against it -- the one

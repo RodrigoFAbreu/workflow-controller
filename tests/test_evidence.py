@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import decision, evidence
+from controller.managed_repo import VALIDATED_WORKFLOW_RELEASES
 from tests import fixtures
 
 
@@ -2839,14 +2840,13 @@ class ImplementationBundleRecoveryGateTest(unittest.TestCase):
                 ])
 
     def test_provenance_recovery_is_named_only_at_the_phases_workflow_admits_it_from(self) -> None:
-        scripts_dir = fixtures.REPO_ROOT / "scripts"
-        sys.path.insert(0, str(scripts_dir))
-        import workflow_state as real_workflow_state  # noqa: PLC0415
-
-        self.assertEqual(
-            evidence.PROVENANCE_RECOVERY_LEGAL_PHASES,
-            real_workflow_state.bundle_generation_recovered_role_legal_committed_phases("2.2"),
-        )
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                legal = fixtures.evaluate_in_workflow_release(
+                    release,
+                    'sorted(workflow_state.bundle_generation_recovered_role_legal_committed_phases("2.2"))',
+                )
+                self.assertEqual(evidence.PROVENANCE_RECOVERY_LEGAL_PHASES, frozenset(legal))
         self.assertNotIn("APPLYING_REVIEW_FEEDBACK", evidence.PROVENANCE_RECOVERY_LEGAL_PHASES)
         # Unreachable through `decide` (the clause is never evaluated at
         # APPLYING_REVIEW_FEEDBACK), but the gate itself never names the

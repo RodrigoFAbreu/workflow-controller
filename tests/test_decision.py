@@ -21,6 +21,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import decision, target_state
+from controller.managed_repo import VALIDATED_WORKFLOW_RELEASES
 from controller.errors import MissingCommandsDirectoryError, NoSupportedActionError, UnknownPhaseError
 from tests import fixtures
 
@@ -117,10 +118,10 @@ class KnownPhaseSetTest(unittest.TestCase):
         self.assertEqual(decision.KNOWN_PHASES, _HAND_COPIED_TWENTY_PHASES)
         self.assertEqual(len(decision.KNOWN_PHASES), 20)
 
-    def test_two_directional_equality_against_target_state_known_phases(self) -> None:
-        # decision.py must not import target_state (dependency graph), so
-        # this cross-check lives in the test, not the module.
-        self.assertEqual(decision.KNOWN_PHASES, target_state.KNOWN_PHASES)
+    def test_target_state_re_exports_this_phase_list(self) -> None:
+        # One phase list: target_state re-exports decision's, never a copy.
+        self.assertIs(target_state.KNOWN_PHASES, decision.KNOWN_PHASES)
+        self.assertIs(target_state.TERMINAL_PHASES, decision.TERMINAL_PHASES)
 
 
 class TableDrivenPhaseDecisionTest(unittest.TestCase):
@@ -374,8 +375,13 @@ class UserOnlyDenylistTest(unittest.TestCase):
         self.commands_dir = fixtures.copy_real_commands_dir(Path(self._tmp.name) / "commands")
 
     def test_derivation_matches_the_expected_four_exactly(self) -> None:
-        derived = decision.derive_user_only_commands(self.commands_dir)
-        self.assertEqual(derived, frozenset(_EXPECTED_USER_ONLY))
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                commands_dir = fixtures.copy_real_commands_dir(
+                    Path(self._tmp.name) / release / "commands", release=release,
+                )
+                derived = decision.derive_user_only_commands(commands_dir)
+                self.assertEqual(derived, frozenset(_EXPECTED_USER_ONLY))
 
     def test_recover_implementation_provenance_named_explicitly(self) -> None:
         derived = decision.derive_user_only_commands(self.commands_dir)
@@ -454,7 +460,7 @@ class CommandFilePartitionTest(unittest.TestCase):
     """The command-file partition property (revision 10, round 9's B1):
     enumerate every ``*.md`` under the real ``.claude/commands/`` and
     assert the partition into selected / deliberately-not-selected /
-    user-only is total and disjoint."""
+    user-only is total and disjoint -- for every admitted release."""
 
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -462,8 +468,15 @@ class CommandFilePartitionTest(unittest.TestCase):
         self.commands_dir = fixtures.copy_real_commands_dir(Path(self._tmp.name) / "commands")
 
     def test_partition_is_total_and_matches_expected_three_sets(self) -> None:
-        classification = decision.classify_command_files(self.commands_dir)
-        on_disk = {p.stem for p in self.commands_dir.glob("*.md")}
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                self._assert_partition(fixtures.copy_real_commands_dir(
+                    Path(self._tmp.name) / release / "commands", release=release,
+                ))
+
+    def _assert_partition(self, commands_dir: Path) -> None:
+        classification = decision.classify_command_files(commands_dir)
+        on_disk = {p.stem for p in commands_dir.glob("*.md")}
         self.assertEqual(set(classification), on_disk)
         self.assertEqual(len(on_disk), 17)
 

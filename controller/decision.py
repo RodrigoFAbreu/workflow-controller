@@ -31,7 +31,9 @@ them (revision 71 relocation, ``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``'s
 ``target_state`` (later in the order) imports it from here rather than the
 reverse -- the single-instance property the ``is NO_PHASE`` comparisons
 CP6/CP7 perform depend on requires exactly one owning module, and it must
-be the earliest one that needs it.
+be the earliest one that needs it. The same holds for the phase list:
+:data:`KNOWN_PHASES` and :data:`TERMINAL_PHASES` are declared here, once,
+and ``target_state`` re-exports them.
 
 **Split with CP4B** (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``, "CP4 /
 CP4B -- Next-action decision engine and human-gate classification"): this
@@ -122,14 +124,17 @@ NO_PHASE = _NoPhaseType()
 #: itself, and anything else to a refusal, never a guess.
 NO_PHASE_WIRE = "__NO_PHASE__"
 
-#: The closed set of all twenty phases the installed reference release's
-#: own ``scripts/workflow_state.py:KNOWN_PHASES`` persists (a literal copy
-#: of ``controller.target_state.KNOWN_PHASES`` -- this module cannot
-#: import ``target_state`` per the dependency graph above, so the copy is
-#: kept honest by a two-directional equality test against both the real
-#: ``target_state.KNOWN_PHASES`` and a hand-copied set of the twenty
-#: names, exactly as CP3's own test does for its copy).
+#: The closed set of all twenty phases every admitted Workflow release's
+#: own ``scripts/workflow_state.py:KNOWN_PHASES`` persists. A literal copy,
+#: not an import -- the Controller must never import ``scripts/`` -- and the
+#: Controller's one phase list: ``controller.target_state`` re-exports it
+#: rather than holding a second copy. Kept honest by a two-directional
+#: set-equality test against each admitted release's own module
+#: (``tests/test_target_state.py``, one subprocess per vendored release
+#: tree) and against a hand-copied set of the twenty names
+#: (``tests/test_decision.py``).
 KNOWN_PHASES: frozenset[str] = frozenset({
+    # v1 (docs/ai-workflow/MILESTONE_WORKFLOW.md)
     "PLANNING",
     "SELF_REVIEWING_PLAN",
     "AWAITING_EXTERNAL_PLAN_REVIEW",
@@ -142,15 +147,31 @@ KNOWN_PHASES: frozenset[str] = frozenset({
     "FIXING_FUNCTIONAL_FINDINGS",
     "AWAITING_USER_ACCEPTANCE",
     "MILESTONE_COMPLETE",
+    # v2.1-only additions
     "AWAITING_LOCAL_PLAN_REVIEW",
     "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
     "AWAITING_PLAN_APPROVAL",
     "AWAITING_TECHNICAL_APPROVAL",
+    # D-Legacy phase 1 -- dormant, not terminal
     "LEGACY_READY",
+    # workflow-2.4.0 addition (D-Plan-Amendment-1): real and persisted --
+    # entered by request_plan_amendment alone, survives an interruption
+    # between the amendment request and the first post-request
+    # /milestone-plan call.
     "AMENDING_PLAN",
+    # workflow-2.5.0 additions (D-Implementation-Review-Stages): "2.2"-only,
+    # real and persisted, mirroring AWAITING_LOCAL_PLAN_REVIEW/
+    # AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW's own local-then-manual-external
+    # shape at the implementation stage.
     "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
     "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
 })
+
+#: Only ``MILESTONE_COMPLETE`` is terminal -- ``LEGACY_READY`` is
+#: explicitly dormant, not terminal, matching every admitted release's own
+#: ``TERMINAL_PHASES``. Re-exported by ``controller.target_state``, like
+#: :data:`KNOWN_PHASES`.
+TERMINAL_PHASES: frozenset[str] = frozenset({"MILESTONE_COMPLETE"})
 
 
 def phase_to_wire(phase: "str | _NoPhaseType") -> str:

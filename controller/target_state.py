@@ -10,8 +10,10 @@ writes and owns Workflow lifecycle transitions for this repository;
 **different**, managed repository's ``docs/ai-workflow/WORKFLOW_STATE.json``
 and ``WORKFLOW_CONFIG.json``. Neither module imports the other; the
 Controller never adds ``scripts/`` to ``sys.path``. Where this module needs
-Workflow's own vocabulary (the closed set of known phases), it holds a
-literal, test-verified copy rather than importing it.
+Workflow's own vocabulary (the closed set of known phases, and the terminal
+ones), it re-exports ``controller.decision``'s literal, test-verified copy
+(:data:`KNOWN_PHASES`, :data:`TERMINAL_PHASES`) rather than importing
+Workflow's or holding a second copy.
 
 ``read()`` opens files in ``"r"`` mode only and this module defines no write
 function -- see ``tests/test_target_state.py``'s AST-scan test for the
@@ -25,7 +27,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from controller.decision import NO_PHASE, NO_PHASE_WIRE
+from controller.decision import KNOWN_PHASES, NO_PHASE, NO_PHASE_WIRE, TERMINAL_PHASES
 from controller.errors import (
     AmbiguousWorkItemError,
     MalformedTargetRegistryError,
@@ -38,52 +40,6 @@ from controller.managed_repo import ManagedRepository
 _STATE_REL_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
 _CONFIG_REL_PATH = "docs/ai-workflow/WORKFLOW_CONFIG.json"
 
-#: The closed set of all twenty phases the installed reference release's
-#: own ``scripts/workflow_state.py:KNOWN_PHASES`` persists (re-derived at
-#: revision 64 against the installed release by importing that module and
-#: counting: twenty entries). A literal copy, not an import -- the
-#: Controller must never import ``scripts/`` -- kept honest by a
-#: two-directional set-equality test against the real module.
-KNOWN_PHASES: frozenset[str] = frozenset({
-    # v1 (docs/ai-workflow/MILESTONE_WORKFLOW.md)
-    "PLANNING",
-    "SELF_REVIEWING_PLAN",
-    "AWAITING_EXTERNAL_PLAN_REVIEW",
-    "REVISING_PLAN",
-    "IMPLEMENTING",
-    "SELF_REVIEWING_IMPLEMENTATION",
-    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
-    "APPLYING_REVIEW_FEEDBACK",
-    "AWAITING_FUNCTIONAL_REVIEW",
-    "FIXING_FUNCTIONAL_FINDINGS",
-    "AWAITING_USER_ACCEPTANCE",
-    "MILESTONE_COMPLETE",
-    # v2.1-only additions
-    "AWAITING_LOCAL_PLAN_REVIEW",
-    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
-    "AWAITING_PLAN_APPROVAL",
-    "AWAITING_TECHNICAL_APPROVAL",
-    # D-Legacy phase 1 -- dormant, not terminal
-    "LEGACY_READY",
-    # workflow-2.4.0 addition (D-Plan-Amendment-1): real and persisted --
-    # entered by request_plan_amendment alone, survives an interruption
-    # between the amendment request and the first post-request
-    # /milestone-plan call.
-    "AMENDING_PLAN",
-    # workflow-2.5.0 additions (D-Implementation-Review-Stages): "2.2"-only,
-    # real and persisted, mirroring AWAITING_LOCAL_PLAN_REVIEW/
-    # AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW's own local-then-manual-external
-    # shape at the implementation stage.
-    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
-    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
-})
-
-#: Only ``MILESTONE_COMPLETE`` is terminal -- ``LEGACY_READY`` is
-#: explicitly dormant, not terminal, matching the installed reference
-#: release's own ``TERMINAL_PHASES``.
-TERMINAL_PHASES: frozenset[str] = frozenset({"MILESTONE_COMPLETE"})
-
-
 #: ``NO_PHASE``/``NO_PHASE_WIRE`` are declared in ``controller.decision``,
 #: not here (revision 71 relocation): ``decision.decide_no_work_item``
 #: needs the same sentinel object CP6/CP7 read back off disk, and
@@ -92,7 +48,9 @@ TERMINAL_PHASES: frozenset[str] = frozenset({"MILESTONE_COMPLETE"})
 #: ``target_state`` may import ``decision``, never the reverse. Re-exported
 #: here (``target_state.NO_PHASE``) so every module that reads a target's
 #: Workflow state can reach the one canonical sentinel through this
-#: module's own vocabulary, without a second, divergent instance.
+#: module's own vocabulary, without a second, divergent instance. The phase
+#: list (``KNOWN_PHASES``, ``TERMINAL_PHASES``) is re-exported the same way,
+#: so the Controller holds exactly one.
 
 
 class _NoWorkItemYetType:

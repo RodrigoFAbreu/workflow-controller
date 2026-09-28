@@ -10,11 +10,12 @@ each refuse with their own named error; ``active_work_item_id`` selection
 and its ``--work-item``/single-non-terminal/``NoWorkItemYet``/ambiguous
 fallbacks; ``registry_complete``'s three outcomes (``None``, ``True``/
 ``False``, ``MalformedTargetRegistryError``); ``incomplete_children``'s
-reverse lookup; the known-phase set's two-directional equality against the
-installed reference release's own ``KNOWN_PHASES`` (revision 64: twenty
-members, including the ``AMENDING_PLAN``/``AWAITING_LOCAL_IMPLEMENTATION_
-REVIEW``/``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` widening); and
-the read-only AST-scan proof that this module can never write.
+reverse lookup; the known-phase set's two-directional equality against
+every admitted release's own ``KNOWN_PHASES`` (twenty members, including
+the ``AMENDING_PLAN``/``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``/
+``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` widening), read from the
+vendored release trees; and the read-only AST-scan proof that this module
+can never write.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import target_state  # noqa: E402
+from controller.managed_repo import VALIDATED_WORKFLOW_RELEASES  # noqa: E402
 from controller.target_state import NoWorkItemYet  # noqa: E402
 from controller.errors import (  # noqa: E402
     AmbiguousWorkItemError,
@@ -274,20 +276,25 @@ class UnknownPhaseTest(unittest.TestCase):
 
 
 class KnownPhaseSetEqualityTest(unittest.TestCase):
-    def test_equals_frozen_workflow_v2_3_1_known_phases(self) -> None:
-        scripts_dir = REPO_ROOT / "scripts"
-        sys.path.insert(0, str(scripts_dir))
-        import workflow_state as real_workflow_state  # noqa: PLC0415
+    """The Controller's one phase list (``decision``'s, re-exported here)
+    against every admitted release's own ``workflow_state``, each read in its
+    own interpreter from the vendored tree
+    (``fixtures.evaluate_in_workflow_release``)."""
 
-        self.assertEqual(target_state.KNOWN_PHASES, real_workflow_state.KNOWN_PHASES)
-        self.assertEqual(len(target_state.KNOWN_PHASES), 20)
+    def test_equals_every_admitted_release_known_phases(self) -> None:
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                phases = fixtures.evaluate_in_workflow_release(release, "sorted(workflow_state.KNOWN_PHASES)")
+                self.assertEqual(target_state.KNOWN_PHASES, frozenset(phases))
+                self.assertEqual(len(phases), 20)
 
-    def test_terminal_phases_equal_frozen_workflow_v2_3_1(self) -> None:
-        scripts_dir = REPO_ROOT / "scripts"
-        sys.path.insert(0, str(scripts_dir))
-        import workflow_state as real_workflow_state  # noqa: PLC0415
-
-        self.assertEqual(target_state.TERMINAL_PHASES, real_workflow_state.TERMINAL_PHASES)
+    def test_terminal_phases_equal_every_admitted_release(self) -> None:
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                terminal = fixtures.evaluate_in_workflow_release(
+                    release, "sorted(workflow_state.TERMINAL_PHASES)",
+                )
+                self.assertEqual(target_state.TERMINAL_PHASES, frozenset(terminal))
 
 
 class SelectWorkItemTest(unittest.TestCase):

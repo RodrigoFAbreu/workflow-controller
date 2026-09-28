@@ -181,7 +181,9 @@ A release commit that lands on `main` while a milestone is in flight
 moves `main` under that milestone: the milestone then ends at
 `integration_required` (see
 [Milestone branches and pull requests](milestone-branches.md)), which is
-expected.
+expected under Workflow 2.5.1 and 2.6.0 alike, until a Workflow release
+provides a base-moving transition
+([ADR 0006](../adr/0006-workflow-release-admission-and-per-release-contracts.md)).
 
 ## Repository settings
 
@@ -203,9 +205,9 @@ them, but the release and review flow assumes them.
   - a pull request does **not** have to be up to date with `main` to be
     merged. That requirement would block the `integration_required`
     procedure (merging a milestone pull request that `main` moved ahead
-    of) under Workflow 2.5.1. Milestone pull requests keep their freshness
-    check anyway: the Controller marks one ready only when `main` is an
-    ancestor of it.
+    of) under Workflow 2.5.1 and 2.6.0. Milestone pull requests keep their
+    freshness check anyway: the Controller marks one ready only when `main`
+    is an ancestor of it.
 - **Merge methods**: merge commits only; squash and rebase merging are off.
   Squash and rebase merges take the reviewed Workflow commits off `main`.
   Close-out detects them (`merge_method_rewrote_history`) but cannot undo

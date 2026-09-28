@@ -45,6 +45,9 @@ state, and it never crosses a human gate.
   with "Create a merge commit". `gitrepo.merge_trunk` (a
   history-preserving `git merge --no-ff`) is implemented and tested in
   disposable repositories only, and no lifecycle path calls it.
+  Admission widened to 2.6.0 by
+  [ADR 0006](0006-workflow-release-admission-and-per-release-contracts.md)
+  (1.3.0), whose answers to E1-E5 keep this rule for 2.6.0 too.
 - **Integration with Workflow 2.6.x is a separate milestone.** Earlier
   plan revisions kept a CP11 that waited for a released Workflow 2.6.x.
   It was split out (the user's decision): this milestone finishes under

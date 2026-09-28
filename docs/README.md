@@ -20,6 +20,16 @@ Where to find what, and who maintains it. Start with the
 
 These guides are maintained by hand in this repository.
 
+## Releases
+
+| Release notes | Read it for |
+|---|---|
+| [1.3.0](releases/1.3.0.md) | Workflow 2.6.0 admitted beside 2.5.1, the new error codes and gates, and the 1.2.1 changes that shipped without notes |
+
+Each release from 1.3.0 on has its notes in `releases/`. The GitHub release
+itself carries the wheel and `SHA256SUMS`
+([Releasing](guide/ci-and-releases.md#releasing)).
+
 ## Direction
 
 - [Roadmap](ROADMAP.md): what is done, what comes next, and why.
@@ -36,6 +46,7 @@ stay stable; the code and the guides must agree with them.
 | [0003](adr/0003-trunk-branch-pr-release-orchestration.md) | milestone branches, pull requests and the release transaction |
 | [0004](adr/0004-worker-lifecycle-ownership.md) | how a worker's lifetime and the processes it owns are decided, and the harness limitations left open |
 | [0005](adr/0005-adaptive-test-sharding.md) | the test inventory, planner and sharded runner |
+| [0006](adr/0006-workflow-release-admission-and-per-release-contracts.md) | which Workflow releases are admitted, what the Controller consumes from each, and why trunk integration stays manual |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

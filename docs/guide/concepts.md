@@ -68,7 +68,8 @@ if asked. Reducing these gates where automated evidence is enough is on the
 
 - **Target**: the repository the Controller operates on (`<repo>` in
   commands). It must have a Workflow installation that Workflow Manager
-  verifies, at a Workflow release the Controller admits.
+  verifies, at a Workflow release the Controller admits: 2.5.1 or 2.6.0
+  (see [Supported Workflow releases](installation.md#supported-workflow-releases)).
 - **Work item / milestone**: one unit of planned work in the Workflow state,
   identified by its id, for example `workflow-controller-adaptive-test-sharding`.
 - **Phase**: where a work item is in the Workflow, for example `IMPLEMENTING`
@@ -76,6 +77,10 @@ if asked. Reducing these gates where automated evidence is enough is on the
 - **Governing version**: the Workflow protocol version a work item is bound
   to (`"1"`, `"2.1"`, `"2.2"`). It is fixed per work item and is not the
   Workflow release number.
+- **Workflow release**: the release of Workflow a target has installed, for
+  example `2.6.0`, as recorded in `.workflow-manager/installation.json`. The
+  Controller admits a target by it, and chooses by it what it reads from
+  Workflow and what it asks Workflow's own queries.
 - **Gate**: a point where the Controller stops and says what a human must do.
   `run` exits `10` there; that is the normal, expected end of a run.
 - **Worker**: one fresh `claude` session running one Workflow command. It

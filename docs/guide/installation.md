@@ -3,9 +3,11 @@
 [Back to the documentation map](../README.md)
 
 - [Requirements](#requirements)
+- [Supported Workflow releases](#supported-workflow-releases)
 - [Install a release (recommended)](#install-a-release-recommended)
 - [Upgrade](#upgrade)
 - [Roll back](#roll-back)
+- [Moving a target to another Workflow release](#moving-a-target-to-another-workflow-release)
 - [Install from a checkout](#install-from-a-checkout)
 - [Uninstall](#uninstall)
 
@@ -25,6 +27,30 @@ The Controller finds Workflow Manager through `--workflow-manager`, then the
 `workflow-manager` on `PATH`. The first of these that is set is final: if it
 does not resolve to an executable, the Controller refuses rather than trying
 the next.
+
+## Supported Workflow releases
+
+A target is admitted only when Workflow Manager verifies its installation and
+its `.workflow-manager/installation.json` names a Workflow release the
+Controller has been validated against
+(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`):
+
+| Controller | Workflow releases admitted |
+|---|---|
+| 1.3.0 and later | 2.5.1, 2.6.0 |
+| 1.2.1 and earlier | 2.5.1 |
+
+Admission is by exact release, so 2.5.0 and 2.6.1 are refused as not
+validated, and 2.7.0 as outside the supported lines
+([Troubleshooting](troubleshooting.md#the-repository-is-refused-as-unmanaged-or-unsupported)).
+`workflow-controller inspect <repo>` prints the release it admitted.
+
+A 2.5.1 target behaves exactly as it did under 1.2.1. For a 2.6.0 target the
+Controller asks Workflow's own queries for the feedback path and for whether
+a plan-review bundle is current
+([Workflow's queries](automation.md#workflows-queries-260-and-later)). The
+design record is
+[ADR 0006](../adr/0006-workflow-release-admission-and-per-release-contracts.md).
 
 ## Install a release (recommended)
 
@@ -102,6 +128,66 @@ consequences:
   installed generation is now older than the running one.
 
 Every release so far is generation 1.
+
+## Moving a target to another Workflow release
+
+A target moves to a new Workflow release through Workflow Manager, never by
+hand, and the Controller must admit the new release first: install
+Controller 1.3.0 or later before moving a target to 2.6.0. Workflow
+Manager's `update` replaces the managed files and rewrites
+`installation.json`. It commits nothing, reads no Workflow state and
+migrates nothing; Workflow 2.6.0's own scripts handle work items created
+under 2.5.1.
+
+**Best between milestones**, with no work item in flight and nothing
+running (`workflow-controller status` shows `active: none`). On a
+repository with milestone branches, do it on a branch of its own and merge
+it like any other change:
+
+```bash
+git switch -c chore/workflow-2.6.0 main
+workflow-manager --release-version 2.6.0 update .
+workflow-manager verify .
+workflow-controller inspect .       # must admit 2.6.0
+git status                          # only the files the Manager wrote
+```
+
+Commit exactly what the Manager wrote, then open a pull request and merge
+it. With no version bump, the merge classifies `NO_CHANGE` and publishes no
+Controller release.
+
+**In flight**, updating the milestone's own branch in place is proven only
+at these phases:
+
+- `AWAITING_LOCAL_PLAN_REVIEW`, `REVISING_PLAN` and
+  `AWAITING_PLAN_APPROVAL`, including a bundle a 2.5.1 withdrawal left
+  behind (the Controller stops at a gate whose steps regenerate it);
+- `IMPLEMENTING`, between checkpoints.
+
+At any other phase an in-flight update is untested. Whatever the phase:
+
+- **never with a plan-approval journal in flight** (an `/approve-review plan`
+  that has not finished): Workflow says to finish or abandon it under 2.5.1
+  first;
+- **never while a worker runs.** A job that straddles the update fails
+  closed at verification (`workflow_release_changed`), and the next
+  invocation admits the new release and decides again;
+- after the update, `/milestone-plan` at `IMPLEMENTING` no longer re-plans:
+  2.6.0 routes a plan change to `/request-plan-amendment`, which only a human
+  runs.
+
+Updating the trunk while a milestone branch stays on the old release also
+works: on the branch the Controller keeps the branch's release, readiness
+still ends at `integration_required`, and after the manual merge the
+close-out completes and the same step then refuses once with
+`WORKFLOW_RELEASE_CHANGED` (the close-out is recorded). The next invocation
+admits the trunk's release. Workflow 2.6.0's lifecycle lock reads the
+`installation.json` committed at `HEAD` of every registered worktree, so a
+linked worktree whose branch predates the update counts as lagging; the
+Controller itself creates no linked worktrees.
+
+Rolling the Controller back to 1.2.1 refuses a target already on 2.6.0
+(`UNSUPPORTED_WORKFLOW_VERSION`, exit `20`); see [Roll back](#roll-back).
 
 ## Install from a checkout
 

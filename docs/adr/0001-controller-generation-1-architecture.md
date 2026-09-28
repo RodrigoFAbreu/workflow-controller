@@ -17,7 +17,8 @@ dispositions".
 
 The Controller automates operation of the Workflow (frozen v2.5.1 --
 `controller.managed_repo.VALIDATED_WORKFLOW_RELEASES` is the admission
-gate, and a target on any other release is refused). It
+gate, and a target on any other release is refused). Admission widened to
+2.6.0 by [ADR 0006](0006-workflow-release-admission-and-per-release-contracts.md) (1.3.0). It
 sits between the Workflow Manager (which owns install/update/verify/drift
 for a managed repository) and a managed development repository's own
 Workflow lifecycle:

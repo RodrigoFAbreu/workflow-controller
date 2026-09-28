@@ -108,6 +108,78 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.
 
+## Workflow release trees
+
+The Controller's tests never read this repository's own installed
+Workflow. Every Workflow release the Controller admits
+(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`) is vendored under
+`tests/workflow_releases/<release>/`: the seventeen `.claude/commands/*.md`
+files, `scripts/workflow_state.py`, `scripts/workflow_fingerprint.py` and
+`scripts/prepare-ai-review.sh`, at their target paths and modes. Each tree's
+`RELEASE.json` records the Workflow Manager commit it was taken from and each
+file's sha256 and executable flag, equal to the Manager's manifest. The
+Workflow-derived inventories (the phase set, the command partition, the
+user-only set, property 5), the decision goldens, the query tests and the
+migration tests all run against these trees, once per admitted release.
+This repository's installed tree is only checked for equality with the
+vendored tree of the release it declares, so updating it through Workflow
+Manager needs no code change.
+
+Only `tools/workflow_releases.py` (stdlib only) writes these trees:
+
+```bash
+python3 tools/workflow_releases.py check     # every tree against its RELEASE.json; exit 1 names each problem
+python3 tools/workflow_releases.py sync 2.6.0 --from ../workflow-manager/distribution/workflow
+```
+
+`check` also reports a file the record does not name and an admitted
+release with no tree. `sync` copies the subset from a Workflow Manager
+checkout's `distribution/workflow` directory and refuses when that
+release's directory differs from the recorded commit
+(`--manager-commit`, default `HEAD`) or a file's digest differs from the
+manifest. With a local Workflow Manager checkout (a sibling
+`../workflow-manager`, or `WORKFLOW_MANAGER_DISTRIBUTION` naming its
+`distribution/workflow` directory), `tests.test_workflow_releases` also
+compares each record with the Manager's manifest; CI has no checkout and
+skips that class.
+
+The decision goldens have one file per admitted release. Their generators
+take `--release` (default `2.5.1`, the reference release), and `--check`
+compares without writing:
+
+```bash
+python3 tests/golden/generate_plan_stage_decisions.py --release 2.6.0 --check
+python3 tests/golden/generate_external_implementation_review_decisions.py --release 2.6.0 --check
+python3 tests/golden/generate_no_policy_lifecycle.py --check                 # 2.5.1 only
+```
+
+Without `--check` a generator rewrites its golden, so only run it that way
+to change the golden on purpose. The 2.5.1 plan-stage generator's `--check`
+reports one known difference (the `AMENDING_PLAN` decline reason), which
+`tests.test_golden_plan_stage_decisions` reverts as its one permitted
+difference before comparing; that test, not the bare `--check`, is the
+check for that file.
+
+**Admitting a future Workflow release** is a deliberate act in a reviewed
+plan, never a version-string edit:
+
+1. vendor it: `python3 tools/workflow_releases.py sync <release> --from ...`;
+2. measure what changed against the previous release: the phase set, the
+   command files and the user-only set, the state writers each automatic
+   command declares (property 5), and anything the Controller reads from
+   Workflow's files or asks Workflow's queries;
+3. give it a `controller.workflow_contract.RELEASE_CONTRACTS` entry, with
+   the query scripts' sha256 from the Manager manifest when it runs queries,
+   and per-release writer declarations in `job.expected_outcomes_for` where
+   its commands write differently;
+4. add it to `VALIDATED_WORKFLOW_RELEASES`, generate its decision goldens,
+   and run the whole suite, which runs every per-release inventory for it;
+5. prove the migration from the previous release
+   (`tests/test_workflow_release_migration.py` is the model).
+
+The record of the 2.6.0 admission is
+[ADR 0006](../adr/0006-workflow-release-admission-and-per-release-contracts.md).
+
 ## Design records
 
 Every design decision behind the Controller is recorded either in an ADR or in

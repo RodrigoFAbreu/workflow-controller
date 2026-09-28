@@ -33,8 +33,8 @@ and the result is released as 1.3.0.
 | CP2 -- the Workflow contract module and the two query clients | complete | `47b51f2` |
 | CP3 -- release-aware feedback resolution | complete | `43a6ecb` |
 | CP4 -- plan-review publication status and per-release writer declarations | complete | `53d9601` |
-| CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | complete | this checkpoint's commit |
-| CP6 -- documentation, release 1.3.0 and full verification | not started | |
+| CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | complete | `f931d24` |
+| CP6 -- documentation, release 1.3.0 and full verification | complete | this checkpoint's commit |
 
 ### CP1 -- vendored release trees, one phase list, per-release inventories (complete)
 
@@ -683,3 +683,112 @@ and the result is released as 1.3.0.
   - `ci-and-releases.md` and `automation.md`;
   - `troubleshooting.md`'s admitted-release refusal. The refusal key is now
     `supported_workflow_lines`, and the wrong-line message names the validated releases.
+
+### CP6 -- documentation, release 1.3.0 and full verification (complete)
+
+- **Guides** (`docs/guide/`).
+  - `installation.md`: "Supported Workflow releases" (the admitted set per Controller release, the
+    two refusal cases, a pointer to ADR 0006), and "Moving a target to another Workflow release".
+    That section covers the Manager's `update`, which commits and migrates nothing, and the
+    between-milestones procedure. In flight it names only the phases M1-M1d and M2 prove
+    (`AWAITING_LOCAL_PLAN_REVIEW`, `REVISING_PLAN`, `AWAITING_PLAN_APPROVAL`, and `IMPLEMENTING`
+    between checkpoints). It rules out a plan-approval journal in flight and an update while a
+    worker runs (M5). It also covers re-planning at `IMPLEMENTING`, the trunk-first case (M3),
+    the 2.6.0 lag probe on linked worktrees, and the rollback refusal.
+  - `concepts.md`: the glossary's "Target" names the two releases, and a new "Workflow release"
+    entry.
+  - `automation.md`: a safety-model bullet for the release re-check and the queries. The
+    automatic table is stated for both releases, with the 2.6.0 bind step, the row-9 recovery
+    and I4 under it. A new section, "Workflow's queries (2.6.0 and later)", covers the two
+    queries, how they run, their fail-closed rule and the plan-stage outcome table (S1-S5 and
+    N1-N4 by phase class), including `plan_review_binding_inconsistent` and
+    `unexpected_plan_review_status`.
+  - `troubleshooting.md`: exit `20`'s row names the two new refusals. A new section, "Workflow
+    releases and Workflow's queries", holds five entries:
+    - the admitted-release refusal, moved there, with both `reason`s and the key rename;
+    - `WORKFLOW_RELEASE_CHANGED` before a decision (`installed: null` and `manifest_error`, and
+      what the preflight did: action, gate, `closed`), and `workflow_release_changed` at
+      verification, including CLI `resume` refusing at `inspect`;
+    - `WORKFLOW_QUERY_FAILED` and `workflow_query_failed`, with a table of every `reason`;
+    - the stale-plan-bundle gate under 2.6.0: rows 4b/4c follow the author-file steps in
+      `plan-inputs/` or `current/`, then the generator. Row 4a offers no restore; the entry
+      gives its `explain` command, why no restore is offered, what the bound state covers, and
+      the overwrite warning. It also says the withdrawal is never the `safe_resume_command`,
+      and that the REJECTED-marker gate gives the same steps at all three ready phases;
+    - the two new plan-stage gates.
+
+    CP4's note is also an entry: a routed item whose registry is not written yet is refused as
+    `MalformedTargetRegistryError` under every release.
+  - `milestone-branches.md`: the bind, `integration_required` and `--abandon` passages name
+    2.5.1 and 2.6.0. The `integration_required` paragraph points to ADR 0006's named follow-up.
+  - `ci-and-releases.md`: the release-commit and ruleset passages name both releases.
+  - `development.md`: a new "Workflow release trees" section. It covers the vendored trees,
+    `tools/workflow_releases.py` `check`/`sync`, the Manager-manifest comparison, the per-release
+    golden generators with `--check`, the 2.5.1 plan-stage `--check`'s known difference, and the
+    five steps for admitting a future release.
+- **ADRs.** `docs/adr/0006-workflow-release-admission-and-per-release-contracts.md` (new). It
+  records admission by exact release, the contract table, the release re-check and per-job
+  pinning, and the queries as the single authority with I6's execution rule. It also records
+  the plan-stage outcome classes, the vendored trees and per-release suites, the E1-E5 table
+  with the five-part Workflow follow-up, target updates between milestones (and why this
+  repository updates after 1.3.0), the rejected alternatives and the consequences. ADR 0001's
+  Context and ADR 0003's drift bullet each gain the one-line pointer. `docs/README.md`'s ADR
+  table gains 0006.
+- **Release notes.** `docs/releases/1.3.0.md` (new). It covers 2.6.0 admitted, the two queries,
+  I6, the plan-stage bind and row 9, the re-check, both new error codes and verification
+  reasons, the new gates, the refusal-evidence key rename, the gate text naming both releases,
+  2.5.1 otherwise unchanged, and the two 1.2.1 behaviour changes (`source` follows the current
+  basis; the 10800 s drain detach bound). `docs/README.md` gains a "Releases" section whose table
+  has the 1.3.0 row.
+- **Version.** `pyproject.toml` `version = "1.3.0"`.
+- **`docs/ROADMAP.md`** is not edited (plan Design G: `/accept-milestone` marks 1.6 complete).
+- **Review of the documentation.** Every statement was checked against the code: the gate
+  builders in `controller/evidence.py`, `_refuse_changed_release` and `_verification_contract` in
+  `controller/job.py` (the evidence keys are `admitted`/`installed` before a decision, and
+  `recorded`/`installed` at verification), `_query_failed` in `controller/workflow_contract.py`,
+  and the admission messages in `controller/managed_repo.py`. Every relative link and anchor in
+  the changed documents resolves, by GitHub's heading-slug rule, and
+  `tests.test_plan_document_consistency` passes (every guide invocation line parses under the
+  live parser).
+- **Verification.**
+  - `python3 tools/ci_workflows.py --check`: exit 0.
+  - `python3 tools/workflow_releases.py check`: exit 0.
+  - Goldens, `--check`: the plan-stage generator with `--release 2.6.0`, the
+    external-implementation-review generator with `--release 2.5.1` and `--release 2.6.0`, and
+    `generate_no_policy_lifecycle.py` report current (exit 0). The plan-stage generator with
+    `--release 2.5.1` exits 1 for the permitted `AMENDING_PLAN` difference, as at the base
+    commit; `tests.test_golden_plan_stage_decisions` and the per-release golden test pass in the
+    runs below.
+  - Full sharded run in this worktree with the bump uncommitted: 2225 of 2227 passed. The two
+    failures, `test_release_tools.VersionCommandTest` and
+    `test_packaged_runtime.VersionEqualsArtifactTest`, compare `tools/release.py version`, which
+    reads the version committed at `HEAD`, with the working tree's `pyproject.toml`. So the
+    checkpoint's content was verified committed, in a scratch clone of `f931d24` with exactly
+    this worktree's changes applied and committed (content checked byte-identical):
+    - `python3 tools/run_tests.py`, in the foreground: 2227 tests in 8 shards, PASS, exact
+      coverage, 104.8 s wall;
+    - `CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime`:
+      9 tests, OK.
+  - `tools/release.py classify`: `RELEASE_DUE`, "1.3.0 has no tag and no release"
+    (`tag=v1.3.0`), exit 0. `classify` takes only a commit on `origin/main`, so it ran in a
+    clone of a scratch bare origin that carries this repository's tags (`v1.1.0` to `v1.2.1`).
+    Its `main` is a merge commit of `2296ad6` (the current `origin/main`) and the scratch CP6
+    commit, made with `git commit-tree`, as GitHub's "Create a merge commit" would. The forge
+    side read this repository's real GitHub releases, read-only.
+  - **The self-update dry run** (Decision 2 evidence, nothing committed), in that scratch clone:
+    - `workflow-manager --release-version 2.6.0 update <clone>`: exit 0. It changed exactly 30
+      paths: the 13 command files, six `docs/ai-workflow/` documents and two of its dry-run
+      scripts, the three scripts and five conformance suites under `scripts/`, and
+      `installation.json`
+      (`workflow_version: "2.6.0"`). `workflow-manager verify <clone>`: "installation matches
+      workflow 2.6.0", exit 0;
+    - `python3 tools/run_tests.py` in the clone, with `workflow-manager` on `PATH`: 2227 tests in
+      8 shards, PASS, exact coverage, 188.5 s wall. The 2.6.0 acceptance-matrix suite alone took
+      179.3 s, against 80.5 s for 2.5.1's.
+      `test_managed_repo.CleanManagedRepositoryTest.test_real_workflow_manager_admits_this_repository`
+      and `test_integration_disposable_repo.RealManagerMigrationTest` ran and passed;
+    - `python3 -m controller inspect <clone>` from the clone: exit 0, "Workflow 2.6.0, profile
+      full".
+
+    The post-release update is therefore a Manager-output-only change.
+  - Every full run above ran under the reaping-subreaper wrapper, as in CP1-CP5.

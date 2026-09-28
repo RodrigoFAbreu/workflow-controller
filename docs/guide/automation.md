@@ -159,8 +159,11 @@ identity. Where Git would run one, the Controller refuses the query
   events are switched off, and the query runs.
 - **An fsmonitor program.** `core.fsmonitor` naming a program, from any
   configuration file, refuses the query before it runs. Git's built-in
-  daemon (`core.fsmonitor = true`) is Git's own code and finds what a full
-  check finds, so it is switched off and the query runs.
+  daemon (`core.fsmonitor = true`, from Git 2.36 on) is Git's own code and
+  finds what a full check finds, so it is switched off and the query runs.
+  Git before 2.36 has no boolean there: it runs `true`, `false` or any
+  other non-empty value as a program found on `PATH`, so with that Git a
+  boolean refuses the query too.
 - **A filter program Git would run.** A driver with a `clean` or `process`
   program gets a probe of the Controller's in its place and is marked
   `required`. Where Git would run the program, it starts the probe instead,

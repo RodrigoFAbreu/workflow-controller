@@ -145,7 +145,11 @@ every Workflow-derived test to the new release at once.
   `post-index-change` hook, that edits the plan when Workflow's Git runs it
   made Workflow report row 4a/4c while the Controller, having switched it
   off, reported `BOUND`. An fsmonitor program also decides which paths Git
-  re-checks. So each such program refuses the query
+  re-checks. The fourth round found an fsmonitor program the Controller
+  took for none: Git before 2.36 runs a boolean `core.fsmonitor` (`true`,
+  `false`) as a program found on `PATH`. With a `true` that edits the
+  plan, Git 2.31.0, 2.35.1 and 2.35.8 made Workflow report row 4a while
+  the Controller reported `BOUND`. So each such program refuses the query
   (`query_git_not_isolated`):
   - **a hook the query's Git fires**: an executable hook file for
     `post-index-change` in the hooks directory Workflow's Git uses
@@ -159,9 +163,12 @@ every Workflow-derived test to the new release at once.
   - **an fsmonitor program**: `core.fsmonitor` set to anything Git does
     not read as a boolean (Git itself decides, through `git config
     --type=bool`), or `GIT_TEST_FSMONITOR` with it unset. Refused before
-    the query runs. Git's built-in daemon (`core.fsmonitor` a boolean) is
-    Git's own code and reports what a full stat check finds, so it stays
-    switched off and the query runs;
+    the query runs. Git's built-in daemon (`core.fsmonitor` a boolean,
+    from Git 2.36 on) is Git's own code and reports what a full stat check
+    finds, so it stays switched off and the query runs. A Git before 2.36
+    (`git version`, the same `git` the query runs) reads no boolean there,
+    so under it any value but an empty one is refused, a key without a
+    value included, on which that Git fails;
   - **a filter program Git would run**: a driver with a `clean` or
     `process` program gets a probe of the Controller's as its `process`
     and is made `required`. Where Git would run the program, it starts the

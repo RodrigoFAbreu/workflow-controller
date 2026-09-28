@@ -10,6 +10,7 @@ python3 tools/run_tests.py                          # everything, in parallel sh
 python3 -m unittest discover -s tests -t .          # the Controller's own suite, serially (about 8 min)
 CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v  # wheel build + venv install
 CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_repo -v  # opt-in: live claude, real spend
+CONTROLLER_TEST_OLD_GIT=/path/to/git-2.35 python3 -m unittest tests.test_workflow_contract -k fsmonitor  # opt-in: a Git before 2.36
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```
 
@@ -17,6 +18,13 @@ The packaging tests skip when a build prerequisite is missing, unless
 `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` makes that a failure. A local wheel
 build refuses a stale `build/` directory left by an earlier build that
 held files this one does not; delete `build/` and rebuild.
+
+`CONTROLLER_TEST_OLD_GIT` names a Git older than 2.36, built from source
+if need be. It runs the live check that such a Git runs a boolean
+`core.fsmonitor` as a program, which the Controller refuses. The rest of
+the suite needs a recent Git: an older one lacks some of what the Git
+isolation tests plant, such as `GIT_CONFIG_GLOBAL` (2.32) and configured
+hooks.
 
 Do not set `PYTHONPATH=.`: `tests.test_identity`'s decoy-package test
 then imports its decoy and fails. Some tests need package-index access,

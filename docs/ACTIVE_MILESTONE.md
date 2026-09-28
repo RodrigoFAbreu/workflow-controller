@@ -942,3 +942,60 @@ named: a query gives Workflow's answer or none.
   - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK;
   - goldens `--check`: current, except the known 2.5.1 plan-stage `AMENDING_PLAN` difference
     (same exit at the previous head; its permitted-difference test passes).
+
+## Implementation review round 4 -- a boolean fsmonitor under an older Git (manual external review `REVISE`)
+
+The local review approved round 4 with two optional findings. The manual external review (Codex)
+returned `REVISE` with one important finding and no blocking one.
+
+- **I1: a boolean `core.fsmonitor` is a program before Git 2.36.** The round-3 check let any
+  value `git config --type=bool` accepts through as Git's built-in daemon. Before 2.36, Git runs
+  every non-empty value, `true` and `false` included, as the path of an fsmonitor program found
+  on `PATH`, and fails on the key written without a value. The installation guide supports Git
+  2.31 and later.
+  - **Reproduced** with Git built from source: 2.31.0, 2.35.1, 2.35.8 (the last 2.35
+    maintenance release, so the boundary is 2.36.0, not the 2.35.1 git-config(1) names) and
+    2.36.0, beside the host's 2.55.0. A `true` early on `PATH` that edits the plan, on a bound
+    2.6.0 target with `core.fsmonitor = true`, made Workflow in place answer row 4a while the
+    Controller answered row 2 `BOUND` under 2.31.0, 2.35.1 and 2.35.8. Both answered row 2
+    under 2.36.0 and 2.55.0. Under 2.35.1, `true`, `false`, `yes` and `1` each ran a program of
+    that name, an empty value ran none, and the key without a value made Git exit 128.
+  - **Fix** (`e91284c`). When `core.fsmonitor` is a non-empty boolean, the Controller asks `git version`,
+    which names the query's own Git (the same `git` on the same `PATH`). Before 2.36, or for a
+    release that does not start with a major and minor number, it refuses before the query
+    runs (`query_git_not_isolated`, facility `fsmonitor`, with the `program` and
+    `git_release`). An empty value is no fsmonitor in any release, and from 2.36 a boolean
+    stays Git's own daemon, switched off.
+  - **Rejected alternative.** Raising the minimum to Git 2.36 would refuse every 2.6.0 query
+    under Git 2.31 to 2.35, Ubuntu 22.04's 2.34.1 included, where only this configuration
+    changes the answer.
+- **Tests.**
+  - `GitIsolationTest` (20 tests): a `git` shim that names an older release refuses `true`,
+    `false`, `1`, `yes`, a Windows-style release, an unknown release and the key without a
+    value, all before the query; an empty value, and `true`/`false` under a 2.36.0 shim, still
+    answer `BOUND`;
+  - an opt-in live regression (`CONTROLLER_TEST_OLD_GIT`, a Git before 2.36): Workflow in place
+    answers 4a, the Controller refuses, runs nothing and writes nothing. It passed with 2.31.0,
+    2.35.1 and 2.35.8;
+  - with the fix removed, the six shim subtests and the live test fail; with the boundary at
+    `(2, 35)`, four shim subtests fail; at `(2, 37)`, the two 2.36.0 subtests error.
+  - Run with a real 2.35.8 or 2.31.0 first on `PATH`, `GitIsolationTest` and
+    `tests.test_workflow_release_migration` show no other isolation gap. The failures are the
+    built-in-daemon test, now refused as intended, and the controls of tests that plant what
+    that Git lacks (`GIT_CONFIG_GLOBAL`, from 2.32, and configured hooks).
+- **Local review optional findings.** The hook census now runs at all five seeded stages
+  (route, publish, generate, ready, revise) in its own class, `QueryHookCensusTest` (`4afb4f3`): it fires
+  `post-index-change` at each stage except route, where nothing fires. The two over-refusals
+  are verified and documented in troubleshooting, not changed: a `hook.<name>.event` disabled
+  by `hook.<name>.enabled = false`, and, with an empty `core.hooksPath` (Git runs no hook),
+  an executable `post-index-change` at the worktree's root. Both fail closed.
+- **Docs.** ADR 0006, automation, installation (a boolean `core.fsmonitor` needs Git 2.36),
+  troubleshooting (the `fsmonitor` facility and remedy with the version condition, and the two
+  over-refusals), development (the opt-in) and the 1.3.0 release notes.
+- **Verification.**
+  - `python3 tools/run_tests.py`: PASS, 2250 tests in 8 shards, exact coverage, 97.1 s, under
+    the reaping-subreaper wrapper;
+  - `tools/workflow_releases.py check` and `tools/ci_workflows.py --check`: exit 0;
+  - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK;
+  - goldens `--check`: current, except the known 2.5.1 plan-stage `AMENDING_PLAN` difference
+    (its permitted-difference test passes).

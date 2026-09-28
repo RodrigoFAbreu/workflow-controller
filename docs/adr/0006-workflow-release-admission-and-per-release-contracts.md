@@ -111,9 +111,29 @@ every Workflow-derived test to the new release at once.
   `sys.executable -B -E -s <private dir>/<script>` there, with `cwd` the
   target, stdin closed and a timeout. The target's `scripts/` directory is
   never on the query's `sys.path`, so a planted `scripts/uuid.py` or `.pyc`
-  never runs, and nothing is written into the target. The digests live in
-  the Controller, not in the target's manifest, which a modified target could
-  rewrite together with the scripts.
+  never runs. The digests live in the Controller, not in the target's
+  manifest, which a modified target could rewrite together with the scripts.
+- **The query's Git is isolated too.** The admitted scripts run
+  `git hash-object`, `git diff --name-only` and `git ls-files` in the
+  target, and Git runs what the target's configuration names: a clean filter
+  a `filter=` attribute selects, the hooks `git diff`'s index refresh fires,
+  an fsmonitor. The implementation review reproduced a clean filter running
+  during the status query. So every Git command of a query inherits an
+  environment with a private copy of the target's index (the target is never
+  written, `.git` included), no transport (`GIT_ALLOW_PROTOCOL` empty), and
+  command-scope settings (`GIT_CONFIG_COUNT`, which override every file):
+  `core.hooksPath` is `/dev/null`, fsmonitor, split-index writes and
+  signature checks are off, every filter driver any configuration file
+  defines has empty `clean`/`smudge`/`process`, and every configured hook is
+  disabled. The Controller reads the configuration back and requires each
+  setting to be in force. What it cannot switch off refuses the query before
+  it runs (`query_git_not_isolated`): a `hook.<name>.command` in the
+  target's own configuration (a Git that runs configured hooks may not honour
+  disabling them), a populated submodule (its Git reads its own
+  configuration), or a Git that does not apply the settings (before 2.31).
+  Diff drivers, signature programs and transports stay configured but idle:
+  the 2.6.0 queries never ask for a patch, a log, a checkout or a fetch, and
+  admitting a later release re-checks that.
 - The plan stage has one outcome per (phase class, status class): a bound
   bundle lets the phase's handler act; a drifted, unverified or legacy
   bundle stops at the stale-plan-bundle gate; a refusal or an answer outside

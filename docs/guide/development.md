@@ -167,7 +167,11 @@ plan, never a version-string edit:
 2. measure what changed against the previous release: the phase set, the
    command files and the user-only set, the state writers each automatic
    command declares (property 5), and anything the Controller reads from
-   Workflow's files or asks Workflow's queries;
+   Workflow's files or asks Workflow's queries. For a release that runs
+   queries, list the Git commands each query can run: the query's Git
+   isolation (`workflow_contract._git_isolation`) relies on 2.6.0's queries
+   never asking Git for a patch, a log, a checkout or a fetch, and
+   `tests.test_workflow_contract.GitIsolationTest` pins it for 2.6.0;
 3. give it a `controller.workflow_contract.RELEASE_CONTRACTS` entry, with
    the query scripts' sha256 from the Manager manifest when it runs queries,
    and per-release writer declarations in `job.expected_outcomes_for` where

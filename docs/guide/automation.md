@@ -130,9 +130,26 @@ feedback path is asked.
 their sha256 against the digests it holds for the admitted release, copies
 exactly those bytes into a private temporary directory and runs them there
 with its own interpreter (`-B -E -s`, stdin closed, a timeout), in the
-target's root. A modified script is never executed, no module from the
-target's `scripts/` directory can run, and the query writes nothing to the
-target. The private directory is removed whatever the outcome.
+target's root. A modified script is never executed, and no module from the
+target's `scripts/` directory can run.
+
+The scripts run Git in the target (`git hash-object`, `git diff
+--name-only`, `git ls-files`), so the Controller also prepares that Git.
+Every Git command of the query reads a private copy of the target's index,
+may use no transport, and runs with settings that override the target's
+configuration: no hook runs (neither `.git/hooks` nor a `core.hooksPath`
+directory nor a configured hook), no filter driver (a `filter=` attribute's
+`clean`, `smudge` or `process` program, whichever configuration file
+defines it) and no fsmonitor. The Controller checks that Git applies each
+setting before the query runs. It refuses the query
+(`WORKFLOW_QUERY_FAILED`, reason `query_git_not_isolated`) when it cannot
+switch something off: a hook command in the target's own Git configuration,
+a populated submodule, or a Git that ignores the settings (before 2.31). The
+queries never ask Git for a patch, a log, a checkout or a fetch, so diff
+drivers, signature programs and transports have nothing to run.
+
+The query writes nothing to the target, `.git` included. The private
+directory is removed whatever the outcome.
 
 **A query that fails is never answered by the old rule.** At a decision it
 refuses (`WORKFLOW_QUERY_FAILED`, exit `20`) and nothing is launched. During

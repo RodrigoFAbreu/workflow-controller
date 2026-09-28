@@ -161,6 +161,7 @@ The evidence's `reason` names the step that failed:
 |---|---|---|
 | `query_script_modified` | the target's `scripts/workflow_state.py` or `scripts/workflow_fingerprint.py` is missing, unreadable, or not the admitted release's bytes (the evidence has the path and both digests). Nothing was executed | run Workflow Manager's `verify`; restore the file, then run again |
 | `query_private_copy_failed` | the Controller could not create, write or remove its private copy in the temporary directory (for example a full disk) | free space in `$TMPDIR`, then run again |
+| `query_git_not_isolated` | the Controller could not keep the query's Git from running a program the target configures, so nothing was run. The evidence's `facility` says why: a `hook.<name>.command` key (a configured hook in the target's own `.git/config`, `config.worktree` or a file they include), `submodule` (a populated submodule, with its `path`), a Git setting (Git ignored the Controller's override: Git before 2.31, or a later `GIT_CONFIG_PARAMETERS` in the environment), `GIT_CONFIG_COUNT` (not a count), `index` (the target's index is not a regular file) or `git` (a Git command failed; `git_argv` and `detail` say which) | remove the configured hook or the submodule from the target, or run the Controller with Git 2.31 or later and without a conflicting `GIT_CONFIG_PARAMETERS`; then run again |
 | `query_launch_failed`, `query_timeout` | the interpreter could not start, or the query did not finish within 120 s | run again; if it persists, run the query by hand (below) |
 | `query_failed` | Workflow's query exited non-zero without an answer, usually with a traceback: for example an undecidable state file, an unknown or `null` `feedback_layout`, or a deleted plan document | the evidence's `stderr` tail has Workflow's own error; fix what it names |
 | `query_output_invalid` | the answer did not have the documented shape | a contract change the Controller does not act on: report it |
@@ -168,7 +169,9 @@ The evidence's `reason` names the step that failed:
 To see Workflow's own answer, run the query in the target:
 `python3 scripts/workflow_fingerprint.py --resolve-feedback-path <id>` or
 `python3 scripts/workflow_state.py --plan-review-publication-status <id>`.
-Both write nothing.
+Run this way, the query is not isolated: it runs the target's scripts in
+place, under the target's own Git configuration, hooks and filters, and Git
+may refresh the target's index.
 
 ### The stale-plan-bundle gate under Workflow 2.6.0
 

@@ -792,3 +792,47 @@ and the result is released as 1.3.0.
 
     The post-release update is therefore a Manager-output-only change.
   - Every full run above ran under the reaping-subreaper wrapper, as in CP1-CP5.
+
+## Implementation review round 1 -- the query's Git (manual external review `REVISE`)
+
+The local review approved round 1, and the manual external review returned `REVISE` with one
+blocking finding. A target could make Git run arbitrary commands during a 2.6.0 query. The
+reviewer's case was a `.git/info/attributes` clean filter, defined in `.git/config`, which ran
+inside the status query's `git hash-object` on a target the Manager verified. That broke I6
+and acceptance criteria 7 and 8.
+
+- **Reproduced**, and a second path found. The query's `git diff --name-only <base>` refreshes
+  a stale index. That rewrites `.git/index` and fires the target's `post-index-change` hook.
+  In Git 2.55 a configured `hook.<name>` hook fires as well, and `core.hooksPath` does not
+  stop it.
+- **Audit of the 2.6.0 scripts** (static reachability from both entry points, and a traced run
+  of every row the tests reach):
+  - the queries run only `rev-parse`, `ls-files`, `diff --name-only`, `config --type=bool
+    core.fileMode` and `hash-object`;
+  - they never write, never produce a patch, a log, a checkout or a fetch, and start no
+    non-Git program;
+  - every environment they build inherits the caller's.
+- **Fix** (`e866ad8`). `workflow_contract._git_isolation` prepares the query's Git: a private
+  index copy, no transport, and command-scope overrides for hooks, fsmonitor, split-index
+  writes, signature checks, every filter driver and every configured hook. Each override is
+  read back and must be in force. The new reason `query_git_not_isolated` refuses a
+  target-configured hook command, a populated submodule, an override Git does not apply, an
+  irregular index, or a failing preparation command. One timeout covers the whole query. The
+  scripts now sit in `<private dir>/scripts/`.
+- **Tests.**
+  - `GitIsolationTest` (10 tests, each plant shown live in place first).
+  - The writes-nothing test now snapshots `.git` too.
+  - The reviewer's reproduction on a real Manager-verified 2.6.0 target, in
+    `RealManagerMigrationTest`.
+  - Every new test fails with the isolation replaced by the plain environment.
+- **Docs.** Automation, troubleshooting (the new reason, and the fact that a query run by hand
+  in place is not isolated), development (admitting a later release re-checks its queries' Git
+  commands), ADR 0006 and the 1.3.0 release notes.
+- **Verification.**
+  - `python3 tools/run_tests.py`: PASS, 2238 tests in 7 shards, exact coverage, 106.4 s,
+    under the reaping-subreaper wrapper;
+  - `tools/workflow_releases.py check`: exit 0;
+  - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK.
+- **Outside this finding.** The Controller's own Git commands elsewhere run under the target's
+  Git configuration, as they did before this milestone. One example is
+  `evidence.functional_review_findings_consumed`'s `git hash-object`. I6 covers the queries only.

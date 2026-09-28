@@ -3435,7 +3435,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-6-integration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 7,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -4060,22 +4060,17 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 56,
-      "last_transition": "2026-09-28T16:39:20Z",
+      "state_revision": 58,
+      "last_transition": "2026-09-28T17:10:29Z",
       "implementation_review_stages": {
-        "review_content_id": "8f8d4152b8ed5108c6b89f7b452e0870dc22a5ef6291c6f27333b516b4fd40cd",
+        "review_content_id": "44161ae9e69dc217f3aab3c4ce42d25d5d6f4d8074e7669a05a9a0758e640205",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
+          "bundle_id": "568df82330dd7098579ba2a6ec03de50e59715cb8e3f4f54e8048ffbf8eb5340",
           "verdict": "APPROVE",
-          "round": 5,
-          "completed_at": "2026-09-28T15:24:34Z"
+          "round": 6,
+          "completed_at": "2026-09-28T17:03:24Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
-          "verdict": "APPROVE",
-          "round": 5,
-          "completed_at": "2026-09-28T15:32:05Z"
-        }
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

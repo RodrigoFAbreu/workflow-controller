@@ -1050,9 +1050,14 @@ code as it stands when its turn comes, not from this list.
     required check;
   - it becomes the squash commit's subject;
   - its type decides the bump: `feat` gives a minor release, `fix` a patch, and `!` a major;
-  - types such as `docs`, `chore` and `ci` merge without a release.
-
-  No milestone bumps `pyproject.toml` by hand. The computed version reaches the wheel at build time.
+  - `docs`, `chore` and `ci` merge without a release (decided 2026-09-29).
+- **The Git tag is the only version authority, as in SignalHub (decided 2026-09-29).**
+  - `pyproject.toml` no longer holds a version; the package's version is set at build time.
+  - The release computes the next version from the latest release tag and the squash commit's
+    type, and builds the wheel with it.
+  - No milestone and no person edits a version anywhere.
+  - This replaces 1.5's rule that `pyproject.toml` is the single human-maintained version
+    authority. The release guide changes with it.
 - The existing release transaction stays: build and verify before the tag, immutable tags, and a
   safe resume of an interrupted publication. Releases on `main` are serialized.
 - Workflow's provenance checks look only at the active work item's history, so a completed item's

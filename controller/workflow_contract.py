@@ -26,9 +26,12 @@ of :func:`_run_query`:
 3. prepares the Git every command of the query runs (:func:`_git_isolation`):
    a private copy of the target's index, so the target is never written,
    no transport, and command-scope configuration that switches off every
-   hook, filter driver and fsmonitor, verified to be in force. It refuses,
-   before the query runs, what it cannot switch off: a hook command in the
-   target's own configuration, or a populated submodule;
+   hook, filter driver and fsmonitor, verified to be in force. A filter
+   driver with a program is also made to fail wherever Git would run it, so
+   a query whose answer depends on a filter fails instead of answering
+   differently from Workflow. It refuses, before the query runs, what it
+   cannot switch off: a hook command in the target's own configuration, or
+   a populated submodule;
 4. runs ``sys.executable -B -E -s <private dir>/scripts/<script> ...`` with
    ``cwd`` the target root, stdin closed and one timeout for all of it. The
    target's ``scripts/`` directory is never on the query's ``sys.path``, so
@@ -595,6 +598,14 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
       every filter driver and every configured hook, named from the
       configuration Git reads for the target, whichever file defines them.
 
+    Switching a filter off changes what ``git hash-object`` answers, and
+    Workflow's content identity is that answer. So a driver that has a
+    ``clean`` or ``process`` program is also made ``required``
+    (:func:`_filters_with_programs`): wherever Git would have run the
+    program, it fails instead, and so does the query (``query_failed``).
+    Where Git would not have run it, the answer is Workflow's own. The
+    drivers are ``context['refused_filters']``.
+
     The configuration is read again under that environment, and each
     setting must be in force as the last, command-scope value. Refused with
     ``query_git_not_isolated`` before the query runs: a hook command in the
@@ -611,7 +622,8 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
     entries = _git_config_entries(run, {**pinned, **private_index})
     _refuse_target_hook_commands(entries, context)
     _refuse_populated_submodules(root, run, {**pinned, **private_index}, context)
-    overrides = _GIT_PINNED_CONFIG + _git_named_overrides(entries)
+    context["refused_filters"] = _filters_with_programs(entries)
+    overrides = _GIT_PINNED_CONFIG + _git_named_overrides(entries, context["refused_filters"])
     env = _with_git_config({**base, **private_index}, overrides, context)
     in_force: dict[str, tuple[str, str | None]] = {}
     for scope, key, value in _git_config_entries(run, env):
@@ -717,10 +729,26 @@ def _split_git_key(key: str) -> tuple[str, str | None, str]:
     return section, subsection if dot else None, variable
 
 
-def _git_named_overrides(entries: list[tuple[str, str, str | None]]) -> tuple[tuple[str, str], ...]:
+def _filters_with_programs(entries: list[tuple[str, str, str | None]]) -> list[str]:
+    """The filter drivers whose ``clean`` or ``process`` in force (the last
+    value of the key) is not empty: those Git would run to hash a path whose
+    ``filter`` attribute names one. A driver with only a ``smudge`` has
+    nothing to run for a query, which never checks out."""
+    programs: dict[tuple[str, str], str | None] = {}
+    for _scope, key, value in entries:
+        section, subsection, variable = _split_git_key(key)
+        if section == "filter" and subsection is not None and variable in ("process", "clean"):
+            programs[subsection, variable] = value
+    return sorted({name for (name, _variable), value in programs.items() if value != ""})
+
+
+def _git_named_overrides(entries: list[tuple[str, str, str | None]],
+                         refused_filters: list[str]) -> tuple[tuple[str, str], ...]:
     """Every filter driver's ``process``, ``clean`` and ``smudge`` set empty,
-    which Git reads as no filter, and every configured hook, and each event
-    one names, disabled."""
+    which Git reads as no filter, each of ``refused_filters`` made
+    ``required``, which Git then fails rather than skip ("clean filter
+    '<name>' failed"), and every configured hook, and each event one names,
+    disabled."""
     filters: set[str] = set()
     hooks: set[str] = set()
     for _scope, key, value in entries:
@@ -735,6 +763,7 @@ def _git_named_overrides(entries: list[tuple[str, str, str | None]]) -> tuple[tu
                 hooks.add(value)
     return (tuple((f"filter.{name}.{variable}", "") for name in sorted(filters)
                   for variable in ("process", "clean", "smudge"))
+            + tuple((f"filter.{name}.required", "true") for name in refused_filters)
             + tuple((f"hook.{name}.enabled", "false") for name in sorted(hooks)))
 
 
@@ -786,11 +815,13 @@ def _json_object(context: dict, completed: subprocess.CompletedProcess) -> dict:
 
 
 def _query_failed(context: dict, completed: subprocess.CompletedProcess) -> WorkflowQueryError:
-    return WorkflowQueryError(
-        f"{context['query']} for {context['work_item_id']!r} exited {completed.returncode}: "
-        f"{_last_line(completed.stderr) or _last_line(completed.stdout) or '(no output)'}",
-        evidence={**context, "reason": "query_failed"},
-    )
+    message = (f"{context['query']} for {context['work_item_id']!r} exited {completed.returncode}: "
+               f"{_last_line(completed.stderr) or _last_line(completed.stdout) or '(no output)'}")
+    if context.get("refused_filters"):
+        drivers = ", ".join(repr(name) for name in context["refused_filters"])
+        message += (f" (the query's Git fails, rather than run a filter program, on any path whose "
+                    f"filter attribute names {drivers})")
+    return WorkflowQueryError(message, evidence={**context, "reason": "query_failed"})
 
 
 def _output_invalid(context: dict, completed: subprocess.CompletedProcess, problem: str) -> WorkflowQueryError:

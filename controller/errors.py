@@ -736,15 +736,19 @@ class WorkflowQueryError(ControllerError):
     - ``query_launch_failed`` and ``query_timeout``: the interpreter could
       not be started, or the query did not finish in time;
     - ``query_failed``: an exit status the query's contract does not
-      document for an answer;
+      document for an answer. This includes a Git command of the query that
+      failed rather than run a filter program: the Controller makes each
+      filter driver with a ``clean`` or ``process`` program
+      (``refused_filters``) fail wherever Git would run it;
     - ``query_output_invalid``: output that does not decode, parse or
       validate as the documented shape (contract drift, never absorbed);
     - ``no_workflow_query``: the release's contract runs no query.
 
     ``evidence`` also carries the release, the query, the work item, the
     ``argv``, ``cwd``, ``returncode`` and the ``stdout``/``stderr`` tails
-    where they exist, the path and both digests for a modified script, and
-    ``git_argv`` for a Git command the preparation ran.
+    where they exist, the path and both digests for a modified script,
+    ``git_argv`` for a Git command the preparation ran, and, once the
+    query's Git is prepared, ``refused_filters``.
     """
 
     code = "WORKFLOW_QUERY_FAILED"

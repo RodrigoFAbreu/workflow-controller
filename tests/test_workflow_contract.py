@@ -630,6 +630,30 @@ class GitIsolationTest(_SeededTargets):
         self.assertFalse(self.sentinel.exists(), "a program the target configures ran during a query")
         self.assertEqual(_tree_snapshot(self.root), before, "a query wrote to the target")
 
+    def assert_status_fails_rather_than_filters(self) -> WorkflowQueryError:
+        """The feedback query, which hashes nothing, answers; the status
+        query's Git fails where it would run the filter, so the query fails
+        too. Either way, nothing runs and nothing is written."""
+        _stat_dirty(self.root, UNCHANGED_TRACKED, self.PLAN)
+        before = _tree_snapshot(self.root)
+        self.assertEqual(workflow_contract.resolve_feedback_path(self.root, CONTRACT, WORK_ITEM_ID).layout, "scoped")
+        with self.assertRaises(WorkflowQueryError) as caught:
+            workflow_contract.plan_review_publication_status(self.root, CONTRACT, WORK_ITEM_ID)
+        evidence = caught.exception.evidence
+        self.assertEqual((evidence["reason"], evidence["refused_filters"]), ("query_failed", ["evil"]), evidence)
+        self.assertIn("CalledProcessError", str(caught.exception))
+        self.assertIn("filter attribute names 'evil'", str(caught.exception))
+        self.assertFalse(self.sentinel.exists(), "a program the target configures ran during a query")
+        self.assertEqual(_tree_snapshot(self.root), before, "a query wrote to the target")
+        return caught.exception
+
+    def released_status_in_place(self) -> dict:
+        """Workflow's own answer: the target's query run in place, under the
+        target's Git configuration, as Workflow runs it."""
+        completed = fixtures.run([sys.executable, workflow_contract.STATE_SCRIPT,
+                                  f"--plan-review-publication-status={WORK_ITEM_ID}"], cwd=self.root)
+        return json.loads(completed.stdout)
+
     def assert_refused(self, facility: str) -> WorkflowQueryError:
         query_tmp = Path(tempfile.mkdtemp(prefix="query-tmp-", dir=self._scratch))
         for run_query in (workflow_contract.resolve_feedback_path, workflow_contract.plan_review_publication_status):
@@ -648,9 +672,11 @@ class GitIsolationTest(_SeededTargets):
         return caught.exception
 
     def test_a_clean_filter_never_runs(self) -> None:
-        # The external review's reproduction: `.git/info/attributes` names a
-        # clean filter that `.git/config` defines; `git hash-object` in the
-        # status query ran it.
+        # The external review's reproduction (round 1): `.git/info/attributes`
+        # names a clean filter that `.git/config` defines; `git hash-object`
+        # in the status query ran it. Even this pass-through filter is not
+        # run, and the Controller cannot know it passes bytes through, so
+        # the status query fails.
         for variant in ("clean", "process", "included", "operator"):
             with self.subTest(variant=variant):
                 root = self.fresh()
@@ -670,7 +696,45 @@ class GitIsolationTest(_SeededTargets):
                     environment = {"GIT_CONFIG_GLOBAL": str(operator)}
                 with mock.patch.dict(os.environ, environment):
                     self.assert_live("hash-object", "--", self.PLAN)
-                    self.assert_queries_run_nothing()
+                    self.assert_status_fails_rather_than_filters()
+
+    def test_a_filter_that_changes_content_fails_the_query_rather_than_bind(self) -> None:
+        # The external review's reproduction (round 2): with the filter
+        # switched off, `git hash-object` hashed other bytes than Workflow's,
+        # so the Controller answered row 2 `BOUND` where Workflow answers 4a.
+        self.fresh()
+        self.attributes("* filter=evil")
+        self.git_config("filter.evil.clean", f"{self.touch} && tr a-z A-Z")
+        released = self.released_status_in_place()
+        self.assertEqual((released["row"], released["status"]), ("4a", "CONTENT_DRIFTED"))
+        self.assertTrue(self.sentinel.exists(), "control: Workflow's query did not run the filter")
+        self.sentinel.unlink()
+        self.assert_status_fails_rather_than_filters()
+
+    def test_a_filter_no_hashed_path_selects_leaves_the_answer_workflows(self) -> None:
+        # `evil` has a program but selects no path a query hashes; `idle`
+        # selects every path but has only a smudge program, which a query
+        # never runs. Git applies neither, so the answer is Workflow's own.
+        root = self.fresh()
+        self.attributes("*.bin filter=evil\n*.md filter=idle")
+        self.git_config("filter.evil.clean", f"{self.touch} && tr a-z A-Z")
+        self.git_config("filter.idle.smudge", f"{self.touch} && tr a-z A-Z")
+        released = self.released_status_in_place()
+        self.assertEqual((released["row"], released["status"]), ("2", "BOUND"))
+        self.assertFalse(self.sentinel.exists())
+        self.assert_queries_run_nothing()
+        spy = _PrivateDirSpy()
+        with mock.patch.object(workflow_contract, "_execute_query", spy):
+            workflow_contract.plan_review_publication_status(root, CONTRACT, WORK_ITEM_ID)
+        (call,) = spy.calls
+        env = call["env"]
+        overrides = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]
+                     for i in range(int(env["GIT_CONFIG_COUNT"]))}
+        self.assertEqual({key: value for key, value in overrides.items() if key.startswith("filter.")}, {
+            **{f"filter.{name}.{variable}": "" for name in ("evil", "idle")
+               for variable in ("process", "clean", "smudge")},
+            "filter.evil.required": "true",
+        })
 
     def test_no_hook_runs(self) -> None:
         for variant in ("hooks-directory", "hooks-path", "operator-configured"):

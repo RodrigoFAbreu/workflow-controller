@@ -3596,6 +3596,9 @@ _QUERY_READING_CLAUSES = {
 }
 
 
+_MILESTONE_PLAN = f"/milestone-plan {lifecycle.WI}"
+
+
 class VerificationWorkflowFailureTest(_ContractTargetCase):
     RESUME_PATHS = (job.STATUS_COMPLETED, job.STATUS_LAUNCHED)
 
@@ -3634,7 +3637,32 @@ class VerificationWorkflowFailureTest(_ContractTargetCase):
     def clause_target(self, name: str, clause: str) -> tuple:
         phase, verdict, task, effect, observed = _QUERY_READING_CLAUSES[clause]
         lc = self.contract_target(name, phase, manual_verdict=verdict)
+        if phase == "AWAITING_LOCAL_PLAN_REVIEW":
+            self.replay_bound_publication_status()
         return lc, task, effect(lc), observed
+
+    def replay_bound_publication_status(self) -> None:
+        """From CP4 a plan-review phase launches only once Workflow reports
+        the bundle ``BOUND``, and the harness's synthetic plan bundle never
+        verifies under 2.6.0. So, for the plan-stage clause only, the
+        publication-status query is answered as row 2 through the private
+        runner hook; every feedback-path query -- the subject here -- still
+        runs the real script. Real bound bundles are covered by
+        ``tests/test_evidence.py``'s CP4 tests and by the plan-stage
+        postcondition tests below."""
+        real = workflow_contract._execute_query
+
+        def execute(argv, *, cwd, timeout):
+            if not argv[5].startswith("--plan-review-publication-status="):
+                return real(argv, cwd=cwd, timeout=timeout)
+            answer = {"work_item_id": lifecycle.WI, "phase": "AWAITING_LOCAL_PLAN_REVIEW", "row": "2",
+                      "status": "BOUND", "remedy": "nothing to do", "bundle_id": "b" * 64,
+                      "fresh_review_content_id": "c" * 64, "advisory": None}
+            return subprocess.CompletedProcess(argv, 0, json.dumps(answer).encode(), b"")
+
+        patcher = unittest.mock.patch.object(workflow_contract, "_execute_query", execute)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_each_query_reading_clause_verifies_under_the_real_query(self) -> None:
         """The positive control: with Workflow answering, each clause reads
@@ -3777,3 +3805,103 @@ class VerificationWorkflowFailureTest(_ContractTargetCase):
                     self.assertEqual(error["evidence"]["contract_error"]["code"], "UNSUPPORTED_WORKFLOW_VERSION")
                 self.assert_nothing_pending(lc, managed_repo)
         self.assertEqual(self.processes(lc), 1)
+
+    # -- workflow-2-6-integration CP4: the plan-stage postcondition under the
+    # 2.6.0 contract is Workflow's own publication status (Design D). The
+    # target is a real 2.6.0 item, seeded through Workflow's writers and its
+    # real generator, whose worker writes exactly the state Workflow's own
+    # bind writes.
+
+    _published_seed: "Path | None" = None
+
+    def published_target(self, name: str) -> lifecycle.Lifecycle:
+        """A real ``"2.2"`` item at ``PLANNING`` whose plan bundle is
+        generated but not bound (row 9, "bind only"), in the scripted-worker
+        harness (whose modelled entry is never written here)."""
+        cls = type(self)
+        if cls._published_seed is None:
+            scratch = TemporaryDirectory(prefix="plan-stage-postcondition-")
+            cls.addClassCleanup(scratch.cleanup)
+            cls._published_seed = fixtures.seed_workflow_item(
+                Path(scratch.name) / "seed", QUERY_RELEASE, "generate", work_item_id=lifecycle.WI)
+        case_dir = self.tmp_root / name
+        root = case_dir / "target"
+        shutil.copytree(cls._published_seed, root, symlinks=True)
+        lc = lifecycle.Lifecycle(case_dir, root.resolve(), fixtures.current_head(root), phase="PLANNING",
+                                 checkpoints={})
+        status = workflow_contract.plan_review_publication_status(
+            lc.root, workflow_contract.contract_for(QUERY_RELEASE), lifecycle.WI)
+        self.assertEqual((status.phase, status.row, status.bundle_verifies), ("PLANNING", "9", True))
+        return lc
+
+    def bind_actions(self, lc: lifecycle.Lifecycle) -> list[dict]:
+        """The state Workflow's own ``bind_plan_review_bundle`` writes for
+        the item: bound once for real, captured, and the state restored."""
+        state = lc.root / lifecycle.STATE_REL
+        before = state.read_bytes()
+        fixtures.run_workflow_python(lc.root, (
+            "wid = sys.argv[1]\nbinding = ws.verify_plan_review_bundle(Path.cwd(), wid)\n"
+            "ws.state_transaction(Path.cwd(), lambda s: ws.bind_plan_review_bundle(\n"
+            "    s, wid, binding=binding, now='2026-09-28T00:00:00Z'))\n"), lifecycle.WI)
+        bound = state.read_text()
+        state.write_bytes(before)
+        return [fixtures.script_write(lifecycle.STATE_REL, bound)]
+
+    def test_the_plan_stage_postcondition_verifies_a_bound_bundle(self) -> None:
+        lc = self.published_target("plan-bound")
+        lc.add(_MILESTONE_PLAN, self.bind_actions(lc))
+        record = self.execute(lc, self.managed(lc))
+        self.assert_finished(record, "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(record["selected_action"]["command"], _MILESTONE_PLAN)
+
+    def test_the_plan_stage_postcondition_is_not_satisfied_by_an_unbound_status(self) -> None:
+        """The worker writes the bound state, then damages the bundle: the
+        item is at the right phase, but Workflow reports row 4b."""
+        lc = self.published_target("plan-unverified")
+        lc.add(_MILESTONE_PLAN, [*self.bind_actions(lc),
+                                 fixtures.script_delete(f".ai-review/{lifecycle.WI}/review-bundle.tar.gz")])
+        record = self.execute(lc, self.managed(lc))
+        self.assert_failed(record, "postcondition_not_satisfied")
+        self.assertIn("row 4b (BUNDLE_UNVERIFIED), not BOUND", record["reconciliation_evidence"]["postcondition_detail"])
+
+    def test_a_query_failure_in_the_plan_stage_postcondition_fails_closed_on_every_path(self) -> None:
+        """The worker writes the bound state, then deletes the plan document,
+        which Workflow validates while resolving the item: the status query
+        itself fails (exit 1)."""
+        lc = self.published_target("plan-query")
+        lc.add(_MILESTONE_PLAN, [*self.bind_actions(lc),
+                                 fixtures.script_delete(f"docs/ai-workflow/{lifecycle.WI}-PLAN.md")])
+        managed_repo = self.managed(lc)
+
+        def check(error: dict) -> None:
+            self.assertEqual((error["evidence"]["reason"], error["evidence"]["returncode"]), ("query_failed", 1))
+
+        self.assert_every_path(
+            lc, managed_repo, reason="workflow_query_failed", code="WORKFLOW_QUERY_FAILED",
+            observed="AWAITING_LOCAL_PLAN_REVIEW", check=check, query="--plan-review-publication-status",
+            release=QUERY_RELEASE,
+        )
+        self.assert_next_step_refuses(lc, managed_repo, WorkflowQueryError)
+
+    def test_a_failed_plan_stage_job_is_not_relaunched_within_the_run(self) -> None:
+        """A 2.6.0 worker whose generation failed leaves the item at
+        ``PLANNING``: verification fails as ``phase_not_in_to_any_of`` and
+        the ``run`` stops, exactly as for 2.5.1. The next step the operator
+        starts sees row 9 and selects the same explicit-id command, which is
+        Workflow's own recovery."""
+        from controller import managed_repo as managed_repo_module
+
+        lc = self.published_target("plan-run")
+        lc.add(_MILESTONE_PLAN, [])
+        for name, value in (("SUPPORTED_WORKFLOW_LINE", "2.6"), ("VALIDATED_WORKFLOW_RELEASES", frozenset({"2.6.0"}))):
+            patcher = unittest.mock.patch.object(managed_repo_module, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        run = self.cli(lc, "run")
+        self.assertEqual(run.code, cli.EXIT_WORKER_FAILED, run.stderr)
+        [failed] = run.records
+        self.assert_failed(failed, "phase_not_in_to_any_of")
+        self.assertEqual(self.processes(lc), 1)
+        explained = self.explain(lc)
+        self.assertEqual((explained["action"], explained["automatic"]), (_MILESTONE_PLAN, True))
+        self.assertIn("plan-review publication status: row 9 (PUBLISHED_UNBOUND)", explained["evidence"])

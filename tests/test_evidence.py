@@ -9,12 +9,16 @@ outcome and the two evidence-driven report-only phases.
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
+import subprocess
 import sys
 import unittest
 import unittest.mock
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -3508,13 +3512,24 @@ class WorkflowQueryGoldenTest(unittest.TestCase):
             for layout in plan.FEEDBACK_LAYOUTS})
 
     def test_answering_what_the_2_5_1_rule_finds_gives_the_2_5_1_decision(self) -> None:
-        """Only the source of the answer changed: where Workflow answers the
+        """Only the source of each answer changed: where Workflow answers the
         directory the 2.5.1 rule finds (``legacy-scoped`` exactly when the
         scenario leaves ``.ai-review/wi-1/feedback/``, else ``legacy-flat``),
         with the phase's ordinary publication status, every 2.6.0 decision
-        is the 2.5.1 one."""
-        for module in (self.plan, self.external):
-            moved = []
+        is the 2.5.1 one -- with the answer's row appended to its evidence
+        wherever the status is read (a ``"2.1"``/``"2.2"`` item at a plan
+        phase). CP4 names exactly two exceptions (Design D), each asserted
+        on its own terms and each non-vacuous:
+
+        - a 2.5.1 stale-plan-bundle gate is a revision-coherence verdict,
+          which the status query replaces: with ``BOUND`` the phase's own
+          handler decides;
+        - a REJECTED marker at ``AWAITING_PLAN_APPROVAL`` takes the
+          plan-stage recovery branch instead of the bare generator."""
+        plan = self.plan
+        stale_reason = "the current plan bundle is stale or withdrawn"
+        moved, superseded_stale, extended_rejected = [], [], []
+        for module in (plan, self.external):
             for scenario, setup, _overrides in module.SCENARIOS:
                 with TemporaryDirectory() as tmp:
                     root = _make_target(Path(tmp))
@@ -3522,14 +3537,917 @@ class WorkflowQueryGoldenTest(unittest.TestCase):
                     layout = ("legacy-scoped" if (root / ".ai-review" / "wi-1" / "feedback").is_dir()
                               else "legacy-flat")
                 for phase, version in module.PHASE_VERSIONS:
-                    runs = self.plan.case_runs(phase, version) if module is self.plan else [(layout, None)]
-                    ordinary = [status for run_layout, status in runs if run_layout == layout][0]
-                    key = self.plan.case_key(scenario, phase, version)
-                    query_key = (self.plan.case_key(scenario, phase, version, layout, ordinary)
-                                 if module is self.plan else self.plan.case_key(scenario, phase, version, layout))
-                    if self.derived[module, "2.5.1"][key] != self.derived[module, _QUERY_RELEASE][query_key]:
+                    key = plan.case_key(scenario, phase, version)
+                    if module is self.external:
+                        query_key = plan.case_key(scenario, phase, version, layout)
+                        if self.derived[module, "2.5.1"][key] != self.derived[module, _QUERY_RELEASE][query_key]:
+                            moved.append(query_key)
+                        continue
+                    ordinary = [status for run_layout, status in plan.case_runs(phase, version)
+                                if run_layout == layout][0]
+                    query_key = plan.case_key(scenario, phase, version, layout, ordinary)
+                    expected = dict(self.derived[plan, "2.5.1"][key])
+                    derived = self.derived[plan, _QUERY_RELEASE][query_key]
+                    gate = expected["gate"]
+                    rejected = gate is not None and (gate["artifact_path"] or "").endswith("REJECTED")
+                    if version not in plan.TWO_STAGE_VERSIONS or (rejected and phase != "AWAITING_PLAN_APPROVAL"):
+                        if expected != derived:
+                            moved.append(query_key)
+                        continue
+                    if rejected:
+                        extended_rejected.append(query_key)
+                        self.assertEqual(derived["gate"]["artifact_path"], gate["artifact_path"], query_key)
+                        self.assertTrue(derived["gate"]["safe_resume_command"].startswith("resolve the failure"),
+                                        query_key)
+                        self.assertIn("REVIEW_REQUEST.md", derived["gate"]["safe_resume_command"], query_key)
+                        self.assertIn("scripts/prepare-ai-review.sh <SHA> plan wi-1",
+                                      derived["gate"]["safe_resume_command"], query_key)
+                        continue
+                    answer = plan.recorded_publication_status("wi-1", phase, version, ordinary)
+                    line = evidence.plan_review_publication_status_evidence(answer)
+                    if stale_reason in expected["reason"]:
+                        superseded_stale.append(query_key)
+                        self.assertNotIn(stale_reason, derived["reason"], query_key)
+                        self.assertEqual(derived["evidence"][-1], line, query_key)
+                        continue
+                    expected["evidence"] = expected["evidence"] + [line]
+                    if expected != derived:
                         moved.append(query_key)
-            self.assertEqual(moved, [], f"{module.__name__}: decisions moved under the 2.6.0 contract")
+        self.assertEqual(moved, [], "decisions moved under the 2.6.0 contract")
+        self.assertTrue(superseded_stale)
+        self.assertTrue(extended_rejected)
+        self.assertTrue(all(" | AWAITING_PLAN_APPROVAL | " in key for key in extended_rejected))
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP4 -- the plan-review
+# publication status (Design D). Every cell Workflow 2.6.0 can produce is
+# driven with its real scripts and real bound bundles; the cells it never
+# produces (S4, N4) and the query failures (S5, N3) through the answers seam
+# and the private runner hook.
+# ---------------------------------------------------------------------------
+
+_PUB_WI = "demo-item"
+_PUB_RELEASE = "2.6.0"
+_PLAN_REL = f"docs/ai-workflow/{_PUB_WI}-PLAN.md"
+_REGISTRY_REL = f"docs/ai-workflow/registry/{_PUB_WI}-registry.json"
+_ARTIFACTS_REL = f"docs/ai-workflow/registry/{_PUB_WI}-artifacts.json"
+_STATE_REL = "docs/ai-workflow/WORKFLOW_STATE.json"
+#: A fourth plan-stage protected path, committed at ``base_commit``.
+_NOTES_REL = "docs/design/NOTES.md"
+_NOTES_TEXT = "design notes, committed at base_commit and unchanged since\n"
+_ITEM_DIR = Path(".ai-review") / _PUB_WI
+_READY = ("AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_PLAN_APPROVAL")
+_NON_READY = ("PLANNING", "REVISING_PLAN", "AMENDING_PLAN")
+
+#: Records the local and then the manual plan-review APPROVE through the
+#: real 2.6.0 writers, moving a bound item to AWAITING_PLAN_APPROVAL.
+_RECORD_APPROVALS = r"""
+import datetime
+import json
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+wid, stages = sys.argv[1], json.loads(sys.argv[2])
+root = Path.cwd()
+bound = json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid][
+    "plan_review_binding"]["bound"]
+if "local" in stages:
+    ws.state_transaction(root, lambda s: ws.record_local_plan_review(
+        s, wid, verdict="APPROVE", bundle_id=bound["bundle_id"], review_content_id=bound["review_content_id"],
+        round=1, now=now))
+if "manual" in stages:
+    ws.state_transaction(root, lambda s: ws.record_manual_plan_review(
+        s, wid, verdict="APPROVE", bundle_id=bound["bundle_id"], round=1, now=now,
+        current_review_content_id=bound["review_content_id"], feedback_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+        feedback_review_content_id=bound["review_content_id"]))
+"""
+
+#: Moves a 2.6.0 revised item's registry to revision 2 without publishing
+#: it: the mirror is then behind the registry (row 8).
+_ADVANCE_REGISTRY = r"""
+wid = sys.argv[1]
+checkpoints = [{"id": "CP1", "name": "one checkpoint", "depends_on": [], "complexity": 1, "session_target": 1}]
+registry = ws.generate_registry(wid, 2, checkpoints)
+mapping = ws.generate_mapping(wid, {"R1": {"description": "one requirement", "checkpoint_ids": ["CP1"]}},
+                              registry=registry)
+ws.write_registry_and_mapping(Path.cwd(), Path(f"docs/ai-workflow/registry/{wid}-registry.json"),
+                              Path(f"docs/ai-workflow/requirements/{wid}-mapping.json"), registry, mapping)
+"""
+
+
+def _pub_state(root: Path) -> dict:
+    return json.loads((root / _STATE_REL).read_text())
+
+
+def _pub_set_phase(root: Path, phase: str) -> None:
+    """Moves the item's phase by hand, for the rows no Workflow writer
+    leaves behind (4d and 6)."""
+    state = _pub_state(root)
+    state["work_items"][_PUB_WI]["phase"] = phase
+    (root / _STATE_REL).write_text(json.dumps(state, indent=2) + "\n")
+
+
+def _pub_status(root: Path):
+    from controller import workflow_contract
+
+    return workflow_contract.plan_review_publication_status(root, workflow_contract.contract_for(_PUB_RELEASE),
+                                                            _PUB_WI)
+
+
+def _pub_decide(root: Path):
+    from controller import target_state
+
+    managed = fixtures.build_target_managed_repository(root)
+    snapshot = target_state.read(managed)
+    return evidence.decide(managed, snapshot, snapshot.work_items[_PUB_WI])
+
+
+def _pub_explain_command(root: Path) -> str:
+    return f"workflow-controller --work-item {_PUB_WI} explain {root}"
+
+
+def _publication_line(row: str, status: str) -> str:
+    return f"plan-review publication status: row {row} ({status})"
+
+
+class _PublicationTargets(unittest.TestCase):
+    """Seeds each real Workflow target once per class; :meth:`target` hands
+    each test its own copy, resolved, under a class-owned scratch
+    directory."""
+
+    SEEDS: dict[str, tuple] = {}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        scratch = TemporaryDirectory(prefix="plan-review-publication-")
+        cls.addClassCleanup(scratch.cleanup)
+        cls._scratch = Path(scratch.name).resolve()
+        cls._seeded = {
+            name: fixtures.seed_workflow_item(cls._scratch / "seeds" / name, release, stage,
+                                              work_item_id=_PUB_WI, **kwargs)
+            for name, (release, stage, kwargs) in cls.SEEDS.items()
+        }
+
+    def target(self, name: str) -> Path:
+        import tempfile
+
+        copy = Path(tempfile.mkdtemp(prefix=f"{name}-", dir=self._scratch))
+        root = copy / "target"
+        shutil.copytree(self._seeded[name], root, symlinks=True)
+        return root
+
+    def outside(self, name: str) -> Path:
+        """A directory outside every target."""
+        import tempfile
+
+        return Path(tempfile.mkdtemp(prefix=f"outside-{name}-", dir=self._scratch))
+
+    def assert_status(self, root: Path, row: str, status: str, phase: str):
+        answer = _pub_status(root)
+        self.assertEqual((answer.phase, answer.row, answer.status), (phase, row, status))
+        return answer
+
+    def assert_stale_gate(self, root: Path, answer, *, inputs_dir: Path, verb: str) -> tuple[str, ...]:
+        """S2 for rows 4b/4c: the stale-plan-bundle gate quoting Workflow's
+        remedy and detail, whose command is the author-file steps in
+        ``inputs_dir`` and then the generator -- never the withdrawal."""
+        decided = _pub_decide(root)
+        gate = decided.gate
+        self.assertIsNotNone(gate, decided)
+        self.assertEqual(decided.evidence[0], _publication_line(answer.row, answer.status))
+        self.assertIn(answer.remedy, gate.what_is_required)
+        self.assertIn(answer.detail, gate.what_is_required)
+        self.assertIn("discards both recorded review stages", gate.what_is_required)
+        self.assertNotIn("/milestone-plan", gate.safe_resume_command)
+        steps = tuple(gate.safe_resume_command.split("; "))
+        self.assertTrue(steps[-1].startswith("3. run scripts/prepare-ai-review.sh "), steps)
+        for step in steps[:-1]:
+            self.assertIn(f"{verb} {inputs_dir}/", step)
+        return steps
+
+    def carry_out(self, root: Path, steps: tuple[str, ...]) -> None:
+        """Carry out plan-bundle recovery steps exactly as written: each
+        author file at the path the step names, then the generator command
+        it names, with the real 2.6.0 scripts."""
+        import re as _re
+
+        for step in steps:
+            context = _re.match(r"^0\. write (\S+)/CONTEXT_FILES\.txt(?:, restoring the previous round's author "
+                                r"files from (\S+)/)?$", step)
+            request = _re.match(r"^\d\. (?:write|refresh) (\S+)/REVIEW_REQUEST\.md", step)
+            results = _re.match(r"^\d\. (?:write|refresh) (\S+)/TEST_RESULTS\.md .*`stage: plan \(revision (\d+)\)`",
+                                step)
+            generator = _re.match(r"^\d\. run (scripts/prepare-ai-review\.sh) (\S+) plan (\S+) -- ", step)
+            if context:
+                target = root / context.group(1) / "CONTEXT_FILES.txt"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = root / context.group(2) / "CONTEXT_FILES.txt" if context.group(2) else None
+                target.write_bytes(source.read_bytes() if source is not None and source.is_file() else b"")
+            elif request:
+                content_id = fixtures.run_workflow_python(
+                    root, "print(fingerprint.compute_review_content_id_plan_stage_for_work_item(Path.cwd(), "
+                          "sys.argv[1])[0])", _PUB_WI).stdout.strip()
+                target = root / request.group(1) / "REVIEW_REQUEST.md"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(f"# Review request\n\nstage: plan\nwork item: {_PUB_WI}\n"
+                                  f"review_content_id: {content_id}\n")
+            elif results:
+                target = root / results.group(1) / "TEST_RESULTS.md"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(f"stage: plan (revision {results.group(2)})\nhead: {fixtures.current_head(root)}\n\n"
+                                  "No checks at the plan stage.\n")
+            elif generator:
+                result = subprocess.run(
+                    [f"./{generator.group(1)}", generator.group(2), "plan", generator.group(3)], cwd=root,
+                    stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                )
+                self.assertEqual(result.returncode, 0, f"{step}\n{result.stdout}\n{result.stderr}")
+            else:
+                self.fail(f"a recovery step this test cannot carry out: {step!r}")
+
+
+class PublicationStatusReadyPhaseRealTest(_PublicationTargets):
+    """S1, S2 (rows 4b and 4c) and S3 at the ready phases, on real 2.6.0
+    bound bundles and 2.5.1-created ones moved to 2.6.0."""
+
+    SEEDS = {
+        "bound": (_PUB_RELEASE, "ready", {}),
+        "published": (_PUB_RELEASE, "publish", {}),
+        "legacy_ready": ("2.5.1", "ready", {"upgrade_to": _PUB_RELEASE}),
+        "legacy_ready_2_5_1": ("2.5.1", "ready", {}),
+    }
+
+    def approve(self, root: Path, *stages: str) -> None:
+        fixtures.run_workflow_python(root, _RECORD_APPROVALS, _PUB_WI, json.dumps(list(stages)))
+
+    def test_s1_row_2_at_every_ready_phase_keeps_the_phase_handler(self) -> None:
+        root = self.target("bound")
+        self.assert_status(root, "2", "BOUND", "AWAITING_LOCAL_PLAN_REVIEW")
+        local = _pub_decide(root)
+        self.assertEqual((local.action.command, local.automatic), (f"/review-plan {_PUB_WI}", True))
+        self.assertEqual(local.evidence, (_publication_line("2", "BOUND"),))
+
+        self.approve(root, "local")
+        self.assert_status(root, "2", "BOUND", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        manual = _pub_decide(root)
+        self.assertEqual(manual.gate.safe_resume_command, f"/record-manual-plan-review {_PUB_WI}")
+        self.assertEqual(manual.evidence, (_publication_line("2", "BOUND"),))
+
+        self.approve(root, "manual")
+        self.assert_status(root, "2", "BOUND", "AWAITING_PLAN_APPROVAL")
+        approval = _pub_decide(root)
+        self.assertEqual(approval.gate.safe_resume_command, f"/approve-review plan {_PUB_WI}")
+        self.assertEqual(approval.evidence, (_publication_line("2", "BOUND"),))
+
+    def test_s1_row_3_a_2_5_1_created_ready_item(self) -> None:
+        root = self.target("legacy_ready")
+        self.assert_status(root, "3", "BOUND", "AWAITING_LOCAL_PLAN_REVIEW")
+        decided = _pub_decide(root)
+        self.assertEqual(decided.action.command, f"/review-plan {_PUB_WI}")
+        self.assertEqual(decided.evidence, (_publication_line("3", "BOUND"),))
+
+    def _row_4b(self, *, plan_inputs: str, author_files: bool) -> None:
+        root = self.target("bound")
+        (root / _ITEM_DIR / "review-bundle.tar.gz").unlink()
+        inputs = _ITEM_DIR / "plan-inputs"
+        if plan_inputs == "absent":
+            shutil.rmtree(root / inputs)
+            inputs = _ITEM_DIR / "current"
+        if not author_files:
+            for name in ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt"):
+                (root / inputs / name).unlink()
+        answer = self.assert_status(root, "4b", "BUNDLE_UNVERIFIED", "AWAITING_LOCAL_PLAN_REVIEW")
+        steps = self.assert_stale_gate(root, answer, inputs_dir=inputs, verb="refresh" if author_files else "write")
+        self.assertIn(f"fresh_review_content_id: {answer.fresh_review_content_id}", _pub_decide(root).evidence)
+        self.carry_out(root, steps)
+        self.assert_status(root, "2", "BOUND", "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(_pub_decide(root).action.command, f"/review-plan {_PUB_WI}")
+
+    def test_s2_row_4b_steps_name_plan_inputs_and_succeed(self) -> None:
+        for author_files in (True, False):
+            with self.subTest(author_files=author_files):
+                self._row_4b(plan_inputs="present", author_files=author_files)
+
+    def test_s2_row_4b_steps_name_current_without_plan_inputs_and_succeed(self) -> None:
+        for author_files in (True, False):
+            with self.subTest(author_files=author_files):
+                self._row_4b(plan_inputs="absent", author_files=author_files)
+
+    def test_s2_row_4c_a_damaged_legacy_bundle(self) -> None:
+        """The answer has no ``fresh_review_content_id``, and neither has the
+        gate's evidence."""
+        root = self.target("legacy_ready")
+        (root / _ITEM_DIR / "review-bundle.tar.gz").unlink()
+        answer = self.assert_status(root, "4c", "LEGACY_UNVERIFIED", "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertIsNone(answer.fresh_review_content_id)
+        steps = self.assert_stale_gate(root, answer, inputs_dir=_ITEM_DIR / "current", verb="refresh")
+        self.assertFalse([line for line in _pub_decide(root).evidence if "fresh_review_content_id" in line])
+        self.carry_out(root, steps)
+        self.assert_status(root, "3", "BOUND", "AWAITING_LOCAL_PLAN_REVIEW")
+
+    def test_s2_row_4c_after_a_completed_2_5_1_withdrawal(self) -> None:
+        """The residue of a completed 2.5.1 withdrawal at a ready phase: no
+        ``current/``, no marker, a quarantine. The steps write every author
+        file, restoring ``CONTEXT_FILES.txt`` from the quarantine first."""
+        root = self.target("legacy_ready_2_5_1")
+        fixtures.run_workflow_python(root, "fingerprint.withdraw_bundle(Path.cwd(), sys.argv[1], 'fixture')", _PUB_WI)
+        fixtures.install_workflow_release(root, _PUB_RELEASE)
+        self.assertFalse((root / _ITEM_DIR / "current").exists())
+        self.assertFalse((root / _ITEM_DIR / "REJECTED").exists())
+        quarantine = [path.name for path in (root / _ITEM_DIR).glob("current.rejected-*")]
+        self.assertEqual(len(quarantine), 1)
+        answer = self.assert_status(root, "4c", "LEGACY_UNVERIFIED", "AWAITING_LOCAL_PLAN_REVIEW")
+        steps = self.assert_stale_gate(root, answer, inputs_dir=_ITEM_DIR / "current", verb="write")
+        self.assertEqual(steps[0], f"0. write {_ITEM_DIR}/current/CONTEXT_FILES.txt, restoring the previous "
+                                   f"round's author files from {_ITEM_DIR}/{quarantine[0]}/")
+        self.carry_out(root, steps)
+        self.assert_status(root, "3", "BOUND", "AWAITING_LOCAL_PLAN_REVIEW")
+
+    def test_s2_row_4c_steps_name_plan_inputs_when_it_exists(self) -> None:
+        for author_files in (True, False):
+            with self.subTest(author_files=author_files):
+                root = self.target("legacy_ready")
+                (root / _ITEM_DIR / "review-bundle.tar.gz").unlink()
+                inputs = root / _ITEM_DIR / "plan-inputs"
+                inputs.mkdir()
+                if author_files:
+                    for name in ("REVIEW_REQUEST.md", "TEST_RESULTS.md", "CONTEXT_FILES.txt"):
+                        shutil.copy2(root / _ITEM_DIR / "current" / name, inputs / name)
+                answer = self.assert_status(root, "4c", "LEGACY_UNVERIFIED", "AWAITING_LOCAL_PLAN_REVIEW")
+                steps = self.assert_stale_gate(root, answer, inputs_dir=_ITEM_DIR / "plan-inputs",
+                                               verb="refresh" if author_files else "write")
+                self.carry_out(root, steps)
+                self.assert_status(root, "3", "BOUND", "AWAITING_LOCAL_PLAN_REVIEW")
+
+    def test_s2_at_awaiting_plan_approval_replaces_the_approval_gate(self) -> None:
+        root = self.target("bound")
+        self.approve(root, "local", "manual")
+        (root / _ITEM_DIR / "review-bundle.tar.gz").unlink()
+        answer = self.assert_status(root, "4b", "BUNDLE_UNVERIFIED", "AWAITING_PLAN_APPROVAL")
+        steps = self.assert_stale_gate(root, answer, inputs_dir=_ITEM_DIR / "plan-inputs", verb="refresh")
+        self.assertNotIn("/approve-review", _pub_decide(root).gate.safe_resume_command)
+        self.carry_out(root, steps)
+        self.assert_status(root, "2", "BOUND", "AWAITING_PLAN_APPROVAL")
+        self.assertEqual(_pub_decide(root).gate.safe_resume_command, f"/approve-review plan {_PUB_WI}")
+
+    def test_s3_row_4d_at_every_ready_phase(self) -> None:
+        for phase in _READY:
+            with self.subTest(phase=phase):
+                root = self.target("published")
+                _pub_set_phase(root, phase)
+                refusal = _pub_status(root)
+                self.assertIn("row 4d", refusal.message)
+                decided = _pub_decide(root)
+                self.assertEqual(decided.gate.safe_resume_command, _pub_explain_command(root))
+                self.assertIn(refusal.message, decided.gate.what_is_required)
+                self.assertIn("plan_review_binding_inconsistent", decided.reason)
+                self.assertIsNone(decided.action)
+
+
+class PublicationStatusNonReadyPhaseRealTest(_PublicationTargets):
+    """N1 (rows 5, 7, 8, 9, 10 and 11, each where Workflow produces it) and
+    N2 (row 6), on real 2.6.0 state."""
+
+    SEEDS = {
+        "routed": (_PUB_RELEASE, "route", {}),
+        "published": (_PUB_RELEASE, "publish", {}),
+        "revised": (_PUB_RELEASE, "revise", {}),
+        "bound": (_PUB_RELEASE, "ready", {}),
+        "legacy_revising": ("2.5.1", "revise", {"upgrade_to": _PUB_RELEASE}),
+    }
+
+    def assert_dispatch(self, root: Path, phase: str, row: str, status: str, command: str, *,
+                        automatic: bool = True) -> None:
+        self.assert_status(root, row, status, phase)
+        decided = _pub_decide(root)
+        self.assertEqual(decided.action.command, command)
+        self.assertEqual((decided.automatic, decided.declined), (automatic, not automatic))
+        self.assertEqual(decided.evidence[-1], _publication_line(row, status))
+
+    def test_n1_row_7_a_new_item_without_a_registry(self) -> None:
+        """Row 7 is the real script's answer for a routed item whose
+        registry is not written yet. The Controller's own state reader
+        refuses that state before any decision (a declared registry must
+        exist), for every release alike, so the cell is driven with the
+        item's view directly."""
+        from controller import target_state
+        from controller.errors import MalformedTargetRegistryError
+
+        root = self.target("routed")
+        self.assert_status(root, "7", "NEEDS_EDIT", "PLANNING")
+        with self.assertRaises(MalformedTargetRegistryError):
+            target_state.read(fixtures.build_target_managed_repository(root))
+        work_item = fixtures.build_work_item_view(work_item_id=_PUB_WI, phase="PLANNING",
+                                                  governing_workflow_version="2.2")
+        decided = evidence.decide(fixtures.build_target_managed_repository(root), None, work_item)
+        self.assertEqual((decided.action.command, decided.automatic), (f"/milestone-plan {_PUB_WI}", True))
+        self.assertEqual(decided.evidence, (_publication_line("7", "NEEDS_EDIT"),))
+
+    def test_n1_row_9_published_but_not_bound_reruns_the_explicit_id_command(self) -> None:
+        self.assert_dispatch(self.target("published"), "PLANNING", "9", "PUBLISHED_UNBOUND",
+                             f"/milestone-plan {_PUB_WI}")
+
+    def test_n1_row_10_after_a_2_6_0_revise(self) -> None:
+        self.assert_dispatch(self.target("revised"), "REVISING_PLAN", "10", "NEEDS_EDIT",
+                             f"/apply-plan-review {_PUB_WI}")
+
+    def test_n1_row_11_an_edit_in_progress(self) -> None:
+        root = self.target("revised")
+        with (root / _PLAN_REL).open("a") as handle:
+            handle.write("\nAn edit in progress.\n")
+        self.assert_dispatch(root, "REVISING_PLAN", "11", "EDIT_IN_PROGRESS", f"/apply-plan-review {_PUB_WI}")
+
+    def test_n1_row_8_the_mirror_behind_the_registry(self) -> None:
+        root = self.target("revised")
+        fixtures.run_workflow_python(root, _ADVANCE_REGISTRY, _PUB_WI)
+        self.assert_dispatch(root, "REVISING_PLAN", "8", "NEEDS_REVISION", f"/apply-plan-review {_PUB_WI}")
+
+    def test_n1_row_5_a_2_5_1_created_item_mid_round(self) -> None:
+        root = self.target("legacy_revising")
+        self.assert_dispatch(root, "REVISING_PLAN", "5", "LEGACY_UNMARKED", f"/apply-plan-review {_PUB_WI}")
+        # At AMENDING_PLAN the same row is reported and the selection is
+        # declined, exactly as before (no expected outcome for that triple).
+        _pub_set_phase(root, "AMENDING_PLAN")
+        self.assert_dispatch(root, "AMENDING_PLAN", "5", "LEGACY_UNMARKED", f"/milestone-plan {_PUB_WI}",
+                             automatic=False)
+
+    def test_n2_row_6_at_every_non_ready_phase(self) -> None:
+        for phase in _NON_READY:
+            with self.subTest(phase=phase):
+                root = self.target("bound")
+                _pub_set_phase(root, phase)
+                refusal = _pub_status(root)
+                self.assertIn("row 6", refusal.message)
+                decided = _pub_decide(root)
+                self.assertIsNone(decided.action)
+                self.assertEqual(decided.gate.safe_resume_command, _pub_explain_command(root))
+                self.assertIn(refusal.message, decided.gate.what_is_required)
+                self.assertNotIn("discards both recorded review stages", decided.gate.what_is_required)
+
+
+def _admit_2_6_0(test: unittest.TestCase) -> None:
+    """Admit Workflow 2.6.0 for the duration of ``test``: it is admitted
+    at CP5, and until then ``managed_repo.inspect`` refuses it."""
+    from controller import managed_repo as managed_repo_module
+
+    for name, value in (("SUPPORTED_WORKFLOW_LINE", "2.6"), ("VALIDATED_WORKFLOW_RELEASES", frozenset({"2.6.0"}))):
+        patcher = unittest.mock.patch.object(managed_repo_module, name, value)
+        patcher.start()
+        test.addCleanup(patcher.stop)
+
+
+def _lstat_snapshot(*tops: Path) -> dict[str, tuple]:
+    """Every entry under each of ``tops`` (the top-level ``.git`` of a
+    repository excluded), by ``lstat``: its type and mode, a link's target
+    string, a file's bytes. Links are recorded, never followed."""
+    import stat as _stat
+
+    snapshot: dict[str, tuple] = {}
+    for top in tops:
+        for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+            if Path(dirpath) == top and ".git" in dirnames:
+                dirnames.remove(".git")
+            for name in [*dirnames, *filenames]:
+                path = Path(dirpath) / name
+                info = os.lstat(path)
+                entry: tuple = (_stat.S_IFMT(info.st_mode), _stat.S_IMODE(info.st_mode))
+                if _stat.S_ISLNK(info.st_mode):
+                    entry += (os.readlink(path),)
+                elif _stat.S_ISREG(info.st_mode):
+                    entry += (path.read_bytes(),)
+                snapshot[str(path)] = entry
+    return snapshot
+
+
+class ContentDriftedRealTest(_PublicationTargets):
+    """Row 4a's no-restore gate, built from a real 2.6.0 bound bundle in
+    every case the plan lists. Its ``safe_resume_command`` is the ``explain``
+    invocation, which the Controller's own parser accepts; the exact text is
+    executed through ``cli.main``, exits 0, prints the same gate, and leaves
+    the working tree, ``.ai-review/<id>/`` and every link, link target and
+    outside directory byte-for-byte as they were."""
+
+    SEEDS = {"bound": (_PUB_RELEASE, "ready", {"extra_protected_paths": {_NOTES_REL: _NOTES_TEXT}})}
+
+    def setUp(self) -> None:
+        self.runtime_home = self.outside("runtime")
+        stub = fixtures.write_stub_workflow_manager(self.outside("manager") / "workflow-manager",
+                                                    release=_PUB_RELEASE)
+        _admit_2_6_0(self)
+        patcher = unittest.mock.patch.dict(os.environ, {
+            "WORKFLOW_CONTROLLER_HOME": str(self.runtime_home), "WORKFLOW_CONTROLLER_WORKFLOW_MANAGER": str(stub)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def edit_plan(self, root: Path) -> None:
+        with (root / _PLAN_REL).open("a") as handle:
+            handle.write("\nAn edit after binding.\n")
+
+    def run_command(self, text: str) -> tuple[int, str, str]:
+        import contextlib
+        import io
+        import shlex
+
+        from controller import cli
+
+        argv = shlex.split(text)
+        self.assertEqual(argv[0], "workflow-controller")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = cli.main(argv[1:])
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def assert_no_restore_gate(self, root: Path, *, fresh_readable: bool = True):
+        from controller import cli
+
+        answer = self.assert_status(root, "4a", "CONTENT_DRIFTED", "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(answer.fresh_review_content_id is not None, fresh_readable)
+        decided = _pub_decide(root)
+        gate = decided.gate
+        self.assertIsNone(decided.action)
+        self.assertEqual(gate.safe_resume_command, _pub_explain_command(root))
+        parsed = cli.build_parser().parse_args(gate.safe_resume_command.split()[1:])
+        self.assertEqual((parsed.command, parsed.work_item, parsed.repo), ("explain", _PUB_WI, str(root)))
+        required = gate.what_is_required
+        for statement in (
+            answer.remedy, answer.detail, "The Controller offers no restore",
+            f"cannot establish that {_ITEM_DIR}/current/files/ still holds the bound state",
+            "cannot keep a path's shape from changing between a printed step and its execution",
+            f"`## Protected paths` in {_ITEM_DIR}/current/MANIFEST.md", _ARTIFACTS_REL,
+            "A restore overwrites the working tree's post-binding edits, which may exist nowhere else",
+            "re-apply them at the next editing phase", "the withdrawal, discards both recorded review stages",
+            "A human decides", "row 2 (BOUND) once the working tree matches the bound state",
+        ):
+            self.assertIn(statement, required)
+        self.assertEqual(decided.evidence[0], _publication_line("4a", "CONTENT_DRIFTED"))
+        self.assertEqual(any("fresh_review_content_id" in line for line in decided.evidence), fresh_readable)
+        return gate
+
+    def assert_command_changes_nothing(self, root: Path, gate, *extra: Path) -> None:
+        before = _lstat_snapshot(root, *extra)
+        code, stdout, stderr = self.run_command(gate.safe_resume_command)
+        self.assertEqual(code, 0, stderr)
+        self.assertIn(f"human gate -- what is required: {gate.what_is_required}", stdout)
+        self.assertIn(f"safe resume command: {gate.safe_resume_command}", stdout)
+        self.assertEqual(_lstat_snapshot(root, *extra), before)
+
+    def test_every_listed_drift_reaches_the_no_restore_gate(self) -> None:
+        def plan_bytes(root: Path) -> tuple:
+            self.edit_plan(root)
+            return ()
+
+        def declarations(root: Path) -> tuple:
+            data = json.loads((root / _ARTIFACTS_REL).read_text())
+            data["plan_stage"]["excluded_paths"]["docs/unrelated.md"] = "a later exclusion"
+            (root / _ARTIFACTS_REL).write_text(json.dumps(data, indent=2) + "\n")
+            return ()
+
+        def plan_mode(root: Path) -> tuple:
+            self.assertEqual(fixtures.run(["git", "config", "core.fileMode"], cwd=root).stdout.strip(), "true")
+            os.chmod(root / _PLAN_REL, os.stat(root / _PLAN_REL).st_mode | 0o100)
+            return ()
+
+        def notes_deleted(root: Path) -> tuple:
+            (root / _NOTES_REL).unlink()
+            return ()
+
+        def notes_link(root: Path) -> tuple:
+            outside = self.outside("notes-link")
+            (outside / "NOTES.md").write_text(_NOTES_TEXT)
+            (root / _NOTES_REL).unlink()
+            (root / _NOTES_REL).symlink_to(outside / "NOTES.md")
+            return (outside,)
+
+        def copy_deleted(root: Path) -> tuple:
+            self.edit_plan(root)
+            (root / _ITEM_DIR / "current" / "files" / _PLAN_REL).unlink()
+            return ()
+
+        def copy_bytes(root: Path) -> tuple:
+            self.edit_plan(root)
+            (root / _ITEM_DIR / "current" / "files" / _PLAN_REL).write_text("other bytes\n")
+            return ()
+
+        def copy_mode(root: Path) -> tuple:
+            self.edit_plan(root)
+            path = root / _ITEM_DIR / "current" / "files" / _PLAN_REL
+            os.chmod(path, os.stat(path).st_mode ^ 0o100)
+            return ()
+
+        cases = {
+            "the plan document's bytes": (plan_bytes, True),
+            "a declarations exclusion": (declarations, True),
+            "the plan document's executable bit": (plan_mode, True),
+            "the fourth protected path deleted": (notes_deleted, False),
+            "the fourth protected path replaced by a link": (notes_link, True),
+            "the plan edited and its bound copy deleted": (copy_deleted, True),
+            "the plan edited and its bound copy's bytes changed": (copy_bytes, True),
+            "the plan edited and its bound copy's mode flipped": (copy_mode, True),
+        }
+        for name, (arrange, fresh_readable) in cases.items():
+            with self.subTest(case=name):
+                root = self.target("bound")
+                extra = arrange(root)
+                gate = self.assert_no_restore_gate(root, fresh_readable=fresh_readable)
+                self.assert_command_changes_nothing(root, gate, *extra)
+
+    def test_a_parent_directory_replaced_by_a_link_after_the_gate_is_rendered(self) -> None:
+        """The gate is rendered first; only then is ``docs/design/`` replaced
+        by a link to an outside copy of its contents. Executing the printed
+        command still changes nothing anywhere. The measured outcome is that
+        Workflow's query fails on the link (``UnclassifiedPathError``: a
+        changed path no classification set covers), so ``explain`` refuses
+        with exit 20 (S5)."""
+        root = self.target("bound")
+        self.edit_plan(root)
+        gate = self.assert_no_restore_gate(root)
+        outside = self.outside("parent-link")
+        shutil.copytree(root / "docs" / "design", outside / "design")
+        shutil.rmtree(root / "docs" / "design")
+        (root / "docs" / "design").symlink_to(outside / "design", target_is_directory=True)
+        before = _lstat_snapshot(root, outside)
+        code, stdout, stderr = self.run_command(gate.safe_resume_command)
+        self.assertEqual(_lstat_snapshot(root, outside), before)
+        self.assertEqual(code, 20, stdout + stderr)
+        self.assertIn("--plan-review-publication-status for 'demo-item' exited 1: "
+                      "workflow_fingerprint.UnclassifiedPathError: docs/design", stderr)
+
+
+def _lifecycle_case():
+    from tests import test_lifecycle_orchestration as lifecycle
+
+    return lifecycle
+
+
+class PublicationQueryFailureRealTest(_PublicationTargets, _lifecycle_case()._LifecycleTestCase):
+    """S5 with the real script: the plan document deleted, or replaced by a
+    link, after binding. Workflow validates it while resolving the item's
+    metadata, so the query itself fails (exit 1, not row 4a), and the step
+    refuses with exit 20, launching and writing nothing."""
+
+    SEEDS = {"bound": (_PUB_RELEASE, "ready", {})}
+
+    def test_a_deleted_or_linked_plan_document_refuses_the_step(self) -> None:
+        import contextlib
+        import io
+
+        from controller import cli
+        from controller.errors import WorkflowQueryError
+
+        _admit_2_6_0(self)
+        for case in ("deleted", "link"):
+            with self.subTest(case=case):
+                root = self.target("bound")
+                outside = self.outside(case)
+                if case == "link":
+                    shutil.copy2(root / _PLAN_REL, outside / "PLAN.md")
+                    (root / _PLAN_REL).unlink()
+                    (root / _PLAN_REL).symlink_to(outside / "PLAN.md")
+                else:
+                    (root / _PLAN_REL).unlink()
+                with self.assertRaises(WorkflowQueryError) as caught:
+                    _pub_status(root)
+                self.assertEqual((caught.exception.evidence["reason"], caught.exception.evidence["returncode"]),
+                                 ("query_failed", 1))
+                runtime_root = self.outside(f"{case}-runtime")
+                before = _lstat_snapshot(root, outside)
+                argv = ["--runtime-dir", str(runtime_root), "--workflow-manager", str(self.stub_manager),
+                        "--claude-binary", str(_lifecycle_case().FAKE_CLAUDE), "--timeout", "60", "step", str(root)]
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with unittest.mock.patch.dict(os.environ, {"FAKE_CLAUDE_REQUIRE_FILE": str(self.never)}), \
+                        contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    code = cli.main(argv)
+                self.assertEqual(code, cli.EXIT_FAIL_CLOSED, stdout.getvalue() + stderr.getvalue())
+                self.assertIn("--plan-review-publication-status for 'demo-item' exited 1", stderr.getvalue())
+                self.assertEqual(sorted((runtime_root / "jobs").glob("*.json")), [])
+                self.assertEqual(_lstat_snapshot(root, outside), before)
+
+class ContentDriftedSeamTest(unittest.TestCase):
+    """Row 4a's gate is a function of the answer and the item id alone: with
+    the same answer it is byte-identical whether the bundle directory is
+    present or removed, and it reads no file of the target."""
+
+    def test_the_gate_does_not_depend_on_the_bundle_directory(self) -> None:
+        from controller import workflow_contract
+        from tests.golden import generate_plan_stage_decisions as golden
+
+        with TemporaryDirectory() as tmp:
+            root = _make_target(Path(tmp))
+            fixtures.write_installation_manifest(root, workflow_version=_PUB_RELEASE)
+            fixtures.write_plan_manifest(root, "wi-1", 1)
+            managed = fixtures.build_target_managed_repository(root)
+            work_item = fixtures.build_work_item_view(phase="AWAITING_LOCAL_PLAN_REVIEW",
+                                                      governing_workflow_version="2.2")
+            golden._current_case.update(layout="scoped", status="content_drifted",
+                                        phase="AWAITING_LOCAL_PLAN_REVIEW", version="2.2")
+            self.addCleanup(golden._current_case.clear)
+            with unittest.mock.patch.object(workflow_contract, "_answers_factory", golden.RecordedAnswers):
+                present = evidence.decide(managed, None, work_item)
+                shutil.rmtree(root / ".ai-review" / "wi-1" / "current")
+                removed = evidence.decide(managed, None, work_item)
+        self.assertEqual(present, removed)
+        self.assertEqual(present.gate.safe_resume_command, f"workflow-controller --work-item wi-1 explain {root}")
+
+
+class _SeamAnswers:
+    """An answers provider for one decision: the ``scoped`` feedback path and
+    ``status`` (or raising it)."""
+
+    status: Any = None
+
+    def __init__(self, contract) -> None:
+        pass
+
+    def feedback_path(self, root, work_item_id):
+        from tests.golden import generate_plan_stage_decisions as golden
+
+        return golden.recorded_feedback_path(work_item_id, "scoped")
+
+    def publication_status(self, root, work_item_id):
+        if isinstance(type(self).status, Exception):
+            raise type(self).status
+        return type(self).status
+
+
+class PublicationStatusCellsTest(unittest.TestCase):
+    """Design D's table cell by cell through the answers seam: the fifteen
+    ready cells (S1-S5 at each ready phase) and the twelve non-ready cells
+    (N1-N4 at each non-ready phase). S5/N3 run the real runner up to its
+    execution step, which the private hook fails."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _query_target(Path(self._tmp.name), phase="PLANNING")
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self.managed = fixtures.build_target_managed_repository(self.root)
+        self.assertEqual(self.managed.workflow_version, _PUB_RELEASE)
+
+    def decide(self, phase: str, answer):
+        from controller import workflow_contract
+
+        work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version="2.2")
+        with unittest.mock.patch.object(_SeamAnswers, "status", answer), \
+                unittest.mock.patch.object(workflow_contract, "_answers_factory", _SeamAnswers):
+            return evidence.decide(self.managed, None, work_item)
+
+    def reference(self, phase: str):
+        """The phase's own decision, as a bound or ordinary answer leaves it."""
+        work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version="2.2")
+        return evidence._decide_after_bundle_gates(self.managed, None, work_item, fixtures.reference_binding(),
+                                                   last_apply_job=None)
+
+    @staticmethod
+    def answer(phase: str, row: str, status: str, **extra):
+        from controller import workflow_contract
+
+        return workflow_contract.PublicationStatus(work_item_id="wi-1", phase=phase, row=row, status=status,
+                                                   remedy=f"remedy for row {row}", **extra)
+
+    @staticmethod
+    def refusal(message: str):
+        from controller import workflow_contract
+
+        return workflow_contract.PublicationRefusal(work_item_id="wi-1", error="PlanReviewBindingInconsistentError",
+                                                    message=message)
+
+    def assert_explain_gate(self, decided, reason: str) -> None:
+        self.assertIsNone(decided.action)
+        self.assertEqual(decided.gate.safe_resume_command, f"workflow-controller --work-item wi-1 explain {self.root}")
+        self.assertIn(reason, decided.reason)
+
+    def assert_query_failure_refuses(self, phase: str) -> None:
+        from controller import workflow_contract
+        from controller.errors import WorkflowQueryError
+
+        def times_out(argv, *, cwd, timeout):
+            raise subprocess.TimeoutExpired(argv, timeout)
+
+        work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version="2.2")
+        with unittest.mock.patch.object(workflow_contract, "_execute_query", times_out), \
+                self.assertRaises(WorkflowQueryError) as caught:
+            evidence.decide(self.managed, None, work_item)
+        self.assertEqual((caught.exception.evidence["reason"], caught.exception.evidence["query"]),
+                         ("query_timeout", "--plan-review-publication-status"))
+
+    def test_the_fifteen_ready_cells(self) -> None:
+        for phase in _READY:
+            with self.subTest(phase=phase, cell="S1"):
+                for row, advisory in (("2", None), ("3", None), ("2", "an advisory")):
+                    decided = self.decide(phase, self.answer(phase, row, "BOUND", advisory=advisory))
+                    expected = self.reference(phase)
+                    tail = (_publication_line(row, "BOUND"),) + (
+                        ("plan-review publication advisory: an advisory",) if advisory else ())
+                    self.assertEqual(decided.evidence, expected.evidence + tail)
+                    self.assertEqual((decided.gate, decided.action, decided.reason),
+                                     (expected.gate, expected.action, expected.reason))
+            with self.subTest(phase=phase, cell="S2"):
+                for row, status in (("4a", "CONTENT_DRIFTED"), ("4b", "BUNDLE_UNVERIFIED"),
+                                    ("4c", "LEGACY_UNVERIFIED")):
+                    decided = self.decide(phase, self.answer(phase, row, status, detail=f"detail {row}"))
+                    self.assertIn(f"remedy for row {row}", decided.gate.what_is_required)
+                    self.assertIn(f"detail {row}", decided.gate.what_is_required)
+                    self.assertNotIn("/milestone-plan", decided.gate.safe_resume_command)
+                    self.assertNotIn("/approve-review", decided.gate.safe_resume_command)
+                    if row == "4a":
+                        self.assert_explain_gate(decided, "the Controller offers no restore")
+                    else:
+                        self.assertIn("scripts/prepare-ai-review.sh", decided.gate.safe_resume_command)
+            with self.subTest(phase=phase, cell="S3"):
+                self.assert_explain_gate(self.decide(phase, self.refusal("row 4d")), "plan_review_binding_inconsistent")
+            with self.subTest(phase=phase, cell="S4"):
+                for answer in (self.answer(phase, "7", "NEEDS_EDIT"), self.answer(phase, "1", "NOT_PLAN_STAGE"),
+                               self.answer("PLANNING", "2", "BOUND")):
+                    self.assert_explain_gate(self.decide(phase, answer), "unexpected_plan_review_status")
+            with self.subTest(phase=phase, cell="S5"):
+                self.assert_query_failure_refuses(phase)
+
+    def test_the_twelve_non_ready_cells(self) -> None:
+        for phase in _NON_READY:
+            with self.subTest(phase=phase, cell="N1"):
+                for row, status in (("5", "LEGACY_UNMARKED"), ("7", "NEEDS_EDIT"), ("8", "NEEDS_REVISION"),
+                                    ("9", "PUBLISHED_UNBOUND"), ("10", "NEEDS_EDIT"), ("11", "EDIT_IN_PROGRESS")):
+                    decided = self.decide(phase, self.answer(phase, row, status))
+                    expected = self.reference(phase)
+                    self.assertEqual(decided.evidence, expected.evidence + (_publication_line(row, status),))
+                    self.assertEqual((decided.action, decided.automatic, decided.declined, decided.reason),
+                                     (expected.action, expected.automatic, expected.declined, expected.reason))
+            with self.subTest(phase=phase, cell="N2"):
+                decided = self.decide(phase, self.refusal("row 6"))
+                self.assert_explain_gate(decided, "plan_review_binding_inconsistent")
+            with self.subTest(phase=phase, cell="N3"):
+                self.assert_query_failure_refuses(phase)
+            with self.subTest(phase=phase, cell="N4"):
+                for answer in (self.answer(phase, "2", "BOUND"), self.answer(phase, "4a", "CONTENT_DRIFTED"),
+                               self.answer(phase, "1", "NOT_PLAN_STAGE"),
+                               self.answer("AWAITING_LOCAL_PLAN_REVIEW", "7", "NEEDS_EDIT")):
+                    self.assert_explain_gate(self.decide(phase, answer), "unexpected_plan_review_status")
+
+    def test_a_1_governed_item_and_the_2_5_1_contract_never_ask(self) -> None:
+        from controller import workflow_contract
+
+        with unittest.mock.patch.object(workflow_contract, "_execute_query",
+                                        side_effect=AssertionError("the status was queried")):
+            for phase in ("PLANNING", "AMENDING_PLAN", "AWAITING_PLAN_APPROVAL"):
+                work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version="1")
+                self.assertEqual(evidence.decide(self.managed, None, work_item).evidence, ())
+            fixtures.write_installation_manifest(self.root, workflow_version="2.5.1")
+            managed = fixtures.build_target_managed_repository(self.root)
+            for phase in (*_READY, *_NON_READY):
+                work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version="2.2")
+                self.assertFalse([line for line in evidence.decide(managed, None, work_item).evidence
+                                  if "publication" in line])
+
+
+class RejectedMarkerQueryContractTest(unittest.TestCase):
+    """A leftover REJECTED marker keeps running first. Under the query
+    contract, for a ``"2.2"`` item, it takes the plan-stage branch -- the
+    clause, then the author-file steps -- at all three ready phases,
+    ``AWAITING_PLAN_APPROVAL`` included. Under 2.5.1, and for a ``"1"``
+    item, ``AWAITING_PLAN_APPROVAL`` keeps the bare generator."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.write_rejected_marker(self.root, "wi-1", scoped=True, detail="quarantine rename failed")
+
+    def decide(self, release: str, phase: str, version: str):
+        from controller import workflow_contract
+
+        fixtures.write_installation_manifest(self.root, workflow_version=release)
+        managed = fixtures.build_target_managed_repository(self.root)
+        work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version=version)
+        with unittest.mock.patch.object(workflow_contract, "_execute_query",
+                                        side_effect=AssertionError("the REJECTED gate queried")):
+            return evidence.decide(managed, None, work_item)
+
+    def test_the_plan_stage_branch_at_every_ready_phase(self) -> None:
+        for inputs in ("current", "plan-inputs"):
+            if inputs == "plan-inputs":
+                (self.root / ".ai-review" / "wi-1" / "plan-inputs").mkdir()
+            for phase in _READY:
+                with self.subTest(phase=phase, inputs=inputs):
+                    gate = self.decide(_PUB_RELEASE, phase, "2.2").gate
+                    self.assertTrue(gate.safe_resume_command.startswith("resolve the failure the REJECTED marker"))
+                    self.assertIn(f"0. write .ai-review/wi-1/{inputs}/CONTEXT_FILES.txt", gate.safe_resume_command)
+                    self.assertIn(f"write .ai-review/wi-1/{inputs}/REVIEW_REQUEST.md", gate.safe_resume_command)
+                    self.assertIn("scripts/prepare-ai-review.sh 0000000000000000000000000000000000000000 plan wi-1",
+                                  gate.safe_resume_command)
+
+    def test_2_5_1_and_a_1_item_keep_the_bare_generator_at_plan_approval(self) -> None:
+        expected = self.decide("2.5.1", "AWAITING_PLAN_APPROVAL", "2.2")
+        self.assertEqual(expected.gate.safe_resume_command, "scripts/prepare-ai-review.sh <base-sha> plan wi-1")
+        for release, version in (("2.5.1", "1"), (_PUB_RELEASE, "1")):
+            with self.subTest(release=release, version=version):
+                decided = self.decide(release, "AWAITING_PLAN_APPROVAL", version)
+                self.assertEqual(decided, self.decide("2.5.1", "AWAITING_PLAN_APPROVAL", version))
+                self.assertEqual(decided.gate.safe_resume_command, expected.gate.safe_resume_command)
+        # And under 2.5.1 the review phases keep today's steps in current/.
+        (self.root / ".ai-review" / "wi-1" / "plan-inputs").mkdir()
+        self.assertIn("write .ai-review/wi-1/current/REVIEW_REQUEST.md",
+                      self.decide("2.5.1", "AWAITING_LOCAL_PLAN_REVIEW", "2.2").gate.safe_resume_command)
 
 
 if __name__ == "__main__":

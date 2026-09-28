@@ -460,7 +460,7 @@ class DeclarationAgainstArtifactTest(unittest.TestCase):
         for release in sorted(VALIDATED_WORKFLOW_RELEASES):
             with self.subTest(release=release):
                 self.assertEqual(job.property_declaration_against_artifact_violations(
-                    fixtures.workflow_release_tree(release), job.EXPECTED_OUTCOMES,
+                    fixtures.workflow_release_tree(release), job.expected_outcomes_for(release),
                 ), [])
 
     def test_row5_branch_is_step5s_own_span(self) -> None:
@@ -1393,6 +1393,225 @@ class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
         self.assertFalse(satisfied)
         self.assertIn("absent from the post-state", detail)
 
+
+
+# ---------------------------------------------------------------------------
+# `workflow-controller-workflow-2-6-integration` CP4 -- per-release writer
+# declarations (Design D) and the plan-stage postcondition under the query
+# contract.
+# ---------------------------------------------------------------------------
+
+_QUERY_RELEASE = "2.6.0"
+
+#: The rows whose writer declarations Workflow 2.6.0 moved, and what each
+#: now declares: the bind for the six two-stage rows, and the "1" row's
+#: publish with the step-6 bind calls it precedes allowlisted.
+_SUBSTITUTED_2_6_0 = {
+    ("PLANNING", "2.1", "/milestone-plan"): ("bind_plan_review_bundle", "milestone-plan.md"),
+    ("PLANNING", "2.2", "/milestone-plan"): ("bind_plan_review_bundle", "milestone-plan.md"),
+    (job.NO_PHASE, None, "/milestone-plan"): ("bind_plan_review_bundle", "milestone-plan.md"),
+    ("PLANNING", "1", "/milestone-plan"): ("publish_plan_revision", "milestone-plan.md"),
+    ("REVISING_PLAN", "2.1", "/apply-plan-review"): ("bind_plan_review_bundle", "apply-plan-review.md"),
+    ("REVISING_PLAN", "2.2", "/apply-plan-review"): ("bind_plan_review_bundle", "apply-plan-review.md"),
+}
+
+
+def _key(eo) -> tuple:
+    return (eo.from_phase, eo.governing_version, eo.action)
+
+
+class PerReleaseWriterDeclarationTest(unittest.TestCase):
+    """``job.expected_outcomes_for(release)``: property 5 is clean for both
+    releases, 2.6.0 exercised explicitly before its admission (CP5)."""
+
+    def test_property_5_is_clean_for_every_contracted_release(self) -> None:
+        from controller import workflow_contract
+
+        self.assertEqual(set(job._WRITER_CALLS_BY_RELEASE), set(workflow_contract.RELEASE_CONTRACTS))
+        for release in sorted(workflow_contract.RELEASE_CONTRACTS):
+            with self.subTest(release=release):
+                outcomes = job.expected_outcomes_for(release)
+                self.assertEqual(job.property_declaration_against_artifact_violations(
+                    fixtures.workflow_release_tree(release), outcomes), [])
+                self.assertEqual(job.property_table_violations(outcomes), [])
+                self.assertEqual(job.property_record_completeness_violations(outcomes), [])
+
+    def test_the_2_5_1_table_against_2_6_0_is_the_fourteen_measured_violations(self) -> None:
+        """The substitution is needed, and exactly where the plan measured
+        it: three further writes after each of the four publishes, and the
+        retired phase flip found nowhere in the two ``REVISING_PLAN`` rows."""
+        violations = job.property_declaration_against_artifact_violations(
+            fixtures.workflow_release_tree(_QUERY_RELEASE), job.EXPECTED_OUTCOMES)
+        self.assertEqual(len(violations), 14, violations)
+        publishes = [key for key, (function, _file) in _SUBSTITUTED_2_6_0.items() if key[2] == "/milestone-plan"]
+        for key in publishes:
+            for function in ("verify_plan_review_bundle", "state_transaction", "bind_plan_review_bundle"):
+                self.assertEqual(sum(v.startswith(repr(key)) and f"further durable write to {function!r}" in v
+                                     for v in violations), 1, (key, function))
+        for version in ("2.1", "2.2"):
+            key = ("REVISING_PLAN", version, "/apply-plan-review")
+            self.assertEqual([v for v in violations if v.startswith(repr(key))], [
+                f"{key!r} ('transition_to_awaiting_local_plan_review'): no call found in apply-plan-review.md's "
+                "declared branch (lines 1-319)"])
+
+    def test_2_5_1_is_the_table_itself(self) -> None:
+        outcomes = job.expected_outcomes_for("2.5.1")
+        self.assertEqual(len(outcomes), len(job.EXPECTED_OUTCOMES))
+        for mine, table in zip(outcomes, job.EXPECTED_OUTCOMES):
+            self.assertIs(mine, table)
+
+    def test_only_the_writer_calls_of_the_measured_rows_differ(self) -> None:
+        """Phases, predicates, postconditions, triples and each row's branch
+        are the same for both releases, so verification -- which reads
+        ``EXPECTED_OUTCOMES`` -- is release-independent."""
+        outcomes = job.expected_outcomes_for(_QUERY_RELEASE)
+        self.assertEqual([_key(eo) for eo in outcomes], [_key(eo) for eo in job.EXPECTED_OUTCOMES])
+        changed = {}
+        for mine, table in zip(outcomes, job.EXPECTED_OUTCOMES):
+            for field in dataclasses.fields(table):
+                if field.name != "writer_calls":
+                    self.assertEqual(getattr(mine, field.name), getattr(table, field.name), (_key(table), field.name))
+            self.assertEqual(job._row_branch(mine), job._row_branch(table), _key(table))
+            if mine.writer_calls != table.writer_calls:
+                changed[_key(mine)] = (mine.writer_calls[0].function, mine.writer_calls[0].file)
+        self.assertEqual(changed, _SUBSTITUTED_2_6_0)
+
+    def test_the_1_row_allowlists_exactly_the_three_step_6_bind_calls(self) -> None:
+        row = {_key(eo): eo for eo in job.expected_outcomes_for(_QUERY_RELEASE)}[("PLANNING", "1", "/milestone-plan")]
+        trailing = row.writer_calls[0].trailing_calls
+        self.assertEqual([function for function, _why in trailing],
+                         ["verify_plan_review_bundle", "state_transaction", "bind_plan_review_bundle"])
+        for _function, why in trailing:
+            self.assertIn("never reaches", why)
+        # Dropping one entry reports that call again: the allowlist never
+        # weakens the property.
+        wc = dataclasses.replace(row.writer_calls[0], trailing_calls=trailing[:2])
+        violations = job.property_declaration_against_artifact_violations(
+            fixtures.workflow_release_tree(_QUERY_RELEASE), (dataclasses.replace(row, writer_calls=(wc,)),))
+        self.assertEqual(len(violations), 1, violations)
+        self.assertIn("further durable write to 'bind_plan_review_bundle'", violations[0])
+
+    def test_an_undeclared_release_is_refused(self) -> None:
+        from controller.errors import UnsupportedWorkflowVersionError
+
+        with self.assertRaises(UnsupportedWorkflowVersionError) as caught:
+            job.expected_outcomes_for("2.7.0")
+        self.assertEqual(caught.exception.evidence["reason"], "no_writer_declarations")
+
+
+class _StubPublicationAnswers:
+    """An answers provider replaying one publication-status answer (or
+    raising it), recording each query; a feedback read is a test error."""
+
+    def __init__(self, answer) -> None:
+        self.answer = answer
+        self.asked: list[str] = []
+
+    def feedback_path(self, root, work_item_id):
+        raise AssertionError("the plan-stage postcondition read the feedback path")
+
+    def publication_status(self, root, work_item_id):
+        self.asked.append(work_item_id)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+def _query_binding(answer):
+    from controller import workflow_contract
+
+    return workflow_contract.BoundContract(contract=workflow_contract.contract_for(_QUERY_RELEASE),
+                                           answers=_StubPublicationAnswers(answer))
+
+
+def _publication_status(status: str, row: str, *, phase: str = "AWAITING_LOCAL_PLAN_REVIEW"):
+    from controller import workflow_contract
+
+    return workflow_contract.PublicationStatus(work_item_id="wi-1", phase=phase, row=row, status=status,
+                                               remedy="the remedy")
+
+
+class PlanStagePostconditionQueryContractTest(unittest.TestCase):
+    """Under the 2.6.0 contract the plan-stage postcondition is Workflow's
+    answer (Design D): the item is at ``AWAITING_LOCAL_PLAN_REVIEW`` and
+    reported ``BOUND`` there. No plan bundle is on disk in these targets, so
+    a satisfied postcondition never came from revision coherence."""
+
+    def setUp(self) -> None:
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / "target"
+        fixtures.build_target_git_repo(self.root)
+
+    def at(self, phase: str, version: str = "2.2", work_item_id: str = "wi-1") -> None:
+        fixtures.write_workflow_state(self.root, {"schema_version": 1, "active_work_item_id": work_item_id,
+                                                  "work_items": {work_item_id: {
+            "work_item_type": "product", "work_item_kind": "product", "work_item_id": work_item_id,
+            "governing_workflow_version": version, "phase": phase, "plan_revision": 1,
+            "implementation_revision": None, "state_revision": 1, "checkpoints": {}, "current_bundle_id": None,
+            "base_commit": "0" * 40, "parent_work_item_id": None}}})
+
+    def postcondition(self, bound, work_item_id: str | None = "wi-1", pre_state: dict | None = None):
+        return job._postcondition_plan_bundle_coherent(self.root, work_item_id, pre_state or {}, bound)
+
+    def test_bound_at_awaiting_local_plan_review_is_satisfied(self) -> None:
+        self.at("AWAITING_LOCAL_PLAN_REVIEW")
+        bound = _query_binding(_publication_status("BOUND", "2"))
+        self.assertEqual(self.postcondition(bound),
+                         (True, "plan-review publication status: row 2 (BOUND) at AWAITING_LOCAL_PLAN_REVIEW"))
+        self.assertEqual(bound.answers.asked, ["wi-1"])
+        # The 2.5.1 rule on the same target: no bundle, not coherent.
+        self.assertFalse(self.postcondition(fixtures.reference_binding())[0])
+
+    def test_every_other_answer_is_not_satisfied(self) -> None:
+        from controller import workflow_contract
+
+        self.at("AWAITING_LOCAL_PLAN_REVIEW")
+        refusal = workflow_contract.PublicationRefusal(
+            work_item_id="wi-1", error="PlanReviewBindingInconsistentError", message="row 4d")
+        cases = {
+            "4b": (_publication_status("BUNDLE_UNVERIFIED", "4b"), "row 4b (BUNDLE_UNVERIFIED), not BOUND"),
+            "9": (_publication_status("PUBLISHED_UNBOUND", "9"), "row 9 (PUBLISHED_UNBOUND), not BOUND"),
+            "refusal": (refusal, "Workflow refuses the plan-review publication status"),
+            "another phase": (_publication_status("BOUND", "2", phase="AWAITING_PLAN_APPROVAL"),
+                              "answered for phase 'AWAITING_PLAN_APPROVAL'"),
+        }
+        for name, (answer, detail) in cases.items():
+            with self.subTest(case=name):
+                satisfied, found = self.postcondition(_query_binding(answer))
+                self.assertFalse(satisfied)
+                self.assertIn(detail, found)
+
+    def test_another_phase_is_not_satisfied_and_asks_nothing(self) -> None:
+        self.at("REVISING_PLAN")
+        bound = _query_binding(_publication_status("BOUND", "2"))
+        self.assertEqual(self.postcondition(bound),
+                         (False, "phase 'REVISING_PLAN' is not 'AWAITING_LOCAL_PLAN_REVIEW'"))
+        self.assertEqual(bound.answers.asked, [])
+
+    def test_a_query_failure_propagates(self) -> None:
+        from controller.errors import WorkflowQueryError
+
+        self.at("AWAITING_LOCAL_PLAN_REVIEW")
+        failure = WorkflowQueryError("the query failed", evidence={"reason": "query_failed"})
+        with self.assertRaises(WorkflowQueryError):
+            self.postcondition(_query_binding(failure))
+
+    def test_the_row_7_postcondition_asks_about_the_new_work_item(self) -> None:
+        self.at("AWAITING_LOCAL_PLAN_REVIEW", work_item_id="wi-new")
+        bound = _query_binding(_publication_status("BOUND", "2"))
+        self.assertTrue(self.postcondition(bound, None, {"pre_work_item_keys": []})[0])
+        self.assertEqual(bound.answers.asked, ["wi-new"])
+
+    def test_a_1_governed_item_keeps_revision_coherence(self) -> None:
+        self.at("AWAITING_EXTERNAL_PLAN_REVIEW", version="1")
+        bound = _query_binding(AssertionError("a \"1\" item was queried"))
+        satisfied, detail = self.postcondition(bound)
+        self.assertFalse(satisfied)
+        self.assertIn("is absent (withdrawn or never generated)", detail)
+        fixtures.write_plan_manifest(self.root, "wi-1", 1)
+        self.assertTrue(self.postcondition(bound)[0])
+        self.assertEqual(bound.answers.asked, [])
 
 
 # ---------------------------------------------------------------------------

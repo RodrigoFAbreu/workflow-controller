@@ -50,6 +50,14 @@ defaults to ``2.5.1``:
   ``"1"``-governed item has no publication status: its recorded query fails
   exactly as the real one does. Case keys gain ``| layout | status``.
 
+  CP3 generated the 2.6.0 file before any decision read the status, so
+  every status variant of a case decided alike. CP4 regenerated it once,
+  deliberately, when the plan phases began to consume the status (Design
+  D): each ready-phase status class now pins its own outcome (the phase
+  handler with the row in its evidence, the stale-plan-bundle gate, the
+  no-restore row-4a gate, the binding-inconsistent gate or the
+  unexpected-status gate), and so does each non-ready one.
+
 The real queries are covered elsewhere: ``tests/test_workflow_contract.py``
 runs them against the vendored 2.6.0 scripts.
 """

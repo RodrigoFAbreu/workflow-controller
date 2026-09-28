@@ -170,8 +170,9 @@ STATUS_HANDOFF_PENDING = "HANDOFF_PENDING"
 #: `pre_work_item_keys`. The rest are report data for
 #: `inspect`/`explain`/`status` and for a later generation's own use --
 #: including `bundle_id`, which is `work_item.current_bundle_id`, a field
-#: no Workflow writer ever sets, and so never a predicate input again (CP2's
-#: plan-stage `BLOCK`-predicate fix).
+#: no Workflow 2.5.1 writer ever sets (2.6.0's `bind_plan_review_bundle`
+#: does, and the Controller still does not read it), and so never a
+#: predicate input again (CP2's plan-stage `BLOCK`-predicate fix).
 #:
 #: `bundle_manifest_bundle_id` (CP2) is the pre-state bundle
 #: ``MANIFEST.md``'s own ``bundle_id:`` line -- the bundle a review job
@@ -614,9 +615,11 @@ def _predicate_row3_block_feedback_current(
     ran).
 
     CP2's fix: the binding side used to be ``pre_state["bundle_id"]``
-    (``work_item.current_bundle_id``), which no Workflow writer ever sets,
-    so a genuine ``BLOCK`` never verified while a feedback file *missing*
-    its binding line did (``None == None``)."""
+    (``work_item.current_bundle_id``), which no Workflow 2.5.1 writer ever
+    sets, so a genuine ``BLOCK`` never verified while a feedback file
+    *missing* its binding line did (``None == None``). Workflow 2.6.0's
+    ``bind_plan_review_bundle`` writes it; the Controller still does not
+    read it."""
     return _block_feedback_bound_to_pre_state_bundle(
         root, work_item_id, pre_state, bound,
         role_matches=lambda role: evidence._normalize_role(role) == "LOCAL_MODEL_PLAN_REVIEW",
@@ -689,7 +692,15 @@ def _postcondition_plan_bundle_coherent(
     single new key against ``pre_state["pre_work_item_keys"]``, exactly
     as :func:`_observe_post_phase` resolves it (no single new key -> not
     satisfied). Any read failure is "not satisfied", never a false
-    verification."""
+    verification.
+
+    Under a ``workflow_query`` contract, for a ``"2.1"``/``"2.2"`` item
+    (`workflow-controller-workflow-2-6-integration` CP4), it is Workflow's
+    answer instead: the item is at ``AWAITING_LOCAL_PLAN_REVIEW`` and
+    ``--plan-review-publication-status`` reports it ``BOUND``
+    (:func:`controller.evidence.plan_review_bound`). A query failure
+    raises ``WorkflowQueryError``, which :func:`_row_clauses_failure`
+    records as ``workflow_query_failed``."""
     try:
         post_snapshot = target_state.read(SimpleNamespace(root=root))
     except ControllerError as exc:
@@ -702,6 +713,8 @@ def _postcondition_plan_bundle_coherent(
     post_work_item = post_snapshot.work_items.get(work_item_id)
     if post_work_item is None:
         return False, f"work item {work_item_id!r} is absent from the post-state"
+    if evidence.queries_plan_review_publication_status(bound, post_work_item.governing_workflow_version):
+        return evidence.plan_review_bound(root, work_item_id, post_work_item.phase, bound)
     return evidence.plan_bundle_coherence(root, work_item_id, post_work_item.plan_revision)
 
 
@@ -1339,6 +1352,75 @@ EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = (
 _EXPECTED_OUTCOMES_BY_KEY: dict[tuple["str | Any", str | None, str], ExpectedOutcome] = {
     (eo.from_phase, eo.governing_version, eo.action): eo for eo in EXPECTED_OUTCOMES
 }
+
+
+#: `milestone-plan.md` step 6's `[2.1]` bind bullet in Workflow 2.6.0, the
+#: sole writer of `AWAITING_LOCAL_PLAN_REVIEW` from `PLANNING`.
+_BIND_FROM_MILESTONE_PLAN_2_6_0 = WriterCall(
+    "bind_plan_review_bundle", "milestone-plan.md", "milestone-plan.md:445", WRITER_KIND_COMPLETION,
+)
+
+#: `apply-plan-review.md` step 7' in Workflow 2.6.0: the same bind, the sole
+#: writer of `AWAITING_LOCAL_PLAN_REVIEW` from `REVISING_PLAN`
+#: (`transition_to_awaiting_local_plan_review` is retired there).
+_BIND_FROM_APPLY_PLAN_REVIEW_2_6_0 = WriterCall(
+    "bind_plan_review_bundle", "apply-plan-review.md", "apply-plan-review.md:294", WRITER_KIND_COMPLETION,
+)
+
+#: The calls a `"1"` item's `publish_plan_revision` now precedes in Workflow
+#: 2.6.0's `milestone-plan.md` (property 5's `trailing_calls` allowlist).
+_STEP_6_BIND_TRAILING_CALLS: tuple[tuple[str, str], ...] = tuple(
+    (function, "a [2.1] bullet a \"1\" item never reaches")
+    for function in ("verify_plan_review_bundle", "state_transaction", "bind_plan_review_bundle")
+)
+
+#: Each release's writer declarations, where they differ from
+#: :data:`EXPECTED_OUTCOMES` (the 2.5.1 table): exactly the rows property 5
+#: flags against that release's command files.
+_WRITER_CALLS_BY_RELEASE: Mapping[str, Mapping[tuple["str | Any", str | None, str], tuple[WriterCall, ...]]] = {
+    "2.5.1": {},
+    "2.6.0": {
+        ("PLANNING", "2.1", "/milestone-plan"): (_BIND_FROM_MILESTONE_PLAN_2_6_0,),
+        ("PLANNING", "2.2", "/milestone-plan"): (_BIND_FROM_MILESTONE_PLAN_2_6_0,),
+        (NO_PHASE, None, "/milestone-plan"): (_BIND_FROM_MILESTONE_PLAN_2_6_0,),
+        ("PLANNING", "1", "/milestone-plan"): (
+            WriterCall("publish_plan_revision", "milestone-plan.md", "milestone-plan.md:372",
+                       WRITER_KIND_COMPLETION, trailing_calls=_STEP_6_BIND_TRAILING_CALLS),
+        ),
+        ("REVISING_PLAN", "2.1", "/apply-plan-review"): (_BIND_FROM_APPLY_PLAN_REVIEW_2_6_0,),
+        ("REVISING_PLAN", "2.2", "/apply-plan-review"): (_BIND_FROM_APPLY_PLAN_REVIEW_2_6_0,),
+    },
+}
+
+
+def expected_outcomes_for(release: str) -> tuple[ExpectedOutcome, ...]:
+    """:data:`EXPECTED_OUTCOMES` with ``release``'s own writer declarations
+    substituted (`workflow-controller-workflow-2-6-integration` CP4,
+    Design D): the table property 5 checks against that release's command
+    files. Only ``writer_calls`` differ, and each substituted row keeps its
+    branch, so the phases, predicates, postconditions and triples -- and
+    so verification, which reads :data:`EXPECTED_OUTCOMES` -- are the same
+    for every release. A release with no declarations is
+    ``UnsupportedWorkflowVersionError``."""
+    substitutions = _WRITER_CALLS_BY_RELEASE.get(release)
+    if substitutions is None:
+        raise UnsupportedWorkflowVersionError(
+            f"the Controller declares no Workflow writers for release {release!r} "
+            f"(declared releases: {sorted(_WRITER_CALLS_BY_RELEASE)})",
+            evidence={"observed_workflow_version": release,
+                      "declared_workflow_releases": sorted(_WRITER_CALLS_BY_RELEASE),
+                      "reason": "no_writer_declarations"},
+        )
+    outcomes = []
+    for eo in EXPECTED_OUTCOMES:
+        writer_calls = substitutions.get((eo.from_phase, eo.governing_version, eo.action))
+        if writer_calls is None:
+            outcomes.append(eo)
+            continue
+        fields = {field.name: getattr(eo, field.name) for field in dataclasses.fields(eo)}
+        fields["writer_calls"] = writer_calls
+        outcomes.append(ExpectedOutcome(**fields))
+    return tuple(outcomes)
 
 
 def property_table_violations(

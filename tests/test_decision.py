@@ -1057,5 +1057,73 @@ class PhaseWireRoundTripTest(unittest.TestCase):
                     decision.phase_from_wire(bad)
 
 
+
+class NoMilestonePlanAtPlanReviewReadyPhaseTest(unittest.TestCase):
+    """Invariant I4 (``workflow-controller-workflow-2-6-integration``, CP4):
+    under Workflow 2.6.0, ``/milestone-plan <id>`` at a plan-review-ready
+    phase withdraws the item and discards both recorded review stages, so
+    no automatic triple selects it there, no decision path does, and no
+    gate names it as its ``safe_resume_command``."""
+
+    READY_PHASES = frozenset({
+        "AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_PLAN_APPROVAL",
+    })
+
+    def test_the_ready_phases_are_workflow_2_6_0_s(self) -> None:
+        from controller import evidence
+
+        self.assertEqual(evidence.PLAN_REVIEW_READY_PHASES, self.READY_PHASES)
+        self.assertEqual(
+            fixtures.evaluate_in_workflow_release("2.6.0", "sorted(workflow_state.PLAN_REVIEW_READY_PHASES)"),
+            sorted(self.READY_PHASES))
+        self.assertEqual(
+            fixtures.evaluate_in_workflow_release("2.6.0", "sorted(workflow_state.PLAN_REVIEW_NON_READY_PHASES)"),
+            sorted(evidence.PLAN_REVIEW_NON_READY_PHASES))
+
+    def test_no_automatic_triple_runs_milestone_plan_at_a_ready_phase(self) -> None:
+        self.assertEqual([triple for triple in decision.AUTOMATIC_TRIPLES
+                          if triple[0] in self.READY_PHASES and triple[2] == "/milestone-plan"], [])
+
+    def test_the_phase_table_never_selects_it_at_a_ready_phase(self) -> None:
+        for phase in sorted(self.READY_PHASES):
+            for version in ("1", "2.1", "2.2"):
+                with self.subTest(phase=phase, version=version):
+                    work_item = fixtures.build_work_item_view(phase=phase, governing_workflow_version=version)
+                    self._assert_not_milestone_plan(decision.decide(_RootOnly(), None, work_item))
+
+    def test_no_decision_at_a_ready_phase_dispatches_or_advertises_it(self) -> None:
+        """The decide sweep: every plan-stage golden scenario, at every ready
+        phase and version a Workflow writer reaches, under both contracts --
+        under 2.6.0 with every publication-status class and feedback layout
+        the golden replays."""
+        from tests.golden import generate_plan_stage_decisions as golden
+
+        swept = 0
+        for release in ("2.5.1", "2.6.0"):
+            for key, body in golden.derive_cases(release).items():
+                phase = key.split(" | ")[1]
+                if phase not in self.READY_PHASES:
+                    continue
+                swept += 1
+                with self.subTest(release=release, case=key):
+                    self.assertNotIn("raises", body)
+                    self.assertFalse((body["action_command"] or "").startswith("/milestone-plan"), body)
+                    if body["gate"] is not None:
+                        self.assertNotIn("/milestone-plan", body["gate"]["safe_resume_command"])
+        self.assertGreater(swept, 1000)
+
+    def _assert_not_milestone_plan(self, selected) -> None:
+        if selected.action is not None:
+            self.assertFalse(selected.action.command.startswith("/milestone-plan"), selected)
+        if selected.gate is not None:
+            self.assertNotIn("/milestone-plan", selected.gate.safe_resume_command)
+
+
+class _RootOnly:
+    """The one attribute ``decision.decide`` reads off a managed repository."""
+
+    root = Path("/nonexistent-target")
+
+
 if __name__ == "__main__":
     unittest.main()

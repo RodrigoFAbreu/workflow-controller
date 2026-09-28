@@ -31,8 +31,8 @@ and the result is released as 1.3.0.
 | --- | --- | --- |
 | CP1 -- vendored release trees, one phase list, per-release inventories | complete | `1689540` |
 | CP2 -- the Workflow contract module and the two query clients | complete | `47b51f2` |
-| CP3 -- release-aware feedback resolution | complete | this checkpoint's commit |
-| CP4 -- plan-review publication status and per-release writer declarations | not started | |
+| CP3 -- release-aware feedback resolution | complete | `43a6ecb` |
+| CP4 -- plan-review publication status and per-release writer declarations | complete | this checkpoint's commit |
 | CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | not started | |
 | CP6 -- documentation, release 1.3.0 and full verification | not started | |
 
@@ -392,3 +392,140 @@ and the result is released as 1.3.0.
   - `tests/test_job.py`'s `_ContractTargetCase` (a `Lifecycle` target on a vendored release,
     driven through `execute_step`/`resume` directly) is reusable for CP4's postcondition query
     failures and CP5's migration scenarios.
+
+### CP4 -- plan-review publication status and per-release writer declarations (complete)
+
+- **The status query at every plan phase** (`controller/evidence.py`). Under a `workflow_query`
+  contract, for a `"2.1"`/`"2.2"` item, `decide` reads `--plan-review-publication-status` at the
+  three ready phases and the three non-ready ones (`_plan_review_publication`), after the
+  REJECTED-marker gate and in place of `plan_bundle_coherence`. `"1"` items and every 2.5.1
+  target keep `plan_bundle_coherence` exactly as before. The Controller reads only the answer's
+  `status`, `row`, `phase`, `remedy`, `detail`, `advisory` and `fresh_review_content_id`, never
+  `plan_review_binding` (I5). One outcome per cell:
+  - S1 (rows 2, 3): the phase's own handler, with `plan-review publication status: row N (BOUND)`
+    and any advisory appended to its evidence (`_with_evidence`, built field by field);
+  - S2 (rows 4a-4c): the stale-plan-bundle gate (`_stale_plan_bundle_gate` with the answer). The
+    evidence names the row and status, `fresh_review_content_id` only when non-null, and
+    Workflow's detail. `what_is_required` quotes Workflow's remedy and detail verbatim and adds
+    that the withdrawal discards both review stages. Rows 4b/4c: the author-file steps, then the
+    generator. Row 4a: the no-restore diagnostic gate (`_content_drifted_gate`), a function of
+    the answer and the item id alone, making every statement Design D lists. At
+    `AWAITING_PLAN_APPROVAL` it replaces the approval gate;
+  - S3/N2 (a refusal, rows 4d/6): `plan_review_binding_inconsistent`, quoting Workflow's message;
+  - S4/N4 (any other status, or an answer for another phase): `unexpected_plan_review_status`;
+  - S5/N3: the `WorkflowQueryError` propagates (exit 20);
+  - N1 (rows 5, 7-11): dispatch as before, with the row and status in the evidence.
+
+  `HumanGate` has no id, so each new gate's `reason` names it. Every gate this checkpoint adds
+  with no automatic continuation renders `workflow-controller --work-item <id> explain
+  <repository>` (`_explain_gate_command`, `shlex`-quoted), never Workflow's withdrawal. The older
+  `_explain_command` form is unchanged (Decision 12).
+- **The author-input directory** (`plan_author_inputs_dir`). Under a `workflow_query` contract the
+  plan-bundle recovery steps name `.ai-review/<id>/plan-inputs/` when it exists, else `current/`
+  (the directory the 2.6.0 generator reads); under 2.5.1 always `current/`, byte-identical.
+- **The REJECTED-marker gate**: under the query contract, for a `"2.1"`/`"2.2"` item, its
+  plan-stage branch covers all three ready phases, `AWAITING_PLAN_APPROVAL` included. 2.5.1 and
+  `"1"` items keep the bare generator there.
+- **The plan-stage postcondition** (`controller/job.py`). For a `"2.1"`/`"2.2"` item under the
+  query contract, `_postcondition_plan_bundle_coherent` is `evidence.plan_review_bound`: the item
+  at `AWAITING_LOCAL_PLAN_REVIEW` and Workflow's status `BOUND` there. A query failure is caught
+  by `_row_clauses_failure` (`workflow_query_failed`).
+- **Per-release writer declarations.** `job.expected_outcomes_for(release)` returns
+  `EXPECTED_OUTCOMES` for 2.5.1 and, for 2.6.0, substitutes `bind_plan_review_bundle`
+  (`milestone-plan.md:445`, `apply-plan-review.md:294`) for the PLANNING `"2.1"`/`"2.2"`,
+  `NO_PHASE` and both REVISING_PLAN rows. The PLANNING `"1"` row keeps `publish_plan_revision`,
+  with `verify_plan_review_bundle`, `state_transaction` and `bind_plan_review_bundle` allowlisted
+  as `trailing_calls`. Only `writer_calls` differ; each row keeps its branch (`None`), so
+  verification, which reads `EXPECTED_OUTCOMES`, is release-independent. Property 5 is `[]` for
+  both releases. The unsubstituted table gives exactly the 14 measured violations on 2.6.0.
+- **Comments corrected**: `current_bundle_id` is written by 2.6.0's bind, and still not read.
+- **The 2.6.0 plan-stage golden was regenerated once, deliberately.** CP3 generated it before any
+  decision read the status, so every status variant decided alike. Now each status class pins
+  its own outcome: 3552 cases, 136 distinct decisions (75 before). Every other golden is
+  byte-unchanged, and the 2.5.1 derivations of both decision goldens equal HEAD's (compared in a
+  scratch worktree of `43a6ecb`).
+- **Fixtures.** CP2's seeding helper moved to `tests/fixtures.py` as `seed_workflow_item`
+  (`WORKFLOW_SEED_SCRIPT`), with a new `generate` stage (generated, not bound: row 9, "bind
+  only") and `extra_protected_paths`. The seeded `CONTEXT_FILES.txt` now names `README.md`: an
+  empty one is the generator's stub, which the recovery steps rightly treat as absent.
+  `run_workflow_python` runs code against a target's own scripts.
+- **Tests.**
+  - `test_job_validation`: property 5 per release through `expected_outcomes_for`; 2.6.0
+    explicitly before admission; the 14 measured violations; 2.5.1 is the table itself; only the
+    six measured rows' writer calls differ, with equal branches; the `"1"` row's allowlist
+    (dropping an entry reports it again); an undeclared release refused. The query-contract
+    postcondition: BOUND satisfied with no bundle on disk, every other answer not, a query
+    failure propagating, row 7's new key, a `"1"` item on revision coherence.
+  - `test_decision` (I4): no automatic triple, no phase-table selection and no decision in a
+    decide sweep of both plan-stage goldens (over 1000 ready-phase cases, every status class)
+    dispatches or advertises `/milestone-plan` at a ready phase. The ready and non-ready sets
+    equal the vendored 2.6.0 script's.
+  - `test_evidence`, real 2.6.0 bundles and scripts:
+    - S1: row 2 at each ready phase (through the real local and manual APPROVE writers); row 3.
+    - S2 row 4b: `plan-inputs/` with and without author files, and `current/` with and without,
+      each carried out with the real generator back to `BOUND`.
+    - S2 row 4c: a damaged legacy bundle (no fresh id in the evidence), a completed 2.5.1
+      withdrawal (step 0 restores from the quarantine), and `plan-inputs/` with and without
+      author files, each carried out back to row 3.
+    - S2 at `AWAITING_PLAN_APPROVAL`, replacing the approval gate.
+    - S3 row 4d at each ready phase.
+    - N1: row 9 at PLANNING, rows 5, 8, 10 and 11 at REVISING_PLAN, and row 5 at AMENDING_PLAN
+      (declined as before). Row 7: the real query answers row 7 for a routed item with no
+      registry, but `target_state.read` refuses that state before any decision (a declared
+      registry must exist; pre-existing and release-independent), so that cell is driven with the
+      item's view directly.
+    - N2: row 6 at each non-ready phase.
+  - `test_evidence`, row 4a on a real bound bundle in all eight listed cases: plan bytes, a
+    declarations exclusion, the plan's execute bit (`core.fileMode` true), the fourth protected
+    path deleted (no fresh id in the evidence) or replaced by a link, and the plan edited with its
+    `current/files/` copy deleted, re-written or mode-flipped. Each gate's command parses with
+    `cli.build_parser()`, runs through `cli.main`, exits 0, prints the same gate, and leaves an
+    identical `lstat` snapshot of the target, `.ai-review/<id>/` and every outside link target.
+  - Row 4a, parent directory linked after the gate is rendered. Measured: Workflow's query fails
+    on the link (`UnclassifiedPathError: docs/design`), so `explain` exits 20. The snapshot is
+    identical.
+  - S5 real: the plan document deleted, or replaced by a link. The query exits 1, and CLI `step`
+    exits 20 with no job record, no worker and an identical snapshot.
+  - Through the answers seam: all fifteen ready and twelve non-ready cells. This includes S4/N4
+    phase mismatches and S5/N3 through the private runner hook (a timeout). The row-4a gate is
+    byte-identical with `current/` present or removed. `"1"` items and 2.5.1 never query. The
+    REJECTED gate's plan-stage branch applies at all three ready phases, naming `plan-inputs/`
+    when present. 2.5.1 and `"1"` items keep the bare generator at `AWAITING_PLAN_APPROVAL`.
+  - `test_evidence`'s CP3 cross-check is restated. With the ordinary status, every 2.6.0 decision
+    is the 2.5.1 one plus the row in its evidence. There are two named, non-vacuous exceptions: a
+    2.5.1 stale-bundle gate (revision coherence) becomes the handler's decision under `BOUND`, and
+    a REJECTED marker at `AWAITING_PLAN_APPROVAL` takes the plan-stage branch.
+  - `test_resume`: on a real row-9 item whose worker writes exactly the state Workflow's own bind
+    writes, the postcondition verifies `FINISHED`. With the bundle then damaged, it fails as
+    `postcondition_not_satisfied` (row 4b). With the plan document then deleted, it fails as
+    `workflow_query_failed` at launch and at `resume` from `COMPLETED` and `LAUNCHED`. Nothing is
+    pending, nothing is relaunched, and the next step refuses. A worker that leaves the item at
+    `PLANNING` fails as `phase_not_in_to_any_of`, and `run` stops after one worker; `explain`
+    then shows row 9 and the explicit-id command.
+  - Existing tests changed: CP3's row-3 plan clause case now needs a `BOUND` status to launch
+    `/review-plan`. The harness's synthetic plan bundle never verifies under 2.6.0, so for that
+    clause only, the status query is answered as row 2 through the private runner hook. Its
+    feedback queries still run the real script. `test_workflow_contract` uses the moved fixture.
+- **Mutation checks.** Each of these fails the new tests: S2 rows treated as S1; the author-input
+  rule forced to `current/`; the REJECTED branch not extended; the row-4a command using the old
+  `explain` form; the phase-mismatch check dropped; the postcondition ignoring the query; a 2.6.0
+  bind declaration removed.
+- **Verification.**
+  - Goldens: `generate_plan_stage_decisions.py --release 2.6.0 --check`, both
+    `generate_external_implementation_review_decisions.py` releases and
+    `generate_no_policy_lifecycle.py --check` report current. `--release 2.5.1` of the plan-stage
+    generator exits 1 for the permitted `AMENDING_PLAN` difference, as at the base commit;
+    `tests.test_golden_plan_stage_decisions` passes and the derivation equals HEAD's.
+  - Named modules: `test_evidence`, `test_job`, `test_job_validation`, `test_decision`,
+    `test_golden_plan_stage_decisions`, `test_workflow_contract`, `test_package_structure`,
+    `test_write_containment`, `test_lifecycle_orchestration`, `test_cli` (799 tests, OK);
+    `test_resume`, `test_managed_repo`, `test_workflow_releases` (172 tests, OK);
+    `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` (9 tests, OK).
+  - Full sharded run, `python3 tools/run_tests.py`, in the foreground: 2209 tests in 8 shards,
+    PASS, exact coverage, 101.9 s wall, under the reaping-subreaper wrapper as in CP1-CP3.
+- **Notes for later checkpoints.**
+  - CP5's M1b/M1d: `_admit_2_6_0` in `tests/test_evidence.py` patches admission until CP5 admits
+    2.6.0, and the `carry_out` helper follows plan-bundle recovery steps literally with the real
+    generator.
+  - CP6's `troubleshooting.md`: `target_state.read` refuses a routed item whose declared registry
+    is not written yet (row 7's state) before any decision, for both releases.

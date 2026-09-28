@@ -27,6 +27,7 @@ import json
 import os
 import signal
 import stat
+import subprocess
 import sys
 import threading
 import time
@@ -34,20 +35,29 @@ import unittest
 import unittest.mock
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, decision, evidence, identity, job, lock, routing, target_state, worker  # noqa: E402
+from controller import (  # noqa: E402
+    cli, decision, evidence, identity, job, lock, milestone_branch as mb, routing, target_state, worker,
+    workflow_contract,
+)
 from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
     OwnedWorkDetachedError,
     PendingJobReconciliationError,
     UserOnlyCommandError,
     WorkerLaunchError,
+    WorkflowQueryError,
+    WorkflowReleaseChangedError,
 )
 from controller.decision import Action, NO_PHASE, Decision, phase_from_wire  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT, SOURCE_KIND_WORKTREE  # noqa: E402
 from tests import fake_claude, fixtures, process_fixtures  # noqa: E402
+from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
+from tests import test_trunk_preflight  # noqa: E402
+from tests.test_trunk_preflight import BRANCH, STATE_REL, WI  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -795,7 +805,7 @@ class PredicateRow3RoleNormalizationTest(unittest.TestCase):
             )
             pre_state = {"bundle_manifest_readable": True, "bundle_manifest_bundle_id": bundle_id}
             self.assertTrue(
-                job._predicate_row3_block_feedback_current(root, "wi-1", pre_state)
+                job._predicate_row3_block_feedback_current(root, "wi-1", pre_state, fixtures.reference_binding())
             )
 
 
@@ -2726,6 +2736,302 @@ class DrainDetachJobTest(_StreamingCase):
         self.assertNotEqual(second["job_id"], record["job_id"])
         self.assertTrue(_alive(excluded["pid"]))
         os.kill(excluded["pid"], signal.SIGKILL)
+
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP3 -- the Workflow contract
+# at decision time, and the installed-release re-check before every decision.
+# ---------------------------------------------------------------------------
+
+#: A release with a ``workflow_query`` contract. It is not admitted until
+#: CP5, so these tests build its ``ManagedRepository`` from the target's
+#: manifest instead of through ``managed_repo.inspect``.
+QUERY_RELEASE = "2.6.0"
+PLAN_REVIEW = f"/review-plan {lifecycle.WI}"
+
+
+def _failed_query(argv: list[str]) -> subprocess.CompletedProcess:
+    """What a query that crashes prints: a traceback, exit 1."""
+    return subprocess.CompletedProcess(argv, 1, b"", b"Traceback (most recent call last):\nOSError: simulated\n")
+
+
+class _ContractTargetCase(lifecycle._LifecycleTestCase):
+    """A ``"2.2"`` lifecycle target (``tests/test_lifecycle_orchestration``)
+    whose Workflow installation is the vendored ``release`` tree, installed
+    and committed before any bundle is generated, driven through
+    ``job.execute_step`` and ``job.resume`` directly with the
+    ``ManagedRepository`` its manifest describes. The Workflow queries run
+    for real, against the vendored scripts."""
+
+    def contract_target(self, name: str, phase: str, *, release: str = QUERY_RELEASE,
+                        manual_verdict: str | None = None) -> lifecycle.Lifecycle:
+        """A target at ``phase``: ``AWAITING_LOCAL_PLAN_REVIEW`` with a
+        coherent plan bundle (``bundle_id`` ``b * 64``), or an
+        implementation-review phase reached through the ``Lifecycle``
+        writers, with ``manual_verdict`` pasted at the manual stage."""
+        if phase == "AWAITING_LOCAL_PLAN_REVIEW":
+            lc = self.seed(name, phase, plan_approval=None, plan_review_stages=None)
+        else:
+            lc = self.seed(name, lifecycle.SELF_REVIEWING, done=lifecycle.CHECKPOINT_IDS)
+        if release != fixtures.REFERENCE_WORKFLOW_RELEASE:
+            fixtures.install_workflow_release(lc.root, release)
+            fixtures.commit_all(lc.root, f"Install Workflow {release}")
+        if phase == "AWAITING_LOCAL_PLAN_REVIEW":
+            fixtures.write_plan_manifest(lc.root, lifecycle.WI, 1)
+            return lc
+        lc.perform(lc.generate())
+        if phase in (lifecycle.AWAITING_MANUAL, lifecycle.AWAITING_EXTERNAL):
+            lc.perform(lc.local_review("APPROVE", 1))
+        if manual_verdict is not None:
+            lc.paste_manual_verdict(manual_verdict, 1)
+        return lc
+
+    def managed(self, lc: lifecycle.Lifecycle):
+        return fixtures.build_target_managed_repository(lc.root)
+
+    def worker_env(self, lc: lifecycle.Lifecycle) -> dict[str, str]:
+        fixtures.write_worker_script(lc.script_path, lc.script)
+        return {"FAKE_CLAUDE_SCRIPT": str(lc.script_path), "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file)}
+
+    def execute(self, lc: lifecycle.Lifecycle, managed_repo) -> dict:
+        with unittest.mock.patch.dict(os.environ, self.worker_env(lc)):
+            return job.execute_step(managed_repo, identity=self.ident, runtime=lc.runtime,
+                                    claude_bin=str(lifecycle.FAKE_CLAUDE), timeout=60)
+
+    def resume_as(self, lc: lifecycle.Lifecycle, managed_repo, record: dict, status: str) -> dict:
+        """``record`` as a Controller lost at ``status`` left it, reconciled
+        by ``job.resume`` with ``managed_repo`` -- inspected before the
+        failure was arranged, as the CLI would have inspected it."""
+        self.rewrite_as(lc, record, status)
+        with unittest.mock.patch.dict(os.environ, self.worker_env(lc)):
+            job.resume(managed_repo, identity=self.ident, runtime=lc.runtime)
+        return self.read_record(lc, record["job_id"])
+
+    def job_files(self, lc: lifecycle.Lifecycle) -> list[str]:
+        jobs = lc.runtime / "jobs"
+        return sorted(p.name for p in jobs.glob("*.json")) if jobs.is_dir() else []
+
+    def assert_nothing_pending(self, lc: lifecycle.Lifecycle, managed_repo) -> None:
+        self.assertEqual(job.pending_reconciliation_jobs(lc.runtime, managed_repo, self.ident), [])
+
+    def assert_workflow_failed(self, record: dict, reason: str, code: str, evidence_items: dict | None = None) -> dict:
+        """A terminal ``FAILED`` job whose ``workflow_error`` carries
+        ``code`` and each of ``evidence_items``; returns the
+        ``workflow_error``."""
+        self.assertEqual(record["status"], job.STATUS_FAILED, record.get("reconciliation_evidence"))
+        self.assertFalse(record["transition_verified"])
+        found = record["reconciliation_evidence"]
+        self.assertEqual((found["code"], found["reason"]), ("TransitionNotObservedError", reason))
+        self.assertEqual(found["workflow_error"]["code"], code)
+        for key, value in (evidence_items or {}).items():
+            self.assertEqual(found["workflow_error"]["evidence"][key], value, key)
+        return found["workflow_error"]
+
+    def break_feedback_query(self, lc: lifecycle.Lifecycle) -> dict:
+        """A state write leaving ``feedback_layout: null``, which Workflow
+        2.6.0's own resolver refuses (exit 1): the real query fails."""
+        lc.entry["feedback_layout"] = None
+        return lc.write_state()
+
+
+class DecisionTimeWorkflowQueryTest(_ContractTargetCase):
+    """A query failure while a step decides -- in its pre-state capture or in
+    ``decide`` -- refuses the step (exit 20): no worker, no job record."""
+
+    def test_a_failure_in_the_pre_state_capture_refuses_before_decide(self) -> None:
+        lc = self.contract_target("pre-state", lifecycle.AWAITING_LOCAL)
+        lc.perform([self.break_feedback_query(lc)])
+        with unittest.mock.patch.object(job.evidence, "decide", side_effect=AssertionError("decide ran")), \
+                self.assertRaises(WorkflowQueryError) as caught:
+            self.execute(lc, self.managed(lc))
+        self.assertEqual(caught.exception.evidence["query"], "--resolve-feedback-path")
+        self.assertEqual(caught.exception.evidence["reason"], "query_failed")
+        self.assertIn("UnknownFeedbackLayoutError", caught.exception.message)
+        self.assertEqual((self.job_files(lc), self.processes(lc)), ([], 0))
+
+    def test_a_failure_in_decide_refuses_and_is_never_the_2_5_1_rule(self) -> None:
+        lc = self.contract_target("decide", lifecycle.AWAITING_LOCAL)
+        real = workflow_contract._execute_query
+        calls: list[list[str]] = []
+
+        def second_fails(argv, *, cwd, timeout):
+            calls.append(argv)
+            return _failed_query(argv) if len(calls) == 2 else real(argv, cwd=cwd, timeout=timeout)
+
+        with unittest.mock.patch.object(workflow_contract, "_execute_query", second_fails), \
+                self.assertRaises(WorkflowQueryError) as caught:
+            self.execute(lc, self.managed(lc))
+        # The first query is the pre-state capture's, the second decide's own binding.
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(caught.exception.evidence["reason"], "query_failed")
+        self.assertEqual((self.job_files(lc), self.processes(lc)), ([], 0))
+
+    def test_the_command_line_exits_20_with_no_launch_and_no_record(self) -> None:
+        lc = self.contract_target("cli", lifecycle.AWAITING_LOCAL)
+        lc.perform([self.break_feedback_query(lc)])
+        managed_repo = self.managed(lc)
+        with unittest.mock.patch.object(cli, "_inspect_target", return_value=managed_repo):
+            result = self.cli(lc, "step", fail_if_invoked=True)
+        self.assertEqual(result.code, cli.EXIT_FAIL_CLOSED, result.stderr)
+        self.assertIn("--resolve-feedback-path", result.stderr)
+        self.assertEqual((result.records, self.processes(lc)), ([], 0))
+
+
+class ReleaseChangedRefusalTextTest(unittest.TestCase):
+    """``_refuse_changed_release`` says what the preflight did, for every
+    outcome shape, and only the decision is ever refused."""
+
+    def setUp(self) -> None:
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        fixtures.write_installation_manifest(self.root, workflow_version=QUERY_RELEASE)
+        self.managed_repo = SimpleNamespace(root=self.root, workflow_version="2.5.1")
+
+    def refusal(self, preflight, events: list[str]) -> WorkflowReleaseChangedError:
+        with self.assertRaises(WorkflowReleaseChangedError) as caught:
+            job._refuse_changed_release(self.managed_repo, preflight, events)
+        return caught.exception
+
+    def test_the_admitted_release_passes(self) -> None:
+        fixtures.write_installation_manifest(self.root, workflow_version="2.5.1")
+        self.assertIsNone(job._refuse_changed_release(self.managed_repo, mb.Proceed(), []))
+
+    def test_each_preflight_outcome_is_named(self) -> None:
+        gate = mb.Gate(mb.GATE_CHECKS_PENDING, "wi-1", "milestone/wi-1", "checks pending")
+        closed = "A milestone close-out completed and was recorded"
+        cases = [
+            (mb.Proceed(), [], "none", None, [], [closed, "action completed", "gate"]),
+            (mb.Proceed(action="bound"), ["bind_planned", "bound"], "bound", None,
+             ["The repository preflight's bound action completed and was recorded."], [closed]),
+            (gate, [], "gate", mb.GATE_CHECKS_PENDING,
+             [f"returned the {mb.GATE_CHECKS_PENDING} gate, which was not recorded; the next invocation "
+              "rediscovers it."], [closed]),
+            (mb.Proceed(action="closed_out"), ["merged", "closed"], "closed_out", None,
+             [f"{closed}."], ["then returned", "action completed"]),
+            (gate, ["closed"], "gate", mb.GATE_CHECKS_PENDING,
+             [f"{closed}; the repository preflight then returned the {mb.GATE_CHECKS_PENDING} gate.",
+              "which was not recorded"], []),
+        ]
+        for preflight, events, action, gate_code, present, absent in cases:
+            with self.subTest(action=action, events=events):
+                refused = self.refusal(preflight, events)
+                self.assertEqual(refused.evidence, {
+                    "admitted": "2.5.1", "installed": QUERY_RELEASE, "preflight_action": action,
+                    "preflight_gate": gate_code, "preflight_events": events})
+                self.assertTrue(refused.message.startswith(
+                    f"{self.root} now runs Workflow {QUERY_RELEASE}, not Workflow 2.5.1"), refused.message)
+                self.assertIn("Only the decision was refused: nothing was decided or launched, and no job record "
+                              "was written.", refused.message)
+                for text in present:
+                    self.assertIn(text, refused.message)
+                for text in absent:
+                    self.assertNotIn(text, refused.message)
+
+    def test_an_unreadable_manifest_is_named_with_the_parser_s_error(self) -> None:
+        (self.root / ".workflow-manager" / "installation.json").unlink()
+        refused = self.refusal(mb.Proceed(), [])
+        self.assertIsNone(refused.evidence["installed"])
+        self.assertEqual(refused.evidence["manifest_error"]["code"], "UNMANAGED_REPOSITORY")
+        self.assertIn("cannot be established (UNMANAGED_REPOSITORY:", refused.message)
+
+
+class ReleaseRecheckBeforeDecisionTest(test_trunk_preflight._PolicyCase):
+    """The installed release is re-read right after the repository
+    preflight, whatever it returned, and a change refuses the step before a
+    gate is recorded or anything is decided (I3). The refusal names what the
+    preflight did."""
+
+    def inspected(self):
+        from controller import managed_repo as managed_repo_module
+
+        return managed_repo_module.inspect(self.root, manager_bin=str(self.stub_manager))
+
+    def set_release(self, release: str) -> str:
+        path = self.root / ".workflow-manager" / "installation.json"
+        original = path.read_text()
+        path.write_text(json.dumps({**json.loads(original), "workflow_version": release}, indent=2) + "\n")
+        return original
+
+    def execute(self, managed_repo) -> dict:
+        fixtures.write_worker_script(self.lc.script_path, self.lc.script)
+        env = {**self.gh_env, "FAKE_CLAUDE_SCRIPT": str(self.lc.script_path),
+               "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.lc.processes_file)}
+        with unittest.mock.patch.dict(os.environ, env):
+            return job.execute_step(managed_repo, identity=self.ident, runtime=self.lc.runtime,
+                                    claude_bin=str(lifecycle.FAKE_CLAUDE), timeout=60)
+
+    def jobs(self) -> list[str]:
+        jobs = self.lc.runtime / "jobs"
+        return sorted(p.name for p in jobs.glob("*.json")) if jobs.is_dir() else []
+
+    def test_a_preflight_gate_is_not_recorded_and_is_rediscovered(self) -> None:
+        self.open_pr_step()
+        self.accept()
+        self.gh_edit(1, state="CLOSED")
+        managed_repo = self.inspected()
+        original = self.set_release(QUERY_RELEASE)
+        jobs_before, workers_before = self.jobs(), self.worker_count()
+        with self.assertRaises(WorkflowReleaseChangedError) as caught:
+            self.execute(managed_repo)
+        found = caught.exception.evidence
+        self.assertEqual((found["admitted"], found["installed"]), ("2.5.1", QUERY_RELEASE))
+        self.assertEqual((found["preflight_action"], found["preflight_gate"]), ("gate", mb.GATE_PR_CLOSED_UNMERGED))
+        self.assertNotIn("manifest_error", found)
+        self.assertIn(f"returned the {mb.GATE_PR_CLOSED_UNMERGED} gate, which was not recorded", caught.exception.message)
+        self.assertIn("Only the decision was refused", caught.exception.message)
+        self.assertEqual((self.jobs(), self.worker_count()), (jobs_before, workers_before))
+        # Restored, the next step rediscovers the gate and records it.
+        (self.root / ".workflow-manager" / "installation.json").write_text(original)
+        gated = self.cli("step")
+        self.assertEqual(gated.code, cli.EXIT_GATE, gated.stderr)
+        self.assertIn(mb.GATE_PR_CLOSED_UNMERGED, gated.records[-1]["human_gate_pending"]["what_is_required"]
+                      + " ".join(gated.records[-1]["selected_action"]["evidence"]))
+
+    def test_a_close_out_followed_by_another_outcome_is_named(self) -> None:
+        """Close-out switches to the trunk, whose merge carries another
+        release and an unbound work item: the preflight closes out, binds
+        that item (``bound``), and the step refuses naming both."""
+        self.open_pr_step()
+        accepted = self.accept()
+        self.gh_edit(1, checks=[{"name": "validate", "state": "SUCCESS", "bucket": "pass"}])
+        self.assertEqual(self.cli("step").code, cli.EXIT_GATE)
+        self.assertEqual(self.record()["state"], mb.READY)
+        human = self.tmp_root / "human"
+        fixtures.run(["git", "clone", "-q", str(self.origin), str(human)])
+        self.git("config", "user.email", "human@example.invalid", cwd=human)
+        self.git("config", "user.name", "Human", cwd=human)
+        self.git("merge", "-q", "--no-ff", "--no-commit", f"origin/{BRANCH}", cwd=human)
+        # The merge lands a Workflow update and a second, unbound work item.
+        state = json.loads((human / STATE_REL).read_text())
+        state["work_items"]["wi-2"] = dict(state["work_items"][WI], work_item_id="wi-2", phase="PLANNING",
+                                           plan_approval=None, base_commit=self.trunk_tip)
+        (human / STATE_REL).write_text(json.dumps(state, indent=2) + "\n")
+        manifest = human / ".workflow-manager" / "installation.json"
+        manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "workflow_version": QUERY_RELEASE},
+                                       indent=2) + "\n")
+        self.git("add", "-A", cwd=human)
+        self.git("commit", "-q", "-m", "Merge pull request #1", cwd=human)
+        self.git("push", "-q", "origin", "main", cwd=human)
+        self.gh_edit(1, state="MERGED", headRefOid=accepted, mergedAt="2026-09-25T01:00:00Z",
+                     mergeCommit={"oid": fixtures.current_head(human)})
+        managed_repo = self.inspected()
+        self.assertEqual(managed_repo.workflow_version, "2.5.1")
+        jobs_before, workers_before = self.jobs(), self.worker_count()
+        with self.assertRaises(WorkflowReleaseChangedError) as caught:
+            self.execute(managed_repo)
+        found = caught.exception.evidence
+        self.assertEqual(found["installed"], QUERY_RELEASE)
+        self.assertEqual((found["preflight_action"], found["preflight_gate"]), ("bound", None))
+        self.assertIn("closed", found["preflight_events"])
+        self.assertLess(found["preflight_events"].index("closed"), found["preflight_events"].index("bound"))
+        message = caught.exception.message
+        self.assertIn("A milestone close-out completed and was recorded; the repository preflight then returned "
+                      "the bound action.", message)
+        self.assertIn("The repository preflight's bound action completed and was recorded.", message)
+        self.assertEqual(self.record()["state"], mb.CLOSED)
+        self.assertEqual((self.jobs(), self.worker_count()), (jobs_before, workers_before))
 
 
 if __name__ == "__main__":

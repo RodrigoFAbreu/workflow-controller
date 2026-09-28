@@ -508,6 +508,16 @@ def evaluate_in_workflow_release(release: str, expression: str):
     return json.loads(result.stdout)
 
 
+def reference_binding():
+    """The reference release's bound Workflow contract (2.5.1: the
+    Controller's own rules, no query) -- what a test that calls a
+    feedback-reading helper or a verification clause directly passes as its
+    ``bound`` argument (workflow-2-6-integration CP3)."""
+    from controller import workflow_contract
+
+    return workflow_contract.bind_release(REFERENCE_WORKFLOW_RELEASE)
+
+
 def install_workflow_release(root: Path, release: str, *, profile: str = "full") -> Path:
     """Install the vendored ``release`` tree into the target ``root``: every
     vendored file at its target path, with its mode, and an
@@ -1085,14 +1095,31 @@ def perform_script_actions(root: Path, actions: list[dict]) -> None:
 def build_target_managed_repository(root: Path):
     """A minimal, real ``managed_repo.ManagedRepository`` pointed at
     ``root`` -- ``target_state.read`` only ever reads ``.root`` off it, so
-    the other fields are inert placeholders rather than a real Workflow
-    Manager inspection. ``workflow_version`` is the reference release, an
-    admitted one."""
+    ``verify``/``status`` are inert placeholders rather than a real Workflow
+    Manager inspection.
+
+    ``workflow_version`` is the release ``root``'s
+    ``.workflow-manager/installation.json`` declares. With no manifest
+    there, one declaring the reference release (an admitted one) is written
+    first: every step re-reads the installed release before deciding, and
+    every verification before judging (workflow-2-6-integration CP3, I3).
+    When ``root`` is a Git repository the written manifest is added to its
+    ``.git/info/exclude``, so it never shows in ``git status`` or a
+    worker's ``git add -A``."""
     from controller.managed_repo import ManagedRepository
 
     root.mkdir(parents=True, exist_ok=True)
+    manifest_path = root / ".workflow-manager" / "installation.json"
+    if not manifest_path.exists():
+        write_installation_manifest(root, workflow_version=REFERENCE_WORKFLOW_RELEASE)
+        exclude = root / ".git" / "info" / "exclude"
+        if (root / ".git").is_dir():
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a") as handle:
+                handle.write("/.workflow-manager/\n")
+    manifest = json.loads(manifest_path.read_text())
     return ManagedRepository(
-        root=root, manifest={}, workflow_version=REFERENCE_WORKFLOW_RELEASE, profile="full",
+        root=root, manifest=manifest, workflow_version=manifest["workflow_version"], profile="full",
         verify={"returncode": 0, "stdout": "", "stderr": ""},
         status={"returncode": 0, "stdout": "", "stderr": ""},
     )

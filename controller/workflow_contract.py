@@ -32,6 +32,15 @@ of :func:`_run_query`:
 Every failure of these steps, and every answer that does not validate, is a
 :class:`~controller.errors.WorkflowQueryError`: nothing else leaves the
 runner, and nothing is ever repaired or read as the 2.5.1 rule.
+
+**The answers seam** (CP3). Evidence and job code never call the runners
+directly: they read a :class:`BoundContract`, which :func:`bind` makes from
+a contract, and ask its ``answers`` (``None`` for a contract that runs no
+query). Production always binds :class:`QueryAnswers`, the real queries
+with a memo that lives only as long as the binding (one decision, one
+pre-state capture, or one verification). The only other provider is the
+private :data:`_answers_factory` hook, which the decision-golden generators
+set to replay recorded answers.
 """
 
 from __future__ import annotations
@@ -45,7 +54,7 @@ import sys
 import tempfile
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Mapping
+from typing import Any, Callable, Mapping
 
 from controller import runtime
 from controller.errors import (
@@ -334,6 +343,74 @@ def _publication_refusal(stdout: bytes, work_item_id: str) -> PublicationRefusal
             or answer["error"] != PUBLICATION_REFUSAL_ERROR or not isinstance(answer["message"], str)):
         return None
     return PublicationRefusal(work_item_id=work_item_id, error=answer["error"], message=answer["message"])
+
+
+# ---------------------------------------------------------------------------
+# The answers seam.
+# ---------------------------------------------------------------------------
+
+
+class QueryAnswers:
+    """The production answers of a ``workflow_query`` contract: the two
+    real queries, each asked at most once per ``(root, work item)`` for as
+    long as this object lives. :func:`bind` makes a fresh one per binding,
+    so nothing is cached across decisions or verifications. A failed query
+    raises and is not remembered."""
+
+    def __init__(self, contract: WorkflowContract) -> None:
+        self._contract = contract
+        self._feedback: dict[tuple[str, str], FeedbackPath] = {}
+        self._status: dict[tuple[str, str], PublicationStatus | PublicationRefusal] = {}
+
+    def feedback_path(self, root: Path, work_item_id: str) -> FeedbackPath:
+        key = (str(root), work_item_id)
+        if key not in self._feedback:
+            self._feedback[key] = resolve_feedback_path(Path(root), self._contract, work_item_id)
+        return self._feedback[key]
+
+    def publication_status(self, root: Path, work_item_id: str) -> PublicationStatus | PublicationRefusal:
+        key = (str(root), work_item_id)
+        if key not in self._status:
+            self._status[key] = plan_review_publication_status(Path(root), self._contract, work_item_id)
+        return self._status[key]
+
+
+@dataclasses.dataclass(frozen=True)
+class BoundContract:
+    """A contract with the answers one decision, pre-state capture or
+    verification reads. ``answers`` has ``feedback_path(root, id)`` and
+    ``publication_status(root, id)``, and is ``None`` for a contract that
+    runs no query."""
+
+    contract: WorkflowContract
+    answers: Any
+
+    @property
+    def release(self) -> str:
+        return self.contract.release
+
+
+#: Test-only: when set, :func:`bind` builds a ``workflow_query`` contract's
+#: answers with this factory instead of :class:`QueryAnswers`. Only the
+#: decision-golden generators set it, to replay recorded Workflow answers.
+#: No production caller can pass a provider.
+_answers_factory: Callable[[WorkflowContract], Any] | None = None
+
+
+def bind(contract: WorkflowContract) -> BoundContract:
+    """``contract`` with fresh answers: :class:`QueryAnswers` when either
+    source is :data:`WORKFLOW_QUERY`, else none."""
+    if WORKFLOW_QUERY not in (contract.feedback_path_source, contract.plan_review_publication_source):
+        return BoundContract(contract=contract, answers=None)
+    factory = _answers_factory if _answers_factory is not None else QueryAnswers
+    return BoundContract(contract=contract, answers=factory(contract))
+
+
+def bind_release(release: str) -> BoundContract:
+    """``bind(contract_for(release))``: the one way evidence and job code
+    turn a release into a binding. An unknown release is
+    ``UnsupportedWorkflowVersionError``."""
+    return bind(contract_for(release))
 
 
 # ---------------------------------------------------------------------------

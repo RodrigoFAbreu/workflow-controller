@@ -69,6 +69,17 @@ resolve with (nothing else in the package threads one through yet). This
 checkpoint therefore performs the fresh *state* read only, deliberately,
 and leaves re-inspecting installation health mid-job to a later checkpoint
 if one needs it.
+
+**The installed Workflow release** (``workflow-controller-workflow-2-6-
+integration`` CP3, invariant I3) is the one exception, and it is a plain
+read of ``.workflow-manager/installation.json``, never a Manager call:
+before every decision, right after the repository preflight, it must still
+be the release ``inspect`` admitted (:func:`_refuse_changed_release`), and
+before every verification it must still be the release the job record
+carries (:func:`_verification_contract`, inside
+:func:`_row_clauses_failure`). That release's Workflow contract, bound
+once per decision, pre-state capture and verification, is what every
+feedback-path read uses.
 """
 
 from __future__ import annotations
@@ -91,7 +102,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from controller import evidence, identity, lock, milestone_branch, routing, runtime, target_state, worker
+from controller import (
+    evidence, identity, lock, milestone_branch, routing, runtime, target_state, worker, workflow_contract,
+)
 from controller.decision import (
     NO_PHASE,
     NO_PHASE_WIRE,
@@ -108,14 +121,21 @@ from controller.errors import (
     JobAbandonRefusedError,
     LifecycleWorkerActiveError,
     LifecycleWorkerUnverifiableError,
+    MalformedInstallationManifestError,
     OwnedWorkDetachedError,
     PendingJobReconciliationError,
     RuntimeContainmentError,
     StaleJobRecordError,
+    UnmanagedRepositoryError,
     UnreconcilableJobError,
+    UnsupportedWorkflowVersionError,
     UserOnlyCommandError,
     WorkerLaunchError,
+    WorkflowQueryError,
+    WorkflowReleaseChangedError,
 )
+from controller.managed_repo import installed_workflow_version
+from controller.workflow_contract import BoundContract
 
 JobRecord = dict[str, Any]
 
@@ -247,11 +267,13 @@ def _bundle_generated_digest(root: Path, bundle_dir: Path) -> str | None:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def _functional_review_consumed_blob(root: Path, work_item_id: str) -> str | None:
+def _functional_review_consumed_blob(root: Path, work_item_id: str, bound: BoundContract) -> str | None:
     """The current Git blob hash of ``FUNCTIONAL_REVIEW.md`` -- report
     data only (not a predicate input; see :data:`PRE_STATE_FIELDS`'s own
-    note on which fields are), ``None`` when the file does not exist."""
-    findings_path = root / evidence.functional_review_findings_path(root, work_item_id)
+    note on which fields are), ``None`` when the file does not exist. The
+    path is ``bound``'s feedback path, so under a ``workflow_query``
+    contract a query failure raises here, before any decision."""
+    findings_path = root / evidence.functional_review_findings_path(root, work_item_id, bound)
     if not findings_path.is_file():
         return None
     result = subprocess.run(
@@ -290,7 +312,13 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
     top-level (`parent_work_item_id is None`) entry in the snapshot: a
     work item that does not exist yet cannot have children, and a naive
     `parent_work_item_id == work_item_id` comparison with
-    `work_item_id=None` would match every top-level entry instead."""
+    `work_item_id=None` would match every top-level entry instead.
+
+    The feedback path it reads (``functional_review_consumed_blob``) is
+    resolved under the admitted release's contract, bound here for this
+    capture alone (``workflow-controller-workflow-2-6-integration`` CP3). A
+    ``WorkflowQueryError`` propagates: this runs before ``decide``, so it is
+    a decision-time refusal, with no worker launched and no record written."""
     root = managed_repo.root
     target_head = _current_head(root)
     pre_work_item_keys = sorted(snapshot.work_items.keys())
@@ -319,6 +347,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
 
     work_item_id = work_item.work_item_id
     phase = work_item.phase
+    bound = workflow_contract.bind_release(managed_repo.workflow_version)
 
     bundle_dir = evidence.resolve_bundle_dir(root, work_item_id, phase=phase)
     manifest = evidence.read_manifest_fields(root, bundle_dir)
@@ -344,7 +373,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
         "bundle_generated_digest": _bundle_generated_digest(root, bundle_dir),
         "rejected_marker_present": rejected_present,
         "child_work_item_ids": child_work_item_ids,
-        "functional_review_consumed_blob": _functional_review_consumed_blob(root, work_item_id),
+        "functional_review_consumed_blob": _functional_review_consumed_blob(root, work_item_id, bound),
         "functional_checklist_evidence": evidence.functional_checklist_evidence(
             root, work_item_id, work_item.base_commit, target_head, work_item.implementation_revision,
         ),
@@ -443,21 +472,26 @@ class WriterCall:
         return self.match_text if self.match_text is not None else f"{self.function}("
 
 
-PredicateFn = Callable[[Path, str, dict], bool]
+#: A row's predicate: ``(root, work_item_id, pre_state, bound) -> bool``.
+#: ``bound`` (`workflow-controller-workflow-2-6-integration` CP3) is the
+#: job's recorded release's contract, bound once per verification by
+#: :func:`_row_clauses_failure` and passed explicitly to every clause; a
+#: clause that reads no Workflow answer ignores it.
+PredicateFn = Callable[[Path, str, dict, BoundContract], bool]
 
 #: A predicate stated with its reason (`workflow-controller-worker-
-#: lifecycle-ownership` CP6): ``(root, work_item_id, pre_state) -> None``
-#: when the row's predicate holds, else a short code naming the first unmet
-#: condition, written to ``reconciliation_evidence.predicate_detail``.
-PredicateDetailFn = Callable[[Path, str, dict], "str | None"]
+#: lifecycle-ownership` CP6): ``(root, work_item_id, pre_state, bound) ->
+#: None`` when the row's predicate holds, else a short code naming the first
+#: unmet condition, written to ``reconciliation_evidence.predicate_detail``.
+PredicateDetailFn = Callable[[Path, str, dict, BoundContract], "str | None"]
 
 #: A row's artifact postcondition (`workflow-controller-worker-execution-
-#: hardening` CP3): ``(root, work_item_id, pre_state) -> (satisfied,
+#: hardening` CP3): ``(root, work_item_id, pre_state, bound) -> (satisfied,
 #: detail)``, evaluated fresh against disk. Distinct from
 #: :data:`PredicateFn`: a predicate disambiguates a self-loop, a
 #: postcondition asserts that the durable artifact a completion phase
 #: promises is actually coherent, whichever way the phase was reached.
-PostconditionFn = Callable[[Path, "str | None", dict], tuple[bool, str]]
+PostconditionFn = Callable[[Path, "str | None", dict, BoundContract], tuple[bool, str]]
 
 #: One ``ExpectedOutcome.postconditions`` entry: the observed post-phases
 #: it applies to, and the postcondition evaluated there.
@@ -538,7 +572,8 @@ def _postcondition_for_phase(outcome: ExpectedOutcome, phase: Any) -> Postcondit
 
 
 def _block_feedback_bound_to_pre_state_bundle(
-    root: Path, work_item_id: str, pre_state: dict, *, role_matches: Callable[[str | None], bool],
+    root: Path, work_item_id: str, pre_state: dict, bound: BoundContract, *,
+    role_matches: Callable[[str | None], bool],
 ) -> bool:
     """The one ``BLOCK``-self-loop evidence rule both review rows share
     (row 3's plan-stage ``/review-plan`` and row 16's ``"2.2"``
@@ -553,7 +588,7 @@ def _block_feedback_bound_to_pre_state_bundle(
     expected_bundle_id = pre_state.get("bundle_manifest_bundle_id")
     if not isinstance(expected_bundle_id, str) or not expected_bundle_id:
         return False
-    feedback_dir = evidence.resolve_feedback_dir(root, work_item_id)
+    feedback_dir = evidence.resolve_feedback_dir(root, work_item_id, bound)
     feedback = evidence.read_feedback_fields(root, feedback_dir)
     if feedback is None:
         return False
@@ -566,7 +601,9 @@ def _block_feedback_bound_to_pre_state_bundle(
     )
 
 
-def _predicate_row3_block_feedback_current(root: Path, work_item_id: str, pre_state: dict) -> bool:
+def _predicate_row3_block_feedback_current(
+    root: Path, work_item_id: str, pre_state: dict, bound: BoundContract,
+) -> bool:
     """Row 3's predicate: a current-round ``REVIEW_FEEDBACK.md`` now
     exists whose ``Reviewed bundle ID:`` matches the bundle the pre-state
     plan ``MANIFEST.md`` carried, whose ``Reviewer role:`` is
@@ -581,24 +618,28 @@ def _predicate_row3_block_feedback_current(root: Path, work_item_id: str, pre_st
     so a genuine ``BLOCK`` never verified while a feedback file *missing*
     its binding line did (``None == None``)."""
     return _block_feedback_bound_to_pre_state_bundle(
-        root, work_item_id, pre_state,
+        root, work_item_id, pre_state, bound,
         role_matches=lambda role: evidence._normalize_role(role) == "LOCAL_MODEL_PLAN_REVIEW",
     )
 
 
-def _predicate_local_implementation_block_current(root: Path, work_item_id: str, pre_state: dict) -> bool:
+def _predicate_local_implementation_block_current(
+    root: Path, work_item_id: str, pre_state: dict, bound: BoundContract,
+) -> bool:
     """Row 16's predicate (the ``"2.2"`` ``/review-implementation``
     ``BLOCK`` no-op): a fresh ``REVIEW_FEEDBACK.md`` whose role is exactly
     ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` (no alias -- the implementation
     ledger was introduced fresh at ``"2.2"``), ``Status: BLOCK``, bound to
     the pre-state manifest's non-null ``bundle_id``."""
     return _block_feedback_bound_to_pre_state_bundle(
-        root, work_item_id, pre_state,
+        root, work_item_id, pre_state, bound,
         role_matches=lambda role: role == evidence.LOCAL_IMPLEMENTATION_ROLE,
     )
 
 
-def _predicate_row5_bundle_regenerated(root: Path, work_item_id: str, pre_state: dict) -> bool:
+def _predicate_row5_bundle_regenerated(
+    root: Path, work_item_id: str, pre_state: dict, bound: BoundContract,
+) -> bool:
     """Row 5's predicate: the freshly recomputed `bundle_generated_digest`
     differs from the one `pre_state` captured -- the generator's own
     completed output, never trusted from `MANIFEST.md`'s stale
@@ -609,7 +650,9 @@ def _predicate_row5_bundle_regenerated(root: Path, work_item_id: str, pre_state:
     return post_digest != pre_state.get("bundle_generated_digest")
 
 
-def _predicate_row7_new_work_item_created(root: Path, work_item_id: Any, pre_state: dict) -> bool:
+def _predicate_row7_new_work_item_created(
+    root: Path, work_item_id: Any, pre_state: dict, bound: BoundContract,
+) -> bool:
     """Row 7's predicate (revision 63's B2, "Row 7's predicate is the
     plan's own key-set-difference rule, restated as data"): the
     post-snapshot's own `work_items` key set, read fresh from disk through
@@ -636,7 +679,7 @@ def _predicate_row7_new_work_item_created(root: Path, work_item_id: Any, pre_sta
 
 
 def _postcondition_plan_bundle_coherent(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """The plan-bundle-producing rows' postcondition (CP3): the current
     plan bundle's ``MANIFEST.md`` belongs to the work item's fresh
@@ -706,7 +749,9 @@ CHECKPOINT_PROGRESS_DETAILS: frozenset[str] = frozenset({
 })
 
 
-def _checkpoint_completion_failure(root: Path, work_item_id: str, pre_state: dict) -> str | None:
+def _checkpoint_completion_failure(
+    root: Path, work_item_id: str, pre_state: dict, bound: BoundContract,
+) -> str | None:
     """The same-phase durable-progress rule, stated once with a reason
     (CP6): ``None`` when it holds, else the first unmet condition, one of
     :data:`CHECKPOINT_PROGRESS_DETAILS`.
@@ -754,18 +799,20 @@ def _checkpoint_completion_failure(root: Path, work_item_id: str, pre_state: dic
     return "completion_not_committed_at_head"
 
 
-def _predicate_checkpoint_completed_durably(root: Path, work_item_id: str, pre_state: dict) -> bool:
+def _predicate_checkpoint_completed_durably(
+    root: Path, work_item_id: str, pre_state: dict, bound: BoundContract,
+) -> bool:
     """Rows 12/13's self-loop predicate (``/milestone-implement`` from
     ``IMPLEMENTING`` back to ``IMPLEMENTING``): :func:`_checkpoint_completion_failure`
     finds no unmet condition. Step 1f persists the completion and commits
     it in one guard window, so a completion left only in the working tree
     is not durable and does not verify; a pre-state lacking either input
     is "not satisfied"."""
-    return _checkpoint_completion_failure(root, work_item_id, pre_state) is None
+    return _checkpoint_completion_failure(root, work_item_id, pre_state, bound) is None
 
 
 def _postcondition_self_review_entered_durably(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """Rows 12/13's ``SELF_REVIEWING_IMPLEMENTATION`` postcondition: the
     fresh ``registry_complete`` is ``True``, every registry checkpoint is
@@ -826,7 +873,7 @@ def _postcondition_self_review_entered_durably(
 
 
 def _postcondition_implementation_bundle_coherent(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """The implementation-bundle-producing phases' postcondition (rows
     12-15, and the coherence half of row 18's): no ``REJECTED`` marker
@@ -853,7 +900,7 @@ def _postcondition_implementation_bundle_coherent(
 
 
 def _postcondition_implementation_bundle_regenerated(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """Row 18's postcondition (``"2.2"`` ``/apply-implementation-review``):
     the coherent clause, plus a manifest ``generation_head`` different from
@@ -863,7 +910,7 @@ def _postcondition_implementation_bundle_regenerated(
     ``reviewed_implementation_head`` deliberately do not move."""
     if "bundle_manifest_generation_head" not in pre_state:
         return False, "the pre-state carries no bundle_manifest_generation_head to compare against"
-    coherent, detail = _postcondition_implementation_bundle_coherent(root, work_item_id, pre_state)
+    coherent, detail = _postcondition_implementation_bundle_coherent(root, work_item_id, pre_state, bound)
     if not coherent:
         return False, detail
     manifest = evidence.read_manifest_fields(root, evidence.implementation_bundle_dir(root, work_item_id))
@@ -881,15 +928,16 @@ def _implementation_manifest(root: Path, work_item_id: str) -> dict[str, Any]:
 
 
 def _feedback_verdict_failure(
-    root: Path, work_item_id: str, *, role: str, status: str,
+    root: Path, work_item_id: str, bound: BoundContract, *, role: str, status: str,
     bundle_id: str | None, bundle_source: str,
 ) -> tuple[dict | None, str | None]:
-    """``(feedback, None)`` when ``REVIEW_FEEDBACK.md`` (read fresh) is on
-    file with reviewer role exactly ``role``, ``Status`` exactly ``status``
-    and ``Reviewed bundle ID`` equal to a non-null ``bundle_id``;
-    otherwise ``(feedback_or_None, detail)`` naming the first failing
-    clause. ``bundle_source`` names where ``bundle_id`` came from."""
-    feedback_dir = evidence.resolve_feedback_dir(root, work_item_id)
+    """``(feedback, None)`` when ``REVIEW_FEEDBACK.md`` (read fresh, at
+    ``bound``'s feedback path) is on file with reviewer role exactly
+    ``role``, ``Status`` exactly ``status`` and ``Reviewed bundle ID`` equal
+    to a non-null ``bundle_id``; otherwise ``(feedback_or_None, detail)``
+    naming the first failing clause. ``bundle_source`` names where
+    ``bundle_id`` came from."""
+    feedback_dir = evidence.resolve_feedback_dir(root, work_item_id, bound)
     feedback = evidence.read_feedback_fields(root, feedback_dir)
     if feedback is None:
         return None, f"no REVIEW_FEEDBACK.md is on file at {feedback_dir}"
@@ -908,7 +956,7 @@ def _feedback_verdict_failure(
 
 
 def _postcondition_local_implementation_approve_recorded(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """Row 16's ``AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW``
     postcondition (a local ``APPROVE``): the fresh ledger records
@@ -945,7 +993,7 @@ def _postcondition_local_implementation_approve_recorded(
     if ledger.manual is not None:
         return False, f"the ledger already records {evidence.MANUAL_IMPLEMENTATION_ROLE}"
     _feedback, failure = _feedback_verdict_failure(
-        root, work_item_id, role=evidence.LOCAL_IMPLEMENTATION_ROLE, status="APPROVE",
+        root, work_item_id, bound, role=evidence.LOCAL_IMPLEMENTATION_ROLE, status="APPROVE",
         bundle_id=manifest_bundle_id, bundle_source="manifest bundle_id",
     )
     if failure is not None:
@@ -957,7 +1005,7 @@ def _postcondition_local_implementation_approve_recorded(
 
 
 def _postcondition_local_implementation_revise_recorded(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """Row 16's ``APPLYING_REVIEW_FEEDBACK`` postcondition (a local
     ``REVISE``): the feedback on file is role exactly
@@ -965,7 +1013,7 @@ def _postcondition_local_implementation_revise_recorded(
     bundle the job started from (a non-null
     ``pre_state["bundle_manifest_bundle_id"]``), for this work item."""
     feedback, failure = _feedback_verdict_failure(
-        root, work_item_id, role=evidence.LOCAL_IMPLEMENTATION_ROLE, status="REVISE",
+        root, work_item_id, bound, role=evidence.LOCAL_IMPLEMENTATION_ROLE, status="REVISE",
         bundle_id=pre_state.get("bundle_manifest_bundle_id"),
         bundle_source="the pre-state manifest bundle_id",
     )
@@ -977,7 +1025,7 @@ def _postcondition_local_implementation_revise_recorded(
 
 
 def _postcondition_manual_implementation_approve_recorded(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """Row 17's ``AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`` postcondition
     (a manual ``APPROVE``): the fresh ledger records both stages against
@@ -1008,7 +1056,7 @@ def _postcondition_manual_implementation_approve_recorded(
             f"ledger review_content_id {ledger.review_content_id!r} != manifest review_content_id "
             f"{manifest_content_id!r}"
         )
-    feedback = evidence.read_feedback_fields(root, evidence.resolve_feedback_dir(root, work_item_id))
+    feedback = evidence.read_feedback_fields(root, evidence.resolve_feedback_dir(root, work_item_id, bound))
     if feedback is None:
         return False, "no REVIEW_FEEDBACK.md is on file to bind the manual stage to"
     reviewed_bundle_id = feedback.get("reviewed_bundle_id")
@@ -1023,14 +1071,14 @@ def _postcondition_manual_implementation_approve_recorded(
 
 
 def _postcondition_manual_implementation_revise_recorded(
-    root: Path, work_item_id: "str | None", pre_state: dict,
+    root: Path, work_item_id: "str | None", pre_state: dict, bound: BoundContract,
 ) -> tuple[bool, str]:
     """Row 17's ``APPLYING_REVIEW_FEEDBACK`` postcondition (a manual
     ``REVISE``): the feedback on file is role exactly
     ``MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`` with ``Status: REVISE``, and
     the ledger's manual stage is still unrecorded -- the ``REVISE`` branch
     writes no ledger entry. A malformed ledger is "not satisfied"."""
-    feedback = evidence.read_feedback_fields(root, evidence.resolve_feedback_dir(root, work_item_id))
+    feedback = evidence.read_feedback_fields(root, evidence.resolve_feedback_dir(root, work_item_id, bound))
     if feedback is None:
         return False, "no REVIEW_FEEDBACK.md is on file"
     if feedback.get("reviewer_role") != evidence.MANUAL_IMPLEMENTATION_ROLE:
@@ -1735,10 +1783,132 @@ _VERIFYING_WORKER_OUTCOMES = frozenset({"SUCCESS", "INTERRUPTED"})
 _INCOMPLETE_EFFECT_PHASES: dict[tuple[str, str | None, str], frozenset[str]] = {}
 
 
+# ---------------------------------------------------------------------------
+# `workflow-controller-workflow-2-6-integration` CP3 -- the installed-release
+# re-check, before every decision and before every verification (I3).
+# ---------------------------------------------------------------------------
+
+#: :func:`_row_clauses_failure`'s two Workflow reasons. Whenever
+#: verification runs, at launch or at `resume`, each records a terminal
+#: `FAILED` job carrying ``workflow_error``, and leaves no pending job.
+WORKFLOW_RELEASE_CHANGED_REASON = "workflow_release_changed"
+WORKFLOW_QUERY_FAILED_REASON = "workflow_query_failed"
+WORKFLOW_ERROR_REASONS: frozenset[str] = frozenset({WORKFLOW_RELEASE_CHANGED_REASON, WORKFLOW_QUERY_FAILED_REASON})
+
+
+def _installed_release(root: Path) -> tuple[str | None, dict | None]:
+    """``(installed, None)``: the release the target's installation manifest
+    declares right now (``managed_repo.installed_workflow_version``, a plain
+    file read). ``(None, manifest_error)`` when it cannot be established:
+    the manifest is missing or unreadable, and ``manifest_error`` is the
+    parser error's ``{"code", "message"}``."""
+    try:
+        return installed_workflow_version(root), None
+    except (UnmanagedRepositoryError, MalformedInstallationManifestError) as exc:
+        return None, {"code": exc.code, "message": exc.message}
+
+
+def _workflow_error(exc: WorkflowReleaseChangedError | WorkflowQueryError) -> dict:
+    """``workflow_error``: the error's ``code``, ``message`` and full
+    ``evidence``, as a job record carries it."""
+    return {"code": exc.code, "message": exc.message, "evidence": exc.evidence}
+
+
+def _verification_contract(root: Path, recorded: Any) -> BoundContract:
+    """The contract a job verifies under: the release its record carries
+    (``target_workflow_version``, written at launch from the admitted
+    ``ManagedRepository``), bound once -- provided the target still runs
+    that release. :class:`~controller.errors.WorkflowReleaseChangedError`
+    when it does not, when the installed release cannot be established
+    (``installed`` is ``None`` and ``manifest_error`` says why), or when
+    the recorded value is missing or names a release with no contract.
+    ``evidence`` is ``{"recorded", "installed"}`` plus the reason's own
+    key."""
+    installed, manifest_error = _installed_release(root)
+    evidence_dict: dict = {"recorded": recorded, "installed": installed}
+    if manifest_error is not None:
+        evidence_dict["manifest_error"] = manifest_error
+        raise WorkflowReleaseChangedError(
+            f"the installed Workflow release of {root} cannot be established ({manifest_error['code']}: "
+            f"{manifest_error['message']}); the job was launched under Workflow {recorded!r} and is not "
+            "verified under any other",
+            evidence=evidence_dict,
+        )
+    if installed != recorded:
+        raise WorkflowReleaseChangedError(
+            f"{root} now runs Workflow {installed!r}, not Workflow {recorded!r}, which the job was launched "
+            "under; it is not verified under any other",
+            evidence=evidence_dict,
+        )
+    try:
+        return workflow_contract.bind_release(recorded)
+    except UnsupportedWorkflowVersionError as exc:
+        raise WorkflowReleaseChangedError(
+            f"the job was launched under Workflow {recorded!r}, for which this Controller holds no "
+            "Workflow contract; it is not verified",
+            evidence={**evidence_dict, "contract_error": {"code": exc.code, "message": exc.message}},
+        ) from exc
+
+
+def _refuse_changed_release(managed_repo: Any, preflight: Any, preflight_events: list[str]) -> None:
+    """The installed-release re-check before every decision (I3): right
+    after the repository preflight returns -- a ``Gate`` or a ``Proceed``;
+    close-out can switch to a trunk that runs another release -- and before
+    a preflight gate is recorded, the pre-state is captured or ``decide``
+    runs, all of which can resolve the feedback path.
+
+    Returns when the installed release is the one ``managed_repo.inspect``
+    admitted. Otherwise raises
+    :class:`~controller.errors.WorkflowReleaseChangedError` (exit 20):
+    nothing is decided or launched and no job record is written. The
+    evidence names what the preflight did -- ``preflight_action`` (its
+    ``Proceed.action``, or ``gate``), ``preflight_gate`` (the gate's code, or
+    ``None``) and ``preflight_events`` (the binding events it wrote in this
+    step, in order) -- and the message says it in words, so a completed
+    close-out is never mistaken for a failed one."""
+    admitted = managed_repo.workflow_version
+    installed, manifest_error = _installed_release(managed_repo.root)
+    if manifest_error is None and installed == admitted:
+        return
+    is_gate = isinstance(preflight, milestone_branch.Gate)
+    action = "gate" if is_gate else preflight.action
+    evidence_dict: dict = {
+        "admitted": admitted, "installed": installed, "preflight_action": action,
+        "preflight_gate": preflight.code if is_gate else None, "preflight_events": list(preflight_events),
+    }
+    if manifest_error is not None:
+        evidence_dict["manifest_error"] = manifest_error
+        what = (f"the installed Workflow release of {managed_repo.root} cannot be established "
+                f"({manifest_error['code']}: {manifest_error['message']}); this step was admitted under "
+                f"Workflow {admitted}")
+        then = "restore .workflow-manager/installation.json, then re-run, and a fresh inspect admits it again"
+    else:
+        what = (f"{managed_repo.root} now runs Workflow {installed}, not Workflow {admitted}, which this step "
+                "was admitted under")
+        then = "re-run: a fresh inspect admits the installed release, or refuses it"
+    sentences = [f"{what}. Only the decision was refused: nothing was decided or launched, and no job "
+                 "record was written."]
+    closed_out = not is_gate and action == "closed_out"
+    if "closed" in preflight_events:
+        if closed_out:
+            sentences.append("A milestone close-out completed and was recorded.")
+        else:
+            returned = f"the {preflight.code} gate" if is_gate else f"the {action} action"
+            sentences.append(f"A milestone close-out completed and was recorded; the repository preflight then "
+                             f"returned {returned}.")
+    if is_gate:
+        sentences.append(f"The repository preflight returned the {preflight.code} gate, which was not recorded; "
+                         "the next invocation rediscovers it.")
+    elif action != "none" and not (closed_out and "closed" in preflight_events):
+        sentences.append(f"The repository preflight's {action} action completed and was recorded.")
+    sentences.append(f"Next: {then}.")
+    raise WorkflowReleaseChangedError(" ".join(sentences), evidence=evidence_dict)
+
+
 def _row_clauses_failure(
     *, root: Path, work_item_id: str | None, outcome: ExpectedOutcome, pre_state: dict,
-    observed_phase_after: "str | Any",
-) -> tuple[str | None, str | None]:
+    observed_phase_after: "str | Any", release: Any,
+) -> tuple[str | None, str | None, str | None, dict | None]:
     """The phase, predicate and postcondition clauses of step 8's rule,
     stated once and shared by :func:`_verify_transition` (``execute_step``)
     and :func:`_row2_verified` (``resume``) -- so the two sites cannot
@@ -1746,14 +1916,29 @@ def _row_clauses_failure(
     revision 64's `B1`). The worker-outcome clause stays with each caller,
     since only they know whether an outcome exists at all.
 
-    Returns ``(reason, postcondition_detail, predicate_detail)``:
-    ``reason`` is ``None`` when every clause holds, else
-    ``"phase_not_in_to_any_of"``, ``"predicate_not_satisfied"`` or
-    ``"postcondition_not_satisfied"``; ``postcondition_detail`` is the
-    postcondition's own detail string, set only for the last reason;
-    ``predicate_detail`` is the first unmet condition a row's
-    ``predicate_detail`` names (CP6), set only for
-    ``predicate_not_satisfied`` on such a row.
+    Returns ``(reason, postcondition_detail, predicate_detail,
+    workflow_error)``: ``reason`` is ``None`` when every clause holds, else
+    ``"workflow_release_changed"``, ``"phase_not_in_to_any_of"``,
+    ``"predicate_not_satisfied"``, ``"postcondition_not_satisfied"`` or
+    ``"workflow_query_failed"``; ``postcondition_detail`` is the
+    postcondition's own detail string, set only for
+    ``postcondition_not_satisfied``; ``predicate_detail`` is the first unmet
+    condition a row's ``predicate_detail`` names (CP6), set only for
+    ``predicate_not_satisfied`` on such a row; ``workflow_error`` (the
+    error's ``code``, ``message`` and ``evidence``) is set only for the two
+    Workflow reasons.
+
+    **The Workflow contract** (``workflow-controller-workflow-2-6-integration``
+    CP3). Before any clause, ``release`` -- the job record's
+    ``target_workflow_version`` -- is checked against the installed release
+    and bound once (:func:`_verification_contract`); every predicate,
+    ``predicate_detail`` and postcondition receives that binding. A release
+    that changed, or cannot be established, is ``workflow_release_changed``;
+    a ``WorkflowQueryError`` from any clause is ``workflow_query_failed``.
+    Both are caught here, the one helper launch and ``resume`` share, so
+    neither can escape after the ``COMPLETED`` flush and leave the job
+    pending; each caller records ``FAILED``. A 2.5.1 job never queries, so
+    it verifies exactly as before.
 
     The predicate clause's trigger is keyed on the row's own
     :func:`_row_branch` (revision 65's repair, round 64's `B1`): evaluated
@@ -1766,27 +1951,34 @@ def _row_clauses_failure(
     is evaluated after both: the one ``outcome.postconditions`` entry
     whose phase set contains ``observed_phase_after``, if any
     (:func:`_postcondition_for_phase`; per-phase since CP2)."""
+    try:
+        bound = _verification_contract(root, release)
+    except WorkflowReleaseChangedError as exc:
+        return WORKFLOW_RELEASE_CHANGED_REASON, None, None, _workflow_error(exc)
     if observed_phase_after not in outcome.to_any_of:
-        return "phase_not_in_to_any_of", None, None
+        return "phase_not_in_to_any_of", None, None, None
     branch = _row_branch(outcome)
-    if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
-        if outcome.predicate_detail is not None:
-            predicate_detail = outcome.predicate_detail(root, work_item_id, pre_state)
-            if predicate_detail is not None:
-                return "predicate_not_satisfied", None, predicate_detail
-        elif not outcome.predicate(root, work_item_id, pre_state):
-            return "predicate_not_satisfied", None, None
-    postcondition = _postcondition_for_phase(outcome, observed_phase_after)
-    if postcondition is not None:
-        satisfied, detail = postcondition(root, work_item_id, pre_state)
-        if not satisfied:
-            return "postcondition_not_satisfied", detail, None
-    return None, None, None
+    try:
+        if outcome.predicate is not None and (branch is None or observed_phase_after == outcome.from_phase):
+            if outcome.predicate_detail is not None:
+                predicate_detail = outcome.predicate_detail(root, work_item_id, pre_state, bound)
+                if predicate_detail is not None:
+                    return "predicate_not_satisfied", None, predicate_detail, None
+            elif not outcome.predicate(root, work_item_id, pre_state, bound):
+                return "predicate_not_satisfied", None, None, None
+        postcondition = _postcondition_for_phase(outcome, observed_phase_after)
+        if postcondition is not None:
+            satisfied, detail = postcondition(root, work_item_id, pre_state, bound)
+            if not satisfied:
+                return "postcondition_not_satisfied", detail, None, None
+    except WorkflowQueryError as exc:
+        return WORKFLOW_QUERY_FAILED_REASON, None, None, _workflow_error(exc)
+    return None, None, None, None
 
 
 def _verify_transition(
     *, root: Path, work_item_id: str | None, outcome: ExpectedOutcome, pre_state: dict,
-    observed_phase_after: "str | Any", worker_outcome: str,
+    observed_phase_after: "str | Any", worker_outcome: str, release: Any,
 ) -> tuple[bool, dict]:
     """Step 8's rule, stated in full and in one form (CP6B): ``verified``
     is ``True`` iff ``worker_outcome`` is ``SUCCESS`` or ``INTERRUPTED``,
@@ -1799,33 +1991,40 @@ def _verify_transition(
     ``evidence`` is a ``TransitionNotObservedError``-shaped dict naming the
     expected set, the observed phase, the worker outcome, the failing
     clause as ``reason``, and (for the postcondition clause) its
-    ``postcondition_detail``; ``{}`` when ``verified``."""
+    ``postcondition_detail``; ``{}`` when ``verified``. ``release`` is the
+    job record's ``target_workflow_version``, the contract the clauses are
+    evaluated under (CP3)."""
+    workflow_error = None
     if worker_outcome not in _VERIFYING_WORKER_OUTCOMES:
         reason, postcondition_detail, predicate_detail = "worker_outcome", None, None
     else:
-        reason, postcondition_detail, predicate_detail = _row_clauses_failure(
+        reason, postcondition_detail, predicate_detail, workflow_error = _row_clauses_failure(
             root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
-            observed_phase_after=observed_phase_after,
+            observed_phase_after=observed_phase_after, release=release,
         )
         if reason is None:
             return True, {}
     return False, _transition_not_observed_evidence(
         outcome=outcome, observed_phase_after=phase_to_wire(observed_phase_after),
         worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
-        predicate_detail=predicate_detail,
+        predicate_detail=predicate_detail, workflow_error=workflow_error,
     )
 
 
 def _transition_not_observed_evidence(
     *, outcome: ExpectedOutcome, observed_phase_after: str, worker_outcome: str | None,
     reason: str, postcondition_detail: str | None, predicate_detail: str | None = None,
+    workflow_error: dict | None = None,
 ) -> dict:
     """The ``TransitionNotObservedError``-shaped ``reconciliation_evidence``
-    both ``execute_step`` and ``_reconcile_completed`` write. The optional
+    ``execute_step``, ``_reconcile_completed`` and (for the two Workflow
+    reasons) ``_reconcile_launched`` write. The optional
     ``postcondition_detail`` key is present only on the
-    ``postcondition_not_satisfied`` reason, and the optional
+    ``postcondition_not_satisfied`` reason, the optional
     ``predicate_detail`` key (CP6) only on ``predicate_not_satisfied`` for a
-    row whose predicate states its reason."""
+    row whose predicate states its reason, and the optional
+    ``workflow_error`` key (``workflow-controller-workflow-2-6-integration``
+    CP3) only on ``workflow_release_changed`` and ``workflow_query_failed``."""
     evidence_dict = {
         "code": "TransitionNotObservedError",
         "reason": reason,
@@ -1837,6 +2036,8 @@ def _transition_not_observed_evidence(
         evidence_dict["postcondition_detail"] = postcondition_detail
     if predicate_detail is not None:
         evidence_dict["predicate_detail"] = predicate_detail
+    if workflow_error is not None:
+        evidence_dict["workflow_error"] = workflow_error
     return evidence_dict
 
 
@@ -2217,8 +2418,8 @@ def _expected_outcome_for_record(record: JobRecord) -> ExpectedOutcome:
 
 def _row2_verified(
     *, root: Path, work_item_id: str, outcome: ExpectedOutcome, pre_state: dict,
-    observed_phase_after: str, status: str, worker_outcome: str | None,
-) -> tuple[bool, str | None, str | None, str | None]:
+    observed_phase_after: str, status: str, worker_outcome: str | None, release: Any,
+) -> tuple[bool, str | None, str | None, str | None, dict | None]:
     """The ``LAUNCHED``/``COMPLETED`` row's own rule (CP7's reconciliation
     table, row 2), stated once for both statuses. ``worker_outcome`` is
     guaranteed absent on a ``LAUNCHED`` record and present-and-known on a
@@ -2227,11 +2428,16 @@ def _row2_verified(
     stated positively here rather than by substituting a fake outcome
     value, so the returned reason (when unverified) never misreports what
     the record actually carried. Returns ``(verified, reason,
-    postcondition_detail, predicate_detail)`` -- ``reason`` is one of
-    ``"worker_outcome"``, ``"phase_not_in_to_any_of"``,
-    ``"predicate_not_satisfied"`` or ``"postcondition_not_satisfied"``,
-    ``None`` when verified; ``postcondition_detail`` is set only for the
-    last, ``predicate_detail`` (CP6) only for ``predicate_not_satisfied``.
+    postcondition_detail, predicate_detail, workflow_error)`` -- ``reason``
+    is one of ``"worker_outcome"``, ``"workflow_release_changed"``,
+    ``"phase_not_in_to_any_of"``, ``"predicate_not_satisfied"``,
+    ``"postcondition_not_satisfied"`` or ``"workflow_query_failed"``,
+    ``None`` when verified; ``postcondition_detail`` is set only for
+    ``postcondition_not_satisfied``, ``predicate_detail`` (CP6) only for
+    ``predicate_not_satisfied``, and ``workflow_error``
+    (``workflow-controller-workflow-2-6-integration`` CP3) only for the two
+    Workflow reasons. ``release`` is the record's
+    ``target_workflow_version``.
 
     Every clause after the worker-outcome one is
     :func:`_row_clauses_failure`, the helper :func:`_verify_transition`
@@ -2245,12 +2451,12 @@ def _row2_verified(
     else:
         outcome_ok = True  # STATUS_LAUNCHED, validated absent by case 3.
     if not outcome_ok:
-        return False, "worker_outcome", None, None
-    reason, postcondition_detail, predicate_detail = _row_clauses_failure(
+        return False, "worker_outcome", None, None, None
+    reason, postcondition_detail, predicate_detail, workflow_error = _row_clauses_failure(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
-        observed_phase_after=observed_phase_after,
+        observed_phase_after=observed_phase_after, release=release,
     )
-    return reason is None, reason, postcondition_detail, predicate_detail
+    return reason is None, reason, postcondition_detail, predicate_detail, workflow_error
 
 
 def _reconcile_planned(record: JobRecord, *, runtime_root: Path) -> JobRecord:
@@ -2278,7 +2484,14 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     ``select_work_item(work_item_id=None)`` call, whose own "more than one
     candidate" branch is ``AmbiguousWorkItemError`` (CP3), which would
     abort the whole ``resume`` call on exactly the two-key case row 7's own
-    declared cases require to fail closed instead (revision 64's `B1`)."""
+    declared cases require to fail closed instead (revision 64's `B1`).
+
+    The two Workflow reasons (``workflow-controller-workflow-2-6-integration``
+    CP3) come first among the unverified outcomes: a release that changed
+    or cannot be established, or a query that cannot be answered, means the
+    transition cannot be judged either way, so the record is ``FAILED``
+    with that evidence -- never ``INTERRUPTED`` (a fresh ``step`` would
+    retry blind) and never ``UnreconcilableJobError``."""
     root = managed_repo.root
     work_item_id = record["work_item_id"]
     pre_state = record.get("pre_state") or {}
@@ -2288,9 +2501,10 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     observed_phase_after_wire = phase_to_wire(observed_phase_after)
     observed_head = _current_head(root)
 
-    verified, reason, postcondition_detail, predicate_detail = _row2_verified(
+    verified, reason, postcondition_detail, predicate_detail, workflow_error = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after, status=STATUS_LAUNCHED, worker_outcome=None,
+        release=record.get("target_workflow_version"),
     )
     now = _now()
     branch_violation = _branch_invariant_violation(root, runtime_root, record) if verified else None
@@ -2303,6 +2517,19 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
         }
         return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
                         details=_reconciled_details(reconciled))
+
+    if reason in WORKFLOW_ERROR_REASONS:
+        failed = {
+            **record, "status": STATUS_FAILED, "transition_verified": False,
+            "observed_phase_after": observed_phase_after_wire,
+            "reconciliation_evidence": _transition_not_observed_evidence(
+                outcome=outcome, observed_phase_after=observed_phase_after_wire, worker_outcome=None,
+                reason=reason, postcondition_detail=None, workflow_error=workflow_error,
+            ),
+            "reconciled_at": now, "updated_at": now,
+        }
+        return _persist(runtime_root, record["job_id"], failed, event="reconciled",
+                        details=_reconciled_details(failed))
 
     phase_unchanged = observed_phase_after_wire == pre_state.get("phase")
     head_unchanged = observed_head == pre_state.get("target_head")
@@ -2394,9 +2621,10 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
     observed_phase_after = _observe_post_phase(managed_repo, work_item_id, pre_state)
     observed_phase_after_wire = phase_to_wire(observed_phase_after)
 
-    verified, reason, postcondition_detail, predicate_detail = _row2_verified(
+    verified, reason, postcondition_detail, predicate_detail, workflow_error = _row2_verified(
         root=root, work_item_id=work_item_id, outcome=outcome, pre_state=pre_state,
         observed_phase_after=observed_phase_after, status=STATUS_COMPLETED, worker_outcome=worker_outcome,
+        release=record.get("target_workflow_version"),
     )
     now = _now()
     branch_violation = _branch_invariant_violation(root, runtime_root, record) if verified else None
@@ -2418,7 +2646,7 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         "reconciliation_evidence": _transition_not_observed_evidence(
             outcome=outcome, observed_phase_after=observed_phase_after_wire,
             worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
-            predicate_detail=predicate_detail,
+            predicate_detail=predicate_detail, workflow_error=workflow_error,
         ),
         "reconciled_at": now,
         "updated_at": now,
@@ -4305,8 +4533,18 @@ def _execute_step_locked(
     # (I1). Otherwise it may have bound, switched or closed out, so the
     # state is read again; a gate is recorded GATE_BLOCKED like any other
     # (exit 10), and a refusal raises (exit 20).
-    branch_ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime)
+    preflight_events: list[str] = []
+    branch_ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime,
+                                          events=preflight_events)
     preflight = milestone_branch.repository_preflight(branch_ctx, requested_work_item_id=work_item_id)
+    # Step 1c (workflow-controller-workflow-2-6-integration CP3, I3): the
+    # installed Workflow release must still be the admitted one -- checked
+    # here, after the preflight (close-out switches to the trunk, which may
+    # run another release) and before a gate is recorded, the pre-state is
+    # captured or `decide` runs, since each can resolve the feedback path
+    # under the admitted release's contract. A mismatch or an unreadable
+    # manifest refuses (exit 20), naming what the preflight did.
+    _refuse_changed_release(managed_repo, preflight, preflight_events)
     if isinstance(preflight, milestone_branch.Gate):
         return _branch_gate_record(runtime, managed_repo, identity, target_state.read(managed_repo), preflight,
                                    run_id=run_id)
@@ -4724,10 +4962,12 @@ def _launch_job(
     )
 
     # Step 8: the verification rule, stated in full and in one form.
+    # CP3 (workflow-2-6-integration): verified under the release the record
+    # carries, exactly as `resume` would verify it.
     verified, verification_evidence = _verify_transition(
         root=managed_repo.root, work_item_id=resolved_work_item_id, outcome=outcome_row,
         pre_state=pre_state, observed_phase_after=observed_phase_after,
-        worker_outcome=result.outcome,
+        worker_outcome=result.outcome, release=record["target_workflow_version"],
     )
 
     # CP8 (trunk-branch-pr-release-orchestration): the post-step branch

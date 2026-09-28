@@ -177,13 +177,20 @@ class Context:
     """Where a preflight runs: the target worktree (``repo_root``, its
     top level), the Controller runtime root, the Git runner, a forge factory
     (``repository -> Forge``; default :class:`~controller.forge.GhForge`)
-    and a clock."""
+    and a clock.
+
+    ``events``, when a list is given, receives the name of every binding
+    event :func:`_event` writes through this context, in order (a plain
+    append, never a file write). ``controller.job`` passes a fresh one per
+    step, so a refusal after the preflight can say what it did
+    (workflow-2-6-integration CP3)."""
 
     repo_root: Path
     runtime_root: Path
     runner: gitrepo.Runner | None = None
     forge_factory: Callable[[str], forge_mod.Forge] | None = None
     clock: Callable[[], str] = _utc_now
+    events: list[str] | None = None
 
     def forge(self, repository: str) -> forge_mod.Forge:
         return (self.forge_factory or forge_mod.GhForge)(repository)
@@ -350,6 +357,8 @@ def _event(ctx: Context, key: str, record: Mapping[str, Any], event: str, **deta
     runtime.append_jsonl(ctx.runtime_root, events_rel(key, record["work_item_id"]), {
         "at": ctx.clock(), "event": event, "binding_generation": record["binding_generation"],
         "state": record["state"], **details})
+    if ctx.events is not None:
+        ctx.events.append(event)
 
 
 def _write(ctx: Context, key: str, record: dict, event: str | None = None, **details: Any) -> dict:

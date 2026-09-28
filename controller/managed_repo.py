@@ -187,6 +187,30 @@ def _read_manifest(root: Path) -> dict:
     return manifest
 
 
+def installed_workflow_version(root: Path) -> str:
+    """The ``workflow_version`` the target's installation manifest declares
+    right now: a plain read through :func:`_read_manifest`, never a Workflow
+    Manager call and never an admission check
+    (``docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``, I3).
+    ``controller.job`` compares it with the release a step was admitted
+    under, or a job was launched under; it never selects a contract. A
+    missing manifest raises :class:`~controller.errors.UnmanagedRepositoryError`
+    and an unreadable one :class:`~controller.errors.MalformedInstallationManifestError`,
+    exactly as :func:`inspect` would -- including an ``OSError`` from the
+    parser's own existence check (Python 3.12's ``Path.is_file`` raises one
+    for an unsearchable directory), so these two are the only errors a
+    caller has to catch."""
+    root = Path(root)
+    try:
+        return _read_manifest(root)["workflow_version"]
+    except OSError as exc:
+        manifest_path = root / _MANIFEST_REL_PATH
+        raise MalformedInstallationManifestError(
+            f"{manifest_path} could not be read: {exc}",
+            evidence={"manifest_path": str(manifest_path), "error": str(exc)},
+        ) from exc
+
+
 def _resolve_manager_bin(manager_bin: str | None) -> str:
     """``--workflow-manager``, then ``MANAGER_ENV``, then
     ``shutil.which("workflow-manager")`` -- whichever source supplies a

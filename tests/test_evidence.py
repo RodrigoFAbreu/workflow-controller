@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -146,17 +147,17 @@ class FeedbackDirResolutionTest(unittest.TestCase):
 
     def test_resolves_flat_when_no_scoped_layout_exists(self) -> None:
         # No .ai-review/wi-1/ directory exists at all.
-        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1"),
+        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1", fixtures.reference_binding()),
                           Path(".ai-review/feedback"))
 
     def test_resolves_flat_when_work_item_root_exists_but_feedback_subdir_does_not(self) -> None:
         (self.root / ".ai-review" / "wi-1" / "current").mkdir(parents=True)
-        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1"),
+        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1", fixtures.reference_binding()),
                           Path(".ai-review/feedback"))
 
     def test_resolves_scoped_once_the_feedback_subdir_itself_exists(self) -> None:
         (self.root / ".ai-review" / "wi-1" / "feedback").mkdir(parents=True)
-        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1"),
+        self.assertEqual(evidence.resolve_feedback_dir(self.root, "wi-1", fixtures.reference_binding()),
                           Path(".ai-review/wi-1/feedback"))
 
 
@@ -3304,6 +3305,231 @@ class UncommittedImplementationStateGateTest(unittest.TestCase):
             {phase for (phase, _version, token) in decision.AUTOMATIC_TRIPLES if token == "/milestone-implement"},
             evidence.MILESTONE_IMPLEMENT_PHASES,
         )
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP3 -- release-aware feedback
+# resolution. Under the 2.6.0 contract the feedback path is Workflow's own
+# answer (`--resolve-feedback-path`, run here for real against the vendored
+# 2.6.0 scripts); under 2.5.1 it is the Controller's rule, unchanged.
+# ---------------------------------------------------------------------------
+
+_QUERY_RELEASE = "2.6.0"
+
+
+def _query_target(tmp_root: Path, *, phase: str = "AWAITING_FUNCTIONAL_REVIEW", **entry) -> Path:
+    """A committed ``"2.2"`` work item on the vendored 2.6.0 installation.
+    ``entry`` overrides its ``WORKFLOW_STATE.json`` entry (for example a
+    ``feedback_layout`` stamp)."""
+    root = tmp_root / "target"
+    fixtures.build_target_git_repo(root)
+    (root / "README.md").write_text("target fixture\n")
+    (root / ".gitignore").write_text(".ai-review/\n")
+    base_commit = fixtures.commit_all(root, "initial")
+    fixtures.install_workflow_release(root, _QUERY_RELEASE)
+    fixtures.write_workflow_state(root, {"schema_version": 1, "active_work_item_id": "wi-1", "work_items": {
+        "wi-1": {"work_item_type": "product", "work_item_kind": "product", "work_item_id": "wi-1",
+                 "governing_workflow_version": "2.2", "phase": phase, "plan_revision": 1,
+                 "implementation_revision": 1, "state_revision": 1, "checkpoints": {}, "current_bundle_id": None,
+                 "base_commit": base_commit, "parent_work_item_id": None, **entry},
+    }})
+    fixtures.commit_all(root, "Workflow 2.6.0 and its state")
+    return root
+
+
+class _CountingRunner:
+    """The private runner hook, counting each query it lets through."""
+
+    def __init__(self) -> None:
+        from controller import workflow_contract
+
+        self.real = workflow_contract._execute_query
+        self.queries: list[str] = []
+
+    def __call__(self, argv, *, cwd, timeout):
+        self.queries.append(argv[5].split("=", 1)[0])
+        return self.real(argv, cwd=cwd, timeout=timeout)
+
+
+class WorkflowQueryFeedbackPathTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp_root = Path(self._tmp.name)
+
+    @staticmethod
+    def bound():
+        from controller import workflow_contract
+
+        return workflow_contract.bind_release(_QUERY_RELEASE)
+
+    def test_a_stamped_scoped_item_resolves_scoped_before_its_directory_exists(self) -> None:
+        root = _query_target(self.tmp_root, feedback_layout="scoped")
+        self.assertFalse((root / ".ai-review" / "wi-1" / "feedback").exists())
+        self.assertEqual(evidence.resolve_feedback_dir(root, "wi-1", self.bound()), Path(".ai-review/wi-1/feedback"))
+        # The 2.5.1 rule answers flat for the same item: the defect CP3 removes.
+        self.assertEqual(evidence.resolve_feedback_dir(root, "wi-1", fixtures.reference_binding()),
+                         Path(".ai-review/feedback"))
+
+    def test_an_unstamped_item_follows_workflow_s_legacy_rule(self) -> None:
+        root = _query_target(self.tmp_root)
+        self.assertEqual(evidence.resolve_feedback_dir(root, "wi-1", self.bound()), Path(".ai-review/feedback"))
+        (root / ".ai-review" / "wi-1" / "feedback").mkdir(parents=True)
+        self.assertEqual(evidence.resolve_feedback_dir(root, "wi-1", self.bound()), Path(".ai-review/wi-1/feedback"))
+
+    def test_the_functional_review_helpers_follow_the_answer(self) -> None:
+        root = _query_target(self.tmp_root, feedback_layout="scoped")
+        bound = self.bound()
+        findings = evidence.functional_review_findings_path(root, "wi-1", bound)
+        marker = evidence.functional_review_consumed_marker_path(root, "wi-1", bound)
+        self.assertEqual((findings, marker), (Path(".ai-review/wi-1/feedback/FUNCTIONAL_REVIEW.md"),
+                                              Path(".ai-review/wi-1/feedback/FUNCTIONAL_REVIEW.consumed")))
+        self.assertIsNone(evidence.functional_review_findings_consumed(root, "wi-1", bound))
+        (root / findings).parent.mkdir(parents=True)
+        (root / findings).write_text("# Findings\n")
+        self.assertFalse(evidence.functional_review_findings_consumed(root, "wi-1", bound))
+        blob = fixtures.run(["git", "hash-object", "--", str(root / findings)], cwd=root).stdout.strip()
+        (root / marker).write_text(blob + "\n")
+        self.assertTrue(evidence.functional_review_findings_consumed(root, "wi-1", bound))
+
+    def test_a_query_failure_propagates_and_is_never_the_2_5_1_rule(self) -> None:
+        from controller.errors import WorkflowQueryError
+
+        root = _query_target(self.tmp_root, feedback_layout=None)
+        with self.assertRaises(WorkflowQueryError) as caught:
+            evidence.resolve_feedback_dir(root, "wi-1", self.bound())
+        self.assertEqual(caught.exception.evidence["reason"], "query_failed")
+        managed_repo = fixtures.build_target_managed_repository(root)
+        self.assertEqual(managed_repo.workflow_version, _QUERY_RELEASE)
+        work_item = fixtures.build_work_item_view(phase="AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+                                                  governing_workflow_version="1")
+        with self.assertRaises(WorkflowQueryError):
+            evidence.decide(managed_repo, None, work_item)
+
+    def test_a_decision_asks_at_most_once_and_nothing_is_cached_across_decisions(self) -> None:
+        """``AWAITING_FUNCTIONAL_REVIEW`` with a current checklist and
+        unconsumed findings reads the feedback path four times in one
+        decision: one query answers them all, and the next decision asks
+        again."""
+        from controller import workflow_contract
+
+        root = _query_target(self.tmp_root, feedback_layout="scoped")
+        base_commit = fixtures.current_head(root)
+        fixtures.commit_all(root, "Checklist\n\nWorkflow-Functional-Checklist: wi-1/1/" + "a" * 40, allow_empty=True)
+        findings = root / ".ai-review" / "wi-1" / "feedback" / "FUNCTIONAL_REVIEW.md"
+        findings.parent.mkdir(parents=True)
+        findings.write_text("# Findings\n")
+        managed_repo = fixtures.build_target_managed_repository(root)
+        work_item = fixtures.build_work_item_view(phase="AWAITING_FUNCTIONAL_REVIEW", governing_workflow_version="2.2",
+                                                  base_commit=base_commit, implementation_revision=1)
+        runner = _CountingRunner()
+        with unittest.mock.patch.object(workflow_contract, "_execute_query", runner):
+            first = evidence.decide(managed_repo, None, work_item)
+            self.assertEqual(first.action.command, "/apply-functional-review wi-1")
+            self.assertEqual(runner.queries, ["--resolve-feedback-path"])
+            evidence.decide(managed_repo, None, work_item)
+        self.assertEqual(runner.queries, ["--resolve-feedback-path"] * 2)
+
+    def test_the_2_5_1_contract_runs_no_query(self) -> None:
+        from controller import workflow_contract
+
+        root = _query_target(self.tmp_root, feedback_layout=None)
+        fixtures.write_installation_manifest(root, workflow_version="2.5.1")
+        managed_repo = fixtures.build_target_managed_repository(root)
+        work_item = fixtures.build_work_item_view(phase="AWAITING_FUNCTIONAL_REVIEW", governing_workflow_version="2.2")
+        with unittest.mock.patch.object(workflow_contract, "_execute_query",
+                                        side_effect=AssertionError("a query ran under 2.5.1")):
+            self.assertIsNone(fixtures.reference_binding().answers)
+            evidence.decide(managed_repo, None, work_item)
+            self.assertEqual(evidence.resolve_feedback_dir(root, "wi-1", fixtures.reference_binding()),
+                             Path(".ai-review/feedback"))
+
+    def test_no_public_entry_point_takes_an_answers_provider(self) -> None:
+        """Production always binds the real queries: ``decide``,
+        ``execute_step`` and ``bind`` take no provider, and the only other
+        one is the private hook the golden generators set."""
+        import inspect
+
+        from controller import job, workflow_contract
+
+        self.assertEqual(list(inspect.signature(evidence.decide).parameters),
+                         ["managed_repo", "snapshot", "work_item", "last_apply_job"])
+        self.assertEqual(list(inspect.signature(job.execute_step).parameters),
+                         ["managed_repo", "work_item_id", "identity", "runtime", "permission_mode", "timeout",
+                          "claude_bin", "routing", "run_id"])
+        self.assertEqual(list(inspect.signature(workflow_contract.bind).parameters), ["contract"])
+        self.assertIsNone(workflow_contract._answers_factory)
+        self.assertIsInstance(self.bound().answers, workflow_contract.QueryAnswers)
+
+
+class WorkflowQueryGoldenTest(unittest.TestCase):
+    """The 2.6.0 decision goldens (Design C), checked directly: 2.6.0 is
+    admitted only at CP5, when the golden tests iterate every admitted
+    release. The 2.5.1 goldens keep their files and their derivations."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tests.golden import generate_external_implementation_review_decisions as external
+        from tests.golden import generate_plan_stage_decisions as plan
+
+        cls.plan, cls.external = plan, external
+        cls.derived = {(module, release): module.derive_cases(release)
+                       for module in (plan, external) for release in ("2.5.1", _QUERY_RELEASE)}
+
+    def test_the_2_6_0_goldens_rederive_byte_equal(self) -> None:
+        for module in (self.plan, self.external):
+            with self.subTest(golden=module.GOLDEN_PATHS[_QUERY_RELEASE].name):
+                self.assertEqual(module.render_document(self.derived[module, _QUERY_RELEASE], _QUERY_RELEASE),
+                                 module.GOLDEN_PATHS[_QUERY_RELEASE].read_text())
+
+    def test_the_2_5_1_goldens_are_the_original_files(self) -> None:
+        self.assertEqual(self.plan.GOLDEN_PATHS["2.5.1"].name, "plan_stage_decisions.json")
+        self.assertEqual(self.external.GOLDEN_PATHS["2.5.1"].name, "external_implementation_review_decisions.json")
+        self.assertEqual(self.external.render_document(self.derived[self.external, "2.5.1"], "2.5.1"),
+                         self.external.GOLDEN_PATH.read_text())
+
+    def test_every_scenario_runs_on_every_layout_and_status_class(self) -> None:
+        plan = self.plan
+        expected = {plan.case_key(scenario, phase, version, layout, status)
+                    for scenario, _setup, _overrides in plan.SCENARIOS
+                    for phase, version in plan.PHASE_VERSIONS
+                    for layout, status in plan.case_runs(phase, version)}
+        self.assertEqual(set(self.derived[plan, _QUERY_RELEASE]), expected)
+        ready = plan.case_runs("AWAITING_PLAN_APPROVAL", "2.2")
+        self.assertEqual({layout for layout, _ in ready}, set(plan.FEEDBACK_LAYOUTS))
+        self.assertEqual({status for _, status in ready}, set(plan.READY_STATUS_CLASSES))
+        self.assertEqual({status for _, status in plan.case_runs("REVISING_PLAN", "2.1")},
+                         set(plan.NON_READY_STATUS_CLASSES))
+        self.assertEqual(plan.case_runs("PLANNING", "1"), [(layout, plan.NO_STATUS) for layout in plan.FEEDBACK_LAYOUTS])
+        external = self.external
+        self.assertEqual(set(self.derived[external, _QUERY_RELEASE]), {
+            plan.case_key(scenario, phase, version, layout)
+            for scenario, _setup, _overrides in external.SCENARIOS for phase, version in external.PHASE_VERSIONS
+            for layout in plan.FEEDBACK_LAYOUTS})
+
+    def test_answering_what_the_2_5_1_rule_finds_gives_the_2_5_1_decision(self) -> None:
+        """Only the source of the answer changed: where Workflow answers the
+        directory the 2.5.1 rule finds (``legacy-scoped`` exactly when the
+        scenario leaves ``.ai-review/wi-1/feedback/``, else ``legacy-flat``),
+        with the phase's ordinary publication status, every 2.6.0 decision
+        is the 2.5.1 one."""
+        for module in (self.plan, self.external):
+            moved = []
+            for scenario, setup, _overrides in module.SCENARIOS:
+                with TemporaryDirectory() as tmp:
+                    root = _make_target(Path(tmp))
+                    setup(root, fixtures.current_head(root))
+                    layout = ("legacy-scoped" if (root / ".ai-review" / "wi-1" / "feedback").is_dir()
+                              else "legacy-flat")
+                for phase, version in module.PHASE_VERSIONS:
+                    runs = self.plan.case_runs(phase, version) if module is self.plan else [(layout, None)]
+                    ordinary = [status for run_layout, status in runs if run_layout == layout][0]
+                    key = self.plan.case_key(scenario, phase, version)
+                    query_key = (self.plan.case_key(scenario, phase, version, layout, ordinary)
+                                 if module is self.plan else self.plan.case_key(scenario, phase, version, layout))
+                    if self.derived[module, "2.5.1"][key] != self.derived[module, _QUERY_RELEASE][query_key]:
+                        moved.append(query_key)
+            self.assertEqual(moved, [], f"{module.__name__}: decisions moved under the 2.6.0 contract")
 
 
 if __name__ == "__main__":

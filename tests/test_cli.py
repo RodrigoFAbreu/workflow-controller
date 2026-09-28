@@ -53,9 +53,11 @@ from controller.errors import (  # noqa: E402
     RuntimeContainmentError,
     SourceSnapshotError,
     UnmanagedRepositoryError,
+    WorkflowReleaseChangedError,
 )
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
+from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
@@ -1100,7 +1102,7 @@ def _job_record(*, job_id: str, target_repo: str, status: str,
         "controller_source_commit": FAKE_IDENTITY.source_commit,
         "controller_source_tree_digest": FAKE_IDENTITY.tree_digest,
         "target_repo": target_repo,
-        "target_workflow_version": "2.3.1",
+        "target_workflow_version": "2.5.1",
         "work_item_id": work_item_id,
         "observed_phase_before": "PLANNING",
         "pre_state": {
@@ -2447,6 +2449,150 @@ class StepFollowTest(_RunRecordFixture, unittest.TestCase):
                          {k: v for k, v in plain_record.items() if k in ("status", "worker_outcome", "event_seq")})
         [run] = self._runs()
         self.assertNotIn("follow", run)
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP3 -- the installed Workflow
+# release through the command line: a `run` inspects once, so every later
+# step re-reads the installed release before deciding (I3); and `resume`
+# inspects first, so an unreadable manifest refuses there and the record
+# waits, untouched, until it is restored.
+# ---------------------------------------------------------------------------
+
+_MANIFEST_REL = ".workflow-manager/installation.json"
+_PAUSE_REL = ".ai-review/pause.sentinel"
+
+
+class ReleaseChangedDuringRunTest(lifecycle._LifecycleTestCase):
+    """One ``run``, held at the orchestration boundary after its first job by
+    the test-support pause file, which that job's worker creates. While it
+    is held the installation manifest changes, and the run is released: the
+    second step refuses (exit 20) before deciding anything."""
+
+    def run_held(self, name: str, mutate) -> tuple[lifecycle.Lifecycle, int, str, list]:
+        lc = self.at_awaiting_local(name)
+        lc.add(lifecycle.REVIEW_IMPLEMENTATION,
+               [*lc.local_review("APPROVE", 1), fixtures.script_write(_PAUSE_REL, "held\n")])
+        fixtures.write_worker_script(lc.script_path, lc.script)
+        sentinel = lc.root / _PAUSE_REL
+        refusals: list = []
+        real = job._refuse_changed_release
+
+        def spy(*args, **kwargs):
+            try:
+                return real(*args, **kwargs)
+            except WorkflowReleaseChangedError as exc:
+                refusals.append(exc)
+                raise
+
+        outcome: dict = {}
+        stderr = io.StringIO()
+        env = {"FAKE_CLAUDE_SCRIPT": str(lc.script_path), "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file),
+               cli.TEST_HOOKS_ENV: "1"}
+        argv = ["--runtime-dir", str(lc.runtime), "--workflow-manager", str(self.stub_manager),
+                "--claude-binary", str(lifecycle.FAKE_CLAUDE), "--timeout", "60",
+                "run", str(lc.root), "--pause-file", str(sentinel)]
+
+        def run() -> None:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                outcome["code"] = cli.main(argv)
+
+        with unittest.mock.patch.dict(os.environ, env), \
+                unittest.mock.patch.object(job, "_refuse_changed_release", spy):
+            thread = threading.Thread(target=run, daemon=True)
+            thread.start()
+            try:
+                self.assertTrue(process_fixtures.wait_until(
+                    lambda: sentinel.exists() and self._finished_jobs(lc) == 1, timeout=60),
+                    "the first job never finished and held the run")
+                mutate(lc.root / _MANIFEST_REL)
+            finally:
+                sentinel.unlink(missing_ok=True)
+                thread.join(60)
+        self.assertFalse(thread.is_alive(), "the run never ended")
+        return lc, outcome["code"], stderr.getvalue(), refusals
+
+    @staticmethod
+    def _finished_jobs(lc: lifecycle.Lifecycle) -> int:
+        jobs = lc.runtime / "jobs"
+        records = [json.loads(p.read_text()) for p in jobs.glob("*.json")] if jobs.is_dir() else []
+        return sum(1 for record in records if record.get("status") == job.STATUS_FINISHED)
+
+    def assert_refused_after_one_job(self, lc, code: int, stderr: str, refusals: list) -> dict:
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED, stderr)
+        self.assertEqual(self.processes(lc), 1, "the second step launched a worker")
+        self.assertEqual(self._finished_jobs(lc), 1)
+        self.assertEqual(len(list((lc.runtime / "jobs").glob("*.json"))), 1, "the refused step wrote a record")
+        [refusal] = refusals
+        self.assertIn(refusal.message, stderr)
+        self.assertIn("Only the decision was refused", stderr)
+        found = refusal.evidence
+        self.assertEqual(found["admitted"], "2.5.1")
+        self.assertEqual((found["preflight_action"], found["preflight_gate"], found["preflight_events"]),
+                         ("none", None, []))
+        return found
+
+    def test_a_changed_release_refuses_the_next_step(self) -> None:
+        def update(path: Path) -> None:
+            path.write_text(json.dumps({**json.loads(path.read_text()), "workflow_version": "2.6.0"}) + "\n")
+
+        lc, code, stderr, refusals = self.run_held("changed", update)
+        found = self.assert_refused_after_one_job(lc, code, stderr, refusals)
+        self.assertEqual(found["installed"], "2.6.0")
+        self.assertNotIn("manifest_error", found)
+        self.assertIn("now runs Workflow 2.6.0, not Workflow 2.5.1", stderr)
+
+    def test_a_removed_or_malformed_manifest_refuses_the_next_step(self) -> None:
+        for name, mutate, manifest_code in (
+            ("removed", lambda path: path.unlink(), "UNMANAGED_REPOSITORY"),
+            ("malformed", lambda path: path.write_text("{not json\n"), "MALFORMED_INSTALLATION_MANIFEST"),
+        ):
+            with self.subTest(manifest=name):
+                lc, code, stderr, refusals = self.run_held(name, mutate)
+                found = self.assert_refused_after_one_job(lc, code, stderr, refusals)
+                self.assertIsNone(found["installed"])
+                self.assertEqual(found["manifest_error"]["code"], manifest_code)
+                self.assertIn("cannot be established", stderr)
+
+
+class ResumeWithUnreadableManifestTest(lifecycle._LifecycleTestCase):
+    """CLI ``resume`` inspects before any verification, so while the
+    manifest is missing or damaged it refuses there (exit 20), and the
+    record stays byte-unchanged and pending; once the manifest is restored
+    the next ``resume`` reconciles it as it would have."""
+
+    def test_resume_refuses_at_inspect_and_reconciles_once_restored(self) -> None:
+        cases = (("removed", lambda path: path.unlink(), "has no .workflow-manager/installation.json"),
+                 ("malformed", lambda path: path.write_text("{not json\n"), "could not be read/parsed as JSON"))
+        for index, (name, damage, refusal) in enumerate(cases):
+            for status in (job.STATUS_COMPLETED, job.STATUS_LAUNCHED):
+                with self.subTest(manifest=name, status=status):
+                    lc = self.at_awaiting_local(f"{name}-{status.lower()}")
+                    lc.add(lifecycle.REVIEW_IMPLEMENTATION, lc.local_review("APPROVE", 1))
+                    stepped = self.cli(lc, "step")
+                    self.assertEqual(stepped.code, cli.EXIT_OK, stepped.stderr)
+                    [record] = stepped.records
+                    self.rewrite_as(lc, record, status)
+                    managed = fixtures.build_target_managed_repository(lc.root)
+                    manifest = lc.root / _MANIFEST_REL
+                    original = manifest.read_bytes()
+                    job_path = lc.runtime / "jobs" / f"{record['job_id']}.json"
+                    before = job_path.read_bytes()
+                    damage(manifest)
+
+                    refused = self.cli(lc, "resume")
+                    self.assertEqual(refused.code, cli.EXIT_FAIL_CLOSED, refused.stdout)
+                    self.assertIn(refusal, refused.stderr)
+                    self.assertEqual(job_path.read_bytes(), before, "the refused resume touched the record")
+                    self.assertEqual([entry.job_id for entry in
+                                      job.pending_reconciliation_jobs(lc.runtime, managed, self.ident)],
+                                     [record["job_id"]])
+
+                    manifest.write_bytes(original)
+                    resumed = self.cli(lc, "resume")
+                    self.assertEqual(resumed.code, cli.EXIT_OK, resumed.stderr)
+                    self.assert_finished(self.read_record(lc, record["job_id"]), lifecycle.AWAITING_MANUAL)
+                    self.assertEqual(self.processes(lc), 1, "resume never relaunches")
 
 
 if __name__ == "__main__":

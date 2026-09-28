@@ -29,10 +29,34 @@ file is canonical JSON (``sort_keys``, indent 2, trailing newline).
 Run ``python3 tests/golden/generate_plan_stage_decisions.py`` to rewrite
 the golden, or with ``--check`` to compare without writing. Rewriting it is
 a deliberate act: the golden's whole value is that it does not move.
+
+**The release dimension** (``docs/ai-workflow/
+CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``, Design C, CP3). ``--release``
+selects the Workflow release whose contract the decisions run under, and
+defaults to ``2.5.1``:
+
+- ``--release 2.5.1`` writes and checks ``plan_stage_decisions.json``, the
+  file above, derived exactly as before (invariant I1);
+- ``--release 2.6.0`` writes and checks ``plan_stage_decisions.2.6.0.json``.
+  It pins the Controller's decision logic under the 2.6.0 contract, so
+  Workflow's two answers are *inputs*, replayed through
+  ``workflow_contract``'s private answers hook as recorded values
+  (:class:`RecordedAnswers`). Each scenario runs once per feedback layout
+  (:data:`FEEDBACK_LAYOUTS`), its feedback files written at that layout's
+  path, with the phase's ordinary publication status; at the ``"2.1"``/
+  ``"2.2"`` plan phases it also runs once per publication-status class
+  (:data:`READY_STATUS_CLASSES` at the review-ready phases,
+  :data:`NON_READY_STATUS_CLASSES` elsewhere), on the ``scoped`` layout. A
+  ``"1"``-governed item has no publication status: its recorded query fails
+  exactly as the real one does. Case keys gain ``| layout | status``.
+
+The real queries are covered elsewhere: ``tests/test_workflow_contract.py``
+runs them against the vendored 2.6.0 scripts.
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -46,10 +70,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from controller import evidence  # noqa: E402
+from controller import evidence, workflow_contract  # noqa: E402
+from controller.errors import WorkflowQueryError  # noqa: E402
+from controller.managed_repo import REFERENCE_WORKFLOW_RELEASE  # noqa: E402
 from tests import fixtures  # noqa: E402
 
 GOLDEN_PATH = Path(__file__).resolve().parent / "plan_stage_decisions.json"
+
+#: Each release this generator derives a golden for, and that golden's file.
+#: The reference release keeps the original file name.
+GOLDEN_PATHS: dict[str, Path] = {
+    REFERENCE_WORKFLOW_RELEASE: GOLDEN_PATH,
+    "2.6.0": GOLDEN_PATH.with_name("plan_stage_decisions.2.6.0.json"),
+}
 
 WORK_ITEM_ID = "wi-1"
 
@@ -100,7 +133,15 @@ def _author_files(root: Path, *, text: str = "previous round\n", names=_AUTHOR_F
         path.write_text(text)
 
 
+#: Under a ``workflow_query`` release, the feedback directory of the layout
+#: the case runs on: every scenario's feedback is written there instead of
+#: where the 2.5.1 rule would find it. ``None`` for the reference release.
+_feedback_redirect: Path | None = None
+
+
 def _feedback(root: Path, feedback_dir: Path, **fields) -> None:
+    if _feedback_redirect is not None:
+        feedback_dir = _feedback_redirect
     fixtures.write_review_feedback(root, feedback_dir, fixtures.build_review_feedback_text(**fields))
 
 
@@ -362,6 +403,180 @@ SCENARIOS: tuple[tuple[str, Callable[[Path, str], None], dict[str, Any]], ...] =
 
 
 # ---------------------------------------------------------------------------
+# The release dimension: Workflow's answers as recorded values.
+# ---------------------------------------------------------------------------
+
+#: Workflow 2.6.0's three feedback layouts (``--resolve-feedback-path``).
+FEEDBACK_LAYOUTS: tuple[str, ...] = ("scoped", "legacy-scoped", "legacy-flat")
+
+#: The governing versions the publication-status query applies to.
+TWO_STAGE_VERSIONS = frozenset({"2.1", "2.2"})
+
+#: Workflow 2.6.0's ``PLAN_REVIEW_READY_PHASES``, and the plan phases before them.
+READY_PHASES = frozenset({"AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+                          "AWAITING_PLAN_APPROVAL"})
+NON_READY_PHASES = frozenset({"PLANNING", "REVISING_PLAN", "AMENDING_PLAN"})
+
+#: The publication-status classes the Controller distinguishes (Design D):
+#: S1 with and without an advisory, the three S2 rows, S3 and one S4 status
+#: at a ready phase; N1, N2 and one N4 status at a non-ready one. The first
+#: of each is the phase's ordinary status, the one every layout runs with.
+READY_STATUS_CLASSES: tuple[str, ...] = (
+    "bound", "bound_advisory", "content_drifted", "bundle_unverified", "legacy_unverified", "refusal",
+    "unexpected",
+)
+NON_READY_STATUS_CLASSES: tuple[str, ...] = ("ordinary", "refusal", "unexpected")
+
+#: The layout the publication-status runs use: the one 2.6.0 stamps.
+STATUS_LAYOUT = "scoped"
+
+#: The status label of a ``"1"``-governed case, which has none.
+NO_STATUS = "-"
+
+_WITHDRAW = ("withdraw with /milestone-plan {wid} (it consumes this content and discards both recorded "
+             "stages)")
+
+
+def recorded_feedback_path(work_item_id: str, layout: str) -> workflow_contract.FeedbackPath:
+    """``--resolve-feedback-path``'s answer for ``layout``."""
+    feedback_dir = ".ai-review/feedback" if layout == "legacy-flat" else f".ai-review/{work_item_id}/feedback"
+    return workflow_contract.FeedbackPath(
+        work_item_id=work_item_id, layout=layout, feedback_dir=feedback_dir,
+        review_feedback_path=f"{feedback_dir}/REVIEW_FEEDBACK.md",
+        functional_review_path=f"{feedback_dir}/FUNCTIONAL_REVIEW.md",
+    )
+
+
+def recorded_publication_status(
+    work_item_id: str, phase: str, version: str, status_class: str,
+) -> workflow_contract.PublicationStatus | workflow_contract.PublicationRefusal:
+    """``--plan-review-publication-status``'s answer for one status class,
+    in Workflow 2.6.0's own words (``workflow_state.
+    plan_review_publication_status``). A ``"1"``-governed item's query
+    exits 1 with a traceback, which the runner raises as a
+    ``WorkflowQueryError``; so does the recorded one."""
+    wid = work_item_id
+    if version not in TWO_STAGE_VERSIONS:
+        raise WorkflowQueryError(
+            f"--plan-review-publication-status for {wid!r} exited 1: WrongGoverningVersionForPlanReviewStageError: "
+            f"{wid}: governing_workflow_version is {version!r}, not one of ['2.1', '2.2'] -- the two-stage "
+            "plan-review protocol applies to \"2.1\"/\"2.2\" work items alike",
+            evidence={"release": "2.6.0", "query": "--plan-review-publication-status", "work_item_id": wid,
+                      "reason": "query_failed", "returncode": 1},
+        )
+    withdraw = _WITHDRAW.format(wid=wid)
+
+    def status(row: str, value: str, remedy: str, **extra) -> workflow_contract.PublicationStatus:
+        return workflow_contract.PublicationStatus(
+            work_item_id=wid, phase=phase, row=row, status=value, remedy=remedy, **extra)
+
+    if phase in READY_PHASES:
+        if status_class == "bound":
+            return status("2", "BOUND", "nothing to do", fresh_review_content_id="c" * 64, bundle_id="b" * 64,
+                          advisory=None)
+        if status_class == "bound_advisory":
+            return status("2", "BOUND", "nothing to do", fresh_review_content_id="c" * 64, bundle_id="b" * 64,
+                          advisory=(f"bundle_id mismatch (advisory only, does not block ingestion): feedback "
+                                    f"bundle_id={'b' * 64!r}, current recomputed bundle_id={'a' * 64!r}"))
+        if status_class == "content_drifted":
+            return status(
+                "4a", "CONTENT_DRIFTED",
+                f"restore the bound bytes from .ai-review/{wid}/current/files/<path> (and the plan's (Revision N) "
+                f"title), which returns to row 2; or {withdraw} and take the normal path",
+                fresh_review_content_id="e" * 64,
+                detail=f"the worktree's fresh plan-stage review_content_id is {'e' * 64!r}, not the bound {'c' * 64!r}",
+            )
+        if status_class == "bundle_unverified":
+            return status(
+                "4b", "BUNDLE_UNVERIFIED",
+                f"regenerate the bundle (./scripts/prepare-ai-review.sh <base> plan {wid}); the content is "
+                f"unchanged, so row 2 then matches and the new bundle_id is advisory; or {withdraw}",
+                fresh_review_content_id="c" * 64,
+                detail=(f"the plan-review bundle at .ai-review/{wid}/current does not verify: current/ recomputes "
+                        f"bundle_id {'f' * 64!r}, MANIFEST.md states {'b' * 64!r}"),
+            )
+        if status_class == "legacy_unverified":
+            return status(
+                "4c", "LEGACY_UNVERIFIED",
+                f"regenerate the bundle (./scripts/prepare-ai-review.sh <base> plan {wid}), after which the legacy "
+                f"ready item is accepted as-is; or {withdraw}",
+                detail=f"the plan-review bundle at .ai-review/{wid}/current does not verify: MANIFEST.md is missing",
+            )
+        if status_class == "refusal":
+            return workflow_contract.PublicationRefusal(
+                work_item_id=wid, error=workflow_contract.PUBLICATION_REFUSAL_ERROR,
+                message=(f"{wid!r} is at ready phase {phase!r} with a CONSUMED plan_review_binding record -- no "
+                         f"workflow-2.6.0 call leaves a ready phase holding anything but BOUND (row 4d); "
+                         f"{withdraw}, which writes the fail-closed marker"),
+            )
+        if status_class == "unexpected":
+            return status("7", "NEEDS_EDIT", "the normal path")
+    elif phase in NON_READY_PHASES:
+        if status_class == "ordinary":
+            if phase == "REVISING_PLAN":
+                return status("10", "NEEDS_EDIT", "the normal path", fresh_review_content_id="c" * 64)
+            return status("7", "NEEDS_EDIT", "the normal path")
+        if status_class == "refusal":
+            return workflow_contract.PublicationRefusal(
+                work_item_id=wid, error=workflow_contract.PUBLICATION_REFUSAL_ERROR,
+                message=(f"{wid!r} is at non-ready phase {phase!r} with a BOUND plan_review_binding record -- "
+                         "every exit from a ready phase writes CONSUMED (row 6); refusing"),
+            )
+        if status_class == "unexpected":
+            return status("2", "BOUND", "nothing to do", fresh_review_content_id="c" * 64, bundle_id="b" * 64,
+                          advisory=None)
+    raise AssertionError(f"no recorded publication status for {phase!r}/{version!r}/{status_class!r}")
+
+
+class RecordedAnswers:
+    """The answers one golden case replays: :func:`recorded_feedback_path`
+    for its layout and :func:`recorded_publication_status` for its status
+    class. Installed as ``workflow_contract._answers_factory`` (the private
+    hook), so ``evidence.decide``'s own ``bind`` builds one per decision; the
+    case in progress is read from :data:`_current_case`."""
+
+    def __init__(self, contract: workflow_contract.WorkflowContract) -> None:
+        self._case = dict(_current_case)
+
+    def feedback_path(self, root: Path, work_item_id: str) -> workflow_contract.FeedbackPath:
+        return recorded_feedback_path(work_item_id, self._case["layout"])
+
+    def publication_status(self, root: Path, work_item_id: str):
+        return recorded_publication_status(work_item_id, self._case["phase"], self._case["version"],
+                                           self._case["status"])
+
+
+#: The case whose answers :class:`RecordedAnswers` replays.
+_current_case: dict[str, str] = {}
+
+
+def case_runs(phase: str, version: str) -> list[tuple[str, str]]:
+    """``[(layout, status class)]`` for one ``(phase, version)`` under a
+    ``workflow_query`` release: every layout with the phase's ordinary
+    status, then every other status class on :data:`STATUS_LAYOUT`. A
+    ``"1"``-governed item runs every layout with :data:`NO_STATUS`."""
+    if version not in TWO_STAGE_VERSIONS:
+        return [(layout, NO_STATUS) for layout in FEEDBACK_LAYOUTS]
+    classes = READY_STATUS_CLASSES if phase in READY_PHASES else NON_READY_STATUS_CLASSES
+    ordinary, others = classes[0], classes[1:]
+    return [(layout, ordinary) for layout in FEEDBACK_LAYOUTS] + [(STATUS_LAYOUT, other) for other in others]
+
+
+@contextlib.contextmanager
+def recorded_answers(layout: str):
+    """Replay recorded answers, and write every scenario's feedback at
+    ``layout``'s directory, for the duration."""
+    global _feedback_redirect
+    previous = (workflow_contract._answers_factory, _feedback_redirect)
+    workflow_contract._answers_factory = RecordedAnswers
+    _feedback_redirect = Path(recorded_feedback_path(WORK_ITEM_ID, layout).feedback_dir)
+    try:
+        yield
+    finally:
+        workflow_contract._answers_factory, _feedback_redirect = previous
+
+
+# ---------------------------------------------------------------------------
 # Normalisation and serialisation (shared with the test).
 # ---------------------------------------------------------------------------
 
@@ -404,14 +619,24 @@ def decision_to_dict(decision: Any) -> dict[str, Any]:
     }
 
 
-def case_key(scenario_id: str, phase: str, version: str) -> str:
-    return f"{scenario_id} | {phase} | {version}"
+def case_key(scenario_id: str, phase: str, version: str, *dimensions: str) -> str:
+    """``scenario | phase | version``, plus ``| layout | status`` under a
+    ``workflow_query`` release."""
+    return " | ".join((scenario_id, phase, version, *dimensions))
 
 
-def derive_cases() -> dict[str, dict[str, Any]]:
+def queries_workflow(release: str) -> bool:
+    """Whether ``release``'s contract asks Workflow for the feedback path."""
+    return workflow_contract.contract_for(release).feedback_path_source == workflow_contract.WORKFLOW_QUERY
+
+
+def derive_cases(release: str = REFERENCE_WORKFLOW_RELEASE) -> dict[str, dict[str, Any]]:
     """Run every scenario against every ``(phase, version)`` of
     :data:`PHASE_VERSIONS` through ``controller.evidence.decide`` and return
-    the normalised decisions, keyed by :func:`case_key`."""
+    the normalised decisions, keyed by :func:`case_key`. Under a
+    ``workflow_query`` release, every case of :func:`case_runs` too."""
+    if queries_workflow(release):
+        return _derive_query_cases(release)
     cases: dict[str, dict[str, Any]] = {}
     for scenario_id, setup, overrides in SCENARIOS:
         with TemporaryDirectory() as tmp:
@@ -438,7 +663,46 @@ def derive_cases() -> dict[str, dict[str, Any]]:
     return cases
 
 
-def render_document(cases: dict[str, dict[str, Any]]) -> str:
+def _derive_query_cases(release: str) -> dict[str, dict[str, Any]]:
+    """:func:`derive_cases` under a ``workflow_query`` release: one target
+    per ``(scenario, layout)``, its feedback written at the layout's
+    directory (created for ``legacy-scoped``, whose answer means it exists),
+    its manifest declaring ``release``, and every run of :func:`case_runs`
+    on that layout decided with that run's recorded answers."""
+    cases: dict[str, dict[str, Any]] = {}
+    for scenario_id, setup, overrides in SCENARIOS:
+        for layout in FEEDBACK_LAYOUTS:
+            with TemporaryDirectory() as tmp, recorded_answers(layout):
+                root = Path(tmp) / "target"
+                fixtures.build_target_git_repo(root)
+                (root / "README.md").write_text("target fixture\n")
+                head = fixtures.commit_all(root, "initial")
+                setup(root, head)
+                if layout == "legacy-scoped":
+                    (root / _SCOPED_FEEDBACK).mkdir(parents=True, exist_ok=True)
+                fixtures.write_installation_manifest(root, workflow_version=release)
+                managed_repo = fixtures.build_target_managed_repository(root)
+                roots = (str(root), str(root.resolve()))
+                for phase, version in PHASE_VERSIONS:
+                    for run_layout, status_class in case_runs(phase, version):
+                        if run_layout != layout:
+                            continue
+                        _current_case.update(layout=layout, status=status_class, phase=phase, version=version)
+                        fields = dict(_BASE_OVERRIDES)
+                        fields.update(overrides)
+                        work_item = fixtures.build_work_item_view(
+                            work_item_id=WORK_ITEM_ID, phase=phase, governing_workflow_version=version,
+                            **fields,
+                        )
+                        try:
+                            body = decision_to_dict(evidence.decide(managed_repo, snapshot=None, work_item=work_item))
+                        except Exception as exc:  # pinned, never swallowed: a raise is a decision too
+                            body = {"raises": type(exc).__name__, "message": str(exc)}
+                        cases[case_key(scenario_id, phase, version, layout, status_class)] = normalise(body, roots)
+    return cases
+
+
+def render_document(cases: dict[str, dict[str, Any]], release: str = REFERENCE_WORKFLOW_RELEASE) -> str:
     """The golden file's exact text for ``cases``. Identical decisions are
     stored once, under a content-derived id (the first 12 hex digits of the
     SHA-256 of their canonical JSON), and ``cases`` maps each case key to
@@ -467,6 +731,18 @@ def render_document(cases: dict[str, dict[str, Any]]) -> str:
         "cases": index,
         "decisions": decisions,
     }
+    if queries_workflow(release):
+        document["description"] = (
+            f"Plan-stage decisions of controller.evidence.decide under the Workflow {release} "
+            "contract, Workflow's feedback-path and publication-status answers replayed as recorded "
+            "values (tests/golden/generate_plan_stage_decisions.py --release "
+            f"{release}). 'cases' maps 'scenario | phase | version | layout | status' to a key of "
+            "'decisions'."
+        )
+        document["release"] = release
+        document["feedback_layouts"] = list(FEEDBACK_LAYOUTS)
+        document["ready_status_classes"] = list(READY_STATUS_CLASSES)
+        document["non_ready_status_classes"] = list(NON_READY_STATUS_CLASSES)
     return json.dumps(document, sort_keys=True, indent=2) + "\n"
 
 
@@ -478,23 +754,39 @@ def load_cases(text: str) -> dict[str, dict[str, Any]]:
     return {key: decisions[decision_id] for key, decision_id in document["cases"].items()}
 
 
-def render() -> str:
+def render(release: str = REFERENCE_WORKFLOW_RELEASE) -> str:
     """The golden file's exact text, freshly derived from the code."""
-    return render_document(derive_cases())
+    return render_document(derive_cases(release), release)
+
+
+def release_argument(argv: list[str]) -> str:
+    """``--release <release>`` (or ``--release=<release>``), defaulting to
+    the reference release; a release with no golden file is refused."""
+    release = REFERENCE_WORKFLOW_RELEASE
+    for index, token in enumerate(argv):
+        if token == "--release" and index + 1 < len(argv):
+            release = argv[index + 1]
+        elif token.startswith("--release="):
+            release = token.split("=", 1)[1]
+    if release not in GOLDEN_PATHS:
+        raise SystemExit(f"no golden for release {release!r} (known: {sorted(GOLDEN_PATHS)})")
+    return release
 
 
 def main(argv: list[str]) -> int:
-    text = render()
+    release = release_argument(argv)
+    golden_path = GOLDEN_PATHS[release]
+    text = render(release)
     if "--check" in argv:
-        current = GOLDEN_PATH.read_text() if GOLDEN_PATH.is_file() else None
+        current = golden_path.read_text() if golden_path.is_file() else None
         if current == text:
-            print(f"{GOLDEN_PATH} is current")
+            print(f"{golden_path} is current")
             return 0
-        print(f"{GOLDEN_PATH} differs from a fresh derivation", file=sys.stderr)
+        print(f"{golden_path} differs from a fresh derivation", file=sys.stderr)
         return 1
-    GOLDEN_PATH.write_text(text)
+    golden_path.write_text(text)
     document = json.loads(text)
-    print(f"wrote {GOLDEN_PATH} ({len(document['cases'])} cases, "
+    print(f"wrote {golden_path} ({len(document['cases'])} cases, "
           f"{len(document['decisions'])} distinct decisions)")
     return 0
 

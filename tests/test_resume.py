@@ -20,6 +20,7 @@ test".
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
 import shutil
@@ -35,7 +36,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, job, lock, observe, worker  # noqa: E402
+from controller import cli, job, lock, observe, worker, workflow_contract  # noqa: E402
 from controller import runtime as runtime_module  # noqa: E402
 from controller.errors import (  # noqa: E402
     GitDirectoryUnresolvableError,
@@ -45,9 +46,13 @@ from controller.errors import (  # noqa: E402
     PendingJobReconciliationError,
     StaleJobRecordError,
     UnreconcilableJobError,
+    WorkflowQueryError,
+    WorkflowReleaseChangedError,
 )
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fake_claude, fixtures, process_fixtures  # noqa: E402
+from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
+from tests.test_job import PLAN_REVIEW, QUERY_RELEASE, _ContractTargetCase  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
@@ -161,7 +166,7 @@ def _record(
         "controller_source_commit": "a" * 40,
         "controller_source_tree_digest": "b" * 64,
         "target_repo": target_repo,
-        "target_workflow_version": "2.3.1",
+        "target_workflow_version": "2.5.1",
         "work_item_id": work_item_id,
         "observed_phase_before": phase,
         "pre_state": pre_state,
@@ -1048,7 +1053,7 @@ _CHILD_STEP = (
     "pinned_at='2024-01-01T00:00:00Z', version='1.1.1'); "
     "from controller.managed_repo import ManagedRepository; "
     "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
-    "workflow_version='2.3.1', profile='full', "
+    "workflow_version='2.5.1', profile='full', "
     "verify={'returncode': 0, 'stdout': '', 'stderr': ''}, "
     "status={'returncode': 0, 'stdout': '', 'stderr': ''}); "
     "job.execute_step(mr, identity=ident, runtime=Path(sys.argv[3]), claude_bin=sys.argv[4])"
@@ -2394,7 +2399,7 @@ _CHILD_ABANDON = (
     "pinned_at='2024-01-01T00:00:00Z', version='1.1.1'); "
     "from controller.managed_repo import ManagedRepository; "
     "mr = ManagedRepository(root=Path(sys.argv[2]), manifest={}, "
-    "workflow_version='2.3.1', profile='full', "
+    "workflow_version='2.5.1', profile='full', "
     "verify={'returncode': 0, 'stdout': '', 'stderr': ''}, "
     "status={'returncode': 0, 'stdout': '', 'stderr': ''}); "
     "job.abandon(mr, identity=ident, runtime=Path(sys.argv[3]), job_id=sys.argv[4])"
@@ -3543,3 +3548,232 @@ class ReplayDeterminismTest(unittest.TestCase):
     def test_the_p5_fixture_replays_to_the_same_bracket_states(self) -> None:
         data = (Path(__file__).resolve().parent / "harness_contract" / "p5_p11_wakeup_fires.jsonl").read_bytes()
         self._assert_replay_matches_live(data)
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP3 -- Workflow failures
+# whenever verification runs: at launch, and at `resume` from a `COMPLETED`
+# and from a `LAUNCHED` record, each ending in a terminal `FAILED` job that
+# leaves nothing pending (Design C, "Query failures"; invariants I2, I3).
+# Every `resume` here calls `job.resume` directly, with the
+# `ManagedRepository` inspected before the failure was arranged: the CLI's
+# own `resume` inspects first and refuses there while the manifest is
+# unreadable (`tests/test_cli.py`'s `ResumeWithUnreadableManifestTest`).
+# ---------------------------------------------------------------------------
+
+_MANIFEST_REL = ".workflow-manager/installation.json"
+
+
+def _plan_block(lc) -> list[dict]:
+    """``/review-plan``'s local ``BLOCK``: the verdict alone, bound to the
+    plan bundle the job started from; the phase stays."""
+    return [fixtures.script_write(lifecycle.FEEDBACK_REL, fixtures.build_review_feedback_text(
+        status="BLOCK", reviewer_role="LOCAL_MODEL_PLAN_REVIEW", reviewed_bundle_id="b" * 64, work_item=lifecycle.WI,
+    ))]
+
+
+#: Every predicate and postcondition that reads Workflow's feedback-path
+#: answer: ``(target phase, pasted manual verdict, task, worker effect,
+#: observed phase)``.
+_QUERY_READING_CLAUSES = {
+    "_predicate_row3_block_feedback_current": (
+        "AWAITING_LOCAL_PLAN_REVIEW", None, PLAN_REVIEW, _plan_block, "AWAITING_LOCAL_PLAN_REVIEW"),
+    "_predicate_local_implementation_block_current": (
+        lifecycle.AWAITING_LOCAL, None, lifecycle.REVIEW_IMPLEMENTATION,
+        lambda lc: lc.local_review("BLOCK", 1), lifecycle.AWAITING_LOCAL),
+    "_postcondition_local_implementation_approve_recorded": (
+        lifecycle.AWAITING_LOCAL, None, lifecycle.REVIEW_IMPLEMENTATION,
+        lambda lc: lc.local_review("APPROVE", 1), lifecycle.AWAITING_MANUAL),
+    "_postcondition_local_implementation_revise_recorded": (
+        lifecycle.AWAITING_LOCAL, None, lifecycle.REVIEW_IMPLEMENTATION,
+        lambda lc: lc.local_review("REVISE", 1), lifecycle.APPLYING),
+    "_postcondition_manual_implementation_approve_recorded": (
+        lifecycle.AWAITING_MANUAL, "APPROVE", lifecycle.RECORD_MANUAL,
+        lambda lc: lc.manual_review("APPROVE", 1), lifecycle.AWAITING_EXTERNAL),
+    "_postcondition_manual_implementation_revise_recorded": (
+        lifecycle.AWAITING_MANUAL, "REVISE", lifecycle.RECORD_MANUAL,
+        lambda lc: lc.manual_review("REVISE", 1), lifecycle.APPLYING),
+}
+
+
+class VerificationWorkflowFailureTest(_ContractTargetCase):
+    RESUME_PATHS = (job.STATUS_COMPLETED, job.STATUS_LAUNCHED)
+
+    def assert_every_path(self, lc, managed_repo, *, reason: str, code: str, observed: str,
+                          check=lambda error: None, **evidence_items) -> dict:
+        """Launch once, then reconcile the same job from ``COMPLETED`` and
+        from ``LAUNCHED``: each a terminal ``FAILED`` with ``reason`` and a
+        ``workflow_error`` carrying ``code``, nothing pending, and no
+        relaunch."""
+        record = self.execute(lc, managed_repo)
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+        self.assertEqual(record["observed_phase_after"], observed)
+        check(self.assert_workflow_failed(record, reason, code, evidence_items))
+        self.assert_nothing_pending(lc, managed_repo)
+        launched = self.processes(lc)
+        self.assertEqual(launched, 1)
+        for status in self.RESUME_PATHS:
+            with self.subTest(path=status):
+                resumed = self.resume_as(lc, managed_repo, record, status)
+                check(self.assert_workflow_failed(resumed, reason, code, evidence_items))
+                self.assertEqual(resumed["observed_phase_after"], observed)
+                self.assertIn("reconciled_at", resumed)
+                self.assert_nothing_pending(lc, managed_repo)
+                self.assertEqual(self.processes(lc), launched, "resume never relaunches")
+        return record
+
+    def assert_next_step_refuses(self, lc, managed_repo, error: type) -> None:
+        """The failure persists, so the next step refuses on its own, at
+        decision time -- never with ``PendingJobReconciliationError`` -- and
+        launches and records nothing."""
+        jobs, launched = self.job_files(lc), self.processes(lc)
+        with self.assertRaises(error):
+            self.execute(lc, managed_repo)
+        self.assertEqual((self.job_files(lc), self.processes(lc)), (jobs, launched))
+
+    def clause_target(self, name: str, clause: str) -> tuple:
+        phase, verdict, task, effect, observed = _QUERY_READING_CLAUSES[clause]
+        lc = self.contract_target(name, phase, manual_verdict=verdict)
+        return lc, task, effect(lc), observed
+
+    def test_each_query_reading_clause_verifies_under_the_real_query(self) -> None:
+        """The positive control: with Workflow answering, each clause reads
+        the feedback where Workflow says it is, and the job verifies."""
+        for index, clause in enumerate(_QUERY_READING_CLAUSES):
+            with self.subTest(clause=clause):
+                lc, task, actions, observed = self.clause_target(f"verifies-{index}", clause)
+                lc.add(task, actions)
+                self.assert_finished(self.execute(lc, self.managed(lc)), observed)
+
+    def test_each_query_reading_clause_fails_closed_on_every_path(self) -> None:
+        def check(error: dict) -> None:
+            self.assertIn("UnknownFeedbackLayoutError", error["message"])
+            self.assertEqual((error["evidence"]["reason"], error["evidence"]["returncode"]), ("query_failed", 1))
+
+        for index, clause in enumerate(_QUERY_READING_CLAUSES):
+            with self.subTest(clause=clause):
+                lc, task, actions, observed = self.clause_target(f"query-{index}", clause)
+                lc.add(task, [*actions, self.break_feedback_query(lc)])
+                managed_repo = self.managed(lc)
+                self.assert_every_path(
+                    lc, managed_repo, reason="workflow_query_failed", code="WORKFLOW_QUERY_FAILED",
+                    observed=observed, check=check, query="--resolve-feedback-path", release=QUERY_RELEASE,
+                )
+                self.assert_next_step_refuses(lc, managed_repo, WorkflowQueryError)
+
+    def test_a_modified_query_script_fails_closed_on_every_path_and_never_runs(self) -> None:
+        lc = self.contract_target("modified", lifecycle.AWAITING_LOCAL)
+        planted = "import pathlib\npathlib.Path('MODIFIED-SCRIPT-RAN').write_text('ran')\n"
+        lc.add(lifecycle.REVIEW_IMPLEMENTATION, [
+            *lc.local_review("APPROVE", 1), fixtures.script_write("scripts/workflow_fingerprint.py", planted)])
+        managed_repo = self.managed(lc)
+        self.assert_every_path(
+            lc, managed_repo, reason="workflow_query_failed", code="WORKFLOW_QUERY_FAILED",
+            observed=lifecycle.AWAITING_MANUAL, path="scripts/workflow_fingerprint.py",
+            check=lambda error: self.assertEqual(error["evidence"]["reason"], "query_script_modified"),
+        )
+        self.assertFalse((lc.root / "MODIFIED-SCRIPT-RAN").exists(), "the modified script ran")
+        self.assert_next_step_refuses(lc, managed_repo, WorkflowQueryError)
+
+    def test_a_failed_private_copy_fails_closed_at_launch_and_from_completed(self) -> None:
+        lc = self.contract_target("private-copy", lifecycle.AWAITING_LOCAL)
+        lc.add(lifecycle.REVIEW_IMPLEMENTATION, lc.local_review("APPROVE", 1))
+        managed_repo = self.managed(lc)
+        armed = threading.Event()
+        real_write, real_launch = workflow_contract.runtime.write_bytes, job.worker.launch
+
+        def write_bytes(root, rel_path, data):
+            if armed.is_set() and Path(root).name.startswith("workflow-controller-query-"):
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_write(root, rel_path, data)
+
+        def launch(*args, **kwargs):
+            result = real_launch(*args, **kwargs)
+            armed.set()  # only once the worker has completed
+            return result
+
+        def check(record: dict) -> None:
+            error = self.assert_workflow_failed(record, "workflow_query_failed", "WORKFLOW_QUERY_FAILED",
+                                                {"reason": "query_private_copy_failed"})
+            self.assertIn("No space left on device", error["evidence"]["error"])
+            self.assert_nothing_pending(lc, managed_repo)
+
+        with unittest.mock.patch.object(workflow_contract.runtime, "write_bytes", write_bytes), \
+                unittest.mock.patch.object(job.worker, "launch", launch):
+            record = self.execute(lc, managed_repo)
+            check(record)
+            check(self.resume_as(lc, managed_repo, record, job.STATUS_COMPLETED))
+        self.assertEqual(self.processes(lc), 1)
+
+    def test_a_changed_release_fails_closed_on_every_path(self) -> None:
+        """M5's verification rule: a job launched under 2.5.1 whose target
+        is updated before verification is verified under no release."""
+        lc = self.contract_target("changed", lifecycle.AWAITING_LOCAL, release="2.5.1")
+        manifest = json.loads((lc.root / _MANIFEST_REL).read_text())
+        lc.add(lifecycle.REVIEW_IMPLEMENTATION, [*lc.local_review("APPROVE", 1), fixtures.script_write(
+            _MANIFEST_REL, json.dumps({**manifest, "workflow_version": QUERY_RELEASE}, indent=2) + "\n")])
+        managed_repo = self.managed(lc)
+        self.assertEqual(managed_repo.workflow_version, "2.5.1")
+        self.assert_every_path(
+            lc, managed_repo, reason="workflow_release_changed", code="WORKFLOW_RELEASE_CHANGED",
+            observed=lifecycle.AWAITING_MANUAL, recorded="2.5.1", installed=QUERY_RELEASE,
+            check=lambda error: self.assertNotIn("manifest_error", error["evidence"]),
+        )
+        self.assert_next_step_refuses(lc, managed_repo, WorkflowReleaseChangedError)
+
+    def test_an_unreadable_manifest_fails_closed_on_every_path_until_restored(self) -> None:
+        cases = {
+            "removed": (fixtures.script_delete(_MANIFEST_REL), "UNMANAGED_REPOSITORY"),
+            "not JSON": (fixtures.script_write(_MANIFEST_REL, "{not json\n"), "MALFORMED_INSTALLATION_MANIFEST"),
+            "schema_version 2": (fixtures.script_write(_MANIFEST_REL, json.dumps({
+                "schema_version": 2, "workflow_version": "2.5.1", "profile": "full"}) + "\n"),
+                "MALFORMED_INSTALLATION_MANIFEST"),
+        }
+        for index, (name, (damage, manifest_code)) in enumerate(cases.items()):
+            with self.subTest(manifest=name):
+                lc = self.contract_target(f"unreadable-{index}", lifecycle.AWAITING_LOCAL, release="2.5.1")
+                original = (lc.root / _MANIFEST_REL).read_bytes()
+                lc.add(lifecycle.REVIEW_IMPLEMENTATION, [*lc.local_review("APPROVE", 1), damage])
+                managed_repo = self.managed(lc)
+
+                def check(error: dict, manifest_code=manifest_code) -> None:
+                    self.assertEqual(error["evidence"]["manifest_error"]["code"], manifest_code)
+
+                self.assert_every_path(
+                    lc, managed_repo, reason="workflow_release_changed", code="WORKFLOW_RELEASE_CHANGED",
+                    observed=lifecycle.AWAITING_MANUAL, recorded="2.5.1", installed=None, check=check,
+                )
+                # Restored, the next step is not refused: it decides, and gates.
+                (lc.root / _MANIFEST_REL).write_bytes(original)
+                gated = self.execute(lc, managed_repo)
+                self.assertEqual(gated["status"], job.STATUS_GATE_BLOCKED)
+                self.assertEqual(self.processes(lc), 1, "nothing was relaunched")
+
+    def test_a_record_without_a_contracted_release_fails_closed(self) -> None:
+        """``resume`` verifies under the record's own release: a record with
+        none, or one naming a release this Controller holds no contract for,
+        is verified under nothing -- a terminal ``FAILED``, never a guess."""
+        lc = self.contract_target("uncontracted", lifecycle.AWAITING_LOCAL, release="2.5.1")
+        lc.add(lifecycle.REVIEW_IMPLEMENTATION, lc.local_review("APPROVE", 1))
+        managed_repo = self.managed(lc)
+        record = self.execute(lc, managed_repo)
+        self.assert_finished(record, lifecycle.AWAITING_MANUAL)
+        manifest = lc.root / _MANIFEST_REL
+        for name, recorded, installed in (("missing", None, "2.5.1"), ("uncontracted", "2.7.0", "2.7.0")):
+            with self.subTest(recorded=name):
+                manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "workflow_version": installed})
+                                    + "\n")
+                rewritten = {k: v for k, v in self.rewrite_as(lc, record, job.STATUS_COMPLETED).items()
+                             if k != "target_workflow_version" or recorded is not None}
+                if recorded is not None:
+                    rewritten["target_workflow_version"] = recorded
+                runtime_module.write_json(lc.runtime, f"jobs/{record['job_id']}.json", rewritten)
+                with unittest.mock.patch.dict(os.environ, self.worker_env(lc)):
+                    job.resume(managed_repo, identity=self.ident, runtime=lc.runtime)
+                error = self.assert_workflow_failed(
+                    self.read_record(lc, record["job_id"]), "workflow_release_changed", "WORKFLOW_RELEASE_CHANGED",
+                    {"recorded": recorded, "installed": installed})
+                if recorded is not None:
+                    self.assertEqual(error["evidence"]["contract_error"]["code"], "UNSUPPORTED_WORKFLOW_VERSION")
+                self.assert_nothing_pending(lc, managed_repo)
+        self.assertEqual(self.processes(lc), 1)

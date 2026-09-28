@@ -739,3 +739,30 @@ class WorkflowQueryError(ControllerError):
     """
 
     code = "WORKFLOW_QUERY_FAILED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP3 -- the installed-release
+# re-check (``controller.job``).
+# ---------------------------------------------------------------------------
+
+
+class WorkflowReleaseChangedError(ControllerError):
+    """The target's installed Workflow release is not the one the Controller
+    is acting under, or cannot be established: its
+    ``.workflow-manager/installation.json`` names another release, or is
+    missing or unreadable.
+
+    Raised before a decision, right after the repository preflight, when the
+    installed release differs from the one ``managed_repo.inspect``
+    admitted. Nothing is decided or launched and no job record is written;
+    ``evidence`` carries ``admitted``, ``installed`` (``null`` when the
+    manifest cannot be read, with the parser error's ``code`` and
+    ``message`` under ``manifest_error``) and what the preflight did
+    (``preflight_action``, ``preflight_gate``, ``preflight_events``).
+
+    At job verification the same condition, against the release the job
+    record carries, is a terminal ``FAILED`` job with reason
+    ``workflow_release_changed``, never a raise."""
+
+    code = "WORKFLOW_RELEASE_CHANGED"

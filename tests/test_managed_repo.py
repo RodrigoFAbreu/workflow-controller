@@ -20,6 +20,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -336,6 +337,37 @@ class InstallProfilePairTest(unittest.TestCase):
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
             with self.assertRaises(UnsupportedInstallProfileError):
                 managed_repo.inspect(repo, manager_bin=str(stub))
+
+
+
+class InstalledWorkflowVersionTest(unittest.TestCase):
+    """``installed_workflow_version`` (workflow-2-6-integration CP3): a plain
+    manifest read, never a Workflow Manager call, whose only failures are
+    the parser's own two refusals."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def test_it_reads_the_declared_release_without_the_manager(self) -> None:
+        fixtures.write_installation_manifest(self.root, workflow_version="2.6.0")
+        with unittest.mock.patch.object(managed_repo, "_run", side_effect=AssertionError("the Manager ran")):
+            self.assertEqual(managed_repo.installed_workflow_version(self.root), "2.6.0")
+
+    def test_a_missing_or_malformed_manifest_is_the_parser_s_own_refusal(self) -> None:
+        with self.assertRaises(UnmanagedRepositoryError):
+            managed_repo.installed_workflow_version(self.root)
+        fixtures.write_installation_manifest(self.root, schema_version=2)
+        with self.assertRaises(MalformedInstallationManifestError):
+            managed_repo.installed_workflow_version(self.root)
+
+    def test_an_os_error_the_parser_does_not_map_is_a_malformed_manifest(self) -> None:
+        with unittest.mock.patch.object(managed_repo, "_read_manifest",
+                                        side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaises(MalformedInstallationManifestError) as caught:
+                managed_repo.installed_workflow_version(self.root)
+        self.assertIn("Permission denied", caught.exception.message)
 
 
 if __name__ == "__main__":

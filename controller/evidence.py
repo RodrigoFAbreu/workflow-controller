@@ -7,9 +7,19 @@ decision engine and human-gate classification").
 "Dependency direction" section has ``job -> {managed_repo, target_state,
 evidence, worker, handoff} -> decision``, so ``evidence`` sits *beside*
 ``managed_repo``/``target_state``, never imported by either, and imports
-only ``controller.decision`` -- never the reverse). For every phase this
-module does not itself refine, it is a pure pass-through to
-:func:`controller.decision.decide`.
+only ``controller.decision`` and ``controller.workflow_contract`` -- never
+the reverse). For every phase this module does not itself refine, it is a
+pure pass-through to :func:`controller.decision.decide`.
+
+**The Workflow contract** (``workflow-controller-workflow-2-6-integration``
+CP3). :func:`decide` binds the admitted release's contract once
+(``workflow_contract.bind_release(managed_repo.workflow_version)``) and
+passes that ``BoundContract`` explicitly to every reader of the feedback
+path (:func:`resolve_feedback_dir` and the ``FUNCTIONAL_REVIEW.md``
+helpers). Under the 2.5.1 contract the path is this module's own rule,
+byte for byte; under a ``workflow_query`` contract it is Workflow's answer
+to ``--resolve-feedback-path``, and a ``WorkflowQueryError`` propagates
+(exit 20), never a fallback to the 2.5.1 rule.
 
 **Automatic-lifecycle-orchestration CP4** gives the implementation-review
 phases their evidence handlers: ``AWAITING_LOCAL_IMPLEMENTATION_REVIEW``
@@ -80,7 +90,9 @@ from pathlib import Path
 from typing import Any
 
 from controller import decision as _decision
+from controller import workflow_contract
 from controller.decision import Action, Decision, HumanGate
+from controller.workflow_contract import BoundContract
 
 # ---------------------------------------------------------------------------
 # The text model for every labelled-line read (revision 47, local round
@@ -167,8 +179,17 @@ def _scoped_else_flat(root: Path, work_item_id: str, *, leaf: str) -> Path:
     return Path(".ai-review") / leaf
 
 
-def resolve_feedback_dir(root: Path, work_item_id: str) -> Path:
-    """``<feedback_dir>``, at every stage: scoped-else-flat, taking no
+def resolve_feedback_dir(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    """``<feedback_dir>``, at every stage, under ``bound``'s contract.
+
+    A ``workflow_query`` contract (Workflow 2.6.0) asks Workflow
+    (``--resolve-feedback-path``) and returns its ``feedback_dir``: a
+    stamped ``scoped`` item's directory whether or not it exists yet, which
+    no existence rule can know. A query failure raises
+    ``WorkflowQueryError``; it is never answered by the rule below.
+
+    The ``controller_rule`` contract (2.5.1) keeps this function's own
+    rule, unchanged: scoped-else-flat, taking no
     stage argument -- but keyed on the feedback leaf's **own** existence
     (``.ai-review/<work_item_id>/feedback/``), never on the work item's
     root directory the way ``resolve_bundle_dir``/``resolve_rejected_marker_path``
@@ -188,6 +209,8 @@ def resolve_feedback_dir(root: Path, work_item_id: str) -> Path:
     commands that actually write/read feedback resolved to the flat one,
     so a human gate's reported ``artifact_path`` named a location nothing
     downstream ever reads."""
+    if bound.contract.feedback_path_source == workflow_contract.WORKFLOW_QUERY:
+        return Path(bound.answers.feedback_path(root, work_item_id).feedback_dir)
     scoped = _scoped_root(work_item_id) / "feedback"
     if (root / scoped).is_dir():
         return scoped
@@ -569,25 +592,27 @@ def functional_checklist_evidence(
     return None
 
 
-def functional_review_findings_path(root: Path, work_item_id: str) -> Path:
-    return resolve_feedback_dir(root, work_item_id) / "FUNCTIONAL_REVIEW.md"
+def functional_review_findings_path(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    return resolve_feedback_dir(root, work_item_id, bound) / "FUNCTIONAL_REVIEW.md"
 
 
-def functional_review_consumed_marker_path(root: Path, work_item_id: str) -> Path:
-    return resolve_feedback_dir(root, work_item_id) / "FUNCTIONAL_REVIEW.consumed"
+def functional_review_consumed_marker_path(root: Path, work_item_id: str, bound: BoundContract) -> Path:
+    """Beside ``FUNCTIONAL_REVIEW.md``, under Workflow's own name. Workflow
+    2.6.0's feedback query does not return it; the name is unchanged."""
+    return resolve_feedback_dir(root, work_item_id, bound) / "FUNCTIONAL_REVIEW.consumed"
 
 
-def functional_review_findings_consumed(root: Path, work_item_id: str) -> bool | None:
+def functional_review_findings_consumed(root: Path, work_item_id: str, bound: BoundContract) -> bool | None:
     """``None`` if ``FUNCTIONAL_REVIEW.md`` does not exist yet (there is
     nothing to have consumed). ``True`` if the consumed-marker's recorded
     hash equals the findings file's current git blob hash -- mirroring
     ``workflow_fingerprint.assert_functional_review_not_already_consumed``'s
     own presence-then-content read shape. ``False`` for a missing marker
     or a hash mismatch (genuinely new, unconsumed findings)."""
-    findings_path = root / functional_review_findings_path(root, work_item_id)
+    findings_path = root / functional_review_findings_path(root, work_item_id, bound)
     if not findings_path.is_file():
         return None
-    marker_path = root / functional_review_consumed_marker_path(root, work_item_id)
+    marker_path = root / functional_review_consumed_marker_path(root, work_item_id, bound)
     try:
         recorded = marker_path.read_text().strip()
     except OSError:
@@ -1285,9 +1310,11 @@ def evaluate_apply_implementation_review_admissibility(
 # ---------------------------------------------------------------------------
 
 
-def _decide_awaiting_local_plan_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
+def _decide_awaiting_local_plan_review(
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
+) -> Decision:
     phase = "AWAITING_LOCAL_PLAN_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback = read_feedback_fields(root, feedback_dir)
     if feedback is not None:
         role = _normalize_role(feedback.get("reviewer_role"))
@@ -1324,10 +1351,10 @@ def _decide_awaiting_local_plan_review(root: Path, work_item_id: str, work_item:
 
 
 def _decide_awaiting_manual_external_plan_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
     feedback = read_feedback_fields(root, feedback_dir)
 
@@ -1405,9 +1432,11 @@ def _decide_awaiting_manual_external_plan_review(
     )
 
 
-def _decide_awaiting_external_plan_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
+def _decide_awaiting_external_plan_review(
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
+) -> Decision:
     phase = "AWAITING_EXTERNAL_PLAN_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
     feedback = read_feedback_fields(root, feedback_dir)
 
@@ -1486,14 +1515,14 @@ def _explain_command(work_item_id: str) -> str:
 
 
 def _decide_awaiting_external_implementation_review_legacy(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """The ``"1"``/``"2.1"`` handler (and any version other than
     ``"2.2"``), byte-identical to the one before automatic-lifecycle-
     orchestration CP4 -- pinned by ``tests/golden/external_implementation_
     review_decisions.json``."""
     phase = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = resolve_bundle_dir(root, work_item_id, phase=phase)
     feedback = read_feedback_fields(root, feedback_dir)
     manifest = read_manifest_fields(root, bundle_dir)
@@ -1562,7 +1591,7 @@ def _pinned_bundle(work_item: Any, bundle_id: str | None) -> bool:
 
 
 def _decide_awaiting_external_implementation_review_two_stage(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """The ``"2.2"`` handler. This phase is reached only through a recorded
     manual ``APPROVE`` (``record_manual_implementation_review``), so "no
@@ -1587,7 +1616,7 @@ def _decide_awaiting_external_implementation_review_two_stage(
     Clauses the Controller cannot see (an uncommitted protected-content
     edit) stay ``/approve-review``'s own recomputation to refuse on."""
     phase = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
     bundle_dir = implementation_bundle_dir(root, work_item_id)
     feedback = read_feedback_fields(root, feedback_dir)
@@ -1696,19 +1725,19 @@ def _decide_awaiting_external_implementation_review_two_stage(
 
 
 def _decide_awaiting_external_implementation_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """``"2.2"`` is ledger-, feedback- and pin-aware
     (:func:`_decide_awaiting_external_implementation_review_two_stage`);
     every other version keeps its pre-CP4 decision, byte for byte
     (:func:`_decide_awaiting_external_implementation_review_legacy`)."""
     if getattr(work_item, "governing_workflow_version", None) == "2.2":
-        return _decide_awaiting_external_implementation_review_two_stage(root, work_item_id, work_item)
-    return _decide_awaiting_external_implementation_review_legacy(root, work_item_id, work_item)
+        return _decide_awaiting_external_implementation_review_two_stage(root, work_item_id, work_item, bound)
+    return _decide_awaiting_external_implementation_review_legacy(root, work_item_id, work_item, bound)
 
 
 def _decide_awaiting_local_implementation_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """A ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` ``BLOCK`` on file gates:
     ``review-implementation.md`` A7 requires explicit user resolution
@@ -1719,7 +1748,7 @@ def _decide_awaiting_local_implementation_review(
     Otherwise ``/review-implementation <id>`` is selected (automatic by the
     dispatch rule at ``"2.2"``)."""
     phase = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback = read_feedback_fields(root, feedback_dir)
     if (
         feedback is not None and feedback.get("status") == "BLOCK"
@@ -1752,7 +1781,7 @@ def _decide_awaiting_local_implementation_review(
 
 
 def _decide_awaiting_manual_external_implementation_review(
-    root: Path, work_item_id: str, work_item: Any,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
     """The ``"2.2"`` manual stage, mirroring the plan stage's
     ``/record-manual-plan-review`` ingestion. Every sub-case but the last is
@@ -1775,7 +1804,7 @@ def _decide_awaiting_manual_external_implementation_review(
     The Controller never writes ``REVIEW_FEEDBACK.md``: ingestion launches
     only once a human has placed the verdict there."""
     phase = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     bundle_dir = implementation_bundle_dir(root, work_item_id)
     feedback = read_feedback_fields(root, feedback_dir)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
@@ -1858,9 +1887,11 @@ def _decide_awaiting_manual_external_implementation_review(
     )
 
 
-def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item: Any) -> Decision:
+def _decide_awaiting_functional_review(
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
+) -> Decision:
     phase = "AWAITING_FUNCTIONAL_REVIEW"
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     current_head = _current_head(root)
     checklist = functional_checklist_evidence(
         root, work_item_id, getattr(work_item, "base_commit", None), current_head,
@@ -1882,7 +1913,7 @@ def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item:
             reason=f"{phase}: no current-round Workflow-Functional-Checklist evidence found",
         )
 
-    findings_path = functional_review_findings_path(root, work_item_id)
+    findings_path = functional_review_findings_path(root, work_item_id, bound)
     if not (root / findings_path).is_file():
         return Decision(
             observed_phase=phase, evidence=(f"checklist evidence commit {checklist['commit_sha']}",),
@@ -1899,7 +1930,7 @@ def _decide_awaiting_functional_review(root: Path, work_item_id: str, work_item:
             reason=f"{phase}: checklist is current and no FUNCTIONAL_REVIEW.md exists yet",
         )
 
-    consumed = functional_review_findings_consumed(root, work_item_id)
+    consumed = functional_review_findings_consumed(root, work_item_id, bound)
     if consumed is False:
         return Decision(
             observed_phase=phase, evidence=("unconsumed FUNCTIONAL_REVIEW.md findings",),
@@ -2772,7 +2803,8 @@ def relaunch_bound_applies(job: LaunchedJobView | None, manifest_bundle_id: str 
 
 
 def _decide_applying_review_feedback_two_stage(
-    root: Path, work_item_id: str, work_item: Any, *, last_apply_job: LaunchedJobView | None,
+    root: Path, work_item_id: str, work_item: Any, bound: BoundContract, *,
+    last_apply_job: LaunchedJobView | None,
 ) -> Decision:
     """``"2.2"`` ``APPLYING_REVIEW_FEEDBACK`` (CP4B), after the ``REJECTED``
     and implementation-bundle gates, in front of CP4's corrected gate:
@@ -2792,7 +2824,7 @@ def _decide_applying_review_feedback_two_stage(
        exactly when ``HEAD`` does not yet record ``APPLYING_REVIEW_FEEDBACK``."""
     phase = _APPLYING_REVIEW_FEEDBACK
     corrected_what, corrected_resume = _decision._STATIC_GATES[phase]
-    feedback_dir = resolve_feedback_dir(root, work_item_id)
+    feedback_dir = resolve_feedback_dir(root, work_item_id, bound)
     feedback_path = feedback_dir / "REVIEW_FEEDBACK.md"
     bundle_dir = implementation_bundle_dir(root, work_item_id)
     manifest = read_manifest_fields(root, bundle_dir)
@@ -2927,10 +2959,17 @@ def decide(
     ``controller.job.last_launched_apply_job_view``, which this module
     cannot import. Both callers (``job.execute_step`` and ``cli``'s
     ``explain``) pass it, so both see the same J and make the same
-    decision; it is read at no other phase."""
+    decision; it is read at no other phase.
+
+    The Workflow contract is bound here, once per decision, from the
+    release ``managed_repo.inspect`` admitted (``managed_repo.
+    workflow_version``), and passed explicitly to every handler that reads
+    the feedback path (``workflow-controller-workflow-2-6-integration``
+    CP3). No caller can pass another provider."""
     phase = work_item.phase
     work_item_id = work_item.work_item_id
     root = managed_repo.root
+    bound = workflow_contract.bind_release(managed_repo.workflow_version)
 
     if phase in BUNDLE_BEARING_PHASES:
         rejected, detail = rejected_marker_detail(root, work_item_id)
@@ -2965,7 +3004,7 @@ def decide(
     if phase == _APPLYING_REVIEW_FEEDBACK and work_item.governing_workflow_version in _APPLY_AUTOMATION_VERSIONS:
         return _decision.apply_dispatch_rule(
             _decide_applying_review_feedback_two_stage(
-                root, work_item_id, work_item, last_apply_job=last_apply_job,
+                root, work_item_id, work_item, bound, last_apply_job=last_apply_job,
             ),
             work_item.governing_workflow_version,
         )
@@ -2977,7 +3016,7 @@ def decide(
         # launches is decided by the same rule `decision.decide` applies to
         # its own handlers' output.
         return _decision.apply_dispatch_rule(
-            handler(root, work_item_id, work_item), work_item.governing_workflow_version,
+            handler(root, work_item_id, work_item, bound), work_item.governing_workflow_version,
         )
 
     return _decision.decide(managed_repo, snapshot, work_item)

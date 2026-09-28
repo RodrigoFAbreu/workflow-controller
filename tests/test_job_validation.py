@@ -1363,7 +1363,7 @@ class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
     def test_postcondition_with_zero_or_two_new_keys_is_not_satisfied(self) -> None:
         fixtures.write_plan_manifest(self.root, "wi-a", 1)
         pre_state = {"pre_work_item_keys": []}
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state)
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("found 0", detail)
 
@@ -1371,25 +1371,25 @@ class PlanBundlePostconditionRowSevenTest(unittest.TestCase):
         env = _write_new_work_items_env(self.root, "wi-a", "wi-b")
         state_path.write_text(env["FAKE_CLAUDE_WRITE_TEXT"])
         fixtures.write_plan_manifest(self.root, "wi-b", 1)
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state)
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, None, pre_state, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("found 2", detail)
 
         # Positive control: the same two-key state, with one key already
         # pre-existing, resolves the single new key and is satisfied.
         satisfied, _detail = job._postcondition_plan_bundle_coherent(
-            self.root, None, {"pre_work_item_keys": ["wi-a"]},
+            self.root, None, {"pre_work_item_keys": ["wi-a"]}, fixtures.reference_binding(),
         )
         self.assertTrue(satisfied)
 
     def test_postcondition_with_an_unreadable_post_state_is_not_satisfied(self) -> None:
         (self.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-1", {})
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-1", {}, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("post-state could not be read", detail)
 
     def test_postcondition_for_an_absent_work_item_is_not_satisfied(self) -> None:
-        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-missing", {})
+        satisfied, detail = job._postcondition_plan_bundle_coherent(self.root, "wi-missing", {}, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("absent from the post-state", detail)
 
@@ -1480,12 +1480,12 @@ class Row3BlockPredicateBundleIdRegressionTest(unittest.TestCase):
                 ),
             )
             predicate = job._predicate_row3_block_feedback_current
-            self.assertTrue(predicate(root, "wi-1", {"bundle_manifest_bundle_id": "b" * 64}))
+            self.assertTrue(predicate(root, "wi-1", {"bundle_manifest_bundle_id": "b" * 64}, fixtures.reference_binding()))
             # The pre-CP2 input alone no longer satisfies it, and a record
             # written before the field existed is "not satisfied".
-            self.assertFalse(predicate(root, "wi-1", {"bundle_id": "b" * 64, "bundle_manifest_readable": True}))
-            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": None}))
-            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": ""}))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_id": "b" * 64, "bundle_manifest_readable": True}, fixtures.reference_binding()))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": None}, fixtures.reference_binding()))
+            self.assertFalse(predicate(root, "wi-1", {"bundle_manifest_bundle_id": ""}, fixtures.reference_binding()))
 
 
 # ---------------------------------------------------------------------------
@@ -1773,8 +1773,8 @@ class CheckpointProgressDetailUnitTest(_ImplementationRowTestCase):
     names none."""
 
     def _assert_detail(self, root: Path, pre_state: dict, detail: "str | None") -> None:
-        self.assertEqual(job._checkpoint_completion_failure(root, "wi-1", pre_state), detail)
-        self.assertIs(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state), detail is None)
+        self.assertEqual(job._checkpoint_completion_failure(root, "wi-1", pre_state, fixtures.reference_binding()), detail)
+        self.assertIs(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()), detail is None)
         if detail is not None:
             self.assertIn(detail, job.CHECKPOINT_PROGRESS_DETAILS)
 
@@ -1876,24 +1876,31 @@ class SelfLoopPredicateSingleSiteTest(unittest.TestCase):
             finally:
                 depth[0] -= 1
 
-        def detail(_root, _wid, _pre):
+        def detail(_root, _wid, _pre, _bound):
             seen.append(depth[0])
             return "head_unchanged"
 
         row = dataclasses.replace(eo, predicate_detail=detail)
+        # The installed-release re-check (workflow-2-6-integration CP3) runs
+        # before every clause, so the root carries the reference manifest.
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        fixtures.write_installation_manifest(root)
+        release = fixtures.REFERENCE_WORKFLOW_RELEASE
         with unittest.mock.patch.object(job, "_row_clauses_failure", clauses):
             verified, ev = job._verify_transition(
-                root=Path("/nonexistent"), work_item_id="wi-1", outcome=row, pre_state={},
-                observed_phase_after="IMPLEMENTING", worker_outcome="SUCCESS",
+                root=root, work_item_id="wi-1", outcome=row, pre_state={},
+                observed_phase_after="IMPLEMENTING", worker_outcome="SUCCESS", release=release,
             )
             self.assertFalse(verified)
             self.assertEqual(ev["predicate_detail"], "head_unchanged")
             for status, outcome in ((job.STATUS_LAUNCHED, None), (job.STATUS_COMPLETED, "SUCCESS")):
                 result = job._row2_verified(
-                    root=Path("/nonexistent"), work_item_id="wi-1", outcome=row, pre_state={},
-                    observed_phase_after="IMPLEMENTING", status=status, worker_outcome=outcome,
+                    root=root, work_item_id="wi-1", outcome=row, pre_state={},
+                    observed_phase_after="IMPLEMENTING", status=status, worker_outcome=outcome, release=release,
                 )
-                self.assertEqual(result, (False, "predicate_not_satisfied", None, "head_unchanged"))
+                self.assertEqual(result, (False, "predicate_not_satisfied", None, "head_unchanged", None))
         self.assertEqual(seen, [1, 1, 1])
 
     def test_predicate_detail_without_a_predicate_is_a_violation(self) -> None:
@@ -1920,15 +1927,15 @@ class CheckpointPredicateUnitTest(_ImplementationRowTestCase):
         root = self._repo()
         head = fixtures.current_head(root)
         pre_state = {"target_head": head, "checkpoints": {"CP1": {"status": "IN_PROGRESS"}}}
-        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
         # Positive control: the same facts with HEAD having moved since.
         moved = {**pre_state, "target_head": "0" * 40}
-        self.assertTrue(job._predicate_checkpoint_completed_durably(root, "wi-1", moved))
+        self.assertTrue(job._predicate_checkpoint_completed_durably(root, "wi-1", moved, fixtures.reference_binding()))
 
     def test_a_checkpoint_already_complete_in_the_pre_state_does_not_count(self) -> None:
         root = self._repo()
         pre_state = {"target_head": "0" * 40, "checkpoints": {"CP1": {"status": "COMPLETE"}}}
-        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
 
     def test_absent_or_malformed_inputs_are_not_satisfied(self) -> None:
         root = self._repo()
@@ -1939,18 +1946,18 @@ class CheckpointPredicateUnitTest(_ImplementationRowTestCase):
             {"target_head": "0" * 40, "checkpoints": ["CP1"]},
         ):
             with self.subTest(pre_state=pre_state):
-                self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+                self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
 
     def test_an_unreadable_post_state_is_not_satisfied(self) -> None:
         root = self._repo()
         (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
         pre_state = {"target_head": "0" * 40, "checkpoints": {}}
-        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state))
+        self.assertFalse(job._predicate_checkpoint_completed_durably(root, "wi-1", pre_state, fixtures.reference_binding()))
 
     def test_the_self_review_postcondition_reads_an_unreadable_post_state_as_not_satisfied(self) -> None:
         root = self._repo()
         (root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").write_text("{not json")
-        satisfied, detail = job._postcondition_self_review_entered_durably(root, "wi-1", {})
+        satisfied, detail = job._postcondition_self_review_entered_durably(root, "wi-1", {}, fixtures.reference_binding())
         self.assertFalse(satisfied)
         self.assertIn("post-state could not be read", detail)
 

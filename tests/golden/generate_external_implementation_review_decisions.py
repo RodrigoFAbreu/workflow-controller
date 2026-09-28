@@ -27,6 +27,15 @@ Run ``python3 tests/golden/generate_external_implementation_review_decisions.py`
 to rewrite the golden, or with ``--check`` to compare without writing.
 Rewriting it is a deliberate act: the golden's whole value is that it does
 not move.
+
+**The release dimension** (``docs/ai-workflow/
+CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``, Design C, CP3), as in the
+plan-stage generator: ``--release 2.5.1`` (the default) writes and checks the
+file above, derived exactly as before; ``--release 2.6.0`` writes and checks
+``external_implementation_review_decisions.2.6.0.json``, where each scenario
+runs once per Workflow 2.6.0 feedback layout, its feedback written at that
+layout's path and Workflow's feedback-path answer replayed as a recorded
+value. This phase reads no publication status. Case keys gain ``| layout``.
 """
 
 from __future__ import annotations
@@ -42,12 +51,20 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from controller import evidence  # noqa: E402
+from controller.managed_repo import REFERENCE_WORKFLOW_RELEASE  # noqa: E402
 from tests import fixtures  # noqa: E402
+from tests.golden import generate_plan_stage_decisions as plan_golden  # noqa: E402
 from tests.golden.generate_plan_stage_decisions import (  # noqa: E402
-    case_key, decision_to_dict, load_cases, normalise,
+    FEEDBACK_LAYOUTS, case_key, decision_to_dict, load_cases, normalise, queries_workflow, recorded_feedback_path,
 )
 
 GOLDEN_PATH = Path(__file__).resolve().parent / "external_implementation_review_decisions.json"
+
+#: Each release this generator derives a golden for, and that golden's file.
+GOLDEN_PATHS: dict[str, Path] = {
+    REFERENCE_WORKFLOW_RELEASE: GOLDEN_PATH,
+    "2.6.0": GOLDEN_PATH.with_name("external_implementation_review_decisions.2.6.0.json"),
+}
 
 WORK_ITEM_ID = "wi-1"
 PHASE = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
@@ -82,9 +99,16 @@ def _implementation_manifest(root: Path, head: str) -> None:
     )
 
 
+#: Under a ``workflow_query`` release, the feedback directory of the layout
+#: the case runs on (every scenario's feedback is written there); ``None``
+#: for the reference release.
+_feedback_redirect: Path | None = None
+
+
 def _feedback(feedback_dir: Path, **fields) -> Callable[[Path, str], None]:
     def write(root: Path, head: str) -> None:
-        fixtures.write_review_feedback(root, feedback_dir, fixtures.build_review_feedback_text(**fields))
+        target_dir = feedback_dir if _feedback_redirect is None else _feedback_redirect
+        fixtures.write_review_feedback(root, target_dir, fixtures.build_review_feedback_text(**fields))
     return write
 
 
@@ -151,10 +175,13 @@ SCENARIOS: tuple[tuple[str, Callable[[Path, str], None], dict[str, Any]], ...] =
 )
 
 
-def derive_cases() -> dict[str, dict[str, Any]]:
+def derive_cases(release: str = REFERENCE_WORKFLOW_RELEASE) -> dict[str, dict[str, Any]]:
     """Run every scenario at every ``(phase, version)`` of
     :data:`PHASE_VERSIONS` through ``controller.evidence.decide``, normalised
-    and keyed by :func:`~tests.golden.generate_plan_stage_decisions.case_key`."""
+    and keyed by :func:`~tests.golden.generate_plan_stage_decisions.case_key`;
+    under a ``workflow_query`` release, once per feedback layout."""
+    if queries_workflow(release):
+        return _derive_query_cases(release)
     cases: dict[str, dict[str, Any]] = {}
     for scenario_id, setup, overrides in SCENARIOS:
         with TemporaryDirectory() as tmp:
@@ -179,12 +206,51 @@ def derive_cases() -> dict[str, dict[str, Any]]:
     return cases
 
 
-def render_document(cases: dict[str, dict[str, Any]]) -> str:
+def _derive_query_cases(release: str) -> dict[str, dict[str, Any]]:
+    """:func:`derive_cases` under a ``workflow_query`` release: one target
+    per ``(scenario, layout)``, with its feedback at the layout's directory
+    (created for ``legacy-scoped``), its manifest declaring ``release``, and
+    the plan-stage generator's recorded answers for that layout."""
+    global _feedback_redirect
+    cases: dict[str, dict[str, Any]] = {}
+    for scenario_id, setup, overrides in SCENARIOS:
+        for layout in FEEDBACK_LAYOUTS:
+            previous = _feedback_redirect
+            _feedback_redirect = Path(recorded_feedback_path(WORK_ITEM_ID, layout).feedback_dir)
+            try:
+                with TemporaryDirectory() as tmp, plan_golden.recorded_answers(layout):
+                    root = Path(tmp) / "target"
+                    fixtures.build_target_git_repo(root)
+                    (root / "README.md").write_text("target fixture\n")
+                    head = fixtures.commit_all(root, "initial")
+                    setup(root, head)
+                    if layout == "legacy-scoped":
+                        (root / _SCOPED_FEEDBACK).mkdir(parents=True, exist_ok=True)
+                    fixtures.write_installation_manifest(root, workflow_version=release)
+                    managed_repo = fixtures.build_target_managed_repository(root)
+                    roots = (str(root), str(root.resolve()))
+                    for phase, version in PHASE_VERSIONS:
+                        plan_golden._current_case.update(
+                            layout=layout, status=plan_golden.NO_STATUS, phase=phase, version=version)
+                        fields = dict(_BASE_OVERRIDES)
+                        fields.update(overrides)
+                        work_item = fixtures.build_work_item_view(
+                            work_item_id=WORK_ITEM_ID, phase=phase, governing_workflow_version=version, **fields,
+                        )
+                        try:
+                            body = decision_to_dict(evidence.decide(managed_repo, snapshot=None, work_item=work_item))
+                        except Exception as exc:  # pinned, never swallowed: a raise is a decision too
+                            body = {"raises": type(exc).__name__, "message": str(exc)}
+                        cases[case_key(scenario_id, phase, version, layout)] = normalise(body, roots)
+            finally:
+                _feedback_redirect = previous
+    return cases
+
+
+def render_document(cases: dict[str, dict[str, Any]], release: str = REFERENCE_WORKFLOW_RELEASE) -> str:
     """The golden file's exact text for ``cases``: the plan-stage golden's
     own deduplicated form (identical decisions stored once, under a
     content-derived id), with this golden's own description."""
-    from tests.golden import generate_plan_stage_decisions as plan_golden
-
     document = json.loads(plan_golden.render_document(cases))
     document["description"] = (
         "\"1\"/\"2.1\" AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW decisions of "
@@ -194,30 +260,41 @@ def render_document(cases: dict[str, dict[str, Any]]) -> str:
         "'scenario | phase | version' to a key of 'decisions'."
     )
     document["phase_versions"] = [list(pair) for pair in PHASE_VERSIONS]
+    if queries_workflow(release):
+        document["description"] = (
+            f"\"1\"/\"2.1\" AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW decisions of controller.evidence.decide "
+            f"under the Workflow {release} contract, Workflow's feedback-path answer replayed as a recorded "
+            f"value (tests/golden/generate_external_implementation_review_decisions.py --release {release}). "
+            "'cases' maps 'scenario | phase | version | layout' to a key of 'decisions'."
+        )
+        document["release"] = release
+        document["feedback_layouts"] = list(FEEDBACK_LAYOUTS)
     return json.dumps(document, sort_keys=True, indent=2) + "\n"
 
 
-def render() -> str:
+def render(release: str = REFERENCE_WORKFLOW_RELEASE) -> str:
     """The golden file's exact text, freshly derived from the code."""
-    return render_document(derive_cases())
+    return render_document(derive_cases(release), release)
 
 
-__all__ = ["GOLDEN_PATH", "PHASE_VERSIONS", "SCENARIOS", "derive_cases", "load_cases", "render",
+__all__ = ["GOLDEN_PATH", "GOLDEN_PATHS", "PHASE_VERSIONS", "SCENARIOS", "derive_cases", "load_cases", "render",
            "render_document"]
 
 
 def main(argv: list[str]) -> int:
-    text = render()
+    release = plan_golden.release_argument(argv)
+    golden_path = GOLDEN_PATHS[release]
+    text = render(release)
     if "--check" in argv:
-        current = GOLDEN_PATH.read_text() if GOLDEN_PATH.is_file() else None
+        current = golden_path.read_text() if golden_path.is_file() else None
         if current == text:
-            print(f"{GOLDEN_PATH} is current")
+            print(f"{golden_path} is current")
             return 0
-        print(f"{GOLDEN_PATH} differs from a fresh derivation", file=sys.stderr)
+        print(f"{golden_path} differs from a fresh derivation", file=sys.stderr)
         return 1
-    GOLDEN_PATH.write_text(text)
+    golden_path.write_text(text)
     document = json.loads(text)
-    print(f"wrote {GOLDEN_PATH} ({len(document['cases'])} cases, "
+    print(f"wrote {golden_path} ({len(document['cases'])} cases, "
           f"{len(document['decisions'])} distinct decisions)")
     return 0
 

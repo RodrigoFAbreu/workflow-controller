@@ -30,8 +30,8 @@ and the result is released as 1.3.0.
 | id | status | commit |
 | --- | --- | --- |
 | CP1 -- vendored release trees, one phase list, per-release inventories | complete | `1689540` |
-| CP2 -- the Workflow contract module and the two query clients | complete | this checkpoint's commit |
-| CP3 -- release-aware feedback resolution | not started | |
+| CP2 -- the Workflow contract module and the two query clients | complete | `47b51f2` |
+| CP3 -- release-aware feedback resolution | complete | this checkpoint's commit |
 | CP4 -- plan-review publication status and per-release writer declarations | not started | |
 | CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | not started | |
 | CP6 -- documentation, release 1.3.0 and full verification | not started | |
@@ -241,3 +241,154 @@ and the result is released as 1.3.0.
     `tests/fixtures.py` when they need it.
   - The generator runs a plain `python3`, which writes `scripts/__pycache__` into a target (and
     into the bundle's `files/`) unless `PYTHONDONTWRITEBYTECODE` is set.
+
+### CP3 -- release-aware feedback resolution (complete)
+
+- **The answers seam** (`controller/workflow_contract.py`). `QueryAnswers` runs the two real
+  queries, each at most once per `(root, work item)` for as long as the object lives. A failed
+  query is not remembered. `BoundContract(contract, answers)` and `bind(contract)` give a fresh
+  `QueryAnswers` for a `workflow_query` contract and `answers=None` for 2.5.1.
+  `bind_release(release)` is `bind(contract_for(release))`. The private `_answers_factory` hook,
+  which `bind` consults, is set only by the golden generators. No public entry point takes a
+  provider, and a test pins `decide`'s, `execute_step`'s and `bind`'s signatures.
+- **Resolver** (`controller/evidence.py`). `resolve_feedback_dir(root, id, bound)` returns
+  Workflow's `feedback_dir` under a `workflow_query` contract. Under 2.5.1 it runs the old body
+  unchanged. A `WorkflowQueryError` propagates and is never answered by the 2.5.1 rule.
+  `functional_review_findings_path`, `functional_review_consumed_marker_path` (Workflow's name,
+  next to `FUNCTIONAL_REVIEW.md`) and `functional_review_findings_consumed` take the binding too.
+  `decide` binds once per call, from `managed_repo.workflow_version`, and passes the binding to
+  the nine handler call sites. `bound` is a required argument everywhere, so no caller can fall
+  back to the 2.5.1 rule by omission.
+- **Before every decision** (`controller/job.py`, `_refuse_changed_release`). The check runs in
+  `_execute_step_locked` right after `repository_preflight` returns, for a `Gate` and a `Proceed`
+  alike. That is before `_branch_gate_record`, the state re-read, `_capture_pre_state` and
+  `decide`.
+  - `managed_repo.installed_workflow_version(root)` (new) is a plain read through
+    `_read_manifest`. It also maps a stray `OSError` to `MalformedInstallationManifestError`:
+    Python 3.12's `Path.is_file` raises one for an unsearchable directory, and 3.12 is the
+    supported floor. The self-review found this; without it the error could have escaped
+    verification.
+  - Any mismatch, or a missing or unreadable manifest, raises `WorkflowReleaseChangedError`
+    (new, `WORKFLOW_RELEASE_CHANGED`, exit 20). Its evidence is `admitted`, `installed` (`null`
+    plus `manifest_error` `{code, message}` when unreadable), `preflight_action`,
+    `preflight_gate` and `preflight_events`.
+  - The message says that only the decision was refused. It names a returned gate as not
+    recorded and rediscovered next time, an action other than `none` as completed and recorded,
+    and a close-out whenever `preflight_events` holds `closed`. When the preflight's own
+    outcome is `closed_out`, the close-out is stated once.
+  - `milestone_branch.Context.events` (new, default `None`) collects every event `_event`
+    writes. `_event` is the only binding-event writer, which was checked.
+- **Pre-state capture.** `_capture_pre_state` binds its own contract for
+  `functional_review_consumed_blob`. A query failure there is a decision-time refusal, before
+  `decide`.
+- **Verification** (`_row_clauses_failure`, the one helper `_verify_transition` and
+  `_row2_verified` share). It takes `release`, the job record's `target_workflow_version`, and
+  runs `_verification_contract` first. That checks the installed release against the record
+  and binds once. A mismatch, an unreadable manifest, or a missing or uncontracted recorded
+  release (`contract_error`) all give `workflow_release_changed`.
+  - The clauses run inside one `try/except WorkflowQueryError`, which gives
+    `workflow_query_failed`. The helper now returns a fourth element, `workflow_error`
+    (`code`, `message`, full `evidence`).
+  - `_transition_not_observed_evidence` gains the optional `workflow_error` key.
+    `_row2_verified` returns five elements.
+  - `_reconcile_launched` checks the two reasons ahead of its `INTERRUPTED` and
+    `UnreconcilableJobError` branches and records `FAILED`. Launch and `_reconcile_completed`
+    already record `FAILED` for an unverified job.
+  - `PredicateFn`, `PredicateDetailFn` and `PostconditionFn` gain a fourth positional `bound`.
+    Every clause takes it. The six feedback readers use it, and the rest ignore it.
+- **Goldens** (`--release`, default `2.5.1`).
+  - `--release 2.5.1` checks the existing files. They are byte-unchanged, and the derivation of
+    both is byte-identical to HEAD's (compared case by case).
+  - `--release 2.6.0` writes `plan_stage_decisions.2.6.0.json` (3552 cases, 75 distinct
+    decisions, 0.7 s, 496 KB) and `external_implementation_review_decisions.2.6.0.json` (114
+    cases, 25 KB). Workflow's answers are replayed through the hook as recorded values, in
+    2.6.0's own words (`RecordedAnswers`).
+  - Each scenario runs once per layout (`scoped`, `legacy-scoped`, `legacy-flat`), its feedback
+    written at that layout's path, with the phase's ordinary status. At the `"2.1"`/`"2.2"`
+    plan phases it also runs once per status class on `scoped`: `bound`, `bound_advisory`,
+    `content_drifted`, `bundle_unverified`, `legacy_unverified`, `refusal` and `unexpected` at
+    the ready phases, and `ordinary`, `refusal` and `unexpected` elsewhere. This reads "also
+    runs once per status class" as additional runs rather than a cross product with the
+    layouts, which would double the file.
+  - A `"1"`-governed item runs every layout with status `-`, and its recorded status query
+    fails as the real one does. CP3 consumes no status yet, so the status variants decide
+    alike until CP4 regenerates the file.
+- **Tests** (32 new).
+  - `test_evidence`: real 2.6.0 resolution. A stamped `scoped` item resolves scoped before its
+    directory exists, where the 2.5.1 rule says flat. Also covered: the legacy layouts, the
+    functional-review helpers, a failure propagating from the resolver and from `decide`, one
+    query answering four reads in one decision (and a new query per decision), no query under
+    2.5.1, and the signature pins.
+  - `test_evidence` golden checks: both 2.6.0 files re-derive byte-equal, the 2.5.1 files are
+    the originals, and the coverage is exact. A cross-check derives both releases: wherever
+    Workflow answers the layout the 2.5.1 rule would find, with the ordinary status, every
+    2.6.0 decision equals the 2.5.1 one.
+  - `test_job`: a query failure in the pre-state capture (`decide` never reached), in `decide`
+    (the second query fails through the runner hook), and at the CLI (exit 20); no record and no
+    worker in each case. The refusal wording for each preflight outcome shape. The gate case
+    (`pr_closed_unmerged` not recorded, then rediscovered once restored).
+  - `test_job`, the real close-out case: the merge lands a Workflow update and an unbound item,
+    and the preflight closes out and binds it. Evidence `preflight_action: bound` and
+    `closed` before `bound` in the events; the record is `CLOSED` and nothing is launched.
+  - `test_resume` (`VerificationWorkflowFailureTest`): each of the six query-reading clauses on
+    real 2.6.0 scripts, broken for real by the worker's `feedback_layout: null`. Each ends
+    `FAILED` / `workflow_query_failed` at launch and at `resume` from `COMPLETED` and
+    `LAUNCHED`, with nothing pending, no relaunch, and a next step refused with
+    `WorkflowQueryError`. Each also has a positive control that verifies `FINISHED`.
+  - `test_resume`, the other verification failures: a script replaced by the worker
+    (`query_script_modified`, all three paths, never executed); an `ENOSPC` private-copy write
+    armed after the worker (launch, `COMPLETED`); a changed release on all three paths (M5); a
+    removed, non-JSON and `schema_version: 2` manifest on all three paths, with the next step
+    gating once restored; and a record with no or an uncontracted release.
+  - `test_cli`: a `run` held by the worker-created pause file while the manifest is changed,
+    removed or malformed. Exit 20, one worker and one record, and the refusal's evidence taken
+    by a spy. CLI `resume` with the manifest removed or malformed, from `COMPLETED` and
+    `LAUNCHED`: exit 20 at `inspect`, the record byte-unchanged and pending, and it reconciles
+    `FINISHED` once restored.
+  - `test_managed_repo`: `installed_workflow_version`.
+- **Existing tests changed** (the plan's named exception, no assertion changed except where
+  noted):
+  - `fixtures.build_target_managed_repository` now writes the reference manifest when none
+    exists, excluded from Git through `.git/info/exclude`. It returns the release the manifest
+    declares.
+  - `fixtures.reference_binding()` is new. The 2.5.1 binding is passed at the direct clause and
+    resolver call sites: 17 in `test_job_validation`, one in `test_job`, three in `test_evidence`.
+  - `target_workflow_version`/`workflow_version` `"2.3.1"` became `"2.5.1"` in `test_resume` (a
+    record builder and a child Controller) and `test_cli` (a record builder). A real record only
+    ever carries an admitted release.
+  - `SelfLoopPredicateSingleSiteTest.test_both_sites_evaluate_the_predicate_through_the_helper`
+    needed a root with the reference manifest instead of `/nonexistent`, because the release
+    check runs before every clause. It also needed the `release` argument, a four-argument fake
+    detail, and a fifth `None` in `_row2_verified`'s expected tuple.
+- **Mutation checks.** Each of these mutations fails the new tests:
+  - dropping the `WorkflowQueryError` catch;
+  - dropping `_reconcile_launched`'s Workflow branch;
+  - dropping the pre-decision re-check;
+  - dropping the verification release comparison;
+  - making `resolve_feedback_dir` ignore the contract.
+- **Verification.**
+  - Goldens: `generate_external_implementation_review_decisions.py --release 2.5.1 --check`,
+    `--release 2.6.0 --check` for both generators, and `generate_no_policy_lifecycle.py --check`
+    report current.
+  - `generate_plan_stage_decisions.py --release 2.5.1 --check` exits 1, as it does at the base
+    commit and at CP1: this is the permitted `AMENDING_PLAN` reason difference that
+    `tests.test_golden_plan_stage_decisions` reverts. That test passes, the file is
+    byte-unchanged, and the derivation equals HEAD's.
+  - Named modules: `test_evidence`, `test_job`, `test_resume`, `test_cli`, `test_job_validation`,
+    `test_lifecycle_orchestration`, `test_managed_repo`, `test_workflow_contract`,
+    `test_package_structure`, `test_write_containment`, `test_golden_plan_stage_decisions`,
+    `test_milestone_branch` and `test_trunk_preflight`: 937 tests, OK. `test_packaged_runtime`
+    with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK.
+  - Full sharded run, `python3 tools/run_tests.py`, in the foreground: 2163 tests in 8 shards,
+    PASS, exact coverage, 95.5 s wall. It ran under the reaping-subreaper wrapper, as in CP1
+    and CP2. The record-without-a-release test was added after that run, and passes in the
+    named-module run.
+- **Notes for later checkpoints.**
+  - The guides do not describe `WORKFLOW_RELEASE_CHANGED`, `workflow_release_changed` or
+    `workflow_query_failed` yet. Design G assigns them to CP6's `troubleshooting.md` entries.
+  - CP4 consumes the recorded status classes. `RecordedAnswers`, `recorded_publication_status`
+    and `case_runs` are in `tests/golden/generate_plan_stage_decisions.py`.
+    `_postcondition_plan_bundle_coherent` already receives the binding and still ignores it.
+  - `tests/test_job.py`'s `_ContractTargetCase` (a `Lifecycle` target on a vendored release,
+    driven through `execute_step`/`resume` directly) is reusable for CP4's postcondition query
+    failures and CP5's migration scenarios.

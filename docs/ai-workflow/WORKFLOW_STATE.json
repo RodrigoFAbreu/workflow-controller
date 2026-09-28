@@ -3435,7 +3435,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-6-integration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -3502,10 +3502,10 @@
         "recorded_at": "2026-09-28T05:15:36Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
-        "approved_review_content_id": "8f8d4152b8ed5108c6b89f7b452e0870dc22a5ef6291c6f27333b516b4fd40cd",
+        "reviewed_bundle_id": "f6953d6acd3ae01c0bc9428b97ea5f9ebd67da44ef4e6af59c43222a23eda34e",
+        "approved_review_content_id": "44161ae9e69dc217f3aab3c4ce42d25d5d6f4d8074e7669a05a9a0758e640205",
         "review_content_manifest": [
           {
             "path": "controller/__init__.py",
@@ -3643,7 +3643,7 @@
             "path": "docs/releases/1.3.0.md",
             "exists": true,
             "mode": "100644",
-            "blob": "bb77cbb8f72344a98152e04e44d8d0313ec7e204"
+            "blob": "068dfc1a6a81ededf1e1a0ca763b77736305cf2a"
           },
           {
             "path": "pyproject.toml",
@@ -3757,7 +3757,7 @@
             "path": "tests/test_workflow_contract.py",
             "exists": true,
             "mode": "100644",
-            "blob": "901b413e3c012c1da94e4aabb5058745a2f51569"
+            "blob": "86b10f4a821753ca719e015ef8db5fb231828c6d"
           },
           {
             "path": "tests/test_workflow_release_migration.py",
@@ -4036,11 +4036,11 @@
             "blob": "84a1ef04e82c507d9924cde7cfdad809d3abac4d"
           }
         ],
-        "reviewed_content_commit": "0624a71c964c974e8852020c64add1f071b251da",
+        "reviewed_content_commit": "bf8f0c96f92f6da9179f87e2b3d64b9163bdc3dd",
         "legacy_evidence": null,
         "user_confirmation": "implementation workflow-controller-workflow-2-6-integration",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-28T15:43:16Z"
+        "recorded_at": "2026-09-28T18:10:09Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -4060,17 +4060,22 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 59,
-      "last_transition": "2026-09-28T17:17:52Z",
+      "state_revision": 62,
+      "last_transition": "2026-09-28T18:10:09Z",
       "implementation_review_stages": {
         "review_content_id": "44161ae9e69dc217f3aab3c4ce42d25d5d6f4d8074e7669a05a9a0758e640205",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "568df82330dd7098579ba2a6ec03de50e59715cb8e3f4f54e8048ffbf8eb5340",
+          "bundle_id": "f6953d6acd3ae01c0bc9428b97ea5f9ebd67da44ef4e6af59c43222a23eda34e",
           "verdict": "APPROVE",
-          "round": 6,
-          "completed_at": "2026-09-28T17:03:24Z"
+          "round": 7,
+          "completed_at": "2026-09-28T17:34:04Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "f6953d6acd3ae01c0bc9428b97ea5f9ebd67da44ef4e6af59c43222a23eda34e",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-09-28T17:38:00Z"
+        }
       }
     }
   }

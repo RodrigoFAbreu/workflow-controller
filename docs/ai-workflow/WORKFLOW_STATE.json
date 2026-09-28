@@ -3435,7 +3435,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-6-integration-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -3501,7 +3501,547 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-28T05:15:36Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
+        "approved_review_content_id": "8f8d4152b8ed5108c6b89f7b452e0870dc22a5ef6291c6f27333b516b4fd40cd",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "59804a8022a50e6d95311203fdb1ea97df082329"
+          },
+          {
+            "path": "controller/decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fe8406f775fd986dfda052b7f0875a044ba10a83"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b828e32f7fbe1bae5f7ef3e92db223b87e55ad1d"
+          },
+          {
+            "path": "controller/evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5fbc6f6b15a8e897d47db61fb558b84d886a4f7a"
+          },
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "15add239e3c161ffae6e0c827255715c209f8498"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c277d5084d5756720fa25e663cf1e59c4d62aa0c"
+          },
+          {
+            "path": "controller/managed_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b44da463ddb3ceb21c4450cdd5e8fd85f790c1e5"
+          },
+          {
+            "path": "controller/milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a0220724c8bcdf7384951417ccb7a28fbe3693de"
+          },
+          {
+            "path": "controller/target_state.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "185f64eca816f2a5fb1c03fc23c1dcecbcb04c09"
+          },
+          {
+            "path": "controller/workflow_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "03d94d370ebc19d257d83b649d89a5d5201ce230"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0fb133ea7f50e8157a5418899a93dd30b4ddd84c"
+          },
+          {
+            "path": "docs/adr/0001-controller-generation-1-architecture.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d44a3f17381a58fabd54b8e44dfeb4fbc1014ffc"
+          },
+          {
+            "path": "docs/adr/0003-trunk-branch-pr-release-orchestration.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d430eef4663362f864b2401501d536d5199a107c"
+          },
+          {
+            "path": "docs/adr/0006-workflow-release-admission-and-per-release-contracts.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fc1933a0a2e233e3fcbfdae584321bc920150100"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c3b236c6239299ec0c84453e7f11a0ac80c1d958"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "232d8f718a51bdcfa831054da047db589674b6ec"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "986d9414db03d89bd46bae6df94d815e0aee5937"
+          },
+          {
+            "path": "docs/guide/concepts.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "524987a0b988305c4b878feafdf9ccf042766dec"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5488342039bb6712f2cc714e6fc3c3073a9b8c4d"
+          },
+          {
+            "path": "docs/guide/installation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3f91ef486677934d834fed06bb99fa4f0174186c"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57c9ecb4f518668932d92d610e7063f4881ef25d"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dc922054c919e34410d3fcfd6334bb61888dd530"
+          },
+          {
+            "path": "docs/releases/1.3.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bb77cbb8f72344a98152e04e44d8d0313ec7e204"
+          },
+          {
+            "path": "pyproject.toml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f9da89c42ac570548471be5787e4917f6e3a9f27"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57abc3a6a1601a11c8f868a87d5f7d5567c51d09"
+          },
+          {
+            "path": "tests/golden/external_implementation_review_decisions.2.6.0.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d4199e81ced1482b29a4ddd247ebd694f3a0ef66"
+          },
+          {
+            "path": "tests/golden/generate_external_implementation_review_decisions.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1910173ace4d248dcf9421ef5b3718591f2cec0f"
+          },
+          {
+            "path": "tests/golden/generate_plan_stage_decisions.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c53dfc3a19c527c6e8f97a6b9e4371fba2ebd93b"
+          },
+          {
+            "path": "tests/golden/plan_stage_decisions.2.6.0.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0a703c92f83135365ea040b59fdfa22a591251c2"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0ff412354acc843883c98c8e9472af8ca3c73b3"
+          },
+          {
+            "path": "tests/test_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d280b9b32c6671017ad6df45158b0e133ebae683"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5b7064800aae583383443acfafba3de743b62b50"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "908cf4ea85f6f1b5bf9ce0abee07d38d98001313"
+          },
+          {
+            "path": "tests/test_integration_disposable_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "90a0967a299d11b8c2d1f576185f263638ce3e73"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fa845b6a82fe40ba7c12256fa48a5e96e6478d0e"
+          },
+          {
+            "path": "tests/test_job_validation.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef9952b53701d1b9b43aac1f6fbbfb54162a54b6"
+          },
+          {
+            "path": "tests/test_managed_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6cb7ef22c72066ba4176bdba3dfd94e3fa6c7ab5"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d125a66f0b27112eb42fb22d25a9ec3f4b291cdc"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "86339a7be65fbac6a5c2b3dcbbfc069b6a226df7"
+          },
+          {
+            "path": "tests/test_target_state.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fd8dfb5686fe332126e118201385018281a08a3b"
+          },
+          {
+            "path": "tests/test_trunk_orchestration_e2e.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c601cc85163c085a75021aa8f50a2833baf8dcc8"
+          },
+          {
+            "path": "tests/test_workflow_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "901b413e3c012c1da94e4aabb5058745a2f51569"
+          },
+          {
+            "path": "tests/test_workflow_release_migration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d553e665f207d86fda5098f048f7cbf3af898a71"
+          },
+          {
+            "path": "tests/test_workflow_releases.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d8a1ffb2fcf74f148775dc05bc4020b127e928a3"
+          },
+          {
+            "path": "tests/test_write_containment.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e76d0dd45e1d0ea7489051626c28e6fcd2ff293c"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/accept-milestone.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "722a340be9eb38b76c65c460331890f039aa1786"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/apply-functional-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c5f99cbbf6fcfa63ca2cb2a2bb322a12043c07f1"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/apply-implementation-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "024fcbdcc1d5283315ea5a10bd6efc912ddec68e"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/apply-plan-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4785cd418ee000e15641507fe9a9e2f79823c659"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/approve-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f861c17167dc4f1810d5dd89ec485420cc5e4b69"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/bootstrap-workflow-v2.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7e1ddee9dd08932bdb08118b295c8760b39cc62c"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/milestone-implement.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "010085d269fcdb5076cd72959517d1069a2e1a3a"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/milestone-plan.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fe8c90c54b6c83c47afa50f548a845554402c0b3"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/prepare-functional-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "425b86caa10ea285286e5037ee2fdfc81f1724d8"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/prepare-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f454f5045b0424c4cce54b4372ec21634cba61c0"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/record-manual-implementation-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8291c1d56422e962f6c60e8e73294c2bf1be4a7a"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/record-manual-plan-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c7adf8d1f9343a4e5b9445f61e3b0ff06c9c4b9b"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/recover-implementation-provenance.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e57206246db7b64c05ccc2179a2c60be1c3de40c"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/request-plan-amendment.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "10d718f9fc901d69933fa79f8d91f50b1e167e51"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/review-functional.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c86fef6ccaac3cfc22b3277dd9dbf98add67afd7"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/review-implementation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "acbc81b4c3b20a5ad64bd0928e3f99fc5126c536"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/.claude/commands/review-plan.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "40395a93ac565773acf4cabc32959d4ff41f3336"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/RELEASE.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "16d4b37e103f3cd69b7bbdb95bd306e591c50dfd"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/scripts/prepare-ai-review.sh",
+            "exists": true,
+            "mode": "100755",
+            "blob": "023ddc6840cba4ea3b51f3b336d93756062dff22"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/scripts/workflow_fingerprint.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "d5b391a0a8abe0cf405ae9478af09cb382ac87ec"
+          },
+          {
+            "path": "tests/workflow_releases/2.5.1/scripts/workflow_state.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "75092c25d64494d5b1f8111bee99a55d27d6da5c"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/accept-milestone.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "722a340be9eb38b76c65c460331890f039aa1786"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/apply-functional-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a917d9c2eb9417db149af09fb1d6034bfde21af9"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/apply-implementation-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "22ebf21adec00f64b5baa6462473e96257c93549"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/apply-plan-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a09734ab11848e9dca8062e8f5fecc842bc470d0"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/approve-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a41b84d5af165b2e48cdc4b03fcb998b6941ff3f"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/bootstrap-workflow-v2.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7e1ddee9dd08932bdb08118b295c8760b39cc62c"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/milestone-implement.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ff1b676148e6fd86842a8b7e1d5acfd34634195f"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/milestone-plan.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "70b519e1066b7f0d1ae40b0e286cc4162390c5ed"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/prepare-functional-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8f738ad03ed2fbf38b11962140bc2106200fa4f6"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/prepare-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f454f5045b0424c4cce54b4372ec21634cba61c0"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/record-manual-implementation-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c6f31b458e99c3b33d5ce28866b62caab34ae2b5"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/record-manual-plan-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "597e2d70edfd1329e2367de72489feeee54699af"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/recover-implementation-provenance.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e57206246db7b64c05ccc2179a2c60be1c3de40c"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/request-plan-amendment.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7033205e2ea27154ecf9815c254e8ea09aac7749"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/review-functional.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "45248f42fe543d1f716863d5f0c8dd2d6a09d70c"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/review-implementation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f21697257e9f389c46cc92d4f97e0629b7a97c0a"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/.claude/commands/review-plan.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "97844572f2714df0c7fc172bb573ed335206e30f"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/RELEASE.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3716fe9d6d03e98c98e947b1a8f1aa6431f48ef3"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/scripts/prepare-ai-review.sh",
+            "exists": true,
+            "mode": "100755",
+            "blob": "921fa983ea82b01914e45dbb977c1afcd6104bad"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/scripts/workflow_fingerprint.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "565f24bb2dcc21227cb5abf52e0549d7091b8525"
+          },
+          {
+            "path": "tests/workflow_releases/2.6.0/scripts/workflow_state.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fed844fc70c54bac8787ebea8f77cb67cd7c2f05"
+          },
+          {
+            "path": "tools/workflow_releases.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "84a1ef04e82c507d9924cde7cfdad809d3abac4d"
+          }
+        ],
+        "reviewed_content_commit": "0624a71c964c974e8852020c64add1f071b251da",
+        "legacy_evidence": null,
+        "user_confirmation": "implementation workflow-controller-workflow-2-6-integration",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-28T15:43:16Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "c971c142edd690390b0d1de4245a7daadb50511fddc0ac6d9953e51bb935f81c",
@@ -3520,17 +4060,22 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 51,
-      "last_transition": "2026-09-28T15:10:18Z",
+      "state_revision": 54,
+      "last_transition": "2026-09-28T15:43:16Z",
       "implementation_review_stages": {
-        "review_content_id": "21d84f925913b610003d6e2cf7d5fe63af899509c255d364387e1564289d44b7",
+        "review_content_id": "8f8d4152b8ed5108c6b89f7b452e0870dc22a5ef6291c6f27333b516b4fd40cd",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "9228e0b91db995ea0585bd704e524afc4940f134c27bb3d6df7afa5777e6b237",
+          "bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-09-28T13:01:58Z"
+          "round": 5,
+          "completed_at": "2026-09-28T15:24:34Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-09-28T15:32:05Z"
+        }
       }
     }
   }

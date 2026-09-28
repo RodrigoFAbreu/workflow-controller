@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-workflow-2-6-integration",
+  "requirements": {
+    "R1": {
+      "description": "Admit Workflow 2.6.0 alongside 2.5.1 by exact release (VALIDATED_WORKFLOW_RELEASES, SUPPORTED_WORKFLOW_LINES), with version fixtures and refusal tests updated",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R2": {
+      "description": "Hash-pinned vendored per-release Workflow trees so tests never depend on this repository's installed release, and this repository's installed tree equals the vendored tree of its declared release",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The Workflow-derived inventories (phase set, command partition, user-only commands, property 5) run against every admitted release",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R4": {
+      "description": "The golden decision suites run against every admitted release, with the 2.5.1 goldens byte-unchanged",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R5": {
+      "description": "For 2.6+ targets the feedback path comes from Workflow's --resolve-feedback-path (scoped, legacy-scoped, legacy-flat), and 2.5.1 behaviour is unchanged",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "For 2.6+ two-stage items, plan-bundle readiness comes from Workflow's --plan-review-publication-status instead of Controller-side revision coherence",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "Per-release expected-outcome writer declarations for exactly the rows 2.6.0 changed, and job verification/resume pinned to the release recorded at launch",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R8": {
+      "description": "Trunk plan questions E1-E5 answered from the released 2.6.0 contract; merge_trunk left unwired, integration_required preserved, the narrow Workflow follow-up named",
+      "checkpoint_ids": [
+        "CP5",
+        "CP6"
+      ]
+    },
+    "R9": {
+      "description": "2.5.1-to-2.6.0 migration tested, including in-flight bound milestones",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R10": {
+      "description": "This repository's own Workflow update to 2.6.0 happens only through Workflow Manager, as a separate change after the 1.3.0 release, proven in advance by a dry run",
+      "checkpoint_ids": [
+        "CP1",
+        "CP6"
+      ]
+    },
+    "R11": {
+      "description": "Release 1.3.0: pyproject.toml bumped by this milestone (explicit acceptance item) and release notes added",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R12": {
+      "description": "docs/guide and the ADRs agree with every behaviour change (ADR 0006 added)",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R13": {
+      "description": "One authoritative Controller phase list instead of two copies",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R14": {
+      "description": "A Workflow query executes only the admitted release's script bytes under the admitted release: the installed release is re-checked before every decision and verification, and the two query scripts are read once, digest-checked against the contract's per-release digests and run from a private copy of exactly those bytes, so no other module from the target's scripts directory can execute during a query",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R15": {
+      "description": "A Workflow query failure (a failed private copy included), release change or unreadable installation manifest during job verification, whenever verification runs at launch or at resume, records a terminal FAILED job carrying its evidence through one shared catch point and leaves no pending job; a CLI resume while the manifest is still unreadable refuses at inspect and leaves the record untouched until the manifest is restored",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R16": {
+      "description": "At the stale-plan-bundle gate for a 2.6.0 target, the recovery steps keep the author-file steps, in the author-input directory the 2.6.0 generator reads, ahead of Workflow's regenerate remedy, so they succeed when followed for a 2.5.1-created item whose author files are absent; the REJECTED-marker gate gives the same recovery at all three plan-review-ready phases, AWAITING_PLAN_APPROVAL included",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R17": {
+      "description": "No Controller-authored safe_resume_command names Workflow's withdrawal, and none this plan adds changes the working tree: row 4a gets a no-restore diagnostic gate, built from the query answer and the item id alone, whose safe_resume_command, like every other gate this plan adds without an automatic continuation, is workflow-controller --work-item <id> explain <repository>, accepted by the Controller's own parser and exiting 0; its what_is_required quotes Workflow's full remedy and detail, says the Controller offers no restore because it cannot establish that current/files holds the bound state or hold a path's shape between a printed step and its execution, names what the bound state covers (the protected paths' existence, mode and bytes and the artifacts declarations file's classification sets), and warns that a restore overwrites post-binding edits; executing the exact advertised command on real 2.6.0 bound bundles leaves the working tree, .ai-review/<id>/ and every link target unchanged, including when a changed-since-base path's current/files copy was deleted, byte-modified or mode-modified, and when a parent directory is replaced by a symbolic link after the gate is rendered",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

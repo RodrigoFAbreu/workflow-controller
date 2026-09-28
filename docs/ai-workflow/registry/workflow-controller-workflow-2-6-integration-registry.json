@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-workflow-2-6-integration",
+  "plan_revision": 7,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Vendored release trees, one phase list, per-release inventories: hash-pinned Workflow 2.5.1 and 2.6.0 subsets under tests/workflow_releases/ with tools/workflow_releases.py sync/check, release-parameterised fixtures, this repository's installed tree equal to the vendored tree of its declared release and its real-Manager admission test release-agnostic, target_state re-exporting decision's phase list, and the phase-set, command-partition, user-only and property-5 inventories iterating every admitted release",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Workflow contract module and query clients: controller/workflow_contract.py with the per-release contract table carrying the query scripts' sha256 digests, strict runners and parsers for --resolve-feedback-path and --plan-review-publication-status (the two scripts read once, digest-checked and run from a private copy of exactly those bytes with sys.executable -B -E -s, cwd target root, stdin closed, timeout, exact output validation, PublicationRefusal for rows 4d/6, every read, private-copy and execution failure a WorkflowQueryError exit 20), tested against the real vendored 2.6.0 scripts for every layout, acted-on status row, error, modified script and planted standard-library shadow, not yet wired",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Release-aware feedback resolution: evidence.resolve_feedback_dir keeps the 2.5.1 rule byte-for-byte and asks Workflow for 2.6.0, the bound contract threaded explicitly from the admitted ManagedRepository through decide, job launch, verification and resume (the installed release re-checked right after the repository preflight with WORKFLOW_RELEASE_CHANGED naming the preflight's action, any unrecorded gate and any completed close-out, an unreadable installation manifest treated as a changed release, verification pinned to the job record's target_workflow_version, and release changes, unreadable manifests and query failures during verification caught once in _row_clauses_failure so launch and resume both record a FAILED job with the evidence and leave no pending job), and the plan-stage and external-implementation-review goldens gaining a release dimension with the 2.5.1 files byte-unchanged",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Plan-review publication status and per-release writer declarations: for 2.6.0 two-stage items one outcome per ready phase and status class (the stale-bundle gate at all three ready phases, keeping the author-file steps in the directory the 2.6.0 generator reads ahead of Workflow's regenerate remedy and, for row 4a, a no-restore diagnostic gate whose parser-valid explain command changes nothing, since the Controller can neither establish that current/files holds the bound state nor hold a path's shape until a printed step runs, with no safe_resume_command ever naming the withdrawal; the REJECTED-marker gate's author-file steps at all three ready phases; the binding-inconsistent and unexpected-status gates), one outcome per non-ready phase and status class including the unexpected-status gate, and the plan-stage postconditions consume --plan-review-publication-status instead of revision coherence; expected_outcomes_for(release) substitutes the 2.6.0 bind writer for the PLANNING, NO_PHASE and REVISING_PLAN rows so property 5 is clean for both releases; no automatic /milestone-plan at a plan-review-ready phase",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Admission of 2.6.0 and 2.5.1-to-2.6.0 migration: SUPPORTED_WORKFLOW_LINES and VALIDATED_WORKFLOW_RELEASES admit 2.6.0 beside 2.5.1, version fixtures and refusal tests updated, every per-release inventory and decision golden active for both releases; migration scenarios M1-M5 in CI (plan-review-ready bound milestones updated in place with mid-revision, leftover-REJECTED-marker at a review phase and at plan approval, and completed-withdrawal variants, implementing bound milestones, trunk-updated drift keeping integration_required, a new scoped item, a job straddling an update) plus a local real-Workflow-Manager variant; E1-E5 answered, merge_trunk left unwired, gate text naming both releases",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Documentation, release 1.3.0 and full verification (terminal): docs/guide updates, ADR 0006 with pointers from ADRs 0001 and 0003, docs/releases/1.3.0.md, pyproject.toml version 1.3.0 with release classify RELEASE_DUE, the self-update dry run of this repository to Workflow 2.6.0 in a scratch clone, and the full sharded, packaged-runtime, CI-workflow and golden verification",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

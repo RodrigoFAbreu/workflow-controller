@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-workflow-2-6-integration",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -3425,6 +3425,78 @@
         }
       ],
       "amendment_base_commit": "f358409d050bdc01528d8734585a7e37a6e6206c"
+    },
+    "workflow-controller-workflow-2-6-integration": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-workflow-2-6-integration",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-6-integration-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 7,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "2296ad63b35521684d6e421cebbb7c1c49b76551",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": null,
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "4ce7a1b486d79429ff306716e6a273b4fdbbb103781dda7157cc3659ba95b643",
+        "approved_review_content_id": "c971c142edd690390b0d1de4245a7daadb50511fddc0ac6d9953e51bb935f81c",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b096d8d0ab3a1a44b94d716732dd11806660eeb1"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-workflow-2-6-integration-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b05a16f68663ba6945a73f0537b236de28c76ba4"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-6-integration-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a5b3aae1c799437291401f1518acb0432855c98c"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the plan stage for workflow-controller-workflow-2-6-integration",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-28T05:15:36Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c971c142edd690390b0d1de4245a7daadb50511fddc0ac6d9953e51bb935f81c",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "4ce7a1b486d79429ff306716e6a273b4fdbbb103781dda7157cc3659ba95b643",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-09-28T00:23:03Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "4ce7a1b486d79429ff306716e6a273b4fdbbb103781dda7157cc3659ba95b643",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-09-28T00:29:43Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 26,
+      "last_transition": "2026-09-28T05:15:36Z"
     }
   }
 }

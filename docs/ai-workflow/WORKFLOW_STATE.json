@@ -3502,7 +3502,7 @@
         "recorded_at": "2026-09-28T05:15:36Z"
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "EXTERNAL_APPROVE",
         "reviewed_bundle_id": "8bc8eb536015d704f1ab17e879d6d4a30d6ef1ea5f01a0c532a97749cde495d0",
         "approved_review_content_id": "8f8d4152b8ed5108c6b89f7b452e0870dc22a5ef6291c6f27333b516b4fd40cd",
@@ -4060,8 +4060,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 54,
-      "last_transition": "2026-09-28T15:43:16Z",
+      "state_revision": 55,
+      "last_transition": "2026-09-28T16:33:08Z",
       "implementation_review_stages": {
         "review_content_id": "8f8d4152b8ed5108c6b89f7b452e0870dc22a5ef6291c6f27333b516b4fd40cd",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {

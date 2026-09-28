@@ -836,3 +836,50 @@ and acceptance criteria 7 and 8.
 - **Outside this finding.** The Controller's own Git commands elsewhere run under the target's
   Git configuration, as they did before this milestone. One example is
   `evidence.functional_review_findings_consumed`'s `git hash-object`. I6 covers the queries only.
+
+## Implementation review round 2 -- a filter that changes content (manual external review `REVISE`)
+
+The local review approved round 2. The manual external review returned `REVISE` with one
+blocking finding. Round 1 switched every filter driver off, and that changed what `git
+hash-object` answers, which is Workflow's content identity. The reviewer's case was a
+Manager-verified 2.6.0 target with `filter.evil.clean = tr a-z A-Z` selected through
+`.git/info/attributes`. Released Workflow reports row 4a, or 4c after a 2.5.1 migration. The
+Controller reported rows 2/3 `BOUND` and let the phase handler act.
+
+- **Reproduced** on a seeded 2.6.0 target: Workflow in place answered 4a, and the Controller
+  answered row 2 `BOUND`.
+- **Fix** (`a519a46`). A driver whose `clean` or `process` in force is not empty is also made
+  `required` in command scope. Git then fails wherever it would run the program, and so the
+  query fails (`query_failed`; the evidence's `refused_filters` names the drivers). It fails
+  exactly when Workflow's answer would depend on the program. A driver no hashed path selects,
+  and a smudge-only driver, leave the answer at Workflow's own. Before relying on this, the
+  2.6.0 query path was checked to let a failing Git command fail it: its only broad `except`
+  wraps the bundle-id recomputation, which runs no Git.
+- **Rejected alternative.** A check of attributes before the query cannot list every path
+  `git hash-object` may be given (ignored files, files in an untracked nested repository). It
+  would also refuse every repository that uses Git LFS.
+- **Audit of the other facilities**, for the property the finding names: isolation must never
+  change an answer.
+  - Hooks, split-index writes and signature checks feed nothing the queries read.
+  - Without fsmonitor, Git stat-checks every path. It can only find more changed paths, which
+    the classification gate refuses, never fewer.
+  - No transport only turns a lazy fetch into a failure.
+  - The private index copy did change an answer. Its fresh mtime hid a racily clean edit from
+    `git diff`, which Git in place lists. Fixed in `816ffc1`: the copy keeps the index's mtime.
+- **Tests.**
+  - `GitIsolationTest` (13 tests): the reviewer's uppercasing filter, which Workflow in place
+    answers 4a and the Controller refuses. The round-1 pass-through variants now refuse as well.
+    Filters that no hashed path selects answer as before, and only a driver with a program is
+    made required. A racily clean edit is seen as Git in place sees it.
+  - The real-Manager reproduction runs a pass-through and an uppercasing filter: Workflow in
+    place answers 3 and 4c, and the Controller's query and decision refuse.
+  - Each new test fails with its fix removed.
+- **Docs.** Automation, troubleshooting (a filter under `query_failed`, with the remedy),
+  development (admitting a release re-checks that a failing Git command fails the query), ADR
+  0006 (isolation never changes an answer) and the 1.3.0 release notes.
+- **Verification.**
+  - `python3 tools/run_tests.py`: PASS, 2241 tests in 8 shards, exact coverage, 90.4 s, under
+    the reaping-subreaper wrapper;
+  - `tools/workflow_releases.py check` and `tools/ci_workflows.py --check`: exit 0;
+  - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK;
+  - goldens `--check`: current, except the known 2.5.1 plan-stage `AMENDING_PLAN` difference.

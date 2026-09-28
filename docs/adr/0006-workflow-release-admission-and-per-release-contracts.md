@@ -134,6 +134,32 @@ every Workflow-derived test to the new release at once.
   Diff drivers, signature programs and transports stay configured but idle:
   the 2.6.0 queries never ask for a patch, a log, a checkout or a fetch, and
   admitting a later release re-checks that.
+- **Isolation never changes an answer.** A query must give Workflow's answer
+  or none. Switching a facility off is safe only where that holds. The
+  second implementation review round showed that it did not hold for
+  filters: a clean filter changes the bytes `git hash-object` hashes. An
+  uppercasing filter made the Controller report a drifted plan bundle
+  `BOUND` (rows 2/3) where Workflow reports row 4a/4c. So a driver with a
+  `clean` or `process` program is also marked `required`, and Git fails
+  wherever it would run the program, which fails the query
+  (`query_failed`). Git decides where a filter applies, so the query fails
+  exactly when Workflow's answer would depend on the program, and answers
+  as usual otherwise. A check of attributes before the query could not
+  list every path `git hash-object` may be given (ignored files, files in
+  an untracked nested repository). It would also refuse every repository
+  that uses Git LFS. This relies on the query letting a failing Git command
+  fail it, which 2.6.0's does, and admitting a later release re-checks it.
+  The other facilities were checked the same way:
+  - hooks, split-index writes and signature checks feed nothing the queries
+    read;
+  - without fsmonitor, Git stat-checks every path. It can only find more
+    changed paths, which Workflow's classification gate refuses, never
+    fewer;
+  - no transport only turns a lazy fetch into a failure.
+
+  The private index copy keeps the index file's mtime. Git re-hashes an
+  entry no older than the index (a racily clean entry), and a fresh copy
+  would miss an edit made in the same clock tick that Workflow's Git sees.
 - The plan stage has one outcome per (phase class, status class): a bound
   bundle lets the phase's handler act; a drifted, unverified or legacy
   bundle stops at the stale-plan-bundle gate; a refusal or an answer outside

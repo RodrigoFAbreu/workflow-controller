@@ -141,7 +141,19 @@ configuration: no hook runs (neither `.git/hooks` nor a `core.hooksPath`
 directory nor a configured hook), no filter driver (a `filter=` attribute's
 `clean`, `smudge` or `process` program, whichever configuration file
 defines it) and no fsmonitor. The Controller checks that Git applies each
-setting before the query runs. It refuses the query
+setting before the query runs.
+
+Switching a filter off is not enough on its own. A clean filter changes the
+bytes `git hash-object` hashes, and Workflow's content identity is that
+hash. So a driver with a `clean` or `process` program is also marked
+`required`. Wherever Git would run the program, it fails instead, and so
+does the query (`WORKFLOW_QUERY_FAILED`, reason `query_failed`). The query
+never answers differently from Workflow: a filter that changes content
+could otherwise make a drifted plan bundle look `BOUND`. A driver that no
+path the query hashes selects changes nothing, and the query answers as
+usual.
+
+The Controller refuses the query
 (`WORKFLOW_QUERY_FAILED`, reason `query_git_not_isolated`) when it cannot
 switch something off: a hook command in the target's own Git configuration,
 a populated submodule, or a Git that ignores the settings (before 2.31). The

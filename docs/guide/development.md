@@ -170,8 +170,11 @@ plan, never a version-string edit:
    Workflow's files or asks Workflow's queries. For a release that runs
    queries, list the Git commands each query can run: the query's Git
    isolation (`workflow_contract._git_isolation`) relies on 2.6.0's queries
-   never asking Git for a patch, a log, a checkout or a fetch, and
-   `tests.test_workflow_contract.GitIsolationTest` pins it for 2.6.0;
+   never asking Git for a patch, a log, a checkout or a fetch. It also
+   relies on a failing Git command failing the query, never turning into
+   an answer: that is how a filter the Controller will not run refuses the
+   query. `tests.test_workflow_contract.GitIsolationTest` pins both for
+   2.6.0;
 3. give it a `controller.workflow_contract.RELEASE_CONTRACTS` entry, with
    the query scripts' sha256 from the Manager manifest when it runs queries,
    and per-release writer declarations in `job.expected_outcomes_for` where

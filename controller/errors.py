@@ -174,7 +174,9 @@ class UnsupportedWorkflowVersionError(ControllerError):
     ``profile``. ``evidence['reason']`` distinguishes a version outside the
     supported line entirely (``"outside_supported_line"``) from one inside
     the line that has not been individually validated
-    (``"unvalidated_release"``)."""
+    (``"unvalidated_release"``). ``workflow_contract.contract_for`` raises it
+    too, with ``"no_workflow_contract"``, for a release the Controller holds
+    no Workflow contract for."""
 
     code = "UNSUPPORTED_WORKFLOW_VERSION"
 
@@ -700,3 +702,40 @@ class BranchInvariantViolatedError(ControllerError):
     Controller does not repair it; a human inspects."""
 
     code = "BRANCH_INVARIANT_VIOLATED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-workflow-2-6-integration CP2 -- the Workflow contract
+# and its two query clients (``controller.workflow_contract``).
+# ---------------------------------------------------------------------------
+
+
+class WorkflowQueryError(ControllerError):
+    """A Workflow query (``--resolve-feedback-path`` or
+    ``--plan-review-publication-status``) could not give an answer the
+    Controller may act on. It is the only exception the query runner lets
+    out, whatever step failed, and it is never a fallback to the 2.5.1 rule:
+    the caller fails closed (exit ``20``).
+
+    ``evidence['reason']`` names the failed step:
+
+    - ``query_script_modified``: a script is missing, unreadable, not a
+      regular file, or its bytes do not have the contract's digest. Nothing
+      was executed;
+    - ``query_private_copy_failed``: the private directory could not be
+      created, written or removed. Nothing was executed after a creation or
+      write failure, and a removal failure discards the answer;
+    - ``query_launch_failed`` and ``query_timeout``: the interpreter could
+      not be started, or the query did not finish in time;
+    - ``query_failed``: an exit status the query's contract does not
+      document for an answer;
+    - ``query_output_invalid``: output that does not decode, parse or
+      validate as the documented shape (contract drift, never absorbed);
+    - ``no_workflow_query``: the release's contract runs no query.
+
+    ``evidence`` also carries the release, the query, the work item, the
+    ``argv``, ``cwd``, ``returncode`` and the ``stdout``/``stderr`` tails
+    where they exist, and the path and both digests for a modified script.
+    """
+
+    code = "WORKFLOW_QUERY_FAILED"

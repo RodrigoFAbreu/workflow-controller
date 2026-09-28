@@ -29,8 +29,8 @@ and the result is released as 1.3.0.
 
 | id | status | commit |
 | --- | --- | --- |
-| CP1 -- vendored release trees, one phase list, per-release inventories | complete | this checkpoint's commit |
-| CP2 -- the Workflow contract module and the two query clients | not started | |
+| CP1 -- vendored release trees, one phase list, per-release inventories | complete | `1689540` |
+| CP2 -- the Workflow contract module and the two query clients | complete | this checkpoint's commit |
 | CP3 -- release-aware feedback resolution | not started | |
 | CP4 -- plan-review publication status and per-release writer declarations | not started | |
 | CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | not started | |
@@ -139,3 +139,105 @@ and the result is released as 1.3.0.
   - `tests/test_resume.py` and `tests/test_cli.py` still build job records and child
     `ManagedRepository`s with `target_workflow_version`/`workflow_version` `"2.3.1"`. CP3's strict
     contract lookup under a job record's release will meet them.
+
+### CP2 -- the Workflow contract module and the two query clients (complete)
+
+- **`controller/workflow_contract.py`** (new). It sits after `identity` and before `decision` in
+  `controller/__init__.py` and `DEPENDENCY_ORDER`. It imports `errors`, and also `runtime`, for
+  the `runtime.write_bytes` private copy that Design B requires. Both come earlier in the order.
+  - `WorkflowContract` and `RELEASE_CONTRACTS`: exactly `2.5.1` (`controller_rule`,
+    `revision_coherence`, no digests) and `2.6.0` (`workflow_query` for both, with the sha256 of
+    `scripts/workflow_state.py` and `scripts/workflow_fingerprint.py` from the Manager manifest).
+    `contract_for` refuses an unknown release with `UnsupportedWorkflowVersionError`, reason
+    `no_workflow_contract`.
+  - `resolve_feedback_path(root, contract, id) -> FeedbackPath` and
+    `plan_review_publication_status(root, contract, id) -> PublicationStatus |
+    PublicationRefusal`. Both take the contract, because the runner needs its digests. The id is
+    passed as one `--<query>=<id>` token, so an id that starts with `-` cannot be read as an
+    option.
+  - Validation. A feedback answer needs exactly the five keys, all strings, the id echoed, a
+    known layout, normalised relative POSIX paths, and the directory and file paths that layout
+    implies. A status answer needs the five always-present strings and only the documented
+    per-row keys, with their types. The row must be a string from the table and carry its paired
+    status, and the id must be echoed. Exit 1 whose stdout is exactly
+    `{"error": "PlanReviewBindingInconsistentError", "message": <str>}` is a
+    `PublicationRefusal`. Any other exit 1 (a traceback) is an error.
+  - `_run_query` reads both scripts once each (regular files only) and checks their digests.
+    It writes exactly those bytes into a `TemporaryDirectory(prefix="workflow-controller-query-")`
+    through `runtime.write_bytes`, and runs `sys.executable -B -E -s <private>/<script>` with
+    `cwd` the target root, stdin closed, a 120 s timeout and bytes output. The directory is
+    removed on every path. `_execute_query` is the private runner hook, and it replaces only the
+    execution step.
+- **`WorkflowQueryError`** (new, `errors.py`, `WORKFLOW_QUERY_FAILED`, exit 20 through the
+  existing `ControllerError` mapping). It is the only exception the runner lets out. Its reasons:
+  - `query_script_modified`: missing, unreadable, not a regular file, or the wrong digest.
+    Nothing is executed;
+  - `query_private_copy_failed`: the directory could not be created, written or removed. A
+    removal failure discards the answer. After an earlier failure, the removal error is added
+    to that failure's evidence under `private_dir_removal_error`;
+  - `query_launch_failed`: an `OSError` at launch, or a `ValueError` from an argument
+    `subprocess` cannot pass (a NUL byte in the id). The review of this checkpoint's diff found
+    that the `ValueError` would have escaped;
+  - `query_timeout`, `query_failed` (an undocumented exit status), `query_output_invalid`, and
+    `no_workflow_query` (a contract without digests).
+
+  The evidence carries the release, query, work item, `argv`, `cwd`, return code and output
+  tails, plus the path and both digests for a modified script.
+- **Not wired yet.** No decision, job or evidence code calls the module. The answers seam
+  (`WorkflowAnswers`, `QueryAnswers` with its per-call memo, `bind`, `BoundContract`) is left to
+  CP3, whose file list names `bind` and `BoundContract`.
+- **`tests/test_workflow_contract.py`** (new, 45 tests, about 7 s). Disposable repositories run
+  the vendored 2.6.0 tree. They are seeded through Workflow's own writers and its real plan-bundle
+  generator. A 2.5.1-created item is seeded under the vendored 2.5.1 tree and then moved to 2.6.0
+  by overwriting the tree. The tests cover:
+  - the table: digests equal to both `RELEASE.json` records, `VALIDATED_WORKFLOW_RELEASES`
+    included in the table, the status set equal to the vendored script's ten
+    `PLAN_REVIEW_STATUS_*` values, and the unknown-release refusal;
+  - feedback: `scoped` (stamped, directory absent and still absent after the query),
+    `legacy-scoped`, `legacy-flat`, an unknown id, an unknown or `null` layout, an undecidable
+    state file, and malformed ids including `--help`;
+  - status, real rows: 2, 3, 4a, 4b, 4c (no fresh id), 5, 9 (`bundle_verifies` false) and the
+    4d refusal. No Workflow writer produces row 4d, so the test moves a published item's phase by
+    hand. A `"1"`-governed item and an unknown id are errors. The queries write nothing to the
+    target;
+  - isolation (I6):
+    - either script modified by one appended sentinel-writing line, for both queries: refused,
+      the hook is never called, and no sentinel appears. A missing script, or one replaced by a
+      directory, is also refused;
+    - planted `scripts/uuid.py`/`scripts/secrets.py`, a planted
+      `scripts/__pycache__/workflow_fingerprint.*.pyc` with the source's mtime and size, and a
+      shadowing `PYTHONPATH`: none runs, both answers are correct, and no `__pycache__` is
+      written. Each plant has a positive control proving it runs in place;
+    - the private directory holds exactly the vendored bytes of the two scripts when the query
+      runs, and is gone afterwards;
+  - runner failures: the directory is removed after success, a failing query, an injected
+    timeout and a real 1 ms timeout. Each copy failure is injected by patching: creation with
+    `ENOSPC`, and the write with `ENOSPC` and with `RuntimeContainmentError`. Removal failures
+    are covered on the success and failure paths. Also covered: a launch `OSError` and the
+    NUL-byte id. Only `WorkflowQueryError` escapes;
+  - validation through the hook: 18 feedback and 21 status violations, each refused with its
+    reason, and the valid shapes (row 4c without a fresh id, row 4a with `null`, row 1 with
+    five keys, an advisory, a refusal) accepted.
+
+  Deliberately broken runners were caught. Without `-E`, the `PYTHONPATH` test fails. Run in
+  place, the shadow, `.pyc` and private-directory tests fail. Without the digest comparison,
+  the modified-script test fails.
+- **Query wall time** (read, digest check and copy included). The item was bound on a disposable
+  repository, Python 3.14.7, 20 runs each. `--resolve-feedback-path` took a median of 43 ms
+  (42-43 ms). `--plan-review-publication-status` took a median of 105 ms (104-106 ms). The read
+  and digest check alone took 0.5 ms.
+- **Verification.**
+  - Named modules: `tests.test_workflow_contract`, `test_package_structure`,
+    `test_write_containment`, `test_identity`, `test_plan_document_consistency`,
+    `test_workflow_releases`, and `test_packaged_runtime` with
+    `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`.
+  - Full sharded run, `python3 tools/run_tests.py`, in the foreground: 2132 tests in 8 shards,
+    PASS, exact coverage, 80.2 s wall.
+  - As in CP1, this session is a Controller-launched worker, and it ran the suite under a
+    reaping-subreaper wrapper.
+- **Notes for later checkpoints.**
+  - The seeding helper (`_seed_target` with `_SEED_SCRIPT`, stages `route`/`publish`/`ready`/
+    `revise`, `upgrade_to`) is in `tests/test_workflow_contract.py`. CP4 and CP5 may move it into
+    `tests/fixtures.py` when they need it.
+  - The generator runs a plain `python3`, which writes `scripts/__pycache__` into a target (and
+    into the bundle's `files/`) unless `PYTHONDONTWRITEBYTECODE` is set.

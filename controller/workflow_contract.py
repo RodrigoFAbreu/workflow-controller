@@ -29,9 +29,10 @@ of :func:`_run_query`:
    hook, filter driver and fsmonitor, verified to be in force. A filter
    driver with a program is also made to fail wherever Git would run it, so
    a query whose answer depends on a filter fails instead of answering
-   differently from Workflow. It refuses, before the query runs, what it
-   cannot switch off: a hook command in the target's own configuration, or
-   a populated submodule;
+   differently from Workflow. It refuses, before the query runs, a hook the
+   query's Git would fire and an fsmonitor program, whose absence could
+   change Workflow's answer, and what it cannot switch off: a hook command
+   in the target's own configuration, or a populated submodule;
 4. runs ``sys.executable -B -E -s <private dir>/scripts/<script> ...`` with
    ``cwd`` the target root, stdin closed and one timeout for all of it. The
    target's ``scripts/`` directory is never on the query's ``sys.path``, so
@@ -115,6 +116,12 @@ _GIT_PINNED_CONFIG: tuple[tuple[str, str], ...] = (
 #: other scope (``local``, ``worktree``, and the files they include) is the
 #: target's own.
 _OPERATOR_GIT_SCOPES = frozenset({"system", "global", "command"})
+#: The hook events a query's Git can fire. The 2.6.0 queries run ``git
+#: rev-parse``, ``config``, ``ls-files``, ``hash-object`` and ``diff
+#: --name-only``, and only the index refresh of ``git diff`` fires a hook.
+#: A test installs every hook githooks(5) names and runs Workflow's queries
+#: in place to check this.
+_QUERY_HOOK_EVENTS = ("post-index-change",)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -598,6 +605,18 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
       every filter driver and every configured hook, named from the
       configuration Git reads for the target, whichever file defines them.
 
+    A query gives Workflow's answer or none, so a program is switched off
+    only where that cannot change the answer. A hook or an fsmonitor
+    program may edit the files Workflow hashes, and an fsmonitor decides
+    which paths Git re-checks. So, refused with ``query_git_not_isolated``
+    before the query runs: a hook the query's Git would fire (an executable
+    hook file for one of :data:`_QUERY_HOOK_EVENTS`, or a hook any
+    configuration file sets for one), an fsmonitor program, a hook command
+    in the target's own configuration (not every Git release that runs one
+    lets it be switched off), a populated submodule (its Git reads its own
+    configuration), and any setting Git does not apply (Git before 2.31
+    ignores ``GIT_CONFIG_COUNT``).
+
     Switching a filter off changes what ``git hash-object`` answers, and
     Workflow's content identity is that answer. So a driver that has a
     ``clean`` or ``process`` program is also made ``required``
@@ -606,21 +625,26 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
     Where Git would not have run it, the answer is Workflow's own. The
     drivers are ``context['refused_filters']``.
 
+    Hooks for other events are switched off as well; the query's Git never
+    fires them. Git's built-in fsmonitor daemon (``core.fsmonitor`` a
+    boolean) is Git's own code and reports what a full stat check finds, so
+    switching it off leaves the answer unchanged.
+
     The configuration is read again under that environment, and each
-    setting must be in force as the last, command-scope value. Refused with
-    ``query_git_not_isolated`` before the query runs: a hook command in the
-    target's own configuration (not every Git release that runs one lets it
-    be switched off), a populated submodule (its Git reads its own
-    configuration), and any setting Git does not apply (Git before 2.31
-    ignores ``GIT_CONFIG_COUNT``)."""
+    setting must be in force as the last, command-scope value."""
     base = {**os.environ, "GIT_ALLOW_PROTOCOL": ""}
     run = _PreflightGit(root, context=context, timeout=timeout, deadline=deadline)
     pinned = _with_git_config(base, _GIT_PINNED_CONFIG, context)
     index = Path(os.fsdecode(run(["rev-parse", "--git-path", "index"], pinned).rstrip(b"\n")))
     _copy_index(root / index, private_dir, context)
     private_index = {"GIT_INDEX_FILE": str(private_dir / _PRIVATE_INDEX)}
-    entries = _git_config_entries(run, {**pinned, **private_index})
+    # What Workflow's own Git reads, without the Controller's settings. The
+    # commands asked under it (`config`, `rev-parse --git-path`) read no
+    # index or working tree, and fire no hook.
+    entries = _git_config_entries(run, base)
     _refuse_target_hook_commands(entries, context)
+    _refuse_hooks_the_query_fires(root, run, base, entries, context)
+    _refuse_fsmonitor_programs(run, base, entries, context)
     _refuse_populated_submodules(root, run, {**pinned, **private_index}, context)
     context["refused_filters"] = _filters_with_programs(entries)
     overrides = _GIT_PINNED_CONFIG + _git_named_overrides(entries, context["refused_filters"])
@@ -641,16 +665,17 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
 class _PreflightGit:
     """``git <args>``'s stdout in the target, under ``env``, within what is
     left of the query's timeout. Every failure is a
-    :class:`WorkflowQueryError`."""
+    :class:`WorkflowQueryError`; :meth:`completed` leaves the exit status to
+    the caller."""
 
     def __init__(self, root: Path, *, context: dict, timeout: float, deadline: float) -> None:
         self._root, self._context, self._timeout, self._deadline = root, context, timeout, deadline
 
-    def __call__(self, args: list[str], env: dict[str, str]) -> bytes:
+    def completed(self, args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess:
         argv = ["git", *args]
         try:
-            completed = subprocess.run(argv, cwd=self._root, env=env, stdin=subprocess.DEVNULL,
-                                       capture_output=True, check=False, timeout=_remaining(self._deadline))
+            return subprocess.run(argv, cwd=self._root, env=env, stdin=subprocess.DEVNULL,
+                                  capture_output=True, check=False, timeout=_remaining(self._deadline))
         except subprocess.TimeoutExpired as exc:
             error = _timed_out(self._context, self._timeout, exc)
             error.evidence["git_argv"] = argv
@@ -658,6 +683,10 @@ class _PreflightGit:
         except OSError as exc:
             raise _not_isolated(self._context, "git", f"{' '.join(argv)} could not be started: {exc}",
                                 git_argv=argv) from exc
+
+    def __call__(self, args: list[str], env: dict[str, str]) -> bytes:
+        argv = ["git", *args]
+        completed = self.completed(args, env)
         if completed.returncode != 0:
             raise _not_isolated(
                 self._context, "git",
@@ -783,6 +812,61 @@ def _refuse_target_hook_commands(entries: list[tuple[str, str, str | None]], con
                 f"which the Controller cannot switch off in every Git release",
                 scope=scope,
             )
+
+
+def _refuse_hooks_the_query_fires(root: Path, run: _PreflightGit, env: dict[str, str],
+                                  entries: list[tuple[str, str, str | None]], context: dict) -> None:
+    """A hook Workflow's Git would run during the query: a hook file for one
+    of :data:`_QUERY_HOOK_EVENTS` that Git would execute (``access(X_OK)``,
+    as Git decides) in the hooks directory Workflow's Git uses, or a hook any
+    configuration file sets for one. A hook may edit the files Workflow
+    hashes, so switching it off could change the answer."""
+    hooks = Path(os.fsdecode(run(["rev-parse", "--git-path", "hooks"], env).rstrip(b"\n")))
+    for event in _QUERY_HOOK_EVENTS:
+        path = root / hooks / event
+        if os.access(path, os.X_OK):
+            raise _not_isolated(
+                context, "hook",
+                f"the hook {str(path)!r} would run on {event} during the query, and the Controller "
+                f"cannot know what it changes",
+                event=event, path=str(path),
+            )
+    for scope, key, value in entries:
+        section, subsection, variable = _split_git_key(key)
+        if section == "hook" and subsection is not None and variable == "event" and value in _QUERY_HOOK_EVENTS:
+            raise _not_isolated(
+                context, key,
+                f"the Git configuration ({scope}) sets the hook {subsection!r} to run on {value} during "
+                f"the query, and the Controller cannot know what it changes",
+                scope=scope, event=value,
+            )
+
+
+def _refuse_fsmonitor_programs(run: _PreflightGit, env: dict[str, str],
+                               entries: list[tuple[str, str, str | None]], context: dict) -> None:
+    """An fsmonitor program Workflow's Git would run: ``core.fsmonitor`` set
+    to anything Git does not read as a boolean, or, with it unset, the
+    environment's ``GIT_TEST_FSMONITOR``. The program decides which paths
+    Git re-checks, and may edit the files Workflow hashes. Git decides
+    what is a boolean: ``git config --type=bool`` exits 0 for one and 1 for
+    an unset key."""
+    completed = run.completed(["config", "--type=bool", "--get", "core.fsmonitor"], env)
+    if completed.returncode == 0:
+        return
+    if completed.returncode == 1:
+        program: str | None = env.get("GIT_TEST_FSMONITOR", "")
+        if not program:
+            return
+        source = "the environment's GIT_TEST_FSMONITOR"
+    else:
+        program = next((value for _scope, key, value in reversed(entries) if key == "core.fsmonitor"), None)
+        source = f"core.fsmonitor, which Git reads as no boolean ({_last_line(completed.stderr) or 'no output'}),"
+    raise _not_isolated(
+        context, "fsmonitor",
+        f"{source} names the fsmonitor program {program!r}, which Workflow's Git would run during the "
+        f"query, and the Controller cannot know what it reports or changes",
+        program=program,
+    )
 
 
 def _refuse_populated_submodules(root: Path, run: _PreflightGit, env: dict[str, str], context: dict) -> None:

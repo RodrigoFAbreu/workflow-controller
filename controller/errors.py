@@ -727,12 +727,14 @@ class WorkflowQueryError(ControllerError):
       created, written or removed. Nothing was executed after a creation or
       write failure, and a removal failure discards the answer;
     - ``query_git_not_isolated``: the Git the query would run cannot be
-      kept from starting a program the target configures: a hook command in
-      the target's own Git configuration, a populated submodule, a setting
-      of the Controller's that Git does not apply (Git before 2.31), an
-      index that is not a regular file, or a Git command that fails while
-      the Controller prepares the query. ``facility`` names which, and
-      ``detail`` says what was found. Nothing was executed;
+      kept from starting a program the target configures without the
+      answer perhaps changing: a hook the query's Git would fire, an
+      fsmonitor program, a hook command in the target's own Git
+      configuration, a populated submodule, a setting of the Controller's
+      that Git does not apply (Git before 2.31), an index that is not a
+      regular file, or a Git command that fails while the Controller
+      prepares the query. ``facility`` names which, and ``detail`` says what
+      was found. Nothing was executed;
     - ``query_launch_failed`` and ``query_timeout``: the interpreter could
       not be started, or the query did not finish in time;
     - ``query_failed``: an exit status the query's contract does not

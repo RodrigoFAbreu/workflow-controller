@@ -24,6 +24,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Callable
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -589,6 +590,17 @@ def _executable(path: Path, body: str) -> Path:
     return path
 
 
+#: Every hook githooks(5) names (Git 2.55).
+DOCUMENTED_HOOKS = (
+    "applypatch-msg", "commit-msg", "fsmonitor-watchman", "p4-changelist", "p4-post-changelist",
+    "p4-pre-submit", "p4-prepare-changelist", "post-applypatch", "post-checkout", "post-commit",
+    "post-index-change", "post-merge", "post-receive", "post-rewrite", "post-update", "pre-applypatch",
+    "pre-auto-gc", "pre-commit", "pre-merge-commit", "pre-push", "pre-rebase", "pre-receive",
+    "prepare-commit-msg", "proc-receive", "push-to-checkout", "reference-transaction", "sendemail-validate",
+    "update",
+)
+
+
 class GitIsolationTest(_SeededTargets):
     """Each plant is shown live first: Git run in place, as the Workflow
     scripts run it without the Controller, starts the planted program. The
@@ -655,6 +667,10 @@ class GitIsolationTest(_SeededTargets):
         return json.loads(completed.stdout)
 
     def assert_refused(self, facility: str) -> WorkflowQueryError:
+        """Both queries refused before they run: no query, no program, no
+        write, no private directory left."""
+        _stat_dirty(self.root, UNCHANGED_TRACKED, self.PLAN)
+        before = _tree_snapshot(self.root)
         query_tmp = Path(tempfile.mkdtemp(prefix="query-tmp-", dir=self._scratch))
         for run_query in (workflow_contract.resolve_feedback_path, workflow_contract.plan_review_publication_status):
             with mock.patch.object(tempfile, "tempdir", str(query_tmp)), \
@@ -668,8 +684,26 @@ class GitIsolationTest(_SeededTargets):
             self.assertIsNone(evidence["argv"])
             self.assertIn("isolated", str(caught.exception))
         self.assertFalse(self.sentinel.exists())
+        self.assertEqual(_tree_snapshot(self.root), before, "a refused query wrote to the target")
         self.assertEqual(os.listdir(query_tmp), [], "a refusal left its private directory")
         return caught.exception
+
+    def assert_workflow_drifts_where_the_controller_refuses(self, plant: Callable[[Path], None],
+                                                            facility: str) -> None:
+        """The same plant, which appends to the plan when Git runs it, in two
+        copies of the bound target. Workflow's query run in place runs it and
+        answers row 4a; the Controller refuses, runs nothing and writes
+        nothing, never answering row 2 or 3."""
+        control = self.fresh()
+        plant(control)
+        _stat_dirty(control)
+        released = self.released_status_in_place()
+        self.assertEqual((released["row"], released["status"]), ("4a", "CONTENT_DRIFTED"))
+        self.assertIn(b"planted edit", (control / self.PLAN).read_bytes(), "control: the plant did not run")
+        root = self.fresh()
+        plant(root)
+        self.assert_refused(facility)
+        self.assertNotIn(b"planted edit", (root / self.PLAN).read_bytes())
 
     def test_a_clean_filter_never_runs(self) -> None:
         # The external review's reproduction (round 1): `.git/info/attributes`
@@ -765,30 +799,116 @@ class GitIsolationTest(_SeededTargets):
         self.assertIn(UNCHANGED_TRACKED.encode(), in_place.split(b"\0"), "control: Git in place missed the edit")
         self.assertEqual(seen, [(mtime, in_place)])
 
-    def test_no_hook_runs(self) -> None:
-        for variant in ("hooks-directory", "hooks-path", "operator-configured"):
+    def test_the_querys_git_fires_no_hook_but_post_index_change(self) -> None:
+        # What `_QUERY_HOOK_EVENTS` rests on: every documented hook
+        # installed, Workflow's two queries run in place fire only the
+        # events the Controller refuses. The index refresh that fires
+        # `post-index-change` is forced, so the census is not empty.
+        root = self.fresh()
+        fired = root.parent / "fired"
+        for name in DOCUMENTED_HOOKS:
+            _executable(root / ".git" / "hooks" / name, f"echo {name} >> {fired}")
+        _stat_dirty(root, UNCHANGED_TRACKED, self.PLAN)
+        self.released_status_in_place()
+        fixtures.run([sys.executable, workflow_contract.FINGERPRINT_SCRIPT,
+                      f"--resolve-feedback-path={WORK_ITEM_ID}"], cwd=root)
+        self.assertEqual(set(fired.read_text().split()), set(workflow_contract._QUERY_HOOK_EVENTS))
+
+    def test_a_hook_the_querys_git_fires_is_refused(self) -> None:
+        # The external review's reproduction (round 3): with the hook
+        # switched off, the Controller answered row 2 where Workflow, whose
+        # Git fires it, answers what the hook leaves.
+        for variant in ("hooks-directory", "hooks-path", "relative-hooks-path", "operator-configured"):
             with self.subTest(variant=variant):
                 root = self.fresh()
                 hook = _executable(root.parent / "hook", self.touch)
                 environment = {}
+                facility = "hook"
                 if variant == "hooks-directory":
                     shutil.copy(hook, root / ".git" / "hooks" / "post-index-change")
                 elif variant == "hooks-path":
                     shutil.copy(hook, root.parent / "post-index-change")
                     self.git_config("core.hooksPath", str(root.parent))
+                elif variant == "relative-hooks-path":
+                    # Git reads a relative hooks path from the working
+                    # tree's root; under `.git`, no query classifies it.
+                    (root / ".git" / "relative-hooks").mkdir()
+                    shutil.copy(hook, root / ".git" / "relative-hooks" / "post-index-change")
+                    self.git_config("core.hooksPath", ".git/relative-hooks")
                 else:
                     operator = root.parent / "operator.gitconfig"
                     operator.write_text(f'[hook "planted"]\n\tcommand = {hook}\n\tevent = post-index-change\n')
                     environment = {"GIT_CONFIG_GLOBAL": str(operator)}
+                    facility = "hook.planted.event"
                 with mock.patch.dict(os.environ, environment):
                     self.assert_live("diff", "--name-only", "-z", _entry(root)["base_commit"])
-                    self.assert_queries_run_nothing()
+                    error = self.assert_refused(facility)
+                self.assertEqual(error.evidence["event"], "post-index-change")
+                if facility == "hook":
+                    self.assertEqual(Path(error.evidence["path"]).resolve(),
+                                     (root / _git(root, "rev-parse", "--git-path", "hooks").strip()
+                                      / "post-index-change").resolve())
+                else:
+                    self.assertEqual(error.evidence["scope"], "global")
 
-    def test_no_fsmonitor_runs(self) -> None:
-        self.fresh()
-        self.git_config("core.fsmonitor", str(_executable(self.root.parent / "fsmonitor", f"{self.touch}; exit 1")))
-        self.assert_live("diff", "--name-only", "-z", _entry(self.root)["base_commit"])
-        self.assert_queries_run_nothing()
+    def test_a_hook_that_edits_the_plan_is_refused_where_workflow_drifts(self) -> None:
+        def plant(root: Path) -> None:
+            _executable(root / ".git" / "hooks" / "post-index-change", f"echo planted edit >> {self.PLAN}")
+
+        self.assert_workflow_drifts_where_the_controller_refuses(plant, "hook")
+
+    def test_hooks_the_querys_git_never_fires_are_switched_off(self) -> None:
+        # Every other documented hook, a configured hook for another event,
+        # and a `post-index-change` file Git would not execute: the query
+        # runs, none of them starts, and the answer is Workflow's.
+        root = self.fresh()
+        for name in DOCUMENTED_HOOKS:
+            if name not in workflow_contract._QUERY_HOOK_EVENTS:
+                _executable(root / ".git" / "hooks" / name, self.touch)
+        (root / ".git" / "hooks" / "post-index-change").write_text(f"#!/bin/sh\n{self.touch}\n")
+        operator = root.parent / "operator.gitconfig"
+        operator.write_text(f'[hook "planted"]\n\tcommand = {self.touch}\n\tevent = pre-commit\n')
+        with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(operator)}):
+            released = self.released_status_in_place()
+            self.assertEqual((released["row"], released["status"]), ("2", "BOUND"))
+            self.assertFalse(self.sentinel.exists())
+            self.assert_queries_run_nothing()
+
+    def test_an_fsmonitor_program_is_refused(self) -> None:
+        for variant in ("local", "operator", "environment"):
+            with self.subTest(variant=variant):
+                root = self.fresh()
+                program = str(_executable(root.parent / "fsmonitor", f"{self.touch}; exit 1"))
+                environment = {}
+                if variant == "local":
+                    self.git_config("core.fsmonitor", program)
+                elif variant == "operator":
+                    operator = root.parent / "operator.gitconfig"
+                    operator.write_text(f"[core]\n\tfsmonitor = {program}\n")
+                    environment = {"GIT_CONFIG_GLOBAL": str(operator)}
+                else:
+                    environment = {"GIT_TEST_FSMONITOR": program}
+                with mock.patch.dict(os.environ, environment):
+                    self.assert_live("diff", "--name-only", "-z", _entry(root)["base_commit"])
+                    error = self.assert_refused("fsmonitor")
+                self.assertEqual(error.evidence["program"], program)
+
+    def test_an_fsmonitor_that_edits_the_plan_is_refused_where_workflow_drifts(self) -> None:
+        def plant(root: Path) -> None:
+            program = _executable(root.parent / "fsmonitor", f"echo planted edit >> {root / self.PLAN}; exit 1")
+            _git(root, "config", "core.fsmonitor", str(program))
+
+        self.assert_workflow_drifts_where_the_controller_refuses(plant, "fsmonitor")
+
+    def test_the_builtin_fsmonitor_is_switched_off(self) -> None:
+        # A boolean is Git's own daemon, not a program the target chooses:
+        # it reports what a full stat check finds, so switching it off
+        # leaves the answer Workflow's, and no daemon starts in the target.
+        for value in ("true", "false", "1"):
+            with self.subTest(value=value):
+                self.fresh()
+                self.git_config("core.fsmonitor", value)
+                self.assert_queries_run_nothing()
 
     def test_no_diff_driver_runs(self) -> None:
         # The queries never ask Git for a patch, so a textconv or external

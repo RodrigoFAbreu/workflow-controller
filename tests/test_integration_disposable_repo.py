@@ -501,6 +501,87 @@ class RealManagerMigrationTest(unittest.TestCase):
                     with self.assertRaises(WorkflowQueryError):
                         self.decide(target)
 
+    def test_a_verified_2_6_0_target_never_hides_its_fsmonitor_or_hook(self) -> None:
+        # Round 3's reproductions, on a migrated target: an fsmonitor
+        # program or a `post-index-change` hook that edits the plan when
+        # Workflow's Git runs it. Workflow's query run in place answers the
+        # drift (row 4c); switching the program off made the Controller
+        # answer row 3 `BOUND`. The Controller refuses before the query runs, and neither
+        # the target nor its plan changes.
+        from controller.errors import WorkflowQueryError
+
+        with tempfile.TemporaryDirectory() as td:
+            seeded = self.migrated_target(Path(td).resolve())
+            plan = f"docs/ai-workflow/{migration.WI}-PLAN.md"
+
+            def fsmonitor(root: Path) -> None:
+                program = root.parent / "fsmonitor"
+                program.write_text(f"#!/bin/sh\necho planted edit >> {root / plan}\nexit 1\n")
+                program.chmod(0o755)
+                fixtures.run(["git", "config", "core.fsmonitor", str(program)], cwd=root)
+
+            def hook(root: Path) -> None:
+                program = root / ".git" / "hooks" / "post-index-change"
+                program.write_text(f"#!/bin/sh\necho planted edit >> {plan}\n")
+                program.chmod(0o755)
+
+            for plant, facility in ((fsmonitor, "fsmonitor"), (hook, "hook")):
+                with self.subTest(facility=facility):
+                    control, root = (Path(td) / facility / name / "target" for name in ("control", "refused"))
+                    for copy in (control, root):
+                        shutil.copytree(seeded, copy, symlinks=True)
+                        plant(copy)
+                        self.stat_dirty(copy)
+                    self.assertEqual(self.status_in_place(control), ("4c", "LEGACY_UNVERIFIED"))
+                    self.assertIn(b"planted edit", (control / plan).read_bytes(), "control: the plant did not run")
+
+                    before = {path: path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+                    for query in (migration.publication_status, migration.feedback_path):
+                        with self.assertRaises(WorkflowQueryError) as caught:
+                            query(root)
+                        evidence = caught.exception.evidence
+                        self.assertEqual((evidence["reason"], evidence["facility"], evidence["argv"]),
+                                         ("query_git_not_isolated", facility, None))
+                    with self.assertRaises(WorkflowQueryError):
+                        self.decide(root)
+                    self.assertEqual({path: path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()},
+                                     before, "a refused query changed the target")
+
+    def migrated_target(self, td: Path) -> Path:
+        """A 2.5.1 target with :data:`migration.WI` at a ready plan-review
+        phase, updated to 2.6.0 by the real Manager."""
+        target = td / "target"
+        target.mkdir()
+        fixtures.run(["git", "init", "-q"], cwd=target)
+        fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
+        fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
+        (target / "README.md").write_text("disposable migration fixture\n")
+        fixtures.commit_all(target, "seed")
+        self.manager("--release-version", migration.LEGACY, "bootstrap", str(target), "--profile", "full")
+        config_path = target / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json"
+        config = json.loads(config_path.read_text())
+        config["supported_versions"] = sorted(set(config["supported_versions"]) | {"2.2"})
+        config_path.write_text(json.dumps(config, indent=2) + "\n")
+        base = fixtures.commit_all(target, "Bootstrap Workflow 2.5.1")
+        fixtures.run_workflow_seed(target, "ready", work_item_id=migration.WI, base_commit=base)
+        self.manager("--release-version", migration.UPDATED, "update", str(target))
+        return target
+
+    @staticmethod
+    def status_in_place(target: Path) -> tuple[str, str]:
+        answer = json.loads(fixtures.run(
+            [sys.executable, "scripts/workflow_state.py",
+             f"--plan-review-publication-status={migration.WI}"], cwd=target).stdout)
+        return answer["row"], answer["status"]
+
+    @staticmethod
+    def stat_dirty(target: Path) -> None:
+        """Move a tracked file's mtime on, unchanged, so ``git diff``
+        re-hashes it and refreshes the index (firing ``post-index-change``)."""
+        path = target / "README.md"
+        stat_result = path.stat()
+        os.utime(path, ns=(stat_result.st_atime_ns, stat_result.st_mtime_ns + 10 ** 10))
+
 
 class ControllerSourceTreeDigestVerificationTest(unittest.TestCase):
     """Default-suite coverage for `_expected_controller_source_tree_digest`

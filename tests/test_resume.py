@@ -3889,14 +3889,8 @@ class VerificationWorkflowFailureTest(_ContractTargetCase):
         the ``run`` stops, exactly as for 2.5.1. The next step the operator
         starts sees row 9 and selects the same explicit-id command, which is
         Workflow's own recovery."""
-        from controller import managed_repo as managed_repo_module
-
         lc = self.published_target("plan-run")
         lc.add(_MILESTONE_PLAN, [])
-        for name, value in (("SUPPORTED_WORKFLOW_LINE", "2.6"), ("VALIDATED_WORKFLOW_RELEASES", frozenset({"2.6.0"}))):
-            patcher = unittest.mock.patch.object(managed_repo_module, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
         run = self.cli(lc, "run")
         self.assertEqual(run.code, cli.EXIT_WORKER_FAILED, run.stderr)
         [failed] = run.records

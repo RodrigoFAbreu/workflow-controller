@@ -32,8 +32,8 @@ and the result is released as 1.3.0.
 | CP1 -- vendored release trees, one phase list, per-release inventories | complete | `1689540` |
 | CP2 -- the Workflow contract module and the two query clients | complete | `47b51f2` |
 | CP3 -- release-aware feedback resolution | complete | `43a6ecb` |
-| CP4 -- plan-review publication status and per-release writer declarations | complete | this checkpoint's commit |
-| CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | not started | |
+| CP4 -- plan-review publication status and per-release writer declarations | complete | `53d9601` |
+| CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration | complete | this checkpoint's commit |
 | CP6 -- documentation, release 1.3.0 and full verification | not started | |
 
 ### CP1 -- vendored release trees, one phase list, per-release inventories (complete)
@@ -529,3 +529,157 @@ and the result is released as 1.3.0.
     generator.
   - CP6's `troubleshooting.md`: `target_state.read` refuses a routed item whose declared registry
     is not written yet (row 7's state) before any decision, for both releases.
+
+### CP5 -- admission of 2.6.0 and 2.5.1 → 2.6.0 migration (complete)
+
+- **Admission** (`controller/managed_repo.py`). `SUPPORTED_WORKFLOW_LINE = "2.5"` became
+  `SUPPORTED_WORKFLOW_LINES = frozenset({"2.5", "2.6"})`, and `VALIDATED_WORKFLOW_RELEASES` is
+  `{"2.5.1", "2.6.0"}`. Its comment states what was measured for 2.6.0 and the steps for admitting
+  a later release. `REFERENCE_WORKFLOW_RELEASE` stays `"2.5.1"`.
+  - Both refusals carry `supported_workflow_lines`, a sorted list, in place of
+    `supported_workflow_line` (Decision 5).
+  - The wrong-line message names the supported lines and the validated releases, where it named
+    the reference release. The unvalidated message names the line the release is in.
+  - `errors.UnsupportedWorkflowVersionError`'s docstring says the same.
+- **E1-E5** (`controller/milestone_branch.py`, `controller/gitrepo.py`). The `integration_required`
+  gate now reads "Workflow 2.5.1 and 2.6.0 have no transition that moves a work item's base, so
+  the Controller does not integrate". The `--abandon` problem text names both releases, and so
+  does the `MILESTONE_COMPLETE` comment. `merge_trunk`'s docstring gives the reason it stays
+  unwired: the answers to E1-E5.
+- **Per-release inventories and goldens.** The inventories already iterated
+  `VALIDATED_WORKFLOW_RELEASES`, so they now run for 2.6.0 too: the phase and terminal sets, the
+  command partition, the user-only set, property 5 and the provenance-recovery phases.
+  `test_evidence.WorkflowQueryGoldenTest` now iterates the admitted releases:
+  - each admitted release has its own golden in both generators, exactly;
+  - each golden re-derives byte-equal. The 2.5.1 plan-stage golden keeps its one named permitted
+    difference, and the test asserts that difference is non-vacuous.
+- **The pre-admission scaffolding is gone.** `test_evidence._admit_2_6_0` and `test_resume`'s
+  inline patch of the old constant are removed. The comments that said 2.6.0 is admitted only at
+  CP5 are corrected in `test_job` and `test_job_validation`.
+- **Fixtures.**
+  - `run_workflow_seed` (new) runs `WORKFLOW_SEED_SCRIPT` in an existing target. It takes a
+    `checkpoint_ids` option. `seed_workflow_item` calls it, and its seeds are byte-identical.
+  - `carry_out_plan_recovery_steps` (new) is CP4's `carry_out`, moved from `test_evidence` and
+    taking the work item as an argument. `test_evidence` delegates to it.
+- **`tests/test_workflow_release_migration.py`** (new, 10 tests, about 17 s).
+  - The targets are clones of a bare origin, with the vendored 2.5.1 tree, the Workflow
+    configuration and, except for M4 and M5, the policy. They are driven through `cli.main` with
+    the fake `gh` and the scripted worker, on `test_trunk_orchestration_e2e`'s harness.
+  - Items are seeded by the real writers and generator of the installed release.
+  - A worker's Workflow write is the state the real writer produces, computed by the test and
+    then restored (`real_write`).
+  - The milestone is bound through the Controller's own `repository_preflight`. The operator
+    commits the narrative (`docs/ACTIVE_MILESTONE.md`, excluded from the plan-stage content), and
+    the next preflight pushes the branch and opens the Draft PR.
+  - The update step replaces the twenty vendored files, rewrites `installation.json` and commits
+    exactly those paths.
+  - Scenarios:
+    - **M1** (legacy-flat, and legacy-scoped with `.ai-review/<id>/feedback/` present).
+      - `inspect` admits 2.6.0, and the feedback query answers the 2.5.1 rule's directory. The
+        status is row 3, and the decision is the pre-update `/review-plan`.
+      - The update leaves the binding record byte-unchanged.
+      - The dispatched worker writes the real 2.6.0 `REVISE`, and the job verifies `FINISHED`
+        under 2.6.0. The same step pushed the update commit, and the PR is still #1.
+      - After the `REVISE`: row 10 with a non-legacy `CONSUMED` record, then
+        `/apply-plan-review`.
+    - **M1a**: row 5 after a 2.5.1 `REVISE`.
+      - The worker writes the real `ensure_plan_review_binding_marker` state, which gives row 11
+        with a legacy record.
+      - `run` stops after one failed job (`phase_not_in_to_any_of`).
+      - The next step dispatches `/apply-plan-review` again, with row 11 in its evidence.
+    - **M1b**: the real 2.5.1 `withdraw_bundle`, then the marker planted with the text it holds
+      between the quarantine rename and its own removal.
+      - The REJECTED gate fires, and the status query never runs (a spy on the private runner
+        hook). The steps name `current/`, with step 0 restoring from the quarantine.
+      - Once the steps are carried out with the real 2.6.0 generator, the marker is gone, the
+        status is row 3 and the decision is `/review-plan`.
+    - **M1c**: a completed withdrawal gives row 4c and the stale-plan-bundle gate.
+      - The gate quotes Workflow's remedy and detail, and its step 0 names the quarantine.
+      - On a copy, Workflow's bare remedy fails with `MissingReviewContentIdStatementError`.
+      - The gate's steps give row 3.
+    - **M1d**: as M1b at `AWAITING_PLAN_APPROVAL`, after the real 2.5.1 local and manual
+      `APPROVE`.
+      - The gate takes the plan-stage branch, never the bare generator, which fails on a copy.
+      - The steps give row 3. The real 2.6.0 `assert_plan_review_bundle_bound` accepts the item,
+        and the decision is the `/approve-review plan` gate with row 3 in its evidence.
+    - **M2**: `IMPLEMENTING` after the plan approval and CP1, all through the real 2.5.1 writers.
+      - The writers used: `build_approval_record` and `apply_plan_approval`, the approval commit
+        with its trailers, then identity, claim, `IN_PROGRESS`, `complete_checkpoint`, the
+        checkpoint commit and the release.
+      - The PR opens from the approval commit.
+      - After the update, `/milestone-implement` is decided with the same evidence, and the
+        feedback resolves legacy-flat.
+      - The real 2.6.0 `claim_checkpoint` of CP2 succeeds. It creates the new
+        `*.lifecycle.lock` under `<git-common-dir>/ai-workflow/checkpoint-claims/`, which 2.5.1
+        never wrote.
+    - **M3**: the trunk is updated by a second clone while the milestone runs, using
+      `test_trunk_orchestration_e2e`'s scripted lifecycle.
+      - On the branch no query runs, and every job records `target_workflow_version: 2.5.1`.
+      - Readiness gives `integration_required` with the new text.
+      - After the manual merge, `execute_step` closes out and then refuses
+        (`WORKFLOW_RELEASE_CHANGED`). The evidence is `admitted` 2.5.1, `installed` 2.6.0,
+        `preflight_action: closed_out` and `closed` in the events. The message says the
+        close-out completed and was recorded.
+      - The record is `CLOSED`, HEAD is `main` at the merge, and no job and no worker were added.
+      - The next `inspect` reports 2.6.0, and `explain` exits 0.
+    - **M4**: after the update, the real 2.6.0 `route_work_item` stamps the item `scoped`.
+      - Before its directory exists, the query and `resolve_feedback_dir` say
+        `.ai-review/wi-1/feedback`, where the 2.5.1 rule says flat.
+      - A `BLOCK` verdict at the flat path does not change the decision.
+      - At the scoped path it gives the `BLOCK` gate.
+    - **M5**: a `/review-plan` worker records the real 2.5.1 `REVISE` and then overlays the
+      2.6.0 files and manifest, uncommitted (`git restore --source`). This is the Manager's
+      write, not its commit.
+      - At launch the job is `FAILED` with `workflow_release_changed` (`recorded` 2.5.1,
+        `installed` 2.6.0), and nothing is pending.
+      - Rewritten as `COMPLETED` and then as `LAUNCHED`, CLI `resume` admits 2.6.0 at `inspect`
+        and reconciles the same `FAILED`, exit 0, with no new worker.
+      - `explain` then decides under 2.6.0: row 5, `/apply-plan-review`.
+- **The local-only variant**, `test_integration_disposable_repo.RealManagerMigrationTest`. It is
+  skipped without `workflow-manager`, and it ran here.
+  - It runs a real `workflow-manager --release-version 2.5.1 bootstrap` and seeds the item with
+    the real 2.5.1 writers.
+  - It then runs a real `--release-version 2.6.0 update` and `verify`. The twenty paths the CI
+    simulation writes hold exactly the vendored 2.6.0 bytes after the real update.
+  - The rest is M1's assertions with the real Manager's `inspect`: legacy-flat, row 3,
+    `/review-plan` with row 3 in the evidence; then a real 2.6.0 `REVISE`, row 10 and
+    `/apply-plan-review`.
+- **Other new tests.**
+  - `test_managed_repo`:
+    - the sets and the reference release are pinned, and `SUPPORTED_WORKFLOW_LINE` is gone;
+    - `test_2_6_0_refuses_outside_supported_line` is inverted to `test_2_6_0_is_admitted`;
+    - 2.6.1 is refused `unvalidated_release`, and 2.7.0 `outside_supported_line`, each with the
+      list key;
+    - the 2.4.0 and 2.5.0 cases now expect the list and the two releases.
+  - `test_cli.InspectCommandTest`:
+    - a 2.6.0 target in text and JSON (`_build_managed_target` gains `workflow_version`);
+    - 2.6.1 and 2.7.0 refused through `cli.main`, exit 20, each message naming its own case.
+  - `test_gitrepo.MergeTrunkTest`: no Controller module other than `gitrepo` names `merge_trunk`.
+- **Mutation checks.** Each of these fails the new tests:
+  - `VALIDATED_WORKFLOW_RELEASES` back to `{"2.5.1"}`: `test_managed_repo`, M1 and M5;
+  - `SUPPORTED_WORKFLOW_LINES` back to `{"2.5"}`: `test_managed_repo` and the CLI cases.
+- **Verification.**
+  - `python3 tools/workflow_releases.py check`: exit 0.
+  - Goldens:
+    - both generators with `--release 2.6.0 --check` report current;
+    - the external-implementation-review generator with `--release 2.5.1 --check` reports
+      current;
+    - `generate_no_policy_lifecycle.py --check` reports current;
+    - the plan-stage generator with `--release 2.5.1 --check` exits 1, as at the base commit, for
+      the permitted `AMENDING_PLAN` difference. `tests.test_golden_plan_stage_decisions` and the
+      per-release golden test pass.
+  - Named modules: `test_workflow_release_migration`, `test_managed_repo`, `test_cli`,
+    `test_evidence`, `test_gitrepo`, `test_milestone_branch`, `test_trunk_orchestration_e2e`,
+    `test_workflow_releases`, `test_workflow_contract`, `test_golden_plan_stage_decisions`,
+    `test_decision`, `test_target_state`, `test_job_validation`, `test_package_structure` and
+    `test_write_containment`: 864 tests, OK.
+  - `test_integration_disposable_repo.RealManagerMigrationTest` with the real `workflow-manager`
+    on `PATH`: OK.
+  - `test_packaged_runtime` with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`: 9 tests, OK.
+  - Full sharded run, `python3 tools/run_tests.py`, in the foreground: 2227 tests in 8 shards,
+    PASS, exact coverage, 98.6 s wall. As in CP1-CP4, it ran under the reaping-subreaper wrapper.
+- **Notes for CP6.** Guide text that still describes 2.5.1 alone, which Design G assigns to CP6:
+  - `milestone-branches.md`'s `integration_required` and abandon passages (lines 32, 84, 132);
+  - `ci-and-releases.md` and `automation.md`;
+  - `troubleshooting.md`'s admitted-release refusal. The refusal key is now
+    `supported_workflow_lines`, and the wrong-line message names the validated releases.

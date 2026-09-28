@@ -45,6 +45,7 @@ from controller.managed_repo import (  # noqa: E402
     REFERENCE_WORKFLOW_RELEASE, SUPPORTED_PROFILES, VALIDATED_WORKFLOW_RELEASES,
 )
 from tests import fixtures  # noqa: E402
+from tests import test_workflow_release_migration as migration  # noqa: E402
 
 REPO_ROOT = fixtures.REPO_ROOT
 WORKFLOW_MANAGER_BIN = shutil.which("workflow-manager")
@@ -377,6 +378,74 @@ class InstallationAdmissibilityTest(unittest.TestCase):
             with self.assertRaises(AssertionError) as ctx:
                 _assert_target_installation_admissible(target)
             self.assertIn("no installation manifest found", str(ctx.exception))
+
+
+@unittest.skipUnless(WORKFLOW_MANAGER_BIN, "no real workflow-manager installed")
+class RealManagerMigrationTest(unittest.TestCase):
+    """M1 against the real Workflow Manager, locally
+    (``docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``,
+    Design F, workflow-2-6-integration CP5): a real ``workflow-manager
+    --release-version 2.5.1 bootstrap``, driven to M1's state with the real
+    2.5.1 writers and generator, then a real ``--release-version 2.6.0
+    update`` and ``verify``. It proves that the Manager's full write set
+    gives what ``tests/test_workflow_release_migration.py``'s CI simulation
+    of its subset gives. Skipped when ``workflow-manager`` is absent, as in
+    CI."""
+
+    def manager(self, *args: str) -> subprocess.CompletedProcess:
+        result = fixtures.run([WORKFLOW_MANAGER_BIN, *args], check=False)
+        self.assertEqual(result.returncode, 0, f"workflow-manager {' '.join(args)}:\n{result.stdout}\n{result.stderr}")
+        return result
+
+    def decide(self, target: Path):
+        from controller import evidence, managed_repo, target_state
+
+        managed = managed_repo.inspect(target)
+        snapshot = target_state.read(managed)
+        return managed, evidence.decide(managed, snapshot, snapshot.work_items[migration.WI])
+
+    def test_m1_through_the_real_manager_update(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td).resolve() / "target"
+            target.mkdir()
+            fixtures.run(["git", "init", "-q"], cwd=target)
+            fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
+            fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
+            (target / "README.md").write_text("disposable migration fixture\n")
+            fixtures.commit_all(target, "seed")
+            self.manager("--release-version", migration.LEGACY, "bootstrap", str(target), "--profile", "full")
+            config_path = target / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json"
+            config = json.loads(config_path.read_text())
+            config["supported_versions"] = sorted(set(config["supported_versions"]) | {"2.2"})
+            config_path.write_text(json.dumps(config, indent=2) + "\n")
+            base = fixtures.commit_all(target, "Bootstrap Workflow 2.5.1")
+            fixtures.run_workflow_seed(target, "ready", work_item_id=migration.WI, base_commit=base)
+            managed, before = self.decide(target)
+            self.assertEqual(managed.workflow_version, migration.LEGACY)
+            self.assertEqual((before.action.command, before.automatic), (migration.REVIEW_PLAN, True))
+            legacy_dir = migration.rule_feedback_dir(target)
+
+            self.manager("--release-version", migration.UPDATED, "update", str(target))
+            self.manager("verify", str(target))
+            # The subset the CI simulation writes is exactly what the Manager wrote.
+            tree = fixtures.workflow_release_tree(migration.UPDATED)
+            for rel_path in migration.vendored_paths(migration.UPDATED):
+                self.assertEqual((target / rel_path).read_bytes(), (tree / rel_path).read_bytes(), rel_path)
+
+            managed, after = self.decide(target)
+            self.assertEqual(managed.workflow_version, migration.UPDATED)
+            answer = migration.feedback_path(target)
+            self.assertEqual((answer.layout, answer.feedback_dir), ("legacy-flat", legacy_dir))
+            status = migration.publication_status(target)
+            self.assertEqual((status.phase, status.row, status.status), (migration.AWAITING_LOCAL_PLAN, "3", "BOUND"))
+            self.assertEqual((after.action.command, after.automatic), (before.action.command, True))
+            self.assertIn(migration.publication_line("3", "BOUND"), after.evidence)
+
+            fixtures.run_workflow_python(target, migration.RECORD_LOCAL_VERDICT, migration.WI, "REVISE")
+            status = migration.publication_status(target)
+            self.assertEqual((status.phase, status.row, status.status), (migration.REVISING_PLAN, "10", "NEEDS_EDIT"))
+            _managed, revised = self.decide(target)
+            self.assertEqual((revised.action.command, revised.automatic), (migration.APPLY_PLAN_REVIEW, True))
 
 
 class ControllerSourceTreeDigestVerificationTest(unittest.TestCase):

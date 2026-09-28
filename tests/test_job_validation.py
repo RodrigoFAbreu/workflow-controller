@@ -1422,7 +1422,7 @@ def _key(eo) -> tuple:
 
 class PerReleaseWriterDeclarationTest(unittest.TestCase):
     """``job.expected_outcomes_for(release)``: property 5 is clean for both
-    releases, 2.6.0 exercised explicitly before its admission (CP5)."""
+    releases -- every contracted release, whether or not it is admitted."""
 
     def test_property_5_is_clean_for_every_contracted_release(self) -> None:
         from controller import workflow_contract

@@ -169,12 +169,13 @@ class DriftedInstallationError(ControllerError):
 
 class UnsupportedWorkflowVersionError(ControllerError):
     """The manifest's ``workflow_version`` fails the Controller's two-tier
-    baseline rule (``managed_repo.SUPPORTED_WORKFLOW_LINE`` then
+    baseline rule (``managed_repo.SUPPORTED_WORKFLOW_LINES`` then
     ``managed_repo.VALIDATED_WORKFLOW_RELEASES``), regardless of
-    ``profile``. ``evidence['reason']`` distinguishes a version outside the
-    supported line entirely (``"outside_supported_line"``) from one inside
-    the line that has not been individually validated
-    (``"unvalidated_release"``). ``workflow_contract.contract_for`` raises it
+    ``profile``. ``evidence['reason']`` distinguishes a version outside
+    every supported line (``"outside_supported_line"``) from one inside a
+    supported line that has not been individually validated
+    (``"unvalidated_release"``); both carry the sorted list
+    ``supported_workflow_lines``. ``workflow_contract.contract_for`` raises it
     too, with ``"no_workflow_contract"``, for a release the Controller holds
     no Workflow contract for."""
 

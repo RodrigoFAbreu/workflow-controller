@@ -2744,9 +2744,10 @@ class DrainDetachJobTest(_StreamingCase):
 # at decision time, and the installed-release re-check before every decision.
 # ---------------------------------------------------------------------------
 
-#: A release with a ``workflow_query`` contract. It is not admitted until
-#: CP5, so these tests build its ``ManagedRepository`` from the target's
-#: manifest instead of through ``managed_repo.inspect``.
+#: A release with a ``workflow_query`` contract. These tests build its
+#: ``ManagedRepository`` from the target's manifest
+#: (``fixtures.build_target_managed_repository``) rather than through
+#: ``managed_repo.inspect``, which would need a Workflow Manager.
 QUERY_RELEASE = "2.6.0"
 PLAN_REVIEW = f"/review-plan {lifecycle.WI}"
 

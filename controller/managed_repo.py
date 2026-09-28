@@ -27,7 +27,8 @@ Five ordered, fail-closed checks, refusing at the first failure:
    carrying both commands' verbatim output as evidence.
 5. **The two-tier "Supported Workflow baseline" rule** (revision 68,
    manual external plan review round 67's ``I1``): ``workflow_version``
-   must first parse as a dotted release inside :data:`SUPPORTED_WORKFLOW_LINE`
+   must first parse as a dotted release inside one of
+   :data:`SUPPORTED_WORKFLOW_LINES`
    (a necessary pre-filter and diagnostic classifier only), then must be an
    **exact member** of :data:`VALIDATED_WORKFLOW_RELEASES` (the real
    admission gate -- a release inside the supported line that has never
@@ -70,23 +71,33 @@ _MANIFEST_REL_PATH = ".workflow-manager/installation.json"
 MANAGER_ENV = "WORKFLOW_CONTROLLER_WORKFLOW_MANAGER"
 
 #: A manifest's ``workflow_version`` must parse as a dotted release whose
-#: major and minor components are exactly these two -- a necessary
-#: pre-filter and diagnostic classifier only, never by itself sufficient
-#: for admission (``VALIDATED_WORKFLOW_RELEASES`` below is the actual
-#: gate). Lets a refusal say "wrong line" instead of "not yet validated".
-SUPPORTED_WORKFLOW_LINE = "2.5"
+#: ``major.minor`` line is one of these -- a necessary pre-filter and
+#: diagnostic classifier only, never by itself sufficient for admission
+#: (``VALIDATED_WORKFLOW_RELEASES`` below is the actual gate). Lets a
+#: refusal say "wrong line" instead of "not yet validated".
+SUPPORTED_WORKFLOW_LINES: frozenset[str] = frozenset({"2.5", "2.6"})
 
 #: The actual admission gate (revision 68, manual external plan review
 #: round 67's ``I1``): ``workflow_version`` must be an **exact member** of
-#: this closed set, not merely a member of ``SUPPORTED_WORKFLOW_LINE``.
-#: ``2.5.1`` is its only element because it is the only release this
-#: Controller's inventories and baseline-verification suites were ever
-#: actually measured against. Growing this set is a deliberate act, never
-#: automatic from a parsed major/minor match: re-measure the inventories
-#: and baseline-verification suites against the newly-installed release,
-#: then add its version string here by name, in a plan revision that
-#: states what was measured.
-VALIDATED_WORKFLOW_RELEASES: frozenset[str] = frozenset({"2.5.1"})
+#: this closed set, not merely inside one of ``SUPPORTED_WORKFLOW_LINES``.
+#: Its members are the releases this Controller's inventories and
+#: baseline-verification suites were actually measured against:
+#:
+#: - ``2.5.1``, the reference release;
+#: - ``2.6.0`` (Controller 1.3.0,
+#:   ``docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``). Its
+#:   released contract was measured in that plan's Investigation, and the
+#:   phase set, command-file partition, user-only derivation, property 5,
+#:   both decision goldens, the two Workflow queries and the 2.5.1 -> 2.6.0
+#:   migration scenarios run against its vendored tree
+#:   (``tests/workflow_releases/2.6.0/``).
+#:
+#: Growing this set is a deliberate act, never automatic from a parsed
+#: major/minor match: vendor the release, re-measure the inventories and
+#: baseline-verification suites against it, give it a
+#: ``workflow_contract.RELEASE_CONTRACTS`` entry, then add its version
+#: string here by name, in a plan revision that states what was measured.
+VALIDATED_WORKFLOW_RELEASES: frozenset[str] = frozenset({"2.5.1", "2.6.0"})
 
 #: Unchanged in membership and justification since revision 32: both
 #: profiles install the identical command/tooling surface the Controller
@@ -97,11 +108,10 @@ VALIDATED_WORKFLOW_RELEASES: frozenset[str] = frozenset({"2.5.1"})
 SUPPORTED_PROFILES: frozenset[str] = frozenset({"runtime", "full"})
 
 #: The one concrete release every inventory in the plan is derived from
-#: and re-derivable against. Since revision 68 it is also the sole member
-#: of ``VALIDATED_WORKFLOW_RELEASES`` -- the derivation pin and the
-#: admission gate currently name the same release, but remain two
-#: different mechanisms; a future validated release would extend the
-#: latter without necessarily moving the former.
+#: and re-derivable against: the fixture default and the release of the
+#: unchanged baseline goldens. The derivation pin and the admission gate
+#: are two different mechanisms: admitting ``2.6.0`` extended
+#: ``VALIDATED_WORKFLOW_RELEASES`` without moving this pin.
 REFERENCE_WORKFLOW_RELEASE = "2.5.1"
 
 _DOTTED_RELEASE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -275,15 +285,15 @@ def _check_workflow_version(workflow_version: str, root: Path) -> None:
     evidence ``reason`` values so they are never conflated in a report a
     human reads."""
     line = _workflow_line(workflow_version)
-    if line != SUPPORTED_WORKFLOW_LINE:
+    if line not in SUPPORTED_WORKFLOW_LINES:
         raise UnsupportedWorkflowVersionError(
             f"{root} runs Workflow {workflow_version!r}, which is outside the Controller's "
-            f"supported line {SUPPORTED_WORKFLOW_LINE!r} (reference release "
-            f"{REFERENCE_WORKFLOW_RELEASE!r})",
+            f"supported lines {sorted(SUPPORTED_WORKFLOW_LINES)} (validated releases: "
+            f"{sorted(VALIDATED_WORKFLOW_RELEASES)})",
             evidence={
                 "root": str(root),
                 "observed_workflow_version": workflow_version,
-                "supported_workflow_line": SUPPORTED_WORKFLOW_LINE,
+                "supported_workflow_lines": sorted(SUPPORTED_WORKFLOW_LINES),
                 "reference_workflow_release": REFERENCE_WORKFLOW_RELEASE,
                 "reason": "outside_supported_line",
             },
@@ -291,12 +301,12 @@ def _check_workflow_version(workflow_version: str, root: Path) -> None:
     if workflow_version not in VALIDATED_WORKFLOW_RELEASES:
         raise UnsupportedWorkflowVersionError(
             f"{root} runs Workflow {workflow_version!r}, which is in the Controller's supported "
-            f"line {SUPPORTED_WORKFLOW_LINE!r} but has not been individually validated "
+            f"line {line!r} but has not been individually validated "
             f"(validated releases: {sorted(VALIDATED_WORKFLOW_RELEASES)})",
             evidence={
                 "root": str(root),
                 "observed_workflow_version": workflow_version,
-                "supported_workflow_line": SUPPORTED_WORKFLOW_LINE,
+                "supported_workflow_lines": sorted(SUPPORTED_WORKFLOW_LINES),
                 "validated_workflow_releases": sorted(VALIDATED_WORKFLOW_RELEASES),
                 "reference_workflow_release": REFERENCE_WORKFLOW_RELEASE,
                 "reason": "unvalidated_release",

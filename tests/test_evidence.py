@@ -3467,9 +3467,10 @@ class WorkflowQueryFeedbackPathTest(unittest.TestCase):
 
 
 class WorkflowQueryGoldenTest(unittest.TestCase):
-    """The 2.6.0 decision goldens (Design C), checked directly: 2.6.0 is
-    admitted only at CP5, when the golden tests iterate every admitted
-    release. The 2.5.1 goldens keep their files and their derivations."""
+    """The decision goldens of every admitted release (Design C): each
+    admitted release has its own plan-stage and external-implementation-review
+    golden, and each re-derives byte-equal from the code as it stands. The
+    2.5.1 goldens keep their files and their derivations."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -3478,13 +3479,31 @@ class WorkflowQueryGoldenTest(unittest.TestCase):
 
         cls.plan, cls.external = plan, external
         cls.derived = {(module, release): module.derive_cases(release)
-                       for module in (plan, external) for release in ("2.5.1", _QUERY_RELEASE)}
+                       for module in (plan, external)
+                       for release in sorted(VALIDATED_WORKFLOW_RELEASES | {"2.5.1", _QUERY_RELEASE})}
 
-    def test_the_2_6_0_goldens_rederive_byte_equal(self) -> None:
+    def test_every_admitted_release_has_its_own_goldens(self) -> None:
+        self.assertEqual(VALIDATED_WORKFLOW_RELEASES, frozenset({"2.5.1", _QUERY_RELEASE}))
         for module in (self.plan, self.external):
-            with self.subTest(golden=module.GOLDEN_PATHS[_QUERY_RELEASE].name):
-                self.assertEqual(module.render_document(self.derived[module, _QUERY_RELEASE], _QUERY_RELEASE),
-                                 module.GOLDEN_PATHS[_QUERY_RELEASE].read_text())
+            with self.subTest(golden=module.__name__):
+                self.assertEqual(set(module.GOLDEN_PATHS), set(VALIDATED_WORKFLOW_RELEASES))
+
+    def test_every_admitted_release_rederives_its_goldens_byte_equal(self) -> None:
+        """The 2.5.1 plan-stage golden keeps its one named permitted
+        difference (``tests.test_golden_plan_stage_decisions``); every
+        other golden re-derives with no difference at all."""
+        from tests.test_golden_plan_stage_decisions import _revert_permitted_difference
+
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            for module in (self.plan, self.external):
+                path = module.GOLDEN_PATHS[release]
+                with self.subTest(release=release, golden=path.name):
+                    checked_in = path.read_text()
+                    derived = self.derived[module, release]
+                    if module is self.plan and release == "2.5.1":
+                        derived, reverted = _revert_permitted_difference(module.load_cases(checked_in), derived)
+                        self.assertTrue(reverted)
+                    self.assertEqual(module.render_document(derived, release), checked_in)
 
     def test_the_2_5_1_goldens_are_the_original_files(self) -> None:
         self.assertEqual(self.plan.GOLDEN_PATHS["2.5.1"].name, "plan_stage_decisions.json")
@@ -3726,45 +3745,9 @@ class _PublicationTargets(unittest.TestCase):
         return steps
 
     def carry_out(self, root: Path, steps: tuple[str, ...]) -> None:
-        """Carry out plan-bundle recovery steps exactly as written: each
-        author file at the path the step names, then the generator command
-        it names, with the real 2.6.0 scripts."""
-        import re as _re
-
-        for step in steps:
-            context = _re.match(r"^0\. write (\S+)/CONTEXT_FILES\.txt(?:, restoring the previous round's author "
-                                r"files from (\S+)/)?$", step)
-            request = _re.match(r"^\d\. (?:write|refresh) (\S+)/REVIEW_REQUEST\.md", step)
-            results = _re.match(r"^\d\. (?:write|refresh) (\S+)/TEST_RESULTS\.md .*`stage: plan \(revision (\d+)\)`",
-                                step)
-            generator = _re.match(r"^\d\. run (scripts/prepare-ai-review\.sh) (\S+) plan (\S+) -- ", step)
-            if context:
-                target = root / context.group(1) / "CONTEXT_FILES.txt"
-                target.parent.mkdir(parents=True, exist_ok=True)
-                source = root / context.group(2) / "CONTEXT_FILES.txt" if context.group(2) else None
-                target.write_bytes(source.read_bytes() if source is not None and source.is_file() else b"")
-            elif request:
-                content_id = fixtures.run_workflow_python(
-                    root, "print(fingerprint.compute_review_content_id_plan_stage_for_work_item(Path.cwd(), "
-                          "sys.argv[1])[0])", _PUB_WI).stdout.strip()
-                target = root / request.group(1) / "REVIEW_REQUEST.md"
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(f"# Review request\n\nstage: plan\nwork item: {_PUB_WI}\n"
-                                  f"review_content_id: {content_id}\n")
-            elif results:
-                target = root / results.group(1) / "TEST_RESULTS.md"
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(f"stage: plan (revision {results.group(2)})\nhead: {fixtures.current_head(root)}\n\n"
-                                  "No checks at the plan stage.\n")
-            elif generator:
-                result = subprocess.run(
-                    [f"./{generator.group(1)}", generator.group(2), "plan", generator.group(3)], cwd=root,
-                    stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
-                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-                )
-                self.assertEqual(result.returncode, 0, f"{step}\n{result.stdout}\n{result.stderr}")
-            else:
-                self.fail(f"a recovery step this test cannot carry out: {step!r}")
+        """Carry out plan-bundle recovery steps exactly as written, with the
+        real 2.6.0 scripts (``fixtures.carry_out_plan_recovery_steps``)."""
+        fixtures.carry_out_plan_recovery_steps(root, _PUB_WI, steps)
 
 
 class PublicationStatusReadyPhaseRealTest(_PublicationTargets):
@@ -3986,17 +3969,6 @@ class PublicationStatusNonReadyPhaseRealTest(_PublicationTargets):
                 self.assertNotIn("discards both recorded review stages", decided.gate.what_is_required)
 
 
-def _admit_2_6_0(test: unittest.TestCase) -> None:
-    """Admit Workflow 2.6.0 for the duration of ``test``: it is admitted
-    at CP5, and until then ``managed_repo.inspect`` refuses it."""
-    from controller import managed_repo as managed_repo_module
-
-    for name, value in (("SUPPORTED_WORKFLOW_LINE", "2.6"), ("VALIDATED_WORKFLOW_RELEASES", frozenset({"2.6.0"}))):
-        patcher = unittest.mock.patch.object(managed_repo_module, name, value)
-        patcher.start()
-        test.addCleanup(patcher.stop)
-
-
 def _lstat_snapshot(*tops: Path) -> dict[str, tuple]:
     """Every entry under each of ``tops`` (the top-level ``.git`` of a
     repository excluded), by ``lstat``: its type and mode, a link's target
@@ -4034,7 +4006,6 @@ class ContentDriftedRealTest(_PublicationTargets):
         self.runtime_home = self.outside("runtime")
         stub = fixtures.write_stub_workflow_manager(self.outside("manager") / "workflow-manager",
                                                     release=_PUB_RELEASE)
-        _admit_2_6_0(self)
         patcher = unittest.mock.patch.dict(os.environ, {
             "WORKFLOW_CONTROLLER_HOME": str(self.runtime_home), "WORKFLOW_CONTROLLER_WORKFLOW_MANAGER": str(stub)})
         patcher.start()
@@ -4195,7 +4166,6 @@ class PublicationQueryFailureRealTest(_PublicationTargets, _lifecycle_case()._Li
         from controller import cli
         from controller.errors import WorkflowQueryError
 
-        _admit_2_6_0(self)
         for case in ("deleted", "link"):
             with self.subTest(case=case):
                 root = self.target("bound")

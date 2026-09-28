@@ -190,10 +190,17 @@ class DriftedInstallationTest(unittest.TestCase):
 
 
 class UnsupportedWorkflowVersionTest(unittest.TestCase):
-    """The baseline predicate's own seven cases (revision 64, widened to
-    seven at revision 68, manual external round 67's ``I1``, ``REQ-T18B``):
-    a bare line predicate, a bare closed set and the two-tier rule each
-    agree on a different subset of them."""
+    """The baseline predicate's own cases (revision 64, widened at
+    revision 68, manual external round 67's ``I1``, ``REQ-T18B``, and for
+    the admission of 2.6.0 in Controller 1.3.0): a bare line predicate, a
+    bare closed set and the two-tier rule each agree on a different subset
+    of them."""
+
+    def test_supported_lines_and_validated_releases(self) -> None:
+        self.assertEqual(managed_repo.SUPPORTED_WORKFLOW_LINES, frozenset({"2.5", "2.6"}))
+        self.assertEqual(managed_repo.VALIDATED_WORKFLOW_RELEASES, frozenset({"2.5.1", "2.6.0"}))
+        self.assertEqual(managed_repo.REFERENCE_WORKFLOW_RELEASE, "2.5.1")
+        self.assertFalse(hasattr(managed_repo, "SUPPORTED_WORKFLOW_LINE"))
 
     def test_reference_release_2_5_1_is_admitted(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -201,6 +208,44 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
             result = managed_repo.inspect(repo, manager_bin=str(stub))
             self.assertEqual(result.workflow_version, "2.5.1")
+
+    def test_2_6_0_is_admitted(self) -> None:
+        """Was ``test_2_6_0_refuses_outside_supported_line`` until 2.6.0 was
+        admitted (Controller 1.3.0)."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.6.0")
+            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager", release="2.6.0")
+            result = managed_repo.inspect(repo, manager_bin=str(stub))
+            self.assertEqual(result.workflow_version, "2.6.0")
+            self.assertEqual(result.profile, "full")
+            self.assertIn("workflow 2.6.0", result.verify["stdout"])
+
+    def test_2_7_0_refuses_outside_supported_line(self) -> None:
+        """Keeps the line predicate a set of lines rather than a floor."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.7.0")
+            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
+            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+                managed_repo.inspect(repo, manager_bin=str(stub))
+            evidence = ctx.exception.evidence
+            self.assertEqual(evidence["observed_workflow_version"], "2.7.0")
+            self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
+            self.assertEqual(evidence["reason"], "outside_supported_line")
+            self.assertNotIn("supported_workflow_line", evidence)
+
+    def test_2_6_1_refuses_unvalidated(self) -> None:
+        """Inside the newly supported 2.6 line, but never measured."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.6.1")
+            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
+            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+                managed_repo.inspect(repo, manager_bin=str(stub))
+            evidence = ctx.exception.evidence
+            self.assertEqual(evidence["observed_workflow_version"], "2.6.1")
+            self.assertEqual(evidence["reason"], "unvalidated_release")
+            self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
+            self.assertEqual(evidence["validated_workflow_releases"], ["2.5.1", "2.6.0"])
+            self.assertIn("supported line '2.6'", str(ctx.exception))
 
     def test_2_4_0_refuses_outside_supported_line(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -210,7 +255,7 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
                 managed_repo.inspect(repo, manager_bin=str(stub))
             evidence = ctx.exception.evidence
             self.assertEqual(evidence["observed_workflow_version"], "2.4.0")
-            self.assertEqual(evidence["supported_workflow_line"], "2.5")
+            self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
             self.assertEqual(evidence["reference_workflow_release"], "2.5.1")
             self.assertEqual(evidence["reason"], "outside_supported_line")
 
@@ -219,15 +264,6 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
         designed on -- a stated, tested fact rather than a side effect."""
         with tempfile.TemporaryDirectory() as td:
             repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.3.1")
-            stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
-            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
-                managed_repo.inspect(repo, manager_bin=str(stub))
-            self.assertEqual(ctx.exception.evidence["reason"], "outside_supported_line")
-
-    def test_2_6_0_refuses_outside_supported_line(self) -> None:
-        """Keeps the line predicate a line rather than a floor."""
-        with tempfile.TemporaryDirectory() as td:
-            repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.6.0")
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
             with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
                 managed_repo.inspect(repo, manager_bin=str(stub))
@@ -255,7 +291,8 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
             evidence = ctx.exception.evidence
             self.assertEqual(evidence["observed_workflow_version"], "2.5.0")
             self.assertEqual(evidence["reason"], "unvalidated_release")
-            self.assertEqual(evidence["validated_workflow_releases"], ["2.5.1"])
+            self.assertEqual(evidence["validated_workflow_releases"], ["2.5.1", "2.6.0"])
+            self.assertIn("supported line '2.5'", str(ctx.exception))
 
     def test_req_t18b_same_inventory_unvalidated_release_refuses_before_any_inventory_read(self) -> None:
         """`REQ-T18B`: a fixture whose ``.claude/commands/`` tree and

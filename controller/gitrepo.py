@@ -530,8 +530,10 @@ def merge_trunk(repo_root: Path, remote: str, trunk: str, *, runner: Runner | No
     merge -- leaving the tree as it was -- and refuses naming the
     conflicting paths.
 
-    Wired into no lifecycle path in this milestone (see the plan's
-    "Workflow / Controller boundary")."""
+    Wired into no lifecycle path: neither Workflow 2.5.1 nor 2.6.0 has a
+    transition that moves a work item's base after an integration merge,
+    or provenance that admits one (the answers to E1-E5 in
+    ``docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md``)."""
     _require_clean(repo_root, f"merge {remote}/{trunk}", runner)
     target = f"refs/remotes/{remote}/{trunk}"
     argv, result = _run(repo_root, ["merge", "--no-ff", "--no-edit", target], runner)

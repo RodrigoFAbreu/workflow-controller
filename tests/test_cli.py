@@ -340,8 +340,9 @@ class StatusFirstLineTest(unittest.TestCase):
 
 
 def _build_managed_target(tmp_root: Path, *, phase: str, work_item_id: str = "wi-1",
-                           governing_workflow_version: str | None = "2.1") -> Path:
-    repo = fixtures.build_managed_repo(tmp_root / "repo")
+                           governing_workflow_version: str | None = "2.1",
+                           workflow_version: str = "2.5.1") -> Path:
+    repo = fixtures.build_managed_repo(tmp_root / "repo", workflow_version=workflow_version)
     entry = {
         "work_item_type": "product",
         "work_item_kind": "product",
@@ -421,6 +422,54 @@ class InspectCommandTest(unittest.TestCase):
         self.assertEqual(payload["work_item"]["phase"], "PLANNING")
         self.assertEqual(payload["work_item"]["last_completed_checkpoint_id"], "CP1")
         self.assertEqual(payload["controller"], identity.runtime_record(FAKE_IDENTITY))
+
+    def test_2_6_0_target_text_and_json_reports_name_the_release(self) -> None:
+        """Admission of 2.6.0 (Controller 1.3.0): ``inspect`` reports a
+        2.6.0 target exactly as a 2.5.1 one, with its own release."""
+        import contextlib
+        import io
+        repo = _build_managed_target(self.tmp_root / "2.6.0", phase="PLANNING", workflow_version="2.6.0")
+        stub = fixtures.write_stub_workflow_manager(self.tmp_root / "workflow-manager-2.6.0", release="2.6.0")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_inspect(_Args(str(repo), workflow_manager=str(stub)), self.runtime_root,
+                                        FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        out = buf.getvalue()
+        self.assertIn("Workflow 2.6.0", out)
+        self.assertNotIn("2.5.1", out)
+        self.assertIn("phase: PLANNING", out)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exit_code = cli.cmd_inspect(_Args(str(repo), workflow_manager=str(stub), json_out=True),
+                                        self.runtime_root, FAKE_IDENTITY)
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["repository"]["workflow_version"], "2.6.0")
+        self.assertEqual(payload["work_item"]["phase"], "PLANNING")
+
+    def test_unvalidated_and_outside_line_releases_refuse_through_the_cli(self) -> None:
+        """2.6.1 (inside the 2.6 line, never measured) and 2.7.0 (outside
+        both lines) refuse at ``inspect`` with exit 20, each message naming
+        its own case (the evidence is pinned in ``test_managed_repo``)."""
+        import contextlib
+        import io
+        cases = (
+            ("2.6.1", "is in the Controller's supported line '2.6' but has not been individually validated "
+                      "(validated releases: ['2.5.1', '2.6.0'])"),
+            ("2.7.0", "is outside the Controller's supported lines ['2.5', '2.6'] "
+                      "(validated releases: ['2.5.1', '2.6.0'])"),
+        )
+        for release, message in cases:
+            with self.subTest(release=release):
+                repo = _build_managed_target(self.tmp_root / release, phase="PLANNING", workflow_version=release)
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    exit_code = cli.main(["--runtime-dir", str(self.runtime_root),
+                                          "--workflow-manager", str(self.stub_manager), "inspect", str(repo)])
+                self.assertEqual(exit_code, cli.EXIT_FAIL_CLOSED)
+                self.assertEqual(out.getvalue(), "")
+                self.assertIn(f"runs Workflow '{release}', which {message}", err.getvalue())
 
     def test_unmanaged_repository_refuses(self) -> None:
         bare = fixtures.build_bare_git_repo(self.tmp_root / "bare")

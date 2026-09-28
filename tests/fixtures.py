@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -545,8 +546,9 @@ def install_workflow_release(root: Path, release: str, *, profile: str = "full")
 #:   has bound it;
 #: - ``revise``: a local ``REVISE`` has been recorded (``REVISING_PLAN``).
 #: ``extra_protected_paths`` (already committed) join the declarations'
-#: ``plan_stage.protected_paths``. It runs with ``-B`` so no bytecode lands
-#: in the target.
+#: ``plan_stage.protected_paths``; the registry holds ``checkpoint_ids``
+#: (default ``["CP1"]``). It runs with ``-B`` so no bytecode lands in the
+#: target.
 WORKFLOW_SEED_SCRIPT = r"""
 import datetime
 import json
@@ -592,9 +594,11 @@ tx(lambda state: ws.route_work_item(
 ))
 if reach < 1:
     raise SystemExit(0)
-checkpoints = [{"id": "CP1", "name": "one checkpoint", "depends_on": [], "complexity": 1, "session_target": 1}]
+checkpoint_ids = args.get("checkpoint_ids", ["CP1"])
+checkpoints = [{"id": cid, "name": "one checkpoint" if len(checkpoint_ids) == 1 else f"checkpoint {cid}",
+                "depends_on": [], "complexity": 1, "session_target": 1} for cid in checkpoint_ids]
 registry = ws.generate_registry(wid, 1, checkpoints)
-mapping = ws.generate_mapping(wid, {"R1": {"description": "one requirement", "checkpoint_ids": ["CP1"]}},
+mapping = ws.generate_mapping(wid, {"R1": {"description": "one requirement", "checkpoint_ids": checkpoint_ids}},
                               registry=registry)
 ws.write_registry_and_mapping(root, Path(registry_path), Path(mapping_path), registry, mapping)
 declarations = ws.generate_artifacts_declarations(wid, plan_path, registry_path, mapping_path,
@@ -657,6 +661,30 @@ def run_workflow_python(root: Path, code: str, *args: str) -> subprocess.Complet
     return result
 
 
+def run_workflow_seed(root: Path, stage: str, *, work_item_id: str, base_commit: str,
+                      governing_workflow_version: str = "2.2",
+                      extra_protected_paths: tuple[str, ...] | list[str] = (),
+                      checkpoint_ids: tuple[str, ...] = ("CP1",)) -> None:
+    """Run :data:`WORKFLOW_SEED_SCRIPT` in the existing target ``root``,
+    through whatever Workflow release it has installed: ``work_item_id`` is
+    created with ``base_commit`` and seeded up to ``stage``. The target's
+    ``WORKFLOW_CONFIG.json`` must list ``governing_workflow_version``."""
+    result = subprocess.run(
+        [sys.executable, "-B", "-E", "-s", "-c", WORKFLOW_SEED_SCRIPT, json.dumps({
+            "work_item_id": work_item_id, "base_commit": base_commit, "stage": stage,
+            "governing_workflow_version": governing_workflow_version,
+            "extra_protected_paths": list(extra_protected_paths), "checkpoint_ids": list(checkpoint_ids),
+        })],
+        cwd=root, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+        # The generator runs a plain `python3`: keep its bytecode out of the
+        # target too, so a `__pycache__` found later was written by a query.
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"seeding {work_item_id} to {stage} in {root} failed (exit {result.returncode}):\n"
+                             f"{result.stdout}\n{result.stderr}")
+
+
 def seed_workflow_item(root: Path, release: str, stage: str, *, work_item_id: str,
                        upgrade_to: str | None = None, governing_workflow_version: str = "2.2",
                        extra_protected_paths: dict[str, str] | None = None) -> Path:
@@ -686,26 +714,62 @@ def seed_workflow_item(root: Path, release: str, stage: str, *, work_item_id: st
         {"schema_version": 1, "active_work_item_id": None, "work_items": {}},
     ) + "\n")
     base_commit = commit_all(root, "seed")
-    result = subprocess.run(
-        [sys.executable, "-B", "-E", "-s", "-c", WORKFLOW_SEED_SCRIPT, json.dumps({
-            "work_item_id": work_item_id, "base_commit": base_commit, "stage": stage,
-            "governing_workflow_version": governing_workflow_version,
-            "extra_protected_paths": sorted(extra_protected_paths or {}),
-        })],
-        cwd=root, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
-        # The generator runs a plain `python3`: keep its bytecode out of the
-        # target too, so a `__pycache__` found later was written by a query.
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-    )
-    if result.returncode != 0:
-        raise AssertionError(f"seeding {release}/{stage} failed (exit {result.returncode}):\n"
-                             f"{result.stdout}\n{result.stderr}")
+    run_workflow_seed(root, stage, work_item_id=work_item_id, base_commit=base_commit,
+                      governing_workflow_version=governing_workflow_version,
+                      extra_protected_paths=sorted(extra_protected_paths or {}))
     if upgrade_to is not None:
         install_workflow_release(root, upgrade_to)
     written = sorted(root.rglob("__pycache__"))
     if written:
         raise AssertionError(f"seeding wrote bytecode into the target: {written}")
     return root
+
+def carry_out_plan_recovery_steps(root: Path, work_item_id: str, steps: tuple[str, ...]) -> None:
+    """Carry out the Controller's plan-bundle recovery steps
+    (``evidence._plan_bundle_recovery_steps``, numbered ``0.``-``3.``)
+    exactly as written, with the target's own installed Workflow: each
+    author file at the path the step names -- ``CONTEXT_FILES.txt`` copied
+    from the quarantine the step names, if any, ``REVIEW_REQUEST.md`` with
+    the fresh plan-stage ``review_content_id``, ``TEST_RESULTS.md`` with the
+    revision the step names and the current ``HEAD`` -- then the generator
+    command it names. Raises on a step it cannot carry out, and on a
+    generator that exits non-zero."""
+    for step in steps:
+        context = re.match(r"^0\. write (\S+)/CONTEXT_FILES\.txt(?:, restoring the previous round's author "
+                           r"files from (\S+)/)?$", step)
+        request = re.match(r"^\d\. (?:write|refresh) (\S+)/REVIEW_REQUEST\.md", step)
+        results = re.match(r"^\d\. (?:write|refresh) (\S+)/TEST_RESULTS\.md .*`stage: plan \(revision (\d+)\)`",
+                           step)
+        generator = re.match(r"^\d\. run (scripts/prepare-ai-review\.sh) (\S+) plan (\S+) -- ", step)
+        if context:
+            target = root / context.group(1) / "CONTEXT_FILES.txt"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = root / context.group(2) / "CONTEXT_FILES.txt" if context.group(2) else None
+            target.write_bytes(source.read_bytes() if source is not None and source.is_file() else b"")
+        elif request:
+            content_id = run_workflow_python(
+                root, "print(fingerprint.compute_review_content_id_plan_stage_for_work_item(Path.cwd(), "
+                      "sys.argv[1])[0])", work_item_id).stdout.strip()
+            target = root / request.group(1) / "REVIEW_REQUEST.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"# Review request\n\nstage: plan\nwork item: {work_item_id}\n"
+                              f"review_content_id: {content_id}\n")
+        elif results:
+            target = root / results.group(1) / "TEST_RESULTS.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"stage: plan (revision {results.group(2)})\nhead: {current_head(root)}\n\n"
+                              "No checks at the plan stage.\n")
+        elif generator:
+            result = subprocess.run(
+                [f"./{generator.group(1)}", generator.group(2), "plan", generator.group(3)], cwd=root,
+                stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=120,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            )
+            if result.returncode != 0:
+                raise AssertionError(f"{step}\n(exit {result.returncode})\n{result.stdout}\n{result.stderr}")
+        else:
+            raise AssertionError(f"a recovery step this helper cannot carry out: {step!r}")
+
 
 def copy_real_commands_dir(dest: Path, *, release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
     """A real, on-disk copy of the released Workflow ``release``'s

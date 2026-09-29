@@ -8,8 +8,9 @@ everything adopter-specific from the committed
 ``.workflow-controller/policy.json``; this file is its reference adopter's
 thin CLI:
 
-- ``version`` prints the version the policy's version source declares at the
-  checked-out commit (``HEAD``'s committed tree);
+- ``version`` prints the version a local (non-release) build of the
+  checked-out tree carries: its static ``pyproject.toml`` version, else the
+  highest release tag reachable from ``HEAD`` (``0.0.0`` without one);
 - ``classify --commit C`` classifies trunk commit ``C`` and prints the
   ``state``, ``version``, ``tag`` and target ``commit`` as ``key=value``
   lines (also appended to ``$GITHUB_OUTPUT`` when set). A failing state
@@ -17,6 +18,12 @@ thin CLI:
 - ``build`` runs the policy's ``build`` command at the checked-out commit;
 - ``verify`` runs the policy's ``verify`` command on every built artifact
   for the checked-out commit;
+- both take the classified version from the environment variable
+  ``RELEASE_VERSION`` (``classify``'s ``version``), never from an argument,
+  so their command lines stay 1.3.0's: a ``RESUME`` can target a commit
+  carrying 1.3.0's own tooling. Under the ``conventional_commit`` trigger it
+  is required; under ``version_change`` it is optional and must equal the
+  committed version;
 - ``publish --commit TARGET`` recomputes the classification of the
   checked-out trunk commit and, for ``RELEASE_DUE`` or ``RESUME`` targeting
   ``TARGET``, tags (after validation, never moving a tag), publishes or
@@ -24,8 +31,13 @@ thin CLI:
 - ``verify-wheel WHEEL (--tag TAG | --local) --commit SHA`` checks a built
   wheel's name, metadata, entry point, required and forbidden files, its
   ``BUILD_INFO.json`` and the package digest recomputed from the wheel's own
-  members (the reference policy's ``verify`` command);
-- ``checksums DIR`` writes ``DIR/SHA256SUMS`` in ``sha256sum`` format.
+  members (the reference policy's ``verify`` command). A ``--tag`` wheel
+  carries the tag's version, a ``--local`` one the ``version`` subcommand's;
+- ``checksums DIR`` writes ``DIR/SHA256SUMS`` in ``sha256sum`` format;
+- ``check-title TITLE`` validates a pull request title against the policy
+  committed at ``HEAD`` (for a ``pull_request`` run, the merge ref): under
+  the ``conventional_commit`` trigger it prints ``ok: <type> → <bump>`` or
+  refuses; under ``version_change`` the title is not release input.
 
 There is no tag-first subcommand: a release tag is created only by
 ``publish``, after validation, so a hand-pushed ``v*`` tag triggers nothing.
@@ -49,6 +61,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import buildinfo  # noqa: E402
+from controller import conventional_commit  # noqa: E402
 from controller import forge as forge_module  # noqa: E402
 from controller import gitrepo, release_txn, repo_policy  # noqa: E402
 from controller import version as version_module  # noqa: E402
@@ -224,7 +237,7 @@ def checksums(directory: Path) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="release.py", description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("version", help="print the policy's version at the checked-out commit")
+    sub.add_parser("version", help="print the version a local build of the checked-out tree carries")
     classify = sub.add_parser("classify", help="classify a trunk commit for release")
     classify.add_argument("--commit", required=True, help="the trunk commit to classify")
     sub.add_parser("build", help="run the policy's build command at the checked-out commit")
@@ -239,15 +252,27 @@ def build_parser() -> argparse.ArgumentParser:
     wheel.add_argument("--commit", required=True, help="the commit the wheel must be built from")
     sums = sub.add_parser("checksums", help="write DIR/SHA256SUMS")
     sums.add_argument("directory", type=Path)
+    title = sub.add_parser("check-title", help="validate a pull request title against the committed policy")
+    title.add_argument("title")
     return parser
 
 
 def checked_out_version(repo_root: Path = REPO_ROOT) -> str:
-    """The checked-out ``<repo_root>/pyproject.toml``'s static version."""
+    """The version a local build of the checked-out ``repo_root`` carries
+    (``controller/version.py``'s ``local_build_version``)."""
     try:
-        return version_module.source_version(repo_root)
+        return version_module.local_build_version(repo_root)
     except ValueError as exc:
         raise Refusal("version source", str(exc)) from None
+
+
+def wheel_version(repo_root: Path, tag: str | None) -> str:
+    """The version ``verify-wheel`` expects: the release tag's, or for a
+    local wheel (``tag`` is ``None``) the checked-out tree's."""
+    if tag is None:
+        return checked_out_version(repo_root)
+    _require_tag_format(tag)
+    return buildinfo.version_for_tag(tag)
 
 
 # --- the release transaction ------------------------------------------------
@@ -261,14 +286,6 @@ def committed_policy(repo_root: Path, rev: str = "HEAD") -> repo_policy.Reposito
     if policy is None:
         raise Refusal("repository policy", f"{rev} has no {repo_policy.POLICY_PATH}")
     return policy
-
-
-def policy_version(repo_root: Path, rev: str = "HEAD") -> str:
-    """The version the policy committed at ``rev`` reads from ``rev``."""
-    try:
-        return repo_policy.read_committed_version(repo_root, committed_policy(repo_root, rev), rev)
-    except ControllerError as exc:
-        raise Refusal("version source", str(exc)) from None
 
 
 def release_context(repo_root: Path, rev: str = "HEAD") -> release_txn.ReleaseContext:
@@ -303,15 +320,32 @@ def cmd_classify(repo_root: Path, commit: str) -> None:
     print(f"ok: {state.state}: {state.detail}", file=sys.stderr)
 
 
+#: The classified version ``build`` and ``verify`` build for.
+RELEASE_VERSION_ENV = "RELEASE_VERSION"
+
+
+def release_version(ctx: release_txn.ReleaseContext) -> str | None:
+    """``$RELEASE_VERSION``, required under the ``conventional_commit``
+    trigger; ``None`` when unset or empty."""
+    version = os.environ.get(RELEASE_VERSION_ENV) or None
+    if version is None and ctx.release.trigger == repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+        raise Refusal(RELEASE_VERSION_ENV, f"is unset or empty; under the "
+                                           f"{ctx.release.trigger} trigger it carries the classified "
+                                           f"version (classify's version output)")
+    return version
+
+
 def cmd_build(repo_root: Path) -> None:
     head = _head(repo_root)
-    for path in release_txn.build(release_context(repo_root), head):
+    ctx = release_context(repo_root)
+    for path in release_txn.build(ctx, head, release_version(ctx)):
         print(f"ok: built {path.relative_to(repo_root)}")
 
 
 def cmd_verify(repo_root: Path) -> None:
     head = _head(repo_root)
-    for path in release_txn.verify(release_context(repo_root), head):
+    ctx = release_context(repo_root)
+    for path in release_txn.verify(ctx, head, release_version(ctx)):
         print(f"ok: {path.relative_to(repo_root)} verified for {head}")
 
 
@@ -321,11 +355,24 @@ def cmd_publish(repo_root: Path, target: str) -> None:
     print(f"ok: {outcome.tag} at {outcome.target}: {outcome.action} ({outcome.url})")
 
 
+def check_title(repo_root: Path, title: str) -> str:
+    """The ``ok:`` line for ``title`` under the policy committed at ``HEAD``."""
+    release = committed_policy(repo_root).release
+    if release.trigger != repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+        return f"ok: the release trigger is {release.trigger}; the title is not release input"
+    try:
+        bump = conventional_commit.bump(title, release.change_types)
+    except ControllerError as exc:
+        raise Refusal("title", exc.message) from None
+    subject = conventional_commit.parse(title)
+    return f"ok: {subject.type}{'!' if subject.breaking else ''} → {bump}"
+
+
 def main(argv: list[str] | None = None, *, repo_root: Path = REPO_ROOT) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "version":
-            print(policy_version(repo_root))
+            print(checked_out_version(repo_root))
         elif args.command == "classify":
             cmd_classify(repo_root, args.commit)
         elif args.command == "build":
@@ -335,11 +382,13 @@ def main(argv: list[str] | None = None, *, repo_root: Path = REPO_ROOT) -> int:
         elif args.command == "publish":
             cmd_publish(repo_root, args.commit)
         elif args.command == "verify-wheel":
-            version = checked_out_version(repo_root)
-            verify_wheel(args.wheel, version=version, commit=args.commit, tag=args.tag)
+            verify_wheel(args.wheel, version=wheel_version(repo_root, args.tag),
+                         commit=args.commit, tag=args.tag)
             print(f"ok: {args.wheel.name} verified")
         elif args.command == "checksums":
             print(f"ok: wrote {checksums(args.directory)}")
+        elif args.command == "check-title":
+            print(check_title(repo_root, args.title))
     except (Refusal, ControllerError) as exc:
         reason = f"{exc.code}: {exc}" if isinstance(exc, ControllerError) else str(exc)
         reason = " | ".join(line for line in reason.splitlines() if line.strip())

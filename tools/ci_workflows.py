@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Controller's GitHub Actions workflows, as a model. Stdlib only.
 
-The tests are stdlib-only and cannot parse YAML, so the three workflows live
+The tests are stdlib-only and cannot parse YAML, so the four workflows live
 here as Python data and are rendered by a small deterministic emitter:
 
 - ``validate.yml`` (``workflow_call`` only) is the single definition of the
@@ -12,15 +12,21 @@ here as Python data and are rendered by a small deterministic emitter:
   proves every planned test ran exactly once, and ``package`` builds and
   checks the wheel;
 - ``ci.yml`` runs it on every pull request;
+- ``pr-title.yml`` checks every pull request's title against the committed
+  policy (``tools/release.py check-title``): the title becomes the squash
+  commit's subject, and its Conventional Commit type decides the release;
 - ``main.yml`` runs it on every push to ``main`` (and on
   ``workflow_dispatch``), then classifies the trunk commit with
   ``tools/release.py classify`` and, when a release is due or resumable,
-  builds, verifies and publishes it as one release transaction.
+  builds, verifies and publishes it as one release transaction. ``build``
+  receives the classified version as ``RELEASE_VERSION``, and its ``build``
+  and ``verify`` command lines are 1.3.0's, so a ``RESUME`` target carrying
+  1.3.0's tooling still builds.
 
 A ``v*`` tag push triggers nothing: the release transaction creates the tag,
 after validation.
 
-``--write`` renders ``.github/workflows/{validate,ci,main}.yml`` and removes
+``--write`` renders ``.github/workflows/{validate,ci,main,pr-title}.yml`` and removes
 the retired ``release.yml``; ``--check`` exits ``1`` naming every committed
 file that differs from the render, and a retired file that still exists. The
 committed YAML is what GitHub runs, so ``--check`` passing means GitHub runs
@@ -73,8 +79,8 @@ PYTHON_VERSION = "3.12"
 RUNNER = "ubuntu-latest"
 
 #: Every action ``main.yml``'s ``release-plan``, ``build`` and ``publish``
-#: jobs use, pinned to the full commit its tag named when the retired
-#: ``release.yml`` first read it (``git ls-remote
+#: jobs and ``pr-title.yml``'s ``title`` job use, pinned to the full commit
+#: its tag named when the retired ``release.yml`` first read it (``git ls-remote
 #: https://github.com/actions/<repo>``; each is a lightweight tag, so the
 #: listed object is the commit). ``validate.yml`` keeps the major tag, as
 #: the workflows before it did (ADR 0002).
@@ -124,16 +130,29 @@ PLAN_JOB_OUTPUTS = ("shards", "count", "digest")
 DIST_DIR = "dist"
 ARTIFACT_NAME = "dist"
 
-PIPX_SMOKE = "\n".join([
-    f"pipx install {DIST_DIR}/*.whl",
-    'expected="workflow-controller $(python3 tools/release.py version)"',
-    'actual="$(workflow-controller --version)"',
-    "actual=\"${actual%%$'\\n'*}\"",
-    'if [ "$actual" != "$expected" ]; then',
-    '  echo "workflow-controller --version line 1 is \'$actual\', expected \'$expected\'" >&2',
-    "  exit 1",
-    "fi",
-])
+
+def _pipx_smoke(version: str) -> str:
+    """Install the built wheel with pipx and require ``--version``'s first
+    line to be ``workflow-controller <version>`` (``version`` is shell text)."""
+    return "\n".join([
+        f"pipx install {DIST_DIR}/*.whl",
+        f'expected="workflow-controller {version}"',
+        'actual="$(workflow-controller --version)"',
+        "actual=\"${actual%%$'\\n'*}\"",
+        'if [ "$actual" != "$expected" ]; then',
+        '  echo "workflow-controller --version line 1 is \'$actual\', expected \'$expected\'" >&2',
+        "  exit 1",
+        "fi",
+    ])
+
+
+#: ``validate``'s smoke test: the local build's version.
+PIPX_SMOKE = _pipx_smoke("$(python3 tools/release.py version)")
+#: ``main.yml``'s ``build`` job's smoke test: the version ``release-plan``
+#: classified, which the job receives as ``RELEASE_VERSION``. Under
+#: ``version_change`` that is the committed version, and a ``RESUME`` target
+#: carrying 1.3.0's tooling builds exactly it.
+RELEASE_PIPX_SMOKE = _pipx_smoke("$RELEASE_VERSION")
 
 
 class Pinned:
@@ -412,12 +431,15 @@ def main_workflow() -> dict:
                 "needs": ["validate", "release-plan"],
                 "if": _publishing_condition(),
                 "runs-on": RUNNER,
+                # tools/release.py build and verify read it; their command
+                # lines stay 1.3.0's, which a RESUME target's tooling accepts.
+                "env": {"RELEASE_VERSION": "${{ needs.release-plan.outputs.version }}"},
                 "steps": [
                     _checkout(pinned=True, fetch_depth=0, ref="${{ needs.release-plan.outputs.commit }}"),
                     _setup_python(pinned=True),
                     {"name": "build", "run": "python3 tools/release.py build"},
                     {"name": "verify", "run": "python3 tools/release.py verify"},
-                    {"name": "pipx smoke test", "run": PIPX_SMOKE},
+                    {"name": "pipx smoke test", "run": RELEASE_PIPX_SMOKE},
                     {"name": "checksums", "run": f"python3 tools/release.py checksums {DIST_DIR}"},
                     {"uses": Pinned("actions/upload-artifact"),
                      "with": {"name": ARTIFACT_NAME, "path": f"{DIST_DIR}/"}},
@@ -442,6 +464,37 @@ def main_workflow() -> dict:
     }
 
 
+#: ``pr-title.yml``'s check context, the job's ``name``.
+PR_TITLE_CHECK = "PR title"
+#: The ``pull_request`` activity types that can change the title or the
+#: merge ref's committed policy.
+PR_TITLE_TYPES = ("opened", "edited", "reopened", "synchronize")
+
+
+def pr_title_workflow() -> dict:
+    # The title reaches the script only through the environment, never
+    # interpolated into it. The default checkout depth is enough: only the
+    # merge ref's own committed policy is read.
+    return {
+        "name": PR_TITLE_CHECK,
+        "on": {"pull_request": {"types": list(PR_TITLE_TYPES)}},
+        "permissions": {"contents": "read"},
+        "jobs": {
+            "title": {
+                "name": PR_TITLE_CHECK,
+                "runs-on": RUNNER,
+                "steps": [
+                    _checkout(pinned=True),
+                    _setup_python(pinned=True),
+                    {"name": "check title",
+                     "env": {"TITLE": "${{ github.event.pull_request.title }}"},
+                     "run": 'python3 tools/release.py check-title "$TITLE"'},
+                ],
+            },
+        },
+    }
+
+
 _GENERATED = ("Generated by tools/ci_workflows.py -- do not edit by hand.\n"
               "Change the model there and run: python3 tools/ci_workflows.py --write")
 
@@ -457,6 +510,11 @@ WORKFLOWS = {
                  "Every action outside validate is pinned to a full commit SHA; publish is the only\n"
                  "job that can write.\n\n"
                  + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
+    "pr-title.yml": (pr_title_workflow,
+                     "Checks every pull request's title against the policy committed on its merge ref\n"
+                     "(tools/release.py check-title). The title becomes the squash commit's subject,\n"
+                     "whose Conventional Commit type decides the release. The title is passed through\n"
+                     "the environment only. The job's name is the required check context."),
 }
 #: Workflow files the model once rendered and no longer does. ``--write``
 #: removes them and ``--check`` fails while one exists: the tag-triggered

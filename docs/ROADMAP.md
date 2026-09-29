@@ -9,9 +9,10 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 ## At a glance
 
 **Where things stand (2026-09-29).** Controller 1.3.0 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through the Workflow 2.6
-integration (1.6) is complete. Workflow Manager also runs Workflow 2.6.0 and has its adaptive test
-sharding on `main`.
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C1, squash merges
+and PR-title versions (11.1, accepted 2026-09-29), is complete. C1 is released as 1.4.0 by its
+separate cutover pull request, after its own pull request (#8) is merged. Workflow Manager also
+runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -32,7 +33,7 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 
 | # | Step | Needs | Section |
 |---|---|---|---|
-| C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
+| C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) (complete) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, and telemetry v0 (tokens, cache, cost and time per job) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements) |
 | C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C2 | [11.3](#113-auto-merge-and-release-wait) |
@@ -329,7 +330,7 @@ Required end state:
 - no permanent `develop` branch;
 - fail closed when trunk moves in a way Workflow 2.5.1 cannot safely integrate;
 - generic repository release policy with Controller as the first reference adopter;
-- `pyproject.toml` is the single human-maintained Controller version authority;
+- `pyproject.toml` is the single human-maintained Controller version authority (superseded by 11.1, step C1, and [ADR 0007](adr/0007-tag-derived-versions-and-squash-merges.md): the release tags are the only version authority);
 - version change on trunk drives one deterministic release transaction;
 - validate/build/verify before tag creation;
 - immutable tags;
@@ -1041,6 +1042,14 @@ code as it stands when its turn comes, not from this list.
 
 ## 11.1 Squash merges and PR-title versions
 
+**Status:** Complete (`workflow-controller-squash-merge-tag-versioning`, accepted 2026-09-29 under
+Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md`, ADR
+`docs/adr/0007-tag-derived-versions-and-squash-merges.md`; the narrative is archived at
+`docs/milestones/completed/workflow-controller-squash-merge-tag-versioning.md`). The milestone never
+changed the policy or `pyproject.toml`'s version line. The switch is the plan's Design H: merge PR
+#8 with a merge commit, close it out with 1.3.0, change the repository settings, then squash-merge
+the two-file cutover pull request, which releases 1.4.0.
+
 **Step C1.** Checked against Workflow Manager: a Controller-only change.
 
 - Squash merges only. The repository settings become squash-only, with the squash message set to
@@ -1165,6 +1174,7 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 1.4    Worker lifecycle ownership hotfix                     COMPLETE (in 1.2.0)
 1.2.1  Adaptive test sharding                                COMPLETE (released as 1.2.1)
 1.6    Workflow 2.6 compatibility integration                COMPLETE (released as 1.3.0)
+11.1   C1: squash merges and PR-title versions               COMPLETE (releases as 1.4.0 at its cutover)
 ```
 
 ---

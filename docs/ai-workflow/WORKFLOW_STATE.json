@@ -4077,6 +4077,465 @@
           "completed_at": "2026-09-28T17:38:00Z"
         }
       }
+    },
+    "workflow-controller-squash-merge-tag-versioning": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-squash-merge-tag-versioning",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-squash-merge-tag-versioning-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-squash-merge-tag-versioning-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 3,
+      "implementation_revision": 2,
+      "functional_review_round": null,
+      "base_commit": "455cef0632a35744060288e71504bf93f1f06830",
+      "reviewed_implementation_head": "669d900d7723048c4ca5a96784a64a5731489cd7",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP7",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "614b398752f45fce1e274c234ae83a23b7b8d521"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "56cdb2c1ae4e742353fac491a4151b30e4ed14f8"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "0b61493efef8dc9c26d141021c5d70d36df5ca2b"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "dae01c29aa24f2922c0fe47a4052895d14c64c35"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "bec6a2370f3098a7f4c140830fe7bd25ba1e4a26"
+        },
+        "CP6": {
+          "status": "COMPLETE",
+          "start_commit": "08314d19d51f38d0315c55cbb012eaed244a8add"
+        },
+        "CP7": {
+          "status": "COMPLETE",
+          "start_commit": "85966f11b2b4843dc21f02985ffb042eb4696925"
+        }
+      },
+      "current_bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+        "approved_review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef0b0b78ed0be0020ffb8830a5f759070c569a19"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-squash-merge-tag-versioning-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ed25c335b5e4b4af192a0bb445bc58c859045bfa"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-squash-merge-tag-versioning-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ea76114338a445949167ae08de11af63af2c93a9"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "plan workflow-controller-squash-merge-tag-versioning",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-29T08:13:02Z"
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "19a04f83437558993ea835d014f695bb44d3180663ec44698c71ea51f3443ca5",
+        "approved_review_content_id": "192e2dee2eca34858d5d4f5718fb1ccef03defa88a90aa78bbd3721b86d9e858",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/main.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4bb15cbb02af1538796926f5afb5141518b05fc6"
+          },
+          {
+            "path": ".github/workflows/pr-title.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0fba5d984f0150dbd621d24e0090de4e5484d6f4"
+          },
+          {
+            "path": "CLAUDE.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aab18200c80d719e3779f8124271779f26586121"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e49f6e1d0f6372cf7a805c177e08530533961338"
+          },
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6346f6d6bdec517be6d9b510441cafc0a0ce8df1"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bea04df5bf5e18c9f2c5f872df38768b166105ed"
+          },
+          {
+            "path": "controller/conventional_commit.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4121a75de72c43acc3a8472ce4a5ef681e571102"
+          },
+          {
+            "path": "controller/decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ee60c86bd46aba2bbbc213aa4574e8454e3d9d77"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aa93b570393187da39f2ea527ff23386e3b90f68"
+          },
+          {
+            "path": "controller/forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ac77d5adb8f58dd3528a11312be40d32ab9fb8e7"
+          },
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bdf3d1fbd4c91b8067aa670a53afa9f8e2077b4b"
+          },
+          {
+            "path": "controller/handoff.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f56713677d4976411bbea045f1014ece32ee0e01"
+          },
+          {
+            "path": "controller/identity.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f6170faeee9202cd22d7a9e4985eafd24b52101"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "493bb5e92f1c369f31b77fa03f5ebb7bd27b028b"
+          },
+          {
+            "path": "controller/milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "13171326f15eefe04bf564dbfda115f5023af08f"
+          },
+          {
+            "path": "controller/release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c83659deec466419fd818dd8e65ce435d501b1d3"
+          },
+          {
+            "path": "controller/repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "29e4c929785fb85c366c216c6fede26d385f3c08"
+          },
+          {
+            "path": "controller/version.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cf81cdc88c5309ee206298802ccfcc23a30979d1"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d36a0a44aca73c31da92bc26dfa60a549f36047c"
+          },
+          {
+            "path": "docs/adr/0003-trunk-branch-pr-release-orchestration.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d3747842ce402f5aa8813f3163f24d5486c7b775"
+          },
+          {
+            "path": "docs/adr/0007-tag-derived-versions-and-squash-merges.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "584ac16d862bab891043fc947302fac6de7f8aed"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-squash-merge-tag-versioning-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "44d0ac29edd582ec27a56c0e4626a27cedb7608a"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "62872bb5ab68072ba222491568aea52a535c61da"
+          },
+          {
+            "path": "docs/guide/concepts.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b9bf7c75850cd22e1ce6858705acc01fff88de1d"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cba705316709eff6c4629a45e54bbc85bb5c3ff1"
+          },
+          {
+            "path": "docs/guide/installation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1369a58928e693de3abe04c2ee29e98f21f33069"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "916cd3edb7fbb5e0219c8234e123ba698e3ba6df"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a379846fc21434c99008632df5774f7fe5229511"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6262699bc470419e82ec07a282cef7f9b4f86e7b"
+          },
+          {
+            "path": "docs/releases/1.4.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ce429ec5c5502ee5ef376fa6af11dfe8091101fb"
+          },
+          {
+            "path": "setup.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "41025672b7ac858581a56730cddf8a31c97e20fb"
+          },
+          {
+            "path": "tests/fake_gh.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "5b092703c786682059f02b2a483a7e3955dd15fb"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5d68cb9b7afd0e5694be4eaf1e0bbdbdfe701052"
+          },
+          {
+            "path": "tests/test_buildinfo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "724b4f2c00d5a8a0048cf9dd8bae0a3bc752747c"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ec30ad38be9dcca26a87685fd9441c047bb3ddcd"
+          },
+          {
+            "path": "tests/test_conventional_commit.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "eb3f0de19f94e07d338d49a73676f3c1f5ac3048"
+          },
+          {
+            "path": "tests/test_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cd4142043d2e24c9be5ad016a2a0630dce563430"
+          },
+          {
+            "path": "tests/test_forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d91b26c562727061e421bd1a53a8a43723c4afee"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "982889f55a61390aec0869c36f1429303a31b4cf"
+          },
+          {
+            "path": "tests/test_job_validation.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "18916b1abeaf0feffff65a5bf6a313d82177f7b3"
+          },
+          {
+            "path": "tests/test_milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e0a3f9f1fb102ecf1043c1aecec51dcb4b37a48a"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f213eb8e1ef42f66c7f14dd681971b91413062e0"
+          },
+          {
+            "path": "tests/test_packaged_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1c8f0329a5263268b96150762db3f64f30a4d303"
+          },
+          {
+            "path": "tests/test_pull_request_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "657b7e47af468f66dbcbda14186a02b2b9c7aab2"
+          },
+          {
+            "path": "tests/test_release_tools.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4387e6e8f28786a9d12a1850a5233ba914c47021"
+          },
+          {
+            "path": "tests/test_release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "469cd5fe835478f41851f5fc59b5604f1d40bf6c"
+          },
+          {
+            "path": "tests/test_repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "243dc0b2395548183223e770240c5fc89a6737f7"
+          },
+          {
+            "path": "tests/test_trunk_orchestration_e2e.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "970d633ca860bb6a2d617ef20558e1198aadf727"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f7fb7098798f43438256aae7f7eb2bb051e04aae"
+          },
+          {
+            "path": "tests/test_version_authority.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d788b0de71ce273451d9ddc1c4611ba7c4783688"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "83250d8a26e974acf154c2e2594edc261f24733c"
+          },
+          {
+            "path": "tools/release.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "eaacad8c07a6aa8387766e871abcd08dc5f1103b"
+          }
+        ],
+        "reviewed_content_commit": "669d900d7723048c4ca5a96784a64a5731489cd7",
+        "legacy_evidence": null,
+        "user_confirmation": "implementation workflow-controller-squash-merge-tag-versioning",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-29T13:28:53Z"
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-29T01:27:32Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-29T01:31:54Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 35,
+      "last_transition": "2026-09-29T13:58:19Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-09-29T01:23:42Z",
+        "consumed": {
+          "review_content_id": "20c14b9c883e8ba4c8106c3e1686fd6b85a5ca287c5b635a66e7dfa56859aa7e",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+          "bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+          "plan_revision": 3
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "192e2dee2eca34858d5d4f5718fb1ccef03defa88a90aa78bbd3721b86d9e858",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "19a04f83437558993ea835d014f695bb44d3180663ec44698c71ea51f3443ca5",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-29T13:18:10Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "19a04f83437558993ea835d014f695bb44d3180663ec44698c71ea51f3443ca5",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-29T13:26:39Z"
+        }
+      }
     }
   }
 }

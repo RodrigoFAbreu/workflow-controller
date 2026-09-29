@@ -4653,7 +4653,7 @@ def _execute_step_locked(
     # `last_apply_job` (automatic-lifecycle-orchestration CP4B) is the job
     # history the "2.2" APPLYING_REVIEW_FEEDBACK relaunch bound reads -- the
     # same read `cli`'s `explain` makes, so both reach the same decision.
-    decision = decide_no_work_item(managed_repo) if is_bootstrap else evidence.decide(
+    decision = decide_no_work_item(managed_repo, base=preflight.base) if is_bootstrap else evidence.decide(
         managed_repo, snapshot, work_item,
         last_apply_job=last_launched_apply_job_view(runtime, managed_repo.root, resolved_work_item_id),
     )

@@ -104,7 +104,23 @@ a wheel is a release is its checksum in the GitHub Release's
 `SHA256SUMS`, not `--version`. Build-provenance attestation may come
 later.
 
-The version (`pyproject.toml`'s static `[project].version`, `MAJOR.MINOR.PATCH`) and the
-generation (`controller/GENERATION.json`) are separate. The generation is
-the compatibility axis that handoff and job-record validation compare.
-Version 1.2.1 is still generation 1.
+The version is always a plain `MAJOR.MINOR.PATCH`. Where it comes from:
+
+- a release wheel carries its release tag's version, set at build time;
+- a local wheel, and a **source** runtime, carry `pyproject.toml`'s
+  static `[project].version` when it declares one (every checkout of
+  this repository from before the
+  [cutover](ci-and-releases.md#cutover-from-the-version-file-model)).
+  Otherwise, with `dynamic = ["version"]`, they carry the highest
+  `v<MAJOR.MINOR.PATCH>` tag reachable from the checkout's `HEAD`, or
+  `0.0.0` when none is (a shallow clone without tags, for example). A
+  checkout between two releases therefore reports the last release it
+  contains; line 2 of `--version`, and `BUILD_INFO.json` for a wheel,
+  tell it apart by its commit and build origin;
+- a pinned source snapshot has no `.git`, so with a dynamic version it
+  is derived from the origin checkout's tags at the snapshot's commit,
+  and recorded in `SOURCE_PIN.json`.
+
+The version and the generation (`controller/GENERATION.json`) are
+separate. The generation is the compatibility axis that handoff and
+job-record validation compare. Version 1.2.1 is still generation 1.

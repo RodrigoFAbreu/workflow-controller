@@ -272,19 +272,18 @@ class ChecksumsTest(unittest.TestCase):
 
 
 class VersionCommandTest(unittest.TestCase):
+    """``version`` prints the version a local build of the checked-out tree
+    carries (``version.local_build_version``); it needs no policy."""
+
     def test_version_prints_the_controller_version(self) -> None:
         result = fixtures.run([sys.executable, str(RELEASE_PY), "version"], check=False)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, f"{VERSION}\n", ""))
 
-    def _committed(self, root: Path, pyproject: str, *, policy: bool = True) -> None:
+    def _committed(self, root: Path, pyproject: str) -> None:
         fixtures.run(["git", "init", "-q", str(root)])
         fixtures.run(["git", "config", "user.email", "t@example.invalid"], cwd=root)
         fixtures.run(["git", "config", "user.name", "T"], cwd=root)
         (root / "pyproject.toml").write_text(pyproject)
-        if policy:
-            (root / ".workflow-controller").mkdir()
-            shutil.copy2(fixtures.REPO_ROOT / ".workflow-controller" / "policy.json",
-                         root / ".workflow-controller" / "policy.json")
         fixtures.commit_all(root, "fixture")
 
     def _version(self, root: Path) -> tuple[int, str, str]:
@@ -293,34 +292,37 @@ class VersionCommandTest(unittest.TestCase):
             code = release.main(["version"], repo_root=root)
         return code, stdout.getvalue(), stderr.getvalue()
 
-    def test_version_reads_the_policy_version_source_at_head(self) -> None:
+    def test_a_static_version_is_the_checked_out_one(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             self._committed(root, '[project]\nname = "x"\nversion = "4.5.6"\n')
-            (root / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "9.9.9"\n')
-            # The committed tree, never the working tree.
+            fixtures.run(["git", "tag", "v9.0.0"], cwd=root)
             self.assertEqual(self._version(root), (0, "4.5.6\n", ""))
+            # What a local build of this tree would carry.
+            (root / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "4.5.7"\n')
+            self.assertEqual(self._version(root), (0, "4.5.7\n", ""))
+
+    def test_a_dynamic_version_is_the_highest_tag_reachable_from_head(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._committed(root, '[project]\nname = "x"\ndynamic = ["version"]\n')
+            self.assertEqual(self._version(root), (0, "0.0.0\n", ""))
+            fixtures.run(["git", "tag", "v1.4.0"], cwd=root)
+            fixtures.commit_all(root, "after", allow_empty=True)
+            self.assertEqual(self._version(root), (0, "1.4.0\n", ""))
 
     def test_an_unreadable_version_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            self._committed(Path(td), '[project]\nname = "x"\n')
+            self._committed(Path(td), '[project]\nname = "x"\nversion = "1.2"\n')
             code, _, stderr = self._version(Path(td))
             self.assertEqual(code, 1)
             self.assertIn("refused: version source:", stderr)
 
-    def test_a_missing_policy_is_refused(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            self._committed(Path(td), '[project]\nname = "x"\nversion = "1.0.0"\n', policy=False)
-            code, _, stderr = self._version(Path(td))
-            self.assertEqual(code, 1)
-            self.assertIn("refused: repository policy:", stderr)
-
 
 class CheckedOutVersionTest(unittest.TestCase):
-    """``version`` (through the committed policy's version source) and
-    ``verify-wheel`` both take the version from the checked-out
-    ``pyproject.toml``: rewriting and committing it in a disposable checkout
-    moves both."""
+    """``version`` and ``verify-wheel --local`` both take the version from
+    the checked-out tree: rewriting and committing its static version in a
+    disposable checkout moves both."""
 
     MOVED = "7.8.9"
 
@@ -337,7 +339,6 @@ class CheckedOutVersionTest(unittest.TestCase):
             cls.clone = fixtures.build_checkout(cls.tmp / "clone")
             shutil.copytree(fixtures.REPO_ROOT / "tools", cls.clone / "tools",
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-            shutil.copytree(fixtures.REPO_ROOT / ".workflow-controller", cls.clone / ".workflow-controller")
             pyproject = cls.clone / "pyproject.toml"
             text = pyproject.read_text()
             assert f'version = "{VERSION}"' in text
@@ -375,6 +376,73 @@ class CheckedOutVersionTest(unittest.TestCase):
                                  commit=self.commit, tag=None)
 
 
+class DynamicVersionWheelTest(unittest.TestCase):
+    """In a tag-derived checkout, ``verify-wheel --tag TAG`` expects
+    ``TAG``'s version and ``--local`` the highest tag reachable from
+    ``HEAD``."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        missing = fixtures.wheel_build_prerequisite()
+        if missing is not None:
+            if os.environ.get(fixtures.REQUIRE_PACKAGING_TESTS_ENV) == "1":
+                raise AssertionError(f"wheel-build prerequisite missing: {missing}")
+            raise unittest.SkipTest(f"wheel-build prerequisite missing: {missing}")
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.tmp = Path(cls._tmp.name)
+        try:
+            cls.clone = fixtures.build_checkout(cls.tmp / "clone", dynamic_version=True)
+            shutil.copytree(fixtures.REPO_ROOT / "tools", cls.clone / "tools",
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            fixtures.commit_all(cls.clone, "tools")
+            fixtures.run(["git", "tag", "v2.3.4"], cwd=cls.clone)
+            cls.commit = fixtures.current_head(cls.clone)
+            env = {k: v for k, v in os.environ.items()
+                   if not k.startswith("GIT_") and k != "WORKFLOW_CONTROLLER_RELEASE_TAG"}
+            fixtures.build_wheel(cls.clone, cls.tmp / "local", env=env)
+            shutil.rmtree(cls.clone / "build")
+            fixtures.build_wheel(cls.clone, cls.tmp / "release",
+                                 env=dict(env, WORKFLOW_CONTROLLER_RELEASE_TAG="v2.4.0"))
+            shutil.rmtree(cls.clone / "build")
+        except BaseException:
+            cls._tmp.cleanup()
+            raise
+        cls.local_wheel = cls.tmp / "local" / "workflow_controller-2.3.4-py3-none-any.whl"
+        cls.release_wheel = cls.tmp / "release" / "workflow_controller-2.4.0-py3-none-any.whl"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def _release(self, *args: str) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        return fixtures.run([sys.executable, "-B", str(self.clone / "tools" / "release.py"), *args],
+                            cwd=self.tmp, env=env, check=False)
+
+    def test_version_is_the_tag_version(self) -> None:
+        result = self._release("version")
+        self.assertEqual((result.returncode, result.stdout), (0, "2.3.4\n"), result.stderr)
+
+    def test_a_release_wheel_verifies_against_its_tag(self) -> None:
+        result = self._release("verify-wheel", str(self.release_wheel), "--tag", "v2.4.0", "--commit", self.commit)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self._release("verify-wheel", str(self.release_wheel), "--tag", "v2.4.1", "--commit", self.commit)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refused: wheel filename:", result.stderr)
+
+    def test_a_local_wheel_verifies_against_the_local_build_version(self) -> None:
+        result = self._release("verify-wheel", str(self.local_wheel), "--local", "--commit", self.commit)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self._release("verify-wheel", str(self.release_wheel), "--local", "--commit", self.commit)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refused: wheel filename:", result.stderr)
+
+    def test_a_malformed_tag_is_refused(self) -> None:
+        result = self._release("verify-wheel", str(self.release_wheel), "--tag", "2.4.0", "--commit", self.commit)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refused: tag format:", result.stderr)
+
+
 class RetiredSubcommandsTest(unittest.TestCase):
     """CP5 removes the tag-first subcommands together with ``release.yml``,
     their only caller: a release tag is created only by ``publish``."""
@@ -383,7 +451,7 @@ class RetiredSubcommandsTest(unittest.TestCase):
         commands = next(action for action in release.build_parser()._actions
                         if isinstance(action, argparse._SubParsersAction)).choices
         self.assertEqual(sorted(commands), sorted(["version", "classify", "build", "verify", "publish",
-                                                   "verify-wheel", "checksums"]))
+                                                   "verify-wheel", "checksums", "check-title"]))
         for name in RETIRED_SUBCOMMANDS:
             with self.subTest(name=name):
                 self.assertNotIn(name, commands)
@@ -399,12 +467,85 @@ class RetiredSubcommandsTest(unittest.TestCase):
                 self.assertFalse(hasattr(release, attr))
 
 
+class CheckTitleTest(unittest.TestCase):
+    """``check-title`` (squash-merge-tag-versioning CP1): the policy
+    committed at ``HEAD`` decides, never the working tree."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = fixtures.build_target_git_repo(Path(self._tmp.name) / "repo")
+        self.policy_file = self.root / ".workflow-controller" / "policy.json"
+
+    def _commit_policy(self, raw: bytes) -> None:
+        self.policy_file.parent.mkdir(exist_ok=True)
+        self.policy_file.write_bytes(raw)
+        fixtures.commit_all(self.root, "policy")
+
+    def _check(self, title: str) -> tuple[int, str, str]:
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = release.main(["check-title", title], repo_root=self.root)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_version_change_does_not_read_the_title(self) -> None:
+        self._commit_policy(fixtures.LEGACY_POLICY)
+        expected = "ok: the release trigger is version_change; the title is not release input\n"
+        for title in ("feat: x", "Revert \"feat: x\"", "anything"):
+            with self.subTest(title=title):
+                self.assertEqual(self._check(title), (0, expected, ""))
+
+    def test_conventional_commit_names_the_bump(self) -> None:
+        self._commit_policy(fixtures.CONVENTIONAL_POLICY)
+        for title, line in (
+            ("feat: squash merges with release versions derived from pull request titles", "feat → minor"),
+            ("fix(forge): x (#12)", "fix → patch"),
+            ("docs: x", "docs → none"),
+            ("refactor!: x", "refactor! → major"),
+        ):
+            with self.subTest(title=title):
+                self.assertEqual(self._check(title), (0, f"ok: {line}\n", ""))
+
+    def test_an_invalid_title_is_a_one_line_refusal(self) -> None:
+        self._commit_policy(fixtures.CONVENTIONAL_POLICY)
+        for title, fragment in (
+            ("Feat: x", "is not a Conventional Commit title"),
+            ("feature: x", "unknown type 'feature'"),
+            ("docs!: x", "a breaking change must release"),
+            ('Revert "feat: x"', "is not a Conventional Commit title"),
+            ("feat: x\nsecond line", "is not a Conventional Commit title"),
+        ):
+            with self.subTest(title=title):
+                code, out, err = self._check(title)
+                self.assertEqual((code, out), (1, ""))
+                self.assertTrue(err.startswith("release.py check-title: refused: title: "), err)
+                self.assertIn(fragment, err)
+                self.assertEqual(len(err.splitlines()), 1)
+
+    def test_a_missing_policy_is_refused(self) -> None:
+        (self.root / "README").write_text("x\n")
+        fixtures.commit_all(self.root, "init")
+        code, out, err = self._check("feat: x")
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("refused: repository policy: HEAD has no .workflow-controller/policy.json", err)
+
+    def test_the_policy_is_read_from_head_not_the_working_tree(self) -> None:
+        self._commit_policy(fixtures.LEGACY_POLICY)
+        self.policy_file.write_bytes(fixtures.CONVENTIONAL_POLICY)
+        self.assertEqual(self._check("Feat: x")[0], 0)
+        fixtures.commit_all(self.root, "cutover")
+        self.assertEqual(self._check("Feat: x")[0], 1)
+        self.policy_file.write_bytes(fixtures.LEGACY_POLICY)
+        self.assertEqual(self._check("Feat: x")[0], 1)
+
+
 class ReleaseTransactionCliTest(_ReleaseCase):
     """``classify``/``build``/``verify``/``publish`` over the toy adopter of
     ``tests.test_release_txn``: a bare origin and the fake ``gh``."""
 
-    def _main(self, *args: str, github_output: Path | None = None) -> tuple[int, str, str]:
-        env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log))
+    def _main(self, *args: str, github_output: Path | None = None,
+              extra_env: dict[str, str] | None = None) -> tuple[int, str, str]:
+        env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log), **(extra_env or {}))
         env.pop("GITHUB_OUTPUT", None)
         if github_output is not None:
             env["GITHUB_OUTPUT"] = str(github_output)
@@ -441,6 +582,42 @@ class ReleaseTransactionCliTest(_ReleaseCase):
         self.assertTrue(out.startswith("state=COLLISION_RELEASE_WITHOUT_TAG\n"), out)
         self.assertIn("refused: COLLISION_RELEASE_WITHOUT_TAG:", err)
         self.assertEqual(len(err.splitlines()), 1)
+
+    def test_build_and_verify_take_the_classified_version_from_release_version(self) -> None:
+        # version_change: optional, and it must equal the committed version.
+        fixtures.run(["git", "switch", "-q", "--detach", self.base], cwd=self.clone)
+        self.assertEqual(self._main("build")[:2], (0, "ok: built dist/pkg-1.0.0.txt\n"))
+        for value in ("", "1.0.0"):
+            self.assertEqual(self._main("verify", extra_env={"RELEASE_VERSION": value})[0], 0)
+        code, _, err = self._main("build", extra_env={"RELEASE_VERSION": "1.0.1"})
+        self.assertEqual(code, 1)
+        self.assertIn("not", err)
+        self.assertIn("committed version 1.0.0", err)
+
+        # conventional_commit: required, and it is what is built.
+        fixtures.run(["git", "switch", "-q", "main"], cwd=self.clone)
+        feat = self.squash("feat: first")
+        fixtures.run(["git", "switch", "-q", "--detach", feat], cwd=self.clone)
+        for env in ({}, {"RELEASE_VERSION": ""}):
+            for command in ("build", "verify"):
+                code, out, err = self._main(command, extra_env=env)
+                self.assertEqual((code, out), (1, ""))
+                self.assertIn("refused: RELEASE_VERSION: is unset or empty", err)
+                self.assertEqual(len(err.splitlines()), 1)
+        env = {"RELEASE_VERSION": "0.1.0"}
+        self.assertEqual(self._main("build", extra_env=env)[:2], (0, "ok: built dist/pkg-0.1.0.txt\n"))
+        self.assertEqual(self._main("verify", extra_env=env)[:2],
+                         (0, f"ok: dist/pkg-0.1.0.txt verified for {feat}\n"))
+
+    def test_build_and_verify_keep_1_3_0s_command_lines(self) -> None:
+        parser = release.build_parser()
+        subparsers = next(action for action in parser._actions
+                          if isinstance(action, argparse._SubParsersAction))
+        for command in ("build", "verify"):
+            with self.subTest(command):
+                self.assertEqual(parser.parse_args([command]).command, command)
+                options = [action.dest for action in subparsers.choices[command]._actions]
+                self.assertEqual(options, ["help"])
 
     def test_a_controller_refusal_is_one_line(self) -> None:
         code, _, err = self._main("publish", "--commit", self.base)

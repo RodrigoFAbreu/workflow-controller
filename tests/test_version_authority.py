@@ -1,14 +1,18 @@
-"""The single Controller version authority (trunk-branch-pr-release CP1).
+"""The single Controller version authority (trunk-branch-pr-release CP1;
+squash-merge-tag-versioning CP2).
 
-``pyproject.toml``'s static ``[project].version`` is the only place the
-version is written. A source runtime reads its own code root's
-``pyproject.toml`` and never distribution metadata; a package runtime reads
-the metadata of the distribution installed in its own code root,
-cross-checked against ``BUILD_INFO.json``; a pinned child reads its own
-``SOURCE_PIN.json``. The packaged ``--version``/``METADATA``/``BUILD_INFO``/
-``tools/release.py version`` agreement is ``tests.test_packaged_runtime``
-case 6, and ``tools/release.py`` following the checked-out ``pyproject.toml``
-is ``tests.test_release_tools.CheckedOutVersionTest``.
+Before the squash-merge cutover, ``pyproject.toml``'s static
+``[project].version`` is the only place the version is written; after it,
+``pyproject.toml`` declares ``dynamic = ["version"]`` and the Git tags are
+the authority (``version.tag_version``). A source runtime reads its own code
+root and never distribution metadata; a package runtime reads the metadata
+of the distribution installed in its own code root, cross-checked against
+``BUILD_INFO.json``; a pinned child reads its own ``SOURCE_PIN.json``. The
+packaged ``--version``/``METADATA``/``BUILD_INFO``/``tools/release.py
+version`` agreement is ``tests.test_packaged_runtime`` case 6,
+``tools/release.py`` following the checked-out tree is
+``tests.test_release_tools.CheckedOutVersionTest``, and building a dynamic
+``pyproject.toml`` is ``tests.test_buildinfo.DynamicVersionBuildTest``.
 """
 
 from __future__ import annotations
@@ -18,10 +22,12 @@ import importlib
 import importlib.metadata
 import json
 import os
+import re
 import sys
 import tempfile
 import tomllib
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -44,6 +50,11 @@ def _set_version(checkout: Path, value: str) -> None:
     path.write_text(replaced)
 
 
+def _tag(checkout: Path, name: str, *, annotated: bool = False, rev: str = "HEAD") -> None:
+    args = ["-a", "-m", name] if annotated else []
+    fixtures.run(["git", "tag", *args, name, rev], cwd=checkout)
+
+
 def _version_line(code_root: Path, *, pythonpath: list[Path], cwd: Path) -> str:
     env = {k: v for k, v in os.environ.items() if k != identity.EXEC_HANDOFF_ENV}
     env["PYTHONPATH"] = os.pathsep.join(str(p) for p in pythonpath)
@@ -54,11 +65,22 @@ def _version_line(code_root: Path, *, pythonpath: list[Path], cwd: Path) -> str:
 
 
 class SingleAuthorityTest(unittest.TestCase):
-    def test_pyproject_declares_a_static_version_and_no_dynamic_one(self) -> None:
+    def test_the_repository_is_exactly_pre_or_post_cutover(self) -> None:
+        """Pre-cutover: a static version with the ``version_change``
+        trigger. Post-cutover: a dynamic version with the
+        ``conventional_commit`` trigger. Nothing else."""
         pyproject = tomllib.loads(fixtures.PYPROJECT.read_text())
-        self.assertRegex(pyproject["project"]["version"], version.SEMVER_RE)
-        self.assertNotIn("dynamic", pyproject["project"])
+        project = pyproject["project"]
+        trigger = json.loads((fixtures.REPO_ROOT / ".workflow-controller" / "policy.json")
+                             .read_text())["release"]["trigger"]
         self.assertNotIn("dynamic", pyproject.get("tool", {}).get("setuptools", {}))
+        if "version" in project:
+            self.assertRegex(project["version"], version.SEMVER_RE)
+            self.assertNotIn("dynamic", project)
+            self.assertEqual(trigger, "version_change")
+        else:
+            self.assertEqual(project.get("dynamic"), ["version"])
+            self.assertEqual(trigger, "conventional_commit")
 
     def test_no_version_assignment_remains_in_the_package(self) -> None:
         for path in sorted((fixtures.REPO_ROOT / "controller").glob("*.py")):
@@ -78,8 +100,24 @@ class SingleAuthorityTest(unittest.TestCase):
 
 
 class ReadersTest(unittest.TestCase):
-    def test_source_version_reads_the_static_version(self) -> None:
+    def test_source_version_reads_this_repository(self) -> None:
         self.assertEqual(version.source_version(fixtures.REPO_ROOT), VERSION)
+
+    def test_a_static_version_wins_over_the_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout")
+            _tag(checkout, "v9.9.9")
+            self.assertEqual(version.static_pyproject_version(checkout), VERSION)
+            self.assertEqual(version.source_version(checkout), VERSION)
+            self.assertEqual(version.local_build_version(checkout), VERSION)
+
+    def test_static_pyproject_version_is_none_when_dynamic_or_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for text in ('[project]\nname = "x"\ndynamic = ["version"]\n', '[project]\nname = "x"\n', ""):
+                with self.subTest(text=text):
+                    (root / "pyproject.toml").write_text(text)
+                    self.assertIsNone(version.static_pyproject_version(root))
 
     def test_source_version_refuses_a_missing_or_malformed_version(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -87,7 +125,8 @@ class ReadersTest(unittest.TestCase):
             for label, text in (
                 ("missing file", None),
                 ("not toml", "[project\n"),
-                ("no static version", '[project]\nname = "x"\ndynamic = ["version"]\n'),
+                # Dynamic, and root is not a Git work tree: no tag to derive from.
+                ("dynamic outside Git", '[project]\nname = "x"\ndynamic = ["version"]\n'),
                 ("not semver", '[project]\nversion = "1.2"\n'),
                 ("not a string", "[project]\nversion = 1\n"),
             ):
@@ -125,6 +164,126 @@ class ReadersTest(unittest.TestCase):
                 package_version(site)
 
 
+class TagVersionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.checkout = fixtures.build_checkout(self.tmp / "checkout", dynamic_version=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_no_tag_is_0_0_0(self) -> None:
+        self.assertEqual(version.tag_version(self.checkout), "0.0.0")
+
+    def test_the_highest_reachable_release_tag_wins(self) -> None:
+        _tag(self.checkout, "v1.9.0")
+        _tag(self.checkout, "v1.10.0", annotated=True)
+        _tag(self.checkout, "v1.2.3")
+        self.assertEqual(version.tag_version(self.checkout), "1.10.0")
+
+    def test_lightweight_and_annotated_tags_are_both_read(self) -> None:
+        _tag(self.checkout, "v2.0.0", annotated=True)
+        self.assertEqual(version.tag_version(self.checkout), "2.0.0")
+        _tag(self.checkout, "v2.0.1")
+        self.assertEqual(version.tag_version(self.checkout), "2.0.1")
+
+    def test_other_tag_shapes_are_ignored(self) -> None:
+        _tag(self.checkout, "v1.0.0")
+        for name in ("v01.2.3", "1.2.3", "v1.2.3-rc.1", "v2.0", "release-9.9.9", "V9.9.9"):
+            _tag(self.checkout, name)
+        self.assertEqual(version.tag_version(self.checkout), "1.0.0")
+
+    def test_a_tag_off_the_history_is_ignored(self) -> None:
+        base = fixtures.current_head(self.checkout)
+        _tag(self.checkout, "v1.0.0")
+        fixtures.run(["git", "checkout", "-q", "-b", "side"], cwd=self.checkout)
+        fixtures.commit_all(self.checkout, "side", allow_empty=True)
+        _tag(self.checkout, "v3.0.0")
+        fixtures.run(["git", "checkout", "-q", "-"], cwd=self.checkout)
+        self.assertEqual(version.tag_version(self.checkout), "1.0.0")
+        # The side branch reaches both; an explicit rev is honoured.
+        self.assertEqual(version.tag_version(self.checkout, "side"), "3.0.0")
+        self.assertEqual(version.tag_version(self.checkout, base), "1.0.0")
+
+    def test_an_unborn_head_is_0_0_0(self) -> None:
+        unborn = fixtures.build_checkout(self.tmp / "unborn", dynamic_version=True, committed=False)
+        self.assertEqual(version.tag_version(unborn), "0.0.0")
+        self.assertEqual(version.source_version(unborn), "0.0.0")
+        # An unborn checkout fails the source probes in either model; the
+        # version it reports is still 0.0.0.
+        static_unborn = fixtures.build_checkout(self.tmp / "static-unborn", committed=False)
+        resolved = identity.resolve_runtime(unborn)
+        self.assertEqual(resolved.runtime_kind, identity.resolve_runtime(static_unborn).runtime_kind)
+        self.assertEqual(resolved.version, "0.0.0")
+
+    def test_undecidable_reads_refuse(self) -> None:
+        (self.checkout / "sub").mkdir()
+        cases = (
+            ("not a repository", self.tmp / "plain", "HEAD"),
+            ("not the top of the work tree", self.checkout / "sub", "HEAD"),
+            ("a rev that does not resolve", self.checkout, "no-such-branch"),
+        )
+        (self.tmp / "plain").mkdir()
+        for label, root, rev in cases:
+            with self.subTest(label):
+                with self.assertRaises(ValueError):
+                    version.tag_version(root, rev)
+
+    def test_a_failing_git_refuses(self) -> None:
+        with fixtures.empty_path(self.tmp):
+            with self.assertRaises(ValueError):
+                version.tag_version(self.checkout)
+
+    def test_git_environment_redirection_is_ignored(self) -> None:
+        other = fixtures.build_checkout(self.tmp / "other", dynamic_version=True)
+        _tag(other, "v8.0.0")
+        with unittest.mock.patch.dict(os.environ, {"GIT_DIR": str(other / ".git")}):
+            self.assertEqual(version.tag_version(self.checkout), "0.0.0")
+
+    def test_local_build_version(self) -> None:
+        _tag(self.checkout, "v4.1.0")
+        self.assertEqual(version.local_build_version(self.checkout), "4.1.0")
+        copy = self.tmp / "copy"
+        copy.mkdir()
+        (copy / "pyproject.toml").write_text((self.checkout / "pyproject.toml").read_text())
+        self.assertEqual(version.local_build_version(copy), "0.0.0")
+
+
+class FixtureTest(unittest.TestCase):
+    """Clones never depend on tags, on either side of the cutover."""
+
+    def test_a_clone_declares_the_static_version_unless_asked_otherwise(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            static = fixtures.build_checkout(Path(td) / "static")
+            project = tomllib.loads((static / "pyproject.toml").read_text())["project"]
+            self.assertEqual((project["version"], "dynamic" in project), (VERSION, False))
+            dynamic = fixtures.build_checkout(Path(td) / "dynamic", dynamic_version=True)
+            project = tomllib.loads((dynamic / "pyproject.toml").read_text())["project"]
+            self.assertEqual((project.get("version"), project["dynamic"]), (None, ["version"]))
+            # Only the version line differs from the real file.
+            real = fixtures.PYPROJECT.read_text().splitlines()
+            for clone in (static, dynamic):
+                lines = (clone / "pyproject.toml").read_text().splitlines()
+                self.assertEqual(len(lines), len(real))
+                self.assertLessEqual(sum(a != b for a, b in zip(lines, real)), 1)
+
+    def test_a_clone_is_never_tagged(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            for kwargs in ({}, {"dynamic_version": True}):
+                with self.subTest(**kwargs):
+                    clone = fixtures.build_checkout(Path(td) / f"c{len(kwargs)}", **kwargs)
+                    self.assertEqual(fixtures.run(["git", "tag"], cwd=clone).stdout, "")
+
+    def test_no_test_copies_the_real_policy_into_a_clone(self) -> None:
+        copy_call = re.compile(r"copy(?:2|tree|file)?\(")
+        for path in sorted((fixtures.REPO_ROOT / "tests").glob("*.py")):
+            for number, line in enumerate(path.read_text().splitlines(), 1):
+                with self.subTest(file=path.name, line=number):
+                    self.assertFalse(copy_call.search(line) and ".workflow-controller" in line,
+                                     f"{path.name}:{number} copies the real policy: {line.strip()}")
+
+
 class SourceRuntimeTest(unittest.TestCase):
     def test_a_stale_egg_info_in_the_checkout_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -160,11 +319,23 @@ class SourceRuntimeTest(unittest.TestCase):
             with _running_from(checkout):
                 self.assertEqual(identity.pin().version, OTHER)
 
+    def test_a_dynamic_checkout_reports_its_tag_version(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout", dynamic_version=True)
+            _tag(checkout, "v3.2.1")
+            resolved = identity.resolve_runtime(checkout)
+            self.assertEqual((resolved.runtime_kind, resolved.version), (identity.RUNTIME_KIND_SOURCE, "3.2.1"))
+            self.assertEqual(_version_line(checkout, pythonpath=[checkout], cwd=Path(td)),
+                             "workflow-controller 3.2.1")
+            # A commit past the tag still reports the last release it contains.
+            fixtures.commit_all(checkout, "after the release", allow_empty=True)
+            self.assertEqual(identity.resolve_runtime(checkout).version, "3.2.1")
+
     def test_an_unreadable_version_leaves_the_checkout_unidentified(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             checkout = fixtures.build_checkout(Path(td) / "checkout")
-            (checkout / "pyproject.toml").write_text('[project]\nname = "workflow-controller"\n')
-            fixtures.commit_all(checkout, "drop the version")
+            (checkout / "pyproject.toml").write_text('[project]\nname = "workflow-controller"\nversion = "1.2"\n')
+            fixtures.commit_all(checkout, "break the version")
             resolved = identity.resolve_runtime(checkout)
             self.assertEqual(resolved.runtime_kind, identity.RUNTIME_KIND_UNIDENTIFIED)
             self.assertIn("no readable version", resolved.reason)
@@ -259,6 +430,29 @@ class PinnedChildTest(unittest.TestCase):
             self.assertEqual(self._pin_from(dest).version, OTHER)
 
 
+    def test_a_dynamic_snapshot_reports_the_origins_tag_version(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout", dynamic_version=True)
+            _tag(checkout, "v2.7.0")
+            dest = identity.materialise(checkout, Path(td) / "runtime")
+            self.assertFalse((dest / ".git").exists())
+            pin_data = runtime.read_json(dest / "SOURCE_PIN.json")
+            self.assertEqual(pin_data["source_kind"], identity.SOURCE_KIND_COMMIT)
+            self.assertEqual((pin_data["version"], pin_data["controller_runtime"]["version"]), ("2.7.0", "2.7.0"))
+            self.assertEqual(self._pin_from(dest).version, "2.7.0")
+
+    def test_a_dirty_dynamic_snapshot_reports_its_commits_tag_version(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout", dynamic_version=True)
+            _tag(checkout, "v2.7.1")
+            errors_py = checkout / "controller" / "errors.py"
+            errors_py.write_text(errors_py.read_text() + "\n# uncommitted\n")
+            dest = identity.materialise(checkout, Path(td) / "runtime", allow_dirty=True)
+            pin_data = runtime.read_json(dest / "SOURCE_PIN.json")
+            self.assertEqual(pin_data["source_kind"], identity.SOURCE_KIND_WORKTREE)
+            self.assertEqual(pin_data["version"], "2.7.1")
+
+
 class HandoffVersionTest(unittest.TestCase):
     def test_the_committed_pyproject_version_is_read(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -273,9 +467,25 @@ class HandoffVersionTest(unittest.TestCase):
     def test_a_malformed_committed_version_is_none(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             checkout = fixtures.build_checkout(Path(td) / "checkout")
-            (checkout / "pyproject.toml").write_text('[project]\nname = "workflow-controller"\n')
-            fixtures.commit_all(checkout, "drop the version")
+            (checkout / "pyproject.toml").write_text('[project]\nname = "workflow-controller"\nversion = "1.2"\n')
+            fixtures.commit_all(checkout, "break the version")
             self.assertIsNone(handoff._read_committed_version(checkout))
+
+    def test_a_dynamic_committed_version_is_read_from_the_tags_at_head(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkout = fixtures.build_checkout(Path(td) / "checkout", dynamic_version=True)
+            _tag(checkout, "v5.0.0")
+            self.assertEqual(handoff._read_committed_version(checkout), "5.0.0")
+            # An uncommitted static line is not what HEAD approves.
+            (checkout / "pyproject.toml").write_text(fixtures.pyproject_text().replace(VERSION, "6.6.6"))
+            self.assertEqual(handoff._read_committed_version(checkout), "5.0.0")
+            # A tag on a commit HEAD does not reach is not HEAD's either.
+            fixtures.run(["git", "checkout", "-q", "-b", "side"], cwd=checkout)
+            fixtures.run(["git", "stash", "-q"], cwd=checkout)
+            fixtures.commit_all(checkout, "side", allow_empty=True)
+            _tag(checkout, "v5.1.0")
+            fixtures.run(["git", "checkout", "-q", "-"], cwd=checkout)
+            self.assertEqual(handoff._read_committed_version(checkout), "5.0.0")
 
 
 if __name__ == "__main__":

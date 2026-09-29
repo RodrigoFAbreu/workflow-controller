@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-squash-merge-tag-versioning",
+  "requirements": {
+    "R1": {
+      "description": "One Conventional Commit grammar and bump rule (feat minor, fix patch, ! major; docs, chore, ci and the other none types release nothing), shared by the PR title check, the release classification and the Controller's own title validation",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R2": {
+      "description": "The repository policy admits trigger conventional_commit with change_types, optional bump_overrides and no version_source, plus the optional pull_request.merge_method with the squash cross-field rule, while every 1.3.0 policy keeps its meaning",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A PR title check, runnable as a required check, validates the pull request title with the release's own code reading the committed policy",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "R4": {
+      "description": "The Git tag is the only version authority: pyproject.toml can hold no version, the wheel's version is set at build time from the release tag, and source runtimes, pinned snapshots, handoff records and local builds derive their version from reachable release tags",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The release computes the next version from the highest ancestor release tag and the first-parent commit types since it, with legacy commits contributing nothing, unclassifiable subjects failing closed (INVALID_SUBJECT) until acknowledged in bump_overrides (which settles only unclassifiable commits and never overrides a valid title), and an unsettled base tag resumed first",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "The existing release safety is preserved for both triggers: build and verify before the tag, immutable tags, RESUME, abandoned_tags, serialized main releases, and build/verify/smoke-test of exactly the classified version, including a RESUME at a target carrying 1.3.0's release tooling",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "In squash mode the Controller's pull request carries the plan's declared Conventional Commit title and a trailer-free body that becomes the squash commit body, synchronised at readiness, with a pr_title_invalid gate and squash gate texts; merge mode stays byte-identical",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R8": {
+      "description": "In squash mode only, close-out recognises a verified squash merge as MERGED_SQUASHED and closes the milestone out from the branch or the trunk, while unverified or indistinguishable rewrites stay MERGED_REWRITTEN and merge mode keeps 1.3.0's behaviour",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R9": {
+      "description": "The next milestone is planned from main's head: with milestone branches enabled, the bootstrap launches /milestone-plan with the trunk tip as its explicit base",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R10": {
+      "description": "The cutover never locks out this milestone or its pull request: the policy and version line stay unchanged in the milestone, the post-cutover policy is validated, and the milestone merge (NO_CHANGE) and the cutover pull request (RELEASE_DUE 1.4.0 from v1.3.0) are rehearsed",
+      "checkpoint_ids": [
+        "CP1",
+        "CP7"
+      ]
+    },
+    "R11": {
+      "description": "The guides, README, CLAUDE.md, documentation map, ROADMAP 1.5 note, ADR 0007 with the ADR 0003 pointer and the 1.4.0 release notes describe the tag-derived, squash-merge model and the cutover",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    },
+    "R12": {
+      "description": "Every test that reads this repository passes both before and after the cutover, with full sharded, packaged-runtime, CI-workflow and golden verification",
+      "checkpoint_ids": [
+        "CP2",
+        "CP7"
+      ]
+    }
+  }
+}

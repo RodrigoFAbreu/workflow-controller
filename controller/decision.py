@@ -584,20 +584,34 @@ BRANCH_GATE_TEXTS = {
                                     "trunk by hand, and disable squash and rebase merging",
     "unmerged_commits": "move the unmerged commits off the milestone branch",
     "dirty_tree": "commit, stash or discard the tracked changes",
+    "pr_title_invalid": "the pull request's title is not a valid Conventional Commit; set a valid title "
+                        "on GitHub",
+}
+
+#: The texts a squash-mode gate (``merge_method: "squash"`` in the binding's
+#: policy) uses instead of :data:`BRANCH_GATE_TEXTS`'s.
+BRANCH_GATE_TEXTS_SQUASH = {
+    "post_acceptance_commits": "commits follow the acceptance commit; merge anyway on GitHub with \"Squash "
+                               "and merge\", or leave the pull request unready",
+    "integration_required": "the trunk moved past the milestone's base; mark the pull request ready and "
+                            "merge it on GitHub with \"Squash and merge\"",
+    "merge_pull_request": "merge the pull request on GitHub with \"Squash and merge\"",
 }
 
 
 def branch_human_gate(repository: str, gate: Any, *, phase: str = BRANCH_GATE_PHASE) -> HumanGate:
     """The :class:`HumanGate` for a milestone-branch preflight gate (a
     duck-typed ``controller.milestone_branch.Gate``: ``code``,
-    ``work_item_id``, ``message``, ``exits``)."""
+    ``work_item_id``, ``message``, ``exits``, and ``merge_method``, whose
+    ``"squash"`` selects :data:`BRANCH_GATE_TEXTS_SQUASH`)."""
     if gate.code not in BRANCH_GATE_TEXTS:
         raise ValueError(f"unknown milestone-branch gate {gate.code!r}")
+    texts = BRANCH_GATE_TEXTS_SQUASH if getattr(gate, "merge_method", "merge") == "squash" else {}
     return HumanGate(
         repository=repository,
         work_item_id=gate.work_item_id or "",
         phase=phase,
-        what_is_required=f"{BRANCH_GATE_TEXTS[gate.code]} ({gate.code}): {gate.message}",
+        what_is_required=f"{texts.get(gate.code, BRANCH_GATE_TEXTS[gate.code])} ({gate.code}): {gate.message}",
         artifact_path=None,
         safe_resume_command=gate.exits[0] if gate.exits else "workflow-controller step",
     )
@@ -1038,7 +1052,7 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     return apply_dispatch_rule(handler(managed_repo, work_item), work_item.governing_workflow_version)
 
 
-def decide_no_work_item(managed_repo: Any) -> Decision:
+def decide_no_work_item(managed_repo: Any, *, base: str | None = None) -> Decision:
     """The distinct, sibling entry point for a ``target_state.NoWorkItemYet``
     target (revision 63, B2, ``REQ-40``): called *before* :func:`decide`
     ever runs, since there is no ``WorkItemView`` -- and so no ``phase`` --
@@ -1053,17 +1067,31 @@ def decide_no_work_item(managed_repo: Any) -> Decision:
     alone derives and creates the first work item from
     ``docs/ACTIVE_MILESTONE.md`` (``D-Plan-Amendment`` constraint), so the
     Controller must never supply one here, mirroring exactly what a human
-    operator would type for a brand-new milestone."""
+    operator would type for a brand-new milestone.
+
+    ``base`` (``workflow-controller-squash-merge-tag-versioning`` Design F)
+    is the trunk tip a passed trunk start proved equal to
+    ``<remote>/<trunk>``, given when milestone branches are enabled: the
+    command is then ``/milestone-plan <base>``, Workflow's one-argument
+    ``<base-sha>`` form, so the next milestone's base is the trunk tip even
+    after a squash merge left the previous completion commit off the trunk.
+    The triple stays ``(NO_PHASE, None, "/milestone-plan")``: every table
+    keys on the command token. Without one the command is bare, as
+    before."""
+    command, reason = "/milestone-plan", ("no non-terminal work item exists and none was explicitly named; "
+                                          "frozen /milestone-plan derives and creates the first one from "
+                                          "docs/ACTIVE_MILESTONE.md")
+    if base is not None:
+        command = f"/milestone-plan {base}"
+        reason += f", based on the trunk tip {base}"
     selected = Decision(
         observed_phase=NO_PHASE,
         evidence=(),
-        action=Action(command="/milestone-plan"),
+        action=Action(command=command),
         automatic=True,
         gate=None,
         declined=False,
-        reason="no non-terminal work item exists and none was explicitly named; frozen "
-               "/milestone-plan derives and creates the first one from "
-               "docs/ACTIVE_MILESTONE.md",
+        reason=reason,
     )
     # The bootstrap's own `(NO_PHASE, None, "/milestone-plan")` triple is
     # in AUTOMATIC_TRIPLES, so this stays automatic -- through the same

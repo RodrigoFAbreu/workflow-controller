@@ -1,7 +1,9 @@
 """Tests for the release identity CP1 adds: the single version source
-(``pyproject.toml``'s static ``[project].version``), ``controller/buildinfo.py``'s digest and schema
+(``pyproject.toml``'s static ``[project].version``, or after the squash-merge
+cutover the release tags), ``controller/buildinfo.py``'s digest and schema
 rules, and ``setup.py``'s ``build_py`` hook that writes
-``controller/BUILD_INFO.json`` into every built wheel.
+``controller/BUILD_INFO.json`` into every built wheel, and the version
+``setup.py`` supplies for a dynamic ``pyproject.toml``.
 
 The hook tests build real wheels from disposable committed clones with
 ``pip wheel --no-deps --no-build-isolation``. They skip, naming the missing
@@ -52,10 +54,14 @@ class VersionSourceTest(unittest.TestCase):
     def test_version_is_plain_semver(self) -> None:
         self.assertRegex(VERSION, buildinfo.SEMVER_RE)
 
-    def test_pyproject_declares_the_version_statically(self) -> None:
+    def test_pyproject_declares_the_version_statically_or_dynamically(self) -> None:
+        """Static (pre-cutover) or ``dynamic = ["version"]`` with no
+        setuptools dynamic source: ``setup.py`` supplies it (post-cutover)."""
         pyproject = tomllib.loads(fixtures.PYPROJECT.read_text())
-        self.assertEqual(pyproject["project"]["version"], VERSION)
-        self.assertNotIn("version", pyproject["project"].get("dynamic", []))
+        project = pyproject["project"]
+        self.assertNotEqual("version" in project, "version" in project.get("dynamic", []))
+        if "version" in project:
+            self.assertEqual(project["version"], VERSION)
         self.assertNotIn("dynamic", pyproject.get("tool", {}).get("setuptools", {}))
 
     def test_generation_file_is_declared_package_data(self) -> None:
@@ -345,6 +351,86 @@ class BuildHookTest(unittest.TestCase):
         mapped = Path(located.stdout.strip())
         self.assertEqual(mapped, (self.clone / "controller").resolve())
         self.assertFalse((mapped / buildinfo.BUILD_INFO_NAME).exists())
+
+
+class DynamicVersionBuildTest(unittest.TestCase):
+    """A clone whose ``pyproject.toml`` declares ``dynamic = ["version"]``
+    (the post-cutover form): ``setup.py`` supplies the highest reachable
+    release tag's version, or a release build's own tag's."""
+
+    def setUp(self) -> None:
+        fixtures.require_wheel_build(self)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.clone = fixtures.build_checkout(self.tmp / "clone", dynamic_version=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _build(self, *, check: bool = True, **env):
+        out = self.tmp / "dist"
+        result = fixtures.build_wheel(self.clone, out, env=_clean_env(**env), check=False)
+        if check:
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result, out
+
+    def _wheel_and_record(self, out: Path) -> tuple[Path, dict]:
+        wheels = sorted(out.glob("*.whl"))
+        self.assertEqual(len(wheels), 1, wheels)
+        with zipfile.ZipFile(wheels[0]) as zf:
+            return wheels[0], json.loads(zf.read(f"controller/{buildinfo.BUILD_INFO_NAME}"))
+
+    def test_a_local_build_carries_the_highest_reachable_tag(self) -> None:
+        fixtures.run(["git", "tag", "v2.3.4"], cwd=self.clone)
+        fixtures.run(["git", "tag", "v2.3.3"], cwd=self.clone)
+        wheel, record = self._wheel_and_record(self._build()[1])
+        self.assertEqual(wheel.name, "workflow_controller-2.3.4-py3-none-any.whl")
+        info = buildinfo.validate_build_info(record, expected_version="2.3.4")
+        self.assertEqual((info.build_origin, info.release_tag), ("local", None))
+        self.assertEqual(info.source_commit, fixtures.current_head(self.clone))
+
+    def test_a_local_build_without_a_tag_is_0_0_0(self) -> None:
+        wheel, record = self._wheel_and_record(self._build()[1])
+        self.assertEqual(wheel.name, "workflow_controller-0.0.0-py3-none-any.whl")
+        self.assertEqual(record["version"], "0.0.0")
+
+    def test_a_release_build_carries_its_tag(self) -> None:
+        fixtures.run(["git", "tag", "v2.3.4"], cwd=self.clone)
+        wheel, record = self._wheel_and_record(
+            self._build(WORKFLOW_CONTROLLER_RELEASE_TAG="v2.4.0")[1])
+        self.assertEqual(wheel.name, "workflow_controller-2.4.0-py3-none-any.whl")
+        info = buildinfo.validate_build_info(record, expected_version="2.4.0")
+        self.assertEqual((info.build_origin, info.release_tag), ("release", "v2.4.0"))
+
+    def test_a_malformed_release_tag_fails_the_build(self) -> None:
+        for tag in ("2.4.0", "v2.4", "v2.4.0-rc.1", ""):
+            with self.subTest(tag=tag):
+                result, out = self._build(check=False, WORKFLOW_CONTROLLER_RELEASE_TAG=tag)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("cannot derive the version", result.stdout + result.stderr)
+                self.assertEqual(list(out.glob("*.whl")), [])
+
+    def test_a_non_git_copy_is_0_0_0(self) -> None:
+        fixtures.run(["git", "tag", "v2.3.4"], cwd=self.clone)
+        copy = self.tmp / "copy"
+        shutil.copytree(self.clone, copy, ignore=shutil.ignore_patterns(".git"))
+        self.clone = copy
+        _, record = self._wheel_and_record(self._build()[1])
+        self.assertEqual((record["version"], record["source_commit"]), ("0.0.0", None))
+
+    def test_editable_install_writes_no_build_info(self) -> None:
+        fixtures.run(["git", "tag", "v2.3.4"], cwd=self.clone)
+        venv_dir = self.tmp / "venv"
+        fixtures.run([sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)])
+        result = fixtures.run(
+            [str(venv_dir / "bin" / "python"), "-m", "pip", "install", "--quiet", "--no-deps",
+             "--no-build-isolation", "-e", str(self.clone)],
+            env=_clean_env(PIP_DISABLE_PIP_VERSION_CHECK="1"), check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(list(self.clone.rglob(buildinfo.BUILD_INFO_NAME)), [])
+        self.assertEqual(list(venv_dir.rglob(buildinfo.BUILD_INFO_NAME)), [])
+        self.assertEqual(len(list(venv_dir.rglob("workflow_controller-2.3.4.dist-info"))), 1)
 
 
 class EditableModeEarlyReturnTest(unittest.TestCase):

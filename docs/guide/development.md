@@ -32,6 +32,33 @@ because `fixtures.editable_install` runs a build-isolated `pip install -e`.
 Run the suite in the foreground: a job backgrounded with a plain `&`
 ignores SIGINT, and the Ctrl-C tests then fail spuriously.
 
+## Building from a checkout
+
+Once `pyproject.toml` declares `dynamic = ["version"]` (this repository
+from the [cutover](ci-and-releases.md#cutover-from-the-version-file-model)
+on), no file holds the version. `setup.py` supplies it at build time:
+
+- a local build (`python -m pip wheel --no-deps -w dist .`, or
+  `pip install -e .`) gets the highest `v<MAJOR.MINOR.PATCH>` tag
+  reachable from `HEAD`, or `0.0.0` without one, or outside Git.
+  `python3 tools/release.py version` prints it, and
+  `tools/release.py verify-wheel --local` expects it;
+- a release build sets `WORKFLOW_CONTROLLER_RELEASE_TAG` to the tag
+  (the policy's build command does it, from `{tag}`), and the wheel gets
+  that tag's version. A malformed tag fails the build.
+  `verify-wheel --tag TAG` expects the tag's version.
+
+A checkout between two releases therefore builds the last release's
+version, not a development version; `BUILD_INFO.json`'s commit and
+`build_origin: "local"` tell the build apart. With a static
+`version = "..."` line (the legacy model), setuptools reads it, and a
+release tag that does not match it fails the build.
+
+The tests never depend on the real tags: `tests/fixtures.build_checkout()`
+writes a static version into every disposable clone and never tags it.
+Only the tests that exercise tag derivation keep the dynamic form, and
+they create their own tags.
+
 ## Verification policy
 
 - Full-suite verification uses the sharded default,

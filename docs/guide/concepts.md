@@ -53,8 +53,8 @@ Controller, for a repository with a `.workflow-controller/policy.json`:
 | Technical approval (`/approve-review`) | **human** |
 | Functional review | **human**, from a checklist the Workflow prepares |
 | Acceptance (`/accept-milestone`) | **human** |
-| Pull request marked ready once checks pass | Controller |
-| Merge | **human**, on GitHub, with a merge commit |
+| Pull request title and body set, pull request marked ready once checks pass | Controller |
+| Merge | **human**, on GitHub, with "Squash and merge" (or a merge commit, as the policy says) |
 | Switch back to `main` (close-out) | Controller |
 
 The human steps are the Workflow's six hard gates
@@ -104,10 +104,18 @@ if asked. Reducing these gates where automated evidence is enough is on the
   pull request.
 - **Repository policy**: `.workflow-controller/policy.json`, committed in the
   target. It turns on milestone branches, pull requests and releases, and
-  says how.
-- **Version and generation**: the version (`pyproject.toml`, for example
-  `1.2.1`) names a release. The generation (`controller/GENERATION.json`) is
-  the compatibility axis for job records and handoff between a running
+  says how, including the merge method and the release trigger.
+- **Pull request title**: under squash merges, the subject of the commit
+  that lands on the trunk. A milestone plan declares it, and under the
+  `conventional_commit` release trigger its Conventional Commit type
+  (`feat`, `fix`, `docs`, ...) decides the release. See
+  [Releasing](ci-and-releases.md#releasing).
+- **Version and generation**: the version (for example `1.4.0`) names a
+  release, and the release tag is its only authority. A Controller built
+  from a checkout reports the highest release tag the checkout contains
+  (or, before this repository's cutover, `pyproject.toml`'s static
+  version). The generation (`controller/GENERATION.json`) is the
+  compatibility axis for job records and handoff between a running
   Controller and a newer one. Every release so far is generation 1.
 - **Runtime kind**: what code is running: `package` (an installed wheel),
   `source` (an editable checkout) or `unidentified`.

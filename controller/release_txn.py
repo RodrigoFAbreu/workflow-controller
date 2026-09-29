@@ -9,6 +9,13 @@ previous push -- and :func:`publish` carries out a publishing
 classification: tag after validation, publish, or resume an interrupted
 publication at the tag's own commit.
 
+The trigger of the policy committed at ``C`` decides how the version at
+``C`` is found: read from the version source (``version_change``), or
+computed from the highest release tag in ``C``'s history and the
+Conventional Commit types of the first-parent commits since it
+(``conventional_commit``, ``workflow-controller-squash-merge-tag-
+versioning`` CP3, Design C). The rows that follow are the same for both.
+
 Everything adopter-specific comes from the policy (:mod:`controller.
 repo_policy`): the version source, the tag format, the ``build`` and
 ``verify`` commands, the artifact paths and the checksums file name. Git
@@ -28,11 +35,17 @@ import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 
-from . import gitrepo, repo_policy, runtime
-from .errors import GitOperationError, ReleaseTransactionError
+from . import conventional_commit, gitrepo, repo_policy, runtime
+from .errors import (
+    GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError, ReleaseTransactionError,
+)
 from .forge import Forge, Release
 
 # -- classification states, in the plan's row order --------------------------
+#: ``conventional_commit`` only: a first-parent commit since the base tag
+#: whose subject no ``change_types`` entry or ``bump_overrides`` entry
+#: classifies. Never counted as a patch (I4).
+INVALID_SUBJECT = "INVALID_SUBJECT"
 COLLISION_TAG_ELSEWHERE = "COLLISION_TAG_ELSEWHERE"
 ABANDONED_VERSION = "ABANDONED_VERSION"
 ABANDONED_TAG_INCONSISTENT = "ABANDONED_TAG_INCONSISTENT"
@@ -45,9 +58,9 @@ RESUME = "RESUME"
 INVALID_TRANSITION = "INVALID_TRANSITION"
 RELEASE_DUE = "RELEASE_DUE"
 
-STATES = (COLLISION_TAG_ELSEWHERE, ABANDONED_VERSION, ABANDONED_TAG_INCONSISTENT, ALREADY_RELEASED,
-          RELEASE_MISMATCH, NO_CHANGE, COLLISION_RELEASE_WITHOUT_TAG, BASELINE_UNRELEASED, RESUME,
-          INVALID_TRANSITION, RELEASE_DUE)
+STATES = (INVALID_SUBJECT, COLLISION_TAG_ELSEWHERE, ABANDONED_VERSION, ABANDONED_TAG_INCONSISTENT,
+          ALREADY_RELEASED, RELEASE_MISMATCH, NO_CHANGE, COLLISION_RELEASE_WITHOUT_TAG, BASELINE_UNRELEASED,
+          RESUME, INVALID_TRANSITION, RELEASE_DUE)
 #: The states a CI run succeeds on.
 SUCCESS_STATES = frozenset({ABANDONED_VERSION, ALREADY_RELEASED, NO_CHANGE, RESUME, RELEASE_DUE})
 #: The states :func:`publish` acts on.
@@ -101,7 +114,8 @@ class Classification:
     publishes: the tag's own commit when the tag exists (``RESUME`` at a
     strict ancestor included), ``commit`` otherwise. ``unsettled`` names the
     tags behind ``BASELINE_UNRELEASED``; ``problems`` the asset-set failures
-    behind ``RELEASE_MISMATCH``."""
+    behind ``RELEASE_MISMATCH``, or the unclassifiable commits behind
+    ``INVALID_SUBJECT``."""
 
     state: str
     version: str
@@ -316,6 +330,77 @@ def _require_on_trunk(ctx: ReleaseContext, commit: str) -> None:
                       f"classified", commit=commit, trunk_tip=tip)
 
 
+def _bumped(version: tuple[int, int, int], bump: str) -> str:
+    major, minor, patch = version
+    if bump == conventional_commit.MAJOR:
+        return f"{major + 1}.0.0"
+    if bump == conventional_commit.MINOR:
+        return f"{major}.{minor + 1}.0"
+    if bump == conventional_commit.PATCH:
+        return f"{major}.{minor}.{patch + 1}"
+    return f"{major}.{minor}.{patch}"
+
+
+@dataclasses.dataclass(frozen=True)
+class _RangeBump:
+    """The highest bump the first-parent commits since the base ask for,
+    and the commits no subject or override classifies."""
+
+    bump: str
+    invalid: tuple[str, ...]
+
+
+def _range_bump(ctx: ReleaseContext, base_commit: str | None, commit: str) -> _RangeBump:
+    """Classify each first-parent commit of ``base_commit..commit`` (Design
+    C step 3). A legacy commit -- no policy committed at it, or one under
+    ``version_change`` -- contributes nothing; a Conventional one its own
+    subject's bump under the ``change_types`` committed at it, else the
+    ``bump_overrides`` entry of ``commit``'s policy. An override never
+    replaces a decision, and an unparsable policy at a range commit is never
+    read as legacy: both refuse. An override settles only an unparsable
+    policy, never a failed Git read of one, which always refuses."""
+    overrides = ctx.release.bump_overrides
+    highest = conventional_commit.NONE
+    invalid = []
+    remedy = f"add the commit to release.bump_overrides in {repo_policy.POLICY_PATH} in a pull request"
+    for sha, subject in gitrepo.first_parent_subjects(ctx.repo_root, base_commit, commit,
+                                                      runner=ctx.git_runner):
+        try:
+            raw = repo_policy.read_committed_policy_bytes(ctx.repo_root, sha)
+        except InvalidRepositoryPolicyError as exc:
+            raise _refuse(f"the policy committed at {sha} ({subject!r}) cannot be read from Git: "
+                          f"{exc.message}", commit=sha, subject=subject, policy_error=exc.message) from None
+        try:
+            policy = repo_policy.parse_committed_policy(raw, sha)
+        except InvalidRepositoryPolicyError as exc:
+            if sha not in overrides:
+                raise _refuse(f"the policy committed at {sha} ({subject!r}) cannot be read: "
+                              f"{exc.message}; {remedy}", commit=sha, subject=subject,
+                              policy_error=exc.message) from None
+            bump = overrides[sha]
+        else:
+            decided = None
+            if policy is None or policy.release.trigger != repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+                bump = conventional_commit.NONE
+                decided = "a legacy commit (no conventional_commit policy at it), which releases nothing"
+            else:
+                try:
+                    bump = conventional_commit.bump(subject, policy.release.change_types)
+                    decided = f"{bump} by its subject"
+                except InvalidTitleError as exc:
+                    if sha not in overrides:
+                        invalid.append(f"{sha} {subject!r}: {exc.message}")
+                        continue
+                    bump = overrides[sha]
+            if decided is not None and sha in overrides:
+                raise _refuse(f"release.bump_overrides names {sha} ({subject!r}), which is already "
+                              f"classified: {decided}; remove the entry in a pull request",
+                              commit=sha, subject=subject, classification=decided)
+        if conventional_commit.BUMPS.index(bump) > conventional_commit.BUMPS.index(highest):
+            highest = bump
+    return _RangeBump(bump=highest, invalid=tuple(invalid))
+
+
 def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Classification:
     """Classify trunk commit ``commit`` (first matching row of the plan's
     table). Fetches the trunk and, unless ``fetch_tags`` is false, every
@@ -327,9 +412,9 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
         raise _refuse(f"{repo_policy.POLICY_PATH} does not enable release", commit=commit)
     commit = _resolve_commit(ctx, commit)
     _require_on_trunk(ctx, commit)
-    version = repo_policy.read_committed_version(ctx.repo_root, ctx.policy, commit)
-    key = release.version_key(version)
-    tag = release.tag_for(version)
+    conventional = release.trigger == repo_policy.TRIGGER_CONVENTIONAL_COMMIT
+    if not conventional:
+        version = repo_policy.read_committed_version(ctx.repo_root, ctx.policy, commit)
     abandoned = set(release.abandoned_tags)
 
     if fetch_tags:
@@ -343,8 +428,41 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
             matching[name] = (tag_version, oid)
     ancestors = {name: entry for name, entry in matching.items()
                  if gitrepo.is_ancestor(ctx.repo_root, entry[1], commit, runner=ctx.git_runner)}
+
+    viewed: dict[str, Release | None] = {}
+    if conventional:
+        # Design C: the base is the highest ancestor tag; an unsettled base
+        # is resumed before anything since it is released.
+        base = max(ancestors, key=lambda name: release.version_key(ancestors[name][0]), default=None)
+        version = "0.0.0" if base is None else ancestors[base][0]
+        base_commit = None if base is None else ancestors[base][1]
+        settled = True
+        if base is not None and base not in abandoned:
+            viewed[base] = ctx.forge.view_release(base)
+            settled = viewed[base] is not None and not viewed[base].is_draft
+        if settled:
+            ranged = _range_bump(ctx, base_commit, commit)
+            if ranged.invalid:
+                return Classification(
+                    state=INVALID_SUBJECT, version=version, tag=release.tag_for(version), commit=commit,
+                    target=base_commit or commit, tag_commit=base_commit, release=None,
+                    detail=(f"{len(ranged.invalid)} commit(s) since "
+                            f"{base or 'the start of history'} have no Conventional Commit subject "
+                            f"the policy classifies: " + "; ".join(ranged.invalid)
+                            + f"; add each to release.bump_overrides in {repo_policy.POLICY_PATH} in a "
+                            f"pull request"),
+                    problems=ranged.invalid)
+            if base is None and ranged.bump == conventional_commit.NONE:
+                return Classification(
+                    state=NO_CHANGE, version=version, tag=release.tag_for(version), commit=commit,
+                    target=commit, tag_commit=None, release=None,
+                    detail="no release tag is reachable and no commit since the start of history releases")
+            version = _bumped(release.version_key(version), ranged.bump)
+
+    key = release.version_key(version)
+    tag = release.tag_for(version)
     tag_commit = remote_tags.get(tag)
-    found = ctx.forge.view_release(tag)
+    found = viewed[tag] if tag in viewed else ctx.forge.view_release(tag)
 
     def result(state: str, detail: str, **extra) -> Classification:
         return Classification(state=state, version=version, tag=tag, commit=commit,
@@ -423,22 +541,43 @@ def local_artifacts(ctx: ReleaseContext, version: str, root: Path | None = None)
     return files
 
 
-def build(ctx: ReleaseContext, commit: str) -> list[Path]:
-    """Run the policy's ``build`` command at the checked-out ``commit`` and
-    return the artifacts it produced."""
+def build_version(ctx: ReleaseContext, commit: str, version: str | None) -> str:
+    """The version the build of ``commit`` carries. Under
+    ``conventional_commit`` it is ``version``, the classified one (required:
+    nothing committed names it). Under ``version_change`` it is the committed
+    version, and a ``version`` that differs from it refuses."""
+    if ctx.release.trigger == repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+        if not version:
+            raise _refuse(f"the release trigger is {ctx.release.trigger!r}: the build needs the "
+                          f"classified version, and none was given", commit=commit)
+        try:
+            ctx.release.version_key(version)
+        except ValueError as exc:
+            raise _refuse(f"the classified version is invalid: {exc}", commit=commit) from None
+        return version
+    committed = repo_policy.read_committed_version(ctx.repo_root, ctx.policy, commit)
+    if version and version != committed:
+        raise _refuse(f"the classified version {version} is not {commit}'s committed version "
+                      f"{committed}", commit=commit, version=version, committed=committed)
+    return committed
+
+
+def build(ctx: ReleaseContext, commit: str, version: str | None) -> list[Path]:
+    """Run the policy's ``build`` command at the checked-out ``commit`` for
+    :func:`build_version`'s version and return the artifacts it produced."""
     commit = _checked_out(ctx, commit)
-    version = repo_policy.read_committed_version(ctx.repo_root, ctx.policy, commit)
+    version = build_version(ctx, commit, version)
     result = _run_policy_command(ctx, ctx.release.build, _values(ctx, version, commit))
     if result.returncode != 0:
         raise _refuse(f"the build command failed ({_command_failure(result)})", commit=commit)
     return local_artifacts(ctx, version)
 
 
-def verify(ctx: ReleaseContext, commit: str, root: Path | None = None) -> list[Path]:
-    """Run the policy's ``verify`` command on every artifact for ``commit``,
-    refusing on the first failure."""
+def verify(ctx: ReleaseContext, commit: str, version: str | None, root: Path | None = None) -> list[Path]:
+    """Run the policy's ``verify`` command on every artifact for ``commit``
+    and :func:`build_version`'s version, refusing on the first failure."""
     commit = _resolve_commit(ctx, commit)
-    version = repo_policy.read_committed_version(ctx.repo_root, ctx.policy, commit)
+    version = build_version(ctx, commit, version)
     files = local_artifacts(ctx, version, root)
     for path in files:
         failure = verify_artifact(ctx, path, version, commit)

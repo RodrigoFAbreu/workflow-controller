@@ -153,8 +153,10 @@ git status                          # only the files the Manager wrote
 ```
 
 Commit exactly what the Manager wrote, then open a pull request and merge
-it. With no version bump, the merge classifies `NO_CHANGE` and publishes no
-Controller release.
+it. Under the `conventional_commit` release trigger, give it a title that
+releases nothing, such as `chore: move to Workflow 2.6.0`; the merge then
+classifies `NO_CHANGE` and publishes no Controller release (under
+`version_change`, the same holds when the version is not bumped).
 
 **In flight**, updating the milestone's own branch in place is proven only
 at these phases:
@@ -206,7 +208,16 @@ workflow-controller --version    # runtime: package (local build from <commit>)
 ```
 
 The build records the checkout's commit, whether it had uncommitted changes,
-and a digest of the package. A wheel built from uncommitted changes, or with
+and a digest of the package. The wheel's version is the checkout's: with
+`pyproject.toml`'s `dynamic = ["version"]` (this repository from the
+[cutover](ci-and-releases.md#cutover-from-the-version-file-model) on),
+the highest release tag reachable from `HEAD`, so a checkout ahead of
+`v1.4.0` builds `workflow_controller-1.4.0-py3-none-any.whl`. A clone
+that reaches no release tag (a shallow one, for example) builds `0.0.0`,
+so build from a full clone. `python3 tools/release.py version` prints the
+version a local build carries. The line
+`package (local build from <commit>)`, not the version, tells such a
+wheel apart from a release. A wheel built from uncommitted changes, or with
 no verifiable provenance, needs `--allow-dirty-source` to run `step`, `run`
 or `resume`. A local build refuses a stale `build/` directory left by an
 earlier build that held files this one does not; delete `build/` and rebuild.
@@ -222,7 +233,9 @@ An editable install runs the checkout itself. `step`, `run` and `resume`
 snapshot the checkout's committed `HEAD` with `git archive`, so what runs is
 always a commit. With uncommitted changes to the Controller's own files they
 refuse (`DirtyControllerSourceError`) unless you pass `--allow-dirty-source`,
-which snapshots the working tree instead. A source runtime keeps its state in
+which snapshots the working tree instead. Its version is derived the same
+way as a local wheel's (see
+[Runtime identity](runtime.md#runtime-identity)). A source runtime keeps its state in
 `<checkout>/.controller/` (row 3 of the
 [runtime root ladder](runtime.md#controller-owned-runtime-state)).
 

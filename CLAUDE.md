@@ -43,3 +43,5 @@ on update. Add repository-specific guidance below it; it is never touched.
 - Operator and developer guides: `docs/guide/`. Keep them current when a
   change alters behaviour they describe; plans and completed-milestone
   narratives are historical records and are not updated afterwards.
+- A milestone plan declares its pull request title (see
+  `docs/guide/milestone-branches.md`).

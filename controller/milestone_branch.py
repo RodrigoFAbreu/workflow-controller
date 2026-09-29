@@ -52,8 +52,10 @@ from pathlib import Path
 from typing import Any
 
 from . import forge as forge_mod
-from . import gitrepo, repo_policy, runtime
-from .errors import BranchBindingError, BranchInvariantViolatedError, GitOperationError, InvalidRepositoryPolicyError
+from . import conventional_commit, gitrepo, repo_policy, runtime
+from .errors import (
+    BranchBindingError, BranchInvariantViolatedError, GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError,
+)
 
 SCHEMA_VERSION = 1
 STATE_REL_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
@@ -68,24 +70,30 @@ PR_PLANNED = "PR_PLANNED"
 PR_OPEN = "PR_OPEN"
 READY = "READY"
 MERGED = "MERGED"
+MERGED_SQUASHED = "MERGED_SQUASHED"
 CLOSED = "CLOSED"
 MERGED_REWRITTEN = "MERGED_REWRITTEN"
 MERGED_BEFORE_ACCEPTANCE = "MERGED_BEFORE_ACCEPTANCE"
 PR_CLOSED_UNMERGED = "PR_CLOSED_UNMERGED"
 ABANDONED = "ABANDONED"
 
-STATES = (BRANCH_PLANNED, BRANCH_BOUND, PR_PLANNED, PR_OPEN, READY, MERGED, CLOSED,
+STATES = (BRANCH_PLANNED, BRANCH_BOUND, PR_PLANNED, PR_OPEN, READY, MERGED, MERGED_SQUASHED, CLOSED,
           MERGED_REWRITTEN, MERGED_BEFORE_ACCEPTANCE, PR_CLOSED_UNMERGED, ABANDONED)
 
 #: The Controller drives these.
-NON_TERMINAL_STATES = frozenset({BRANCH_PLANNED, BRANCH_BOUND, PR_PLANNED, PR_OPEN, READY, MERGED})
+NON_TERMINAL_STATES = frozenset({BRANCH_PLANNED, BRANCH_BOUND, PR_PLANNED, PR_OPEN, READY, MERGED,
+                                 MERGED_SQUASHED})
 #: Blocking until an exit moves the record out, from the branch or trunk.
 REFUSAL_STATES = frozenset({MERGED_BEFORE_ACCEPTANCE, PR_CLOSED_UNMERGED})
 #: Never blocking.
 TERMINAL_STATES = frozenset({CLOSED, MERGED_REWRITTEN, ABANDONED})
 
-#: The three outcomes of the merged-PR handling (CP7's "Close-out").
-MERGED_PR_HANDLING = (MERGED, MERGED_REWRITTEN, MERGED_BEFORE_ACCEPTANCE)
+#: The outcomes of the merged-PR handling (CP7's "Close-out");
+#: ``MERGED_SQUASHED`` only under ``merge_method: "squash"``
+#: (``workflow-controller-squash-merge-tag-versioning`` Design F).
+MERGED_PR_HANDLING = (MERGED, MERGED_SQUASHED, MERGED_REWRITTEN, MERGED_BEFORE_ACCEPTANCE)
+#: The merged states close-out runs from.
+CLOSE_OUT_STATES = (MERGED, MERGED_SQUASHED)
 
 
 def _pairs(sources, targets) -> set[tuple[str | None, str]]:
@@ -106,7 +114,7 @@ TRANSITIONS = frozenset(
     | _pairs([PR_CLOSED_UNMERGED], [PR_OPEN, *MERGED_PR_HANDLING])
     | _pairs([PR_CLOSED_UNMERGED, MERGED_BEFORE_ACCEPTANCE], [BRANCH_BOUND, ABANDONED])
     | _pairs([BRANCH_PLANNED, BRANCH_BOUND], [ABANDONED])
-    | _pairs([MERGED], [CLOSED])
+    | _pairs(CLOSE_OUT_STATES, [CLOSED])
 )
 
 #: The bind step's plan-stage phases: an explicit set, because Workflow's
@@ -139,17 +147,23 @@ GATE_MERGE_PULL_REQUEST = "merge_pull_request"
 GATE_MERGE_METHOD_REWROTE_HISTORY = "merge_method_rewrote_history"
 GATE_UNMERGED_COMMITS = "unmerged_commits"
 GATE_DIRTY_TREE = "dirty_tree"
+GATE_PR_TITLE_INVALID = "pr_title_invalid"
 
 #: Every gate a preflight can return.
 GATE_CODES = frozenset({
     GATE_SWITCH_TO_TRUNK, GATE_BOUND_ITEM_MISSING, GATE_PR_CLOSED_UNMERGED, GATE_MERGED_BEFORE_ACCEPTANCE,
     GATE_FAST_FORWARD_TRUNK, GATE_POST_ACCEPTANCE_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_CHECKS_PENDING,
     GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_PR_HEAD_NOT_ACCEPTED, GATE_MERGE_PULL_REQUEST,
-    GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE,
+    GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE, GATE_PR_TITLE_INVALID,
 })
 
 #: The marker line of every Draft PR body the Controller creates.
 PR_MARKER = "<!-- workflow-controller: work_item={work_item_id} -->"
+#: A plan's declared pull request title (``workflow-controller-squash-merge-
+#: tag-versioning`` Design E): exactly one line starting with
+#: :data:`PLAN_TITLE_PREFIX`, and it must match :data:`PLAN_TITLE_RE` whole.
+PLAN_TITLE_PREFIX = "Pull request title:"
+PLAN_TITLE_RE = re.compile(r"Pull request title: `(?P<title>[^`\r\n]+)`")
 _PR_URL_RE = re.compile(r"^https://[^/\s]+/(?P<repo>[^/\s]+/[^/\s]+)/pull/(?P<number>[0-9]+)/?$")
 
 # ``milestone-binding`` dispositions.
@@ -204,11 +218,14 @@ class Proceed:
     ``binding`` is the governing record, or ``None`` when no binding governs
     the step; ``action`` names what this preflight did (``none``, ``bound``,
     ``adopted``, ``completed``, ``observed``, ``trunk_start``, ``pr_created``,
-    ``closed_out``)."""
+    ``closed_out``). ``base`` is the trunk tip a passed trunk start proved
+    equal to ``<remote>/<trunk>`` (full ``HEAD``), which the bootstrap names
+    as the next milestone's base; ``None`` otherwise."""
 
     work_item_override: str | None = None
     binding: Mapping[str, Any] | None = None
     action: str = "none"
+    base: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -221,6 +238,9 @@ class Gate:
     branch: str | None
     message: str
     exits: tuple[str, ...] = ()
+    #: The binding policy's merge method; ``decision.branch_human_gate``
+    #: words a squash-mode gate for "Squash and merge".
+    merge_method: str = repo_policy.MERGE_METHOD_MERGE
 
 
 def _refuse(message: str, *, work_item_id: str | None = None, branch: str | None = None,
@@ -646,7 +666,7 @@ def _branch_cells(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
         state = record["state"]
         if state in TERMINAL_STATES or state in REFUSAL_STATES:
             return _stopped_on_branch(ctx, key, record, head)
-        if state == MERGED:
+        if state in CLOSE_OUT_STATES:
             return _close_out_on_branch(ctx, key, record, head)
         if state in (PR_OPEN, READY):
             pr = _verified_pr(ctx, record, record["pr"]["number"])
@@ -661,6 +681,8 @@ def _branch_cells(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
             if state == READY:
                 return _merge_gate(record, tip=head.commit)
             if _phase(committed_state(ctx, "HEAD"), record["work_item_id"]) != MILESTONE_COMPLETE:
+                if _squash(record):
+                    _sync_title(ctx, key, record, pr)
                 return Proceed(work_item_override=override, binding=record, action=action)
             return _readiness(ctx, key, record, head)
         if not observed:
@@ -876,6 +898,13 @@ def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
     pr, accepted = record["pr"], record.get("accepted_head")
     later = (f". Local commits after the acceptance commit {accepted} (the tip is {tip}) are not pushed to a "
              f"ready pull request" if tip is not None and accepted is not None and tip != accepted else "")
+    if _squash(record):
+        return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
+                    f"pull request #{pr['number']} ({pr['url']}) is ready; a human merges it on GitHub with "
+                    f"\"{SQUASH_BUTTON}\". The squash commit's subject is the pull request's title and its body "
+                    f"the pull request's body. The Controller never merges{later}",
+                    (f"merge pull request #{pr['number']} on GitHub with \"{SQUASH_BUTTON}\"",),
+                    repo_policy.MERGE_METHOD_SQUASH)
     return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
                 f"pull request #{pr['number']} ({pr['url']}) is ready; a human merges it on GitHub with "
                 f"\"Create a merge commit\". Squash and rebase merges take the reviewed commits off "
@@ -904,7 +933,8 @@ def _merged_handling(ctx: Context, key: str, record: dict, pr: forge_mod.PullReq
     with ``h`` the branch tip. Reads only the first-parent path
     ``branch_point..h``, its committed states and trailers, and the fetched
     ``<remote>/<trunk>`` -- never the working tree -- and writes
-    ``MERGED_BEFORE_ACCEPTANCE``, ``MERGED_REWRITTEN`` or ``MERGED``."""
+    ``MERGED_BEFORE_ACCEPTANCE``, ``MERGED_REWRITTEN`` or ``MERGED``, or,
+    in squash mode only, ``MERGED_SQUASHED`` for a :func:`verified_squash`."""
     work_item_id, remote, trunk = record["work_item_id"], record["repository"]["remote"], record["trunk"]
     if pr is not None and gitrepo.ref_commit(ctx.repo_root, h, runner=ctx.runner) is None:
         # The head branch was deleted on GitHub after the merge.
@@ -921,12 +951,62 @@ def _merged_handling(ctx: Context, key: str, record: dict, pr: forge_mod.PullReq
                       "merged_before_acceptance", head=h, untrailered=search.untrailered)
     remote_trunk = _remote_trunk(ctx, remote, trunk)
     if not _ancestor(ctx, h, remote_trunk):
+        if pr is not None and _squash(record) and verified_squash(ctx, record, pr, h, remote_trunk):
+            return _write(ctx, key, dict(record, state=MERGED_SQUASHED, merged_head=h, accepted_head=search.commit,
+                                         merge_commit=pr.merge_commit, **fields),
+                          "merged_squashed", head=h, merge_commit=pr.merge_commit, pr=pr.number)
         return _write(ctx, key, dict(record, state=MERGED_REWRITTEN, merged_head=h, accepted_head=search.commit,
                                      merge_commit=None if pr is None else pr.merge_commit, rewrite_gate_shown=False,
                                      **fields),
                       "merged_rewritten", head=h, remote_trunk=remote_trunk)
     return _write(ctx, key, dict(record, state=MERGED, merged_head=h, accepted_head=search.commit, **fields),
                   "merged", head=h, pr=None if pr is None else pr.number)
+
+
+#: ``git merge-tree --write-tree``'s floor, needed on the integration path only.
+MERGE_TREE_MIN_GIT = (2, 38, 0)
+
+
+def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullRequest, h: str,
+                    remote_trunk: str) -> bool:
+    """Whether merged pull request ``pr``, whose head ``h`` is not on the
+    fetched ``remote_trunk``, was squash-merged with the reviewed content
+    (Design F's five conditions). ``False`` means "not verified", and the
+    caller writes ``MERGED_REWRITTEN``; a state this cannot tell apart from
+    a rebase is not verified. An undecidable read -- Git older than 2.38 on
+    the integration path, or a failing ``merge-tree`` -- refuses and writes
+    nothing (I3)."""
+    m = pr.merge_commit
+    # 1. the merge commit is on the trunk.
+    if not m or gitrepo.ref_commit(ctx.repo_root, m, runner=ctx.runner) != m or not _ancestor(ctx, m, remote_trunk):
+        return False
+    # 2. one parent.
+    parents = gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)
+    if len(parents) != 1:
+        return False
+    p = parents[0]
+    # 3. GitHub's squash subject: the title and the number.
+    if gitrepo.commit_subject(ctx.repo_root, m, runner=ctx.runner) != f"{pr.title} (#{pr.number})":
+        return False
+    # 5. not a rewrite of h: a rebase keeps h's author, author date and message.
+    if gitrepo.commit_identity(ctx.repo_root, m, runner=ctx.runner) \
+            == gitrepo.commit_identity(ctx.repo_root, h, runner=ctx.runner):
+        return False
+    # 4. the reviewed content.
+    tree = gitrepo.tree_of(ctx.repo_root, m, runner=ctx.runner)
+    if _ancestor(ctx, p, h):
+        return tree == gitrepo.tree_of(ctx.repo_root, h, runner=ctx.runner)
+    if gitrepo.merge_drivers(ctx.repo_root, runner=ctx.runner):
+        return False  # never run a configured merge driver's program
+    version = gitrepo.git_version(ctx.repo_root, runner=ctx.runner)
+    if version < MERGE_TREE_MIN_GIT:
+        raise _refuse(f"pull request #{pr.number}'s merge commit {m} is verified against `git merge-tree "
+                      f"--write-tree`, which needs Git {'.'.join(map(str, MERGE_TREE_MIN_GIT))} or later; this Git "
+                      f"is {'.'.join(map(str, version))}", work_item_id=record["work_item_id"],
+                      branch=record["branch"], pr=pr.number, merge_commit=m,
+                      exits=[f"upgrade Git to {'.'.join(map(str, MERGE_TREE_MIN_GIT))} or later"])
+    merged = gitrepo.merge_tree(ctx.repo_root, p, h, runner=ctx.runner)
+    return merged is not None and merged == tree
 
 
 def _unmerged_commits_gate(ctx: Context, record: Mapping[str, Any], tip: str, *, from_trunk: bool) -> Gate:
@@ -945,7 +1025,8 @@ def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.Hea
     """Close-out step 3 from the branch: a clean tree and the tip at
     ``merged_head``, then switch to the trunk, fast-forward it to
     ``<remote>/<trunk>``, write ``CLOSED``, and continue to the trunk start
-    (step 4)."""
+    (step 4). From ``MERGED_SQUASHED`` the squash commit stands in for
+    ``merged_head`` in the trunk-membership check."""
     work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
     remote, h = record["repository"]["remote"], record["merged_head"]
     changes = gitrepo.tracked_changes(ctx.repo_root, runner=ctx.runner)
@@ -961,7 +1042,12 @@ def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.Hea
                       exits=[f"fast-forward {branch} to {h} (`git merge --ff-only {h}`)"])
     remote_trunk = _remote_trunk(ctx, remote, trunk)
     local_trunk = _local_branch(ctx, trunk)
-    if not _ancestor(ctx, h, remote_trunk):
+    if record["state"] == MERGED_SQUASHED:
+        m = record["merge_commit"]
+        if not _ancestor(ctx, m, remote_trunk):
+            raise _refuse(f"the squash commit {m} of the merged head {h} is not on {remote}/{trunk}",
+                          work_item_id=work_item_id, branch=branch)
+    elif not _ancestor(ctx, h, remote_trunk):
         raise _refuse(f"the merged head {h} is not on {remote}/{trunk}", work_item_id=work_item_id, branch=branch)
     if local_trunk is None or not _ancestor(ctx, local_trunk, remote_trunk):
         raise _refuse(f"the local {trunk} ({local_trunk}) cannot fast-forward to {remote}/{trunk} ({remote_trunk})",
@@ -981,7 +1067,7 @@ def _after_close(ctx: Context, key: str) -> Proceed | Gate:
     policy = None if head.commit is None else repo_policy.read_committed_policy(ctx.repo_root, "HEAD")
     outcome = _on_trunk(ctx, key, live_records(ctx.runtime_root, key), head, policy, None)
     if isinstance(outcome, Proceed) and outcome.action in ("none", "trunk_start"):
-        return Proceed(action="closed_out")
+        return Proceed(action="closed_out", base=outcome.base)
     return outcome
 
 
@@ -1093,12 +1179,17 @@ def _discover_on_branch(ctx: Context, key: str, record: dict,
             return _merged_handling(ctx, key, record, None, head.commit)  # the PR-less close-out
         return _write(ctx, key, dict(record, state=BRANCH_BOUND), "pr_not_needed", tip=head.commit)
     record = _ensure_pushed(ctx, key, record, head.commit)
-    item = _work_items(worktree_state(ctx), "the working tree's state").get(work_item_id) or {}
-    body = (f"Milestone `{work_item_id}` (plan: `{item.get('plan_path') or 'unrecorded'}`), driven by "
-            f"workflow-controller. A human merges it with \"Create a merge commit\".\n\n"
-            + PR_MARKER.format(work_item_id=work_item_id) + "\n")
+    if _squash(record):
+        declared = declared_title(ctx, work_item_id)
+        title, body = declared.title or work_item_id, squash_body(work_item_id, declared.plan_path)
+    else:
+        item = _work_items(worktree_state(ctx), "the working tree's state").get(work_item_id) or {}
+        title = work_item_id
+        body = (f"Milestone `{work_item_id}` (plan: `{item.get('plan_path') or 'unrecorded'}`), driven by "
+                f"workflow-controller. A human merges it with \"Create a merge commit\".\n\n"
+                + PR_MARKER.format(work_item_id=work_item_id) + "\n")
     forge = ctx.forge(record["repository"]["forge_repository"])
-    pr = forge.create_draft_pr(branch, trunk, work_item_id, body)
+    pr = forge.create_draft_pr(branch, trunk, title, body)
     problems = _identity_problems(record, pr)
     if problems or pr.state != "OPEN":
         raise _refuse(f"the pull request #{pr.number} just created for {branch} does not verify: "
@@ -1106,6 +1197,151 @@ def _discover_on_branch(ctx: Context, key: str, record: dict,
                       work_item_id=work_item_id, branch=branch, pr=pr.number)
     return _write(ctx, key, dict(record, state=PR_OPEN, pr=dict(_pr_ref(pr), created=True)),
                   "pr_created", pr=pr.number)
+
+
+# -- the pull request title and body in squash mode --------------------------------------
+
+SQUASH_BUTTON = "Squash and merge"
+MERGE_BUTTON = "Create a merge commit"
+
+
+def _squash(record: Mapping[str, Any]) -> bool:
+    """Whether the binding's policy merges milestone pull requests with
+    "Squash and merge". Every other mode is 1.3.0's, byte for byte."""
+    return binding_policy(record).milestone_branches.merge_method == repo_policy.MERGE_METHOD_SQUASH
+
+
+def _merge_button(squash: bool) -> tuple[str, str]:
+    return ((SQUASH_BUTTON, repo_policy.MERGE_METHOD_SQUASH) if squash
+            else (MERGE_BUTTON, repo_policy.MERGE_METHOD_MERGE))
+
+
+@dataclasses.dataclass(frozen=True)
+class DeclaredTitle:
+    """The pull request title a plan declares, read at ``HEAD``:
+    ``plan_path`` from ``HEAD``'s committed state, ``title`` the declared
+    title when there is exactly one valid declaration (else ``None``), and
+    ``problem`` why there is none."""
+
+    plan_path: str | None
+    title: str | None
+    problem: str | None
+
+
+def plan_title(text: str) -> tuple[str | None, str | None]:
+    """``(title, problem)`` for a plan's text: the one line starting with
+    :data:`PLAN_TITLE_PREFIX` must match :data:`PLAN_TITLE_RE` whole. Zero
+    lines, more than one, or a malformed one declare no title. The title's
+    grammar is the caller's to check."""
+    lines = [line for line in text.split("\n") if line.startswith(PLAN_TITLE_PREFIX)]
+    if len(lines) != 1:
+        return None, f"the plan has {len(lines)} `{PLAN_TITLE_PREFIX}` lines, not exactly one"
+    match = PLAN_TITLE_RE.fullmatch(lines[0])
+    if match is None:
+        return None, f"the plan's line {lines[0]!r} is not ``{PLAN_TITLE_PREFIX} `<title>` ``"
+    return match["title"], None
+
+
+def title_problem(ctx: Context, title: str) -> str | None:
+    """Why ``title`` is not a valid pull request title, or ``None``: checked
+    with :func:`conventional_commit.bump` against the ``change_types`` of the
+    policy committed at ``HEAD`` when its trigger is ``conventional_commit``,
+    and against the grammar alone otherwise."""
+    policy = repo_policy.read_committed_policy(ctx.repo_root, "HEAD")
+    try:
+        if policy is not None and policy.release.trigger == repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+            conventional_commit.bump(title, policy.release.change_types)
+        else:
+            conventional_commit.parse(title)
+    except InvalidTitleError as exc:
+        return str(exc)
+    return None
+
+
+def declared_title(ctx: Context, work_item_id: str) -> DeclaredTitle:
+    """The title ``work_item_id``'s plan declares, from ``HEAD``'s commit
+    only: ``plan_path`` from the committed state, the plan text from
+    ``HEAD:<plan_path>``. The working tree is never read, so an uncommitted
+    edit of either changes nothing. A title that is not valid UTF-8 is
+    none: it is never repaired into one the plan does not contain."""
+    item = _work_items(committed_state(ctx, "HEAD"), f"{STATE_REL_PATH} at HEAD").get(work_item_id) or {}
+    plan_path = item.get("plan_path")
+    if not isinstance(plan_path, str) or not plan_path:
+        return DeclaredTitle(None, None, f"{STATE_REL_PATH} at HEAD records no plan_path for {work_item_id}")
+    raw = gitrepo.show(ctx.repo_root, "HEAD", plan_path, runner=ctx.runner)
+    if raw is None:
+        return DeclaredTitle(plan_path, None, f"HEAD has no {plan_path}")
+    title, problem = plan_title(raw.decode("utf-8", "surrogateescape"))
+    if title is not None:
+        try:
+            title.encode("utf-8")
+        except UnicodeEncodeError:
+            return DeclaredTitle(plan_path, None, f"the plan's declared title {title!r} is not valid UTF-8")
+        problem = title_problem(ctx, title)
+        if problem is not None:
+            title = None
+    return DeclaredTitle(plan_path, title, problem)
+
+
+def squash_body(work_item_id: str, plan_path: str | None, *, accepted: str | None = None,
+                branch: str | None = None) -> str:
+    """The squash-mode pull request body, which becomes the squash commit's
+    body. No line parses as a Git trailer (I8). The "Accepted at" line is
+    added at readiness."""
+    lines = [f"Milestone `{work_item_id}`, planned in `{plan_path or 'unrecorded'}`, driven by workflow-controller."]
+    if accepted is not None:
+        lines.append(f"Accepted at {accepted} on `{branch}`; merge with \"{SQUASH_BUTTON}\".")
+    return "\n".join(lines) + "\n\n" + PR_MARKER.format(work_item_id=work_item_id) + "\n"
+
+
+def _edit_pr(ctx: Context, key: str, record: Mapping[str, Any], number: int, *, title: str | None = None,
+             body: str | None = None) -> None:
+    """``gh pr edit``, re-read by the forge. Idempotent: a restart re-reads
+    the pull request and finds nothing left to edit."""
+    ctx.forge(record["repository"]["forge_repository"]).edit_pr(number, title=title, body=body)
+    _event(ctx, key, record, "pr_edited", pr=number, title=title, body=body is not None)
+
+
+def _sync_title(ctx: Context, key: str, record: Mapping[str, Any], pr: forge_mod.PullRequest) -> None:
+    """A ``PR_OPEN`` step in squash mode: set the declared title when the
+    pull request's differs. Without a valid declaration nothing is edited."""
+    declared = declared_title(ctx, record["work_item_id"])
+    if declared.title is not None and pr.title != declared.title:
+        _edit_pr(ctx, key, record, pr.number, title=declared.title)
+
+
+def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: forge_mod.PullRequest,
+                        a: str) -> Gate | None:
+    """Readiness in squash mode, after conditions 4-6 and before 7: the
+    title decision (the declared title wins; without one a valid current
+    title is kept; otherwise ``pr_title_invalid``), then the body with the
+    acceptance commit. An edit ends the step at ``checks_pending``, so
+    ``READY`` is never written on checks sampled before it."""
+    work_item_id, branch, number = record["work_item_id"], record["branch"], pr.number
+    declared = declared_title(ctx, work_item_id)
+    title = None
+    if declared.title is not None:
+        if pr.title != declared.title:
+            title = declared.title
+    else:
+        problem = title_problem(ctx, pr.title)
+        if problem is not None:
+            return Gate(GATE_PR_TITLE_INVALID, work_item_id, branch,
+                        f"pull request #{number}'s title {pr.title!r} is not a valid Conventional Commit ({problem}), "
+                        f"and the plan declares none ({declared.problem}). A squash merge makes the title the trunk "
+                        f"commit's subject. The plan can no longer be amended after acceptance, so set a valid title "
+                        f"on GitHub",
+                        (f"set a valid Conventional Commit title on pull request #{number} on GitHub",),
+                        repo_policy.MERGE_METHOD_SQUASH)
+    body = squash_body(work_item_id, declared.plan_path, accepted=a, branch=branch)
+    if forge_mod.same_text(pr.body, body):
+        body = None
+    if title is None and body is None:
+        return None
+    _edit_pr(ctx, key, record, number, title=title, body=body)
+    return Gate(GATE_CHECKS_PENDING, work_item_id, branch,
+                f"pull request #{number}'s title or body was just updated; its checks re-run",
+                ("re-run the step once the checks finish",), repo_policy.MERGE_METHOD_SQUASH)
 
 
 # -- readiness --------------------------------------------------------------------------
@@ -1136,14 +1372,16 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
                       branch=branch, untrailered=search.untrailered,
                       exits=["accept the milestone with /accept-milestone"])
     a = search.commit
+    squash = _squash(record)
+    button, method = _merge_button(squash)
     if tip != a:
         after = gitrepo.first_parent_log(ctx.repo_root, a, tip, runner=ctx.runner)
         return Gate(GATE_POST_ACCEPTANCE_COMMITS, work_item_id, branch,
                     f"{branch} has commits after the acceptance commit {a}: {', '.join(after)}. A pull request is "
                     f"marked ready only at the accepted head, and the Controller never removes commits. A human "
-                    f"decides: merge anyway on GitHub (mark it ready, \"Create a merge commit\"), after which the "
+                    f"decides: merge anyway on GitHub (mark it ready, \"{button}\"), after which the "
                     f"merged-PR handling converges; otherwise this gate persists",
-                    (f"merge pull request #{number} on GitHub anyway with \"Create a merge commit\"",))
+                    (f"merge pull request #{number} on GitHub anyway with \"{button}\"",), method)
     # 4. and 5. pushed, and the pull request shows exactly A.
     observation = record["last_observation"]
     pr = _verified_pr(ctx, record, number)
@@ -1160,8 +1398,14 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
                     f"{remote}/{trunk} has moved {behind} commit(s) past {branch}'s base. Workflow 2.5.1 and 2.6.0 "
                     f"have no transition that moves a work item's base, so the Controller does not integrate. "
                     f"The manual procedure: on GitHub, mark pull request #{number} ready and merge it with "
-                    f"\"Create a merge commit\"",
-                    (f"mark pull request #{number} ready and merge it on GitHub with \"Create a merge commit\"",))
+                    f"\"{button}\"",
+                    (f"mark pull request #{number} ready and merge it on GitHub with \"{button}\"",), method)
+    # Squash mode: the title decision and the body sync, before condition 7,
+    # whose failing `PR title` check only this sync can fix. An edit ends the step.
+    if squash:
+        gate = _sync_for_readiness(ctx, key, record, pr, a)
+        if gate is not None:
+            return gate
     # 7. green checks, when the binding's policy requires them.
     if binding_policy(record).milestone_branches.ready_requires_green_checks:
         gate = _checks_gate(ctx, record, number)
@@ -1372,7 +1616,7 @@ def _reconcile_from_trunk(ctx: Context, key: str, record: dict, head: gitrepo.He
     (``None``), a gate, or a refusal naming the record's exits. Never
     switches (I4); never creates a pull request."""
     state = record["state"]
-    if state in (PR_OPEN, READY, MERGED, PR_CLOSED_UNMERGED):
+    if state in (PR_OPEN, READY, *CLOSE_OUT_STATES, PR_CLOSED_UNMERGED):
         return _close_out_from_trunk(ctx, key, record, head)
     if state == BRANCH_BOUND:
         h = _branch_tip_for_trunk_side(ctx, record)
@@ -1397,7 +1641,7 @@ def _prless_applies(ctx: Context, record: Mapping[str, Any], h: str) -> bool:
 def _trunk_merged(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | None:
     """The trunk side of a merged-PR handling outcome: refuse on
     ``MERGED_BEFORE_ACCEPTANCE``, gate once on ``MERGED_REWRITTEN``, and
-    run close-out-from-trunk step 3 on ``MERGED``."""
+    run close-out-from-trunk step 3 on ``MERGED`` and ``MERGED_SQUASHED``."""
     if record["state"] == MERGED_BEFORE_ACCEPTANCE:
         raise _trunk_block(ctx, record, head)
     if record["state"] == MERGED_REWRITTEN:
@@ -1407,11 +1651,11 @@ def _trunk_merged(ctx: Context, key: str, record: dict, head: gitrepo.HeadState)
 
 def _close_out_from_trunk(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | None:
     """Close-out from trunk, steps 0 to 3, for a ``PR_OPEN``, ``READY``,
-    ``MERGED`` or ``PR_CLOSED_UNMERGED`` record."""
+    ``MERGED``, ``MERGED_SQUASHED`` or ``PR_CLOSED_UNMERGED`` record."""
     work_item_id, branch = record["work_item_id"], record["branch"]
     # 0. the bound branch is not checked out in another worktree.
     _require_not_checked_out_elsewhere(ctx, record)
-    if record["state"] == MERGED:
+    if record["state"] in CLOSE_OUT_STATES:
         return _close_trunk_step3(ctx, key, record)
     # 1. the pull request must show merged.
     pr = _verified_pr(ctx, record, record["pr"]["number"])
@@ -1433,8 +1677,9 @@ def _close_out_from_trunk(ctx: Context, key: str, record: dict, head: gitrepo.He
 
 def _close_trunk_step3(ctx: Context, key: str, record: dict) -> Gate | None:
     """Close-out from trunk step 3: the local bound branch, if any, holds
-    nothing beyond ``merged_head``, and ``merged_head`` is on
-    ``<remote>/<trunk>``; then ``CLOSED``. Local trunk is not
+    nothing beyond ``merged_head``, and ``merged_head`` (from
+    ``MERGED_SQUASHED``, the squash commit) is on ``<remote>/<trunk>``; then
+    ``CLOSED``. Local trunk is not
     fast-forwarded here: the trunk start that follows gates a behind
     trunk."""
     work_item_id, branch, h = record["work_item_id"], record["branch"], record["merged_head"]
@@ -1443,7 +1688,12 @@ def _close_trunk_step3(ctx: Context, key: str, record: dict) -> Gate | None:
     if local is not None and not _ancestor(ctx, local, h):
         return _unmerged_commits_gate(ctx, record, local, from_trunk=True)
     remote_trunk = _remote_trunk(ctx, remote, trunk)
-    if not _ancestor(ctx, h, remote_trunk):
+    if record["state"] == MERGED_SQUASHED:
+        m = record["merge_commit"]
+        if not _ancestor(ctx, m, remote_trunk):
+            raise _refuse(f"the squash commit {m} of {branch} is not on {remote}/{trunk}", work_item_id=work_item_id,
+                          branch=branch, exits=[f"fetch {remote}/{trunk} once the merge is visible"])
+    elif not _ancestor(ctx, h, remote_trunk):
         raise _refuse(f"the merged head {h} of {branch} is not on {remote}/{trunk}", work_item_id=work_item_id,
                       branch=branch, exits=[f"fetch {remote}/{trunk} once the merge is visible"])
     _write(ctx, key, dict(record, state=CLOSED), "closed", side="trunk")
@@ -1578,7 +1828,7 @@ def _trunk_start(ctx: Context, policy: repo_policy.RepositoryPolicy, head: gitre
                       branch=trunk, exits=["commit, stash or discard them"], tracked_changes=changes)
     remote_tip = _remote_trunk(ctx, remote, trunk)
     if remote_tip == head.commit:
-        return Proceed(action="trunk_start")
+        return Proceed(action="trunk_start", base=head.commit)
     if _ancestor(ctx, head.commit, remote_tip):
         behind = gitrepo.ahead_behind(ctx.repo_root, head.commit, remote_tip, runner=ctx.runner)[1]
         return Gate(GATE_FAST_FORWARD_TRUNK, None, trunk,
@@ -1936,7 +2186,7 @@ def binding_lines(runtime_root: Path) -> list[str]:
 
 def _prediction(action: str, detail: str, *, record: Mapping[str, Any] | None = None,
                 work_item_id: str | None = None, branch: str | None = None, gate: str | None = None,
-                network: bool = False) -> dict:
+                network: bool = False, base: str | None = None) -> dict:
     as_of = ((record or {}).get("last_observation") or {}).get("observed_at")
     if network:
         detail = f"{detail} (as of {as_of or 'no observation yet'})"
@@ -1948,6 +2198,7 @@ def _prediction(action: str, detail: str, *, record: Mapping[str, Any] | None = 
         "gate": gate,
         "detail": detail,
         "as_of": as_of if network else None,
+        "base": base,
     }
 
 
@@ -2018,6 +2269,9 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
     if state == MERGED:
         return _prediction("close_out", f"the merged binding closes out and HEAD switches to {record['trunk']}",
                            record=record)
+    if state == MERGED_SQUASHED:
+        return _prediction("close_out", f"the squash-merged binding closes out and HEAD switches to "
+                                        f"{record['trunk']}", record=record)
     if state == READY:
         return _prediction("gate", "the pull request is ready; a human merges it", record=record,
                            gate=GATE_MERGE_PULL_REQUEST, network=True)
@@ -2056,6 +2310,8 @@ def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.H
                                gate=GATE_MERGE_METHOD_REWROTE_HISTORY)
         if state == MERGED:
             return _prediction("close_out", "the merged binding closes out from the trunk", record=record)
+        if state == MERGED_SQUASHED:
+            return _prediction("close_out", "the squash-merged binding closes out from the trunk", record=record)
         if state not in TERMINAL_STATES:
             return _prediction("refuse", f"{record['work_item_id']} is bound to {record['branch']} (binding "
                                          f"state {state}), so the trunk cannot start a milestone, unless its "
@@ -2084,7 +2340,8 @@ def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.H
         return _prediction("proceed", f"the trunk start compares {trunk} with {remote}/{trunk} ({fetched})",
                            branch=trunk)
     if remote_tip == head.commit:
-        return _prediction("proceed", f"{trunk} equals {remote}/{trunk} ({fetched})", branch=trunk)
+        return _prediction("proceed", f"{trunk} equals {remote}/{trunk} ({fetched})", branch=trunk,
+                           base=head.commit)
     if _ancestor(ctx, head.commit, remote_tip):
         return _prediction("gate", f"{trunk} is behind {remote}/{trunk} ({fetched})", branch=trunk,
                            gate=GATE_FAST_FORWARD_TRUNK)

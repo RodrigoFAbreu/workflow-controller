@@ -319,11 +319,64 @@ class UndecidableTest(_Case):
             forge.GhForge(FAKE_GH_REPOSITORY, full).list_prs("b")
 
 
+class EditTest(_Case):
+    def test_view_reads_the_title_and_body(self) -> None:
+        self.push_branch_with_commit()
+        pr = self.forge.create_draft_pr("milestone/wi-1", "main", "feat: a title", "the body\n")
+        self.assertEqual((pr.title, pr.body), ("feat: a title", "the body\n"))
+        self.assertIn("title,body", forge.PR_FIELDS)
+
+    def test_edit_runs_the_exact_argv_and_re_reads(self) -> None:
+        self.push_branch_with_commit()
+        pr = self.forge.create_draft_pr("milestone/wi-1", "main", "t", "b")
+        self.calls.clear()
+        edited = self.forge.edit_pr(pr.number, title="fix: new", body="new body\n")
+        self.assertEqual(self.calls[0], ["gh", "pr", "edit", str(pr.number), "--title", "fix: new", "--body",
+                                         "new body\n", "--repo", FAKE_GH_REPOSITORY])
+        self.assertEqual(self.calls[1][:3], ["gh", "pr", "view"])
+        self.assertEqual((edited.title, edited.body), ("fix: new", "new body\n"))
+        self.calls.clear()
+        self.assertEqual(self.forge.edit_pr(pr.number, title="docs: only the title").body, "new body\n")
+        self.assertEqual(self.calls[0], ["gh", "pr", "edit", str(pr.number), "--title", "docs: only the title",
+                                         "--repo", FAKE_GH_REPOSITORY])
+        with self.assertRaises(ValueError):
+            self.forge.edit_pr(pr.number)
+
+    def test_edit_refuses_when_the_re_read_disagrees(self) -> None:
+        self.push_branch_with_commit()
+        pr = self.forge.create_draft_pr("milestone/wi-1", "main", "t", "b")
+        real = gitrepo.subprocess_runner(self.env)
+
+        def ignores_edits(argv):
+            if argv[1:3] == ["pr", "edit"]:
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+            return real(argv)
+
+        stale = forge.GhForge(FAKE_GH_REPOSITORY, ignores_edits)
+        for kwargs in ({"title": "fix: x"}, {"body": "other"}):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ForgeError) as caught:
+                    stale.edit_pr(pr.number, **kwargs)
+                self.assertNotIsInstance(caught.exception, ForgeUndecidableError)
+
+    def test_a_body_differing_only_in_line_ends_is_the_same(self) -> None:
+        self.assertTrue(forge.same_text("a\r\nb\r\n", "a\nb\n"))
+        self.assertTrue(forge.same_text("a\nb", "a\nb\n"))
+        self.assertFalse(forge.same_text("a\nb", "a\nc"))
+
+    def test_a_closed_pr_cannot_be_edited(self) -> None:
+        self.seed_pr(4, state="CLOSED")
+        with self.assertRaises(ForgeUndecidableError):
+            self.forge.edit_pr(4, title="fix: x")
+
+
 class NoMergeOperationTest(unittest.TestCase):
-    def test_the_forge_has_no_merge_close_delete_edit_or_comment_operation(self) -> None:
+    def test_the_forge_has_no_merge_close_delete_or_comment_operation(self) -> None:
         names = {name.lower() for name in dir(forge.GhForge) if not name.startswith("_")}
-        for forbidden in ("merge", "close", "delete", "comment", "edit", "api"):
+        for forbidden in ("merge", "close", "delete", "comment", "api"):
             self.assertFalse([n for n in names if forbidden in n], forbidden)
+        # The one edit: a pull request's title and body (squash-merge-tag-versioning CP5).
+        self.assertEqual([n for n in names if "edit" in n], ["edit_pr"])
 
 
 if __name__ == "__main__":

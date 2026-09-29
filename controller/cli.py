@@ -718,23 +718,24 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         print(f"lifecycle lock: {lock_state}")
     snapshot = target_state.read(target)
     work_item = target_state.select_work_item(snapshot, work_item_id=args.work_item)
+    # CP8 (trunk-branch-pr-release-orchestration): the preflight outcome the
+    # next step would take, from local Git and the records only (no fetch,
+    # no `gh`); `None`, and the key omitted, when no policy or binding
+    # applies (I1, I10). Its predicted trunk-start base is the bootstrap's
+    # base, as `step` passes the passed trunk start's (squash-merge Design F).
+    preflight = milestone_branch.predict(_branch_context(target, runtime_root), requested_work_item_id=args.work_item)
+    preflight_block = {} if preflight is None else {"repository_preflight": preflight}
     # The same job-history read `job.execute_step` makes (automatic-
     # lifecycle-orchestration CP4B), so `explain` and `step` see the same
     # apply relaunch bound. It never raises on a job file and writes nothing.
     decision = (
-        decide_no_work_item(target)
+        decide_no_work_item(target, base=None if preflight is None else preflight["base"])
         if work_item is target_state.NoWorkItemYet
         else evidence.decide(
             target, snapshot, work_item,
             last_apply_job=job.last_launched_apply_job_view(runtime_root, target.root, work_item.work_item_id),
         )
     )
-    # CP8 (trunk-branch-pr-release-orchestration): the preflight outcome the
-    # next step would take, from local Git and the records only (no fetch,
-    # no `gh`); `None`, and the key omitted, when no policy or binding
-    # applies (I1, I10).
-    preflight = milestone_branch.predict(_branch_context(target, runtime_root), requested_work_item_id=args.work_item)
-    preflight_block = {} if preflight is None else {"repository_preflight": preflight}
 
     if args.json:
         gate = decision.gate

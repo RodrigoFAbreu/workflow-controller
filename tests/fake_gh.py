@@ -20,6 +20,8 @@ decisions depend on:
 - ``pr checks`` reproduces ``gh``'s exit codes: 8 with JSON when a check is
   pending, 1 with JSON when one failed, and 1 with the "no checks reported"
   message and no JSON when the PR has none (``"checks": null``);
+- ``pr edit`` sets the stored ``title``/``body``; a closed or merged PR
+  cannot be edited;
 - ``release create --verify-tag`` fails when the origin lacks the tag, and
   ``release upload``/``release download`` never overwrite.
 
@@ -54,7 +56,7 @@ import sys
 from pathlib import Path
 
 PR_JSON_FIELDS = ("number", "state", "isDraft", "headRefName", "headRefOid", "baseRefName",
-                  "isCrossRepository", "url", "mergedAt", "mergeCommit")
+                  "isCrossRepository", "url", "mergedAt", "mergeCommit", "title", "body")
 #: ``gh pr checks``'s exit code for "some checks are still pending".
 GH_EXIT_PENDING = 8
 
@@ -251,6 +253,17 @@ def _run(argv: list[str], state: dict) -> tuple[str, bool]:
             raise _Exit(1, f"Pull request #{pr['number']} is closed. Only draft pull requests can be marked as \"ready for review\"\n")
         pr["isDraft"] = False
         return "", True
+
+    if (group, sub) == ("pr", "edit"):
+        pr = _find_pr(state, positional[0])
+        if "title" not in opts and "body" not in opts:
+            raise _Exit(1, "fake gh: pr edit needs --title or --body\n")
+        if pr["state"] != "OPEN":
+            raise _Exit(1, f"Pull request #{pr['number']} is {pr['state'].lower()}\n")
+        for field in ("title", "body"):
+            if field in opts:
+                pr[field] = opts[field]
+        return pr["url"] + "\n", True
 
     if (group, sub) == ("pr", "checks"):
         pr = _find_pr(state, positional[0])

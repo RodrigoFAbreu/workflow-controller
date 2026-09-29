@@ -7,9 +7,11 @@ call names the policy's repository explicitly (``--repo OWNER/NAME``; ``gh
 repo view``, which has no ``--repo`` flag, takes it positionally), so a
 checkout with several remotes can never resolve to an upstream or a fork.
 
-There is deliberately **no** merge, close, delete, edit-body or comment
-operation, and no ``gh api`` (I3; ``tests/test_no_rewrite_invariants``
-scans for the spellings). A human merges every pull request.
+There is deliberately **no** merge, close, delete or comment operation, and
+no ``gh api`` (I3; ``tests/test_no_rewrite_invariants`` scans for the
+spellings). A human merges every pull request. The one pull request edit,
+:meth:`GhForge.edit_pr`, sets the title and body a squash merge carries to
+the trunk (``workflow-controller-squash-merge-tag-versioning`` CP5).
 
 Every read whose result cannot be classified -- a non-zero exit that is not
 one of ``gh``'s documented outcomes, authentication or network failure, a
@@ -33,7 +35,7 @@ from .errors import ForgeError, ForgeUndecidableError
 from .gitrepo import Runner, subprocess_runner
 
 PR_FIELDS = ("number,state,isDraft,headRefName,headRefOid,baseRefName,isCrossRepository,url,"
-             "mergedAt,mergeCommit")
+             "mergedAt,mergeCommit,title,body")
 RELEASE_FIELDS = "tagName,isDraft,assets,url"
 CHECK_FIELDS = "name,state,bucket"
 
@@ -71,6 +73,14 @@ class PullRequest:
     url: str
     merged_at: str | None
     merge_commit: str | None
+    title: str = ""
+    body: str = ""
+
+
+def same_text(a: str, b: str) -> bool:
+    """Whether two pull request texts are the same once GitHub's own
+    normalisations are undone: CRLF line ends, and trailing newlines."""
+    return re.sub("\r\n", "\n", a).rstrip("\n") == re.sub("\r\n", "\n", b).rstrip("\n")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -111,6 +121,7 @@ class Forge(Protocol):
     def view_pr(self, number: int) -> PullRequest: ...
     def create_draft_pr(self, head: str, base: str, title: str, body: str) -> PullRequest: ...
     def mark_ready(self, number: int) -> None: ...
+    def edit_pr(self, number: int, *, title: str | None = None, body: str | None = None) -> PullRequest: ...
     def pr_checks(self, number: int) -> Checks: ...
     def view_release(self, tag: str) -> Release | None: ...
     def create_release(self, tag: str, files: Sequence[Path], title: str, notes: str) -> None: ...
@@ -202,6 +213,8 @@ class GhForge:
             url=_field(obj, "url", str, argv),
             merged_at=_field(obj, "mergedAt", str, argv, nullable=True) or None,
             merge_commit=merge_oid,
+            title=_field(obj, "title", str, argv),
+            body=_field(obj, "body", str, argv),
         )
 
     # -- repository --------------------------------------------------------
@@ -262,6 +275,25 @@ class GhForge:
 
     def mark_ready(self, number: int) -> None:
         self._ok(["pr", "ready", str(number)])
+
+    def edit_pr(self, number: int, *, title: str | None = None, body: str | None = None) -> PullRequest:
+        """Set pull request ``number``'s title and/or body (``gh pr edit``),
+        then re-read it with :meth:`view_pr` and refuse unless the re-read
+        shows the new values. Returns the re-read pull request."""
+        if title is None and body is None:
+            raise ValueError("edit_pr needs a title or a body")
+        args = ["pr", "edit", str(number)]
+        if title is not None:
+            args += ["--title", title]
+        if body is not None:
+            args += ["--body", body]
+        argv, _ = self._ok(args)
+        pr = self.view_pr(number)
+        if (title is not None and pr.title != title) or (body is not None and not same_text(pr.body, body)):
+            raise ForgeError(f"gh pr edit {number} did not take: the re-read pull request shows other values",
+                             evidence={"argv": argv, "title": pr.title, "body": pr.body,
+                                       "expected_title": title, "expected_body": body})
+        return pr
 
     def pr_checks(self, number: int) -> Checks:
         """The PR's checks. ``gh`` reports normal outcomes through its exit

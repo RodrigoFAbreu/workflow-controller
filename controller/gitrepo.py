@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import re
 import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -184,6 +185,30 @@ def first_parent_log(repo_root: Path, a: str, b: str, *, runner: Runner | None =
     return out.split()
 
 
+def first_parent_subjects(repo_root: Path, base: str | None, commit: str, *,
+                          runner: Runner | None = None) -> list[tuple[str, str]]:
+    """``(commit, subject)`` for each commit of ``base..commit`` along
+    ``commit``'s first-parent chain -- all of that chain when ``base`` is
+    ``None`` -- oldest first. The subject is Git's own (``%s``: the message's
+    first paragraph, its lines joined by spaces)."""
+    revs = [commit] if base is None else [f"{base}..{commit}"]
+    out = _git(repo_root, ["rev-list", "--first-parent", "--reverse", "--format=%H%x00%s",
+                           "--end-of-options", *revs], runner)
+    lines = out.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) % 2:
+        raise GitOperationError(f"git rev-list returned an odd listing: {out!r}", evidence={"stdout": out})
+    pairs = []
+    for header, record in zip(lines[::2], lines[1::2]):
+        sha, sep, subject = record.partition("\0")
+        if header != f"commit {sha}" or not sep or len(sha) not in (40, 64):
+            raise GitOperationError(f"git rev-list returned an unexpected record: {header!r} {record!r}",
+                                    evidence={"stdout": out})
+        pairs.append((sha, subject))
+    return pairs
+
+
 def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
     """``git status --porcelain --untracked-files=no`` entries, one per
     changed tracked path; empty for a clean tracked tree."""
@@ -199,6 +224,72 @@ def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[st
         if entry[:1] in ("R", "C") or entry[1:2] in ("R", "C"):
             i += 1  # a rename/copy's source path follows as its own field
     return entries
+
+
+def commit_parents(repo_root: Path, commit: str, *, runner: Runner | None = None) -> list[str]:
+    """``commit``'s parents, in order."""
+    out = _git(repo_root, ["rev-list", "--parents", "-n", "1", "--end-of-options", commit], runner)
+    fields = _single_line(out, "git rev-list --parents").split()
+    return fields[1:]
+
+
+def tree_of(repo_root: Path, commit: str, *, runner: Runner | None = None) -> str:
+    """The tree object of ``commit``."""
+    out = _git(repo_root, ["rev-parse", "--verify", "--end-of-options", f"{commit}^{{tree}}"], runner)
+    return _single_line(out, "git rev-parse ^{tree}")
+
+
+def commit_subject(repo_root: Path, commit: str, *, runner: Runner | None = None) -> str:
+    """Git's subject of ``commit`` (``%s``)."""
+    out = _git(repo_root, ["show", "-s", "--format=%s", "--end-of-options", commit], runner)
+    return out[:-1] if out.endswith("\n") else out
+
+
+def commit_identity(repo_root: Path, commit: str, *, runner: Runner | None = None) -> str:
+    """``commit``'s author name, author email, raw author date and full
+    message, in one string: equal for two commits exactly when all four
+    are."""
+    return _git(repo_root, ["show", "-s", "--date=raw", "--format=%an%x00%ae%x00%ad%x00%B",
+                            "--end-of-options", commit], runner)
+
+
+_GIT_VERSION_RE = re.compile(r"^git version (?P<major>[0-9]+)\.(?P<minor>[0-9]+)(?:\.(?P<patch>[0-9]+))?")
+
+
+def git_version(repo_root: Path, *, runner: Runner | None = None) -> tuple[int, int, int]:
+    """The running Git's ``(major, minor, patch)``; unparsable output
+    refuses."""
+    out = _git(repo_root, ["version"], runner)
+    match = _GIT_VERSION_RE.match(out)
+    if match is None:
+        raise GitOperationError(f"git version returned {out!r}", evidence={"stdout": out})
+    return int(match["major"]), int(match["minor"]), int(match["patch"] or 0)
+
+
+def merge_drivers(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
+    """Every configured ``merge.<name>.driver`` key, from every scope."""
+    out = _probe(repo_root, ["config", "--get-regexp", r"^merge\..*\.driver$"], runner)
+    return [] if out is None else [line.split(" ", 1)[0] for line in out.splitlines() if line]
+
+
+def merge_tree(repo_root: Path, a: str, b: str, *, runner: Runner | None = None) -> str | None:
+    """``git merge-tree --write-tree a b``: the merged tree, or ``None`` on a
+    conflict (exit 1). It writes only unreferenced objects, never a ref, the
+    index or the working tree. Any other exit, or unparsable output,
+    refuses."""
+    argv, result = _run(repo_root, ["merge-tree", "--write-tree", "--no-messages", "--end-of-options", a, b], runner)
+    out, stderr = _text(result.stdout), _text(result.stderr)
+    lines = out.splitlines()
+    tree = lines[0] if lines else ""
+    shaped = bool(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", tree)) and not stderr.strip()
+    # A conflict is exit 1 *with* the merged tree and the conflicted paths;
+    # an unmergeable argument is exit 1 too, with only a message.
+    if result.returncode == 1 and shaped and len(lines) > 1:
+        return None
+    if result.returncode != 0 or not shaped or len(lines) != 1:
+        raise _failure(f"git merge-tree failed (exit {result.returncode}): {stderr.strip() or out.strip()!r}",
+                       argv, result, stdout=out)
+    return tree
 
 
 def common_dir(repo_root: Path, *, runner: Runner | None = None) -> Path:

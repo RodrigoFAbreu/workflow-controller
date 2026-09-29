@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-squash-merge-tag-versioning",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Conventional Commit titles and the policy schema: controller/conventional_commit.py (SignalHub's grammar, the (#N) suffix accepted, unknown types and a breaking change on a none type refused, bump from the policy's change_types), repo_policy admitting trigger conventional_commit with required change_types, optional bump_overrides and no version_source, the optional pull_request.merge_method with the squash cross-field rule, every 1.3.0 policy still admitted with the same meaning, tools/release.py check-title reading the committed policy, the post-cutover policy block of the plan validated and the reference test accepting exactly the pre- or post-cutover content",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Tag-derived Controller version: controller/version.py static-else-tag derivation (highest reachable v-semver tag, 0.0.0 without one), setup.py supplying a dynamic version from the release tag or the local derivation, source runtime and pinned-snapshot versions derived from the origin checkout's tags, handoff's committed version, tools/release.py version and verify-wheel expectations, and fixtures and version tests valid both before and after the cutover, with a scratch-clone proof that a dynamic pyproject builds a local wheel at the tag version and a release wheel at the injected tag",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Release classification from commit types: release_txn computing the version at C from the highest ancestor tag and the first-parent range's Conventional Commit bumps (legacy-policy commits contribute none, bump_overrides from C's policy settling only unclassifiable commits and refusing an override of a classifiable or legacy one, INVALID_SUBJECT failing closed, the unsettled base tag resumed first), every existing row unchanged for both triggers, build and verify taking the classified version from RELEASE_VERSION with their 1.3.0 command lines unchanged, so a RESUME at a target carrying 1.3.0's tooling still builds, read-only gitrepo range helpers, and toy-history and end-to-end release-history tests including the cutover history",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "CI workflows: tools/ci_workflows.py model gaining pr-title.yml (PR title job on opened, edited, reopened and synchronize, read-only, pinned actions, title passed through env to check-title), main.yml's build job passing release-plan's version as RELEASE_VERSION with build and verify run lines byte-identical to 1.3.0's and the release smoke test comparing with it, validate's local smoke test on the local build version, rendered YAML committed and test_ci_workflows updated",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Pull request title and body in squash mode: forge reading title and body and editing them (gh pr edit, re-read verified), fake_gh support, the plan's declared title read at HEAD and validated against the committed change_types, creation with the declared title, readiness title and body sync with the new pr_title_invalid gate, a trailer-free squash body, mode-dependent gate texts, and merge mode byte-identical to 1.3.0",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Squash close-out and the explicit base: the MERGED_SQUASHED state and transitions, verified-squash detection in squash mode only, merge mode byte-identical to 1.3.0 (merge commit on the trunk, one parent, the title with its (#N) suffix as subject, tree equal to the head or to merge-tree on the integration path, not a rewrite of the head), close-out from the branch and from the trunk, status, inspect and explain naming it, and the bootstrap naming /milestone-plan with the trunk tip when milestone branches are enabled, with the no-policy golden byte-unchanged and an end-to-end squash lifecycle through the next trunk start",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Documentation, ADR 0007, cutover rehearsal and full verification (terminal): the guides, README, CLAUDE.md, docs/README.md, ROADMAP 1.5 note and docs/releases/1.4.0.md, ADR 0007 with the ADR 0003 pointer, a scratch-clone rehearsal of the milestone merge (NO_CHANGE), of the cutover pull request (tests passing in the post-cutover state, RELEASE_DUE 1.4.0 over the real tag topology, a release build and verify-wheel at v1.4.0) and of a RESUME of an interrupted v1.3.0 publication built with v1.3.0's own tooling, and the full sharded, packaged-runtime, CI-workflow and golden verification",
+      "depends_on": [
+        "CP4",
+        "CP6"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

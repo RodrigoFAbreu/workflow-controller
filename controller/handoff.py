@@ -116,12 +116,14 @@ def _read_approved_generation(source_root: Path) -> tuple[int, str]:
 
 def _read_committed_version(source_root: Path) -> str | None:
     """The static ``[project].version`` ``HEAD:pyproject.toml`` declares,
-    or ``None``. Reported in the handoff record only -- never a refusal."""
+    else the version the tags reachable from ``HEAD`` derive, or ``None``.
+    Reported in the handoff record only -- never a refusal."""
     result = _run_git(["show", f"HEAD:{_VERSION_REL_PATH}"], cwd=source_root)
     if result.returncode != 0:
         return None
     try:
-        return version.parse_pyproject_version(result.stdout, where=f"HEAD:{_VERSION_REL_PATH}")
+        static = version.parse_static_version(result.stdout, where=f"HEAD:{_VERSION_REL_PATH}")
+        return static if static is not None else version.tag_version(source_root, "HEAD")
     except ValueError:
         return None
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-squash-merge-tag-versioning",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -4075,6 +4075,97 @@
           "verdict": "APPROVE",
           "round": 7,
           "completed_at": "2026-09-28T17:38:00Z"
+        }
+      }
+    },
+    "workflow-controller-squash-merge-tag-versioning": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-squash-merge-tag-versioning",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-squash-merge-tag-versioning-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-squash-merge-tag-versioning-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "455cef0632a35744060288e71504bf93f1f06830",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+        "approved_review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef0b0b78ed0be0020ffb8830a5f759070c569a19"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-squash-merge-tag-versioning-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ed25c335b5e4b4af192a0bb445bc58c859045bfa"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-squash-merge-tag-versioning-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ea76114338a445949167ae08de11af63af2c93a9"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "plan workflow-controller-squash-merge-tag-versioning",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-29T08:13:02Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-29T01:27:32Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-29T01:31:54Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 13,
+      "last_transition": "2026-09-29T08:13:02Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-09-29T01:23:42Z",
+        "consumed": {
+          "review_content_id": "20c14b9c883e8ba4c8106c3e1686fd6b85a5ca287c5b635a66e7dfa56859aa7e",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "f021282c9e02fd4041f441ce526a85268b58aaee11f64af6ce5abcb2a3ed3383",
+          "bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
+          "plan_revision": 3
         }
       }
     }

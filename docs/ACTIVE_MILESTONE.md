@@ -2,7 +2,8 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-child-process-reaping` (`docs/ROADMAP.md` step C1b,
+**Functional review.** Implementation revision 2 has technical approval (`987017d`); the checklist is
+below. `workflow-controller-child-process-reaping` (`docs/ROADMAP.md` step C1b,
 section 11.1.1 "Reaping every child process"). The plan is
 `docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md`, revision 8, approved at `e074e3b`
 (`EXTERNAL_APPROVE`). The base commit is `6a24f64`. Governing workflow version `2.2`, lifecycle
@@ -238,3 +239,100 @@ milestone carries:
 > then drop the `--max-steps 1` stopgap from both lanes' scripts. The stopgap keeps working with
 > 1.4.1 until then.
 
+## Functional review checklist
+
+Round 1, implementation revision 2 (technical approval `987017d`, reviewed head `be4b9f2`). The
+expected results below were measured on 2026-09-30 against `987017d`.
+
+### Setup
+
+- A scratch directory outside the repository, here `$S` (for example `/tmp/c1b-fr`). Nothing in
+  these flows writes to the repository, its remote, GitHub or the installed Controller (1.4.0).
+- In every shell: `export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=maintenance.auto GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=gc.auto GIT_CONFIG_VALUE_1=0`,
+  except where flow C says to clear it.
+- A scratch bare origin with the real tags, `origin/main` (`6a24f64`) and the milestone branch:
+  ```bash
+  R=/home/rodrigo/Workspace/workflow-controller; S=/tmp/c1b-fr; mkdir -p "$S"
+  git init -q --bare "$S/origin.git"
+  git --git-dir="$S/origin.git" fetch -q --no-tags "$R" "+refs/remotes/origin/main:refs/heads/main" \
+    "+refs/tags/v*:refs/tags/v*" \
+    "+refs/heads/milestone/workflow-controller-child-process-reaping:refs/heads/milestone/workflow-controller-child-process-reaping"
+  ```
+- A local build of the milestone head in a throwaway virtual environment:
+  `git clone -q "$S/origin.git" "$S/src" && git -C "$S/src" checkout -q --detach origin/milestone/workflow-controller-child-process-reaping && python3 -m venv "$S/venv" && "$S/venv/bin/pip" -q install "$S/src"`.
+- Test runs from this session need a reaping subreaper wrapper around them, because a
+  Controller-launched worker's orphans otherwise stay zombies under it. Unset `FORCE_COLOR`, and
+  never set `PYTHONPATH=.`.
+
+### Flows
+
+**A. The local build's version.** Run `"$S/venv/bin/workflow-controller" --version`. Expected:
+`workflow-controller 1.4.0` and `runtime: package (local build from 987017da9acc)`. The highest
+reachable release tag is `v1.4.0`.
+
+**B. Nothing else changed.** In the repository, run `inspect .` and `explain .` with the installed
+1.4.0 and with `"$S/venv/bin/workflow-controller"`. Expected: all exit 0, and the outputs are
+byte-identical. `git diff 6a24f64 -- .workflow-controller/ pyproject.toml setup.py .github/`
+is empty.
+
+**C. The leak is gone (the per-state regressions).** Run
+`python3 -m unittest tests.test_worker.ChildReapingTest` at the head, under the reaping wrapper.
+Expected: 3 tests OK (`RUNNING`, `WAITING`, `DRAINING`). Each launches a real supervised worker (the
+fake `claude`) that orphans a burst of short-lived processes in that state, and samples the zombies
+held by the supervising process. None may exceed 30 for more than 5 samples. CP2 recorded a peak
+of 10 or 11 at the head, against a peak of about 150 (118 samples above 30) for `RUNNING` and
+`WAITING` at `6a24f64`.
+
+**D. The safety tests.** Run `tests.test_worker.ReapingSweepTest ReapingPredicateTest
+ForeignBornTest IdleReaperTest ReapingResetTest ReapingLaunchTest FollowerStartsNoProcessTest`,
+`tests.test_cli.ChildReapingCliTest`, `tests.test_fixtures_git_hygiene` and
+`tests.test_fake_claude_contract`, together with C. Expected: `Ran 119 tests`, `OK`, about 46 s.
+They cover:
+- waited-for statuses kept (`Popen` children, `exclude_from_reaping`);
+- the worker and the anchor never collected;
+- overlapping launches, including the reused-pid exclusion from the external review;
+- the same-session grandchild;
+- the between-launch reaper and the paused step boundary;
+- `run`/`step` reaping after a step and on an exception;
+- the git-hygiene guard.
+
+**E. Fewer orphans from the test suite.** Run this repository's unittest selection
+(`python3 tools/run_tests.py --select tests`, or the `tests` part of the plan) under a counting
+subreaper wrapper. The wrapper marks itself `PR_SET_CHILD_SUBREAPER`, reaps each orphan
+re-parented to it by pid, and counts them, with `GIT_CONFIG_*` cleared. Run it at the head and at
+`6a24f64` (a clone checked out there). Expected: thousands at `6a24f64` (CP3 measured 7,082, of
+which 7,005 were Git), and a few dozen at the head (CP3 measured 87, 1 Git, 0 `git maintenance`).
+The vendored Workflow conformance suites still orphan Git processes. That code is not this
+milestone's to change (it is out of scope), and 1.4.1 collects those orphans every tick.
+
+**F. It releases 1.4.1.** In a clone of `$S/origin.git`, with the repository's `tests/fake_gh.py`
+as `gh` (the releases `v1.1.1`, `v1.2.0`, `v1.2.1`, `v1.3.0` and `v1.4.0` published; the env vars
+as in the C1 checklist), build the squash commit
+`Q=$(git commit-tree "<milestone head>^{tree}" -p origin/main -m "fix: reap every finished child process the Controller holds as a subreaper (#11)")`,
+advance `main` to it, check it out, and run:
+- `python3 tools/release.py check-title "<that subject>"`. Expected: `ok: fix → patch`.
+- `python3 tools/release.py version`. Expected: `1.4.0`.
+- `python3 tools/release.py classify --commit "$Q"`. Expected:
+  `ok: RELEASE_DUE: 1.4.1 has no tag and no release`, `version=1.4.1`, `tag=v1.4.1`, exit 0.
+
+**G. PR #11.** Run `gh pr checks 11`. Expected: every check passes, including `PR title` (the
+title is the plan's `fix: …`), `validate / tests-result` and `workflow-conformance`.
+
+**H. Documentation.** Check each of these describes what C to F showed:
+- `docs/guide/workers.md`, "Collecting finished children";
+- `docs/adr/0004-worker-lifecycle-ownership.md`, "Amendment (1.4.1)";
+- `docs/guide/development.md`, "Throwaway Git repositories";
+- the PR body (the 1.4.1 release notes above), including the operator step: install 1.4.1 between
+  Workflow Manager milestones, then drop `--max-steps 1`.
+
+### Known limitations and out of scope
+
+- No live Controller run on a real repository is part of this round. C launches real supervised
+  workers through `launch`, which is the code the fix changes, and the lanes switch to 1.4.1 after
+  the release.
+- `reattach`'s supervision (`resume`) has no sweep. It adopted nothing, and the plan leaves
+  `resume` unchanged.
+- The full `/proc` fallback is rate-limited, so on a host without `task/<tid>/children` a zombie
+  can wait up to one ownership-scan interval.
+- The vendored Workflow conformance suites still create repositories with maintenance on (E).
+- The known CI flakes (`OwnershipTest`, `CrossProcessEventSeqTest`) are C2.

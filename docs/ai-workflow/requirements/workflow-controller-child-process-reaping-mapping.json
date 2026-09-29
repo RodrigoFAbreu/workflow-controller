@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-child-process-reaping",
+  "requirements": {
+    "R1": {
+      "description": "The Controller collects every finished child it holds as a subreaper on every supervision tick, in every worker state, by pid (never waitpid(-1)), never any launch's worker or anchor, the launch baseline, a child the process spawned in its own session or a pid registered with exclude_from_reaping, while collecting a same-session orphan once it has been observed as another child's descendant, so no child the process waits for loses its exit status",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "After a launch gives up the subreaper it records every non-excluded child in one final sweep, a between-launch reaper collects recorded children that exit before the next launch however long the gap, and the Controller reaps recorded children between steps and at the end of run and step, so no orphan escapes into a later launch's baseline or stays a zombie between launches",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Where /proc/<pid>/task/<tid>/children is missing the sweep falls back to the full /proc scan by ppid, rate-limited to the ownership-scan interval",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Ownership, worker_state contents, the publication signature and job records are unchanged; the follower thread never starts a process",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "A fake worker orphaning hundreds of short-lived processes while RUNNING (and while WAITING and DRAINING) keeps the zombie count under the Controller near zero during the job and zero after it; the test fails on 6a24f64; existing orphan-reap tests keep passing",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R6": {
+      "description": "Every throwaway Git repository the tests create has maintenance.auto=false and gc.auto=0 in its own config, through one shared fixture, enforced by a guard test",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R7": {
+      "description": "The guides and ADR 0004 describe the reaping and the throwaway-repository rule; the orphan count of a full suite run is measured before and after; protected paths outside the footprint are unchanged; the pull request body carries the 1.4.1 notes",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

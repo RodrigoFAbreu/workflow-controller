@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-child-process-reaping",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -4534,6 +4534,97 @@
           "verdict": "APPROVE",
           "round": 2,
           "completed_at": "2026-09-29T13:26:39Z"
+        }
+      }
+    },
+    "workflow-controller-child-process-reaping": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-child-process-reaping",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-child-process-reaping-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 8,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "6a24f64a50462d7b82c13fda1ce45b253c7fc65b",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+        "approved_review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da098a99fe752e437edb5ba148aa34d63d177b12"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5a8b0a2969dfb7f35a2592f291e594932310e9f7"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-child-process-reaping-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ae2f6a684e320a669292e6a9aabefc3242c2a4af"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "plan workflow-controller-child-process-reaping",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-29T21:22:07Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-09-29T18:51:44Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-09-29T18:55:40Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 29,
+      "last_transition": "2026-09-29T21:22:07Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-09-29T18:50:00Z",
+        "consumed": {
+          "review_content_id": "dc3c2ed83479e94bb6ffa3866391cf52d036e42752777d89ba69b7277c71ab24",
+          "plan_revision": 7,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+          "plan_revision": 8
+        },
+        "bound": {
+          "review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+          "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+          "plan_revision": 8
         }
       }
     }

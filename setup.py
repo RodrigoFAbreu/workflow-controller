@@ -4,8 +4,15 @@ The ``build_py`` subclass below writes ``controller/BUILD_INFO.json`` into
 ``build_lib`` after the standard copy. It never writes into the source tree
 and does nothing at all for an editable install, so an editable install stays
 a source runtime by construction. ``controller/buildinfo.py`` is loaded by
-file path; ``controller/__init__.py`` is never imported. The version is
-setuptools' own static read of ``pyproject.toml``'s ``[project].version``.
+file path; ``controller/__init__.py`` is never imported.
+
+The version is setuptools' own static read of ``pyproject.toml``'s
+``[project].version`` when one is declared. When ``pyproject.toml`` declares
+``dynamic = ["version"]`` instead, the version is passed to ``setup()``: a
+release build's comes from its ``WORKFLOW_CONTROLLER_RELEASE_TAG`` (a
+malformed tag fails the build), and any other build's is
+``controller/version.py``'s ``local_build_version`` (the highest release tag
+reachable from ``HEAD``, or ``0.0.0``).
 """
 
 from __future__ import annotations
@@ -122,5 +129,19 @@ class build_py(_build_py):
                              f"delete build/ and rebuild")
 
 
+def _dynamic_version() -> dict:
+    """``{"version": ...}`` for a dynamic ``pyproject.toml``, else ``{}``
+    (setuptools reads the static version itself)."""
+    version = _load_module("version")
+    try:
+        if not version.declares_dynamic_version((SOURCE_DIR / "pyproject.toml").read_text(encoding="utf-8")):
+            return {}
+        if RELEASE_TAG_ENV in os.environ:
+            return {"version": _load_module("buildinfo").version_for_tag(os.environ[RELEASE_TAG_ENV])}
+        return {"version": version.local_build_version(SOURCE_DIR)}
+    except (OSError, ValueError) as exc:
+        raise SetupError(f"cannot derive the version: {exc}") from None
+
+
 if __name__ == "__main__":  # setuptools.build_meta executes this file as __main__
-    setup(cmdclass={"build_py": build_py})
+    setup(cmdclass={"build_py": build_py}, **_dynamic_version())

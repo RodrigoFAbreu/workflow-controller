@@ -295,14 +295,15 @@ def resolve_runtime(code_root: Path) -> RuntimeResolution:
     fail-closed: ``unidentified``, decided before any validation and
     without Git. Otherwise build info means ``package`` (if it validates
     against the installed distribution's metadata), a ``.git`` means
-    ``source`` (if both probes agree and ``pyproject.toml`` declares a
-    version), and anything else is ``unidentified``. The ``SOURCE_PIN.json``
+    ``source`` (if both probes agree and a version resolves), and anything
+    else is ``unidentified``. The ``SOURCE_PIN.json``
     branch (a pinned snapshot) is ``pin()``'s own, checked before this.
 
     The version comes from where the code lives: a ``package`` runtime's is
     the metadata of the distribution installed in ``code_root`` and must
     equal ``BUILD_INFO.json``'s; a ``source`` runtime's is
-    ``<code_root>/pyproject.toml``'s, and never distribution metadata."""
+    ``<code_root>/pyproject.toml``'s static version, else the one its tags
+    derive (``version.source_version``), and never distribution metadata."""
     code_root = Path(code_root)
     build_path = _build_info_path(code_root)
     has_build_info = os.path.lexists(build_path)
@@ -574,13 +575,16 @@ def _read_package_generation(snapshot: Path) -> int:
     return _parse_generation(raw, source_desc=f"the installed package's {_GENERATION_REL_PATH}")
 
 
-def _snapshot_version(snapshot: Path, runtime_kind: str) -> str:
-    """The version ``SOURCE_PIN.json`` records, read from the snapshot
-    itself, never from this process: a source snapshot's own
-    ``pyproject.toml`` (so a dirty snapshot reports what it holds), or a
-    package snapshot's own ``controller/BUILD_INFO.json`` (a package
-    snapshot has no ``*.dist-info``; ``resolve_runtime`` already checked
-    that file against the distribution metadata)."""
+def _snapshot_version(snapshot: Path, runtime_kind: str, *, origin: Path,
+                      commit: str | None) -> str:
+    """The version ``SOURCE_PIN.json`` records, never read from this
+    process: a source snapshot's own static ``pyproject.toml`` version (so a
+    dirty snapshot reports what it holds), else -- a snapshot has no
+    ``.git`` -- the version the origin checkout's tags derive at the
+    snapshot's ``commit`` (``HEAD`` for a dirty snapshot); or a package
+    snapshot's own ``controller/BUILD_INFO.json`` (a package snapshot has no
+    ``*.dist-info``; ``resolve_runtime`` already checked that file against
+    the distribution metadata)."""
     try:
         if runtime_kind == RUNTIME_KIND_PACKAGE:
             path = _build_info_path(snapshot)
@@ -592,7 +596,8 @@ def _snapshot_version(snapshot: Path, runtime_kind: str) -> str:
             if not isinstance(value, str) or not version.SEMVER_RE.fullmatch(value):
                 raise ValueError(f"{path} version is {value!r}, not MAJOR.MINOR.PATCH")
             return value
-        return version.source_version(snapshot)
+        static = version.static_pyproject_version(snapshot)
+        return static if static is not None else version.tag_version(origin, commit or "HEAD")
     except ValueError as exc:
         raise SourceSnapshotError(
             f"cannot resolve the snapshot's version: {exc}",
@@ -702,7 +707,8 @@ def materialise(
         tree_digest = compute_tree_digest(tmp_dir)
         if runtime_kind == RUNTIME_KIND_SOURCE:
             generation, generation_source = _read_generation(origin_source_root)
-        pin_version = _snapshot_version(tmp_dir, runtime_kind)
+        pin_version = _snapshot_version(tmp_dir, runtime_kind, origin=origin_source_root,
+                                        commit=source_commit)
 
         dest = source_dir / tree_digest
         runtime.assert_contained(source_dir, dest)

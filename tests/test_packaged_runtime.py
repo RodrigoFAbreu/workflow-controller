@@ -53,8 +53,8 @@ def _write_generation(checkout: Path, generation: int) -> None:
 
 
 def _write_version(checkout: Path, value: str) -> None:
-    """Move ``checkout``'s static ``[project].version``, the single version
-    authority, to ``value``."""
+    """Move ``checkout``'s static ``[project].version`` (every
+    ``fixtures.build_checkout`` clone declares one) to ``value``."""
     path = checkout / "pyproject.toml"
     text = path.read_text()
     replaced = text.replace(f'version = "{fixtures.CONTROLLER_VERSION}"', f'version = "{value}"', 1)
@@ -320,8 +320,8 @@ class VersionEqualsArtifactTest(_PackagedRuntimeCase):
         self.assertEqual(installed_build["version"], fixtures.CONTROLLER_VERSION)
         self.assertEqual(installed_build, self.wheel_build_info)
         # The wheel was built from a checkout carrying this repository's own
-        # pyproject.toml, which is what tools/release.py reads.
-        self.assertEqual((self.clone / "pyproject.toml").read_bytes(), fixtures.PYPROJECT.read_bytes())
+        # pyproject.toml, at the version tools/release.py reports.
+        self.assertEqual((self.clone / "pyproject.toml").read_text(), fixtures.pyproject_text())
         released = fixtures.run([sys.executable, str(fixtures.REPO_ROOT / "tools" / "release.py"), "version"],
                                 env=_base_env(), check=False)
         self.assertEqual((released.returncode, released.stdout), (0, f"{fixtures.CONTROLLER_VERSION}\n"),

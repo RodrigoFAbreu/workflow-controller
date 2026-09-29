@@ -127,19 +127,43 @@ def run(args: list[str], *, cwd: Path | None = None, env: dict | None = None,
     )
 
 
-def build_checkout(dest: Path, *, generation: int | None = 1, committed: bool = True) -> Path:
+#: ``pyproject.toml``'s version line in the static model, and in the
+#: tag-derived one (the squash-merge cutover replaces the first by the second).
+STATIC_VERSION_LINE = f'version = "{CONTROLLER_VERSION}"'
+DYNAMIC_VERSION_LINE = 'dynamic = ["version"]'
+
+
+def pyproject_text(*, dynamic_version: bool = False) -> str:
+    """This repository's real ``pyproject.toml``, with its version line in
+    the static form (``CONTROLLER_VERSION``) or, with ``dynamic_version``,
+    the tag-derived form -- whichever form the real file holds."""
+    text = PYPROJECT.read_text()
+    old, new = ((STATIC_VERSION_LINE, DYNAMIC_VERSION_LINE) if dynamic_version
+                else (DYNAMIC_VERSION_LINE, STATIC_VERSION_LINE))
+    lines = [new if line == old else line for line in text.splitlines(keepends=False)]
+    assert new in lines, f"{PYPROJECT} declares neither {STATIC_VERSION_LINE!r} nor {DYNAMIC_VERSION_LINE!r}"
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+
+def build_checkout(dest: Path, *, generation: int | None = 1, committed: bool = True,
+                   dynamic_version: bool = False) -> Path:
     """Copy this repository's real ``controller/`` package,
     ``pyproject.toml`` and ``setup.py`` (the build hook) into a fresh
     directory, and -- unless the caller wants a dirty fixture -- ``git
     init`` and commit it. A minimal, real
     checkout the mechanism can be run against without ever touching this
-    repository's own working tree."""
+    repository's own working tree.
+
+    The clone's ``pyproject.toml`` always declares the static
+    ``CONTROLLER_VERSION``, on either side of the squash-merge cutover, so no
+    clone depends on tags; ``dynamic_version=True`` gives it the tag-derived
+    form instead. A clone is never tagged."""
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copytree(
         CONTROLLER_PKG, dest / "controller",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "SOURCE_PIN.json", "BUILD_INFO.json"),
     )
-    shutil.copy2(PYPROJECT, dest / "pyproject.toml")
+    (dest / "pyproject.toml").write_text(pyproject_text(dynamic_version=dynamic_version))
     shutil.copy2(SETUP_PY, dest / "setup.py")
     # Without this, the *parent* process's own unpinned import of
     # `controller/` (before it ever reaches materialise()'s dirty check)

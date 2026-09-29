@@ -8,40 +8,58 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-09-28).** Controller 1.2.1 is the latest release. Every milestone
-through the Workflow 2.6 integration (1.6 below, accepted 2026-09-28) is complete. That milestone
-admits Workflow 2.6.0 beside 2.5.1 and ships as Controller 1.3.0 once its pull request (#5) is
-merged into `main`. This repository's own Workflow installation stays on 2.5.1 until then.
+**Where things stand (2026-09-29).** Controller 1.3.0 is the latest release. It admits Workflow
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through the Workflow 2.6
+integration (1.6) is complete. Workflow Manager also runs Workflow 2.6.0 and has its adaptive test
+sharding on `main`.
 
-**Where this is heading.** Each roadmap item becomes one autonomous Controller run: fresh workers
-for implementation, independent review and remediation, automated evidence where it suffices, a
-green pull request, an automatic merge into a protected `main`, a deterministic release, and then
-a fresh run for the next item. Human gates stay only where a decision needs human judgement.
+**Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
+it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
+starts the next item, until the roadmap is empty. In the end no human gate is left:
+- plan approval and technical approval pass on the evidence of the local review plus an automated
+  cross-model review;
+- `/accept-milestone` passes when the automated functional review finds nothing;
+- the pull request merges itself when its required checks are green;
+- the release runs from `main`.
 
-**Next, in order.** Each step is one small milestone that is released on its own.
+Usage limits are tracked, so a run never starts work it cannot finish before a limit resets.
 
-| # | Step | Repository | Roadmap section |
+**Two lanes run in parallel**, one milestone at a time in each: this repository, and Workflow
+Manager together with the new `workflow` repository. The lanes meet at two points only: C9 needs
+Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
+
+**Controller lane, in order.** Each step is one small milestone that is released on its own.
+
+| # | Step | Needs | Section |
 |---|---|---|---|
-| 1 | Integrate the released Workflow 2.6, kept minimal (complete) | Controller | 1.6 |
-| 2 | Squash merges, with the release version derived from pull request titles | Controller | new; the first slice of automatic merging (1.8/1.9) |
-| 3 | Operational cleanup and telemetry v0 (token, cache, cost and timing per job) | Controller | 1.4, plus 8 |
-| 4 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | Controller | new; the base of automated functional evidence (1.8) |
-| 5 | Workflow 2.7: Orchestration Protocol v1 (`describe`, `verify`, `next-action`, `reconcile`) | Workflow Manager | 1.7 |
-| 6 | The Controller on the protocol: decisions first, then outcomes | Controller | 1.7 |
-| 7 | Workflow 2.8: gate policy; automatic advance on sufficient evidence, including automated cross-model review and automated functional evidence | Workflow Manager | 1.8 |
-| 8 | A review-only harness seam with a Codex reviewer | Controller | the smallest slice of 5 |
-| 9 | Automatic merge: fix the known timing flakes and D7 first, then GitHub auto-merge on green required checks | Controller | 1.9 |
-| 10 | The roadmap runner: next item, one run, merge, release, stop | Controller | new |
+| C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
+| C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
+| C3 | Settings file v1, the 1.4 cleanup patches, and telemetry v0 (tokens, cache, cost and time per job) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements) |
+| C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C2 | [11.3](#113-auto-merge-and-release-wait) |
+| C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
+| C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
+| C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
+| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3, C7 | [11.6](#116-usage-budget) |
+| C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
+| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
+| C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10 | [11.7](#117-the-kanban-runner) |
 
-In parallel, in Workflow Manager: finish its test-sharding milestone; then a protected `main`,
-pull requests and separate Manager and Workflow releases; later, Manager resolving exact Workflow
-releases from published artifacts instead of the checked-in `distribution/` tree.
+**Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
+because C9 and C10 depend on them.
+
+| # | Step | Repository |
+|---|---|---|
+| M1 | Trunk model: protected `main`, pull-request-only changes, squash merges with a PR-title version, auto-merge, a Manager release; a stopgap test profile until M2 | Workflow Manager |
+| M2 | Distribution rework: Workflow moves to its own repository and releases as downloadable packages (every earlier release published too); the Manager downloads, verifies, caches and installs them; its tests cover only the release in development and the upgrade path | Workflow Manager, `workflow` |
+| W1 | Workflow 2.7, the first packaged release: Orchestration Protocol v1 and the `v2.6.0-001` follow-up | `workflow` |
+| W2 | Workflow 2.8: gate policy, and a red or changes-requested pull request reopening the same work item | `workflow` |
+| M3 | Workflow Manager and `workflow` driven by the Controller's loop | both |
 
 **Deferred** because they do not unlock that operating model: concurrency and multi-worktree (6),
 the observation dashboard (7.5), other forges (7.6), hot-reloadable routing (8), the orchestrator
 (9), and assurance tiers. RepFlow (3, 4) migrates once, directly to a protocol-capable Workflow.
 
-The numbered sections below keep their historical numbers; this table is the current order.
+The numbered sections below keep their historical numbers; these tables are the current order.
 
 ---
 
@@ -258,8 +276,8 @@ Requirements:
 **Status:** One urgent correctness hotfix complete in this slot (`workflow-controller-worker-lifecycle-ownership`,
 accepted 2026-09-26 under Workflow 2.5.1; the narrative is archived at
 `docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`). The four patches
-below remain open; they are step 3 of [At a glance](#at-a-glance), after the Workflow 2.6
-integration (1.6, complete) and the squash-merge versioning change
+below remain open. They are step C3 of [At a glance](#at-a-glance), together with the settings
+file below and telemetry v0 (section 8).
 
 **Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
 plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR
@@ -280,6 +298,14 @@ name) are in ADR 0004. It was not folded together with the patches below, which 
 - add explicit abandoned/unreconcilable apply-review relaunch-bound tests;
 - improve active-job/status presentation while observability work is already touching runtime diagnostics;
 - make the drain detach bound and the other Controller tunables configurable, including a `--timeout` for `resume`'s re-attach drain; 10800 s is an interim constant, amendment 1 of 1.2.1.
+
+**Settings file v1 (step C3).** One Controller settings file holds every value that is, or could
+safely be, configurable without breaking the Controller: tunables such as the drain detach bound,
+routing defaults, and later the auto-merge and review switches.
+- The Controller writes every missing setting into the file with its default, so a new setting
+  migrates itself.
+- A setting that no longer exists is ignored and can be cleaned up.
+- The file is the model a future UI edits.
 
 ---
 
@@ -320,8 +346,8 @@ Workflow 2.5.1; plan `docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.
 `docs/adr/0006-workflow-release-admission-and-per-release-contracts.md`; the narrative is archived
 at `docs/milestones/completed/workflow-controller-workflow-2-6-integration.md`). It admits Workflow
 2.6.0 beside 2.5.1 by exact release and ships as Controller 1.3.0. E1-E5 are answered in ADR 0006:
-`gitrepo.merge_trunk` stays unwired, and the ADR names the Workflow follow-up. Moving this
-repository's own installation to 2.6.0 is a separate change after 1.3.0 is released.
+`gitrepo.merge_trunk` stays unwired, and the ADR names the Workflow follow-up. 1.3.0 was released
+on 2026-09-28, and this repository moved to Workflow 2.6.0 in pull request #6.
 
 **Priority:** Immediately after both parallel milestones complete.
 
@@ -1008,9 +1034,129 @@ Ongoing work:
 
 ---
 
+# 11. Autonomous delivery
+
+The steps of [At a glance](#at-a-glance) that no earlier section covers. Each is planned from the
+code as it stands when its turn comes, not from this list.
+
+## 11.1 Squash merges and PR-title versions
+
+**Step C1.** Checked against Workflow Manager: a Controller-only change.
+
+- Squash merges only. The repository settings become squash-only, with the squash message set to
+  the pull request title and body.
+- The release version is derived from the pull request title, as in SignalHub:
+  - the title must be a Conventional Commit (`feat: …`, `fix: …`, `feat!: …`), checked by a
+    required check;
+  - it becomes the squash commit's subject;
+  - its type decides the bump: `feat` gives a minor release, `fix` a patch, and `!` a major;
+  - `docs`, `chore` and `ci` merge without a release (decided 2026-09-29).
+- **The Git tag is the only version authority, as in SignalHub (decided 2026-09-29).**
+  - `pyproject.toml` no longer holds a version; the package's version is set at build time.
+  - The release computes the next version from the latest release tag and the squash commit's
+    type, and builds the wheel with it.
+  - No milestone and no person edits a version anywhere.
+  - This replaces 1.5's rule that `pyproject.toml` is the single human-maintained version
+    authority. The release guide changes with it.
+- The existing release transaction stays: build and verify before the tag, immutable tags, and a
+  safe resume of an interrupted publication. Releases on `main` are serialized.
+- Workflow's provenance checks look only at the active work item's history, so a completed item's
+  squashed commits are never re-checked.
+- Close-out gains a merged-by-squash state (`MERGED_SQUASHED`). The next item is planned from
+  `main`'s head, with that base passed explicitly to `/milestone-plan`.
+- A milestone branch is never rebased or updated from `main`.
+
+## 11.2 CI reliability
+
+**Step C2.** An unattended merge stalls on every flaky run, and the Workflow 2.6 milestone needed
+five re-runs.
+
+- Fix the known races:
+  - `OwnershipTest`, which reads a process's command line while that process is still starting;
+  - `CrossProcessEventSeqTest`;
+  - D7.
+- A re-run of only the failed jobs must count: today `tests-result` aggregates the first
+  attempt's shard results, so only a full re-run clears a flake.
+- Decide whether a shard is retried automatically, and how a retry is reported so that a real
+  failure is never hidden.
+
+## 11.3 Auto-merge and release wait
+
+**Step C4.**
+
+- Once a milestone is accepted and its pull request is ready, the Controller enables GitHub
+  auto-merge, and GitHub merges when the required checks are green.
+- The Controller waits for the release run on `main`, records the published release, closes out,
+  and stops.
+- If a check goes red after acceptance, it stops and reports. The fix loop is C10.
+- Until C10, `/accept-milestone` stays a human gate, and it is the last one.
+- The settings file (C3) can turn auto-merge off.
+
+## 11.4 SignalHub notifications
+
+**Step C5.** Once runs are unattended, the operator needs to know what is happening and when
+something is blocked, without watching a terminal. [SignalHub](https://github.com/RodrigoFAbreu/SignalHub)
+is the owner's notification platform and already accepts generic events from any producer. The
+Controller becomes one more producer over its public API (`POST /api/v1/events`), and SignalHub
+needs no special case.
+
+- **What is sent:**
+  - a milestone started, planned or accepted;
+  - **a blocker**: a human gate reached, a refusal, a failed job, red checks after acceptance, a
+    stuck release;
+  - a pull request merged;
+  - a release published;
+  - a usage pause and its resume (C8);
+  - a run finished.
+- **How each event is shaped:** a category and a severity, with a blocker at the highest severity,
+  so SignalHub's per-device filters apply. Each event links to the pull request, release or run
+  where there is one.
+- **Idempotency:** each event carries an `Idempotency-Key` derived from its run, job or event
+  identity, so a retry or a `resume` never sends a notification twice.
+- **Configuration:** it lives in the settings file (C3): the server address, which events are sent,
+  and the minimum severity. The API key comes from the environment or a file, never from the
+  repository.
+- **Notifications never steer the lifecycle.** A notification that cannot be delivered is retried
+  a bounded number of times and recorded in the run's events. It never blocks, fails or changes a
+  lifecycle step.
+- **Standard library only.** The Controller calls the HTTP API directly, the same contract
+  SignalHub's own Python SDK uses.
+
+## 11.5 Automated lifecycle scenarios
+
+**Step C6.**
+
+- Disposable repositories, fake workers and fake forges run whole lifecycle paths without model
+  usage.
+- They become the automated functional evidence that C10 accepts in place of a manual functional
+  review.
+
+## 11.6 Usage budget
+
+**Step C8.** The kanban loop and the two parallel lanes share one set of usage limits: the Claude
+plan's 5-hour window, and Codex's limits.
+
+- Track usage against those limits across every repository the Controller drives.
+- Forecast a job's cost from telemetry v0 (C3), per role and model.
+- Never start a job that cannot finish before a limit. Pause at a safe boundary instead, and resume
+  automatically after the reset, so no work is left half finished.
+- Record every pause and resume in the run's events.
+
+## 11.7 The kanban runner
+
+**Step C11.**
+
+- Read the roadmap and pick the next open item.
+- Run it end to end: plan, implement, review, test, accept, merge, release.
+- Start the next item, until nothing is left.
+- It stops for a human only when policy says the evidence is insufficient for the next decision,
+  or when the usage budget says to wait.
+
+---
+
 # Execution order
 
-The current order is the table in [At a glance](#at-a-glance). Completed so far, in order:
+The current order is the tables in [At a glance](#at-a-glance). Completed so far, in order:
 
 ```text
 0.     Automatic lifecycle orchestration                     COMPLETE
@@ -1018,7 +1164,7 @@ The current order is the table in [At a glance](#at-a-glance). Completed so far,
 1.5    Trunk/branch/PR/release orchestration                 COMPLETE (first automatic release 1.2.0)
 1.4    Worker lifecycle ownership hotfix                     COMPLETE (in 1.2.0)
 1.2.1  Adaptive test sharding                                COMPLETE (released as 1.2.1)
-1.6    Workflow 2.6 compatibility integration                COMPLETE (ships as 1.3.0)
+1.6    Workflow 2.6 compatibility integration                COMPLETE (released as 1.3.0)
 ```
 
 ---

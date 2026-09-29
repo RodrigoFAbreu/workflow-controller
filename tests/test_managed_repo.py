@@ -328,7 +328,7 @@ class InstallProfilePairTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = Path(td) / "runtime-repo"
             repo.mkdir()
-            fixtures.run(["git", "init", "-q"], cwd=repo)
+            fixtures.git_init(repo)
             fixtures.run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=repo)
             fixtures.run(["git", "config", "user.name", "Controller Tests"], cwd=repo)
             fixtures.run(["git", "commit", "-q", "--allow-empty", "-m", "root"], cwd=repo)

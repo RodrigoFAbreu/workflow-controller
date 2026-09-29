@@ -251,7 +251,7 @@ class _MigrationCase(e2e._E2ECase):
     def build_target(self, tmp: Path) -> tuple[Path, Path]:
         seed = tmp / "seed"
         seed.mkdir(parents=True)
-        fixtures.run(["git", "init", "-q", "--initial-branch=main"], cwd=seed)
+        fixtures.git_init(seed, "--initial-branch=main")
         fixtures.run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=seed)
         fixtures.run(["git", "config", "user.name", "Controller Tests"], cwd=seed)
         (seed / "README.md").write_text("Workflow release migration fixture\n")
@@ -265,11 +265,11 @@ class _MigrationCase(e2e._E2ECase):
             (seed / e2e.POLICY).write_text(json.dumps(policy(), indent=2) + "\n")
         fixtures.commit_all(seed, "Install Workflow 2.5.1")
         origin = tmp / "origin.git"
-        fixtures.run(["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)])
+        fixtures.git_init(origin, "--bare", "--initial-branch=main")
         fixtures.run(["git", "config", "core.logAllRefUpdates", "always"], cwd=origin)
         fixtures.run(["git", "push", "-q", str(origin), "main"], cwd=seed)
         clone = tmp / "clone"
-        fixtures.run(["git", "clone", "-q", str(origin), str(clone)])
+        fixtures.git_clone(origin, clone)
         fixtures.run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=clone)
         fixtures.run(["git", "config", "user.name", "Controller Tests"], cwd=clone)
         return origin, clone.resolve()

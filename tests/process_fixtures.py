@@ -429,5 +429,7 @@ def scratch_git_repo(test_case: unittest.TestCase) -> Path:
     BUILD_DIR.mkdir(exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix="cp5-lock-", dir=BUILD_DIR))
     test_case.addCleanup(shutil.rmtree, root, True)
-    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    from tests import fixtures
+
+    fixtures.git_init(root)
     return root

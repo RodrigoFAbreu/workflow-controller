@@ -2,82 +2,59 @@
 
 ## Status
 
-**Complete.** `workflow-controller-squash-merge-tag-versioning` (`docs/ROADMAP.md` step C1,
-section 11.1) reached `MILESTONE_COMPLETE` on 2026-09-29. It makes squash merges the only merge
-method, takes the release bump from the pull request's Conventional Commit title, makes the Git
-tag the only version authority, and teaches close-out a squash merge (`MERGED_SQUASHED`). The user
-accepted it in functional review round 1 (implementation revision 2), against checklist evidence
-commit `454ffe7d6bdc9570bdcdbc1f1bf14b376bff8f31` (checklist blob
-`b5357336b343966b7999562aed7936f723d18524`).
-- Implementation revision 1: the local review approved it. The external Codex review asked for
-  two Important fixes: an override hid a failed Git read of a historical policy in `_range_bump`,
-  and a plan title declaration that was not valid UTF-8 was decoded with replacement characters.
-  Both were fixed (`5802bbf`, `669d900`).
-- Implementation revision 2 was approved by both implementation-review stages (technical approval
-  `b82d717`, `EXTERNAL_APPROVE`, `CURRENT`).
+**Implementing.** `workflow-controller-child-process-reaping` (`docs/ROADMAP.md` step C1b,
+section 11.1.1 "Reaping every child process"). The plan is
+`docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md`, revision 8, approved at `e074e3b`
+(`EXTERNAL_APPROVE`). The base commit is `6a24f64`. Governing workflow version `2.2`, lifecycle
+authority Workflow 2.6.0, driving Controller the installed 1.4.0. Pull request title
+`fix: reap every finished child process the Controller holds as a subreaper` (1.4.1).
 
-All seven registry checkpoints (`CP1`-`CP7`) are `COMPLETE`, and the registry declares no
-completion obligations. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of this
-transition, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks section 11.1 and step
-C1 of "At a glance" complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-squash-merge-tag-versioning.md`. It covers the goal,
-checkpoint progress and the round-1 functional-review checklist.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for phase and checkpoint status. The
+previous milestone's narrative is archived at
+`docs/milestones/completed/workflow-controller-squash-merge-tag-versioning.md`.
 
-This milestone's own deliverables remain live in the tree, unmoved (the archive file's own preface
-says why):
-- `docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md` and its registry/mapping
-  files, still at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry declares;
-- ADR `docs/adr/0007-tag-derived-versions-and-squash-merges.md`;
-- `controller/conventional_commit.py`, and the squash and tag-version changes in
-  `controller/milestone_branch.py`, `controller/release_txn.py`, `controller/repo_policy.py` and
-  `controller/version.py`;
-- `.github/workflows/pr-title.yml`, `tools/release.py` and `tools/ci_workflows.py`;
-- `docs/releases/1.4.0.md` and the updated guides, including `docs/guide/ci-and-releases.md`.
+## Goal
 
-`.workflow-controller/policy.json` and `pyproject.toml`'s version line are unchanged from the base
-`455cef0` (I7). This repository still runs the legacy `version_change` model until the cutover
-below. The previously completed work items and their archived narratives in
-`docs/milestones/completed/` are unaffected.
+The Controller collects every finished child it holds as a subreaper, on every supervision tick,
+in every worker state, each by its own pid, never the worker, its anchor or a child the process
+waits for; a background reaper covers the gaps between launches. A regression test bounds the
+zombies under the Controller while a fake worker orphans hundreds of processes. The tests'
+throwaway Git repositories never run automatic maintenance. Ownership and published worker state
+are unchanged (I3).
 
-Deferred follow-ups, not conditions of acceptance:
-- **The cutover (plan Design H, steps 1-6).** Each step is done by the user, or by the
-  orchestrator only with the user's explicit authorisation:
-  1. merge PR #8 with **"Create a merge commit"**. `main.yml` classifies it `NO_CHANGE`, so
-     nothing is released;
-  2. 1.3.0 closes the milestone out (`MERGED` → `CLOSED`);
-  3. change the settings: squash merging only, with the "Pull request title and description"
-     squash message; in the "Main Protection" ruleset, the squash merge method, the required
-     check `PR title`, and "Require linear history";
-  4. open the two-file cutover pull request (`pyproject.toml` gets `dynamic = ["version"]`, plus
-     the post-cutover `.workflow-controller/policy.json` from the plan), titled
-     `feat: squash merges with release versions derived from pull request titles`, and
-     squash-merge it;
-  5. `main.yml` classifies `RELEASE_DUE` 1.4.0 from `v1.3.0` and publishes it;
-  6. install 1.4.0 once `status` shows `active: none`. Until then, 1.3.0 refuses lifecycle
-     commands on this repository, because it cannot read the new policy.
-- **Install timing.** A new Controller release is installed only between Workflow Manager
-  milestones (shared lane plan). While a Manager milestone is running, step 6 waits, and so does
-  any Controller milestone after step 4.
-- **Squash code paths on GitHub.** A real squash merge happens first at step 4. Until then the
-  squash title, readiness and close-out paths are covered by the suite only (checklist flow H).
-- Two self-review observations are left as they are (the external review agreed): trailing
-  whitespace in a declared title fails visibly on read-back, and `tag_version` counts abandoned
-  tags (the only one, `v1.1.0`, is below `v1.3.0`).
-- **Zombie child processes.** In long runs the Controller leaks zombie processes: orphans from
-  Git's detached maintenance in test repositories. This is not this milestone's code. It is worked
-  around by one step per Controller process. The user decided on 2026-09-29 that a small
-  zombie-reaping milestone comes next, followed by a patch release. That milestone goes into
-  `docs/ROADMAP.md` after C1 merges.
-- Carried over, unchanged: `docs/ROADMAP.md` section 1.4's four follow-up patches (step C3), and
-  the deferred items of the earlier milestones, listed in their acceptance commits.
+## Checkpoint progress
 
-The milestone branch is on Draft PR #8. The pushed head is `31ef276`. The PR is not merged. The
-technical-approval commit `b82d717`, the checklist commit `454ffe7` and this acceptance commit are
-local only.
+| Checkpoint | Status | Notes |
+|---|---|---|
+| CP1 Test hygiene: throwaway repositories without automatic maintenance | Complete | See below |
+| CP2 Reaping every finished child in every state | Not started | |
+| CP3 Documentation and full verification | Not started | |
 
-**Next action:** do the cutover above. Then run `/milestone-plan` for the next milestone: the
-zombie-reaping milestone the user put first, once it is in `docs/ROADMAP.md`, or otherwise step C2
-of "At a glance", "CI reliability" (section 11.2), the next incomplete roadmap step. After the
-cutover it is planned from `main`'s tip, with that base passed explicitly
-(`/milestone-plan <main tip>`). `/milestone-plan` creates a fresh `work_items` entry and claims
-`active_work_item_id`, ready for `PLANNING`.
+### CP1 -- test hygiene: throwaway repositories without automatic maintenance
+
+- `tests/fixtures.py`: `QUIET_MAINTENANCE` (`maintenance.auto=false`, `gc.auto=0`),
+  `git_init(path, *options, cwd=None)` (init, then `git -C path config` for each key, bare
+  repositories too) and `git_clone(source, dest, *options, cwd=None)` (`clone -c` for each key).
+- Every repository-creating site in `tests/` goes through them: 34 sites, as the guard counted
+  them -- `fixtures.py` (6, including `build_origin_pair`'s two), `process_fixtures.py`,
+  `test_gitrepo.py` (2), `test_integration_disposable_repo.py` (3), `test_job.py`,
+  `test_managed_repo.py`, `test_milestone_branch.py` (2), `test_packaged_runtime.py` (2),
+  `test_pull_request_lifecycle.py` (2), `test_release_tools.py`, `test_release_txn.py`,
+  `test_runtime.py` (2, the `os.system` shell strings), `test_trunk_orchestration_e2e.py` (3),
+  `test_trunk_preflight.py` (2), `test_workflow_contract.py` (2) and
+  `test_workflow_release_migration.py` (3). This matches the plan's measured list.
+- `tests/test_fixtures_git_hygiene.py` (new): the AST guard with the plan's three rules (token
+  sequences, `git`/`_git`/`*_git` helpers, non-docstring shell strings), skipping exactly the
+  `tests/workflow_releases/` prefix and allowing only the bodies of `fixtures.git_init` and
+  `fixtures.git_clone`; its self-tests on synthetic sources (the plan's flagged and unflagged
+  forms, and the prefix cases); and a read-back test that creates a repository with `git_init`,
+  a bare one and a clone, with `GIT_CONFIG_*` cleared, and reads both keys back with
+  `git config --local --get`. The self-tests write `GIT` for `git` in their shell-form sources,
+  so the guard's own literals do not match the shell rule.
+- Nothing outside `tests/` changed (apart from this file and the state file), and nothing under
+  `tests/workflow_releases/`.
+
+Verification: `tests.test_fixtures_git_hygiene` passes. The full sharded run
+(`python3 tools/run_tests.py`, 2418 tests, 5 shards) passed with no failures. It ran inside a
+Controller-launched worker, so it went through a reaping-subreaper wrapper
+(`PR_SET_CHILD_SUBREAPER` + `waitpid(-1)` loop), with `FORCE_COLOR` and `PYTHONPATH` unset.

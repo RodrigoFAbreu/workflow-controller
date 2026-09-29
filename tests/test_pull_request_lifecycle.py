@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import decision, forge as forge_mod, gitrepo, milestone_branch as mb, runtime  # noqa: E402
 from controller.errors import BranchBindingError, ForgeUndecidableError, GitOperationError  # noqa: E402
-from tests.fixtures import commit_all, current_head, run, trailer_message  # noqa: E402
+from tests.fixtures import commit_all, current_head, git_clone, git_init, run, trailer_message  # noqa: E402
 from tests.test_milestone_branch import BRANCH, WID, _Case, policy  # noqa: E402
 
 
@@ -31,7 +31,7 @@ class _Lifecycle(_Case):
         """A second clone of the origin, on the trunk at the origin's tip."""
         human = self.tmp / "human"
         if not human.exists():
-            run(["git", "clone", "-q", str(self.origin), str(human)])
+            git_clone(self.origin, human)
             run(["git", "config", "user.email", "human@example.invalid"], cwd=human)
             run(["git", "config", "user.name", "Human"], cwd=human)
         run(["git", "fetch", "-q", "origin"], cwd=human)
@@ -1531,7 +1531,7 @@ class VerifiedSquashTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.root = self.tmp / "repo"
-        run(["git", "init", "-q", "--initial-branch=main", str(self.root)])
+        git_init(self.root, "--initial-branch=main")
         self.git("config", "user.email", "dev@example.invalid")
         self.git("config", "user.name", "Dev")
         self.write("README.md", "base\n")

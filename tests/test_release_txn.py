@@ -37,7 +37,9 @@ from controller.release_txn import (  # noqa: E402
     NO_CHANGE, RELEASE_DUE, RELEASE_MISMATCH, RESUME,
 )
 from tests import fake_gh  # noqa: E402
-from tests.fixtures import FAKE_GH_REPOSITORY, build_origin_pair, commit_all, fake_gh_env, run  # noqa: E402
+from tests.fixtures import (  # noqa: E402
+    FAKE_GH_REPOSITORY, build_origin_pair, commit_all, fake_gh_env, git_clone, run,
+)
 
 TOY_BUILD = """\
 import secrets, sys
@@ -560,7 +562,7 @@ class TransactionTest(_ReleaseCase):
     def _other_clone(self) -> Path:
         other = self.tmp / "other"
         if not other.exists():
-            run(["git", "clone", "-q", str(self.origin), str(other)])
+            git_clone(self.origin, other)
             run(["git", "config", "user.email", "other@example.invalid"], cwd=other)
             run(["git", "config", "user.name", "Other"], cwd=other)
         return other

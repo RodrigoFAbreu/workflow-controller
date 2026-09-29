@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import runtime
 from controller.errors import RuntimeContainmentError, RuntimeRootUnwritableError
+from tests import fixtures
 
 
 class ResolveRuntimeRootTest(unittest.TestCase):
@@ -36,7 +37,7 @@ class ResolveRuntimeRootTest(unittest.TestCase):
     def test_row3_origin_checkout_when_origin_is_git_repo(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             origin = Path(td)
-            os.system(f"git init -q {origin}")
+            fixtures.git_init(origin)
             root, row = runtime.resolve_runtime_root(
                 runtime_dir=None, origin_source_root=origin, runtime_kind="source", env={},
             )
@@ -50,7 +51,7 @@ class ResolveRuntimeRootTest(unittest.TestCase):
             checkout = Path(td) / "checkout"
             site_packages = checkout / ".venv" / "lib" / "python3.12" / "site-packages"
             site_packages.mkdir(parents=True)
-            os.system(f"git init -q {checkout}")
+            fixtures.git_init(checkout)
             xdg = Path(td) / "xdg-state"
             for kind in ("package", "unidentified"):
                 root, row = runtime.resolve_runtime_root(

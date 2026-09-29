@@ -280,7 +280,7 @@ class VersionCommandTest(unittest.TestCase):
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, f"{VERSION}\n", ""))
 
     def _committed(self, root: Path, pyproject: str) -> None:
-        fixtures.run(["git", "init", "-q", str(root)])
+        fixtures.git_init(root)
         fixtures.run(["git", "config", "user.email", "t@example.invalid"], cwd=root)
         fixtures.run(["git", "config", "user.name", "T"], cwd=root)
         (root / "pyproject.toml").write_text(pyproject)

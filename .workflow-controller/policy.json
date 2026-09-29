@@ -5,12 +5,14 @@
   "milestone_branches": {
     "enabled": true,
     "branch_format": "milestone/{work_item_id}",
-    "pull_request": {"draft": true, "ready_requires_green_checks": true}
+    "pull_request": {"draft": true, "ready_requires_green_checks": true, "merge_method": "squash"}
   },
   "release": {
     "enabled": true,
-    "trigger": "version_change",
-    "version_source": {"kind": "pyproject", "path": "pyproject.toml"},
+    "trigger": "conventional_commit",
+    "change_types": {"feat": "minor", "fix": "patch", "perf": "patch", "refactor": "patch",
+                     "revert": "patch", "build": "patch", "style": "patch",
+                     "docs": "none", "chore": "none", "ci": "none", "test": "none"},
     "version_scheme": "semver",
     "tag_format": "v{version}",
     "abandoned_tags": ["v1.1.0"],

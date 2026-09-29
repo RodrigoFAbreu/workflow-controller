@@ -4546,14 +4546,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-child-process-reaping-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 8,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "6a24f64a50462d7b82c13fda1ce45b253c7fc65b",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP2",
+      "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -4562,6 +4562,10 @@
         "CP2": {
           "status": "COMPLETE",
           "start_commit": "3abf9d160945a9b838b8c84e207780cc783b2596"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "e68b91792595d8feab16107511688689b8a49d29"
         }
       },
       "current_bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
@@ -4615,8 +4619,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 33,
-      "last_transition": "2026-09-29T21:55:32Z",
+      "state_revision": 35,
+      "last_transition": "2026-09-29T22:09:32Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

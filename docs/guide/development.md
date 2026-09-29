@@ -143,6 +143,21 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.
 
+## Throwaway Git repositories
+
+Every Git repository a test creates goes through `fixtures.git_init` or
+`fixtures.git_clone` (`tests/fixtures.py`). Both write
+`maintenance.auto=false` and `gc.auto=0` into the new repository's own
+config, so no Git command a test runs starts automatic maintenance in
+the background. Those detached maintenance processes outlive the test,
+are re-parented to whichever process is the nearest subreaper (a
+supervising Controller, when the suite runs inside a worker), and
+accumulate there. The keys are written per repository rather than set
+through `GIT_CONFIG_*`, because many tests replace the environment on
+purpose. `tests/test_fixtures_git_hygiene.py` fails on any other
+`git init` or `git clone` under `tests/` (the vendored
+`tests/workflow_releases/` trees excepted).
+
 ## Workflow release trees
 
 The Controller's tests never read this repository's own installed

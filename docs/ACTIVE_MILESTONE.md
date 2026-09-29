@@ -28,7 +28,7 @@ are unchanged (I3).
 |---|---|---|
 | CP1 Test hygiene: throwaway repositories without automatic maintenance | Complete | See below |
 | CP2 Reaping every finished child in every state | Complete | See below |
-| CP3 Documentation and full verification | Not started | |
+| CP3 Documentation and full verification | Complete | See below |
 
 ### CP1 -- test hygiene: throwaway repositories without automatic maintenance
 
@@ -159,3 +159,82 @@ with no failures. It ran through the reaping-subreaper wrapper, since this is a
 Controller-launched worker, with `PYTHONPATH` and `FORCE_COLOR` unset. A first run with
 `FORCE_COLOR=3` failed only the known ANSI stderr match in
 `tests.test_evidence.ContentDriftedRealTest`.
+
+### CP3 -- documentation and full verification
+
+- `docs/guide/workers.md`: a "Collecting finished children" paragraph under "Owned processes, the
+  daemon list and the drain bound". It covers the per-tick collection by pid in every state,
+  that collecting is not owning, the final sweep and the between-launch reaper, the same-session
+  rule, and `worker.exclude_from_reaping(spawn)` for an embedder's new-session children (I6).
+- `docs/adr/0004-worker-lifecycle-ownership.md`: a dated "Amendment (1.4.1)" note after the
+  "reaps only its own adopted zombies by specific pid" paragraph. The decision is unchanged.
+- `docs/guide/development.md`: a "Throwaway Git repositories" section (`fixtures.git_init` and
+  `fixtures.git_clone`, the guard test, and why).
+- `tools/test_timings.json` is unchanged: `CommittedTimingsTest` passes, since CP1 and CP2 only
+  added classes.
+- **Unchanged-path check.** `git diff 6a24f64 -- .workflow-controller/ pyproject.toml setup.py
+  .github/` is empty.
+- **Orphan measurement.** Each suite ran under a counting subreaper wrapper (`/tmp/count_reap.py`).
+  The wrapper marks itself `PR_SET_CHILD_SUBREAPER`, reaps each orphan re-parented to it by pid
+  after a `WNOWAIT` peek, and classifies it by the command line a 5 ms sampler saw (or `comm` for
+  one that was already a zombie). `GIT_CONFIG_*` (the lanes' exports), `PYTHONPATH` and
+  `FORCE_COLOR` were cleared, and SIGINT was reset to default before exec. The base run used a
+  local clone checked out at `6a24f64`. Orphans re-parented to the wrapper:
+
+  | Selection | `6a24f64` | head (`e68b917` + CP3) |
+  |---|---|---|
+  | full (`python3 tools/run_tests.py`) | 10,570 (10,491 Git; 118 seen as `git maintenance run`) | 3,572 (3,484 Git; 49 `git maintenance run`) |
+  | `tests` (this repository's unittest suite) | 7,082 (7,005 Git; 76 `git maintenance run`) | 87 (1 Git; 0 maintenance) |
+  | `conformance` (the seven frozen Workflow suites) | not run separately | 3,488 (3,486 Git; 36 `git maintenance run`) |
+
+  Most Git orphans show only as `[git]` because they were already zombies when first sampled.
+  This repository's own suite meets the plan's expectation: from thousands to a few dozen, and no
+  Git maintenance. The 87 left are the tests' own deliberate orphans (`fake_claude.py`, the
+  orphan bursts, the `wlo-cp1-*` fixtures and `sleep`/`bash`). The remaining Git orphans all come
+  from the vendored Workflow conformance suites (`scripts/*_test.py`, run as `conformance:`
+  atoms). Their fixtures create repositories without the keys. They are the installed Workflow's
+  code, which this milestone never edits (plan, "Artifact declaration"), and CP1's guard covers
+  only `tests/`. Under a 1.4.1 Controller those orphans are collected on every tick anyway, so
+  the fix covers them. The hygiene only lowers the count.
+- **Full verification.** The head measurement run is also the full sharded suite: 2464 tests,
+  5 shards, `coverage: exact`, all PASS, wall time 179.1 s. It ran through the counting
+  (reaping) subreaper wrapper, since this is a Controller-launched worker, with `PYTHONPATH`,
+  `FORCE_COLOR` and `GIT_CONFIG_*` unset. The base run (2411 tests) also passed.
+
+## Pull request body (1.4.1 release notes)
+
+From 1.4.0 the pull request body is the release notes (`docs/README.md`). The Draft PR for this
+milestone carries:
+
+> **Reap every finished child process the Controller holds as a subreaper (1.4.1)**
+>
+> **The leak.** While it supervises a worker, the Controller marks itself a child subreaper, so
+> every process the worker orphans is re-parented to it. 1.4.0 recorded those children only when
+> an ownership scan ran, and collected them only when the job drained or ended. A worker whose
+> commands orphan many short-lived processes while `RUNNING` (Git's detached automatic
+> maintenance, after every commit in a throwaway repository) therefore left them as zombies for
+> the whole job. An orphan re-parented after the job's last scan was never collected before the
+> Controller exited. On 2026-09-29 two long-running Controllers filled the per-user process limit
+> this way, and every Claude Code process on the host aborted.
+>
+> **The fix.** The Controller now collects every finished child it holds on every supervision
+> tick, in every worker state (`STARTING`, `RUNNING`, `WAITING`, `ENDING`, `DRAINING`). It
+> reads `/proc/<pid>/task/<tid>/children`, with a rate-limited full `/proc` fallback, and reaps
+> each child by its own pid, never `waitpid(-1)`. It collects once more after a launch gives up
+> the subreaper, and between launches a background reaper thread keeps collecting the recorded
+> children still running, until none is left. It never collects the worker, its anchor, or a
+> child the process spawned in its own session, so an embedder's own subprocesses keep their
+> exit statuses. An embedder that starts a child in a new session during a launch, and reads its
+> status, wraps the spawn in `worker.exclude_from_reaping(spawn)`. Ownership, what the job waits
+> for, and the published `worker_state` are unchanged. Collecting a zombie is not owning it, and
+> job and run records keep 1.4.0's format.
+>
+> **Test hygiene.** Every throwaway Git repository the tests create goes through
+> `fixtures.git_init`/`fixtures.git_clone`, which write `maintenance.auto=false` and `gc.auto=0`
+> into its config. A guard test keeps it that way. Orphans from this repository's unittest suite
+> fell from 7,082 to 87, none of them Git maintenance.
+>
+> **Operator step.** Install 1.4.1 between Workflow Manager milestones (the shared lane plan),
+> then drop the `--max-steps 1` stopgap from both lanes' scripts. The stopgap keeps working with
+> 1.4.1 until then.
+

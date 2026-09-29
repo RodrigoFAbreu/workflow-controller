@@ -147,6 +147,17 @@ its own adopted zombies by specific pid, and keeps the recorded list pruned
 and bounded (one write per scan at most; history as a count plus a sample
 of 20).
 
+Amendment (1.4.1, 2026-09-29, `workflow-controller-child-process-reaping`):
+1.4.0 recorded adopted children only when an ownership scan ran and reaped
+them only when the job drained or ended, so a worker that orphaned many
+short-lived processes while `RUNNING` filled the per-user process limit with
+zombies. The Controller now
+records and reaps its adopted children on every supervision tick, in every
+state, once more after it gives up the subreaper, and between launches
+until none is left. It still reaps only by specific pid, never a child it
+spawned in its own session, and collecting a zombie is still not owning it.
+The decision itself is unchanged.
+
 **Daemon policy** (plan decision 9). Tool daemons a worker starts meet the
 tag and adoption tests by construction, and later jobs reuse them. A closed
 tuple of command-line patterns, `worker.RECOGNISED_DAEMONS`, is never owned:

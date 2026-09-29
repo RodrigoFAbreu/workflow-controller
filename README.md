@@ -117,12 +117,20 @@ A repository that commits `.workflow-controller/policy.json` (this one does)
 also gets:
 
 - one short-lived `milestone/<id>` branch and one Draft pull request per
-  milestone, marked ready once the milestone is accepted and its checks
-  pass. A human merges it, with a merge commit;
-- a release published from `main` whenever `pyproject.toml`'s version
-  changes: validated, built, tagged and published as a GitHub Release with
-  the wheel and `SHA256SUMS`. A merge that does not change the version
-  publishes nothing.
+  milestone, titled with the Conventional Commit title its plan declares
+  and marked ready once the milestone is accepted and its checks pass. A
+  human merges it with "Squash and merge";
+- a release published from `main` when the squash commit's title asks for
+  one: `feat` gives a minor release, `fix` a patch, and `!` a major. The
+  version is computed from the latest release tag; no file holds it. The
+  release is validated, built, tagged and published as a GitHub Release
+  with the wheel and `SHA256SUMS`. A `docs`/`chore`/`ci` title publishes
+  nothing.
+
+A policy that keeps the older `version_change` trigger instead merges with a
+merge commit and releases when `pyproject.toml`'s version changes. This
+repository switched at 1.4.0
+([release notes](docs/releases/1.4.0.md)).
 
 Details: [Milestone branches and pull requests](docs/guide/milestone-branches.md)
 and [Continuous integration and releases](docs/guide/ci-and-releases.md),

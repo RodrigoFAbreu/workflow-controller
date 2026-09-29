@@ -4087,14 +4087,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-squash-merge-tag-versioning-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-squash-merge-tag-versioning-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 3,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "455cef0632a35744060288e71504bf93f1f06830",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP6",
+      "last_completed_checkpoint_id": "CP7",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -4119,6 +4119,10 @@
         "CP6": {
           "status": "COMPLETE",
           "start_commit": "08314d19d51f38d0315c55cbb012eaed244a8add"
+        },
+        "CP7": {
+          "status": "COMPLETE",
+          "start_commit": "85966f11b2b4843dc21f02985ffb042eb4696925"
         }
       },
       "current_bundle_id": "5e877f64ebdecb48e0136f962a4b988218a5d66f8db2c78ef37fadb3ebdc69cb",
@@ -4172,8 +4176,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 25,
-      "last_transition": "2026-09-29T10:28:28Z",
+      "state_revision": 27,
+      "last_transition": "2026-09-29T10:49:24Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

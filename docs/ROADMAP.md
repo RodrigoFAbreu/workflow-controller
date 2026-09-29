@@ -329,7 +329,7 @@ Required end state:
 - no permanent `develop` branch;
 - fail closed when trunk moves in a way Workflow 2.5.1 cannot safely integrate;
 - generic repository release policy with Controller as the first reference adopter;
-- `pyproject.toml` is the single human-maintained Controller version authority;
+- `pyproject.toml` is the single human-maintained Controller version authority (superseded by 11.1, step C1, and [ADR 0007](adr/0007-tag-derived-versions-and-squash-merges.md): the release tags are the only version authority);
 - version change on trunk drives one deterministic release transaction;
 - validate/build/verify before tag creation;
 - immutable tags;

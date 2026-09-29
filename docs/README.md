@@ -24,10 +24,13 @@ These guides are maintained by hand in this repository.
 
 | Release notes | Read it for |
 |---|---|
+| [1.4.0](releases/1.4.0.md) | squash merges, release versions derived from Conventional Commit pull request titles and the release tags, `MERGED_SQUASHED`, and the cutover |
 | [1.3.0](releases/1.3.0.md) | Workflow 2.6.0 admitted beside 2.5.1, the new error codes and gates, and the 1.2.1 changes that shipped without notes |
 
-Each release from 1.3.0 on has its notes in `releases/`. The GitHub release
-itself carries the wheel and `SHA256SUMS`
+Releases 1.3.0 and 1.4.0 have their notes in `releases/`. From 1.4.0 on, a
+milestone's notes are its pull request body, which becomes the squash commit
+body; `releases/` keeps only notes written after a release, if any. The
+GitHub release itself carries the wheel and `SHA256SUMS`
 ([Releasing](guide/ci-and-releases.md#releasing)).
 
 ## Direction
@@ -47,6 +50,7 @@ stay stable; the code and the guides must agree with them.
 | [0004](adr/0004-worker-lifecycle-ownership.md) | how a worker's lifetime and the processes it owns are decided, and the harness limitations left open |
 | [0005](adr/0005-adaptive-test-sharding.md) | the test inventory, planner and sharded runner |
 | [0006](adr/0006-workflow-release-admission-and-per-release-contracts.md) | which Workflow releases are admitted, what the Controller consumes from each, and why trunk integration stays manual |
+| [0007](adr/0007-tag-derived-versions-and-squash-merges.md) | Conventional Commit pull request titles, tag-derived versions, squash close-out and the cutover |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

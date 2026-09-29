@@ -30,7 +30,7 @@ understands a squash merge (`MERGED_SQUASHED`); and a cutover that never locks o
 | CP4 CI workflows | Complete | See below |
 | CP5 Pull request title and body in squash mode | Complete | See below |
 | CP6 Squash close-out and the explicit base | Complete | See below |
-| CP7 Documentation, ADR 0007, cutover rehearsal, full verification | Not started | |
+| CP7 Documentation, ADR 0007, cutover rehearsal, full verification | Complete | See below |
 
 ### CP1 -- Conventional Commit titles and the policy schema
 
@@ -308,3 +308,62 @@ reaping-subreaper wrapper and with `FORCE_COLOR` unset, passed: 2409 tests, 5 sh
 post-cutover scratch clone (a full clone with the real tags, this diff plus the cutover's dynamic
 `pyproject.toml` and `CONVENTIONAL_POLICY`) also passed: 2409 tests, 5 shards. There the
 Controller reports `1.3.0`.
+
+### CP7 -- Documentation, ADR 0007, cutover rehearsal and full verification
+
+- Guides: `ci-and-releases.md` covers the `PR title` check, a rewritten "Releasing" section (both
+  triggers, the type table, the `!` rule, base and range, `INVALID_SUBJECT` and `bump_overrides`,
+  the states table), the post-cutover repository settings, and a "Cutover from the version-file
+  model" section. The "bump the version" step is gone. `milestone-branches.md` covers
+  `merge_method`, the squash flow, the plan's title declaration (the exact `PLAN_TITLE_RE`), title
+  and body sync, `pr_title_invalid`, `MERGED_SQUASHED`, close-out, `git branch -D` and
+  `merged_before_acceptance` under squash. `runtime.md`, `installation.md`, `concepts.md`,
+  `troubleshooting.md` and `development.md` ("Building from a checkout") are updated to match.
+- `README.md` (squash merges, releases from the title, "a `docs`/`chore`/`ci` title publishes
+  nothing"), `CLAUDE.md` (the plan declares its pull request title), `docs/README.md` (the 1.4.0
+  row and the 0007 row), and the note in `docs/ROADMAP.md` section 1.5.
+- New ADR `docs/adr/0007-tag-derived-versions-and-squash-merges.md`. ADR 0003 gains a "superseded
+  in part" pointer.
+- New `docs/releases/1.4.0.md` (Decision D).
+- **Plan correction (wording only).** Design H step 6 says 1.3.0's refusal "names the unknown
+  trigger". 1.3.0's parser, run from `b5332ab` on the post-cutover block, actually refuses first
+  at `milestone_branches.pull_request: unknown key(s) ['merge_method']`. The guides and the 1.4.0
+  notes describe what it really does. The sequence and the lock-out are otherwise as the plan says.
+- **Cutover rehearsal** (`/tmp/claude-c1/cp7/rehearse.sh`). It used a scratch bare origin holding
+  the real tags `v1.1.0`-`v1.3.0` at their real commits and `main` at `455cef0`. The fake forge was
+  seeded with `v1.1.1`, `v1.2.0`, `v1.2.1` and `v1.3.0` published, with `v1.1.0` abandoned. The
+  milestone head is this branch plus the CP7 working tree. Results:
+  1. The `--no-ff` merge into `main` classifies as `NO_CHANGE` at 1.3.0 (`v1.3.0` is published at
+     `b5332ab`, an ancestor).
+  2. The cutover squash commit on top carries the plan's post-cutover block and
+     `dynamic = ["version"]`, titled `feat: squash merges with release versions derived from pull
+     request titles (#9)`. The results:
+     - `check-title` gives `ok: feat → minor`;
+     - `version` gives `1.3.0`;
+     - `classify` gives `RELEASE_DUE` 1.4.0 at the squash commit;
+     - the full sharded suite with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` passes (2409 tests,
+       5 shards);
+     - with `RELEASE_VERSION=1.4.0`, `build`, `verify` and `verify-wheel --tag v1.4.0` pass;
+     - the pipx smoke test prints `workflow-controller 1.4.0`.
+  3. With `v1.3.0`'s release removed, `classify` at the squash commit gives `RESUME` at
+     `b5332ab`, version 1.3.0. In a worktree at `b5332ab`, the build job's `build`, `verify`, pipx
+     smoke-test and `checksums` steps ran with `RELEASE_VERSION=1.3.0`. They were read from the
+     generated `main.yml` model, and the smoke binary was the scratch pipx one. All passed.
+     `publish --commit b5332ab` then created `v1.3.0` with the wheel and `SHA256SUMS`, and the
+     next `classify` gives `RELEASE_DUE` 1.4.0.
+
+  The first full-rehearsal attempt failed 6 tests. They were rehearsal artefacts:
+  `GIT_COMMITTER_*` was exported and overrode the identities the tests expect. The script now
+  sets the scratch clone's `user.*` config instead, and the rerun passed.
+
+Verification:
+- `git diff 455cef0 -- .workflow-controller/policy.json pyproject.toml` is empty (I7).
+- `python3 tools/ci_workflows.py --check` passes.
+- Every golden generator passed with `--check`. `no_policy_lifecycle`,
+  `external_implementation_review_decisions` (2.5.1 and 2.6.0) and
+  `plan_stage_decisions --release 2.6.0` are current. `plan_stage_decisions` for 2.5.1 still
+  differs only in the permitted `AMENDING_PLAN` rows, as at CP6, and
+  `test_golden_plan_stage_decisions` passes.
+- `test_plan_document_consistency` passes.
+- The full sharded run with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, under a reaping-subreaper
+  wrapper and with `FORCE_COLOR` unset, passed: 2409 tests, 6 shards.

@@ -10,6 +10,12 @@ adds no exit code: the table in
 normative exit-code contract, unchanged. The new `milestone-binding`
 subcommand reuses exit codes `0` and `20`.
 
+Superseded in part by
+[ADR 0007](0007-tag-derived-versions-and-squash-merges.md): under its
+`conventional_commit` trigger the release tags, not `pyproject.toml`, are
+the version authority, and `merge_method: "squash"` admits squash merges.
+A policy without either keeps the decisions below.
+
 ## Context
 
 Through 1.1.1 every milestone ran directly on `main`, and a release was a

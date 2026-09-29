@@ -56,13 +56,37 @@ from any terminal and changes nothing. See
 request. See the gate table in
 [Milestone branches and pull requests](milestone-branches.md).
 
+**"The milestone stopped at `pr_title_invalid`."** In squash mode, the plan
+declares no valid pull request title, and the title on the pull request is
+not a valid Conventional Commit either. The plan cannot be amended after
+acceptance: set a valid title on the pull request on GitHub, then `run`
+again. See
+[Squash merges and the pull request title](milestone-branches.md#squash-merges-and-the-pull-request-title).
+
 **"The pull request was closed, or merged too early."** The milestone is in a
 refusal state until you choose an exit. See
 [When a milestone gets stuck](milestone-branches.md#when-a-milestone-gets-stuck-the-refusal-state-exits).
 
-**"A merged milestone did not produce a release."** The version in
-`pyproject.toml` did not change, so `main.yml` classified the merge
-`NO_CHANGE`. See [Releasing](ci-and-releases.md#releasing).
+**"A merged milestone did not produce a release."** `main.yml` classified
+the merge `NO_CHANGE`: under the `conventional_commit` trigger, the pull
+request's title had a type that releases nothing (`docs`, `chore`, `ci` or
+`test` here); under `version_change`, the version did not change. See
+[Releasing](ci-and-releases.md#releasing).
+
+**"`main.yml` failed with `INVALID_SUBJECT`."** A commit on `main` since the
+last release tag has a subject the policy cannot classify, for example a
+squash message edited in the merge dialog. Nothing was tagged. Add the
+commit to `release.bump_overrides` in a pull request. See
+[An unclassifiable subject](ci-and-releases.md#an-unclassifiable-subject-invalid_subject).
+
+**"The `PR title` check failed."** The pull request's title is not a
+Conventional Commit, or its type is not in the policy's `change_types`, or it
+marks a breaking change (`!`) on a type that releases nothing. The check's
+log names which. Edit the title; the check re-runs. On a milestone pull
+request in squash mode, a valid title the plan declares always replaces the
+one on GitHub, so change the plan's `Pull request title:` line instead,
+through a plan amendment; a plan that declares no valid title leaves a
+title you set on GitHub in place.
 
 **"A work item I just planned is refused as malformed."** A work item whose
 state declares a `registry_path` is refused (`MalformedTargetRegistryError`,

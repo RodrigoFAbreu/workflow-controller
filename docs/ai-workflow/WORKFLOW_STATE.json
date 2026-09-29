@@ -4546,7 +4546,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-child-process-reaping-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -4619,8 +4619,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 36,
-      "last_transition": "2026-09-29T22:19:27Z",
+      "state_revision": 38,
+      "last_transition": "2026-09-29T22:38:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -4639,6 +4639,16 @@
           "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
           "plan_revision": 8
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "2e9a7e3187cb622b4c85f4365768049d5a3a95b47c7525ba0698123ebe1982c6",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "96e8a595d71fe702d60570d635bd1dee9467c9f19946a0108f62a400ecaee8bd",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-29T22:25:35Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

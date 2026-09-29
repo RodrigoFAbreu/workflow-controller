@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -834,6 +836,22 @@ class ConventionalClassificationTest(_ReleaseCase):
         tip = self.squash("fix: repaired")
         self.assertRefused(tip, broken, "cannot be read", "bump_overrides")
         self.assertDue(self.squash("chore: settle", overrides={broken: "major"}), "2.0.0")
+
+    def test_an_override_never_settles_a_failed_git_read_of_a_historical_policy(self) -> None:
+        self.published("v1.0.0", self.base)
+        (self.clone / repo_policy.POLICY_PATH).write_text("{ not json")
+        broken = self._commit("feat: hand-broken policy")
+        tip = self.squash("chore: settle", overrides={broken: "major"})
+        self.assertDue(tip, "2.0.0")
+        oid = run(["git", "rev-parse", f"{broken}:{repo_policy.POLICY_PATH}"], cwd=self.clone).stdout.strip()
+        real_git = repo_policy._git
+        for failing, fragment in ((["ls-tree", "-z", broken], "cannot list"), (["cat-file", "blob", oid], "cannot read")):
+            def git(repo_root, args, failing=failing):
+                if args[:len(failing)] == failing:
+                    return subprocess.CompletedProcess(["git", *args], 128, b"", b"fatal: injected")
+                return real_git(repo_root, args)
+            with self.subTest(failing[0]), mock.patch.object(repo_policy, "_git", git):
+                self.assertRefused(tip, broken, "cannot be read from Git", fragment, "injected")
 
 
 class ConventionalTransactionTest(TransactionTest):

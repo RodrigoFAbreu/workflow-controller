@@ -674,7 +674,18 @@ def _read_blob(repo_root: Path, rev: str, path: str) -> bytes | None:
 def read_committed_policy(repo_root: Path, rev: str = "HEAD") -> RepositoryPolicy | None:
     """The admissible policy committed at ``rev``, or ``None`` when ``rev``'s
     tree has no :data:`POLICY_PATH`. Never reads the working tree."""
-    raw = _read_blob(Path(repo_root), rev, POLICY_PATH)
+    return parse_committed_policy(read_committed_policy_bytes(repo_root, rev), rev)
+
+
+def read_committed_policy_bytes(repo_root: Path, rev: str = "HEAD") -> bytes | None:
+    """The exact bytes of :data:`POLICY_PATH` committed at ``rev``, or
+    ``None`` when ``rev``'s tree has none. A failed Git read refuses."""
+    return _read_blob(Path(repo_root), rev, POLICY_PATH)
+
+
+def parse_committed_policy(raw: bytes | None, rev: str) -> RepositoryPolicy | None:
+    """:func:`parse_policy` of the bytes :func:`read_committed_policy_bytes`
+    read at ``rev`` (``None`` for none), naming ``rev`` in a refusal."""
     if raw is None:
         return None
     try:

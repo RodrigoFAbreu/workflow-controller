@@ -36,7 +36,9 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 
 from . import conventional_commit, gitrepo, repo_policy, runtime
-from .errors import ControllerError, GitOperationError, InvalidTitleError, ReleaseTransactionError
+from .errors import (
+    GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError, ReleaseTransactionError,
+)
 from .forge import Forge, Release
 
 # -- classification states, in the plan's row order --------------------------
@@ -355,7 +357,8 @@ def _range_bump(ctx: ReleaseContext, base_commit: str | None, commit: str) -> _R
     subject's bump under the ``change_types`` committed at it, else the
     ``bump_overrides`` entry of ``commit``'s policy. An override never
     replaces a decision, and an unparsable policy at a range commit is never
-    read as legacy: both refuse."""
+    read as legacy: both refuse. An override settles only an unparsable
+    policy, never a failed Git read of one, which always refuses."""
     overrides = ctx.release.bump_overrides
     highest = conventional_commit.NONE
     invalid = []
@@ -363,8 +366,13 @@ def _range_bump(ctx: ReleaseContext, base_commit: str | None, commit: str) -> _R
     for sha, subject in gitrepo.first_parent_subjects(ctx.repo_root, base_commit, commit,
                                                       runner=ctx.git_runner):
         try:
-            policy = repo_policy.read_committed_policy(ctx.repo_root, sha)
-        except ControllerError as exc:
+            raw = repo_policy.read_committed_policy_bytes(ctx.repo_root, sha)
+        except InvalidRepositoryPolicyError as exc:
+            raise _refuse(f"the policy committed at {sha} ({subject!r}) cannot be read from Git: "
+                          f"{exc.message}", commit=sha, subject=subject, policy_error=exc.message) from None
+        try:
+            policy = repo_policy.parse_committed_policy(raw, sha)
+        except InvalidRepositoryPolicyError as exc:
             if sha not in overrides:
                 raise _refuse(f"the policy committed at {sha} ({subject!r}) cannot be read: "
                               f"{exc.message}; {remedy}", commit=sha, subject=subject,

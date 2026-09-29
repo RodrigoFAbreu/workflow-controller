@@ -543,8 +543,9 @@ class ReleaseTransactionCliTest(_ReleaseCase):
     """``classify``/``build``/``verify``/``publish`` over the toy adopter of
     ``tests.test_release_txn``: a bare origin and the fake ``gh``."""
 
-    def _main(self, *args: str, github_output: Path | None = None) -> tuple[int, str, str]:
-        env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log))
+    def _main(self, *args: str, github_output: Path | None = None,
+              extra_env: dict[str, str] | None = None) -> tuple[int, str, str]:
+        env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log), **(extra_env or {}))
         env.pop("GITHUB_OUTPUT", None)
         if github_output is not None:
             env["GITHUB_OUTPUT"] = str(github_output)
@@ -581,6 +582,42 @@ class ReleaseTransactionCliTest(_ReleaseCase):
         self.assertTrue(out.startswith("state=COLLISION_RELEASE_WITHOUT_TAG\n"), out)
         self.assertIn("refused: COLLISION_RELEASE_WITHOUT_TAG:", err)
         self.assertEqual(len(err.splitlines()), 1)
+
+    def test_build_and_verify_take_the_classified_version_from_release_version(self) -> None:
+        # version_change: optional, and it must equal the committed version.
+        fixtures.run(["git", "switch", "-q", "--detach", self.base], cwd=self.clone)
+        self.assertEqual(self._main("build")[:2], (0, "ok: built dist/pkg-1.0.0.txt\n"))
+        for value in ("", "1.0.0"):
+            self.assertEqual(self._main("verify", extra_env={"RELEASE_VERSION": value})[0], 0)
+        code, _, err = self._main("build", extra_env={"RELEASE_VERSION": "1.0.1"})
+        self.assertEqual(code, 1)
+        self.assertIn("not", err)
+        self.assertIn("committed version 1.0.0", err)
+
+        # conventional_commit: required, and it is what is built.
+        fixtures.run(["git", "switch", "-q", "main"], cwd=self.clone)
+        feat = self.squash("feat: first")
+        fixtures.run(["git", "switch", "-q", "--detach", feat], cwd=self.clone)
+        for env in ({}, {"RELEASE_VERSION": ""}):
+            for command in ("build", "verify"):
+                code, out, err = self._main(command, extra_env=env)
+                self.assertEqual((code, out), (1, ""))
+                self.assertIn("refused: RELEASE_VERSION: is unset or empty", err)
+                self.assertEqual(len(err.splitlines()), 1)
+        env = {"RELEASE_VERSION": "0.1.0"}
+        self.assertEqual(self._main("build", extra_env=env)[:2], (0, "ok: built dist/pkg-0.1.0.txt\n"))
+        self.assertEqual(self._main("verify", extra_env=env)[:2],
+                         (0, f"ok: dist/pkg-0.1.0.txt verified for {feat}\n"))
+
+    def test_build_and_verify_keep_1_3_0s_command_lines(self) -> None:
+        parser = release.build_parser()
+        subparsers = next(action for action in parser._actions
+                          if isinstance(action, argparse._SubParsersAction))
+        for command in ("build", "verify"):
+            with self.subTest(command):
+                self.assertEqual(parser.parse_args([command]).command, command)
+                options = [action.dest for action in subparsers.choices[command]._actions]
+                self.assertEqual(options, ["help"])
 
     def test_a_controller_refusal_is_one_line(self) -> None:
         code, _, err = self._main("publish", "--commit", self.base)

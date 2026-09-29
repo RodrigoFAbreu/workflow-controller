@@ -26,7 +26,7 @@ understands a squash merge (`MERGED_SQUASHED`); and a cutover that never locks o
 |---|---|---|
 | CP1 Conventional Commit titles and the policy schema | Complete | See below |
 | CP2 Tag-derived Controller version | Complete | See below |
-| CP3 Release classification from commit types | Not started | |
+| CP3 Release classification from commit types | Complete | See below |
 | CP4 CI workflows | Not started | |
 | CP5 Pull request title and body in squash mode | Not started | |
 | CP6 Squash close-out and the explicit base | Not started | |
@@ -99,3 +99,56 @@ with `FORCE_COLOR` unset, passed: 2308 tests, 6 shards, no failures. The post-cu
 clone with the real tags, this checkpoint's diff plus the cutover's `pyproject.toml` and
 `CONVENTIONAL_POLICY` committed on top) also passed: 2308 tests, 5 shards, the packaged-runtime
 tests included. There the Controller reports `1.3.0` from `v1.3.0`.
+
+### CP3 -- Release classification from commit types
+
+- `controller/release_txn.py`: under `conventional_commit`, `classify` computes the version at
+  `C` (Design C). The base is the highest matching ancestor tag (`0.0.0` without one). An
+  unsettled base (no release or a draft, and not in `abandoned_tags`) keeps the base version, so
+  the unchanged rows give `RESUME` at its commit. Otherwise `_range_bump` walks the first-parent
+  range since the base:
+  - a legacy commit (no policy, or `version_change`) contributes nothing;
+  - a Conventional one contributes its subject's bump under its own committed `change_types`;
+  - an unclassifiable subject takes `C`'s `bump_overrides` entry, else it is named in the new
+    failing state `INVALID_SUBJECT`. The outputs are the base version and tag, and every such
+    commit is listed;
+  - an override naming a classifiable or legacy commit refuses, and so does a range commit whose
+    committed policy cannot be read and has no override.
+
+  No base tag and no bump is `NO_CHANGE` at `0.0.0` with no forge read. The base tag's release
+  view is reused when the version stays at the base. `INVALID_SUBJECT` is first in `STATES` and
+  not in `SUCCESS_STATES`. The `version_change` path is unchanged.
+- `build(ctx, commit, version)` and `verify(ctx, commit, version)` go through `build_version`.
+  Under `conventional_commit` the classified version is required and must be SemVer. Under
+  `version_change` it is optional and must equal the committed version.
+- `controller/gitrepo.py`: `first_parent_subjects(base | None, commit)`, a single read-only
+  `rev-list --first-parent --reverse --format=%H%x00%s` that yields `(commit, subject)` oldest
+  first. The subject is Git's `%s`.
+- `tools/release.py`: `build` and `verify` read `RELEASE_VERSION` from the environment. Their
+  command lines stay byte-identical to 1.3.0's; a missing or empty value refuses in one line
+  under the new trigger.
+- Tests:
+  - `test_release_txn.ConventionalClassificationTest` covers every type and range case in the
+    plan, `INVALID_SUBJECT` and its override, the override refusals, legacy commits, this
+    repository's history since `v1.3.0` (`NO_CHANGE` at the milestone merge, then `RELEASE_DUE`
+    1.1.0), the unsettled or draft base, `BASELINE_UNRELEASED`, `ABANDONED_VERSION`, both
+    collisions, `ALREADY_RELEASED`/`RELEASE_MISMATCH`, `0.1.0` with no base, and
+    `NO_CHANGE` at `0.0.0` with no tag or release. It also covers the unparsable historical
+    policy.
+  - `ConventionalTransactionTest` reruns the whole `TransactionTest`, the concurrent-tag races
+    included, under the new trigger. It also checks the build version rules and that publish
+    refuses a build of another version.
+  - `test_release_tools.ReleaseTransactionCliTest` checks `RELEASE_VERSION` and 1.3.0's bare
+    parsers. `test_gitrepo` covers the range helper.
+  - `test_trunk_orchestration_e2e.ReleaseHistoryTest` adds the cutover history end to end. It
+    also adds a `RESUME` at a base commit carrying a 1.3.0-shaped `tools/release.py`, whose
+    `build`/`verify` steps run as the generated `main.yml` build job declares them.
+
+Verification: the narrow modules pass (`test_release_txn`, `test_release_tools`,
+`test_trunk_orchestration_e2e`, `test_gitrepo`, `test_no_rewrite_invariants`,
+`test_write_containment`, `test_package_structure`, `test_ci_workflows`, `test_repo_policy`,
+`test_version_authority`, `test_plan_document_consistency`: 350 tests). The full sharded run with
+`CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, under a reaping-subreaper wrapper and with `FORCE_COLOR`
+unset, passed: 2342 tests, 5 shards. The post-cutover scratch clone passed too: 2342 tests, 6
+shards. That clone is a full clone with the real tags, carrying this diff plus the cutover's
+dynamic `pyproject.toml` and `CONVENTIONAL_POLICY`, and there the Controller reports `1.3.0`.

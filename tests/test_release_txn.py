@@ -8,6 +8,12 @@ The adopter here is deliberately not this repository: a toy policy whose
 rebuild is not byte-identical, as a wheel is not) and whose ``verify``
 checks the artifact's first line names its version and commit. That shows
 the transaction reads everything adopter-specific from the policy.
+
+The same toy adopter under the ``conventional_commit`` trigger
+(``workflow-controller-squash-merge-tag-versioning`` CP3) derives its
+version from the release tags and the subjects of the trunk commits since
+the highest one; its history starts under ``version_change``, as an
+adopter's does.
 """
 
 from __future__ import annotations
@@ -25,8 +31,8 @@ from controller import forge, gitrepo, release_txn, repo_policy  # noqa: E402
 from controller.errors import ForgeUndecidableError, ReleaseTransactionError  # noqa: E402
 from controller.release_txn import (  # noqa: E402
     ABANDONED_TAG_INCONSISTENT, ABANDONED_VERSION, ALREADY_RELEASED, BASELINE_UNRELEASED,
-    COLLISION_RELEASE_WITHOUT_TAG, COLLISION_TAG_ELSEWHERE, INVALID_TRANSITION, NO_CHANGE,
-    RELEASE_DUE, RELEASE_MISMATCH, RESUME,
+    COLLISION_RELEASE_WITHOUT_TAG, COLLISION_TAG_ELSEWHERE, INVALID_SUBJECT, INVALID_TRANSITION,
+    NO_CHANGE, RELEASE_DUE, RELEASE_MISMATCH, RESUME,
 )
 from tests import fake_gh  # noqa: E402
 from tests.fixtures import FAKE_GH_REPOSITORY, build_origin_pair, commit_all, fake_gh_env, run  # noqa: E402
@@ -85,6 +91,23 @@ def toy_policy(abandoned: list[str], *, enabled: bool = True) -> dict:
             "publication": {"kind": "github_release", "title": "{tag}", "notes": "pkg {tag}"},
         },
     }
+
+
+#: The reference adopter's ``change_types`` (``tests.fixtures.CONVENTIONAL_POLICY``).
+CHANGE_TYPES = {"feat": "minor", "fix": "patch", "perf": "patch", "refactor": "patch",
+                "revert": "patch", "build": "patch", "style": "patch",
+                "docs": "none", "chore": "none", "ci": "none", "test": "none"}
+
+
+def conventional_policy(abandoned: list[str], overrides: dict[str, str] | None = None) -> dict:
+    """:func:`toy_policy` under the ``conventional_commit`` trigger."""
+    policy = toy_policy(abandoned)
+    release = policy["release"]
+    del release["version_source"]
+    release.update(trigger="conventional_commit", change_types=dict(CHANGE_TYPES))
+    if overrides:
+        release["bump_overrides"] = dict(overrides)
+    return policy
 
 
 def artifact_bytes(version: str, commit: str, nonce: str = "0") -> bytes:
@@ -148,6 +171,19 @@ class _ReleaseCase(unittest.TestCase):
         policy.parent.mkdir(exist_ok=True)
         policy.write_text(json.dumps(toy_policy(self.abandoned), indent=2))
         return self._commit(f"version {version} {self.abandoned}", push=push)
+
+    def squash(self, subject: str, *, overrides: dict[str, str] | None = None,
+               abandoned: list[str] | None = None, push: bool = True) -> str:
+        """A trunk commit with ``subject`` under the conventional policy (and
+        ``abandoned`` tags and ``overrides``), as a squash merge lands one."""
+        if abandoned is not None:
+            self.abandoned = abandoned
+        policy = self.clone / repo_policy.POLICY_PATH
+        policy.parent.mkdir(exist_ok=True)
+        policy.write_text(json.dumps(conventional_policy(self.abandoned, overrides), indent=2))
+        path = self.clone / "work.txt"
+        path.write_text((path.read_text() if path.exists() else "") + f"{subject}\n")
+        return self._commit(subject, push=push)
 
     def merge(self, name: str = "change") -> str:
         """A trunk commit that changes nothing release-relevant."""
@@ -219,9 +255,13 @@ class _ReleaseCase(unittest.TestCase):
     def release_views(self) -> list[str]:
         return [argv[3] for argv in self.gh.calls if argv[1:3] == ["release", "view"]]
 
+    #: The classified version :meth:`build_at` builds for (``None``: the
+    #: committed one, under ``version_change``).
+    build_version: str | None = None
+
     def build_at(self, commit: str) -> None:
         run(["git", "switch", "-q", "--detach", commit], cwd=self.clone)
-        release_txn.build(self.ctx(commit), commit)
+        release_txn.build(self.ctx(commit), commit, self.build_version)
 
     def verify_commits(self) -> list[str]:
         if not self.verify_log.exists():
@@ -561,6 +601,283 @@ class TransactionTest(_ReleaseCase):
         self.assertIn("pushing v1.0.0 was rejected", str(raised.exception))
         self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.0.0"), foreign)
         self.assertIsNone(self.release_state("v1.0.0"))
+
+
+class ConventionalClassificationTest(_ReleaseCase):
+    """Design C: the version at ``C`` is the highest ancestor tag bumped by
+    the first-parent commits since it. ``self.base`` is a legacy commit
+    (``version_change``, 1.0.0), published as ``v1.0.0`` where a test says
+    so."""
+
+    def restart(self) -> None:
+        """A fresh history, for one scenario per sub-test."""
+        self.tearDown()
+        self.setUp()
+
+    def assertDue(self, commit: str, version: str) -> release_txn.Classification:
+        state = self.assertState(commit, RELEASE_DUE, target=commit)
+        self.assertEqual((state.version, state.tag), (version, f"v{version}"))
+        return state
+
+    def assertRefused(self, commit: str, *fragments: str) -> None:
+        """Publishing ``commit`` refuses, naming ``fragments``, and creates
+        no tag or release."""
+        tags = gitrepo.ls_remote_tags(self.clone, "origin")
+        releases = fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))["releases"]
+        with self.assertRaises(ReleaseTransactionError) as caught:
+            release_txn.publish(self.ctx(commit), commit, commit, tagger=TAGGER)
+        for fragment in fragments:
+            self.assertIn(fragment, str(caught.exception))
+        self.assertEqual(gitrepo.ls_remote_tags(self.clone, "origin"), tags)
+        self.assertEqual(fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))["releases"], releases)
+
+    def drop_release(self, tag: str) -> None:
+        state = fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))
+        state["releases"] = [r for r in state["releases"] if r["tagName"] != tag]
+        fake_gh.write_state(Path(self.env["FAKE_GH_STATE"]), state)
+
+    def test_each_type_releases_what_change_types_says(self) -> None:
+        cases = [("feat: add x", RELEASE_DUE, "1.1.0"), ("fix: y", RELEASE_DUE, "1.0.1"),
+                 ("perf(core): z", RELEASE_DUE, "1.0.1"), ("feat!: drop x", RELEASE_DUE, "2.0.0"),
+                 ("fix(api)!: rename", RELEASE_DUE, "2.0.0"),
+                 ("docs: a", NO_CHANGE, "1.0.0"), ("chore: b", NO_CHANGE, "1.0.0"),
+                 ("ci: c", NO_CHANGE, "1.0.0"), ("test: d", NO_CHANGE, "1.0.0")]
+        for index, (subject, expected, version) in enumerate(cases):
+            with self.subTest(subject):
+                if index:
+                    self.restart()
+                self.published("v1.0.0", self.base)
+                commit = self.squash(subject)
+                target = commit if expected == RELEASE_DUE else self.base
+                state = self.assertState(commit, expected, target=target)
+                self.assertEqual(state.version, version)
+
+    def test_a_breaking_change_from_0_x_is_a_major(self) -> None:
+        self.published("v0.4.2", self.base)
+        self.assertDue(self.squash("feat!: stable"), "1.0.0")
+
+    def test_the_highest_bump_in_the_range_wins(self) -> None:
+        self.published("v1.0.0", self.base)
+        self.squash("docs: guide")
+        feat = self.squash("feat: thing (#12)")
+        self.assertDue(feat, "1.1.0")
+        self.published("v1.1.0", feat)
+        # Two pushes, one run: the run the middle push skipped is covered.
+        self.squash("feat!: two")
+        self.assertDue(self.squash("fix: three"), "2.0.0")
+
+    def test_an_unclassifiable_subject_is_invalid_subject_until_an_override_settles_it(self) -> None:
+        for index, subject in enumerate(("Merge pull request #5 from o/feature", "feature: x",
+                                         "docs!: y", "feat:no space")):
+            with self.subTest(subject):
+                if index:
+                    self.restart()
+                self.published("v1.0.0", self.base)
+                bad = self.squash(subject)
+                state = self.assertState(self.squash("fix: after"), INVALID_SUBJECT)
+                self.assertFalse(state.succeeded)
+                self.assertFalse(state.publishes)
+                self.assertEqual((state.version, state.tag, state.target), ("1.0.0", "v1.0.0", self.base))
+                self.assertIn(bad, state.detail)
+                self.assertIn(repr(subject), state.detail)
+                self.assertIn("bump_overrides", state.detail)
+                self.assertEqual(len(state.problems), 1)
+                # A later pull request acknowledges it.
+                self.assertDue(self.squash("chore: acknowledge", overrides={bad: "none"}), "1.0.1")
+        # INVALID_SUBJECT is a failure the CLI reports; nothing was tagged.
+        self.assertIn(INVALID_SUBJECT, release_txn.STATES)
+        self.assertNotIn(INVALID_SUBJECT, release_txn.SUCCESS_STATES)
+
+    def test_every_unclassifiable_commit_is_named(self) -> None:
+        self.published("v1.0.0", self.base)
+        first, second = self.squash("oops"), self.squash("more oops")
+        state = self.assertState(self.squash("feat: x"), INVALID_SUBJECT)
+        self.assertEqual(len(state.problems), 2)
+        self.assertTrue(state.problems[0].startswith(first) and state.problems[1].startswith(second))
+
+    def test_an_override_never_replaces_a_decision(self) -> None:
+        self.published("v1.0.0", self.base)
+        legacy = self.merge("a legacy change")
+        breaking = self.squash("feat!: big")
+        docs = self.squash("docs: small")
+        for commit, bump, subject, decided in ((breaking, "none", "feat!: big", "major by its subject"),
+                                               (docs, "major", "docs: small", "none by its subject"),
+                                               (legacy, "patch", "a legacy change", "legacy commit")):
+            with self.subTest(subject):
+                tip = self.squash("chore: override", overrides={commit: bump})
+                self.assertRefused(tip, commit, repr(subject), decided, "remove the entry")
+        # An override naming a commit before the base tag settled an earlier
+        # range, and is ignored.
+        tip = self.squash("chore: old override", overrides={self.base: "major"})
+        self.assertDue(tip, "2.0.0")
+
+    def test_legacy_commits_contribute_nothing(self) -> None:
+        self.published("v1.0.0", self.base)
+        # No policy at all at a commit.
+        (self.clone / repo_policy.POLICY_PATH).unlink()
+        self._commit("remove the policy")
+        self.assertState(self.squash("docs: back"), NO_CHANGE, target=self.base)
+        self.assertDue(self.squash("fix: x"), "1.0.1")
+
+    def _merge_commit(self, name: str) -> str:
+        """A ``--no-ff`` merge of a one-commit side branch into the trunk,
+        under the policy the trunk already carries."""
+        run(["git", "switch", "-q", "-c", name], cwd=self.clone)
+        (self.clone / f"{name}.txt").write_text(f"{name}\n")
+        commit_all(self.clone, f"work on {name}")
+        run(["git", "switch", "-q", "main"], cwd=self.clone)
+        run(["git", "merge", "-q", "--no-ff", "-m", f"Merge pull request from o/{name}", name],
+            cwd=self.clone)
+        run(["git", "push", "-q", "origin", "HEAD:refs/heads/main"], cwd=self.clone)
+        return run(["git", "rev-parse", "HEAD"], cwd=self.clone).stdout.strip()
+
+    def test_this_repositorys_history_since_v1_3_0_releases_the_minor(self) -> None:
+        # v1.0.0 stands for v1.3.0: two legacy merge commits (#6, #7), then the
+        # milestone's own legacy merge, then the cutover's feat squash.
+        self.published("v1.0.0", self.base)
+        self._merge_commit("phase0")
+        self._merge_commit("roadmap")
+        milestone = self._merge_commit("milestone")
+        self.assertState(milestone, NO_CHANGE, target=self.base)
+        self.assertDue(self.squash("feat: squash merges and tag-derived versions (#9)"), "1.1.0")
+
+    def _interrupted(self, *, draft: bool) -> None:
+        self.published("v1.0.0", self.base)
+        feat = self.squash("feat: a")
+        self.tag("v1.1.0", feat)
+        if draft:
+            self.seed_release("v1.1.0", {}, draft=True)
+        fix = self.squash("fix: b")
+        state = self.assertState(fix, RESUME, target=feat)
+        self.assertEqual(state.version, "1.1.0")
+        # Once published, the next run releases the patch since the tag.
+        self.drop_release("v1.1.0")
+        self.seed_release("v1.1.0", self.good_assets("1.1.0", feat))
+        self.assertDue(fix, "1.1.1")
+
+    def test_an_unsettled_base_is_resumed_before_the_bump_since_it(self) -> None:
+        self._interrupted(draft=False)
+
+    def test_a_draft_base_is_resumed_before_the_bump_since_it(self) -> None:
+        self._interrupted(draft=True)
+
+    def test_a_lower_unsettled_tag_is_baseline_unreleased_until_acknowledged(self) -> None:
+        self.published("v1.0.0", self.base)
+        self.tag("v1.1.0", self.squash("feat: a"))
+        self.published("v1.2.0", self.squash("feat: b"))
+        state = self.assertState(self.squash("fix: c"), BASELINE_UNRELEASED)
+        self.assertEqual((state.version, state.unsettled), ("1.2.1", ("v1.1.0",)))
+        self.assertDue(self.squash("chore: settle", abandoned=["v1.1.0"]), "1.2.1")
+
+    def test_an_abandoned_base_is_abandoned_version_then_the_next_bump_is_due(self) -> None:
+        self.published("v1.0.0", self.base)
+        self.tag("v1.1.0", self.squash("feat: a"))
+        state = self.assertState(self.squash("docs: acknowledge", abandoned=["v1.1.0"]), ABANDONED_VERSION)
+        self.assertTrue(state.succeeded)
+        self.assertDue(self.squash("fix: b"), "1.1.1")
+
+    def test_the_collision_rows(self) -> None:
+        self.published("v1.0.0", self.base)
+        run(["git", "switch", "-q", "-c", "side"], cwd=self.clone)
+        side = self.squash("feat: side", push=False)
+        run(["git", "push", "-q", "origin", "side"], cwd=self.clone)
+        self.tag("v1.1.0", side)
+        run(["git", "switch", "-q", "main"], cwd=self.clone)
+        run(["git", "checkout", "-q", "main", "--", "."], cwd=self.clone)
+        self.assertState(self.squash("feat: trunk"), COLLISION_TAG_ELSEWHERE)
+        self.restart()
+        self.published("v1.0.0", self.base)
+        self.seed_release("v1.1.0", {})
+        self.assertState(self.squash("feat: trunk"), COLLISION_RELEASE_WITHOUT_TAG)
+
+    def test_a_rerun_at_the_release_commit_is_already_released_or_a_mismatch(self) -> None:
+        self.published("v1.0.0", self.base)
+        feat = self.squash("feat: a")
+        self.tag("v1.1.0", feat)
+        self.seed_release("v1.1.0", {"pkg-1.1.0.txt": b"wrong"})
+        self.assertState(feat, RELEASE_MISMATCH)
+        self.restart()
+        self.published("v1.0.0", self.base)
+        feat = self.squash("feat: a")
+        self.published("v1.1.0", feat)
+        self.assertState(feat, ALREADY_RELEASED, target=feat)
+        self.assertState(self.squash("docs: b"), NO_CHANGE, target=feat)
+
+    def test_without_a_base_tag_a_feat_is_0_1_0(self) -> None:
+        self.assertDue(self.squash("feat: first"), "0.1.0")
+
+    def test_without_a_base_tag_and_without_a_bump_nothing_is_released(self) -> None:
+        for index, history in enumerate((["docs: a", "chore: b"], ["chore: switch to conventional"])):
+            with self.subTest(history):
+                if index:
+                    self.restart()
+                    self.merge("legacy one")
+                    self.merge("legacy two")
+                for subject in history:
+                    tip = self.squash(subject)
+                state = self.assertState(tip, NO_CHANGE, target=tip)
+                self.assertTrue(state.succeeded)
+                self.assertFalse(state.publishes)
+                self.assertEqual((state.version, state.tag_commit, state.release), ("0.0.0", None, None))
+                self.assertIn("no release tag is reachable", state.detail)
+                self.assertEqual(self.release_views(), [])
+                self.assertEqual(gitrepo.ls_remote_tags(self.clone, "origin"), {})
+                with self.assertRaises(ReleaseTransactionError):
+                    release_txn.publish(self.ctx(tip), tip, tip, tagger=TAGGER)
+                self.assertEqual(gitrepo.ls_remote_tags(self.clone, "origin"), {})
+                self.assertEqual(fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))["releases"], [])
+
+    def test_an_unparsable_historical_policy_refuses_until_overridden(self) -> None:
+        self.published("v1.0.0", self.base)
+        (self.clone / repo_policy.POLICY_PATH).write_text("{ not json")
+        broken = self._commit("feat: hand-broken policy")
+        tip = self.squash("fix: repaired")
+        self.assertRefused(tip, broken, "cannot be read", "bump_overrides")
+        self.assertDue(self.squash("chore: settle", overrides={broken: "major"}), "2.0.0")
+
+
+class ConventionalTransactionTest(TransactionTest):
+    """The whole transaction again under ``conventional_commit``: the toy
+    history's ``v0.9.0`` at the legacy base is acknowledged in
+    ``abandoned_tags`` (so no scenario's release edits unsettle it), and a
+    ``feat!`` squash makes ``1.0.0`` due, so every scenario above names the
+    same tag."""
+
+    build_version = "1.0.0"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.tag("v0.9.0", self.base)
+        self.base = self.squash("feat!: one point oh", abandoned=["v0.9.0"])
+
+    def merge(self, name: str = "change") -> str:
+        return self.squash(f"docs: {name}")
+
+    def test_the_build_is_of_the_classified_version(self) -> None:
+        self.assertEqual(self.classify(self.base).version, "1.0.0")
+        run(["git", "switch", "-q", "--detach", self.base], cwd=self.clone)
+        for missing in (None, ""):
+            with self.assertRaises(ReleaseTransactionError):
+                release_txn.build(self.ctx(self.base), self.base, missing)
+        with self.assertRaises(ReleaseTransactionError):
+            release_txn.build(self.ctx(self.base), self.base, "1.0")
+        # A build of another version: publish refuses before tagging.
+        release_txn.build(self.ctx(self.base), self.base, "1.0.1")
+        with self.assertRaises(ReleaseTransactionError):
+            release_txn.verify(self.ctx(self.base), self.base, "1.0.0")
+        with self.assertRaises(ReleaseTransactionError):
+            self.publish(self.base, self.base)
+        self.assertIsNone(gitrepo.remote_tag_commit(self.clone, "origin", "v1.0.0"))
+
+    def test_version_change_refuses_a_version_that_is_not_the_committed_one(self) -> None:
+        legacy = self.bump("1.5.0")
+        run(["git", "switch", "-q", "--detach", legacy], cwd=self.clone)
+        with self.assertRaises(ReleaseTransactionError):
+            release_txn.build(self.ctx(legacy), legacy, "1.0.0")
+        self.assertEqual([p.name for p in release_txn.build(self.ctx(legacy), legacy, "1.5.0")],
+                         ["pkg-1.5.0.txt"])
+        self.assertEqual([p.name for p in release_txn.verify(self.ctx(legacy), legacy, None)],
+                         ["pkg-1.5.0.txt"])
 
 
 if __name__ == "__main__":

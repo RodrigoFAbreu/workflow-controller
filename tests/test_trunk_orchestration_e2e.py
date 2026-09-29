@@ -53,6 +53,7 @@ from controller import cli, gitrepo, job, milestone_branch as mb, repo_policy, r
 from tests import fake_gh, fixtures  # noqa: E402
 from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
 from tests import test_release_tools as release_tools, test_release_txn  # noqa: E402
+from tests.test_ci_workflows import ci as ci_workflows  # noqa: E402
 from tests.golden import generate_no_policy_lifecycle as golden  # noqa: E402
 from tests.test_milestone_branch import policy  # noqa: E402
 
@@ -748,7 +749,8 @@ class NoPolicyLifecycleTest(_E2ECase):
 class ReleaseHistoryTest(test_release_txn._ReleaseCase):
     """``main.yml``'s release path, per trunk commit: ``classify``, then --
     for ``RELEASE_DUE`` or ``RESUME`` -- ``build`` and ``verify`` at the
-    classified commit, and ``publish`` from the trunk tip."""
+    classified commit with ``RELEASE_VERSION`` set to the classified version,
+    and ``publish`` from the trunk tip."""
 
     _main = release_tools.ReleaseTransactionCliTest._main
 
@@ -759,8 +761,9 @@ class ReleaseHistoryTest(test_release_txn._ReleaseCase):
         outputs = dict(line.split("=", 1) for line in out.splitlines())
         if outputs["state"] in ("RELEASE_DUE", "RESUME"):
             fixtures.run(["git", "switch", "-q", "--detach", outputs["commit"]], cwd=self.clone)
-            self.assertEqual(self._main("build")[0], 0)
-            self.assertEqual(self._main("verify")[0], 0)
+            env = {"RELEASE_VERSION": outputs["version"]}
+            self.assertEqual(self._main("build", extra_env=env)[0], 0)
+            self.assertEqual(self._main("verify", extra_env=env)[0], 0)
             fixtures.run(["git", "switch", "-q", "--detach", tip], cwd=self.clone)
             env = {"FAKE_GH_FAIL": json.dumps({"release create": publish_failure})} if publish_failure else {}
             with unittest.mock.patch.dict(self.env, env):
@@ -798,6 +801,100 @@ class ReleaseHistoryTest(test_release_txn._ReleaseCase):
         self.assertIsNone(self.release_state("v1.1.0"))
         self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.1.0"), orphan)
 
+    def test_the_cutover_history_under_conventional_commits(self) -> None:
+        # v1.0.0 stands for v1.3.0, released under version_change.
+        self.assertEqual(self.ci_run(self.base), "RELEASE_DUE")
+        self.assertEqual(self.ci_run(self.merge("docs")), "NO_CHANGE")
+        # The milestone's own merge, still legacy, releases nothing.
+        self.assertEqual(self.ci_run(self.merge("milestone")), "NO_CHANGE")
+        # The cutover pull request, squashed with a feat title.
+        cutover = self.squash("feat: squash merges and tag-derived versions (#9)")
+        self.assertEqual(self.ci_run(cutover), "RELEASE_DUE")
+        self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.1.0"), cutover)
+        self.assertEqual(self.ci_run(self.squash("docs: guide (#10)")), "NO_CHANGE")
+        # A fix whose publication is interrupted, then resumed by the next merge.
+        fix = self.squash("fix: a (#11)")
+        self.assertEqual(self.ci_run(fix, publish_failure="server_error"), "RELEASE_DUE")
+        self.assertIsNone(self.release_state("v1.1.1"))
+        self.assertEqual(self.ci_run(self.squash("feat: b (#12)")), "RESUME")
+        self.assertFalse(self.release_state("v1.1.1")["isDraft"])
+        self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.1.1"), fix)
+        # The feat the resume skipped is released by the next run.
+        tip = self.squash("chore: tidy (#13)")
+        self.assertEqual(self.ci_run(tip), "RELEASE_DUE")
+        self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", "v1.2.0"), tip)
+        self.assertEqual(self.ci_run(tip), "ALREADY_RELEASED")
+        # An unclassifiable subject fails the run and releases nothing.
+        bad = self.squash("Update README.md")
+        code, out, err = self._main("classify", "--commit", bad)
+        self.assertEqual(code, 1)
+        self.assertTrue(out.startswith("state=INVALID_SUBJECT\nversion=1.2.0\ntag=v1.2.0\n"), out)
+        self.assertIn(bad, err)
+        self.assertEqual(self.ci_run(self.squash("chore: settle", overrides={bad: "none"})), "NO_CHANGE")
+
+    def _build_job_step(self, name: str, outputs: dict[str, str]) -> None:
+        """Run ``main.yml``'s build-job step ``name`` as the generated model
+        declares it, in the checked-out clone, with the job's environment."""
+        job = ci_workflows.main_workflow()["jobs"]["build"]
+        step = next(step for step in job["steps"] if step.get("name") == name)
+        env = {**job.get("env", {}), **step.get("env", {})}
+        for key, value in env.items():
+            for output, found in outputs.items():
+                value = value.replace(f"${{{{ needs.release-plan.outputs.{output} }}}}", found)
+            self.assertNotIn("${{", value, f"{name}: {key} is not a release-plan output")
+            env[key] = value
+        runner_env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log),
+                          RELEASE_VERSION=outputs["version"], **env)
+        result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=self.clone, env=runner_env,
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_resume_at_a_target_carrying_1_3_0s_tooling_builds(self) -> None:
+        # The base commit carries a release.py with 1.3.0's parser (build and
+        # verify take no option) and a static version; its tag is pushed and
+        # its publication interrupted before the cutover.
+        tools = self.clone / "tools"
+        tools.mkdir()
+        (tools / "release.py").write_text(RELEASE_PY_1_3_0)
+        base = self.bump("1.0.0")
+        self.tag("v1.0.0", base)
+        tip = self.squash("feat: after the cutover (#9)")
+        code, out, err = self._main("classify", "--commit", tip)
+        self.assertEqual(code, 0, err)
+        outputs = dict(line.split("=", 1) for line in out.splitlines())
+        self.assertEqual(outputs, {"state": "RESUME", "version": "1.0.0", "tag": "v1.0.0", "commit": base})
+        fixtures.run(["git", "switch", "-q", "--detach", base], cwd=self.clone)
+        self._build_job_step("build", outputs)
+        self._build_job_step("verify", outputs)
+        self.assertEqual(sorted(p.name for p in (self.clone / "dist").iterdir()), ["pkg-1.0.0.txt"])
+        fixtures.run(["git", "switch", "-q", "--detach", tip], cwd=self.clone)
+        code, _, err = self._main("publish", "--commit", base)
+        self.assertEqual(code, 0, err)
+        self.assertFalse(self.release_state("v1.0.0")["isDraft"])
+        fixtures.run(["git", "switch", "-q", "main"], cwd=self.clone)
+        self.assertEqual(self._main("classify", "--commit", tip)[1].splitlines()[:2],
+                         ["state=RELEASE_DUE", "version=1.1.0"])
+
+
+#: ``tools/release.py``'s ``build`` and ``verify`` as 1.3.0 parses them: no
+#: option, and the version read from the committed ``pyproject.toml``.
+RELEASE_PY_1_3_0 = """\
+import argparse, subprocess, sys, tomllib
+parser = argparse.ArgumentParser(prog="release.py")
+sub = parser.add_subparsers(dest="command", required=True)
+sub.add_parser("build")
+sub.add_parser("verify")
+args = parser.parse_args()
+with open("pyproject.toml", "rb") as handle:
+    version = tomllib.load(handle)["project"]["version"]
+commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+                        check=True).stdout.strip()
+if args.command == "build":
+    argv = [sys.executable, "build.py", version, commit]
+else:
+    argv = [sys.executable, "verify.py", f"dist/pkg-{version}.txt", version, commit, f"v{version}"]
+sys.exit(subprocess.run(argv).returncode)
+"""
 
 
 if __name__ == "__main__":

@@ -132,6 +132,30 @@ class ReadTest(_Case):
                                     str(two.resolve()): None})
         self.assertEqual(gitrepo.worktree_branches(one), branches)
 
+    def test_first_parent_subjects(self) -> None:
+        first = self.commit("a.txt", "a\n")
+        run(["git", "switch", "-q", "-c", "side"], cwd=self.clone)
+        side = self.commit("b.txt", "b\n")
+        run(["git", "switch", "-q", "main"], cwd=self.clone)
+        (self.clone / "c.txt").write_text("c\n")
+        run(["git", "add", "c.txt"], cwd=self.clone)
+        # A multi-line first paragraph is one subject; the body is not read.
+        run(["git", "commit", "-q", "-m", "feat: two\nlines", "-m", "body: ignored"], cwd=self.clone)
+        second = current_head(self.clone)
+        run(["git", "merge", "-q", "--no-ff", "-m", "Merge side", "side"], cwd=self.clone)
+        merge = current_head(self.clone)
+        spy = _Spy()
+        self.assertEqual(gitrepo.first_parent_subjects(self.clone, first, merge, runner=spy),
+                         [(second, "feat: two lines"), (merge, "Merge side")])
+        self.assertEqual(spy.subcommands(), ["rev-list"])
+        self.assertNotIn(side, [sha for sha, _ in gitrepo.first_parent_subjects(self.clone, None, merge)])
+        self.assertEqual(gitrepo.first_parent_subjects(self.clone, None, merge),
+                         [(self.base, "Initial commit"), (first, "change a.txt"),
+                          (second, "feat: two lines"), (merge, "Merge side")])
+        self.assertEqual(gitrepo.first_parent_subjects(self.clone, merge, merge), [])
+        with self.assertRaises(GitOperationError):
+            gitrepo.first_parent_subjects(self.clone, None, "no-such-rev")
+
 
 class FetchTest(_Case):
     def test_fetch_into_remote_tracking_refs(self) -> None:

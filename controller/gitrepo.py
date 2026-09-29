@@ -184,6 +184,30 @@ def first_parent_log(repo_root: Path, a: str, b: str, *, runner: Runner | None =
     return out.split()
 
 
+def first_parent_subjects(repo_root: Path, base: str | None, commit: str, *,
+                          runner: Runner | None = None) -> list[tuple[str, str]]:
+    """``(commit, subject)`` for each commit of ``base..commit`` along
+    ``commit``'s first-parent chain -- all of that chain when ``base`` is
+    ``None`` -- oldest first. The subject is Git's own (``%s``: the message's
+    first paragraph, its lines joined by spaces)."""
+    revs = [commit] if base is None else [f"{base}..{commit}"]
+    out = _git(repo_root, ["rev-list", "--first-parent", "--reverse", "--format=%H%x00%s",
+                           "--end-of-options", *revs], runner)
+    lines = out.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) % 2:
+        raise GitOperationError(f"git rev-list returned an odd listing: {out!r}", evidence={"stdout": out})
+    pairs = []
+    for header, record in zip(lines[::2], lines[1::2]):
+        sha, sep, subject = record.partition("\0")
+        if header != f"commit {sha}" or not sep or len(sha) not in (40, 64):
+            raise GitOperationError(f"git rev-list returned an unexpected record: {header!r} {record!r}",
+                                    evidence={"stdout": out})
+        pairs.append((sha, subject))
+    return pairs
+
+
 def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
     """``git status --porcelain --untracked-files=no`` entries, one per
     changed tracked path; empty for a clean tracked tree."""

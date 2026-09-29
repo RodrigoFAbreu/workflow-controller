@@ -18,6 +18,12 @@ thin CLI:
 - ``build`` runs the policy's ``build`` command at the checked-out commit;
 - ``verify`` runs the policy's ``verify`` command on every built artifact
   for the checked-out commit;
+- both take the classified version from the environment variable
+  ``RELEASE_VERSION`` (``classify``'s ``version``), never from an argument,
+  so their command lines stay 1.3.0's: a ``RESUME`` can target a commit
+  carrying 1.3.0's own tooling. Under the ``conventional_commit`` trigger it
+  is required; under ``version_change`` it is optional and must equal the
+  committed version;
 - ``publish --commit TARGET`` recomputes the classification of the
   checked-out trunk commit and, for ``RELEASE_DUE`` or ``RESUME`` targeting
   ``TARGET``, tags (after validation, never moving a tag), publishes or
@@ -314,15 +320,32 @@ def cmd_classify(repo_root: Path, commit: str) -> None:
     print(f"ok: {state.state}: {state.detail}", file=sys.stderr)
 
 
+#: The classified version ``build`` and ``verify`` build for.
+RELEASE_VERSION_ENV = "RELEASE_VERSION"
+
+
+def release_version(ctx: release_txn.ReleaseContext) -> str | None:
+    """``$RELEASE_VERSION``, required under the ``conventional_commit``
+    trigger; ``None`` when unset or empty."""
+    version = os.environ.get(RELEASE_VERSION_ENV) or None
+    if version is None and ctx.release.trigger == repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+        raise Refusal(RELEASE_VERSION_ENV, f"is unset or empty; under the "
+                                           f"{ctx.release.trigger} trigger it carries the classified "
+                                           f"version (classify's version output)")
+    return version
+
+
 def cmd_build(repo_root: Path) -> None:
     head = _head(repo_root)
-    for path in release_txn.build(release_context(repo_root), head):
+    ctx = release_context(repo_root)
+    for path in release_txn.build(ctx, head, release_version(ctx)):
         print(f"ok: built {path.relative_to(repo_root)}")
 
 
 def cmd_verify(repo_root: Path) -> None:
     head = _head(repo_root)
-    for path in release_txn.verify(release_context(repo_root), head):
+    ctx = release_context(repo_root)
+    for path in release_txn.verify(ctx, head, release_version(ctx)):
         print(f"ok: {path.relative_to(repo_root)} verified for {head}")
 
 

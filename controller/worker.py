@@ -570,6 +570,12 @@ _SPAWN_LOCK = threading.RLock()
 #: launches never record each other's.
 _LAUNCH_CHILDREN: dict[int, int | None] = {}
 
+#: Which launch last registered each :data:`_LAUNCH_CHILDREN` entry: a
+#: finished launch's pid can be reused by another launch's worker or anchor
+#: before the first launch's final sweep, which must then leave the newer
+#: entry in place.
+_LAUNCH_OWNERS: dict[int, "_LaunchExclusions"] = {}
+
 #: Pids registered by :func:`exclude_from_reaping`, with a count (nesting).
 _REAP_EXCLUDED: dict[int, int] = {}
 
@@ -890,6 +896,7 @@ class _LaunchExclusions:
         with _SPAWN_LOCK:
             self.children[pid] = start_ticks
             _LAUNCH_CHILDREN[pid] = start_ticks
+            _LAUNCH_OWNERS[pid] = self
 
     def collect(self, *, force_full: bool = False) -> None:
         if self.baseline is not None:
@@ -897,14 +904,18 @@ class _LaunchExclusions:
 
     def final_sweep(self) -> None:
         """Run once the launch has given up the subreaper (I5): the sweep,
-        then this launch's entries leave :data:`_LAUNCH_CHILDREN`, then the
-        between-launch reaper starts if anything is still recorded."""
+        then this launch's entries leave :data:`_LAUNCH_CHILDREN` (only those
+        it still owns: an entry another launch registered for a reused pid
+        stays), then the between-launch reaper starts if anything is still
+        recorded."""
         try:
             self.collect(force_full=True)
         finally:
             with _SPAWN_LOCK:
                 for pid in self.children:
-                    _LAUNCH_CHILDREN.pop(pid, None)
+                    if _LAUNCH_OWNERS.get(pid) is self:
+                        del _LAUNCH_OWNERS[pid]
+                        _LAUNCH_CHILDREN.pop(pid, None)
         _ensure_idle_reaper()
 
 

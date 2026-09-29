@@ -2840,7 +2840,7 @@ class _ReapingSeamCase(unittest.TestCase):
         self.me, self.sid = os.getpid(), os.getsid(0)
         self.fake = _FakeProc(self)
         self.enterContext(self.fake.patch())
-        for name in ("_ADOPTED", "_FOREIGN_BORN", "_LAUNCH_CHILDREN", "_REAP_EXCLUDED"):
+        for name in ("_ADOPTED", "_FOREIGN_BORN", "_LAUNCH_CHILDREN", "_LAUNCH_OWNERS", "_REAP_EXCLUDED"):
             self.enterContext(unittest.mock.patch.dict(getattr(worker, name), clear=True))
         self.enterContext(unittest.mock.patch.object(worker, "_last_full_scan", None))
         self.fake.process(self.me, state="S", pgrp=self.me, ppid=1, session=self.sid)
@@ -2911,6 +2911,29 @@ class ReapingSweepTest(_ReapingSeamCase):
             self.sweep({worker_pid: 500, anchor_pid: None}, baseline={old})
         self.assertEqual(worker._ADOPTED, {})
         self.assertEqual(self.waited, [])
+
+    def test_a_final_sweep_leaves_the_exclusions_of_a_launch_that_reused_its_pids(self) -> None:
+        """Launch A's worker and anchor have been waited for, and launch B's
+        worker (start ticks not yet captured) and anchor reuse their pids
+        before A's final sweep: B's exclusions survive it, so a later sweep
+        whose baseline predates B records neither, and leave with B's own
+        final sweep."""
+        reused_anchor, reused_worker = self.BASE + 1, self.BASE + 2
+        launch_a, launch_b = worker._LaunchExclusions(), worker._LaunchExclusions()
+        launch_a.baseline = launch_b.baseline = set()
+        launch_a.add(reused_worker)
+        launch_a.add(reused_worker, 400)
+        launch_a.add(reused_anchor)
+        launch_b.add(self.child(reused_anchor))  # B's worker, exited, its status still Popen's
+        launch_b.add(self.child(reused_worker, state="S"))  # B's anchor
+        launch_a.final_sweep()
+        self.assertEqual(worker._LAUNCH_CHILDREN, {reused_anchor: None, reused_worker: None})
+        launch_b.add(reused_anchor, 500)
+        self.sweep()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+        launch_b.final_sweep()
+        self.assertEqual((worker._LAUNCH_CHILDREN, worker._LAUNCH_OWNERS), ({}, {}))
 
     def test_the_worker_pid_with_unknown_start_ticks_is_never_recorded(self) -> None:
         pid = self.child(self.BASE + 1)

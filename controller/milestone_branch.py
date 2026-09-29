@@ -1262,7 +1262,8 @@ def declared_title(ctx: Context, work_item_id: str) -> DeclaredTitle:
     """The title ``work_item_id``'s plan declares, from ``HEAD``'s commit
     only: ``plan_path`` from the committed state, the plan text from
     ``HEAD:<plan_path>``. The working tree is never read, so an uncommitted
-    edit of either changes nothing."""
+    edit of either changes nothing. A title that is not valid UTF-8 is
+    none: it is never repaired into one the plan does not contain."""
     item = _work_items(committed_state(ctx, "HEAD"), f"{STATE_REL_PATH} at HEAD").get(work_item_id) or {}
     plan_path = item.get("plan_path")
     if not isinstance(plan_path, str) or not plan_path:
@@ -1270,8 +1271,12 @@ def declared_title(ctx: Context, work_item_id: str) -> DeclaredTitle:
     raw = gitrepo.show(ctx.repo_root, "HEAD", plan_path, runner=ctx.runner)
     if raw is None:
         return DeclaredTitle(plan_path, None, f"HEAD has no {plan_path}")
-    title, problem = plan_title(raw.decode("utf-8", "replace"))
+    title, problem = plan_title(raw.decode("utf-8", "surrogateescape"))
     if title is not None:
+        try:
+            title.encode("utf-8")
+        except UnicodeEncodeError:
+            return DeclaredTitle(plan_path, None, f"the plan's declared title {title!r} is not valid UTF-8")
         problem = title_problem(ctx, title)
         if problem is not None:
             title = None

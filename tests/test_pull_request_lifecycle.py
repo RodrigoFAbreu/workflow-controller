@@ -1321,6 +1321,22 @@ class SquashTitleTest(_Squash):
         commit_all(self.clone, "retitle")
         self.assertIsNone(mb.declared_title(self.ctx, WID).title)
 
+    def test_a_title_declaration_that_is_not_utf_8_is_none_and_edits_nothing(self) -> None:
+        number = self.open_pr()
+        (self.clone / PLAN_PATH).write_bytes(plan_text("feat: abXcd").encode().replace(b"abXcd", b"ab\xffcd"))
+        commit_all(self.clone, "a non-UTF-8 title")
+        declared = mb.declared_title(self.ctx, WID)
+        self.assertEqual((declared.plan_path, declared.title), (PLAN_PATH, None))
+        self.assertIn("not valid UTF-8", declared.problem)
+        edits = len(self.calls("pr", "edit"))
+        self.assertIsInstance(self.preflight(), mb.Proceed)
+        self.assertEqual(len(self.calls("pr", "edit")), edits)
+        self.assertEqual(self.gh_pr_view(number)["title"], TITLE)
+        # Invalid UTF-8 elsewhere in the plan leaves a valid declaration alone.
+        (self.clone / PLAN_PATH).write_bytes(plan_text("fix: amended").encode() + b"\xff\n")
+        commit_all(self.clone, "a non-UTF-8 byte outside the title")
+        self.assertEqual(mb.declared_title(self.ctx, WID).title, "fix: amended")
+
     def test_creation_uses_the_declared_title_and_the_committed_plan_path(self) -> None:
         number = self.open_pr()
         pr = self.gh_pr_view(number)

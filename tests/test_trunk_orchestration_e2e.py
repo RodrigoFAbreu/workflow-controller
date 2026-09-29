@@ -29,6 +29,9 @@ the target, the origin and the fake forge's state file.
    disposable trunk history that reproduces ``v1.1.0``/``v1.1.1``, a bump
    to 1.2.0, and a 1.2.0 publish interrupted after the tag push and resumed
    by the next merge -- through ``tools/release.py``, as ``main.yml`` runs it.
+6. :class:`SquashLifecycleTest`: scenario 1 under a squash policy, through a
+   verified squash merge to the next trunk start, whose bootstrap names the
+   squash commit.
 """
 
 from __future__ import annotations
@@ -71,7 +74,9 @@ MILESTONE_COMPLETE = "MILESTONE_COMPLETE"
 PLAN_BUNDLE_ID = "a" * 64
 PASSING_CHECKS = [{"name": "validate", "state": "SUCCESS", "bucket": "pass"}]
 
-#: Every worker task of the scripted lifecycle, in launch order.
+#: Every worker task of the scripted lifecycle, in launch order, without a
+#: policy. With one, each bootstrap names its trunk tip
+#: (:meth:`_E2ECase.lifecycle_tasks`).
 LIFECYCLE_TASKS = [BOOTSTRAP_PLAN, REVIEW_PLAN, lifecycle.MILESTONE_IMPLEMENT, lifecycle.MILESTONE_IMPLEMENT,
                    lifecycle.MILESTONE_IMPLEMENT, lifecycle.REVIEW_IMPLEMENTATION, BOOTSTRAP_PLAN]
 
@@ -299,10 +304,19 @@ class _E2ECase(lifecycle._LifecycleTestCase):
             reviewed_base_commit=self.trunk_tip, work_item=WI)
         return [fixtures.script_write(PLAN_FEEDBACK_REL, feedback), self.lc.write_state()]
 
+    def bootstrap(self, base: str | None) -> str:
+        """The bootstrap command: ``/milestone-plan <trunk tip>`` once
+        milestone branches are enabled (squash-merge Design F), bare
+        without a policy."""
+        return f"{BOOTSTRAP_PLAN} {base}" if self.with_policy else BOOTSTRAP_PLAN
+
+    def lifecycle_tasks(self, next_base: str) -> list[str]:
+        return [self.bootstrap(self.trunk_tip), *LIFECYCLE_TASKS[1:-1], self.bootstrap(next_base)]
+
     def script_lifecycle(self) -> None:
         """Every worker of the lifecycle, filed under its exact task."""
         lc = self.lc
-        lc.add(BOOTSTRAP_PLAN, self.plan_actions(WI, {WI: dict(lc.entry)}))
+        lc.add(self.bootstrap(self.trunk_tip), self.plan_actions(WI, {WI: dict(lc.entry)}))
         lc.add(REVIEW_PLAN, self.review_plan_actions())
 
     def script_implementation(self) -> None:
@@ -313,15 +327,15 @@ class _E2ECase(lifecycle._LifecycleTestCase):
         lc.add(lifecycle.MILESTONE_IMPLEMENT, lc.generate())
         lc.add(lifecycle.REVIEW_IMPLEMENTATION, lc.local_review("APPROVE", 1))
 
-    def script_next_plan(self) -> None:
-        """The next milestone's ``/milestone-plan``, on the trunk after
-        close-out, next to the accepted item."""
+    def script_next_plan(self, base: str | None = None) -> None:
+        """The next milestone's ``/milestone-plan <base>``, on the trunk
+        after close-out, next to the accepted item."""
         entry = dict(self.lc.entry, work_item_id=WI_NEXT, phase=AWAITING_LOCAL_PLAN, plan_approval=None,
                      base_commit="{HEAD}", checkpoints={}, registry_path=fixtures.registry_rel_path(WI_NEXT),
                      implementation_revision=None, reviewed_implementation_head=None,
                      implementation_review_stages=None, plan_review_stages=None,
                      last_completed_checkpoint_id=None)
-        self.lc.add(BOOTSTRAP_PLAN, self.plan_actions(WI_NEXT, {WI: dict(self.lc.entry), WI_NEXT: entry}))
+        self.lc.add(self.bootstrap(base), self.plan_actions(WI_NEXT, {WI: dict(self.lc.entry), WI_NEXT: entry}))
 
     def approve_plan(self) -> str:
         """``/approve-review plan``: the plan-approval commit on the branch."""
@@ -403,7 +417,7 @@ class _E2ECase(lifecycle._LifecycleTestCase):
         the Draft PR and implements CP1."""
         self.script_lifecycle()
         started = self.step(cli.EXIT_OK)
-        self.assert_launched(started, BOOTSTRAP_PLAN, AWAITING_LOCAL_PLAN, bound=False)
+        self.assert_launched(started, self.bootstrap(self.trunk_tip), AWAITING_LOCAL_PLAN, bound=False)
         self.assertIsNone(self.record(), "the trunk start wrote a binding record")
         self.assertEqual(self.head().branch, "main")
 
@@ -469,12 +483,12 @@ class _E2ECase(lifecycle._LifecycleTestCase):
         """The human merge, then the step that closes out, returns to the
         trunk and starts the next milestone."""
         merge_commit = self.human_merge(1)
-        self.script_next_plan()
+        self.script_next_plan(merge_commit)
         closed = self.step(cli.EXIT_OK)
         record = self.record()
         self.assertEqual(record["state"], mb.CLOSED)
         self.assertEqual((self.head().branch, self.head().commit), ("main", merge_commit))
-        self.assert_launched(closed, BOOTSTRAP_PLAN, AWAITING_LOCAL_PLAN, bound=False)
+        self.assert_launched(closed, self.bootstrap(merge_commit), AWAITING_LOCAL_PLAN, bound=False)
         return merge_commit
 
     def assert_no_force_and_no_merge(self, argvs: list[list[str]]) -> None:
@@ -529,7 +543,7 @@ class PolicyLifecycleTest(_E2ECase):
             accepted = self.drive_to_merge_gate()
             merge_commit = self.drive_close_out()
 
-        self.assertEqual(self.worker_tasks(), LIFECYCLE_TASKS)
+        self.assertEqual(self.worker_tasks(), self.lifecycle_tasks(merge_commit))
         self.assert_single_branch_and_pr()
         self.assert_no_force_and_no_merge(argvs)
         record = self.record()
@@ -618,10 +632,10 @@ class InterruptedLifecycleTest(_E2ECase):
         self.drive_to_pr()
         self.drive_implementation()
         accepted = self.drive_to_merge_gate()
-        self.drive_close_out()
+        merge_commit = self.drive_close_out()
 
         # Each automatic action ran exactly once, and nothing was duplicated.
-        self.assertEqual(self.worker_tasks(), LIFECYCLE_TASKS)
+        self.assertEqual(self.worker_tasks(), self.lifecycle_tasks(merge_commit))
         self.assert_single_branch_and_pr()
         argvs = [json.loads(line) for line in self.argv_log.read_text().splitlines()]
         self.assert_no_force_and_no_merge(argvs)
@@ -665,16 +679,96 @@ class TrunkDriftTest(_E2ECase):
             # The human marks it ready and merges it on GitHub, from PR_OPEN.
             self.gh_edit(1, isDraft=False)
             merge_commit = self.human_merge(1)
-            self.script_next_plan()
+            self.script_next_plan(merge_commit)
             closed = self.step(cli.EXIT_OK)
         self.assertEqual(self.record()["state"], mb.CLOSED)
         self.assertEqual(self.record()["merged_head"], accepted)
         self.assertEqual((self.head().branch, self.head().commit), ("main", merge_commit))
         self.assertTrue(gitrepo.is_ancestor(self.root, landed, merge_commit))
-        self.assert_launched(closed, BOOTSTRAP_PLAN, AWAITING_LOCAL_PLAN, bound=False)
+        self.assert_launched(closed, self.bootstrap(merge_commit), AWAITING_LOCAL_PLAN, bound=False)
         self.assertNotIn("ready", self.binding_events())
         self.assert_single_branch_and_pr()
         self.assert_no_force_and_no_merge(argvs)
+
+
+class SquashLifecycleTest(_E2ECase):
+    """Scenario 1 under a squash policy (``workflow-controller-squash-merge-
+    tag-versioning`` Design E and F): the Draft PR carries the plan's
+    declared title, readiness syncs the body, a human squash-merges on
+    GitHub, close-out verifies the squash, and the next trunk start's
+    bootstrap names the squash commit. Workflow's own resolution of the
+    ``<base-sha>`` argument is not run (the worker is scripted); the
+    launched command text is what is asserted."""
+
+    TITLE = "feat: the squash lifecycle"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.lc.entry["plan_path"] = f"docs/plans/{WI}.md"
+
+    def build_target(self, tmp: Path) -> tuple[Path, Path]:
+        from tests.test_pull_request_lifecycle import squash_policy
+
+        origin, clone = super().build_target(tmp)
+        (clone / POLICY).write_text(json.dumps(squash_policy(), indent=2) + "\n")
+        fixtures.commit_all(clone, "Squash merges")
+        fixtures.run(["git", "push", "-q", "origin", "main"], cwd=clone)
+        return origin, clone
+
+    def plan_actions(self, work_item_id: str, items: dict) -> list[dict]:
+        actions = super().plan_actions(work_item_id, items)
+        actions[0] = fixtures.script_write(f"docs/plans/{work_item_id}.md",
+                                           f"# The plan of {work_item_id}\n\nPull request title: `{self.TITLE}`\n")
+        return actions
+
+    def squash_merge(self, number: int) -> str:
+        """GitHub's "Squash and merge": the title and number, then the body."""
+        pr = next(pr for pr in self.gh_state()["prs"] if pr["number"] == number)
+        head = self.origin_ref(f"refs/heads/{BRANCH}")
+        human = self.human()
+        self.git("merge", "-q", "--squash", f"origin/{BRANCH}", cwd=human)
+        self.git("commit", "-q", "--cleanup=verbatim", "-m", f"{pr['title']} (#{number})\n\n{pr['body']}", cwd=human)
+        self.git("push", "-q", "origin", "main", cwd=human)
+        squash = fixtures.current_head(human)
+        self.gh_edit(number, state="MERGED", headRefOid=head, mergedAt="2026-09-29T01:00:00Z",
+                     mergeCommit={"oid": squash})
+        return squash
+
+    def test_trunk_to_squash_merge_to_the_next_trunk_start(self) -> None:
+        with _run_spy() as argvs:
+            self.drive_to_pr()
+            self.assertEqual(self.gh_state()["prs"][0]["title"], self.TITLE)
+            self.drive_implementation()
+            accepted = self.accept()
+            synced = self.step(cli.EXIT_GATE)
+            self.assert_branch_gate(synced, "just updated")
+            self.assertIn(f"Accepted at {accepted}", self.gh_state()["prs"][0]["body"])
+            self.gh_edit(1, checks=PASSING_CHECKS)
+            ready = self.step(cli.EXIT_GATE)
+            self.assert_branch_gate(ready, "Squash and merge")
+            self.assertEqual(self.record()["state"], mb.READY)
+            squash = self.squash_merge(1)
+            self.script_next_plan(squash)
+            closed = self.step(cli.EXIT_OK)
+        record = self.record()
+        self.assertEqual((record["state"], record["merged_head"], record["accepted_head"], record["merge_commit"]),
+                         (mb.CLOSED, accepted, accepted, squash))
+        self.assertEqual((self.head().branch, self.head().commit), ("main", squash))
+        self.assertFalse(gitrepo.is_ancestor(self.root, accepted, squash))
+        self.assertEqual(self.git("log", "-1", "--format=%s", squash), f"{self.TITLE} (#1)")
+        self.assertEqual(self.git("log", "-1", "--format=%(trailers:only=true)", squash), "")
+        self.assert_launched(closed, f"{BOOTSTRAP_PLAN} {squash}", AWAITING_LOCAL_PLAN, bound=False)
+        self.assertEqual(self.worker_tasks(), self.lifecycle_tasks(squash))
+        events = self.binding_events()
+        self.assertIn("merged_squashed", events)
+        self.assertNotIn("merged", events)
+        self.assert_single_branch_and_pr()
+        self.assert_no_force_and_no_merge(argvs)
+        # The next step binds the next milestone at the squash commit.
+        self.lc.add(f"/review-plan {WI_NEXT}", [])
+        self.cli("step")
+        following = mb.read_record(self.lc.runtime, self.key, WI_NEXT)
+        self.assertEqual((following["state"], following["branch_point"]), (mb.BRANCH_BOUND, squash))
 
 
 # ---------------------------------------------------------------------------

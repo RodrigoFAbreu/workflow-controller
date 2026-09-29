@@ -1052,7 +1052,7 @@ def decide(managed_repo: Any, snapshot: Any, work_item: Any) -> Decision:
     return apply_dispatch_rule(handler(managed_repo, work_item), work_item.governing_workflow_version)
 
 
-def decide_no_work_item(managed_repo: Any) -> Decision:
+def decide_no_work_item(managed_repo: Any, *, base: str | None = None) -> Decision:
     """The distinct, sibling entry point for a ``target_state.NoWorkItemYet``
     target (revision 63, B2, ``REQ-40``): called *before* :func:`decide`
     ever runs, since there is no ``WorkItemView`` -- and so no ``phase`` --
@@ -1067,17 +1067,31 @@ def decide_no_work_item(managed_repo: Any) -> Decision:
     alone derives and creates the first work item from
     ``docs/ACTIVE_MILESTONE.md`` (``D-Plan-Amendment`` constraint), so the
     Controller must never supply one here, mirroring exactly what a human
-    operator would type for a brand-new milestone."""
+    operator would type for a brand-new milestone.
+
+    ``base`` (``workflow-controller-squash-merge-tag-versioning`` Design F)
+    is the trunk tip a passed trunk start proved equal to
+    ``<remote>/<trunk>``, given when milestone branches are enabled: the
+    command is then ``/milestone-plan <base>``, Workflow's one-argument
+    ``<base-sha>`` form, so the next milestone's base is the trunk tip even
+    after a squash merge left the previous completion commit off the trunk.
+    The triple stays ``(NO_PHASE, None, "/milestone-plan")``: every table
+    keys on the command token. Without one the command is bare, as
+    before."""
+    command, reason = "/milestone-plan", ("no non-terminal work item exists and none was explicitly named; "
+                                          "frozen /milestone-plan derives and creates the first one from "
+                                          "docs/ACTIVE_MILESTONE.md")
+    if base is not None:
+        command = f"/milestone-plan {base}"
+        reason += f", based on the trunk tip {base}"
     selected = Decision(
         observed_phase=NO_PHASE,
         evidence=(),
-        action=Action(command="/milestone-plan"),
+        action=Action(command=command),
         automatic=True,
         gate=None,
         declined=False,
-        reason="no non-terminal work item exists and none was explicitly named; frozen "
-               "/milestone-plan derives and creates the first one from "
-               "docs/ACTIVE_MILESTONE.md",
+        reason=reason,
     )
     # The bootstrap's own `(NO_PHASE, None, "/milestone-plan")` triple is
     # in AUTOMATIC_TRIPLES, so this stays automatic -- through the same

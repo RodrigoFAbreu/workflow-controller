@@ -420,6 +420,24 @@ class ObservationTest(_PolicyCase):
         self.assertEqual(explained["repository_preflight"]["action"], "bind")
         self.assertEqual(explained["repository_preflight"]["branch"], BRANCH)
 
+    def test_explain_names_the_trunk_tip_as_the_next_base(self) -> None:
+        """Squash-merge Design F: with no work item, the bootstrap ``explain``
+        predicts is ``/milestone-plan <trunk tip>``, as ``step`` launches it."""
+        explained = json.loads(self.cli("explain", json_out=True).stdout)
+        self.assertEqual(explained["repository_preflight"]["base"], self.trunk_tip)
+        self.assertEqual(explained["action"], f"/milestone-plan {self.trunk_tip}")
+        self.assertTrue(explained["automatic"])
+        # Behind the remote trunk (as of the last fetch), no base is predicted.
+        other = self.tmp_root / "other"
+        fixtures.run(["git", "clone", "-q", str(self.origin), str(other)])
+        fixtures.run(["git", "-c", "user.email=o@example.invalid", "-c", "user.name=O", "commit", "-q",
+                      "--allow-empty", "-m", "elsewhere"], cwd=other)
+        fixtures.run(["git", "push", "-q", "origin", "main"], cwd=other)
+        self.git("fetch", "-q", "origin")
+        explained = json.loads(self.cli("explain", json_out=True).stdout)
+        self.assertIsNone(explained["repository_preflight"]["base"])
+        self.assertEqual(explained["action"], "/milestone-plan")
+
     def test_inspect_and_explain_on_a_bound_branch(self) -> None:
         self.open_pr_step()
         inspected = json.loads(self.cli("inspect", json_out=True).stdout)
@@ -520,7 +538,7 @@ class MilestoneBindingTest(_PolicyCase):
         self.assertEqual(self.worker_count(), before)
         self.git("switch", "-q", "main")
         result = self.cli("step")
-        self.assertEqual(result.records[-1]["selected_action"]["command"], "/milestone-plan")
+        self.assertEqual(result.records[-1]["selected_action"]["command"], f"/milestone-plan {self.head().commit}")
         self.assertNotIn("branch_binding", result.records[-1])
 
     def test_new_pr_after_a_merge_before_acceptance(self) -> None:
@@ -577,7 +595,7 @@ class MilestoneBindingTest(_PolicyCase):
         result = self.cli("step")
         self.assertEqual(self.record()["state"], mb.CLOSED, result.stderr)
         self.assertEqual(self.head().branch, "main")
-        self.assertEqual(result.records[-1]["selected_action"]["command"], "/milestone-plan")
+        self.assertEqual(result.records[-1]["selected_action"]["command"], f"/milestone-plan {self.head().commit}")
         self.assertNotIn("branch_binding", result.records[-1])
         self.assertEqual(len(self.gh_calls("pr", "create")), creates)
 
@@ -589,7 +607,7 @@ class MilestoneBindingTest(_PolicyCase):
         self.git("merge", "-q", "--ff-only", "origin/main")
         result = self.cli("step")
         self.assertEqual(self.record()["state"], mb.CLOSED, result.stderr)
-        self.assertEqual(result.records[-1]["selected_action"]["command"], "/milestone-plan")
+        self.assertEqual(result.records[-1]["selected_action"]["command"], f"/milestone-plan {self.head().commit}")
         self.assertEqual(len(self.gh_calls("pr", "create")), creates)
 
     def test_a_plan_discarded_after_the_bind(self) -> None:
@@ -605,7 +623,7 @@ class MilestoneBindingTest(_PolicyCase):
         self.assertEqual(self.record()["state"], mb.ABANDONED)
         self.git("switch", "-q", "main")
         result = self.cli("step")
-        self.assertEqual(result.records[-1]["selected_action"]["command"], "/milestone-plan")
+        self.assertEqual(result.records[-1]["selected_action"]["command"], f"/milestone-plan {self.head().commit}")
 
     def test_a_refused_disposition_exits_20_and_changes_nothing(self) -> None:
         self.bind_step()

@@ -257,12 +257,17 @@ EXPECTED_TRANSITIONS = {
     ("PR_CLOSED_UNMERGED", "ABANDONED"), ("MERGED_BEFORE_ACCEPTANCE", "ABANDONED"),
     ("BRANCH_PLANNED", "ABANDONED"), ("BRANCH_BOUND", "ABANDONED"),
     ("MERGED", "CLOSED"),
+    # workflow-controller-squash-merge-tag-versioning Design F.
+    ("PR_PLANNED", "MERGED_SQUASHED"), ("PR_OPEN", "MERGED_SQUASHED"), ("READY", "MERGED_SQUASHED"),
+    ("PR_CLOSED_UNMERGED", "MERGED_SQUASHED"),
+    ("MERGED_SQUASHED", "CLOSED"),
 }
 
 
 class StateModelTest(_Case):
     def test_every_state_is_in_exactly_one_class(self) -> None:
-        self.assertEqual(len(mb.STATES), 11)
+        self.assertEqual(len(mb.STATES), 12)
+        self.assertIn(mb.MERGED_SQUASHED, mb.NON_TERMINAL_STATES)
         for state in mb.STATES:
             classes = [state in mb.NON_TERMINAL_STATES, state in mb.REFUSAL_STATES, state in mb.TERMINAL_STATES]
             self.assertEqual(classes.count(True), 1, state)
@@ -397,7 +402,7 @@ class BindTest(_Case):
 
 class TrunkStartTest(_Case):
     def test_clean_trunk_equal_to_the_remote_proceeds(self) -> None:
-        self.assertEqual(self.preflight(), mb.Proceed(action="trunk_start"))
+        self.assertEqual(self.preflight(), mb.Proceed(action="trunk_start", base=current_head(self.clone)))
 
     def test_behind_gates_and_ahead_or_diverged_refuse(self) -> None:
         other = self.tmp / "other"

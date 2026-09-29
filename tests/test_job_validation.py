@@ -451,6 +451,40 @@ class ExpectedOutcomesTableStructureTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class ArgumentBearingBootstrapTest(unittest.TestCase):
+    """``/milestone-plan <trunk tip>`` (``workflow-controller-squash-merge-
+    tag-versioning`` Design F, the open question measured at CP6): every
+    table keys on the command token, so the argument-bearing bootstrap
+    resolves to the bare bootstrap's own row -- the one property 5 checks
+    -- on the launch and the resume paths alike, and routes the same way."""
+
+    def test_the_explicit_base_resolves_to_the_bootstrap_row(self) -> None:
+        from controller import decision, routing
+
+        with TemporaryDirectory() as tmp:
+            managed = fixtures.build_target_managed_repository(Path(tmp) / "target")
+            bare = decision.decide_no_work_item(managed)
+            based = decision.decide_no_work_item(managed, base="a" * 40)
+        self.assertEqual(based.action.command, "/milestone-plan " + "a" * 40)
+        self.assertIn("a" * 40, based.reason)
+        self.assertTrue(based.automatic)
+        row = job._expected_outcome_for(decision.NO_PHASE, None, based)
+        self.assertIs(row, job._expected_outcome_for(decision.NO_PHASE, None, bare))
+        record = {"pre_state": {"phase": decision.NO_PHASE_WIRE, "governing_workflow_version": None},
+                  "selected_action": {"command": based.action.command}}
+        self.assertIs(job._expected_outcome_for_record(record), row)
+        self.assertEqual(routing.role_for(decision.NO_PHASE, based.action.command, None),
+                         routing.role_for(decision.NO_PHASE, bare.action.command, None))
+        for release in sorted(VALIDATED_WORKFLOW_RELEASES):
+            with self.subTest(release=release):
+                rows = [eo for eo in job.expected_outcomes_for(release)
+                        if (eo.from_phase, eo.governing_version, eo.action) == (decision.NO_PHASE, None,
+                                                                                "/milestone-plan")]
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(job.property_declaration_against_artifact_violations(
+                    fixtures.workflow_release_tree(release), tuple(rows)), [])
+
+
 class DeclarationAgainstArtifactTest(unittest.TestCase):
     """CP6B's own resolution of "row 5 stays unresolved": row 5's branch
     is restated to point at step 5's own text directly (a locatable

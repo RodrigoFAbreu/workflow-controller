@@ -339,6 +339,62 @@ class MergeTrunkTest(_Case):
         self.assertEqual(callers, [])
 
 
+class SquashReadTest(_Case):
+    """The reads ``milestone_branch.verified_squash`` makes
+    (``workflow-controller-squash-merge-tag-versioning`` Design F)."""
+
+    def test_parents_tree_subject_and_identity(self) -> None:
+        first = self.commit("a.txt", "a\n")
+        self.assertEqual(gitrepo.commit_parents(self.clone, first), [self.base])
+        self.assertEqual(gitrepo.commit_parents(self.clone, self.base), [])
+        self.assertEqual(gitrepo.tree_of(self.clone, first),
+                         run(["git", "rev-parse", f"{first}^{{tree}}"], cwd=self.clone).stdout.strip())
+        run(["git", "commit", "-q", "--allow-empty", "-m", "feat: x (#3)\n\nbody\nline"], cwd=self.clone)
+        second = current_head(self.clone)
+        self.assertEqual(gitrepo.commit_subject(self.clone, second), "feat: x (#3)")
+        identity = gitrepo.commit_identity(self.clone, second)
+        self.assertEqual(identity.split("\0")[:2], ["Controller Tests", "controller-tests@example.invalid"])
+        self.assertTrue(identity.split("\0")[3].startswith("feat: x (#3)\n\nbody\nline"))
+        self.assertNotEqual(identity, gitrepo.commit_identity(self.clone, first))
+        with self.assertRaises(GitOperationError):
+            gitrepo.commit_parents(self.clone, "no-such-rev")
+
+    def test_git_version_parses_and_refuses_garbage(self) -> None:
+        self.assertGreaterEqual(gitrepo.git_version(self.clone), (2, 31, 0))
+        for out, expected in ((b"git version 2.37.1\n", (2, 37, 1)), (b"git version 2.45.0.windows.1\n", (2, 45, 0)),
+                              (b"git version 2.39.2 (Apple Git-143)\n", (2, 39, 2))):
+            fake = lambda argv, out=out: subprocess.CompletedProcess(argv, 0, out, b"")  # noqa: E731
+            self.assertEqual(gitrepo.git_version(self.clone, runner=fake), expected)
+        with self.assertRaises(GitOperationError):
+            gitrepo.git_version(self.clone, runner=lambda argv: subprocess.CompletedProcess(argv, 0, b"hg 6\n", b""))
+
+    def test_merge_drivers_from_every_scope(self) -> None:
+        self.assertEqual(gitrepo.merge_drivers(self.clone), [])
+        run(["git", "config", "merge.ours-please.driver", "true"], cwd=self.clone)
+        run(["git", "config", "merge.other.name", "not a driver"], cwd=self.clone)
+        self.assertEqual(gitrepo.merge_drivers(self.clone), ["merge.ours-please.driver"])
+
+    def test_merge_tree_clean_conflict_and_failure(self) -> None:
+        gitrepo.create_and_switch(self.clone, "side")
+        side = self.commit("side.txt", "side\n")
+        conflicting = self.commit("README.md", "side\n")
+        gitrepo.switch(self.clone, "main")
+        trunk = self.commit("README.md", "trunk\n")
+        spy = _Spy()
+        tree = gitrepo.merge_tree(self.clone, trunk, side, runner=spy)
+        self.assertEqual(spy.subcommands(), ["merge-tree"])
+        run(["git", "merge", "-q", "--no-edit", side], cwd=self.clone)
+        self.assertEqual(tree, gitrepo.tree_of(self.clone, "HEAD"))
+        self.assertIsNone(gitrepo.merge_tree(self.clone, trunk, conflicting))
+        self.assertEqual(gitrepo.head_state(self.clone).commit, current_head(self.clone))
+        self.assertEqual(gitrepo.tracked_changes(self.clone), [])
+        with self.assertRaises(GitOperationError):
+            gitrepo.merge_tree(self.clone, trunk, "no-such-rev")
+        failing = lambda argv: subprocess.CompletedProcess(argv, 0, b"not a tree\n", b"")  # noqa: E731
+        with self.assertRaises(GitOperationError):
+            gitrepo.merge_tree(self.clone, trunk, side, runner=failing)
+
+
 class RunnerTest(unittest.TestCase):
     def test_a_missing_git_is_a_git_operation_error(self) -> None:
         def missing(argv):

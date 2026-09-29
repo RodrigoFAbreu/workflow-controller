@@ -8,15 +8,18 @@ a second clone of the origin, plus an edit of the fake forge's state."""
 
 from __future__ import annotations
 
+import dataclasses
+import subprocess
 import sys
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import decision, forge as forge_mod, gitrepo, milestone_branch as mb, runtime  # noqa: E402
-from controller.errors import BranchBindingError, ForgeUndecidableError  # noqa: E402
+from controller.errors import BranchBindingError, ForgeUndecidableError, GitOperationError  # noqa: E402
 from tests.fixtures import commit_all, current_head, run, trailer_message  # noqa: E402
 from tests.test_milestone_branch import BRANCH, WID, _Case, policy  # noqa: E402
 
@@ -47,15 +50,25 @@ class _Lifecycle(_Case):
         run(["git", "push", "-q", "origin", "main"], cwd=human)
         return commit
 
-    def human_merge(self, number: int, *, how: str = "merge") -> str:
+    def human_merge(self, number: int, *, how: str = "merge", subject: str | None = None) -> str:
         """A human merges pull request ``number`` on GitHub ("Create a merge
-        commit", a fast-forward, or a squash) and returns its final head."""
+        commit", a fast-forward, a squash with a legacy subject, GitHub's
+        squash of the title and body (``squash_pr``, ``subject`` replacing
+        the title's), or a rebase) and returns its final head."""
         head = self.origin_ref(f"refs/heads/{BRANCH}")
         human = self.human()
         if how == "merge":
             run(["git", "merge", "-q", "--no-ff", "-m", f"Merge pull request #{number}", f"origin/{BRANCH}"], cwd=human)
         elif how == "ff":
             run(["git", "merge", "-q", "--ff-only", f"origin/{BRANCH}"], cwd=human)
+        elif how == "squash_pr":
+            # GitHub's "Squash and merge" with its default message.
+            pr = self.gh_pr_view(number)
+            run(["git", "merge", "-q", "--squash", f"origin/{BRANCH}"], cwd=human)
+            message = f"{subject or pr['title'] + f' (#{number})'}\n\n{pr.get('body') or ''}"
+            run(["git", "commit", "-q", "--cleanup=verbatim", "-m", message], cwd=human)
+        elif how == "rebase":
+            run(["git", "cherry-pick", f"main..origin/{BRANCH}"], cwd=human)
         else:
             run(["git", "merge", "-q", "--squash", f"origin/{BRANCH}"], cwd=human)
             run(["git", "commit", "-q", "-m", f"Squash pull request #{number}"], cwd=human)
@@ -170,6 +183,8 @@ MATRIX = [
     (mb.READY, None, "trunk", "ready_trunk"),
     (mb.MERGED, None, "branch", "merged_branch"),
     (mb.MERGED, None, "trunk", "merged_trunk"),
+    (mb.MERGED_SQUASHED, None, "branch", "squashed_branch"),
+    (mb.MERGED_SQUASHED, None, "trunk", "squashed_trunk"),
     (mb.PR_CLOSED_UNMERGED, None, "branch", "closed_unmerged_branch"),
     (mb.PR_CLOSED_UNMERGED, None, "trunk", "closed_unmerged_trunk"),
     (mb.MERGED_BEFORE_ACCEPTANCE, None, "branch", "mba_branch"),
@@ -439,6 +454,44 @@ class OutcomeMatrixTest(_Lifecycle):
         self.assertEqual((self.record()["state"], self.head().branch), (mb.MERGED, "main"))
         self.assertEqual(self.preflight().action, "trunk_start")
         self.assertEqual(self.record()["state"], mb.CLOSED)
+
+    # MERGED_SQUASHED (squash mode only)
+    def squash_merged(self) -> str:
+        """Under a squash policy: acceptance pushed, then GitHub's "Squash and
+        merge" of the pull request; returns ``A``."""
+        self.write_policy(squash_policy())
+        commit_all(self.clone, "Squash merges")
+        self.push("main")
+        number = self.open_pr()
+        a = self.accept()
+        self.preflight()
+        self.human_merge(number, how="squash_pr")
+        return a
+
+    def test_cell_squashed_branch(self) -> None:
+        self.squash_merged()
+        (self.clone / "README.md").write_text("dirty\n")
+        self.assertGate(self.preflight(), mb.GATE_DIRTY_TREE)
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.git("checkout", "--", "README.md")
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assertEqual(self.record()["state"], mb.CLOSED)
+
+    def test_cell_squashed_trunk(self) -> None:
+        a = self.squash_merged()
+        real = mb.write_record
+
+        def write(root, key, record, *, now):
+            if record["state"] == mb.CLOSED:
+                raise KeyboardInterrupt  # a crash in step 3, after the switch
+            return real(root, key, record, now=now)
+
+        with mock.patch.object(mb, "write_record", side_effect=write):
+            with self.assertRaises(KeyboardInterrupt):
+                self.preflight()
+        self.assertEqual((self.record()["state"], self.head().branch), (mb.MERGED_SQUASHED, "main"))
+        self.assertEqual(self.preflight().action, "trunk_start")
+        self.assertEqual((self.record()["state"], self.record()["merged_head"]), (mb.CLOSED, a))
 
     # PR_CLOSED_UNMERGED
     def closed_unmerged(self) -> int:
@@ -1444,6 +1497,388 @@ class SquashReadinessTest(_Squash):
             self.assertNotIn("rebase", text)
 
 
+# ---------------------------------------------------------------------------
+# Squash close-out (workflow-controller-squash-merge-tag-versioning Design F).
+# ---------------------------------------------------------------------------
+
+
+class VerifiedSquashTest(unittest.TestCase):
+    """:func:`milestone_branch.verified_squash`, condition by condition, over
+    a scratch repository: ``main`` at ``B``, the milestone branch
+    ``B..h``, and the merge commit ``m`` built on ``main``."""
+
+    NUMBER = 7
+
+    def setUp(self) -> None:
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.root = self.tmp / "repo"
+        run(["git", "init", "-q", "--initial-branch=main", str(self.root)])
+        self.git("config", "user.email", "dev@example.invalid")
+        self.git("config", "user.name", "Dev")
+        self.write("README.md", "base\n")
+        self.base = commit_all(self.root, "base")
+        self.git("switch", "-q", "-c", BRANCH)
+        self.write("a.txt", "a\n")
+        commit_all(self.root, "first")
+        self.write("b.txt", "b\n")
+        self.h = commit_all(self.root, "second")
+        self.git("switch", "-q", "main")
+        self.ctx = mb.Context(repo_root=self.root, runtime_root=self.tmp / "runtime")
+        self.record = {"work_item_id": WID, "branch": BRANCH}
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def git(self, *args: str, env: dict | None = None) -> str:
+        import os
+
+        return run(["git", *args], cwd=self.root, env=None if env is None else {**os.environ, **env}).stdout.strip()
+
+    def write(self, name: str, text: str) -> None:
+        (self.root / name).write_text(text)
+
+    def squash(self, message: str = f"{TITLE} (#{NUMBER})", *, env: dict | None = None,
+               extra: str | None = None) -> str:
+        """GitHub's "Squash and merge" of ``h`` onto ``main``."""
+        self.git("merge", "-q", "--squash", self.h)
+        if extra is not None:
+            self.write(extra, "not reviewed\n")
+            self.git("add", "-A")
+        self.git("commit", "-q", "--cleanup=verbatim", "-m", message, env=env)
+        return current_head(self.root)
+
+    def pr(self, m: str | None, *, title: str = TITLE) -> forge_mod.PullRequest:
+        return forge_mod.PullRequest(self.NUMBER, "MERGED", False, BRANCH, self.h, "main", False,
+                                     f"https://github.com/o/r/pull/{self.NUMBER}", "2026-09-29T00:00:00Z", m,
+                                     title, "")
+
+    def verified(self, m: str | None, *, trunk: str | None = None, title: str = TITLE, runner=None) -> bool:
+        ctx = self.ctx if runner is None else dataclasses.replace(self.ctx, runner=runner)
+        return mb.verified_squash(ctx, self.record, self.pr(m, title=title), self.h, trunk or current_head(self.root))
+
+    def test_a_squash_with_the_title_and_number_is_verified(self) -> None:
+        m = self.squash(f"{TITLE} (#{self.NUMBER})\n\nMilestone body\n")
+        self.assertTrue(self.verified(m))
+
+    def test_no_merge_commit_or_one_off_the_trunk_is_not_verified(self) -> None:
+        self.assertFalse(self.verified(None))
+        self.assertFalse(self.verified("0" * 40))
+        m = self.squash()
+        self.git("reset", "-q", "--hard", self.base)
+        self.assertFalse(self.verified(m, trunk=self.base))
+
+    def test_a_two_parent_merge_is_not_verified(self) -> None:
+        self.git("merge", "-q", "--no-ff", "-m", f"{TITLE} (#{self.NUMBER})", self.h)
+        self.assertFalse(self.verified(current_head(self.root)))
+
+    def test_the_subject_must_be_the_title_with_the_number(self) -> None:
+        for message in (TITLE, f"{TITLE} (#8)", "fix: another (#7)", f"{TITLE}  (#7)"):
+            with self.subTest(message=message):
+                self.git("reset", "-q", "--hard", self.base)
+                self.assertFalse(self.verified(self.squash(message)))
+        self.assertFalse(self.verified(current_head(self.root), title="feat: renamed"))
+
+    def test_a_different_tree_is_not_verified(self) -> None:
+        self.assertFalse(self.verified(self.squash(extra="smuggled.txt")))
+
+    def test_a_rebase_is_not_verified(self) -> None:
+        # A multi-commit rebase: m is the rewrite of h, carrying h's subject.
+        self.git("cherry-pick", f"{self.base}..{self.h}")
+        self.assertFalse(self.verified(current_head(self.root)))
+        self.assertFalse(self.verified(current_head(self.root), title="second"))
+
+    def test_a_one_commit_rebase_titled_like_the_pull_request_is_not_verified(self) -> None:
+        # h is the branch's only commit.
+        for subject in (TITLE, f"{TITLE} (#{self.NUMBER})"):
+            with self.subTest(subject=subject):
+                self.git("reset", "-q", "--hard", self.base)
+                self.git("switch", "-q", "-C", "one", self.base)
+                self.write("one.txt", "one\n")
+                self.h = commit_all(self.root, subject)
+                self.git("switch", "-q", "main")
+                self.git("cherry-pick", self.h)
+                m = current_head(self.root)
+                # Same parent, tree and subject as a squash; condition 3 or 5 tells them apart.
+                self.assertEqual(gitrepo.commit_parents(self.root, m), [self.base])
+                self.assertEqual(gitrepo.tree_of(self.root, m), gitrepo.tree_of(self.root, self.h))
+                self.assertFalse(self.verified(m))
+
+    def test_a_squash_given_the_heads_identity_is_not_verified(self) -> None:
+        self.git("switch", "-q", BRANCH)
+        self.write("c.txt", "c\n")
+        self.h = commit_all(self.root, f"{TITLE} (#{self.NUMBER})")
+        self.git("switch", "-q", "main")
+        name, email, date = self.git("show", "-s", "--date=raw", "--format=%an%n%ae%n%ad", self.h).split("\n")
+        same = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_AUTHOR_DATE": date}
+        m = self.squash(f"{TITLE} (#{self.NUMBER})\n", env=same)
+        self.assertEqual(gitrepo.commit_identity(self.root, m), gitrepo.commit_identity(self.root, self.h))
+        self.assertFalse(self.verified(m))
+        # Control: one second later, the same squash is verified.
+        self.git("reset", "-q", "--hard", self.base)
+        seconds, zone = date.split()
+        m = self.squash(f"{TITLE} (#{self.NUMBER})\n", env=dict(same, GIT_AUTHOR_DATE=f"{int(seconds) + 1} {zone}"))
+        self.assertTrue(self.verified(m))
+
+    def moved_trunk(self, name: str = "trunk.txt", text: str = "trunk\n") -> None:
+        self.write(name, text)
+        commit_all(self.root, "main moved")
+
+    def test_the_integration_path_compares_with_merge_tree(self) -> None:
+        self.moved_trunk()
+        m = self.squash()
+        self.assertFalse(gitrepo.is_ancestor(self.root, gitrepo.commit_parents(self.root, m)[0], self.h))
+        self.assertTrue(self.verified(m))
+        self.git("reset", "-q", "--hard", "HEAD~1")
+        self.assertFalse(self.verified(self.squash(extra="smuggled.txt")))
+
+    def test_an_integration_conflict_is_not_verified(self) -> None:
+        self.moved_trunk("a.txt", "trunk's a\n")
+        # The human resolved the conflict by hand; merge-tree conflicts.
+        run(["git", "merge", "--squash", self.h], cwd=self.root, check=False)
+        self.write("a.txt", "resolved\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", f"{TITLE} (#{self.NUMBER})")
+        self.assertFalse(self.verified(current_head(self.root)))
+
+    def test_a_configured_merge_driver_is_never_run(self) -> None:
+        marker = self.tmp / "driver-ran"
+        self.git("config", "merge.marker.driver", f"touch {marker}; cp %B %A")
+        (self.root / ".git" / "info" / "attributes").write_text("*.txt merge=marker\n")
+        self.moved_trunk("a.txt", "trunk's a\n")
+        run(["git", "-c", "merge.marker.driver=false", "merge", "--squash", self.h], cwd=self.root, check=False)
+        self.write("a.txt", "a\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", f"{TITLE} (#{self.NUMBER})")
+        m = current_head(self.root)
+        self.assertFalse(self.verified(m))
+        self.assertFalse(marker.exists())
+        # The guard is what kept it from running: merge-tree itself would.
+        run(["git", "merge-tree", "--write-tree", f"{m}~1", self.h], cwd=self.root, check=False)
+        self.assertTrue(marker.exists())
+
+    def _faking(self, subcommand: str, result) -> Callable:
+        real = gitrepo.subprocess_runner()
+
+        def runner(argv):
+            if argv[3] == subcommand:
+                return result(argv)
+            return real(argv)
+
+        return runner
+
+    def test_an_old_git_or_a_failing_merge_tree_refuses_on_the_integration_path(self) -> None:
+        self.moved_trunk()
+        m = self.squash()
+        old = self._faking("version", lambda argv: subprocess.CompletedProcess(argv, 0, b"git version 2.37.9\n", b""))
+        with self.assertRaises(BranchBindingError) as caught:
+            self.verified(m, runner=old)
+        self.assertIn("2.38", str(caught.exception))
+        self.assertIn("2.37.9", str(caught.exception))
+        broken = self._faking("merge-tree", lambda argv: subprocess.CompletedProcess(argv, 128, b"", b"fatal: boom\n"))
+        with self.assertRaises(GitOperationError):
+            self.verified(m, runner=broken)
+        # The ordinary path needs neither.
+        self.git("reset", "-q", "--hard", self.base)
+        self.assertTrue(self.verified(self.squash(), runner=old))
+
+
+class _SquashClose(_Squash):
+    def squash_merge(self, number: int) -> str:
+        """GitHub's "Squash and merge": the title with ``(#<number>)`` as
+        the subject, the body as the body. Returns the squash commit."""
+        self.human_merge(number, how="squash_pr")
+        return self.origin_ref("refs/heads/main")
+
+    def assert_closed(self, a: str, m: str) -> None:
+        record = self.record()
+        self.assertEqual((record["state"], record["merged_head"], record["accepted_head"], record["merge_commit"]),
+                         (mb.CLOSED, a, a, m))
+
+
+class SquashCloseOutTest(_SquashClose):
+    def test_a_squash_merge_is_verified_and_closes_out_from_the_branch(self) -> None:
+        a = self.to_ready()
+        m = self.squash_merge(self.pr_number())
+        self.assertEqual(self.preflight(), mb.Proceed(action="closed_out", base=m))
+        self.assert_closed(a, m)
+        self.assertEqual(self.head(), gitrepo.HeadState("main", m))
+        self.assertEqual(gitrepo.commit_subject(self.clone, m), f"{TITLE} (#{self.pr_number()})")
+        self.assertEqual([e["state"] for e in self.events() if e["event"] in ("merged_squashed", "closed")],
+                         [mb.MERGED_SQUASHED, mb.CLOSED])
+        self.assertIn(BRANCH, self.git("branch", "--list", BRANCH))  # never deleted
+        self.assertEqual(self.preflight(), mb.Proceed(action="trunk_start", base=m))
+
+    def test_from_the_branch_a_dirty_tree_and_an_unmerged_commit_gate(self) -> None:
+        a = self.to_ready()
+        self.squash_merge(self.pr_number())
+        (self.clone / "README.md").write_text("dirty\n")
+        self.assertGate(self.preflight(), mb.GATE_DIRTY_TREE)
+        self.assertEqual((self.record()["state"], self.head().branch), (mb.MERGED_SQUASHED, BRANCH))
+        self.git("checkout", "--", "README.md")
+        extra = self.commit_file("unmerged.txt")
+        self.assertIn(extra, self.assertGate(self.preflight(), mb.GATE_UNMERGED_COMMITS).message)
+        self.git("reset", "-q", "--keep", a)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assertEqual(self.record()["state"], mb.CLOSED)
+
+    def test_from_the_trunk(self) -> None:
+        a = self.to_ready()
+        m = self.squash_merge(self.pr_number())
+        extra = self.commit_file("unmerged.txt")
+        self.pull_main()
+        gate = self.assertGate(self.preflight(), mb.GATE_UNMERGED_COMMITS)
+        self.assertIn(extra, gate.message)
+        self.assertIn(f"git branch -D {BRANCH}", " ".join(gate.exits))
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.git("branch", "-f", BRANCH, a)
+        self.assertEqual(self.preflight(), mb.Proceed(action="trunk_start", base=m))
+        self.assert_closed(a, m)
+
+    def test_from_the_trunk_before_the_pull(self) -> None:
+        a = self.to_ready()
+        m = self.squash_merge(self.pr_number())
+        self.git("switch", "-q", "main")
+        # Close-out from the trunk writes CLOSED; the trunk start then gates the behind trunk.
+        self.assertGate(self.preflight(), mb.GATE_FAST_FORWARD_TRUNK)
+        self.assert_closed(a, m)
+        self.pull_main()
+        self.assertEqual(self.preflight(), mb.Proceed(action="trunk_start", base=m))
+
+    def test_a_merge_from_pr_open_after_acceptance_is_verified(self) -> None:
+        number = self.open_pr()
+        a = self.accept()
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)  # pushes the acceptance commit
+        m = self.squash_merge(number)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assert_closed(a, m)
+
+    def test_the_integration_path_is_verified_with_merge_tree(self) -> None:
+        number = self.open_pr()
+        self.trunk_commit()
+        a = self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_INTEGRATION_REQUIRED)
+        m = self.squash_merge(number)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assert_closed(a, m)
+
+    def test_an_old_git_on_the_integration_path_refuses_and_writes_nothing(self) -> None:
+        number = self.open_pr()
+        self.trunk_commit()
+        a = self.accept()
+        self.assertGate(self.preflight(), mb.GATE_INTEGRATION_REQUIRED)  # pushes the acceptance commit
+        m = self.squash_merge(number)
+        before = self.snapshot()
+        with mock.patch.object(gitrepo, "git_version", return_value=(2, 37, 0)):
+            with self.assertRaises(BranchBindingError) as caught:
+                self.preflight()
+        self.assertIn("2.38", str(caught.exception))
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
+        failed = GitOperationError("git merge-tree failed (exit 128)", evidence={})
+        with mock.patch.object(gitrepo, "merge_tree", side_effect=failed):
+            with self.assertRaises(GitOperationError):
+                self.preflight()
+        self.assertEqual(self.snapshot(), before)
+        # A later step with a working Git verifies the squash.
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assert_closed(a, m)
+
+    def test_unverified_merges_stay_merged_rewritten(self) -> None:
+        cases = {
+            "rebase": lambda number: self.human_merge(number, how="rebase"),
+            "bare title": lambda number: self.human_merge(number, how="squash_pr", subject=TITLE),
+            "edited subject": lambda number: self.human_merge(number, how="squash_pr", subject="feat: edited (#1)"),
+            "a legacy squash": lambda number: self.human_merge(number, how="squash"),
+        }
+        for name, merge in cases.items():
+            with self.subTest(name):
+                self.fresh()
+                self.to_ready()
+                merge(self.pr_number())
+                gate = self.assertGate(self.preflight(), mb.GATE_MERGE_METHOD_REWROTE_HISTORY)
+                self.assertEqual(self.record()["state"], mb.MERGED_REWRITTEN)
+                self.assertIn("Disable squash and rebase merging", gate.message)
+                self.assertEqual(self.head().branch, BRANCH)
+
+    def test_merged_before_acceptance_then_new_pr_converges_through_a_verified_squash(self) -> None:
+        """The continuation's acceptance and the first squash both add the
+        item's state, so GitHub reports a conflict; the human resolves it on
+        GitHub (a merge of the trunk into the branch there), then squashes.
+        The squash is verified, and close-out names the fast-forward of the
+        local branch to the resolved head."""
+        number = self.open_pr()
+        self.squash_merge(number)
+        self.assertGate(self.preflight(), mb.GATE_MERGED_BEFORE_ACCEPTANCE)
+        mb.acknowledge(self.ctx, WID, mb.NEW_PR)
+        # The squash commit is not in the branch, so the next pull request opens at once.
+        self.assertEqual(self.preflight().action, "pr_created")
+        new = self.pr_number()
+        self.assertNotEqual(new, number)
+        a = self.accept()
+        self.set_checks(new, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_INTEGRATION_REQUIRED)
+        human = self.human()
+        conflict = run(["git", "merge-tree", "--write-tree", "origin/main", f"origin/{BRANCH}"], cwd=human, check=False)
+        self.assertEqual(conflict.returncode, 1)  # a squash-merge button GitHub would disable
+        run(["git", "switch", "-q", "-c", "resolve", f"origin/{BRANCH}"], cwd=human)
+        run(["git", "merge", "-q", "-X", "ours", "--no-edit", "origin/main"], cwd=human)
+        resolved = current_head(human)
+        run(["git", "push", "-q", "origin", f"resolve:refs/heads/{BRANCH}"], cwd=human)
+        run(["git", "--git-dir", str(self.origin), "update-ref", f"refs/pull/{new}/head", resolved])
+        m = self.squash_merge(new)
+        self.assertEqual(gitrepo.commit_parents(self.origin, m), [self.origin_ref("refs/heads/main~1")])
+        with self.assertRaises(BranchBindingError) as caught:
+            self.preflight()
+        self.assertIn(f"git merge --ff-only {resolved}", str(caught.exception))
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.git("merge", "-q", "--ff-only", resolved)
+        self.assertEqual(self.preflight().action, "closed_out")
+        record = self.record()
+        self.assertEqual((record["state"], record["merged_head"], record["accepted_head"], record["merge_commit"]),
+                         (mb.CLOSED, resolved, a, m))
+
+    def test_merged_before_acceptance_then_new_pr_without_a_conflict_uses_merge_tree(self) -> None:
+        number = self.open_pr()
+        self.squash_merge(number)
+        self.assertGate(self.preflight(), mb.GATE_MERGED_BEFORE_ACCEPTANCE)
+        mb.acknowledge(self.ctx, WID, mb.NEW_PR)
+        self.assertEqual(self.preflight().action, "pr_created")
+        new = self.pr_number()
+        self.commit_file("next.txt")
+        a = self.accept()
+        self.set_checks(new, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_INTEGRATION_REQUIRED)
+        # A human squashes with the item's state resolved identically on the
+        # trunk first (no conflict left), so merge-tree decides.
+        human = self.human()
+        run(["git", "checkout", "-q", f"origin/{BRANCH}", "--", mb.STATE_REL_PATH], cwd=human)
+        commit_all(human, "chore: take the milestone's state")
+        run(["git", "push", "-q", "origin", "main"], cwd=human)
+        m = self.squash_merge(new)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assert_closed(a, m)
+
+    def test_status_inspect_and_explain_name_merged_squashed(self) -> None:
+        self.to_ready()
+        self.squash_merge(self.pr_number())
+        (self.clone / "README.md").write_text("dirty\n")
+        self.assertGate(self.preflight(), mb.GATE_DIRTY_TREE)
+        self.assertIn(f"milestone: {WID} {mb.MERGED_SQUASHED} on {BRANCH}", "\n".join(mb.binding_lines(self.rt)))
+        self.assertEqual(mb.observation(self.ctx)["milestone_branch"]["state"], mb.MERGED_SQUASHED)
+        predicted = mb.predict(self.ctx)
+        self.assertEqual((predicted["action"], predicted["binding_state"]), ("close_out", mb.MERGED_SQUASHED))
+        self.assertIn("squash-merged", predicted["detail"])
+        self.git("checkout", "--", "README.md")
+        self.git("switch", "-q", "main")
+        predicted = mb.predict(self.ctx)
+        self.assertEqual((predicted["action"], predicted["binding_state"]), ("close_out", mb.MERGED_SQUASHED))
+        self.assertIn("from the trunk", predicted["detail"])
+
+
 class MergeModeUnchangedTest(_Lifecycle):
     """A policy without ``merge_method``: 1.3.0's title, body and gates."""
 
@@ -1466,6 +1901,59 @@ class MergeModeUnchangedTest(_Lifecycle):
         self.assertEqual(gate.merge_method, "merge")
         self.assertIn("Create a merge commit", decision.branch_human_gate("/repo", gate).what_is_required)
         self.assertEqual(self.gh_pr_view(number)["title"], "someone's title")
+
+
+class MergeModeSquashTest(_Lifecycle):
+    """Design F "Only in squash mode": the squash ``SquashCloseOutTest``
+    verifies, under a policy without ``merge_method``, is 1.3.0's
+    ``MERGED_REWRITTEN``, record and gate byte for byte."""
+
+    def test_a_github_squash_in_merge_mode_is_merged_rewritten_as_in_1_3_0(self) -> None:
+        a = self.to_ready()
+        number = self.record()["pr"]["number"]
+        h = self.human_merge(number, how="squash_pr")
+        m = self.origin_ref("refs/heads/main")
+        with mock.patch.object(mb, "verified_squash", side_effect=AssertionError("never consulted")):
+            gate = self.assertGate(self.preflight(), mb.GATE_MERGE_METHOD_REWROTE_HISTORY)
+        record = self.record()
+        self.assertLessEqual(set(record), {  # no field 1.3.0 did not write
+            "schema_version", "work_item_id", "repository", "policy", "trunk", "branch", "branch_point",
+            "workflow_base_commit", "binding_generation", "state", "pr", "superseded_prs", "merged_head",
+            "last_observation", "accepted_head", "merge_commit", "rewrite_gate_shown", "untrailered_completion",
+            "updated_at"})
+        self.assertEqual((record["state"], record["merged_head"], record["accepted_head"], record["merge_commit"],
+                          record["rewrite_gate_shown"]), (mb.MERGED_REWRITTEN, h, a, m, True))
+        self.assertEqual(gate.message,
+                         f"pull request #{number} was merged, but its head {h} is not on origin/main (merge commit "
+                         f"{m}): a squash or rebase merge rewrote the reviewed history, and the Workflow provenance "
+                         f"on main is unreachable. The Controller cannot undo this and does not switch; switch to "
+                         f"the trunk by hand. Disable squash and rebase merging in the repository's settings")
+        self.assertEqual((gate.exits, gate.merge_method), (("git switch main",), "merge"))
+        self.assertEqual([e["event"] for e in self.events() if e["event"].startswith("merged")], ["merged_rewritten"])
+
+    def test_a_rebase_is_merged_rewritten_in_both_modes(self) -> None:
+        """The titled one-commit rebases are ``VerifiedSquashTest``'s."""
+        for mode in ("merge", "squash"):
+            with self.subTest(mode=mode):
+                self.fresh()
+                if mode == "squash":
+                    self.write_policy(squash_policy())
+                    commit_all(self.clone, "Squash merges")
+                    self.push("main")
+                a = self.to_ready() if mode == "merge" else self._ready_squash()
+                number = self.record()["pr"]["number"]
+                self.human_merge(number, how="rebase")
+                self.assertGate(self.preflight(), mb.GATE_MERGE_METHOD_REWROTE_HISTORY)
+                self.assertEqual((self.record()["state"], self.record()["accepted_head"]), (mb.MERGED_REWRITTEN, a))
+
+    def _ready_squash(self) -> str:
+        number = self.open_pr()
+        a = self.accept()
+        self.gh_edit(number, title="feat: a title")
+        self.set_checks(number, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        return a
 
 
 class GateTextTest(unittest.TestCase):

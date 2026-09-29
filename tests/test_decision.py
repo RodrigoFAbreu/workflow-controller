@@ -1003,6 +1003,19 @@ class DecideNoWorkItemTest(unittest.TestCase):
         self.assertFalse(result.declined)
         self.assertTrue(result.reason)
 
+    def test_an_explicit_base_names_the_one_argument_form(self) -> None:
+        """Design F: the trunk tip a passed trunk start proved; the triple is
+        still the bootstrap's, so the selection stays automatic."""
+        tip = "0123456789abcdef" * 2 + "01234567"
+        result = decision.decide_no_work_item(self.managed_repo, base=tip)
+        self.assertIs(result.observed_phase, decision.NO_PHASE)
+        self.assertEqual(result.action.command, f"/milestone-plan {tip}")
+        self.assertEqual(decision.command_token(result.action.command), "/milestone-plan")
+        self.assertTrue(result.automatic)
+        self.assertIn(f"based on the trunk tip {tip}", result.reason)
+        self.assertEqual(decision.decide_no_work_item(self.managed_repo, base=None),
+                         decision.decide_no_work_item(self.managed_repo))
+
     def test_no_phase_is_never_a_known_phase_and_never_none(self) -> None:
         self.assertNotIn(decision.NO_PHASE, decision.KNOWN_PHASES)
         self.assertIsNotNone(decision.NO_PHASE)

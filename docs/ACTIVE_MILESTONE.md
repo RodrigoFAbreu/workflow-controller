@@ -29,7 +29,7 @@ understands a squash merge (`MERGED_SQUASHED`); and a cutover that never locks o
 | CP3 Release classification from commit types | Complete | See below |
 | CP4 CI workflows | Complete | See below |
 | CP5 Pull request title and body in squash mode | Complete | See below |
-| CP6 Squash close-out and the explicit base | Not started | |
+| CP6 Squash close-out and the explicit base | Complete | See below |
 | CP7 Documentation, ADR 0007, cutover rehearsal, full verification | Not started | |
 
 ### CP1 -- Conventional Commit titles and the policy schema
@@ -220,3 +220,91 @@ write-containment scan flags; it now uses `re.sub`. The full sharded run with
 unset, then passed: 2374 tests, 6 shards. The post-cutover scratch clone (a full clone with the
 real tags, this diff plus the cutover's dynamic `pyproject.toml` and `CONVENTIONAL_POLICY`) also
 passed: 2374 tests, 5 shards.
+
+### CP6 -- Squash close-out and the explicit base
+
+- `controller/milestone_branch.py`:
+  - `MERGED_SQUASHED` is a new non-terminal state, part of `MERGED_PR_HANDLING`. It can be reached
+    from `PR_PLANNED`, `PR_OPEN`, `READY` and `PR_CLOSED_UNMERGED`, and it leads to `CLOSED`.
+    `CLOSE_OUT_STATES` is `(MERGED, MERGED_SQUASHED)`.
+  - `_merged_handling` calls the new `verified_squash` only when the binding's policy is in squash
+    mode, and only for a merged head that is not on the trunk. Otherwise it writes 1.3.0's
+    `MERGED_REWRITTEN`, record and gate byte for byte.
+  - `verified_squash` checks Design F's conditions in the order 1, 2, 3, 5, 4:
+    1. the merge commit exists and is on the fetched trunk;
+    2. it has one parent `p`;
+    3. its subject is `<title> (#<number>)`;
+    5. its author name, email, date and full message are not `h`'s;
+    4. its tree is `h`'s when `p` is an ancestor of `h`; otherwise it is the tree
+       `git merge-tree --write-tree p h` writes.
+
+    Any configured `merge.<name>.driver` means "not verified", and `merge-tree` is never run.
+    Git older than 2.38 on that path refuses, naming the floor. So does a failing `merge-tree`.
+    Neither writes anything.
+  - Close-out, from the branch and from the trunk, runs from both states. From `MERGED_SQUASHED` it
+    checks that the squash commit, not `merged_head`, is on the trunk. Merge-mode refusal texts
+    are unchanged.
+  - `status`, `inspect` and `explain` name the state. `explain` predicts "the squash-merged
+    binding closes out".
+  - The explicit base: `Proceed.base` is the trunk tip that a passed trunk start proved equal to
+    `<remote>/<trunk>`. A close-out carries it on. Every prediction gains a `base` key, which is
+    set only for a trunk start that would pass.
+- `controller/decision.py`: `decide_no_work_item(managed_repo, *, base=None)` names
+  `/milestone-plan <base>` and says so in its reason. The triple is unchanged.
+- `controller/job.py` passes the preflight's `base`, and `controller/cli.py`'s `explain` passes
+  the prediction's. Without a policy, or with branches disabled, the command stays bare, and
+  `no_policy_lifecycle.json` is byte-unchanged.
+- The open question, measured: the expected-outcome table, the resume lookup, routing,
+  `classify_selected_action` and property 5 all key on the command token, so no table needed a
+  new row. `ArgumentBearingBootstrapTest` pins this.
+- `controller/gitrepo.py` adds read-only helpers: `commit_parents`, `tree_of`, `commit_subject`,
+  `commit_identity`, `git_version`, `merge_drivers` and `merge_tree`. `merge_tree` tells a
+  conflict (exit 1, a tree and the conflicted paths) apart from an unmergeable argument (exit 1
+  with a message only), and refuses the latter.
+- **A deviation from the plan's text, for CP7's guide.** Design F says the `--new-pr`
+  continuation after `MERGED_BEFORE_ACCEPTANCE` "still converges" by marking the PR ready and
+  squashing. The measurement shows otherwise. The first squash and the continuation's acceptance
+  both add the item's block to `WORKFLOW_STATE.json`, so the continuation conflicts with the
+  trunk, and GitHub disables the squash button.
+  - What converges: the human resolves the conflict on GitHub (a merge of the trunk into the
+    branch there), then squashes. The squash verifies on the ordinary path, because `p` is an
+    ancestor of the resolved head. Close-out then refuses once and names
+    `git merge --ff-only <resolved head>` for the local branch, after which it closes.
+  - Without a conflict, the `merge-tree` path decides.
+  - No mechanism was added. Both paths are tested.
+- Tests:
+  - `test_milestone_branch`: the state model, 12 states and the exact transition table.
+  - `test_pull_request_lifecycle`:
+    - `MATRIX` rows and cells `squashed_branch`/`squashed_trunk`;
+    - `VerifiedSquashTest`, each condition over a scratch repository: the one-commit rebases with
+      a bare and a numbered title, `h`'s identity with a one-second control, the different tree,
+      the integration path, the conflict, the merge driver whose marker never appears (and does
+      once `merge-tree` itself runs), and Git 2.37 or a failing `merge-tree` through the runner;
+    - `SquashCloseOutTest`: close-out from the branch and the trunk, with `dirty_tree`,
+      `unmerged_commits` and `fast_forward_trunk`; the integration path; refuse-then-verify with
+      an old Git or a failing `merge-tree`, writing nothing; rebase, bare-title, edited-subject
+      and legacy-subject merges giving `MERGED_REWRITTEN`; both `MERGED_BEFORE_ACCEPTANCE
+      --new-pr` paths; and the reporting views;
+    - `MergeModeSquashTest`: the same GitHub squash in merge mode is 1.3.0's `MERGED_REWRITTEN`,
+      and `verified_squash` is never consulted.
+  - `test_gitrepo.SquashReadTest`, `test_decision` (the one-argument form),
+    `test_job_validation.ArgumentBearingBootstrapTest`, and `test_trunk_preflight` (`explain`
+    names the tip). The bootstrap assertions of the existing step tests now expect the tip.
+  - `test_trunk_orchestration_e2e.SquashLifecycleTest`, end to end: the declared title, the body
+    sync, "Squash and merge", close-out, the bootstrap naming the squash commit, and the next
+    bind at it. The policy scenarios expect `/milestone-plan <tip>`, and the no-policy scenario
+    stays bare.
+
+Verification: the narrow modules pass (`test_milestone_branch`, `test_pull_request_lifecycle`,
+`test_trunk_orchestration_e2e`, `test_decision`, `test_job_validation`, `test_trunk_preflight`,
+`test_gitrepo`, `test_cli`, `test_job`, `test_no_rewrite_invariants`, `test_write_containment`,
+`test_package_structure`, `test_golden_plan_stage_decisions`, `test_plan_document_consistency`:
+787 tests). Every golden generator was run with `--check`. `no_policy_lifecycle`,
+`external_implementation_review_decisions` (2.5.1 and 2.6.0) and `plan_stage_decisions --release
+2.6.0` are current. `plan_stage_decisions` for 2.5.1 differs in its `AMENDING_PLAN` rows at `HEAD`
+as well: that is the permitted difference `test_golden_plan_stage_decisions` documents, and the
+test passes. The full sharded run with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, under a
+reaping-subreaper wrapper and with `FORCE_COLOR` unset, passed: 2409 tests, 5 shards. The
+post-cutover scratch clone (a full clone with the real tags, this diff plus the cutover's dynamic
+`pyproject.toml` and `CONVENTIONAL_POLICY`) also passed: 2409 tests, 5 shards. There the
+Controller reports `1.3.0`.

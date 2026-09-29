@@ -158,6 +158,41 @@ STATIC_VERSION_LINE = f'version = "{CONTROLLER_VERSION}"'
 DYNAMIC_VERSION_LINE = 'dynamic = ["version"]'
 
 
+def _idle_reaper_threads() -> list:
+    import threading
+
+    from controller import worker
+    return [t for t in threading.enumerate() if t.name == worker._IDLE_REAPER_NAME and t.is_alive()]
+
+
+def _settle_idle_reaper() -> None:
+    """Let a running between-launch reaper end by itself (up to 2 s), then
+    stop it and settle every record against the real ``/proc``."""
+    import time
+
+    from controller import worker
+    deadline = time.monotonic() + 2.0
+    while _idle_reaper_threads() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    worker._reset_reaping_for_tests(5.0)
+
+
+def isolate_idle_reaper(case: unittest.TestCase) -> None:
+    """Keep ``controller.worker``'s process-wide reaping state out of other
+    tests (reaping plan, Design B.5): settle it now, and again at cleanup,
+    then assert that no ``workflow-controller-reaper`` thread survives and
+    nothing is recorded. Call from ``setUp`` before any patch or spy, so
+    the cleanup runs after every patch has been undone."""
+    from controller import worker
+
+    def settle_and_check() -> None:
+        _settle_idle_reaper()
+        case.assertEqual(_idle_reaper_threads(), [], "a between-launch reaper outlived the test")
+        case.assertEqual(worker._ADOPTED, {}, "a recorded child outlived the test")
+
+    _settle_idle_reaper()
+    case.addCleanup(settle_and_check)
+
 def pyproject_text(*, dynamic_version: bool = False) -> str:
     """This repository's real ``pyproject.toml``, with its version line in
     the static form (``CONTROLLER_VERSION``) or, with ``dynamic_version``,

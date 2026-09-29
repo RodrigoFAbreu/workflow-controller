@@ -30,9 +30,11 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -2642,6 +2644,165 @@ class ResumeWithUnreadableManifestTest(lifecycle._LifecycleTestCase):
                     self.assertEqual(resumed.code, cli.EXIT_OK, resumed.stderr)
                     self.assert_finished(self.read_record(lc, record["job_id"]), lifecycle.AWAITING_MANUAL)
                     self.assertEqual(self.processes(lc), 1, "resume never relaunches")
+
+
+
+# ---------------------------------------------------------------------------
+# Reaping between steps and at the end of `run`/`step` (child-process-reaping
+# CP2, Design B.5).
+# ---------------------------------------------------------------------------
+
+
+#: A double fork: the intermediate prints the grandchild's pid and exits at
+#: once; the grandchild calls ``setsid`` (as Git's ``daemonize`` does) and
+#: polls (on ``/dev/null`` descriptors) for the release file named by
+#: ``argv[1]``, then exits.
+_ORPHAN_SCRIPT = """\
+import os, sys, time
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    null = os.open(os.devnull, os.O_RDWR)
+    for fd in (0, 1, 2):
+        os.dup2(null, fd)
+    while not os.path.exists(sys.argv[1]):
+        time.sleep(0.01)
+    os._exit(0)
+print(pid, flush=True)
+"""
+
+
+def _proc_stat(pid: int) -> "worker._ProcStat | None":
+    try:
+        return worker._parse_stat(Path(f"/proc/{pid}/stat").read_text())
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def _reaper_alive() -> bool:
+    return any(t.name == worker._IDLE_REAPER_NAME and t.is_alive() for t in threading.enumerate())
+
+
+class ChildReapingCliTest(_StepFixture, unittest.TestCase):
+    """``run`` reaps after every step and ``run``/``step`` as they return;
+    a recorded child that exits while ``run`` is paused at its boundary is
+    collected by the between-launch reaper (I8)."""
+
+    def setUp(self) -> None:
+        fixtures.isolate_idle_reaper(self)
+        super().setUp()
+        self.addCleanup(setattr, cli, "_open_run", None)
+        self.release = self.tmp_root / "orphan-release"
+        self.addCleanup(self.release.touch)
+        self.orphans: list[int] = []
+
+    def _launch_leaving_orphan(self) -> int:
+        """What ``launch`` does around its worker, with the worker replaced
+        by an orphan: inside the real subreaper, orphan a grandchild that
+        runs until ``self.release`` exists, wait until it is this process's
+        child, and return once the real final sweep has run (after the
+        subreaper reset) -- which records it and starts the between-launch
+        reaper."""
+        exclusions = worker._LaunchExclusions()
+        with contextlib.ExitStack() as stack:
+            stack.callback(exclusions.final_sweep)
+            stack.enter_context(worker._child_subreaper())
+            exclusions.baseline = worker._own_children()
+            out = subprocess.run([sys.executable, "-c", _ORPHAN_SCRIPT, str(self.release)], capture_output=True,
+                                 text=True, check=True, timeout=10)
+            pid = int(out.stdout)
+            self.orphans.append(pid)
+            self.assertTrue(process_fixtures.wait_until(lambda: getattr(_proc_stat(pid), "ppid", None)
+                                                        == os.getpid(), timeout=10))
+        self.assertIn(pid, worker._ADOPTED)
+        return pid
+
+    def _left_as_zombie(self) -> int:
+        """An orphan recorded by a launch that then exits, left a zombie
+        (the between-launch reaper is held off for this)."""
+        pid = self._launch_leaving_orphan()
+        self.release.touch()
+        self.assertTrue(process_fixtures.wait_until(lambda: _proc_stat(pid).state == "Z", timeout=10))
+        return pid
+
+    def test_run_reaps_a_finished_orphan_after_the_step_that_left_it(self) -> None:
+        self.enterContext(unittest.mock.patch.object(worker, "_ensure_idle_reaper", lambda: None))
+        seen: list = []
+
+        def execute_step(*a, **k):
+            if not self.orphans:
+                self._left_as_zombie()
+                return {"status": job.STATUS_FINISHED}
+            seen.append(_proc_stat(self.orphans[0]))
+            return {"status": job.STATUS_GATE_BLOCKED}
+
+        job.execute_step = execute_step
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager), max_steps=2)
+        self.assertEqual(cli.cmd_run(args, self.runtime_root, self.ident), cli.EXIT_GATE)
+        self.assertEqual(seen, [None], "a zombie child remained after the first step")
+        self.assertEqual(worker._ADOPTED, {})
+
+    def test_step_reaps_a_finished_orphan_even_when_the_step_raises(self) -> None:
+        self.enterContext(unittest.mock.patch.object(worker, "_ensure_idle_reaper", lambda: None))
+
+        def execute_step(*a, **k):
+            self._left_as_zombie()
+            raise RuntimeError("the step failed (test)")
+
+        job.execute_step = execute_step
+        with self.assertRaises(RuntimeError):
+            self._step()
+        self.assertIsNone(_proc_stat(self.orphans[0]))
+        self.assertEqual(worker._ADOPTED, {})
+
+    def test_a_recorded_child_exiting_during_a_paused_boundary_is_collected(self) -> None:
+        pause = self.tmp_root / "pause"
+        self.addCleanup(lambda: pause.unlink(missing_ok=True))
+
+        def execute_step(*a, **k):
+            if not self.orphans:
+                self._launch_leaving_orphan()
+                pause.touch()
+                return {"status": job.STATUS_FINISHED}
+            return {"status": job.STATUS_GATE_BLOCKED}
+
+        entries: list[int] = []
+        paused = threading.Event()
+        real_await = cli._await_pause_file
+
+        def await_pause_file(pause_file) -> None:
+            entries.append(len(entries) + 1)
+            if Path(pause_file).exists():
+                paused.entry = entries[-1]
+                paused.set()
+            real_await(pause_file)
+
+        job.execute_step = execute_step
+        self.enterContext(unittest.mock.patch.object(cli, "_await_pause_file", await_pause_file))
+        self.enterContext(unittest.mock.patch.dict(os.environ, {cli.TEST_HOOKS_ENV: "1"}))
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager), max_steps=2, pause_file=str(pause))
+        outcome: dict = {}
+        runner = threading.Thread(target=lambda: outcome.update(code=cli.cmd_run(args, self.runtime_root,
+                                                                                 self.ident)), daemon=True)
+        runner.start()
+        self.assertTrue(paused.wait(10), "run never paused at its boundary")
+        self.assertEqual(paused.entry, 2)
+        [orphan] = self.orphans
+        self.assertIn(orphan, worker._ADOPTED)
+        stat = _proc_stat(orphan)
+        self.assertEqual((stat.state != "Z", stat.ppid), (True, os.getpid()))
+        self.assertTrue(_reaper_alive(), "no between-launch reaper runs at the paused boundary")
+        self.release.touch()
+        self.assertTrue(process_fixtures.wait_until(lambda: _proc_stat(orphan) is None or
+                                                    _proc_stat(orphan).state == "Z", timeout=10))
+        exited = time.monotonic()
+        self.assertTrue(process_fixtures.wait_until(lambda: _proc_stat(orphan) is None, timeout=5))
+        self.assertLessEqual(time.monotonic() - exited, 0.5)
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertTrue(process_fixtures.wait_until(lambda: not _reaper_alive(), timeout=2))
+        pause.unlink()
+        runner.join(10)
+        self.assertEqual(outcome.get("code"), cli.EXIT_GATE)
 
 
 if __name__ == "__main__":

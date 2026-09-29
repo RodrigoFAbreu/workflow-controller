@@ -34,9 +34,10 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 | # | Step | Needs | Section |
 |---|---|---|---|
 | C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) (complete) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
+| C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance | — | [11.1.1](#1111-reaping-every-child-process) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, and telemetry v0 (tokens, cache, cost and time per job) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements) |
-| C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C2 | [11.3](#113-auto-merge-and-release-wait) |
+| C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
@@ -1046,9 +1047,12 @@ code as it stands when its turn comes, not from this list.
 Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md`, ADR
 `docs/adr/0007-tag-derived-versions-and-squash-merges.md`; the narrative is archived at
 `docs/milestones/completed/workflow-controller-squash-merge-tag-versioning.md`). The milestone never
-changed the policy or `pyproject.toml`'s version line. The switch is the plan's Design H: merge PR
-#8 with a merge commit, close it out with 1.3.0, change the repository settings, then squash-merge
-the two-file cutover pull request, which releases 1.4.0.
+changed the policy or `pyproject.toml`'s version line. The switch is the plan's Design H: PR #8 was
+merged with a merge commit (`f77ff06`, `NO_CHANGE`), the repository settings changed to squash-only,
+and the two-file cutover pull request (#9) is squash-merged, which releases 1.4.0. One change from
+the plan (decided 2026-09-29): C1's binding is closed out by the first 1.4.0 step, not by 1.3.0,
+because a close-out step goes straight on to `/milestone-plan`, which must not start before the
+cutover. Merge mode is unchanged in 1.4.0, and the binding keeps the merge mode it was bound with.
 
 **Step C1.** Checked against Workflow Manager: a Controller-only change.
 
@@ -1074,6 +1078,32 @@ the two-file cutover pull request, which releases 1.4.0.
 - Close-out gains a merged-by-squash state (`MERGED_SQUASHED`). The next item is planned from
   `main`'s head, with that base passed explicitly to `/milestone-plan`.
 - A milestone branch is never rebased or updated from `main`.
+
+## 11.1.1 Reaping every child process
+
+**Step C1b** (added 2026-09-29, ahead of C2). On 2026-09-29 every Claude Code process on the host
+aborted twice within ten minutes: the per-user process limit (125,849, threads included) was full
+of zombie `git` processes held by the two lanes' Controllers.
+
+- **Cause.** The Controller marks itself a child subreaper while a worker runs, so every orphan in
+  the worker's tree is re-parented to it. It scans for orphans only while the worker is `WAITING` on
+  owned background work, and collects only the ones those scans recorded (`_ADOPTED`, reaped at the
+  drain). An orphan that appears while the worker runs a foreground command, such as a test run,
+  is never recorded, and stays a zombie until the Controller exits. Git 2.55 starts detached
+  background maintenance after commits, and test suites make thousands of commits in throwaway
+  repositories: about 1,000 orphans per test run here, and 42,158 in one Workflow Manager run.
+- **Fix.** On every supervision tick, in every state, collect every finished child the Controller
+  holds except the worker and its anchor, each by its own pid (never `waitpid(-1)`, which could
+  steal the worker's status), reading the direct children from `/proc/self/task/<tid>/children`.
+  Do the same between steps and at the end of a run.
+- **Tests.** A fake worker that orphans hundreds of short-lived processes while it is `RUNNING`, not
+  only `WAITING`: the zombie count under the Controller stays near zero during the job and is zero
+  after it. The existing orphan-reap tests keep passing.
+- **Test hygiene.** This repository's throwaway test repositories turn off Git's automatic
+  maintenance (`maintenance.auto=false`, `gc.auto=0`) in the shared test setup. Workflow Manager does
+  the same in its own M1b.
+- **Afterwards.** Both lanes drop their stopgap, one step per Controller process (`--max-steps 1`),
+  once the patch release is installed. A long-lived Controller (C4, C11) depends on this fix.
 
 ## 11.2 CI reliability
 

@@ -843,8 +843,10 @@ class ReleaseHistoryTest(test_release_txn._ReleaseCase):
                 value = value.replace(f"${{{{ needs.release-plan.outputs.{output} }}}}", found)
             self.assertNotIn("${{", value, f"{name}: {key} is not a release-plan output")
             env[key] = value
-        runner_env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log),
-                          RELEASE_VERSION=outputs["version"], **env)
+        # The classified version reaches build and verify only through the
+        # job's own environment, as main.yml declares it.
+        self.assertEqual(env.get("RELEASE_VERSION"), outputs["version"])
+        runner_env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log), **env)
         result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=self.clone, env=runner_env,
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)

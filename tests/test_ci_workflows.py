@@ -5,7 +5,10 @@ absent, the emitter's quoting and layout, and the structure of ``ci.yml``,
 ``validate.yml`` and ``main.yml``; and
 (``workflow-controller-adaptive-test-sharding`` CP6) ``validate.yml``'s
 planned ``plan`` / ``tests`` / ``tests-result`` jobs, the CI placement
-partition and the conformance family.
+partition and the conformance family; and
+(``workflow-controller-squash-merge-tag-versioning`` CP4) ``pr-title.yml``
+and ``main.yml``'s ``build`` job taking the classified version as
+``RELEASE_VERSION``.
 
 The assertions are made on the Python model, and the committed bytes are
 asserted equal to its render, so what GitHub runs is what is tested here. A
@@ -143,6 +146,11 @@ class CommittedFilesTest(unittest.TestCase):
         record = json.loads(INSTALLATION.read_text(encoding="utf-8"))
         expected = record["managed"][".github/workflows/workflow-conformance.yml"]["sha256"]
         self.assertEqual(hashlib.sha256(CONFORMANCE_YML.read_bytes()).hexdigest(), expected)
+
+    def test_the_generated_files(self) -> None:
+        self.assertEqual(sorted(ci.WORKFLOWS), ["ci.yml", "main.yml", "pr-title.yml", "validate.yml"])
+        self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
+        self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
     def test_only_the_model_and_the_managed_workflow_exist(self) -> None:
         present = sorted(path.name for path in WORKFLOWS.iterdir())
@@ -494,6 +502,12 @@ class AllJobsTest(unittest.TestCase):
         self.assertIn('pip install "setuptools>=70.1"', map(_run, _steps(package)))
         self.assertIn(ci.PIPX_SMOKE, map(_run, _steps(package)))
 
+    def test_validate_smoke_test_is_unchanged_in_text(self) -> None:
+        # 1.3.0's text: the local build's version, now tag-derived after the cutover.
+        smoke = [_run(s) for s in _steps(_jobs(ci.validate_workflow())["package"])
+                 if s.get("name") == "pipx smoke test"]
+        self.assertEqual(smoke, [PIPX_SMOKE_1_3_0])
+
     def test_no_step_tags_pushes_or_mutates_a_release(self) -> None:
         # The only tag is created inside ``tools/release.py publish``, after
         # validation, through controller/gitrepo.py and controller/forge.py.
@@ -533,8 +547,8 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, True)
                 else:
                     self.assertIs(persist, False)
-        # validate.yml's four jobs, then release-plan, build and publish.
-        self.assertEqual(checkouts, 7)
+        # validate.yml's four jobs, release-plan, build and publish, then title.
+        self.assertEqual(checkouts, 8)
 
 
 class CiWorkflowTest(unittest.TestCase):
@@ -597,7 +611,8 @@ class MainWorkflowTest(unittest.TestCase):
         self.assertNotIn("permissions", self.jobs["build"])
         self.assertEqual(self.jobs["publish"]["permissions"], {"contents": "write"})
         self.assertEqual(self.jobs["release-plan"]["env"], {"GH_TOKEN": "${{ github.token }}"})
-        self.assertNotIn("env", self.jobs["build"])
+        self.assertEqual(self.jobs["build"]["env"],
+                         {"RELEASE_VERSION": "${{ needs.release-plan.outputs.version }}"})
         self.assertEqual(self.jobs["publish"]["env"],
                          {"GH_TOKEN": "${{ github.token }}",
                           "COMMIT": "${{ needs.release-plan.outputs.commit }}"})
@@ -654,9 +669,22 @@ class MainWorkflowTest(unittest.TestCase):
                  _index(self.build, lambda s: "upload-artifact" in _uses(s))]
         self.assertEqual(order, sorted(order))
         self.assertEqual(order[-1], len(self.build) - 1)
+        # 1.3.0's command lines byte for byte: a RESUME target carrying
+        # 1.3.0's tooling, whose build and verify take no option, accepts them.
         self.assertEqual(_run(self.build[order[0]]), "python3 tools/release.py build")
         self.assertEqual(_run(self.build[order[1]]), "python3 tools/release.py verify")
-        self.assertEqual(_run(self.build[order[2]]), ci.PIPX_SMOKE)
+        self.assertEqual(_run(self.build[order[2]]), ci.RELEASE_PIPX_SMOKE)
+
+    def test_the_release_smoke_test_compares_with_the_classified_version(self) -> None:
+        smoke = ci.RELEASE_PIPX_SMOKE
+        self.assertIn('expected="workflow-controller $RELEASE_VERSION"', smoke.split("\n"))
+        self.assertNotIn("release.py version", smoke)
+        self.assertEqual(smoke, PIPX_SMOKE_1_3_0.replace("$(python3 tools/release.py version)",
+                                                          "$RELEASE_VERSION"))
+        self.assertIn('          expected="workflow-controller $RELEASE_VERSION"\n', ci.render()["main.yml"])
+
+    def test_release_plan_outputs_are_unchanged(self) -> None:
+        self.assertEqual(list(self.jobs["release-plan"]["outputs"]), ["state", "version", "tag", "commit"])
 
     def test_publish_calls_the_transaction_with_the_peeled_commit(self) -> None:
         checkout = self.publish[0]
@@ -688,6 +716,70 @@ class MainWorkflowTest(unittest.TestCase):
         main = ci.render()["main.yml"]
         self.assertIn("Tip commit pushed to the ref", main)
         self.assertIn("gh_release_create", main)
+
+
+class PrTitleWorkflowTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.workflow = ci.pr_title_workflow()
+        self.jobs = _jobs(self.workflow)
+        self.text = ci.render()["pr-title.yml"]
+
+    def test_triggers(self) -> None:
+        self.assertEqual(self.workflow["on"],
+                         {"pull_request": {"types": ["opened", "edited", "reopened", "synchronize"]}})
+        self.assertEqual(self.workflow["name"], "PR title")
+
+    def test_read_only(self) -> None:
+        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
+        self.assertEqual(list(self.jobs), ["title"])
+        self.assertNotIn("permissions", self.jobs["title"])
+        self.assertNotIn("env", self.jobs["title"])
+        self.assertNotIn("secrets.", self.text)
+        self.assertNotIn("token", self.text)
+
+    def test_the_job_name_is_the_check_context(self) -> None:
+        self.assertEqual(self.jobs["title"]["name"], "PR title")
+        self.assertEqual(ci.PR_TITLE_CHECK, "PR title")
+
+    def test_the_title_is_passed_only_through_env(self) -> None:
+        steps = _steps(self.jobs["title"])
+        check = steps[_index(steps, lambda s: "check-title" in _run(s))]
+        self.assertEqual(check["env"], {"TITLE": "${{ github.event.pull_request.title }}"})
+        self.assertEqual(_run(check), 'python3 tools/release.py check-title "$TITLE"')
+        self.assertEqual(check, steps[-1])
+        for step in steps:
+            with self.subTest(step=step.get("name") or _uses(step)):
+                self.assertNotIn("${{", _run(step))
+        run_lines = re.findall(r"(?m)^\s*(?:- )?run: (.*)$", self.text)
+        self.assertEqual(run_lines, ['"python3 tools/release.py check-title \\"$TITLE\\""'])
+        self.assertEqual(self.text.count("github.event.pull_request.title"), 1)
+
+    def test_pinned_actions_without_persisted_credentials(self) -> None:
+        steps = _steps(self.jobs["title"])
+        uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", self.text)
+        self.assertEqual([ref.split("@")[0] for ref, _ in uses],
+                         ["actions/checkout", "actions/setup-python"])
+        for ref, comment in uses:
+            with self.subTest(ref=ref):
+                action, sha = ref.split("@")
+                self.assertEqual((sha, comment), (ci.ACTION_PINS[action][0],
+                                                  f" # {ci.ACTION_PINS[action][1]}"))
+        # The default depth: only the merge ref's own committed policy is read.
+        self.assertEqual(steps[0]["with"], {"persist-credentials": False})
+        self.assertEqual(steps[1]["with"], {"python-version": "3.12"})
+
+
+#: ``validate.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test.
+PIPX_SMOKE_1_3_0 = "\n".join([
+    "pipx install dist/*.whl",
+    'expected="workflow-controller $(python3 tools/release.py version)"',
+    'actual="$(workflow-controller --version)"',
+    "actual=\"${actual%%$'\\n'*}\"",
+    'if [ "$actual" != "$expected" ]; then',
+    '  echo "workflow-controller --version line 1 is \'$actual\', expected \'$expected\'" >&2',
+    "  exit 1",
+    "fi",
+])
 
 
 if __name__ == "__main__":

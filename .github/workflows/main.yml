@@ -67,6 +67,8 @@ jobs:
       - release-plan
     if: "github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
     runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: "${{ needs.release-plan.outputs.version }}"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -83,7 +85,7 @@ jobs:
       - name: "pipx smoke test"
         run: |
           pipx install dist/*.whl
-          expected="workflow-controller $(python3 tools/release.py version)"
+          expected="workflow-controller $RELEASE_VERSION"
           actual="$(workflow-controller --version)"
           actual="${actual%%$'\n'*}"
           if [ "$actual" != "$expected" ]; then

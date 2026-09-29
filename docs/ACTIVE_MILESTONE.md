@@ -27,7 +27,7 @@ understands a squash merge (`MERGED_SQUASHED`); and a cutover that never locks o
 | CP1 Conventional Commit titles and the policy schema | Complete | See below |
 | CP2 Tag-derived Controller version | Complete | See below |
 | CP3 Release classification from commit types | Complete | See below |
-| CP4 CI workflows | Not started | |
+| CP4 CI workflows | Complete | See below |
 | CP5 Pull request title and body in squash mode | Not started | |
 | CP6 Squash close-out and the explicit base | Not started | |
 | CP7 Documentation, ADR 0007, cutover rehearsal, full verification | Not started | |
@@ -152,3 +152,27 @@ Verification: the narrow modules pass (`test_release_txn`, `test_release_tools`,
 unset, passed: 2342 tests, 5 shards. The post-cutover scratch clone passed too: 2342 tests, 6
 shards. That clone is a full clone with the real tags, carrying this diff plus the cutover's
 dynamic `pyproject.toml` and `CONVENTIONAL_POLICY`, and there the Controller reports `1.3.0`.
+
+### CP4 -- CI workflows
+
+- `tools/ci_workflows.py` renders a fourth file, `.github/workflows/pr-title.yml`: `name: PR title`,
+  `pull_request` types `opened`, `edited`, `reopened`, `synchronize`, `contents: read`, one job
+  `title` named `PR title` (the check context). Its steps are the pinned `actions/checkout`
+  (default depth, `persist-credentials: false`), the pinned `actions/setup-python` 3.12, and
+  `python3 tools/release.py check-title "$TITLE"`, with the title in the step's `env` only.
+- `main.yml`'s `build` job gains `env: RELEASE_VERSION: ${{ needs.release-plan.outputs.version }}`.
+  Its `build` and `verify` run lines are 1.3.0's byte for byte. Its pipx smoke test now compares
+  with `workflow-controller $RELEASE_VERSION` (`RELEASE_PIPX_SMOKE`); `release-plan`'s outputs are
+  unchanged. `validate.yml` renders byte-identically to the base (`PIPX_SMOKE`, the local build's
+  version, unchanged in text). `ci.yml` is unchanged.
+- `tests/test_ci_workflows.py`: the generated set, `PrTitleWorkflowTest` (triggers, read-only, the
+  check context, no `${{` in any `run:`, pins, credentials), the build job's env, the release
+  smoke test and the unchanged `validate` smoke text against a literal copy of 1.3.0's.
+- `tests/test_trunk_orchestration_e2e.ReleaseHistoryTest`: the 1.3.0-tooling `RESUME` test now
+  takes `RELEASE_VERSION` from the generated build job's `env` alone; CP3 supplied it by hand.
+
+Verification: `python3 tools/ci_workflows.py --check` passes. The narrow modules pass
+(`test_ci_workflows`, `test_trunk_orchestration_e2e`, `test_plan_document_consistency`,
+`test_write_containment`, `test_package_structure`, `test_release_tools`: 178 tests). The full
+sharded run with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, under a reaping-subreaper wrapper and with
+`FORCE_COLOR` unset, passed: 2351 tests, 6 shards.

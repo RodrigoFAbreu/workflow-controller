@@ -584,20 +584,34 @@ BRANCH_GATE_TEXTS = {
                                     "trunk by hand, and disable squash and rebase merging",
     "unmerged_commits": "move the unmerged commits off the milestone branch",
     "dirty_tree": "commit, stash or discard the tracked changes",
+    "pr_title_invalid": "the pull request's title is not a valid Conventional Commit; set a valid title "
+                        "on GitHub",
+}
+
+#: The texts a squash-mode gate (``merge_method: "squash"`` in the binding's
+#: policy) uses instead of :data:`BRANCH_GATE_TEXTS`'s.
+BRANCH_GATE_TEXTS_SQUASH = {
+    "post_acceptance_commits": "commits follow the acceptance commit; merge anyway on GitHub with \"Squash "
+                               "and merge\", or leave the pull request unready",
+    "integration_required": "the trunk moved past the milestone's base; mark the pull request ready and "
+                            "merge it on GitHub with \"Squash and merge\"",
+    "merge_pull_request": "merge the pull request on GitHub with \"Squash and merge\"",
 }
 
 
 def branch_human_gate(repository: str, gate: Any, *, phase: str = BRANCH_GATE_PHASE) -> HumanGate:
     """The :class:`HumanGate` for a milestone-branch preflight gate (a
     duck-typed ``controller.milestone_branch.Gate``: ``code``,
-    ``work_item_id``, ``message``, ``exits``)."""
+    ``work_item_id``, ``message``, ``exits``, and ``merge_method``, whose
+    ``"squash"`` selects :data:`BRANCH_GATE_TEXTS_SQUASH`)."""
     if gate.code not in BRANCH_GATE_TEXTS:
         raise ValueError(f"unknown milestone-branch gate {gate.code!r}")
+    texts = BRANCH_GATE_TEXTS_SQUASH if getattr(gate, "merge_method", "merge") == "squash" else {}
     return HumanGate(
         repository=repository,
         work_item_id=gate.work_item_id or "",
         phase=phase,
-        what_is_required=f"{BRANCH_GATE_TEXTS[gate.code]} ({gate.code}): {gate.message}",
+        what_is_required=f"{texts.get(gate.code, BRANCH_GATE_TEXTS[gate.code])} ({gate.code}): {gate.message}",
         artifact_path=None,
         safe_resume_command=gate.exits[0] if gate.exits else "workflow-controller step",
     )

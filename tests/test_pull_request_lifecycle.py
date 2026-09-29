@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import decision, forge as forge_mod, gitrepo, milestone_branch as mb, runtime  # noqa: E402
 from controller.errors import BranchBindingError, ForgeUndecidableError  # noqa: E402
 from tests.fixtures import commit_all, current_head, run, trailer_message  # noqa: E402
-from tests.test_milestone_branch import BRANCH, WID, _Case  # noqa: E402
+from tests.test_milestone_branch import BRANCH, WID, _Case, policy  # noqa: E402
 
 
 class _Lifecycle(_Case):
@@ -1174,6 +1174,300 @@ class RefusalExitTest(_Lifecycle):
         self.assertTrue(self.git("ls-remote", "origin", f"refs/heads/{BRANCH}"))
 
 
+# ---------------------------------------------------------------------------
+# The pull request title and body in squash mode
+# (workflow-controller-squash-merge-tag-versioning CP5, Design E).
+# ---------------------------------------------------------------------------
+
+TITLE = "feat: squash the milestone"
+PLAN_PATH = f"PLAN-{WID}.md"
+CHANGE_TYPES = {"feat": "minor", "fix": "patch", "docs": "none"}
+
+
+def squash_policy(*, trigger: str = "conventional_commit") -> dict:
+    data = policy()
+    data["milestone_branches"]["pull_request"]["merge_method"] = "squash"
+    if trigger == "conventional_commit":
+        release = data["release"]
+        release["trigger"] = "conventional_commit"
+        del release["version_source"]
+        release["change_types"] = dict(CHANGE_TYPES)
+    return data
+
+
+def plan_text(*titles: str) -> str:
+    return "# Plan\n\n" + "".join(f"Pull request title: `{t}`\n" for t in titles) + "\nThe plan.\n"
+
+
+def trailers(root: Path, body: str) -> str:
+    return run(["git", "interpret-trailers", "--parse"], cwd=root, input=body).stdout
+
+
+class PlanTitleTest(unittest.TestCase):
+    def test_exactly_one_well_formed_line_declares_the_title(self) -> None:
+        self.assertEqual(mb.plan_title(plan_text(TITLE)), (TITLE, None))
+        cases = {
+            "none": plan_text(),
+            "two": plan_text(TITLE, TITLE),
+            "backtick inside": "Pull request title: `feat: a `b` c`\n",
+            "missing backtick": "Pull request title: `feat: a\n",
+            "no backticks": "Pull request title: feat: a\n",
+            "trailing text": "Pull request title: `feat: a` (draft)\n",
+            "empty": "Pull request title: ``\n",
+            "not at the line start": " Pull request title: `feat: a`\n",
+        }
+        for name, text in cases.items():
+            with self.subTest(name):
+                title, problem = mb.plan_title(text)
+                self.assertIsNone(title)
+                if name != "not at the line start":
+                    self.assertIsNotNone(problem)
+
+    def test_the_plans_own_header_declares_a_valid_title(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        text = (root / "docs/ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md").read_text()
+        self.assertEqual(mb.plan_title(text)[0],
+                         "feat: squash merges with release versions derived from pull request titles")
+
+
+class _Squash(_Lifecycle):
+    policy_data = staticmethod(squash_policy)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_policy(self.policy_data())
+        self.t = commit_all(self.clone, "Squash merges")
+        self.push("main")
+
+    def plan(self, wid: str = WID, *, phase: str = "PLANNING", base: str | None = None,
+             text: str = plan_text(TITLE)) -> None:
+        super().plan(wid, phase=phase, base=base)
+        self.set_item(wid, plan_path=PLAN_PATH)
+        (self.clone / PLAN_PATH).write_text(text)
+
+    def pr_number(self) -> int:
+        return self.record()["pr"]["number"]
+
+
+class SquashTitleTest(_Squash):
+    def test_the_declared_title_is_read_from_heads_commit_and_validated(self) -> None:
+        self.open_pr()
+        self.assertEqual(mb.declared_title(self.ctx, WID), mb.DeclaredTitle(PLAN_PATH, TITLE, None))
+        # Uncommitted edits of the plan's title line or of the working tree's plan_path change nothing.
+        (self.clone / PLAN_PATH).write_text(plan_text("fix: another"))
+        self.set_item(plan_path="elsewhere.md")
+        self.assertEqual(mb.declared_title(self.ctx, WID).title, TITLE)
+        self.discard_plan()
+        # A committed title whose type the committed change_types lack is none.
+        (self.clone / PLAN_PATH).write_text(plan_text("chore: tidy"))
+        commit_all(self.clone, "retitle")
+        declared = mb.declared_title(self.ctx, WID)
+        self.assertIsNone(declared.title)
+        self.assertIn("unknown type 'chore'", declared.problem)
+        (self.clone / PLAN_PATH).write_text(plan_text("docs!: a breaking doc"))
+        commit_all(self.clone, "retitle")
+        self.assertIsNone(mb.declared_title(self.ctx, WID).title)
+
+    def test_creation_uses_the_declared_title_and_the_committed_plan_path(self) -> None:
+        number = self.open_pr()
+        pr = self.gh_pr_view(number)
+        self.assertEqual(pr["title"], TITLE)
+        self.assertEqual(pr["body"], f"Milestone `{WID}`, planned in `{PLAN_PATH}`, driven by workflow-controller.\n\n"
+                                     f"<!-- workflow-controller: work_item={WID} -->\n")
+        self.assertEqual(trailers(self.clone, pr["body"]), "")
+
+    def test_creation_uses_the_id_without_a_valid_declaration(self) -> None:
+        for text in (plan_text(), plan_text("chore: tidy"), plan_text(TITLE, TITLE)):
+            with self.subTest(text=text):
+                self.fresh()
+                self.bind_with(text)
+                self.approve()
+                self.assertEqual(self.preflight().action, "pr_created")
+                self.assertEqual(self.gh_pr_view(self.pr_number())["title"], WID)
+
+    def bind_with(self, text: str) -> None:
+        self.plan(text=text)
+        self.assertEqual(self.preflight().action, "bound")
+
+    def test_a_pr_open_step_syncs_a_differing_title_and_a_restart_edits_nothing(self) -> None:
+        number = self.open_pr()
+        self.gh_edit(number, title="someone's title")
+        self.assertIsInstance(self.preflight(), mb.Proceed)
+        self.assertEqual(self.gh_pr_view(number)["title"], TITLE)
+        self.assertEqual(len(self.calls("pr", "edit")), 1)
+        self.assertNotIn("--body", self.calls("pr", "edit")[0])
+        self.assertIsInstance(self.preflight(), mb.Proceed)
+        self.assertEqual(len(self.calls("pr", "edit")), 1)
+        # An amendment of the declared title reaches the pull request.
+        (self.clone / PLAN_PATH).write_text(plan_text("fix: amended"))
+        commit_all(self.clone, "amend the plan")
+        self.assertIsInstance(self.preflight(), mb.Proceed)
+        self.assertEqual(self.gh_pr_view(number)["title"], "fix: amended")
+
+    def test_a_ready_record_is_never_edited(self) -> None:
+        self.to_ready()
+        number = self.pr_number()
+        edits = len(self.calls("pr", "edit"))
+        self.gh_edit(number, title="fix: set by a human", body="changed")
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(len(self.calls("pr", "edit")), edits)
+        self.assertEqual(self.gh_pr_view(number)["title"], "fix: set by a human")
+
+    def test_readiness_adds_the_acceptance_line_to_the_body(self) -> None:
+        a = self.to_ready_squash()
+        pr = self.gh_pr_view(self.pr_number())
+        self.assertEqual(pr["body"], f"Milestone `{WID}`, planned in `{PLAN_PATH}`, driven by workflow-controller.\n"
+                                     f"Accepted at {a} on `{BRANCH}`; merge with \"Squash and merge\".\n\n"
+                                     f"<!-- workflow-controller: work_item={WID} -->\n")
+        self.assertEqual(trailers(self.clone, pr["body"]), "")
+        self.assertEqual(pr["title"], TITLE)
+
+    def to_ready_squash(self) -> str:
+        """Acceptance, the body sync's ``checks_pending``, then ``READY``."""
+        number = self.open_pr()
+        a = self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        self.assertIn("just updated", self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING).message)
+        self.assertEqual(self.calls("pr", "ready"), [])
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(self.record()["state"], mb.READY)
+        return a
+
+    def to_ready(self) -> str:
+        return self.to_ready_squash()
+
+
+class SquashReadinessTest(_Squash):
+    def test_an_invalid_title_with_a_valid_declaration_converges_without_a_human(self) -> None:
+        number = self.open_pr()
+        a = self.accept()
+        self.gh_edit(number, title="not a conventional title")
+        self.set_checks(number, ("PR title", "fail"), ("ci", "pass"))
+        gate = self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertIn("just updated", gate.message)
+        self.assertEqual(self.gh_pr_view(number)["title"], TITLE)
+        self.assertIn(f"Accepted at {a}", self.gh_pr_view(number)["body"])
+        self.assertEqual(self.calls("pr", "ready"), [])
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
+        edit = self.calls("pr", "edit")[-1]
+        self.assertIn("--title", edit)
+        self.assertIn("--body", edit)
+        # The re-run check passes; nothing is left to edit, and the PR is readied.
+        self.set_checks(number, ("PR title", "pass"), ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(len(self.calls("pr", "ready")), 1)
+        self.assertEqual((self.record()["state"], self.record()["accepted_head"]), (mb.READY, a))
+
+    def test_a_missing_declaration_with_an_invalid_title_gates_pr_title_invalid(self) -> None:
+        self.plan(text=plan_text())
+        self.preflight()
+        self.approve()
+        self.preflight()
+        number = self.pr_number()
+        self.assertEqual(self.gh_pr_view(number)["title"], WID)
+        self.accept()
+        self.set_checks(number, ("PR title", "fail"))
+        gate = self.assertGate(self.preflight(), mb.GATE_PR_TITLE_INVALID)
+        self.assertIn(repr(WID), gate.message)
+        self.assertEqual(gate.merge_method, "squash")
+        self.assertEqual((self.calls("pr", "edit"), self.calls("pr", "checks"), self.calls("pr", "ready")), ([], [], []))
+        human = decision.branch_human_gate("/repo", gate)
+        self.assertIn("pr_title_invalid", human.what_is_required)
+        # A human sets a valid title on GitHub: it is kept, and readiness goes on.
+        self.gh_edit(number, title="fix: set by a human")
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)  # the body sync
+        edit = self.calls("pr", "edit")[-1]
+        self.assertNotIn("--title", edit)
+        self.set_checks(number, ("PR title", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(self.gh_pr_view(number)["title"], "fix: set by a human")
+
+    def test_a_declared_title_wins_over_a_valid_human_title(self) -> None:
+        number = self.open_pr()
+        self.accept()
+        self.gh_edit(number, title="fix: set by a human")
+        self.set_checks(number, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.gh_pr_view(number)["title"], TITLE)
+
+    def test_an_edit_ends_the_step_without_checks_even_when_they_are_not_required(self) -> None:
+        data = squash_policy()
+        data["milestone_branches"]["pull_request"]["ready_requires_green_checks"] = False
+        self.fresh_with(data)
+        number = self.open_pr()
+        self.accept()
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.calls("pr", "ready"), [])
+        self.assertNotEqual(self.record()["state"], mb.READY)
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(self.calls("pr", "checks"), [])
+        self.assertFalse(self.gh_pr_view(number)["isDraft"])
+
+    def fresh_with(self, data: dict) -> None:
+        self.write_policy(data)
+        self.t = commit_all(self.clone, "Change the policy")
+        self.push("main")
+
+    def test_grammar_only_when_the_release_trigger_is_version_change(self) -> None:
+        self.fresh_with(squash_policy(trigger="version_change"))
+        self.plan(text=plan_text("chore: any lowercase type"))
+        self.preflight()
+        self.approve()
+        self.preflight()
+        self.assertEqual(self.gh_pr_view(self.pr_number())["title"], "chore: any lowercase type")
+
+    def test_squash_gate_texts_name_squash_and_merge(self) -> None:
+        number = self.open_pr()
+        self.accept()
+        extra = self.commit_file("late.txt")
+        self.set_checks(number, ("ci", "pass"))
+        gate = self.assertGate(self.preflight(), mb.GATE_POST_ACCEPTANCE_COMMITS)
+        self.assertIn(extra, gate.message)
+        for text in (gate.message, gate.exits[0], decision.branch_human_gate("/repo", gate).what_is_required):
+            self.assertIn("Squash and merge", text)
+            self.assertNotIn("Create a merge commit", text)
+
+    def test_integration_and_merge_gates_name_squash_and_merge(self) -> None:
+        number = self.open_pr()
+        self.trunk_commit()
+        self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        gate = self.assertGate(self.preflight(), mb.GATE_INTEGRATION_REQUIRED)
+        for text in (gate.message, gate.exits[0], decision.branch_human_gate("/repo", gate).what_is_required):
+            self.assertIn("Squash and merge", text)
+            self.assertNotIn("Create a merge commit", text)
+        record = dict(self.record(), pr={"number": number, "url": "u"})
+        gate = mb._merge_gate(record)
+        for text in (gate.message, gate.exits[0], decision.branch_human_gate("/repo", gate).what_is_required):
+            self.assertIn("Squash and merge", text)
+            self.assertNotIn("Create a merge commit", text)
+            self.assertNotIn("rebase", text)
+
+
+class MergeModeUnchangedTest(_Lifecycle):
+    """A policy without ``merge_method``: 1.3.0's title, body and gates."""
+
+    def test_creation_title_and_body_are_1_3_0s(self) -> None:
+        number = self.open_pr()
+        pr = self.gh_pr_view(number)
+        self.assertEqual(pr["title"], WID)
+        self.assertEqual(pr["body"], f"Milestone `{WID}` (plan: `unrecorded`), driven by workflow-controller. A human "
+                                     f"merges it with \"Create a merge commit\".\n\n"
+                                     f"<!-- workflow-controller: work_item={WID} -->\n")
+
+    def test_merge_mode_never_edits(self) -> None:
+        number = self.open_pr()
+        self.gh_edit(number, title="someone's title")
+        self.preflight()
+        self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(self.calls("pr", "edit"), [])
+        self.assertEqual(gate.merge_method, "merge")
+        self.assertIn("Create a merge commit", decision.branch_human_gate("/repo", gate).what_is_required)
+        self.assertEqual(self.gh_pr_view(number)["title"], "someone's title")
+
+
 class GateTextTest(unittest.TestCase):
     def test_every_gate_has_a_human_gate_text(self) -> None:
         self.assertEqual(set(decision.BRANCH_GATE_TEXTS), set(mb.GATE_CODES))
@@ -1185,6 +1479,18 @@ class GateTextTest(unittest.TestCase):
         self.assertEqual(human.safe_resume_command, gate.exits[0])
         with self.assertRaises(ValueError):
             decision.branch_human_gate("/repo", mb.Gate("nope", None, None, "x"))
+
+    def test_squash_texts_replace_only_their_own_codes(self) -> None:
+        self.assertLessEqual(set(decision.BRANCH_GATE_TEXTS_SQUASH), set(mb.GATE_CODES))
+        for code in mb.GATE_CODES:
+            merge = decision.branch_human_gate("/repo", mb.Gate(code, WID, BRANCH, "m"))
+            squash = decision.branch_human_gate("/repo", mb.Gate(code, WID, BRANCH, "m", merge_method="squash"))
+            self.assertEqual(merge.what_is_required, f"{decision.BRANCH_GATE_TEXTS[code]} ({code}): m")
+            if code in decision.BRANCH_GATE_TEXTS_SQUASH:
+                self.assertIn("Squash and merge", squash.what_is_required)
+            else:
+                self.assertEqual(squash, merge)
+        self.assertIn("Conventional Commit", decision.BRANCH_GATE_TEXTS[mb.GATE_PR_TITLE_INVALID])
 
     def test_selected_commands_are_unchanged(self) -> None:
         self.assertNotIn("milestone-binding", " ".join(decision.SELECTED_COMMANDS))

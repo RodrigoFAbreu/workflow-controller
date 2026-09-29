@@ -28,7 +28,7 @@ understands a squash merge (`MERGED_SQUASHED`); and a cutover that never locks o
 | CP2 Tag-derived Controller version | Complete | See below |
 | CP3 Release classification from commit types | Complete | See below |
 | CP4 CI workflows | Complete | See below |
-| CP5 Pull request title and body in squash mode | Not started | |
+| CP5 Pull request title and body in squash mode | Complete | See below |
 | CP6 Squash close-out and the explicit base | Not started | |
 | CP7 Documentation, ADR 0007, cutover rehearsal, full verification | Not started | |
 
@@ -176,3 +176,47 @@ Verification: `python3 tools/ci_workflows.py --check` passes. The narrow modules
 `test_write_containment`, `test_package_structure`, `test_release_tools`: 178 tests). The full
 sharded run with `CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, under a reaping-subreaper wrapper and with
 `FORCE_COLOR` unset, passed: 2351 tests, 6 shards.
+
+### CP5 -- Pull request title and body in squash mode
+
+- `controller/forge.py`: `PR_FIELDS` gains `title,body`, and `PullRequest` gains `title` and
+  `body`. The new `edit_pr(number, *, title=None, body=None)` runs `gh pr edit <n> [--title T]
+  [--body B] --repo …`, re-reads the pull request with `view_pr`, and refuses (`ForgeError`)
+  unless the re-read shows the new values. Bodies are compared with `same_text`, which ignores
+  CRLF line ends and trailing newlines. The module docstring names this one edit; the forge still
+  has no merge, close, delete, comment or `gh api` operation.
+- `controller/milestone_branch.py`, squash mode only (`merge_method: "squash"` in the binding's
+  policy):
+  - `plan_title` extracts ``Pull request title: `<title>` ``: exactly one line starting with the
+    prefix, matching the anchored regex whole. `declared_title` reads `plan_path` from `HEAD`'s
+    committed state and the plan from `HEAD:<plan_path>` (`gitrepo.show`), never the working
+    tree. `title_problem` validates with `conventional_commit.bump` against the `change_types` of
+    the policy committed at `HEAD` under `conventional_commit`, else the grammar alone.
+  - Creation: the declared title, else the work-item id; the body is `squash_body` (the committed
+    `plan_path`, the marker, no trailer-shaped line).
+  - Every `PR_OPEN` step before acceptance edits a differing title to the declared one
+    (`_sync_title`). A `READY` record is never edited.
+  - Readiness, after conditions 4-6 and before condition 7 (`_sync_for_readiness`): the declared
+    title wins; without one a valid current title is kept, otherwise `pr_title_invalid` (new gate
+    code), before any checks are read. The body gains the "Accepted at" line. Any edit ends the
+    step at `checks_pending`, without `gh pr ready` and without writing `READY`.
+  - `Gate` gains `merge_method`; `post_acceptance_commits`, `integration_required` and
+    `merge_pull_request` name "Squash and merge" in squash mode.
+- `controller/decision.py`: `pr_title_invalid` joins `BRANCH_GATE_TEXTS`, and
+  `BRANCH_GATE_TEXTS_SQUASH` replaces the three merge-button texts for a squash-mode gate.
+- Merge mode (no `merge_method`, or `"merge"`) is byte-identical to 1.3.0: title, body, gate
+  texts, and no `pr edit`.
+- `tests/fake_gh.py` returns `title`/`body` and implements `pr edit` (a closed or merged PR
+  refuses). Tests: `test_forge.EditTest`; `test_pull_request_lifecycle` `PlanTitleTest` (the
+  extraction cases and this plan's own header line), `SquashTitleTest`, `SquashReadinessTest`
+  (the readiness-order cases with `ready_requires_green_checks: true`, the call log showing no
+  `gh pr ready` after an edit, the `git interpret-trailers --parse` check on every rendered
+  body), `MergeModeUnchangedTest` and `GateTextTest`.
+
+Verification: the narrow modules pass (`test_forge`, `test_pull_request_lifecycle`: 133 tests;
+`test_write_containment`). The first full run caught `same_text`'s `str.replace`, which the
+write-containment scan flags; it now uses `re.sub`. The full sharded run with
+`CONTROLLER_REQUIRE_PACKAGING_TESTS=1`, under a reaping-subreaper wrapper and with `FORCE_COLOR`
+unset, then passed: 2374 tests, 6 shards. The post-cutover scratch clone (a full clone with the
+real tags, this diff plus the cutover's dynamic `pyproject.toml` and `CONVENTIONAL_POLICY`) also
+passed: 2374 tests, 5 shards.

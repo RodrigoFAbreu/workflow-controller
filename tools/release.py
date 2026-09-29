@@ -25,7 +25,11 @@ thin CLI:
   wheel's name, metadata, entry point, required and forbidden files, its
   ``BUILD_INFO.json`` and the package digest recomputed from the wheel's own
   members (the reference policy's ``verify`` command);
-- ``checksums DIR`` writes ``DIR/SHA256SUMS`` in ``sha256sum`` format.
+- ``checksums DIR`` writes ``DIR/SHA256SUMS`` in ``sha256sum`` format;
+- ``check-title TITLE`` validates a pull request title against the policy
+  committed at ``HEAD`` (for a ``pull_request`` run, the merge ref): under
+  the ``conventional_commit`` trigger it prints ``ok: <type> → <bump>`` or
+  refuses; under ``version_change`` the title is not release input.
 
 There is no tag-first subcommand: a release tag is created only by
 ``publish``, after validation, so a hand-pushed ``v*`` tag triggers nothing.
@@ -49,6 +53,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import buildinfo  # noqa: E402
+from controller import conventional_commit  # noqa: E402
 from controller import forge as forge_module  # noqa: E402
 from controller import gitrepo, release_txn, repo_policy  # noqa: E402
 from controller import version as version_module  # noqa: E402
@@ -239,6 +244,8 @@ def build_parser() -> argparse.ArgumentParser:
     wheel.add_argument("--commit", required=True, help="the commit the wheel must be built from")
     sums = sub.add_parser("checksums", help="write DIR/SHA256SUMS")
     sums.add_argument("directory", type=Path)
+    title = sub.add_parser("check-title", help="validate a pull request title against the committed policy")
+    title.add_argument("title")
     return parser
 
 
@@ -321,6 +328,19 @@ def cmd_publish(repo_root: Path, target: str) -> None:
     print(f"ok: {outcome.tag} at {outcome.target}: {outcome.action} ({outcome.url})")
 
 
+def check_title(repo_root: Path, title: str) -> str:
+    """The ``ok:`` line for ``title`` under the policy committed at ``HEAD``."""
+    release = committed_policy(repo_root).release
+    if release.trigger != repo_policy.TRIGGER_CONVENTIONAL_COMMIT:
+        return f"ok: the release trigger is {release.trigger}; the title is not release input"
+    try:
+        bump = conventional_commit.bump(title, release.change_types)
+    except ControllerError as exc:
+        raise Refusal("title", exc.message) from None
+    subject = conventional_commit.parse(title)
+    return f"ok: {subject.type}{'!' if subject.breaking else ''} → {bump}"
+
+
 def main(argv: list[str] | None = None, *, repo_root: Path = REPO_ROOT) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -340,6 +360,8 @@ def main(argv: list[str] | None = None, *, repo_root: Path = REPO_ROOT) -> int:
             print(f"ok: {args.wheel.name} verified")
         elif args.command == "checksums":
             print(f"ok: wrote {checksums(args.directory)}")
+        elif args.command == "check-title":
+            print(check_title(repo_root, args.title))
     except (Refusal, ControllerError) as exc:
         reason = f"{exc.code}: {exc}" if isinstance(exc, ControllerError) else str(exc)
         reason = " | ".join(line for line in reason.splitlines() if line.strip())

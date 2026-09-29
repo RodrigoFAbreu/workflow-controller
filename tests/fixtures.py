@@ -48,6 +48,78 @@ WORKFLOW_RELEASES_DIR = REPO_ROOT / "tests" / "workflow_releases"
 REQUIRE_PACKAGING_TESTS_ENV = "CONTROLLER_REQUIRE_PACKAGING_TESTS"
 
 
+#: A policy under the ``version_change`` trigger: the trunk plan's reference
+#: content (``CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md``), this repository's
+#: policy before the squash-merge cutover. A test that needs a policy writes
+#: a named fixture policy, never a copy of the real file, so it holds on both
+#: sides of the cutover (squash-merge-tag-versioning, Design B).
+LEGACY_POLICY = b"""\
+{
+  "schema_version": 1,
+  "trunk": {"branch": "main", "remote": "origin"},
+  "forge": {"kind": "github", "repository": "RodrigoFAbreu/workflow-controller"},
+  "milestone_branches": {
+    "enabled": true,
+    "branch_format": "milestone/{work_item_id}",
+    "pull_request": {"draft": true, "ready_requires_green_checks": true}
+  },
+  "release": {
+    "enabled": true,
+    "trigger": "version_change",
+    "version_source": {"kind": "pyproject", "path": "pyproject.toml"},
+    "version_scheme": "semver",
+    "tag_format": "v{version}",
+    "abandoned_tags": ["v1.1.0"],
+    "build": {"kind": "command",
+              "argv": ["python", "-m", "pip", "wheel", "--no-deps", "-w", "dist", "."],
+              "env": {"WORKFLOW_CONTROLLER_RELEASE_TAG": "{tag}"}},
+    "verify": {"kind": "command",
+               "argv": ["python3", "tools/release.py", "verify-wheel", "{artifact}",
+                        "--tag", "{tag}", "--commit", "{commit}"]},
+    "artifacts": {"paths": ["dist/workflow_controller-{version}-py3-none-any.whl"],
+                  "checksums": "SHA256SUMS"},
+    "publication": {"kind": "github_release", "title": "{tag}",
+                    "notes": "workflow-controller {tag}"}
+  }
+}
+"""
+
+#: A policy under the ``conventional_commit`` trigger: the post-cutover block
+#: of ``CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md`` (Design H).
+CONVENTIONAL_POLICY = b"""\
+{
+  "schema_version": 1,
+  "trunk": {"branch": "main", "remote": "origin"},
+  "forge": {"kind": "github", "repository": "RodrigoFAbreu/workflow-controller"},
+  "milestone_branches": {
+    "enabled": true,
+    "branch_format": "milestone/{work_item_id}",
+    "pull_request": {"draft": true, "ready_requires_green_checks": true, "merge_method": "squash"}
+  },
+  "release": {
+    "enabled": true,
+    "trigger": "conventional_commit",
+    "change_types": {"feat": "minor", "fix": "patch", "perf": "patch", "refactor": "patch",
+                     "revert": "patch", "build": "patch", "style": "patch",
+                     "docs": "none", "chore": "none", "ci": "none", "test": "none"},
+    "version_scheme": "semver",
+    "tag_format": "v{version}",
+    "abandoned_tags": ["v1.1.0"],
+    "build": {"kind": "command",
+              "argv": ["python", "-m", "pip", "wheel", "--no-deps", "-w", "dist", "."],
+              "env": {"WORKFLOW_CONTROLLER_RELEASE_TAG": "{tag}"}},
+    "verify": {"kind": "command",
+               "argv": ["python3", "tools/release.py", "verify-wheel", "{artifact}",
+                        "--tag", "{tag}", "--commit", "{commit}"]},
+    "artifacts": {"paths": ["dist/workflow_controller-{version}-py3-none-any.whl"],
+                  "checksums": "SHA256SUMS"},
+    "publication": {"kind": "github_release", "title": "{tag}",
+                    "notes": "workflow-controller {tag}"}
+  }
+}
+"""
+
+
 def run(args: list[str], *, cwd: Path | None = None, env: dict | None = None,
         check: bool = True, input: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(

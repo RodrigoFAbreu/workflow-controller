@@ -781,3 +781,23 @@ class WorkflowReleaseChangedError(ControllerError):
     ``workflow_release_changed``, never a raise."""
 
     code = "WORKFLOW_RELEASE_CHANGED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-squash-merge-tag-versioning CP1 -- Conventional Commit
+# titles (``controller.conventional_commit``).
+# ---------------------------------------------------------------------------
+
+
+class InvalidTitleError(ControllerError):
+    """A pull request title or a trunk commit subject is not a Conventional
+    Commit the policy's ``release.change_types`` can classify: it does not
+    match the grammar, names a type the table does not list, or marks a
+    breaking change (``!``) on a type that releases nothing.
+
+    ``evidence`` carries the ``subject`` and the ``problem`` (``grammar``,
+    ``unknown_type`` or ``breaking_none``), and the allowed ``types`` where
+    they apply.
+    """
+
+    code = "INVALID_TITLE"

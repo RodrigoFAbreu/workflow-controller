@@ -24,10 +24,29 @@ from tests import fixtures  # noqa: E402
 
 REFERENCE = fixtures.REPO_ROOT / repo_policy.POLICY_PATH
 PLAN = fixtures.REPO_ROOT / "docs" / "ai-workflow" / "CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md"
+SQUASH_PLAN = fixtures.REPO_ROOT / "docs" / "ai-workflow" / "CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md"
 
 
-def _reference() -> dict:
-    return json.loads(REFERENCE.read_text(encoding="utf-8"))
+def _legacy() -> dict:
+    return json.loads(fixtures.LEGACY_POLICY)
+
+
+def _conventional() -> dict:
+    return json.loads(fixtures.CONVENTIONAL_POLICY)
+
+
+def _plan_block(path: Path, heading: str) -> dict:
+    block = re.search(re.escape(heading) + r"\n\n```json\n(.*?)\n```", path.read_text(encoding="utf-8"),
+                      re.DOTALL)
+    assert block is not None, f"{path.name} has no JSON block after {heading!r}"
+    return json.loads(block.group(1))
+
+
+#: The trunk plan's reference block: this repository's policy before the
+#: squash-merge cutover.
+PRE_CUTOVER_HEADING = "Reference file (the exact CP2 content):"
+#: The squash-merge plan's block: the policy after it (Design H).
+POST_CUTOVER_HEADING = "**Post-cutover policy (the exact CP7 rehearsal content):**"
 
 
 def _encode(data: dict) -> bytes:
@@ -55,22 +74,50 @@ class ReferencePolicyTest(unittest.TestCase):
         _, env = policy.release.build.render({"tag": "v1.2.3", "version": "1.2.3", "commit": "c"})
         self.assertEqual(env, {"WORKFLOW_CONTROLLER_RELEASE_TAG": "v1.2.3"})
 
-    def test_the_reference_file_is_the_plans_exact_content(self) -> None:
-        text = PLAN.read_text(encoding="utf-8")
-        block = re.search(r"Reference file \(the exact CP2 content\):\n\n```json\n(.*?)\n```",
-                          text, re.DOTALL)
-        self.assertIsNotNone(block)
-        self.assertEqual(json.loads(block.group(1)), _reference())
+    def test_the_reference_file_is_one_plans_exact_content(self) -> None:
+        # Exactly the pre-cutover or the post-cutover content, and no other.
+        reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
+        pre = _plan_block(PLAN, PRE_CUTOVER_HEADING)
+        post = _plan_block(SQUASH_PLAN, POST_CUTOVER_HEADING)
+        self.assertIn(reference, (pre, post))
+        self.assertEqual(reference["release"]["trigger"],
+                         "version_change" if reference == pre else "conventional_commit")
+
+    def test_the_named_fixture_policies_are_the_plans_blocks(self) -> None:
+        self.assertEqual(_legacy(), _plan_block(PLAN, PRE_CUTOVER_HEADING))
+        self.assertEqual(_conventional(), _plan_block(SQUASH_PLAN, POST_CUTOVER_HEADING))
+
+    def test_the_post_cutover_block_validates(self) -> None:
+        # The rehearsed content can never drift from what the parser accepts.
+        raw = json.dumps(_plan_block(SQUASH_PLAN, POST_CUTOVER_HEADING)).encode("utf-8")
+        policy = repo_policy.parse_policy(raw)
+        self.assertEqual(policy.release.trigger, "conventional_commit")
+        self.assertEqual(policy.milestone_branches.merge_method, "squash")
+        self.assertEqual(policy.release.change_types["feat"], "minor")
+        self.assertEqual(policy.release.bump_overrides, {})
+        self.assertIsNone(policy.release.version_source_kind)
+        self.assertIsNone(policy.release.version_source_path)
+        # Everything but the release trigger and the merge method is the
+        # pre-cutover policy's.
+        legacy = repo_policy.parse_policy(fixtures.LEGACY_POLICY)
+        for attribute in ("trunk_branch", "trunk_remote", "forge_kind", "forge_repository"):
+            self.assertEqual(getattr(policy, attribute), getattr(legacy, attribute))
+        for attribute in ("enabled", "version_scheme", "tag_format", "abandoned_tags", "build", "verify",
+                          "artifact_paths", "checksums", "publication_kind", "publication_title",
+                          "publication_notes"):
+            self.assertEqual(getattr(policy.release, attribute), getattr(legacy.release, attribute))
 
     def test_the_reference_version_source_reads_this_repositorys_pyproject(self) -> None:
         policy = repo_policy.parse_policy(REFERENCE.read_bytes())
         text = (fixtures.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertEqual(policy.release.read_version(text), fixtures.CONTROLLER_VERSION)
+        if policy.release.trigger == "version_change":
+            self.assertEqual(policy.release.read_version(text), fixtures.CONTROLLER_VERSION)
+        else:
+            with self.assertRaisesRegex(ValueError, "conventional_commit"):
+                policy.release.read_version(text)
 
 
-class ValidationRefusalTest(unittest.TestCase):
-    """Every rule refuses, each with its own case."""
-
+class _RefusalCase(unittest.TestCase):
     def assertRefuses(self, data: dict | bytes, field: str | None, pattern: str) -> None:
         raw = data if isinstance(data, bytes) else _encode(data)
         with self.assertRaises(InvalidRepositoryPolicyError) as caught:
@@ -80,8 +127,12 @@ class ValidationRefusalTest(unittest.TestCase):
         self.assertEqual(caught.exception.evidence["field"], field)
         self.assertRegex(caught.exception.message, pattern)
 
+
+class ValidationRefusalTest(_RefusalCase):
+    """Every rule refuses, each with its own case."""
+
     def mutate(self, edit) -> dict:
-        data = copy.deepcopy(_reference())
+        data = copy.deepcopy(_legacy())
         edit(data)
         return data
 
@@ -93,7 +144,7 @@ class ValidationRefusalTest(unittest.TestCase):
         self.assertRefuses(b"[]", "(top level)", "must be a JSON object")
 
     def test_duplicate_key(self) -> None:
-        raw = REFERENCE.read_bytes().replace(b'"schema_version": 1,', b'"schema_version": 1, "schema_version": 1,')
+        raw = fixtures.LEGACY_POLICY.replace(b'"schema_version": 1,', b'"schema_version": 1, "schema_version": 1,')
         self.assertRefuses(raw, None, "duplicate key 'schema_version'")
 
     def test_unknown_key_at_every_level(self) -> None:
@@ -243,14 +294,14 @@ class ValidationRefusalTest(unittest.TestCase):
              "release.publication.kind", r"\['github_release'\]"),
             ((lambda d: d["forge"].__setitem__("kind", "gitlab")), "forge.kind", r"\['github'\]"),
             ((lambda d: d["release"].__setitem__("trigger", "on_push")),
-             "release.trigger", r"\['version_change'\]"),
+             "release.trigger", r"\['conventional_commit', 'version_change'\]"),
         ]
         for edit, field, known in cases:
             with self.subTest(field=field):
                 self.assertRefuses(self.mutate(edit), field, "unknown kind .*" + known)
 
     def test_dynamic_pyproject_version_refuses(self) -> None:
-        release = repo_policy.parse_policy(REFERENCE.read_bytes()).release
+        release = repo_policy.parse_policy(fixtures.LEGACY_POLICY).release
         for text, pattern in (
             ('[project]\nname = "x"\ndynamic = ["version"]\n', "dynamic version"),
             ('[project]\nname = "x"\nversion = "1.0.0"\ndynamic = ["version"]\n', "dynamic version"),
@@ -265,7 +316,7 @@ class ValidationRefusalTest(unittest.TestCase):
         self.assertEqual(release.read_version('[project]\nversion = "2.3.4"\n'), "2.3.4")
 
     def test_semver_scheme_is_a_total_order(self) -> None:
-        release = repo_policy.parse_policy(REFERENCE.read_bytes()).release
+        release = repo_policy.parse_policy(fixtures.LEGACY_POLICY).release
         versions = ["1.10.0", "1.9.9", "0.0.1", "2.0.0", "1.9.10"]
         self.assertEqual(sorted(versions, key=release.version_key),
                          ["0.0.1", "1.9.9", "1.9.10", "1.10.0", "2.0.0"])
@@ -318,12 +369,12 @@ class SwitchesTest(unittest.TestCase):
         self.assertFalse(repo_policy.release_enabled(None))
 
     def test_each_switch_is_independent(self) -> None:
-        data = _reference()
+        data = _legacy()
         data["milestone_branches"]["enabled"] = False
         policy = repo_policy.parse_policy(_encode(data))
         self.assertFalse(repo_policy.milestone_branches_enabled(policy))
         self.assertTrue(repo_policy.release_enabled(policy))
-        data = _reference()
+        data = _legacy()
         data["release"]["enabled"] = False
         policy = repo_policy.parse_policy(_encode(data))
         self.assertTrue(repo_policy.milestone_branches_enabled(policy))
@@ -354,16 +405,16 @@ class CommittedTreeReaderTest(unittest.TestCase):
         (self.root / "README").write_text("x\n")
         fixtures.commit_all(self.root, "init")
         self.policy_file.parent.mkdir()
-        self.policy_file.write_bytes(REFERENCE.read_bytes())
+        self.policy_file.write_bytes(fixtures.LEGACY_POLICY)
         fixtures.run(["git", "add", "-A"], cwd=self.root)  # staged, still not committed
         self.assertIsNone(repo_policy.read_committed_policy(self.root))
 
     def test_reads_git_show_head_and_ignores_working_tree_edits(self) -> None:
-        self._commit_policy(REFERENCE.read_bytes())
+        self._commit_policy(fixtures.LEGACY_POLICY)
         self.policy_file.write_text("not json", encoding="utf-8")
         with fixtures.git_call_spy() as calls:
             policy = repo_policy.read_committed_policy(self.root)
-        self.assertEqual(policy.raw, REFERENCE.read_bytes())
+        self.assertEqual(policy.raw, fixtures.LEGACY_POLICY)
         reads = [call[3:] for call in calls if call[1] == "-C" and call[3] in ("ls-tree", "cat-file")]
         # The spy sees each ``subprocess.run`` twice: the call and its ``Popen``.
         reads = [read for index, read in enumerate(reads) if index == 0 or read != reads[index - 1]]
@@ -372,13 +423,13 @@ class CommittedTreeReaderTest(unittest.TestCase):
         self.assertEqual(len(reads), 2)
 
     def test_a_committed_policy_deleted_in_the_worktree_is_still_read(self) -> None:
-        self._commit_policy(REFERENCE.read_bytes())
+        self._commit_policy(fixtures.LEGACY_POLICY)
         self.policy_file.unlink()
         self.assertIsNotNone(repo_policy.read_committed_policy(self.root))
 
     def test_reads_the_named_revision(self) -> None:
-        first = self._commit_policy(REFERENCE.read_bytes())
-        data = _reference()
+        first = self._commit_policy(fixtures.LEGACY_POLICY)
+        data = _legacy()
         data["release"]["enabled"] = False
         self._commit_policy(_encode(data))
         self.assertFalse(repo_policy.read_committed_policy(self.root).release.enabled)
@@ -386,7 +437,7 @@ class CommittedTreeReaderTest(unittest.TestCase):
 
     def test_an_inadmissible_committed_policy_refuses(self) -> None:
         self._commit_policy(b'{"schema_version": 2}')
-        self.policy_file.write_bytes(REFERENCE.read_bytes())  # a valid working copy does not help
+        self.policy_file.write_bytes(fixtures.LEGACY_POLICY)  # a valid working copy does not help
         with self.assertRaises(InvalidRepositoryPolicyError) as caught:
             repo_policy.read_committed_policy(self.root)
         self.assertEqual(caught.exception.evidence["rev"], "HEAD")
@@ -410,7 +461,7 @@ class CommittedTreeReaderTest(unittest.TestCase):
             repo_policy.read_committed_policy(self.root, "no-such-rev")
 
     def test_committed_version_reads_the_version_source_at_the_revision(self) -> None:
-        policy = repo_policy.parse_policy(REFERENCE.read_bytes())
+        policy = repo_policy.parse_policy(fixtures.LEGACY_POLICY)
         (self.root / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "3.1.4"\n')
         commit = fixtures.commit_all(self.root, "v")
         (self.root / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "9.9.9"\n')
@@ -424,6 +475,189 @@ class CommittedTreeReaderTest(unittest.TestCase):
         fixtures.commit_all(self.root, "gone")
         with self.assertRaisesRegex(InvalidRepositoryPolicyError, "does not exist"):
             repo_policy.read_committed_version(self.root, policy)
+
+
+class LegacyPolicyMeaningTest(unittest.TestCase):
+    """Every policy 1.3.0 accepts still parses, to the same values (I6)."""
+
+    VARIANTS = {
+        "reference": lambda d: None,
+        "no abandoned tags": lambda d: d["release"].pop("abandoned_tags"),
+        "release off": lambda d: d["release"].__setitem__("enabled", False),
+        "branches off": lambda d: d["milestone_branches"].__setitem__("enabled", False),
+        "green checks not required": lambda d: d["milestone_branches"]["pull_request"].__setitem__(
+            "ready_requires_green_checks", False),
+        "another tag format": lambda d: d["release"].update(tag_format="release-{version}", abandoned_tags=[]),
+    }
+
+    def test_every_variant_keeps_its_meaning(self) -> None:
+        for name, edit in self.VARIANTS.items():
+            with self.subTest(variant=name):
+                data = _legacy()
+                edit(data)
+                policy = repo_policy.parse_policy(_encode(data))
+                release, branches = data["release"], data["milestone_branches"]
+                self.assertEqual(policy.release.trigger, "version_change")
+                self.assertEqual(policy.release.enabled, release["enabled"])
+                self.assertEqual(policy.release.version_source_kind, "pyproject")
+                self.assertEqual(policy.release.version_source_path, "pyproject.toml")
+                self.assertEqual(policy.release.tag_format, release["tag_format"])
+                self.assertEqual(policy.release.abandoned_tags, tuple(release.get("abandoned_tags", [])))
+                self.assertEqual(policy.release.change_types, {})
+                self.assertEqual(policy.release.bump_overrides, {})
+                self.assertEqual(policy.milestone_branches.enabled, branches["enabled"])
+                self.assertEqual(policy.milestone_branches.ready_requires_green_checks,
+                                 branches["pull_request"]["ready_requires_green_checks"])
+                # No merge_method key: 1.3.0's merge-commit behaviour.
+                self.assertEqual(policy.milestone_branches.merge_method, "merge")
+                self.assertEqual(policy.release.read_version('[project]\nversion = "1.2.3"\n'), "1.2.3")
+
+    def test_the_conventional_keys_are_refused_under_version_change(self) -> None:
+        for key, value in (("change_types", {"feat": "minor"}), ("bump_overrides", {})):
+            with self.subTest(key=key):
+                data = _legacy()
+                data["release"][key] = value
+                with self.assertRaisesRegex(InvalidRepositoryPolicyError, rf"unknown key\(s\) \['{key}'\]"):
+                    repo_policy.parse_policy(_encode(data))
+
+
+class ConventionalTriggerTest(_RefusalCase):
+    """The ``conventional_commit`` trigger: no version source, a required
+    ``change_types`` table, optional ``bump_overrides``."""
+
+    def mutate(self, edit) -> dict:
+        data = _conventional()
+        edit(data)
+        return data
+
+    def test_the_fixture_parses(self) -> None:
+        release = repo_policy.parse_policy(fixtures.CONVENTIONAL_POLICY).release
+        self.assertEqual(release.trigger, "conventional_commit")
+        self.assertIsNone(release.version_source_kind)
+
+    def test_version_source_is_refused(self) -> None:
+        data = self.mutate(lambda d: d["release"].__setitem__(
+            "version_source", {"kind": "pyproject", "path": "pyproject.toml"}))
+        self.assertRefuses(data, "release.version_source", "the release tags are the version")
+
+    def test_change_types_is_required(self) -> None:
+        self.assertRefuses(self.mutate(lambda d: d["release"].pop("change_types")), "release",
+                           r"missing required key\(s\) \['change_types'\]")
+        self.assertRefuses(self.mutate(lambda d: d["release"].__setitem__("change_types", {})),
+                           "release.change_types", "at least one entry")
+
+    def test_malformed_change_types(self) -> None:
+        for value, field, pattern in (
+            ([["feat", "minor"]], "release.change_types", "JSON object"),
+            ({"Feat": "minor"}, "release.change_types", "not a lowercase type"),
+            ({"feat-x": "minor"}, "release.change_types", "not a lowercase type"),
+            ({"": "minor"}, "release.change_types", "not a lowercase type"),
+            ({"feat": "major"}, "release.change_types.feat", r"not one of \['minor', 'none', 'patch'\]"),
+            ({"feat": "Minor"}, "release.change_types.feat", "not one of"),
+            ({"feat": None}, "release.change_types.feat", "not one of"),
+            ({"feat": ["minor"]}, "release.change_types.feat", "not one of"),
+            ({"feat": {"bump": "minor"}}, "release.change_types.feat", "not one of"),
+        ):
+            with self.subTest(value=value):
+                self.assertRefuses(self.mutate(lambda d: d["release"].__setitem__("change_types", value)),
+                                   field, pattern)
+
+    def test_bump_overrides(self) -> None:
+        commit = "0123456789abcdef0123456789abcdef01234567"
+        for bump in ("major", "minor", "patch", "none"):
+            with self.subTest(bump=bump):
+                data = self.mutate(lambda d: d["release"].__setitem__("bump_overrides", {commit: bump}))
+                self.assertEqual(repo_policy.parse_policy(_encode(data)).release.bump_overrides, {commit: bump})
+        self.assertEqual(repo_policy.parse_policy(_encode(self.mutate(
+            lambda d: d["release"].__setitem__("bump_overrides", {})))).release.bump_overrides, {})
+        for value, field, pattern in (
+            ([commit], "release.bump_overrides", "JSON object"),
+            ({commit.upper(): "patch"}, "release.bump_overrides", "not a 40-hex commit"),
+            ({commit[:12]: "patch"}, "release.bump_overrides", "not a 40-hex commit"),
+            ({"v1.2.3": "patch"}, "release.bump_overrides", "not a 40-hex commit"),
+            ({commit: ["patch"]}, f"release.bump_overrides.{commit}", "not one of"),
+            ({commit: "huge"}, f"release.bump_overrides.{commit}",
+             r"not one of \['major', 'minor', 'none', 'patch'\]"),
+        ):
+            with self.subTest(value=value):
+                self.assertRefuses(self.mutate(lambda d: d["release"].__setitem__("bump_overrides", value)),
+                                   field, pattern)
+
+    def test_version_scheme_other_than_semver(self) -> None:
+        self.assertRefuses(self.mutate(lambda d: d["release"].__setitem__("version_scheme", "calver")),
+                           "release.version_scheme", r"unknown kind .*\['semver'\]")
+
+    def test_unknown_key_names_the_triggers_keys(self) -> None:
+        self.assertRefuses(self.mutate(lambda d: d["release"].__setitem__("channel", "beta")), "release",
+                           r"unknown key.*'bump_overrides'.*'change_types'")
+
+
+class MergeMethodTest(unittest.TestCase):
+    def _parse(self, data: dict):
+        return repo_policy.parse_policy(_encode(data))
+
+    def _refused(self, data: dict) -> InvalidRepositoryPolicyError:
+        with self.assertRaises(InvalidRepositoryPolicyError) as caught:
+            self._parse(data)
+        return caught.exception
+
+    def test_values(self) -> None:
+        for method in ("merge", "squash"):
+            with self.subTest(method=method):
+                data = _legacy()
+                data["milestone_branches"]["pull_request"]["merge_method"] = method
+                self.assertEqual(self._parse(data).milestone_branches.merge_method, method)
+        for method in ("rebase", "", 1, None):
+            with self.subTest(method=method):
+                data = _legacy()
+                data["milestone_branches"]["pull_request"]["merge_method"] = method
+                self.assertEqual(self._refused(data).evidence["field"],
+                                 "milestone_branches.pull_request.merge_method")
+
+    def test_the_cross_field_rule(self) -> None:
+        # conventional_commit with both switches on requires squash.
+        for method in (None, "merge"):
+            with self.subTest(method=method):
+                data = _conventional()
+                pull_request = data["milestone_branches"]["pull_request"]
+                if method is None:
+                    pull_request.pop("merge_method")
+                else:
+                    pull_request["merge_method"] = method
+                exc = self._refused(data)
+                self.assertEqual(exc.evidence["field"], "milestone_branches.pull_request.merge_method")
+                self.assertIn("only a squash commit carries the pull request title", exc.message)
+                # Either switch off lifts the rule.
+                for switch in ("release", "milestone_branches"):
+                    relaxed = copy.deepcopy(data)
+                    relaxed[switch]["enabled"] = False
+                    self.assertEqual(self._parse(relaxed).milestone_branches.merge_method, method or "merge")
+        # version_change never requires it.
+        data = _legacy()
+        data["milestone_branches"]["pull_request"]["merge_method"] = "merge"
+        self.assertEqual(self._parse(data).milestone_branches.merge_method, "merge")
+
+
+class ReadVersionUnderConventionalCommitTest(unittest.TestCase):
+    """``Release.read_version`` refuses under the new trigger, naming it.
+    Its callers still call it unconditionally at CP1; CP2 and CP3 remove
+    them."""
+
+    def test_read_version_refuses_naming_the_trigger(self) -> None:
+        release = repo_policy.parse_policy(fixtures.CONVENTIONAL_POLICY).release
+        with self.assertRaisesRegex(ValueError, "the release trigger is 'conventional_commit'"):
+            release.read_version('[project]\nversion = "1.2.3"\n')
+
+    def test_read_committed_version_refuses_without_reading(self) -> None:
+        policy = repo_policy.parse_policy(fixtures.CONVENTIONAL_POLICY)
+        with tempfile.TemporaryDirectory() as td:
+            root = fixtures.build_target_git_repo(Path(td) / "repo")
+            (root / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "3.1.4"\n')
+            fixtures.commit_all(root, "v")
+            with self.assertRaises(InvalidRepositoryPolicyError) as caught:
+                repo_policy.read_committed_version(root, policy)
+        self.assertIn("'conventional_commit'", caught.exception.message)
+        self.assertEqual(caught.exception.evidence["field"], "release.trigger")
 
 
 if __name__ == "__main__":

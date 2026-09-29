@@ -34,6 +34,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from . import conventional_commit
 from .buildinfo import SEMVER_RE
 from .errors import InvalidRepositoryPolicyError
 
@@ -181,7 +182,19 @@ VERSION_SCHEMES = {"semver": _semver_key}
 COMMAND_KINDS = frozenset({"command"})
 PUBLICATION_KINDS = frozenset({"github_release"})
 FORGE_KINDS = frozenset({"github"})
-RELEASE_TRIGGERS = frozenset({"version_change"})
+#: ``version_change`` reads the version from a version source and releases
+#: when it changes; ``conventional_commit`` derives it from the release tags
+#: and the Conventional Commit types of the trunk commits since the last one
+#: (squash-merge-tag-versioning, Design A).
+TRIGGER_VERSION_CHANGE = "version_change"
+TRIGGER_CONVENTIONAL_COMMIT = "conventional_commit"
+RELEASE_TRIGGERS = frozenset({TRIGGER_VERSION_CHANGE, TRIGGER_CONVENTIONAL_COMMIT})
+#: ``milestone_branches.pull_request.merge_method``. ``merge`` is the
+#: default and 1.3.0's behaviour.
+MERGE_METHOD_MERGE = "merge"
+MERGE_METHOD_SQUASH = "squash"
+MERGE_METHODS = frozenset({MERGE_METHOD_MERGE, MERGE_METHOD_SQUASH})
+_COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 
 _FIELD_PLACEHOLDERS = {
     "branch_format": frozenset({"work_item_id"}),
@@ -229,6 +242,7 @@ class MilestoneBranches:
     branch_format: str
     draft: bool
     ready_requires_green_checks: bool
+    merge_method: str = MERGE_METHOD_MERGE
 
     def branch_name(self, work_item_id: str) -> str:
         return render(self.branch_format, {"work_item_id": work_item_id})
@@ -238,8 +252,9 @@ class MilestoneBranches:
 class Release:
     enabled: bool
     trigger: str
-    version_source_kind: str
-    version_source_path: str
+    #: ``None`` under ``conventional_commit``: the tags are the version.
+    version_source_kind: str | None
+    version_source_path: str | None
     version_scheme: str
     tag_format: str
     abandoned_tags: tuple[str, ...]
@@ -250,10 +265,18 @@ class Release:
     publication_kind: str
     publication_title: str
     publication_notes: str
+    #: ``conventional_commit`` only (empty under ``version_change``): type ->
+    #: ``minor``/``patch``/``none``, and trunk commit -> the bump that settles
+    #: it when its subject cannot be classified.
+    change_types: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    bump_overrides: Mapping[str, str] = dataclasses.field(default_factory=dict)
 
     def read_version(self, text: str) -> str:
         """The version the version-source file's ``text`` declares,
-        validated against the version scheme. Raises ``ValueError``."""
+        validated against the version scheme. Raises ``ValueError``, also
+        under a trigger that has no version source."""
+        if self.version_source_kind is None:
+            raise ValueError(_no_version_source(self.trigger))
         version = VERSION_SOURCES[self.version_source_kind](text, where=self.version_source_path)
         self.version_key(version)
         return version
@@ -285,6 +308,11 @@ class RepositoryPolicy:
     forge_repository: str
     milestone_branches: MilestoneBranches
     release: Release
+
+
+def _no_version_source(trigger: str) -> str:
+    return (f"the release trigger is {trigger!r}: the version is derived from the release tags, "
+            f"not read from a version source")
 
 
 def milestone_branches_enabled(policy: RepositoryPolicy | None) -> bool:
@@ -466,7 +494,7 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
     branches = _object(top["milestone_branches"], "milestone_branches",
                        required={"enabled", "branch_format", "pull_request"})
     pull_request = _object(branches["pull_request"], "milestone_branches.pull_request",
-                           required={"draft", "ready_requires_green_checks"})
+                           required={"draft", "ready_requires_green_checks"}, optional={"merge_method"})
     if _boolean(pull_request["draft"], "milestone_branches.pull_request.draft") is not True:
         raise _refuse("must be true: the Controller only opens Draft pull requests",
                       field="milestone_branches.pull_request.draft")
@@ -478,9 +506,19 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
         draft=True,
         ready_requires_green_checks=_boolean(pull_request["ready_requires_green_checks"],
                                              "milestone_branches.pull_request.ready_requires_green_checks"),
+        merge_method=_kind(pull_request.get("merge_method", MERGE_METHOD_MERGE),
+                           "milestone_branches.pull_request.merge_method", MERGE_METHODS),
     )
 
     release = _parse_release(top["release"])
+    # Only a squash commit carries the pull request title to the trunk.
+    if (release.enabled and milestone_branches.enabled
+            and release.trigger == TRIGGER_CONVENTIONAL_COMMIT
+            and milestone_branches.merge_method != MERGE_METHOD_SQUASH):
+        raise _refuse(f"must be {MERGE_METHOD_SQUASH!r} when milestone branches and releases are both "
+                      f"enabled with the {TRIGGER_CONVENTIONAL_COMMIT!r} trigger: only a squash commit "
+                      f"carries the pull request title to the trunk",
+                      field="milestone_branches.pull_request.merge_method")
     return RepositoryPolicy(
         raw=raw, sha256=hashlib.sha256(raw).hexdigest(), data=data,
         trunk_branch=trunk_branch, trunk_remote=trunk_remote,
@@ -490,17 +528,42 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
 
 
 def _parse_release(value: object) -> Release:
-    section = _object(value, "release",
-                      required={"enabled", "trigger", "version_source", "version_scheme", "tag_format",
-                                "build", "verify", "artifacts", "publication"},
-                      optional={"abandoned_tags"})
+    # The trigger decides which keys the section takes, so it is read first.
+    if isinstance(value, dict) and "trigger" in value:
+        trigger = _kind(value["trigger"], "release.trigger", RELEASE_TRIGGERS)
+    else:
+        trigger = None  # ``_object`` below names the shape or the missing key
+    common = {"enabled", "trigger", "version_scheme", "tag_format", "build", "verify", "artifacts",
+              "publication"}
+    if trigger == TRIGGER_CONVENTIONAL_COMMIT:
+        if isinstance(value, dict) and "version_source" in value:
+            raise _refuse(f"is not admitted under the {trigger!r} trigger: the release tags are the "
+                          f"version", field="release.version_source")
+        section = _object(value, "release", required=common | {"change_types"},
+                          optional={"abandoned_tags", "bump_overrides"})
+    else:
+        section = _object(value, "release", required=common | {"version_source"},
+                          optional={"abandoned_tags"})
     enabled = _boolean(section["enabled"], "release.enabled")
-    trigger = _kind(section["trigger"], "release.trigger", RELEASE_TRIGGERS)
-
-    source = _object(section["version_source"], "release.version_source", required={"kind", "path"})
-    source_kind = _kind(source["kind"], "release.version_source.kind", VERSION_SOURCES)
-    source_path = _relative_path(source["path"], "release.version_source.path")
     scheme = _kind(section["version_scheme"], "release.version_scheme", VERSION_SCHEMES)
+
+    source_kind = source_path = None
+    change_types: dict[str, str] = {}
+    bump_overrides: dict[str, str] = {}
+    if trigger == TRIGGER_CONVENTIONAL_COMMIT:
+        if scheme != "semver":
+            raise _refuse(f"must be 'semver' under the {trigger!r} trigger: the bump arithmetic is "
+                          f"SemVer's", field="release.version_scheme")
+        change_types = _bump_table(section["change_types"], "release.change_types",
+                                   key_re=conventional_commit.TYPE_RE, key_name="a lowercase type",
+                                   values=conventional_commit.CHANGE_TYPE_BUMPS, required=True)
+        bump_overrides = _bump_table(section.get("bump_overrides", {}), "release.bump_overrides",
+                                     key_re=_COMMIT_RE, key_name="a 40-hex commit",
+                                     values=frozenset(conventional_commit.BUMPS), required=False)
+    else:
+        source = _object(section["version_source"], "release.version_source", required={"kind", "path"})
+        source_kind = _kind(source["kind"], "release.version_source.kind", VERSION_SOURCES)
+        source_path = _relative_path(source["path"], "release.version_source.path")
 
     tag_format = _string(section["tag_format"], "release.tag_format")
     _check_tag_format(tag_format)
@@ -548,7 +611,25 @@ def _parse_release(value: object) -> Release:
         tag_format=tag_format, abandoned_tags=tuple(abandoned), build=build, verify=verify,
         artifact_paths=tuple(paths), checksums=checksums,
         publication_kind=publication_kind, publication_title=title, publication_notes=notes,
+        change_types=change_types, bump_overrides=bump_overrides,
     )
+
+
+def _bump_table(value: object, field: str, *, key_re: re.Pattern, key_name: str,
+                values: frozenset[str], required: bool) -> dict[str, str]:
+    """A ``change_types`` or ``bump_overrides`` object: each key matches
+    ``key_re``, each value is one of ``values``; a ``required`` one is
+    non-empty."""
+    if not isinstance(value, dict):
+        raise _refuse(f"must be a JSON object, not {value!r}", field=field)
+    if required and not value:
+        raise _refuse("must name at least one entry", field=field)
+    for key, bump in value.items():
+        if not key_re.fullmatch(key):
+            raise _refuse(f"{key!r} is not {key_name}", field=field)
+        if not isinstance(bump, str) or bump not in values:
+            raise _refuse(f"{bump!r} is not one of {sorted(values)}", field=f"{field}.{key}")
+    return dict(value)
 
 
 # ---------------------------------------------------------------------------
@@ -608,6 +689,8 @@ def read_committed_version(repo_root: Path, policy: RepositoryPolicy, rev: str =
     from the committed tree. Refuses a missing file or an unreadable,
     dynamic or out-of-scheme version."""
     release = policy.release
+    if release.version_source_path is None:
+        raise _refuse(_no_version_source(release.trigger), field="release.trigger", rev=rev)
     raw = _read_blob(Path(repo_root), rev, release.version_source_path)
     if raw is None:
         raise _refuse(f"the version source {release.version_source_path} does not exist at {rev}",

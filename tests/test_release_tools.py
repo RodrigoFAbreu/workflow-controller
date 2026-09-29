@@ -383,7 +383,7 @@ class RetiredSubcommandsTest(unittest.TestCase):
         commands = next(action for action in release.build_parser()._actions
                         if isinstance(action, argparse._SubParsersAction)).choices
         self.assertEqual(sorted(commands), sorted(["version", "classify", "build", "verify", "publish",
-                                                   "verify-wheel", "checksums"]))
+                                                   "verify-wheel", "checksums", "check-title"]))
         for name in RETIRED_SUBCOMMANDS:
             with self.subTest(name=name):
                 self.assertNotIn(name, commands)
@@ -397,6 +397,78 @@ class RetiredSubcommandsTest(unittest.TestCase):
         for attr in ("verify_tag", "check_unpublished", "verify_tag_commit", "remote_tag_commit"):
             with self.subTest(attr=attr):
                 self.assertFalse(hasattr(release, attr))
+
+
+class CheckTitleTest(unittest.TestCase):
+    """``check-title`` (squash-merge-tag-versioning CP1): the policy
+    committed at ``HEAD`` decides, never the working tree."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = fixtures.build_target_git_repo(Path(self._tmp.name) / "repo")
+        self.policy_file = self.root / ".workflow-controller" / "policy.json"
+
+    def _commit_policy(self, raw: bytes) -> None:
+        self.policy_file.parent.mkdir(exist_ok=True)
+        self.policy_file.write_bytes(raw)
+        fixtures.commit_all(self.root, "policy")
+
+    def _check(self, title: str) -> tuple[int, str, str]:
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = release.main(["check-title", title], repo_root=self.root)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_version_change_does_not_read_the_title(self) -> None:
+        self._commit_policy(fixtures.LEGACY_POLICY)
+        expected = "ok: the release trigger is version_change; the title is not release input\n"
+        for title in ("feat: x", "Revert \"feat: x\"", "anything"):
+            with self.subTest(title=title):
+                self.assertEqual(self._check(title), (0, expected, ""))
+
+    def test_conventional_commit_names_the_bump(self) -> None:
+        self._commit_policy(fixtures.CONVENTIONAL_POLICY)
+        for title, line in (
+            ("feat: squash merges with release versions derived from pull request titles", "feat → minor"),
+            ("fix(forge): x (#12)", "fix → patch"),
+            ("docs: x", "docs → none"),
+            ("refactor!: x", "refactor! → major"),
+        ):
+            with self.subTest(title=title):
+                self.assertEqual(self._check(title), (0, f"ok: {line}\n", ""))
+
+    def test_an_invalid_title_is_a_one_line_refusal(self) -> None:
+        self._commit_policy(fixtures.CONVENTIONAL_POLICY)
+        for title, fragment in (
+            ("Feat: x", "is not a Conventional Commit title"),
+            ("feature: x", "unknown type 'feature'"),
+            ("docs!: x", "a breaking change must release"),
+            ('Revert "feat: x"', "is not a Conventional Commit title"),
+            ("feat: x\nsecond line", "is not a Conventional Commit title"),
+        ):
+            with self.subTest(title=title):
+                code, out, err = self._check(title)
+                self.assertEqual((code, out), (1, ""))
+                self.assertTrue(err.startswith("release.py check-title: refused: title: "), err)
+                self.assertIn(fragment, err)
+                self.assertEqual(len(err.splitlines()), 1)
+
+    def test_a_missing_policy_is_refused(self) -> None:
+        (self.root / "README").write_text("x\n")
+        fixtures.commit_all(self.root, "init")
+        code, out, err = self._check("feat: x")
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("refused: repository policy: HEAD has no .workflow-controller/policy.json", err)
+
+    def test_the_policy_is_read_from_head_not_the_working_tree(self) -> None:
+        self._commit_policy(fixtures.LEGACY_POLICY)
+        self.policy_file.write_bytes(fixtures.CONVENTIONAL_POLICY)
+        self.assertEqual(self._check("Feat: x")[0], 0)
+        fixtures.commit_all(self.root, "cutover")
+        self.assertEqual(self._check("Feat: x")[0], 1)
+        self.policy_file.write_bytes(fixtures.LEGACY_POLICY)
+        self.assertEqual(self._check("Feat: x")[0], 1)
 
 
 class ReleaseTransactionCliTest(_ReleaseCase):

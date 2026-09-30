@@ -8,11 +8,11 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-09-30).** Controller 1.4.0 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C1b, reaping every
-child process (11.1.1, accepted 2026-09-30), is complete. C1b is released as 1.4.1 when its pull
-request (#11) is squash-merged. Workflow Manager also runs Workflow 2.6.0 and has its adaptive test
-sharding on `main`.
+**Where things stand (2026-09-30).** Controller 1.4.1 is the latest release. It admits Workflow
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C2, CI reliability
+(11.2, accepted 2026-09-30), is complete. C2 is released as 1.4.2 when its pull request (#13) is
+squash-merged. Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on
+`main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -35,7 +35,7 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 |---|---|---|---|
 | C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) (complete) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
 | C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance (complete) | — | [11.1.1](#1111-reaping-every-child-process) |
-| C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
+| C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count (complete) | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
@@ -1134,6 +1134,15 @@ So 1.4.1's notes, written in the milestone's "Pull request body" section, were p
 
 ## 11.2 CI reliability
 
+**Status:** Complete (`workflow-controller-ci-reliability`, accepted 2026-09-30 under Workflow
+2.6.0; plan `docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md`, the 1.4.2 amendments to
+`docs/adr/0004-worker-lifecycle-ownership.md` and `docs/adr/0005-adaptive-test-sharding.md`; the
+narrative is archived at `docs/milestones/completed/workflow-controller-ci-reliability.md`). The
+three flakes are fixed, each with a regression that widens its window. A re-run of failed jobs
+counts: each shard's latest attempt decides, superseded attempts are listed, and `tests-result`
+fails when a job of the current attempt did not succeed. A leaked process fails the run (D7), and
+nothing is retried automatically. Releases as 1.4.2 when PR #13 is squash-merged.
+
 **Step C2.** An unattended merge stalls on every flaky run, and the Workflow 2.6 milestone needed
 five re-runs.
 
@@ -1241,7 +1250,8 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 1.2.1  Adaptive test sharding                                COMPLETE (released as 1.2.1)
 1.6    Workflow 2.6 compatibility integration                COMPLETE (released as 1.3.0)
 11.1   C1: squash merges and PR-title versions               COMPLETE (released as 1.4.0 at its cutover)
-11.1.1 C1b: reaping every child process                    COMPLETE (releases as 1.4.1)
+11.1.1 C1b: reaping every child process                    COMPLETE (released as 1.4.1)
+11.2   C2: CI reliability                                    COMPLETE (releases as 1.4.2)
 ```
 
 ---

@@ -4839,7 +4839,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-reliability-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-reliability-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -4902,10 +4902,10 @@
         "recorded_at": "2026-09-30T08:46:37Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "e6e2d2ccd6e599e47459619c40d07218ad59c4252a860b36ed1b583572a54e0d",
-        "approved_review_content_id": "b8deef458a141d6d9cc38d618415e97967a8fff5f2b57253908a739c16206019",
+        "reviewed_bundle_id": "03b60e43831c99dd1046f503303b7e61579c76ed32b1bcea4ebe2c7233d85d10",
+        "approved_review_content_id": "bd55811de5556dca06dcca1c8841d723989371636d2212f0619a1fe498e8684e",
         "review_content_manifest": [
           {
             "path": ".github/workflows/validate.yml",
@@ -4983,13 +4983,13 @@
             "path": "tests/test_run_tests.py",
             "exists": true,
             "mode": "100644",
-            "blob": "0cd5449c97e27709ce32a09e41488982de181b71"
+            "blob": "3020d4ba321304124ef25ba6621bbb6a77923327"
           },
           {
             "path": "tests/test_test_shards.py",
             "exists": true,
             "mode": "100644",
-            "blob": "93ecb864102eb11ece24e26ecfe094a7ac6fab61"
+            "blob": "613a55fb7795be55c44860d1d51714ed566c4b69"
           },
           {
             "path": "tests/test_worker.py",
@@ -5007,20 +5007,20 @@
             "path": "tools/run_tests.py",
             "exists": true,
             "mode": "100644",
-            "blob": "aabc48a07b0f78de42e8f3d247bf22b8000ba182"
+            "blob": "13bbd33c135a23352147323ba0cbc8cfa3d7a503"
           },
           {
             "path": "tools/test_shards.py",
             "exists": true,
             "mode": "100644",
-            "blob": "4e74dae7b1f705a20786a8b622856bdfd18de829"
+            "blob": "490d89e088fdfc9f38b2848b215ac19374f53d46"
           }
         ],
-        "reviewed_content_commit": "104cfd484577696658b238a26bc9a6f2c170aa43",
+        "reviewed_content_commit": "dbaddce3d50342b459d1bbcc08d432d72e44c485",
         "legacy_evidence": null,
         "user_confirmation": "implementation workflow-controller-ci-reliability",
         "waived_guarantees": [],
-        "recorded_at": "2026-09-30T11:36:09Z"
+        "recorded_at": "2026-09-30T17:56:23Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -5040,8 +5040,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 29,
-      "last_transition": "2026-09-30T12:42:39Z",
+      "state_revision": 32,
+      "last_transition": "2026-09-30T17:56:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5062,18 +5062,18 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "b8deef458a141d6d9cc38d618415e97967a8fff5f2b57253908a739c16206019",
+        "review_content_id": "bd55811de5556dca06dcca1c8841d723989371636d2212f0619a1fe498e8684e",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "e6e2d2ccd6e599e47459619c40d07218ad59c4252a860b36ed1b583572a54e0d",
+          "bundle_id": "03b60e43831c99dd1046f503303b7e61579c76ed32b1bcea4ebe2c7233d85d10",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-09-30T10:00:24Z"
+          "round": 2,
+          "completed_at": "2026-09-30T12:50:01Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "e6e2d2ccd6e599e47459619c40d07218ad59c4252a860b36ed1b583572a54e0d",
+          "bundle_id": "03b60e43831c99dd1046f503303b7e61579c76ed32b1bcea4ebe2c7233d85d10",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-09-30T10:13:34Z"
+          "round": 2,
+          "completed_at": "2026-09-30T13:44:17Z"
         }
       }
     }

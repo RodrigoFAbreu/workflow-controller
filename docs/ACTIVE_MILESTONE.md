@@ -27,7 +27,7 @@ record. A leaked process fails the run (D7); nothing is retried automatically (I
 |---|---|---|
 | CP1 The recorded command line fills once readable | Complete | See below |
 | CP2 The tests wait for the right signal | Complete | See below |
-| CP3 A re-run of failed jobs counts | Not started | |
+| CP3 A re-run of failed jobs counts | Complete | See below |
 | CP4 A leaked process fails the run | Not started | |
 | CP5 Documentation and full verification | Not started | |
 
@@ -109,3 +109,82 @@ under `taskset -c 0,1`, 5 rounds: 30/30 OK.
 Verification: the full sharded run (`python3 tools/run_tests.py`, 2471 tests, 6 shards) passed,
 through the same reaping-subreaper wrapper, in the foreground, with `FORCE_COLOR` and
 `PYTHONPATH` unset.
+
+### CP3 -- a re-run of failed jobs counts
+
+- `tools/test_shards.py`:
+  - Shard records are schema version 2, with a required `run_attempt` (an int >= 1).
+    `validate_shard_result` still reads version 1, which has no `run_attempt`, and
+    `record_attempt` reads it as attempt 1 (I9). `execute_shard` takes `run_attempt`, default 1.
+  - `select_results` collects every `shard-<i>.json` directly in the results directory (the
+    local flat layout) or one directory below it (CI's per-artifact layout), and takes each
+    planned shard's highest attempt (I4). It raises `AggregateError` (exit 2, I7) for:
+    - two records of one shard and attempt (a flat version 1 record counts as attempt 1);
+    - an attempt above `--run-attempt`;
+    - another plan's digest in any record, superseded or not;
+    - a `results-<i>-attempt-<a>` directory whose record is another shard or attempt;
+    - a record whose file name names another shard.
+
+    An unreadable record leaves its shard without a record (CRASHED) unless its directory
+    proves it is older than the selected one. Every record not taken is returned as
+    superseded, with its verdict and failing ids.
+  - `aggregate` takes `superseded` and `upstream` (job to result). Any `upstream` result other
+    than `success` turns an otherwise passing run into exit 2, and a failing run keeps its
+    status (I4a). The summary names each such job under the status line, gives each shard's
+    attempt in a new last column, and adds a "Superseded attempts" section (I5). The
+    reproduction hints name `results-<i>-attempt-<a>`.
+- `tools/run_tests.py`:
+  - `exec-shard --run-attempt N` (default 1; below 1 is a usage error).
+  - `aggregate` uses `select_results` and gains:
+    - `--run-attempt N`;
+    - repeatable `--upstream-result JOB=RESULT`, with `JOB` `plan` or `tests` and `RESULT` one
+      of `success`, `failure`, `cancelled`, `skipped`. Anything else, or a job given twice, is a
+      usage error;
+    - `--write-selected DIR`, which writes the plan and the selected records flat.
+      LOCAL-R3-001: it is written whatever the verdict, including exit 2 from `--upstream-result`
+      (`timings merge` folds passing atoms only). It is not written when the results are refused
+      outright (`AggregateError`).
+  - The summary's directory is created if no results artifact was downloaded at all.
+  - The local runner (`cmd_run`, `--serial`, `--replay`) and `timings merge` are unchanged. They
+    read the flat layout through `load_results`, and the local runner writes attempt 1.
+- `tools/ci_workflows.py`, and `.github/workflows/validate.yml` re-rendered with `--write`:
+  - `exec-shard` passes `--run-attempt ${{ github.run_attempt }}`.
+  - Shard jobs upload `results-${{ matrix.shard }}-attempt-${{ github.run_attempt }}`.
+  - `tests-result` downloads `pattern: results-*` into `results/shards`, without
+    `merge-multiple`. It aggregates with `--results-dir results/shards --run-attempt ...
+    --write-selected results/selected --upstream-result plan=${{ needs.plan.result }}
+    --upstream-result tests=${{ needs.tests.result }}`, and uploads `results/selected/` as
+    `timings-ci-attempt-${{ github.run_attempt }}`.
+  - `test-plan` stays one artifact (Design C). `ci.yml`, `main.yml` and `pr-title.yml` are
+    unchanged.
+- Tests:
+  - `tests/test_test_shards.py`:
+    - `ResultRecordTest`: version 1 and 2 validation, and invalid `run_attempt` values.
+    - `AttemptSelectionTest`:
+      - the run 36483126576 replay, passing whether candidates are discovered in sorted or
+        reversed order;
+      - the superseded failure listed;
+      - a failing attempt 2 after a passing attempt 1;
+      - duplicate, above-bound, directory-mismatch, file-name-mismatch and superseded-digest
+        refusals;
+      - an unreadable record, older and latest;
+      - the flat layout equal to `load_results`;
+      - the four I4a cases: full re-run with a missing record, full re-run with a failed plan,
+        "Re-run failed jobs" green, and failing records keeping exit 1.
+  - `tests/test_run_tests.py` `BuildingBlocksTest` (real `exec-shard` runs into per-artifact
+    directories, the conformance suite failing in attempt 1):
+    - `--run-attempt` recorded;
+    - latest attempt taken, with `--write-selected` feeding `timings merge`;
+    - above-bound refusal writing nothing;
+    - three non-`success` upstream combinations exiting 2 and still writing the selection;
+    - `--upstream-result` usage errors;
+    - no results artifact at all.
+  - `tests/test_ci_workflows.py`: the rendered artifact names match
+    `RESULTS_ARTIFACT_DIR_RE`, there is no `merge-multiple`, and the `--run-attempt`,
+    `--write-selected` and both `--upstream-result` options are wired.
+
+Verification: `python3 -m unittest tests.test_test_shards tests.test_ci_workflows
+tests.test_run_tests` passed (248 tests). `python3 tools/ci_workflows.py --check` is clean. The
+full sharded run (`python3 tools/run_tests.py`, 2493 tests, 6 shards) passed and wrote schema 2
+records (`run_attempt` 1). It ran through the same reaping-subreaper wrapper, in the foreground,
+with `FORCE_COLOR` and `PYTHONPATH` unset.

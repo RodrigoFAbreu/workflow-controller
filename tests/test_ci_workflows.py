@@ -375,7 +375,8 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertEqual(argv, ["python3", "tools/run_tests.py", "exec-shard", "--profile", "ci",
                                 "--ci-placement", "--shard", "${{", "matrix.shard", "}}",
                                 "--expect-digest", "${{", "needs.plan.outputs.digest", "}}",
-                                "--results-dir", "results"])
+                                "--results-dir", "results",
+                                "--run-attempt", "${{", "github.run_attempt", "}}"])
         for absent in ("--count", "--shards", "--plan", "--target-seconds", "--min-shards",
                        "--max-shards"):
             with self.subTest(absent=absent):
@@ -389,13 +390,20 @@ class ValidatePlanTest(unittest.TestCase):
         steps = _steps(self.jobs["tests-result"])
         self.assertEqual(self._argv("tests-result", "aggregate"),
                          ["python3", "tools/run_tests.py", "aggregate", "--plan",
-                          "results/plan.json", "--results-dir", "results",
+                          "results/plan.json", "--results-dir", "results/shards",
+                          "--run-attempt", "${{", "github.run_attempt", "}}",
+                          "--write-selected", "results/selected",
+                          "--upstream-result", "plan=${{", "needs.plan.result", "}}",
+                          "--upstream-result", "tests=${{", "needs.tests.result", "}}",
                           "--plan-artifact", "test-plan", "--results-artifact-prefix",
                           "results-"])
         downloads = [s for s in steps if "download-artifact" in _uses(s)]
+        # Every attempt's results artifacts, each into its own directory:
+        # merged, the last writer of shard-<i>.json would win.
         self.assertEqual([s["with"] for s in downloads],
                          [{"name": "test-plan", "path": "results"},
-                          {"pattern": "results-*", "merge-multiple": True, "path": "results"}])
+                          {"pattern": "results-*", "path": "results/shards"}])
+        self.assertNotIn("merge-multiple", ci.emit(ci.validate_workflow()))
         # A missing artifact must reach aggregate (which exits 2, naming it),
         # not end the job before it can say so.
         self.assertTrue(all(s["continue-on-error"] is True for s in downloads))
@@ -408,12 +416,17 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertEqual(plan_upload, [{"name": "test-plan", "path": "plan.json"}])
         tests_upload = [s for s in _steps(self.jobs["tests"]) if "upload-artifact" in _uses(s)]
         self.assertEqual([(s["if"], s["with"]) for s in tests_upload],
-                         [("always()", {"name": "results-${{ matrix.shard }}", "path": "results/"})])
+                         [("always()", {"name": "results-${{ matrix.shard }}-attempt-"
+                                                "${{ github.run_attempt }}",
+                                        "path": "results/"})])
+        # The download directory name aggregate cross-checks each record against.
+        name = tests_upload[0]["with"]["name"].replace("${{ matrix.shard }}", "3").replace(
+            "${{ github.run_attempt }}", "2")
+        self.assertRegex(name, ci.test_shards.RESULTS_ARTIFACT_DIR_RE)
         timings = [s for s in _steps(self.jobs["tests-result"]) if "upload-artifact" in _uses(s)]
-        self.assertEqual([(s["if"], s["with"]["name"]) for s in timings],
-                         [("always()", "timings-ci")])
-        self.assertEqual(timings[0]["with"]["path"].split("\n"),
-                         ["results/plan.json", "results/shard-*.json"])
+        self.assertEqual([(s["if"], s["with"]) for s in timings],
+                         [("always()", {"name": "timings-ci-attempt-${{ github.run_attempt }}",
+                                        "path": "results/selected/"})])
         self.assertEqual(timings[0], _steps(self.jobs["tests-result"])[-1])
 
     def test_validate_keeps_major_tag_actions(self) -> None:

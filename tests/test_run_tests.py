@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -487,7 +488,7 @@ class BuildingBlocksTest(unittest.TestCase):
         aggregated = self.repo.run(*base, "--plan-artifact", "test-plan",
                                    "--results-artifact-prefix", "results-")
         self.assertEqual(aggregated.returncode, 1, aggregated.stdout + aggregated.stderr)
-        self.assertIn("- CI artifacts: the log is in `results-0`; `test-plan` holds "
+        self.assertIn("- CI artifacts: the log is in `results-0-attempt-1`; `test-plan` holds "
                       "`plan.json` for the replay command", aggregated.stdout)
         alone = self.repo.run(*base, "--plan-artifact", "test-plan")
         self.assertEqual(alone.returncode, 2)
@@ -559,6 +560,116 @@ class BuildingBlocksTest(unittest.TestCase):
                                    "--results-dir", str(self.results))
         self.assertEqual(aggregated.returncode, 2, aggregated.stdout)
         self.assertIn("no result record", aggregated.stdout)
+
+    def ci_layout(self) -> tuple[Path, Path]:
+        """Run 36483126576's shape through the real commands: one shard
+        passes in attempt 1; the conformance suite's shard fails in attempt 1
+        and passes when re-run as attempt 2. Each result is written into the
+        directory download-artifact would extract its artifact into."""
+        plan_path = self.results / "plan.json"
+        planned = self.repo.run("plan", "tests.test_pass", f"conformance:{SUITE}", "--profile",
+                                "ci", "--shards", "2", "--output", str(plan_path))
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        plan = json.loads(plan_path.read_text())
+        self.assertEqual(plan["shard_count"], 2)
+        probe = next(i for i, shard in enumerate(plan["shards"])
+                     if f"conformance:{SUITE}" in shard["test_ids"])
+        shards_dir = self.results / "shards"
+        for index in range(2):
+            for attempt in ((1, 2) if index == probe else (1,)):
+                target = shards_dir / f"results-{index}-attempt-{attempt}"
+                env = {"FAKE_SUITE_STATUS": "1"} if (index, attempt) == (probe, 1) else {}
+                completed = self.repo.run("exec-shard", "--plan", str(plan_path), "--shard",
+                                          str(index), "--results-dir", str(target),
+                                          "--run-attempt", str(attempt), env=env)
+                self.assertEqual(completed.returncode, 1 if env else 0, completed.stderr)
+        return plan_path, shards_dir
+
+    def aggregate(self, plan_path: Path, results: Path, *extra: str):
+        return self.repo.run("aggregate", "--plan", str(plan_path), "--results-dir",
+                             str(results), *extra)
+
+    def test_exec_shard_records_its_run_attempt(self) -> None:
+        self.plan()
+        plan_path = str(self.results / "plan.json")
+        completed = self.exec_shard("--plan", plan_path, "--run-attempt", "4")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        record = self.repo.record(self.results, 0)
+        self.assertEqual((record["schema_version"], record["run_attempt"]), (2, 4))
+        refused = self.exec_shard("--plan", plan_path, "--run-attempt", "0")
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("--run-attempt must be at least 1", refused.stderr)
+
+    def test_aggregate_takes_each_shards_latest_attempt_and_writes_it_flat(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        selected = self.results / "selected"
+        aggregated = self.aggregate(plan_path, shards_dir, "--run-attempt", "2",
+                                    "--upstream-result", "plan=success",
+                                    "--upstream-result", "tests=success",
+                                    "--write-selected", str(selected))
+        self.assertEqual(aggregated.returncode, 0, aggregated.stdout + aggregated.stderr)
+        self.assertIn("## Superseded attempts", aggregated.stdout)
+        self.assertIn(f"  - `conformance:{SUITE}`", aggregated.stdout)
+        self.assertEqual(sorted(p.name for p in selected.iterdir()),
+                         ["plan.json", "shard-0.json", "shard-1.json"])
+        self.assertEqual(json.loads((selected / "plan.json").read_text()),
+                         json.loads(plan_path.read_text()))
+        attempts = sorted(self.repo.record(selected, i)["run_attempt"] for i in range(2))
+        self.assertEqual(attempts, [1, 2])
+        # The selected records are what timings merge reads.
+        merged = self.repo.run("timings", "merge", "--into", str(self.results / "t.json"),
+                               str(selected))
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        # Attempt 1 alone (before the re-run) fails on the probe.
+        shutil.rmtree(next(shards_dir.glob("results-*-attempt-2")))
+        again = self.aggregate(plan_path, shards_dir, "--run-attempt", "1")
+        self.assertEqual(again.returncode, 1, again.stdout + again.stderr)
+
+    def test_aggregate_refuses_an_attempt_above_its_own(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        selected = self.results / "selected"
+        aggregated = self.aggregate(plan_path, shards_dir, "--run-attempt", "1",
+                                    "--write-selected", str(selected))
+        self.assertEqual(aggregated.returncode, 2)
+        self.assertIn("above this run's attempt 1", aggregated.stderr)
+        self.assertFalse(selected.exists())
+
+    def test_a_current_attempt_job_that_failed_fails_over_passing_records(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        for upstream in (("plan=success", "tests=failure"), ("plan=failure", "tests=skipped"),
+                         ("plan=success", "tests=cancelled")):
+            with self.subTest(upstream=upstream):
+                selected = self.results / f"selected-{'-'.join(upstream)}"
+                aggregated = self.aggregate(
+                    plan_path, shards_dir, "--run-attempt", "2", "--write-selected",
+                    str(selected), *[arg for u in upstream for arg in ("--upstream-result", u)])
+                self.assertEqual(aggregated.returncode, 2, aggregated.stdout)
+                failed = [u for u in upstream if not u.endswith("=success")]
+                for option in failed:
+                    job, result = option.split("=")
+                    self.assertIn(f"- job `{job}` of this attempt: `{result}`",
+                                  aggregated.stdout)
+                # LOCAL-R3-001: the selection is still written for timings.
+                self.assertTrue((selected / "plan.json").exists())
+
+    def test_upstream_results_are_checked_for_usage(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        for bad in ("package=success", "tests=passed", "tests", "tests=success,plan=success"):
+            with self.subTest(bad=bad):
+                aggregated = self.aggregate(plan_path, shards_dir, "--upstream-result", bad)
+                self.assertEqual(aggregated.returncode, 2)
+                self.assertIn("is not JOB=RESULT", aggregated.stderr)
+        twice = self.aggregate(plan_path, shards_dir, "--upstream-result", "tests=success",
+                               "--upstream-result", "tests=failure")
+        self.assertEqual(twice.returncode, 2)
+        self.assertIn("gives job tests twice", twice.stderr)
+
+    def test_aggregate_with_no_results_artifact_at_all_says_so(self) -> None:
+        self.plan()
+        missing = self.results / "shards"
+        aggregated = self.aggregate(self.results / "plan.json", missing, "--run-attempt", "1")
+        self.assertEqual(aggregated.returncode, 2, aggregated.stderr)
+        self.assertIn("no result record", (missing / "SUMMARY.md").read_text())
 
     def test_timings_merge_folds_a_results_directory_into_a_profile(self) -> None:
         completed, results = self.repo.run_selection("tests.test_pass", "tests.test_fail")

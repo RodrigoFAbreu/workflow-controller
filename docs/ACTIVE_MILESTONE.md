@@ -2,10 +2,10 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-ci-reliability` (`docs/ROADMAP.md` step C2, section 11.2
+**Functional review.** `workflow-controller-ci-reliability` (`docs/ROADMAP.md` step C2, section 11.2
 "CI reliability"). The plan is `docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md`, revision 3,
 approved at `fdb925a` (`EXTERNAL_APPROVE`). The base commit is `93b82de`. Governing workflow
-version `2.2`, lifecycle authority Workflow 2.6.0. Pull request title
+version `2.2`, lifecycle authority Workflow 2.6.0. Technical approval `43008bd`. Pull request title
 `fix: stop the known CI flakes and make a re-run of failed jobs count` (1.4.2).
 
 `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for phase and checkpoint status. The
@@ -263,6 +263,127 @@ Verification:
 - The full sharded run (`python3 tools/run_tests.py`, 2500 tests, 6 shards) passed with exact
   coverage and no leaked process, through the same reaping-subreaper wrapper, in the foreground,
   with `FORCE_COLOR` and `PYTHONPATH` unset.
+
+## Functional review checklist
+
+Round 1, implementation revision 1 (technical approval `43008bd`, reviewed head `104cfd4`, bundle
+record `373f2ad`). Nothing in flows A-G and I writes to the repository, its remote, GitHub or the
+installed Controller (1.4.1). Flow H pushes a throwaway branch and pull request, and runs only
+with the operator's authorization.
+
+### Setup
+
+- A scratch directory outside the repository, here `$S` (for example `/tmp/c2-fr`).
+- A clone of the milestone head and a local build of it in a throwaway virtual environment:
+  ```bash
+  R=/home/rodrigo/Workspace/workflow-controller; S=/tmp/c2-fr; mkdir -p "$S"
+  git clone -q "$R" "$S/src" && git -C "$S/src" checkout -q --detach 43008bd
+  python3 -m venv "$S/venv" && "$S/venv/bin/pip" -q install "$S/src"
+  ```
+- A second clone at the base, for the red runs: `git clone -q "$R" "$S/base" && git -C "$S/base" checkout -q --detach 93b82de`.
+- Test runs from a Controller-launched worker go through a reaping subreaper wrapper (orphans
+  otherwise stay zombies under the worker). Unset `FORCE_COLOR`, never set `PYTHONPATH=.`, and run
+  suites in the foreground.
+
+### Flows
+
+**A. The local build's version.** Run `"$S/venv/bin/workflow-controller" --version`. Expected:
+`workflow-controller 1.4.1` and `runtime: package (local build from 43008bd…)`; the highest
+reachable release tag is `v1.4.1`.
+
+**B. Nothing else changed.** In the repository, run `inspect .` and `explain .` with the installed
+1.4.1 and with `"$S/venv/bin/workflow-controller"`. Expected: the same exit status and
+byte-identical output. `git diff 93b82de 104cfd4 -- .workflow-controller/ pyproject.toml setup.py
+.github/workflows/ci.yml .github/workflows/main.yml .github/workflows/pr-title.yml` is empty, and
+`python3 tools/ci_workflows.py --check` is clean.
+
+**C. The command line fills once readable (flake 1).** In `$S/src`, run
+`python3 -m unittest tests.test_worker.CmdlineFillTest tests.test_worker.OwnershipTest
+tests.test_worker.OwnershipProvenanceTest tests.test_job.DrainDetachJobTest`. Expected: all pass.
+Then copy `$S/base/controller/worker.py` over `$S/src/controller/worker.py` and run the same
+command: expected 8 failures, as CP1 recorded (the `_escaped` tests and the daemon-detach test
+with `... not found in ''`, `DrainDetachJobTest` with `'<pid> ()' unexpectedly found`, three of
+the four `CmdlineFillTest` tests). Restore the file with `git -C "$S/src" checkout -- controller/worker.py`.
+
+**D. The tests wait for the right signal (flakes 2 and 3).** In `$S/src`, run
+`python3 -m unittest tests.test_resume.CrossProcessEventSeqTest tests.test_job.InProcessConcurrencyTest`.
+Expected: all pass, and each widened test asserts that its delay ran. Then reproduce CP2's red run
+(the base's `_record_with_worker_process` and `_start_first_step` put back, the new tests kept):
+expected `['planned', 'launched', 'reconciled'] != [... 'worker_spawned', ...]` and
+`KeyError: 'worker_process'`. Restore with `git -C "$S/src" checkout -- tests/`. Stress,
+informative: 6 parallel copies of the two classes under `taskset -c 0,1`, 3 rounds, all OK.
+
+**E. Attempt selection, with real shard records.** In `$S/src`, add a scratch module
+`tests/test_zz_probe.py` (never committed) with one test that fails when `PROBE_FAIL=1` and, when
+`PROBE_LEAK=1`, starts `setsid sleep 300` and never ends it. Make a one-shard plan with
+`python3 tools/run_tests.py plan --shards 1 --output "$S/e/plan.json" tests.test_zz_probe tests.test_ci_workflows`,
+and produce records with `exec-shard --plan "$S/e/plan.json" --shard 0 --run-attempt <a>
+--results-dir "$S/e/<case>/shards/results-0-attempt-<a>"`. Aggregate each case with
+`aggregate --plan "$S/e/plan.json" --results-dir "$S/e/<case>/shards" --run-attempt <N>
+--upstream-result plan=success --upstream-result tests=<result> --write-selected "$S/e/<case>/selected"`.
+Expected:
+1. Attempt 1 fails (`PROBE_FAIL=1`), attempt 2 passes, `--run-attempt 2`, `tests=success`: exit 0,
+   and the summary lists the superseded attempt-1 failure.
+2. Only a failing attempt 1, `--run-attempt 2`, `tests=success`: exit 1 (a shard that was not
+   re-run keeps its record, and it failed).
+3. Only a passing attempt 1, `--run-attempt 2`, `tests=failure`: exit 2 (I4a: a current-attempt
+   job failed without a fresh record).
+4. A leak (`PROBE_LEAK=1`), attempt 1: `exec-shard` exits 1 with every test passing, the verdict
+   is `LEAKED`, the `sleep` is reported and is no longer running; `aggregate` exits 1 with
+   `LEAKED`. Add a clean attempt 2: exit 0, and the superseded leak is listed.
+5. Case 1 with the attempt-2 record truncated to invalid JSON: exit 2 (fail closed).
+6. A record written by `$S/base` (schema 1, `python3 tools/run_tests.py --results-dir … tests.test_ci_workflows`
+   there) is read at the head as attempt 1.
+7. The local flat layout: `python3 tools/run_tests.py --results-dir "$S/e/flat" tests.test_ci_workflows`
+   in `$S/src` passes, and `aggregate` over `$S/e/flat` exits 0.
+Remove `tests/test_zz_probe.py` afterwards.
+
+**F. It releases 1.4.2.** In `$S/src`, `python3 tools/release.py check-title "fix: stop the known
+CI flakes and make a re-run of failed jobs count"`. Expected: `ok: fix → patch`. Then, as in
+C1b's flow F (`docs/milestones/completed/workflow-controller-child-process-reaping.md`): a
+scratch bare origin with the real tags and `main` at `93b82de`, `tests/fake_gh.py` as `gh` with
+the releases up to `v1.4.1` published, the squash commit built with `git commit-tree
+"104cfd4^{tree}" -p 93b82de -m "<that title> (#13)"`, and `python3 tools/release.py classify
+--commit <it>`. Expected: `ok: RELEASE_DUE: 1.4.2 has no tag and no release`, `version=1.4.2`,
+`tag=v1.4.2`, exit 0.
+
+**G. PR #13.** Run `gh pr checks 13`. Expected: every check passes, including `PR title`,
+`validate / tests-result` and `workflow-conformance`.
+
+**H. "Re-run failed jobs" on GitHub (needs the operator's authorization).** From `104cfd4`,
+push a throwaway branch `probe/c2-rerun` and open a draft pull request against `main` titled
+`test: C2 re-run probe (throwaway, never merged)`. Each phase is one commit adding or replacing
+`tests/test_zz_probe.py`; after each, wait for the `CI` run, then `gh run rerun <id> --failed`.
+1. A probe that fails when `GITHUB_RUN_ATTEMPT` is 1. Expected: attempt 1 has one red
+   `validate / tests (<i>)` and a red `validate / tests-result`. After "Re-run failed jobs",
+   `tests-result` is green, its aggregate step ran with `--upstream-result tests=success` (I4a's
+   reliance on `needs.tests.result`), and the job summary lists the superseded attempt-1
+   failure.
+2. A probe that leaks `setsid sleep 300` only when `GITHUB_RUN_ATTEMPT` is 1 (I8). Expected:
+   attempt 1's `tests (<i>)` and `tests-result` are red with a `LEAKED` verdict; after "Re-run
+   failed jobs" that shard re-runs and `tests-result` is green, listing the superseded leak.
+3. A probe that always fails. Expected: still red after "Re-run failed jobs".
+Then close the pull request unmerged and delete the branch.
+
+**I. Documentation.** Each of these describes what C to H showed:
+- `docs/guide/ci-and-releases.md`, "Re-running failed jobs", and the `tests`/`tests-result` jobs;
+- `docs/guide/development.md` (exit status 1 includes a leak; "Leaks"; the profile refresh from
+  the highest attempt's `timings-ci-attempt-<a>`);
+- `docs/guide/milestone-branches.md` (`checks_failing`), `docs/guide/workers.md` (the command-line
+  fill);
+- the 1.4.2 amendment notes in `docs/adr/0005-adaptive-test-sharding.md` and
+  `docs/adr/0004-worker-lifecycle-ownership.md`;
+- the PR body (the 1.4.2 release notes below).
+
+### Known limitations and out of scope
+
+- `--write-selected` inside `--results-dir` makes a later local `aggregate` over that directory
+  see duplicate records and refuse (LOCAL-IMPL-R1-001, optional). CI writes to a sibling
+  directory.
+- A 1.4.1 checkout cannot read schema-2 shard records (only a local `--replay` across versions is
+  affected).
+- Nothing is retried automatically (I6); a re-run stays an explicit act.
+- The vendored Workflow conformance suites are unchanged.
 
 ## Pull request body (1.4.2 release notes)
 

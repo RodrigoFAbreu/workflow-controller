@@ -4536,6 +4536,299 @@
           "completed_at": "2026-09-29T13:26:39Z"
         }
       }
+    },
+    "workflow-controller-child-process-reaping": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-child-process-reaping",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-child-process-reaping-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 8,
+      "implementation_revision": 2,
+      "functional_review_round": null,
+      "base_commit": "6a24f64a50462d7b82c13fda1ce45b253c7fc65b",
+      "reviewed_implementation_head": "be4b9f2bb162c602617ebcf0fb393b921a58953a",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP3",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "e074e3b032f761e4d5c6f0c6329cca9c841ad319"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "3abf9d160945a9b838b8c84e207780cc783b2596"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "e68b91792595d8feab16107511688689b8a49d29"
+        }
+      },
+      "current_bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+        "approved_review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da098a99fe752e437edb5ba148aa34d63d177b12"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5a8b0a2969dfb7f35a2592f291e594932310e9f7"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-child-process-reaping-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ae2f6a684e320a669292e6a9aabefc3242c2a4af"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "plan workflow-controller-child-process-reaping",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-29T21:22:07Z"
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "d8797bf1deb4e5e2f93177df7c639f4e56cbe46dfe15239bd491a89b5561601c",
+        "approved_review_content_id": "0cae1a5b60bf1b1b51cfd13098093dd3f311db34c4e7218df4a4d8c6b60b2d3d",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cf1d7a24724e29d965ff47cd008477740a7e6788"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6792fedbf1840ca40121cd0afcebe2867e28ea3a"
+          },
+          {
+            "path": "docs/adr/0004-worker-lifecycle-ownership.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7cbe35c8659c6e8ae11802e54ca019711f248ed"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-child-process-reaping-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8a535edc52a63c4ab94266d33deb8d2e8a76ad7b"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "71d4f81dd882aec6e1bfbbf014b3d477fbb07f80"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "33492c4d61e410901946f78d03f02395b336e808"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "802098bd89fb62ff889bda8aa62f59400e53eee1"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1e7b884f92edcbd7cca3045bed6a2f1d7c4deeae"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "98ba5bc0e1111500cdccd5a4dc8c75e41fd3799b"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ea83421f405ceda89c71b41432a5a3b6117d3a87"
+          },
+          {
+            "path": "tests/test_fake_claude_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3618e3f4161b6fd3df6cc2e4070f14716a8e6d49"
+          },
+          {
+            "path": "tests/test_fixtures_git_hygiene.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "db947d5c27f0a3af58e1561154f15e574d81535d"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "54da38433dd6bd25e9c76bc162b57de2749bf582"
+          },
+          {
+            "path": "tests/test_integration_disposable_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "09d17edf30ec52f34e8dd8ccbc47318b60e632e7"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "75504aa635cca36ad0de059eb1e967a2ee591969"
+          },
+          {
+            "path": "tests/test_managed_repo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dce6b0d1cfe993aeb0f00a261bb2dc2fde222854"
+          },
+          {
+            "path": "tests/test_milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1d2174cfbd26354445d356e1f0a55457945577b7"
+          },
+          {
+            "path": "tests/test_packaged_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1a27b23ea90fab9bc8f96f82e9efdfd801408870"
+          },
+          {
+            "path": "tests/test_pull_request_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1584de4e7c03e0ae6be01650e532dee03f332529"
+          },
+          {
+            "path": "tests/test_release_tools.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cb4879f1df2119bb6c0d630047a5561fc9ebf0ae"
+          },
+          {
+            "path": "tests/test_release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c92a57a29d42f2c111d686d177222c5359b29b05"
+          },
+          {
+            "path": "tests/test_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da67f8d45eae6db7e4d1cbf84457e98d4e4cb4e8"
+          },
+          {
+            "path": "tests/test_trunk_orchestration_e2e.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "36dfd8d1883852c80fab9e623f1cc78666f48fe8"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "93f296fe783308137d09462bde9188c997563789"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2d892b3eccae52203b782808a843617d80ecb73c"
+          },
+          {
+            "path": "tests/test_workflow_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c1e88743c1ede1d8875cbb8eed04409a0bca7f0b"
+          },
+          {
+            "path": "tests/test_workflow_release_migration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4068c1e75509e16a5b12576f1ff4dacad0ffad45"
+          }
+        ],
+        "reviewed_content_commit": "be4b9f2bb162c602617ebcf0fb393b921a58953a",
+        "legacy_evidence": null,
+        "user_confirmation": "implementation workflow-controller-child-process-reaping",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-29T23:29:11Z"
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-09-29T18:51:44Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-09-29T18:55:40Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 43,
+      "last_transition": "2026-09-29T23:46:49Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-09-29T18:50:00Z",
+        "consumed": {
+          "review_content_id": "dc3c2ed83479e94bb6ffa3866391cf52d036e42752777d89ba69b7277c71ab24",
+          "plan_revision": 7,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+          "plan_revision": 8
+        },
+        "bound": {
+          "review_content_id": "5ac5b416bde36d60fcda76fe7d21eee001acf4f5c7850cb6b58e4283f9a04fae",
+          "bundle_id": "c9f55ad7c450a5719c8cb0c7eba324ecc4d0c9175bf178caa9aa212524718e7a",
+          "plan_revision": 8
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "0cae1a5b60bf1b1b51cfd13098093dd3f311db34c4e7218df4a4d8c6b60b2d3d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d8797bf1deb4e5e2f93177df7c639f4e56cbe46dfe15239bd491a89b5561601c",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-29T23:03:21Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d8797bf1deb4e5e2f93177df7c639f4e56cbe46dfe15239bd491a89b5561601c",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-09-29T23:11:54Z"
+        }
+      }
     }
   }
 }

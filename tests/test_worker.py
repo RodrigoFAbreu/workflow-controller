@@ -39,15 +39,17 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 import unittest.mock
+from collections.abc import Iterable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import anchor, lock, routing, worker, worker_stream  # noqa: E402
+from controller import anchor, lock, observe, routing, worker, worker_stream  # noqa: E402
 from controller.errors import UserOnlyCommandError, WorkerLaunchError  # noqa: E402
-from tests import fake_claude, process_fixtures  # noqa: E402
+from tests import fake_claude, fixtures, process_fixtures, test_observe  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
@@ -1010,11 +1012,13 @@ class GroupDrainTest(_SpawnedWorkerCase):
 _TRAP_COMM = "claude) Z 1 (x y"
 
 
-def _stat_line(pid: int, *, state: str, pgrp: int, start_ticks: int, comm: str = _TRAP_COMM, ppid: int = 1) -> str:
+def _stat_line(pid: int, *, state: str, pgrp: int, start_ticks: int, comm: str = _TRAP_COMM, ppid: int = 1,
+               session: int | None = None) -> str:
     """A ``/proc/<pid>/stat`` line: field 3 state, field 4 ppid, field 5
-    pgrp, field 22 starttime, and a few more fields after it."""
+    pgrp, field 6 session (default: ``pgrp``), field 22 starttime, and a
+    few more fields after it."""
     after = [
-        state, str(ppid), str(pgrp), str(pgrp), "0", "-1", "4194560", "0", "0", "0", "0",
+        state, str(ppid), str(pgrp), str(pgrp if session is None else session), "0", "-1", "4194560", "0", "0", "0", "0",
         "3", "1", "0", "0", "20", "0", "1", "0", str(start_ticks), "1000000", "300",
     ]
     return f"{pid} ({comm}) " + " ".join(after) + "\n"
@@ -1032,14 +1036,19 @@ class _FakeProc:
         os.symlink(str(os.getpid()) if own_namespace else "1", self.root / "self")
 
     def process(self, pid: int, *, state: str, pgrp: int, start_ticks: int = 100,
-                threads: dict[int, str] | None = None, ppid: int = 1) -> "_FakeProc":
+                threads: dict[int, str] | None = None, ppid: int = 1, session: int | None = None) -> "_FakeProc":
         (self.root / str(pid)).mkdir(exist_ok=True)
         (self.root / str(pid) / "stat").write_text(
-            _stat_line(pid, state=state, pgrp=pgrp, start_ticks=start_ticks, ppid=ppid))
+            _stat_line(pid, state=state, pgrp=pgrp, start_ticks=start_ticks, ppid=ppid, session=session))
         for tid, thread_state in (threads or {}).items():
             task = self.root / str(pid) / "task" / str(tid)
             task.mkdir(parents=True, exist_ok=True)
             (task / "stat").write_text(_stat_line(tid, state=thread_state, pgrp=pgrp, start_ticks=start_ticks))
+        return self
+
+    def children(self, pid: int, tid: int, children: Iterable[int]) -> "_FakeProc":
+        """``<pid>/task/<tid>/children``: one thread's direct children."""
+        self.write(f"{pid}/task/{tid}/children", "".join(f"{child} " for child in children))
         return self
 
     def write(self, rel_path: str, text: str) -> None:
@@ -2692,6 +2701,982 @@ class OwnershipTest(_SupervisedCase):
         self.assertTrue(entries, "the outer supervisor never owned the leaked inner anchor")
         self.assertEqual({e["source"] for e in entries}, {"adopted"})
         self.assertLess(self.returned - self.started, 45)
+
+
+
+# ---------------------------------------------------------------------------
+# Reaping every finished child (child-process-reaping CP2).
+# ---------------------------------------------------------------------------
+
+
+def _real_stat(pid: int) -> "worker._ProcStat | None":
+    """The real ``/proc/<pid>/stat``, parsed, or ``None`` when it is gone."""
+    try:
+        return worker._parse_stat(Path(f"/proc/{pid}/stat").read_text())
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def _my_children() -> set[int]:
+    """This process's direct children, from every thread's ``children``
+    file (the real ``/proc``, never the patchable seam)."""
+    children: set[int] = set()
+    for tid in os.listdir("/proc/self/task"):
+        with contextlib.suppress(FileNotFoundError):
+            children.update(int(pid) for pid in Path(f"/proc/self/task/{tid}/children").read_text().split())
+    return children
+
+
+def _zombie_children(baseline: set[int]) -> list[int]:
+    """This process's zombie children outside ``baseline``."""
+    zombies = []
+    for pid in _my_children() - baseline:
+        stat = _real_stat(pid)
+        if stat is not None and stat.state == "Z":
+            zombies.append(pid)
+    return zombies
+
+
+def _reaper_threads() -> list[threading.Thread]:
+    return [t for t in threading.enumerate() if t.name == worker._IDLE_REAPER_NAME and t.is_alive()]
+
+
+class _Sampler:
+    """Counts, every 20 ms, the zombie children of this process outside
+    ``baseline`` (reading only: it starts nothing)."""
+
+    INTERVAL = 0.02
+
+    def __init__(self, baseline: set[int]) -> None:
+        self.baseline = baseline
+        self.samples: list[tuple[float, int]] = []
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            self.samples.append((time.time(), len(_zombie_children(self.baseline))))
+            self._stop.wait(self.INTERVAL)
+
+    def __enter__(self) -> "_Sampler":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+
+class ChildReapingTest(_SupervisedCase):
+    """The regression (reaping plan, Design C): a fake worker orphans 150
+    short-lived ``setsid`` grandchildren, one per 20 ms, while the
+    supervisor is ``RUNNING``, ``WAITING`` or ``DRAINING``; the zombies held
+    under this process stay within a bound derived from the tick each state
+    runs at (0.2 s at most: about 10 per tick, bound 30, at most 5 samples
+    above it), and none is left after ``launch``."""
+
+    BURST = {"count": 150, "spacing": 0.02, "lifetime": 0.01}
+    BOUND = 30
+    ALLOWED_ABOVE = 5
+    MIN_SAMPLES = 75
+
+    def setUp(self) -> None:
+        fixtures.isolate_idle_reaper(self)
+        super().setUp()
+        self.marks = self.dir / "marks.json"
+        self.gate = self.dir / "gate"
+
+    def _open_gate_at(self, state: str):
+        def on_state(published: str, details: dict) -> None:
+            if published == state:
+                self.gate.touch()
+        return on_state
+
+    def _burst(self, turns: list, *, state: str) -> None:
+        baseline = _my_children()
+        with _Sampler(baseline) as sampler:
+            result = self.launch(turns, on_state=self._open_gate_at(state), timeout=120)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        marks = json.loads(self.marks.read_text())
+        started, ended = marks["started_at"], marks["ended_at"]
+        during = [count for at, count in sampler.samples if started <= at <= ended]
+        self.assertGreaterEqual(len(during), self.MIN_SAMPLES, "the sampler did not look during the burst")
+        above = [count for count in during if count > self.BOUND]
+        self.assertLessEqual(len(above), self.ALLOWED_ABOVE,
+                             f"zombies above {self.BOUND} in {len(above)} samples (peak {max(during)})")
+        in_effect = [logged for at, logged, _details in self.log if at <= started][-1:]
+        in_effect += [logged for at, logged, _details in self.log if started < at <= ended]
+        self.assertEqual(set(in_effect), {state}, f"published during the burst: {in_effect}")
+        self.assertEqual(_zombie_children(baseline), [], "a zombie child outlived launch")
+
+    def test_orphans_made_while_running_are_reaped_within_the_bound(self) -> None:
+        self._burst([[{"step": "orphan_burst", **self.BURST, "marks_file": str(self.marks),
+                       "gate": str(self.gate)}]], state=worker.RUNNING)
+
+    def test_orphans_made_while_waiting_are_reaped_within_the_bound(self) -> None:
+        command = " ".join(shlex.quote(part) for part in (
+            sys.executable, str(FAKE_CLAUDE), "--orphan-burst", str(self.BURST["count"]), str(self.BURST["spacing"]),
+            str(self.BURST["lifetime"]), "--marks", str(self.marks), "--gate", str(self.gate)))
+        self._burst([[{"step": "bash_bg", "command": command}], [{"step": "text"}]], state=worker.WAITING)
+
+    def test_orphans_made_while_draining_are_reaped_within_the_bound(self) -> None:
+        self._burst([[{"step": "orphan_burst", **self.BURST, "detach": True, "marks_file": str(self.marks),
+                       "gate": str(self.gate)}]], state=worker.DRAINING)
+
+
+
+class _ReapingSeamCase(unittest.TestCase):
+    """A fixture ``/proc`` for the reaping sweep: this process with two
+    threads whose ``children`` files the test writes, fake children in this
+    process's session or another, and an ``os.waitpid`` spy that records
+    every pid and reaps nothing real: a pid in ``self.reaped`` reads as
+    collected, any other as still running."""
+
+    OTHER_SID = 4_300_000
+    BASE = 4_200_000
+
+    def setUp(self) -> None:
+        fixtures.isolate_idle_reaper(self)
+        self.me, self.sid = os.getpid(), os.getsid(0)
+        self.fake = _FakeProc(self)
+        self.enterContext(self.fake.patch())
+        for name in ("_ADOPTED", "_FOREIGN_BORN", "_LAUNCH_CHILDREN", "_LAUNCH_OWNERS", "_REAP_EXCLUDED"):
+            self.enterContext(unittest.mock.patch.dict(getattr(worker, name), clear=True))
+        self.enterContext(unittest.mock.patch.object(worker, "_last_full_scan", None))
+        self.fake.process(self.me, state="S", pgrp=self.me, ppid=1, session=self.sid)
+        self.threads = {self.me: [], self.me + 1: []}
+        self._write_children()
+        self.waited: list[int] = []
+        self.reaped: set[int] = set()
+
+        def waitpid(pid: int, options: int):
+            self.waited.append(pid)
+            return (pid, 0) if pid in self.reaped else (0, 0)
+
+        self.enterContext(unittest.mock.patch.object(worker.os, "waitpid", waitpid))
+
+    def _write_children(self) -> None:
+        for tid, children in self.threads.items():
+            self.fake.children(self.me, tid, children)
+
+    def child(self, pid: int, *, state: str = "Z", same_session: bool = False, start_ticks: int = 500,
+              tid: int | None = None, ppid: int | None = None) -> int:
+        """A fake child of this process, listed in thread ``tid``'s file."""
+        self.fake.process(pid, state=state, pgrp=pid, start_ticks=start_ticks,
+                          ppid=self.me if ppid is None else ppid,
+                          session=self.sid if same_session else self.OTHER_SID)
+        self.threads[self.me if tid is None else tid].append(pid)
+        self._write_children()
+        return pid
+
+    def descendant(self, parent: int, pid: int, *, same_session: bool = True, start_ticks: int = 700,
+                   ppid: int | None = None, state: str = "S") -> int:
+        """A fake child of ``parent`` (listed in its ``children`` file)."""
+        self.fake.process(pid, state=state, pgrp=pid, start_ticks=start_ticks,
+                          ppid=parent if ppid is None else ppid,
+                          session=self.sid if same_session else self.OTHER_SID)
+        path = self.fake.root / str(parent) / "task" / str(parent) / "children"
+        listed = path.read_text().split() if path.exists() else []
+        self.fake.children(parent, parent, [*map(int, listed), pid])
+        return pid
+
+    def gone(self, pid: int) -> None:
+        shutil.rmtree(self.fake.root / str(pid), ignore_errors=True)
+        for children in self.threads.values():
+            if pid in children:
+                children.remove(pid)
+        self._write_children()
+
+    def sweep(self, exclude=None, baseline=(), **kwargs) -> None:
+        worker._collect_children(dict(exclude or {}), set(baseline), **kwargs)
+
+
+class ReapingSweepTest(_ReapingSeamCase):
+    """The sweep (Design B.2): which children it records and reaps."""
+
+    def test_children_of_every_thread_are_recorded_and_a_zombie_is_reaped(self) -> None:
+        first = self.child(self.BASE + 1, tid=self.me)
+        second = self.child(self.BASE + 2, tid=self.me + 1, state="S")
+        self.reaped.add(first)
+        self.sweep()
+        self.assertEqual(worker._ADOPTED, {second: 500})
+        self.assertEqual(self.waited, [first, second])
+        self.assertTrue(all(pid > 0 for pid in self.waited))
+
+    def test_the_worker_anchor_baseline_and_every_exclusion_are_never_recorded(self) -> None:
+        worker_pid, anchor_pid, old, own, other_launch, excluded = (self.child(self.BASE + i) for i in range(1, 7))
+        self.child(own, same_session=True)
+        worker._LAUNCH_CHILDREN[other_launch] = 500
+        with worker.exclude_from_reaping(lambda: types.SimpleNamespace(pid=excluded)):
+            self.sweep({worker_pid: 500, anchor_pid: None}, baseline={old})
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+    def test_a_final_sweep_leaves_the_exclusions_of_a_launch_that_reused_its_pids(self) -> None:
+        """Launch A's worker and anchor have been waited for, and launch B's
+        worker (start ticks not yet captured) and anchor reuse their pids
+        before A's final sweep: B's exclusions survive it, so a later sweep
+        whose baseline predates B records neither, and leave with B's own
+        final sweep."""
+        reused_anchor, reused_worker = self.BASE + 1, self.BASE + 2
+        launch_a, launch_b = worker._LaunchExclusions(), worker._LaunchExclusions()
+        launch_a.baseline = launch_b.baseline = set()
+        launch_a.add(reused_worker)
+        launch_a.add(reused_worker, 400)
+        launch_a.add(reused_anchor)
+        launch_b.add(self.child(reused_anchor))  # B's worker, exited, its status still Popen's
+        launch_b.add(self.child(reused_worker, state="S"))  # B's anchor
+        launch_a.final_sweep()
+        self.assertEqual(worker._LAUNCH_CHILDREN, {reused_anchor: None, reused_worker: None})
+        launch_b.add(reused_anchor, 500)
+        self.sweep()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+        launch_b.final_sweep()
+        self.assertEqual((worker._LAUNCH_CHILDREN, worker._LAUNCH_OWNERS), ({}, {}))
+
+    def test_the_worker_pid_with_unknown_start_ticks_is_never_recorded(self) -> None:
+        pid = self.child(self.BASE + 1)
+        self.sweep({pid: None})
+        self.assertEqual(worker._ADOPTED, {})
+        self.sweep({pid: 499})  # a known, different start: the pid was reused
+        self.assertIn(pid, self.waited)
+
+    def test_an_unreadable_stat_is_skipped_until_it_can_be_read(self) -> None:
+        _skip_if_root(self)
+        pid = self.child(self.BASE + 1, state="S")
+        self.fake.lock_out(f"{pid}/stat")
+        self.sweep()
+        self.assertEqual(worker._ADOPTED, {})
+        os.chmod(self.fake.root / str(pid) / "stat", 0o600)
+        self.sweep()
+        self.assertEqual(worker._ADOPTED, {pid: 500})
+
+    def test_exclude_from_reaping_nests_and_removes_its_entry(self) -> None:
+        pid = self.child(self.BASE + 1)
+        spawn = lambda: types.SimpleNamespace(pid=pid)  # noqa: E731
+        with worker.exclude_from_reaping(spawn):
+            with worker.exclude_from_reaping(spawn):
+                self.assertEqual(worker._REAP_EXCLUDED, {pid: 2})
+            self.assertEqual(worker._REAP_EXCLUDED, {pid: 1})
+            self.sweep()
+            self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(worker._REAP_EXCLUDED, {})
+        self.sweep()
+        self.assertEqual(self.waited, [pid])
+
+    def test_without_children_files_the_full_scan_is_used_and_rate_limited(self) -> None:
+        pid = self.child(self.BASE + 1, state="S")
+        listings: list[int] = []
+        real_list = worker._list_proc
+
+        def list_proc(root):
+            listings.append(1)
+            return real_list(root)
+
+        self.enterContext(unittest.mock.patch.object(worker, "_list_proc", list_proc))
+        shutil.rmtree(self.fake.root / str(self.me) / "task")
+        self.assertIsNone(worker._direct_children())
+        self.sweep()
+        self.assertEqual(worker._ADOPTED, {pid: 500})
+        self.sweep()
+        self.sweep()
+        self.assertEqual(len(listings), 1, "the full scan ran more than once per interval")
+        self.sweep(force_full=True)
+        self.assertEqual(len(listings), 2)
+        worker._last_full_scan -= worker._OWNERSHIP_SCAN_SECONDS
+        self.sweep()
+        self.assertEqual(len(listings), 3)
+
+
+class ReapingPredicateTest(_ReapingSeamCase):
+    """One predicate, applied by every ``_ADOPTED`` writer and by the
+    reaper before each ``waitpid`` (LPR3-01)."""
+
+    def _excluded_zombies(self) -> tuple[int, int, int]:
+        own = self.child(self.BASE + 1, same_session=True)
+        other_launch = self.child(self.BASE + 2)
+        excluded = self.child(self.BASE + 3)
+        worker._LAUNCH_CHILDREN[other_launch] = 500
+        worker._REAP_EXCLUDED[excluded] = 1
+        return own, other_launch, excluded
+
+    def test_the_ownership_scan_records_none_of_them(self) -> None:
+        pids = self._excluded_zombies()
+        for pid in pids:
+            self.fake.process(pid, state="S", pgrp=pid, start_ticks=500, ppid=self.me,
+                              session=self.sid if pid == pids[0] else self.OTHER_SID)
+        process = worker.WorkerProcess(pid=self.BASE + 99, pgid=self.BASE + 99, start_ticks=1, boot_id=None,
+                                       pid_namespace=None, hostname=None, machine_id=None)
+        ownership = worker._Ownership(tag="cp2-no-tag", worker_process=process, anchor_pid=None, baseline=set(),
+                                      adopting=True)
+        ownership.scan()
+        self.assertEqual({e["source"] for e in ownership.entries()}, {"adopted"})  # still owned (I3)
+        self.assertEqual(worker._ADOPTED, {})
+        worker._reap_adopted()
+        self.assertEqual(self.waited, [])
+
+    def test_the_killed_children_reaper_records_none_of_them(self) -> None:
+        self._excluded_zombies()
+        worker._reap_killed_children(set(), pgid=self.BASE + 99)
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+    def test_a_planted_record_that_is_excluded_is_dropped_without_a_waitpid(self) -> None:
+        for pid in self._excluded_zombies():
+            worker._ADOPTED[pid] = 500
+        worker._reap_adopted()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+    def test_a_record_made_before_its_registration_is_dropped_once_registered(self) -> None:
+        pid = self.child(self.BASE + 1)
+        worker._ADOPTED[pid] = 500
+        with worker.exclude_from_reaping(lambda: types.SimpleNamespace(pid=pid)):
+            worker._reap_adopted()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+    def test_a_record_whose_pid_now_names_another_process_is_dropped(self) -> None:
+        pid = self.child(self.BASE + 1, start_ticks=501)
+        worker._ADOPTED[pid] = 500
+        gone = self.BASE + 2
+        worker._ADOPTED[gone] = 500
+        worker._reap_adopted()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+
+class ForeignBornTest(_ReapingSeamCase):
+    """Same-session orphans (Design B.2): collected only once seen born to
+    another child."""
+
+    def test_a_same_session_child_never_seen_as_a_descendant_is_left_alone(self) -> None:
+        pid = self.child(self.BASE + 1, same_session=True)
+        self.sweep()
+        worker._ADOPTED[pid] = 500
+        worker._reap_adopted()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+    def test_one_seen_as_a_descendant_is_recorded_and_reaped_once_reparented(self) -> None:
+        parent = self.child(self.BASE + 1, same_session=True, state="S")
+        grandchild = self.descendant(parent, self.BASE + 2)
+        self.sweep()
+        self.assertEqual(worker._FOREIGN_BORN, {grandchild: 700})
+        self.assertEqual(worker._ADOPTED, {})
+        # The parent exits (its own waiter collects it); the grandchild is
+        # re-parented to this process and finishes.
+        self.gone(parent)
+        self.child(grandchild, same_session=True, start_ticks=700)
+        self.reaped.add(grandchild)
+        self.sweep()
+        self.assertEqual(self.waited, [grandchild])
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(worker._FOREIGN_BORN, {})
+
+    def test_a_reused_pid_does_not_inherit_the_entry(self) -> None:
+        parent = self.child(self.BASE + 1, same_session=True, state="S")
+        grandchild = self.descendant(parent, self.BASE + 2)
+        self.sweep()
+        self.gone(parent)
+        self.child(grandchild, same_session=True, start_ticks=701)  # another process, same pid
+        self.sweep()
+        self.assertEqual(worker._FOREIGN_BORN, {})
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertEqual(self.waited, [])
+
+    def test_the_walk_does_not_descend_into_a_setsid_descendant(self) -> None:
+        parent = self.child(self.BASE + 1, same_session=True, state="S")
+        escaped = self.descendant(parent, self.BASE + 2, same_session=False)
+        below = self.descendant(escaped, self.BASE + 3, same_session=True)
+        self.sweep()
+        self.assertEqual(worker._FOREIGN_BORN, {})
+        self.assertNotIn(below, worker._FOREIGN_BORN)
+
+    def test_a_listed_pid_reused_by_a_child_of_this_process_is_not_admitted(self) -> None:
+        parent = self.child(self.BASE + 1, same_session=True, state="S")
+        reused = self.descendant(parent, self.BASE + 2, ppid=self.me, state="Z")
+        self.sweep()
+        self.assertEqual(worker._FOREIGN_BORN, {})
+        worker._ADOPTED[reused] = 700
+        worker._reap_adopted()
+        self.assertEqual(self.waited, [])
+        self.descendant(parent, reused)  # the same pid, now with the walked parent as ppid
+        self.sweep()
+        self.assertEqual(worker._FOREIGN_BORN, {reused: 700})
+
+    def test_the_pruning_pass_drops_gone_and_reused_entries_and_keeps_unreadable_ones(self) -> None:
+        worker._FOREIGN_BORN.update({self.BASE + 1: 700, self.BASE + 2: 700, self.BASE + 3: 700})
+        self.fake.process(self.BASE + 2, state="S", pgrp=1, start_ticks=701, session=self.sid)
+        self.fake.process(self.BASE + 3, state="S", pgrp=1, start_ticks=700, session=self.sid)
+        self.child(self.BASE + 9, same_session=True, state="S")  # any child: the sweep walks
+        if os.geteuid() != 0:
+            self.fake.lock_out(f"{self.BASE + 3}/stat")
+        self.sweep()
+        self.assertEqual(worker._FOREIGN_BORN, {self.BASE + 3: 700})
+
+
+
+class IdleReaperTest(_ReapingSeamCase):
+    """The between-launch reaper (Design B.5, I8)."""
+
+    def _final_sweep(self) -> None:
+        exclusions = worker._LaunchExclusions()
+        exclusions.baseline = set()
+        exclusions.final_sweep()
+
+    def _wait_no_reaper(self) -> None:
+        self.assertTrue(process_fixtures.wait_until(lambda: not _reaper_threads(), timeout=5),
+                        "the between-launch reaper did not end")
+
+    def test_it_starts_only_while_something_is_recorded_and_ends_once_nothing_is(self) -> None:
+        self._final_sweep()
+        self.assertEqual(_reaper_threads(), [])
+        pid = self.child(self.BASE + 1, state="S")
+        self._final_sweep()
+        self.assertEqual(worker._ADOPTED, {pid: 500})
+        [reaper] = _reaper_threads()
+        worker._ensure_idle_reaper()
+        self._final_sweep()
+        self.assertEqual(_reaper_threads(), [reaper], "a second reaper started")
+        self.reaped.add(pid)
+        self._wait_no_reaper()
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertIsNone(worker._idle_reaper)
+        self.assertTrue(self.waited and all(p == pid for p in self.waited))
+
+    def _blocking_reap(self) -> tuple[threading.Event, threading.Event]:
+        """Wrap ``_reap_adopted`` so the reaper thread, once it has emptied
+        ``_ADOPTED``, signals and blocks inside that iteration (still
+        holding ``_SPAWN_LOCK``) until released."""
+        in_exit, release = threading.Event(), threading.Event()
+        real = worker._reap_adopted
+
+        def reap() -> None:
+            real()
+            if threading.current_thread().name == worker._IDLE_REAPER_NAME and not worker._ADOPTED \
+                    and not in_exit.is_set():
+                in_exit.set()
+                release.wait(10)
+
+        self.enterContext(unittest.mock.patch.object(worker, "_reap_adopted", reap))
+        self.addCleanup(release.set)
+        return in_exit, release
+
+    def test_a_sweep_during_the_reapers_exit_iteration_starts_a_new_reaper(self) -> None:
+        in_exit, release = self._blocking_reap()
+        first = self.child(self.BASE + 1)
+        self.reaped.add(first)
+        worker._ADOPTED[first] = 500
+        worker._ensure_idle_reaper()
+        [old] = _reaper_threads()
+        self.assertTrue(in_exit.wait(10))
+        second = self.child(self.BASE + 2, state="S")
+        sweeper = threading.Thread(target=self._final_sweep, daemon=True)
+        sweeper.start()
+        sweeper.join(0.2)
+        self.assertTrue(sweeper.is_alive(), "the sweep did not wait for the reaper's exit iteration")
+        release.set()
+        sweeper.join(10)
+        old.join(10)
+        self.assertFalse(old.is_alive())
+        self.assertEqual(worker._ADOPTED, {second: 500})
+        self.assertTrue(_reaper_threads(), "a recorded child is waiting with no reaper")
+        self.reaped.add(second)
+        self._wait_no_reaper()
+
+    def test_a_sweep_before_the_exit_iteration_keeps_the_running_reaper(self) -> None:
+        first = self.child(self.BASE + 1, state="S")
+        worker._ADOPTED[first] = 500
+        worker._ensure_idle_reaper()
+        [reaper] = _reaper_threads()
+        second = self.child(self.BASE + 2, state="S")
+        self._final_sweep()
+        self.assertEqual(worker._ADOPTED, {first: 500, second: 500})
+        self.reaped.add(first)
+        self.assertTrue(process_fixtures.wait_until(lambda: first not in worker._ADOPTED, timeout=5))
+        self.assertEqual(_reaper_threads(), [reaper])
+        self.reaped.add(second)
+        self._wait_no_reaper()
+
+
+class ReapingResetTest(unittest.TestCase):
+    """``_reset_reaping_for_tests`` (through ``fixtures.isolate_idle_reaper``'s
+    settle step) never strands a live recorded child and never touches one
+    it may not reap (external plan review round 2, LPR7-02). Real
+    children, the real ``/proc``."""
+
+    def setUp(self) -> None:
+        fixtures.isolate_idle_reaper(self)
+        self.waits: list[tuple[int, int]] = []
+        self.kills: list[int] = []
+        real_waitpid, real_kill = os.waitpid, os.kill
+
+        def waitpid(pid: int, options: int):
+            self.waits.append((pid, options))
+            return real_waitpid(pid, options)
+
+        def kill(pid: int, sig: int) -> None:
+            self.kills.append(pid)
+            real_kill(pid, sig)
+
+        self.enterContext(unittest.mock.patch.object(worker.os, "waitpid", waitpid))
+        self.enterContext(unittest.mock.patch.object(worker.os, "kill", kill))
+
+    def _sleeper(self, *, new_session: bool) -> subprocess.Popen:
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"],
+                                start_new_session=new_session)
+
+        def cleanup() -> None:
+            if proc.returncode is None and _real_stat(proc.pid) is not None:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(proc.pid, signal.SIGKILL)
+                proc.wait()
+            proc.returncode = proc.returncode if proc.returncode is not None else -9
+        self.addCleanup(cleanup)
+        return proc
+
+    def test_a_live_recorded_child_is_killed_and_collected_and_a_planted_pid_untouched(self) -> None:
+        child = self._sleeper(new_session=True)
+        planted = 4_199_999
+        self.assertIsNone(_real_stat(planted))
+        with worker._SPAWN_LOCK:
+            worker._ADOPTED[child.pid] = _real_stat(child.pid).start_ticks
+            worker._ADOPTED[planted] = 1
+            worker._ADOPTED[1] = 1  # a real process, not a child of this one
+            worker._ensure_idle_reaper()
+        self.assertTrue(_reaper_threads())
+        collected = worker._reset_reaping_for_tests(5.0)
+        self.assertEqual(_reaper_threads(), [])
+        self.assertEqual(collected, [child.pid])
+        self.assertEqual([w for w in self.waits if w == (child.pid, 0)], [(child.pid, 0)])
+        self.assertIsNone(_real_stat(child.pid), "the child is still there (a zombie?)")
+        child.returncode = -9
+        self.assertNotIn(planted, [pid for pid, _options in self.waits])
+        self.assertNotIn(1, [pid for pid, _options in self.waits])
+        self.assertEqual(self.kills, [child.pid])
+        self.assertEqual((worker._ADOPTED, worker._FOREIGN_BORN), ({}, {}))
+
+    def test_a_record_with_other_start_ticks_is_dropped_untouched(self) -> None:
+        child = self._sleeper(new_session=True)
+        worker._ADOPTED[child.pid] = _real_stat(child.pid).start_ticks + 1
+        self.assertEqual(worker._reset_reaping_for_tests(5.0), [])
+        self.assertEqual((self.waits, self.kills), ([], []))
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertIsNone(child.poll())
+
+    def test_a_planted_same_session_child_is_dropped_untouched(self) -> None:
+        child = self._sleeper(new_session=False)
+        worker._ADOPTED[child.pid] = _real_stat(child.pid).start_ticks
+        self.assertEqual(worker._reset_reaping_for_tests(5.0), [])
+        self.assertEqual((self.waits, self.kills), ([], []))
+        self.assertEqual(worker._ADOPTED, {})
+        self.assertIsNone(child.poll(), "the waited-for child was ended")
+
+
+
+def _admitted_spy(case: unittest.TestCase) -> list[int]:
+    """Wrap ``_record_adopted``; returns the list of pids it admitted."""
+    admitted: list[int] = []
+    real = worker._record_adopted
+
+    def record(pid: int, stat) -> None:
+        with worker._SPAWN_LOCK:
+            real(pid, stat)
+            if pid in worker._ADOPTED:
+                admitted.append(pid)
+
+    case.enterContext(unittest.mock.patch.object(worker, "_record_adopted", record))
+    return admitted
+
+
+def _await_file(path: Path, timeout: float = 10.0) -> bool:
+    return process_fixtures.wait_until(path.exists, timeout=timeout, interval=0.01)
+
+
+class ReapingLaunchTest(_SupervisedCase):
+    """The reaping around real launches (Design C): children the process
+    waits for keep their exit statuses (I6), spawns have no window before
+    their registration (LPR3-02), adopted same-session grandchildren and
+    between-launch orphans are collected (I2, I5, I8), the final sweep runs
+    after the subreaper is given up, and publications are unchanged (I3)."""
+
+    def setUp(self) -> None:
+        fixtures.isolate_idle_reaper(self)
+        super().setUp()
+
+    # -- children the process waits for (I6) --------------------------------
+
+    def test_a_child_a_callback_starts_and_another_thread_waits_for_keeps_its_status(self) -> None:
+        admitted = _admitted_spy(self)
+        sweeps: list[float] = []
+        real_collect = worker._collect_children
+
+        def collect(*args, **kwargs) -> None:
+            sweeps.append(time.monotonic())
+            real_collect(*args, **kwargs)
+
+        self.patch(worker, "_collect_children", collect)
+        waited: dict = {}
+
+        def wait_for(child: subprocess.Popen) -> None:
+            waited["returncode"] = child.wait()
+            waited["exited"] = time.monotonic()
+
+        def on_state(state: str, details: dict) -> None:
+            if state == worker.WAITING and "child" not in waited:
+                child = subprocess.Popen([sys.executable, "-c", "import time, sys; time.sleep(5); sys.exit(45)"])
+                waited.update(child=child, started=time.monotonic())
+                threading.Thread(target=wait_for, args=(child,), daemon=True).start()
+
+        result = self.launch([[{"step": "bash_bg", "seconds": 7}], [{"step": "text"}]], on_state=on_state)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        self.assertTrue(process_fixtures.wait_until(lambda: "returncode" in waited, timeout=10))
+        self.assertEqual(waited["returncode"], 45)
+        self.assertGreaterEqual(len([at for at in sweeps if waited["started"] <= at <= waited["exited"]]), 20)
+        self.assertNotIn(waited["child"].pid, admitted)
+
+    def test_a_new_session_child_under_exclude_from_reaping_keeps_its_status(self) -> None:
+        waited: dict = {}
+
+        def run_excluded() -> None:
+            spawn = lambda: subprocess.Popen(  # noqa: E731
+                [sys.executable, "-c", "import time, sys; time.sleep(1.5); sys.exit(45)"], start_new_session=True)
+            with worker.exclude_from_reaping(spawn) as child:
+                waited["pid"] = child.pid
+                waited["returncode"] = child.wait()
+
+        def on_state(state: str, details: dict) -> None:
+            if state == worker.WAITING and "thread" not in waited:
+                waited["thread"] = threading.Thread(target=run_excluded, daemon=True)
+                waited["thread"].start()
+
+        admitted = _admitted_spy(self)
+        result = self.launch([[{"step": "bash_bg", "seconds": 3}], [{"step": "text"}]], on_state=on_state)
+        self.assertEqual(result.outcome, worker.SUCCESS)
+        waited["thread"].join(10)
+        self.assertEqual(waited["returncode"], 45)
+        self.assertNotIn(waited["pid"], admitted)
+
+    def test_the_same_new_session_child_without_the_exclusion_is_recorded(self) -> None:
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"], start_new_session=True)
+        self.extra_pids.append(child.pid)
+        self.addCleanup(setattr, child, "returncode", -9)
+        worker._collect_children({}, set(), force_full=True)
+        self.assertEqual(worker._ADOPTED.get(child.pid), _real_stat(child.pid).start_ticks)
+
+    def test_overlapping_launches_never_record_each_others_worker_or_anchor(self) -> None:
+        admitted = _admitted_spy(self)
+        spawned: dict[str, dict] = {}
+        results: dict[str, object] = {}
+        events = {name: threading.Event() for name in ("a", "b")}
+
+        def run(name: str, turns: list) -> None:
+            def on_spawn(worker_process, *, anchor=None, ownership_tag=None) -> None:
+                spawned[name] = {"worker": worker_process, "anchor": anchor, "tag": ownership_tag}
+                self.spawns.append(spawned[name])
+                events[name].set()
+            results[name] = worker.launch("do the bounded thing", cwd=self.dir, permission_mode="acceptEdits",
+                                          timeout=60, claude_bin=str(FAKE_CLAUDE), on_spawn=on_spawn,
+                                          **_stream_paths(self.dir))
+
+        threads = {}
+        with _environment({"FAKE_CLAUDE_EXIT": "3",
+                           "FAKE_CLAUDE_TURNS": json.dumps([[{"step": "bash_bg", "seconds": 2}], [{"step": "text"}]])}):
+            threads["a"] = threading.Thread(target=run, args=("a", None), daemon=True)
+            threads["a"].start()
+            self.assertTrue(events["a"].wait(20))
+            os.environ["FAKE_CLAUDE_EXIT"] = "5"
+            os.environ["FAKE_CLAUDE_TURNS"] = json.dumps([[{"step": "bash_bg", "seconds": 0.5}], [{"step": "text"}]])
+            threads["b"] = threading.Thread(target=run, args=("b", None), daemon=True)
+            threads["b"].start()
+            self.assertTrue(events["b"].wait(20))
+            for thread in threads.values():
+                thread.join(60)
+        self.assertEqual({name: result.returncode for name, result in results.items()}, {"a": 3, "b": 5})
+        launch_children = {spawn[key].pid for spawn in spawned.values() for key in ("worker", "anchor")}
+        self.assertFalse(launch_children & set(admitted), "a launch recorded another launch's worker or anchor")
+
+    # -- no spawn-to-registration window (LPR3-02) ---------------------------
+
+    def _blocked_sweeper(self) -> threading.Thread:
+        def sweep() -> None:
+            worker._collect_children({}, set(), force_full=True)
+            worker._reap_adopted()
+        thread = threading.Thread(target=sweep, daemon=True)
+        thread.start()
+        thread.join(0.2)
+        return thread
+
+    def test_a_sweep_waits_for_an_excluded_spawn_to_be_registered(self) -> None:
+        admitted = _admitted_spy(self)
+        seen: dict = {}
+
+        def spawn() -> subprocess.Popen:
+            child = subprocess.Popen([sys.executable, "-c", "import time, sys; time.sleep(0.5); sys.exit(45)"],
+                                     start_new_session=True)
+            self.assertTrue(process_fixtures.wait_until(lambda: child.pid in _my_children()))
+            seen["sweeper"] = self._blocked_sweeper()
+            seen["blocked"] = seen["sweeper"].is_alive()
+            return child
+
+        with worker.exclude_from_reaping(spawn) as child:
+            seen["sweeper"].join(10)
+            self.assertEqual(child.wait(), 45)
+        self.assertTrue(seen["blocked"], "the sweep ran between the spawn and its registration")
+        self.assertNotIn(child.pid, admitted)
+
+    def test_a_sweep_waits_for_the_workers_and_the_anchors_registration(self) -> None:
+        admitted = _admitted_spy(self)
+        blocked: dict[str, bool] = {}
+        sweepers: list[threading.Thread] = []
+        real_popen, real_spawn_anchor = subprocess.Popen, worker._spawn_anchor
+
+        def popen(args, *a, **kw):
+            proc = real_popen(args, *a, **kw)
+            if args and args[0] == str(FAKE_CLAUDE) and "worker" not in blocked:
+                sweepers.append(self._blocked_sweeper())
+                blocked["worker"] = sweepers[-1].is_alive()
+            return proc
+
+        def spawn_anchor(*a, **kw):
+            anchor_proc = real_spawn_anchor(*a, **kw)
+            sweepers.append(self._blocked_sweeper())
+            blocked["anchor"] = sweepers[-1].is_alive()
+            return anchor_proc
+
+        self.patch(subprocess, "Popen", popen)
+        self.patch(worker, "_spawn_anchor", spawn_anchor)
+        result = self.launch([[{"step": "text"}]], env={"FAKE_CLAUDE_EXIT": "3"})
+        for sweeper in sweepers:
+            sweeper.join(10)
+        self.assertEqual(blocked, {"worker": True, "anchor": True})
+        self.assertEqual(result.returncode, 3)
+        self.assertFalse({self.spawn["worker"].pid, self.spawn["anchor"].pid} & set(admitted))
+
+    # -- adopted children -----------------------------------------------------
+
+    def test_an_adopted_same_session_grandchild_is_reaped_and_its_parent_keeps_its_status(self) -> None:
+        launch_release, parent_release, grandchild_release = (self.dir / name for name in (
+            "launch-release", "parent-release", "grandchild-release"))
+        command = f"while [ ! -e {shlex.quote(str(launch_release))} ]; do sleep 0.05; done"
+        self.addCleanup(launch_release.touch)
+        results: dict = {}
+        waiting = threading.Event()
+
+        def run_launch() -> None:
+            results["result"] = self.launch([[{"step": "bash_bg", "command": command}], [{"step": "text"}]],
+                                            on_state=lambda state, _d: waiting.set() if state == worker.WAITING
+                                            else None)
+            results["returned"] = time.monotonic()
+
+        launcher = threading.Thread(target=run_launch, daemon=True)
+        launcher.start()
+        self.assertTrue(waiting.wait(20))
+        poll = "import os, sys, time\nwhile not os.path.exists(sys.argv[1]): time.sleep(0.01)\n"
+        script = (
+            "import subprocess, sys, os, time\n"
+            f"g = subprocess.Popen([sys.executable, '-c', {poll!r}, {str(grandchild_release)!r}])\n"
+            "print(g.pid, flush=True)\n"
+            f"while not os.path.exists({str(parent_release)!r}): time.sleep(0.01)\n"
+            "sys.exit(45)\n"
+        )
+        parent = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True)
+        self.addCleanup(grandchild_release.touch)
+        self.addCleanup(parent_release.touch)
+        grandchild = int(parent.stdout.readline())
+        self.extra_pids.append(grandchild)
+        ticks = _real_stat(grandchild).start_ticks
+        order: list[str] = []
+        self.assertTrue(process_fixtures.wait_until(lambda: worker._FOREIGN_BORN.get(grandchild) == ticks,
+                                                    timeout=10), "no sweep saw the grandchild as a descendant")
+        order.append("foreign-born")
+        parent_release.touch()
+        self.assertEqual(parent.wait(10), 45)
+        parent.stdout.close()
+        self.assertTrue(process_fixtures.wait_until(lambda: worker._ADOPTED.get(grandchild) == ticks, timeout=10),
+                        "the re-parented grandchild was never recorded")
+        order.append("adopted")
+        stat = _real_stat(grandchild)
+        self.assertEqual((stat.state != "Z", stat.ppid), (True, os.getpid()))
+        grandchild_release.touch()
+        self.assertTrue(process_fixtures.wait_until(lambda: _real_stat(grandchild) is None, timeout=10))
+        collected = time.monotonic()
+        launch_release.touch()
+        launcher.join(30)
+        self.assertEqual(order, ["foreign-born", "adopted"])
+        self.assertLess(collected, results["returned"])
+        self.assertEqual(results["result"].outcome, worker.SUCCESS)
+
+    def test_a_recorded_orphan_alive_at_the_end_of_a_launch_is_collected_between_launches(self) -> None:
+        pid_file = self.dir / "orphan.pid"
+        first = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon", "argv0": "gpg-agent",
+                               "orphan_seconds": 2, "orphan_pid_file": str(pid_file)}], [{"step": "text"}]])
+        self.assertEqual(first.outcome, worker.SUCCESS)
+        orphan = int(pid_file.read_text())
+        self.extra_pids.append(orphan)
+        self.assertIn(orphan, worker._ADOPTED, "the orphan left alive was not recorded")
+        self.assertIsNotNone(_real_stat(orphan))
+        baselines: list[set[int]] = []
+        real_own_children = worker._own_children
+
+        def own_children() -> set[int]:
+            baseline = real_own_children()
+            baselines.append(baseline)
+            if orphan in baseline:
+                self.assertIn(orphan, worker._ADOPTED, "the orphan is in the next baseline unrecorded")
+            return baseline
+
+        self.patch(worker, "_own_children", own_children)
+        second = self.launch([[{"step": "bash_bg", "seconds": 3}], [{"step": "text"}]])
+        self.assertEqual(second.outcome, worker.SUCCESS)
+        self.assertIsNone(_real_stat(orphan), "the orphan is still there (a zombie?)")
+        self.assertNotIn(orphan, worker._ADOPTED)
+
+    # -- the final sweep (I5) -------------------------------------------------
+
+    def _final_sweep_order(self) -> list:
+        """Patch the subreaper and the children seams: a zombie child
+        appears only once the subreaper has been reset. Returns the event
+        list: the two ``_set_child_subreaper`` calls and the record."""
+        events: list = []
+        planted = 4_199_998
+        real_set, real_children, real_read = (worker._set_child_subreaper, worker._direct_children,
+                                              worker._read_stat)
+        real_record = worker._record_adopted
+
+        def set_subreaper(value: int) -> bool:
+            events.append(("set", value))
+            return real_set(value)
+
+        def direct_children(pid=None):
+            children = real_children(pid)
+            if pid is None and children is not None and len([e for e in events if e[0] == "set"]) >= 2:
+                children = children | {planted}
+            return children
+
+        def read_stat(path):
+            if str(path) == f"/proc/{planted}/stat":
+                return worker._ProcStat(state="Z", pgrp=planted, start_ticks=1, session=planted, ppid=os.getpid())
+            return real_read(path)
+
+        def record(pid: int, stat) -> None:
+            if pid == planted:
+                events.append("record")
+            real_record(pid, stat)
+
+        self.patch(worker, "_set_child_subreaper", set_subreaper)
+        self.patch(worker, "_direct_children", direct_children)
+        self.patch(worker, "_read_stat", read_stat)
+        self.patch(worker, "_record_adopted", record)
+        return events
+
+    def _assert_swept_after_the_reset(self, events: list) -> None:
+        self.assertEqual(events[:2], [("set", 1), ("set", 0)], events)
+        self.assertIn("record", events[2:], "the final sweep did not see the child re-parented before the reset")
+
+    def test_the_final_sweep_runs_after_the_subreaper_is_given_up(self) -> None:
+        events = self._final_sweep_order()
+        self.assertEqual(self.launch([[{"step": "text"}]]).outcome, worker.SUCCESS)
+        self._assert_swept_after_the_reset(events)
+
+    def test_the_final_sweep_runs_after_a_drain_detach(self) -> None:
+        self.patch(worker, "DRAIN_DETACH_SECONDS", 1)
+        pid_file = self.dir / "orphan.pid"
+        events = self._final_sweep_order()
+        result = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon",
+                                "orphan_pid_file": str(pid_file)}], [{"step": "text"}]])
+        self.extra_pids.append(int(pid_file.read_text()))
+        self.assertIsInstance(result, worker.DrainDetached)
+        self._assert_swept_after_the_reset(events)
+
+    def test_the_final_sweep_runs_after_an_exception(self) -> None:
+        events = self._final_sweep_order()
+
+        def on_state(state: str, details: dict) -> None:
+            raise RuntimeError("the flush failed (test)")
+
+        with self.assertRaises(RuntimeError):
+            self.launch([[{"step": "text"}]], on_state=on_state)
+        self._assert_swept_after_the_reset(events)
+
+    def test_a_failed_capture_leaves_the_worker_excluded_from_the_final_sweep(self) -> None:
+        admitted = _admitted_spy(self)
+        captured: list[int] = []
+
+        def capture(pid: int):
+            captured.append(pid)
+            os.killpg(pid, signal.SIGKILL)
+            self.assertTrue(process_fixtures.wait_until(lambda: _real_stat(pid).state == "Z", timeout=10))
+            raise RuntimeError("capture failed (test)")
+
+        around_sweep: list[str | None] = []
+        real_final_sweep = worker._LaunchExclusions.final_sweep
+
+        def final_sweep(exclusions) -> None:
+            # The launch's own Popen still holds the worker's status here;
+            # it is released (and collects it) only once the error unwinds.
+            around_sweep.append(getattr(_real_stat(captured[0]), "state", None))
+            real_final_sweep(exclusions)
+            around_sweep.append(getattr(_real_stat(captured[0]), "state", None))
+
+        self.patch(worker, "capture_worker_process", capture)
+        self.patch(worker._LaunchExclusions, "final_sweep", final_sweep)
+        with self.assertRaises(RuntimeError):
+            self.launch([[{"step": "text"}]])
+        [pid] = captured
+        self.assertNotIn(pid, admitted)
+        self.assertEqual(around_sweep, ["Z", "Z"], "the final sweep reaped the worker")
+
+    # -- publications are unchanged (I3) --------------------------------------
+
+    def test_the_published_sequence_is_the_same_with_and_without_the_sweep(self) -> None:
+        turns = [[{"step": "bash_bg", "seconds": 0.5}], [{"step": "text"}]]
+
+        def published() -> list:
+            return [(state, sorted(e["source"] for e in details["owned_processes"]), details["scan"])
+                    for _at, state, details in self.log]
+
+        self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
+        with_sweep = published()
+        self.log.clear()
+        with unittest.mock.patch.object(worker._LaunchExclusions, "collect", lambda self, **kw: None):
+            self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
+        self.assertEqual(published(), with_sweep)
+
+
+class FollowerStartsNoProcessTest(test_observe._FollowCase):
+    """I6: ``--follow``'s renderer (``observe.follow_run``, the one
+    Controller thread besides the supervising one) starts no process."""
+
+    def test_follow_run_renders_a_run_without_starting_a_process(self) -> None:
+        self.write_run("r1", state="ended", exit_code=10, job_ids=["j1"])
+        self.run_event("r1", 1, "run_started")
+        self.run_event("r1", 2, "job_started", job_id="j1")
+        self.write_job("j1", status="FINISHED")
+        self.job_event("j1", 1, "planned", command="/milestone-plan wi")
+        self.worker_line("j1", test_observe._assistant({"type": "text", "text": "hello"}))
+        self.run_event("r1", 3, "job_ended", job_id="j1", status="FINISHED")
+        self.run_event("r1", 4, "run_ended", exit_code=10)
+        spawned: list[str] = []
+
+        def forbidden(name: str):
+            def call(*args, **kwargs):
+                spawned.append(name)
+                raise AssertionError(f"{name} called by the follower")
+            return call
+
+        for target, name in ((subprocess, "Popen"), (os, "fork"), (os, "posix_spawn"), (os, "system")):
+            self.enterContext(unittest.mock.patch.object(target, name, forbidden(name)))
+        thread = threading.Thread(target=observe.follow_run, args=(self.runtime_root, "r1", self.sink),
+                                  kwargs={"from_start": True}, daemon=True)
+        thread.start()
+        thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(spawned, [])
+        self.assertEqual(self.bodies()[-1], "run ended: exit 10")
+        self.assertIn("hello", self.bodies())
 
 
 if __name__ == "__main__":

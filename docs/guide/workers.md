@@ -159,6 +159,24 @@ on the record. Recognition is by name: a daemon the list does not name
 is owned like any other process, and one that imitates a listed name is
 not waited for. Extending the list is a Controller change.
 
+**Collecting finished children.** While it supervises a worker, the
+Controller collects every finished child it holds as a subreaper on
+every tick, in every worker state, each by its own pid (never
+`waitpid(-1)`). Collecting a zombie is not owning it: what the job owns
+and waits for is decided as above, and the collection publishes nothing.
+It collects once more after it gives up the subreaper, and between
+launches a background reaper keeps collecting the recorded children that
+are still running until none is left, whatever the gap between steps.
+It never collects a child it spawned in its own session, so an
+embedder's or a callback's ordinary subprocesses keep their exit
+statuses. An orphan such a subprocess leaves behind in that session is
+collected once the Controller has seen it as that subprocess's
+descendant. A child that an embedder starts in a *new* session while a
+launch runs in the same process, and whose exit status it reads, must be
+spawned through `worker.exclude_from_reaping(spawn)`: enter the block
+before the spawn, pass a callable that returns the `Popen`, and wait for
+the child inside the block.
+
 **The drain bound.** After `claude` exits, the Controller waits for
 the remaining owned processes for at most 3 hours (10800 s,
 `worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends

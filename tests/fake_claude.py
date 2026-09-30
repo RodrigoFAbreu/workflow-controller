@@ -216,6 +216,20 @@ mode (the lifecycle lock's included).
       in the worker's group, blocked opening the FIFO, until a writer opens
       it, and only then execs ``setsid`` in place, so a test can see it
       owned by group first (adaptive-test-sharding CP5B);
+    - ``{"step": "orphan_burst", "count", "spacing", "lifetime", "detach",
+      "marks_file", "gate"}``: one Bash call whose command double-forks ``count``
+      times, ``spacing`` seconds apart; each intermediate exits at once and
+      each grandchild calls ``setsid``, lives ``lifetime`` seconds and exits,
+      as Git's detached maintenance (``daemonize``) does, so every
+      grandchild is orphaned to the nearest subreaper. The call returns
+      once the last grandchild has exited. With ``detach`` the burst runs
+      instead in a ``setsid`` descendant that waits for this fake to exit
+      first, so it happens while the supervisor drains. With ``gate`` (a
+      path) the burst starts only once that file exists. ``marks_file``
+      receives ``{"started_at", "ended_at"}`` (``time.time()``) of the
+      burst. The same burst is ``fake_claude.py --orphan-burst <count>
+      <spacing> <lifetime> [--marks <file>] [--gate <file>]``, for a
+      ``bash_bg`` command;
     - ``{"step": "task_stop", "id"}``: a worker-initiated stop, P8's
       statuses (``killed``/``stopped``) mid-turn, and no notification turn;
     - ``{"step": "await", "id", "notify"}``: wait, mid-turn, for task
@@ -995,6 +1009,22 @@ class StreamingSession:
         tool_use_id = self.tool_use("Bash", {"command": self._bash_command(step), "run_in_background": True})
         self._start_bash(step, tool_use_id)
 
+    def step_orphan_burst(self, step: dict) -> None:
+        argv = [sys.executable, os.path.abspath(__file__), "--orphan-burst", str(step.get("count", 150)),
+                str(step.get("spacing", 0.02)), str(step.get("lifetime", 0.01))]
+        for option, key in (("--marks", "marks_file"), ("--gate", "gate")):
+            if step.get(key):
+                argv += [option, step[key]]
+        tool_use_id = self.tool_use("Bash", {"command": " ".join(argv)})
+        if step.get("detach"):
+            argv += ["--after-parent", str(os.getpid())]
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             close_fds=True, start_new_session=True)
+        else:
+            subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           close_fds=True, check=True)
+        self.tool_result(tool_use_id, "ok", is_error=False)
+
     def step_task_stop(self, step: dict) -> None:
         task = self.tasks[step["id"]]
         tool_use_id = self.tool_use("TaskStop", {"task_id": task.task_id})
@@ -1240,7 +1270,49 @@ class StreamingSession:
                 self.eof.wait(0.01)
 
 
+def orphan_burst(count: int, spacing: float, lifetime: float, marks_file: str | None = None,
+                 gate: str | None = None, after_parent: int | None = None) -> None:
+    """``--orphan-burst``: ``count`` double-forks, ``spacing`` seconds
+    apart, each leaving a ``setsid`` grandchild that lives ``lifetime``
+    seconds; returns once every grandchild has exited (each holds a pipe's
+    write end, so the read sees end of file only then). With
+    ``after_parent`` it first waits until that parent has exited, and with
+    ``gate`` until that file exists."""
+    if after_parent is not None:
+        while os.getppid() == after_parent:
+            time.sleep(0.01)
+    while gate and not os.path.exists(gate):
+        time.sleep(0.01)
+    read_end, write_end = os.pipe()
+    started_at = time.time()
+    for _ in range(count):
+        pid = os.fork()
+        if pid == 0:
+            try:
+                if os.fork() == 0:
+                    os.close(read_end)
+                    os.setsid()
+                    time.sleep(lifetime)
+            finally:
+                os._exit(0)
+        os.waitpid(pid, 0)
+        time.sleep(spacing)
+    os.close(write_end)
+    os.read(read_end, 1)
+    os.close(read_end)
+    if marks_file:
+        with open(marks_file, "w") as fh:
+            json.dump({"started_at": started_at, "ended_at": time.time()}, fh)
+
+
 def main() -> None:
+    if sys.argv[1:2] == ["--orphan-burst"]:
+        count, spacing, lifetime, *rest = sys.argv[2:]
+        options = dict(zip(rest[::2], rest[1::2]))
+        after_parent = options.get("--after-parent")
+        orphan_burst(int(count), float(spacing), float(lifetime), options.get("--marks"), options.get("--gate"),
+                     int(after_parent) if after_parent else None)
+        return
     _refuse_stream_json_without_verbose()
     _count_invocation()
     if _streaming():

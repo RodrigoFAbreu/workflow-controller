@@ -127,11 +127,71 @@ def run(args: list[str], *, cwd: Path | None = None, env: dict | None = None,
     )
 
 
+#: Git's automatic maintenance, off in every throwaway repository: under a
+#: subreaper Controller each detached ``maintenance``/``gc`` run becomes an
+#: orphan it must reap (child-process-reaping, Design A). Written into the
+#: repository's own config, so no test's replacement environment undoes it.
+QUIET_MAINTENANCE = {"maintenance.auto": "false", "gc.auto": "0"}
+
+
+def git_init(path: Path | str, *options: str, cwd: Path | None = None) -> Path:
+    """``git init -q *options path`` with :data:`QUIET_MAINTENANCE` in the
+    new repository's config (a bare one too). The only way the tests create
+    a repository besides :func:`git_clone` (``tests/test_fixtures_git_hygiene.py``)."""
+    run(["git", "init", "-q", *options, str(path)], cwd=cwd)
+    for key, value in QUIET_MAINTENANCE.items():
+        run(["git", "-C", str(path), "config", key, value], cwd=cwd)
+    return Path(path)
+
+
+def git_clone(source: Path | str, dest: Path | str, *options: str, cwd: Path | None = None) -> Path:
+    """``git clone -q`` of ``source`` into ``dest``, with ``clone -c``
+    writing :data:`QUIET_MAINTENANCE` into the new repository's config."""
+    quiet = [arg for key, value in QUIET_MAINTENANCE.items() for arg in ("-c", f"{key}={value}")]
+    run(["git", "clone", "-q", *quiet, *options, str(source), str(dest)], cwd=cwd)
+    return Path(dest)
+
+
 #: ``pyproject.toml``'s version line in the static model, and in the
 #: tag-derived one (the squash-merge cutover replaces the first by the second).
 STATIC_VERSION_LINE = f'version = "{CONTROLLER_VERSION}"'
 DYNAMIC_VERSION_LINE = 'dynamic = ["version"]'
 
+
+def _idle_reaper_threads() -> list:
+    import threading
+
+    from controller import worker
+    return [t for t in threading.enumerate() if t.name == worker._IDLE_REAPER_NAME and t.is_alive()]
+
+
+def _settle_idle_reaper() -> None:
+    """Let a running between-launch reaper end by itself (up to 2 s), then
+    stop it and settle every record against the real ``/proc``."""
+    import time
+
+    from controller import worker
+    deadline = time.monotonic() + 2.0
+    while _idle_reaper_threads() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    worker._reset_reaping_for_tests(5.0)
+
+
+def isolate_idle_reaper(case: unittest.TestCase) -> None:
+    """Keep ``controller.worker``'s process-wide reaping state out of other
+    tests (reaping plan, Design B.5): settle it now, and again at cleanup,
+    then assert that no ``workflow-controller-reaper`` thread survives and
+    nothing is recorded. Call from ``setUp`` before any patch or spy, so
+    the cleanup runs after every patch has been undone."""
+    from controller import worker
+
+    def settle_and_check() -> None:
+        _settle_idle_reaper()
+        case.assertEqual(_idle_reaper_threads(), [], "a between-launch reaper outlived the test")
+        case.assertEqual(worker._ADOPTED, {}, "a recorded child outlived the test")
+
+    _settle_idle_reaper()
+    case.addCleanup(settle_and_check)
 
 def pyproject_text(*, dynamic_version: bool = False) -> str:
     """This repository's real ``pyproject.toml``, with its version line in
@@ -177,7 +237,7 @@ def build_checkout(dest: Path, *, generation: int | None = 1, committed: bool = 
     else:
         generation_path.unlink(missing_ok=True)
 
-    run(["git", "init", "-q"], cwd=dest)
+    git_init(dest)
     run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=dest)
     run(["git", "config", "user.name", "Controller Tests"], cwd=dest)
     if committed:
@@ -378,7 +438,7 @@ def build_bare_git_repo(dest: Path) -> Path:
     """A real, otherwise-empty Git repository with no Workflow Manager
     installation at all -- the ``UnmanagedRepositoryError`` fixture."""
     dest.mkdir(parents=True, exist_ok=True)
-    run(["git", "init", "-q"], cwd=dest)
+    git_init(dest)
     run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=dest)
     run(["git", "config", "user.name", "Controller Tests"], cwd=dest)
     return dest
@@ -792,7 +852,7 @@ def seed_workflow_item(root: Path, release: str, stage: str, *, work_item_id: st
     (path -> text) are committed at ``base_commit`` and declared as further
     plan-stage protected paths. ``.ai-review/`` is ignored."""
     root.mkdir(parents=True)
-    run(["git", "init", "-q"], cwd=root)
+    git_init(root)
     run(["git", "config", "user.email", "workflow-seed@example.invalid"], cwd=root)
     run(["git", "config", "user.name", "Workflow Seed"], cwd=root)
     (root / "README.md").write_text("disposable Workflow fixture\n")
@@ -902,7 +962,7 @@ def build_target_git_repo(root: Path) -> Path:
     a syntactically valid ``.workflow-manager/installation.json`` and
     never runs a real ``git log``."""
     root.mkdir(parents=True, exist_ok=True)
-    run(["git", "init", "-q"], cwd=root)
+    git_init(root)
     run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=root)
     run(["git", "config", "user.name", "Controller Tests"], cwd=root)
     return root
@@ -1474,8 +1534,8 @@ def build_origin_pair(tmp: Path, *, trunk: str = "main") -> tuple[Path, Path]:
     ``trunk`` holds one commit, and a clone of it (``clone``, on ``trunk``,
     with an ``origin`` remote and a committer identity)."""
     origin, clone = tmp / "origin.git", tmp / "clone"
-    run(["git", "init", "-q", "--bare", f"--initial-branch={trunk}", str(origin)])
-    run(["git", "init", "-q", f"--initial-branch={trunk}", str(clone)])
+    git_init(origin, "--bare", f"--initial-branch={trunk}")
+    git_init(clone, f"--initial-branch={trunk}")
     run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=clone)
     run(["git", "config", "user.name", "Controller Tests"], cwd=clone)
     (clone / "README.md").write_text("fixture\n")

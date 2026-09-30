@@ -8,11 +8,11 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-09-29).** Controller 1.3.0 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C1, squash merges
-and PR-title versions (11.1, accepted 2026-09-29), is complete. C1 is released as 1.4.0 by its
-separate cutover pull request, after its own pull request (#8) is merged. Workflow Manager also
-runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
+**Where things stand (2026-09-30).** Controller 1.4.0 is the latest release. It admits Workflow
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C1b, reaping every
+child process (11.1.1, accepted 2026-09-30), is complete. C1b is released as 1.4.1 when its pull
+request (#11) is squash-merged. Workflow Manager also runs Workflow 2.6.0 and has its adaptive test
+sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -34,7 +34,7 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 | # | Step | Needs | Section |
 |---|---|---|---|
 | C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) (complete) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
-| C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance | — | [11.1.1](#1111-reaping-every-child-process) |
+| C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance (complete) | — | [11.1.1](#1111-reaping-every-child-process) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, and telemetry v0 (tokens, cache, cost and time per job) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements) |
 | C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
@@ -1081,6 +1081,13 @@ cutover. Merge mode is unchanged in 1.4.0, and the binding keeps the merge mode 
 
 ## 11.1.1 Reaping every child process
 
+**Status:** Complete (`workflow-controller-child-process-reaping`, accepted 2026-09-30 under
+Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md`, the 1.4.1
+amendment to `docs/adr/0004-worker-lifecycle-ownership.md`; the narrative is archived at
+`docs/milestones/completed/workflow-controller-child-process-reaping.md`). It releases as 1.4.1
+when PR #11 is squash-merged. The release notes reach neither the PR body nor the GitHub release
+yet; a docs pull request adds `docs/releases/1.4.1.md` after the release.
+
 **Step C1b** (added 2026-09-29, ahead of C2). On 2026-09-29 every Claude Code process on the host
 aborted twice within ten minutes: the per-user process limit (125,849, threads included) was full
 of zombie `git` processes held by the two lanes' Controllers.
@@ -1204,7 +1211,8 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 1.4    Worker lifecycle ownership hotfix                     COMPLETE (in 1.2.0)
 1.2.1  Adaptive test sharding                                COMPLETE (released as 1.2.1)
 1.6    Workflow 2.6 compatibility integration                COMPLETE (released as 1.3.0)
-11.1   C1: squash merges and PR-title versions               COMPLETE (releases as 1.4.0 at its cutover)
+11.1   C1: squash merges and PR-title versions               COMPLETE (released as 1.4.0 at its cutover)
+11.1.1 C1b: reaping every child process                    COMPLETE (releases as 1.4.1)
 ```
 
 ---

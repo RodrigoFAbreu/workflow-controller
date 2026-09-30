@@ -91,6 +91,16 @@ recorded identities (:func:`identity_alive`), the exit status unknown. It
 never launches anything. :func:`scan_recorded_owned_processes` is the
 ownership scan a Controller that is not supervising a job makes for its
 ownership hold.
+
+``workflow-controller-child-process-reaping`` CP2 collects every finished
+child this process holds as a subreaper: on every supervision tick, in every
+state, once more after the launch has given up the subreaper, and between
+launches through a background reaper while anything recorded remains
+(:func:`_collect_children`, :func:`reap_adopted_children`). Each child is
+reaped by its own pid, never the worker or the anchor of any launch in
+progress, never a child the process spawned in its own session (only an
+orphan seen born to one of those), and never a child registered with
+:func:`exclude_from_reaping`.
 """
 
 from __future__ import annotations
@@ -107,6 +117,7 @@ import signal
 import socket
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
@@ -546,19 +557,366 @@ def _child_subreaper():
 #: zombie, in this launch or a later one in the same process.
 _ADOPTED: dict[int, int | None] = {}
 
+#: Held by every record-and-reap step and across every protected spawn and
+#: its registration (the worker's, the anchor's, and
+#: :func:`exclude_from_reaping`'s), so no sweep can record or reap a
+#: new-session child between its fork and its registration. Re-entrant: the
+#: sweep's record step calls :func:`_reap_adopted`, which takes it too. It
+#: is never held across a wait for anything but a dead child.
+_SPAWN_LOCK = threading.RLock()
+
+#: The worker and anchor of every launch in progress in this process, as
+#: ``pid -> start_ticks`` (``None``: excluded by pid alone), so overlapping
+#: launches never record each other's.
+_LAUNCH_CHILDREN: dict[int, int | None] = {}
+
+#: Which launch last registered each :data:`_LAUNCH_CHILDREN` entry: a
+#: finished launch's pid can be reused by another launch's worker or anchor
+#: before the first launch's final sweep, which must then leave the newer
+#: entry in place.
+_LAUNCH_OWNERS: dict[int, "_LaunchExclusions"] = {}
+
+#: Pids registered by :func:`exclude_from_reaping`, with a count (nesting).
+_REAP_EXCLUDED: dict[int, int] = {}
+
+#: Same-session processes the sweep has seen as a descendant of one of this
+#: process's children, never as a child of the process itself, as
+#: ``pid -> start_ticks``: only these same-session children may be recorded
+#: (a same-session child the process spawned itself may be waited for).
+_FOREIGN_BORN: dict[int, int] = {}
+
+#: When the sweep last fell back to the full ``/proc`` scan (monotonic).
+_last_full_scan: float | None = None
+
+#: The between-launch reaper's tick, and the thread itself while it runs.
+_IDLE_REAP_SECONDS = 0.2
+_IDLE_REAPER_NAME = "workflow-controller-reaper"
+_idle_reaper: threading.Thread | None = None
+_idle_reaper_stop = threading.Event()
+
+
+def _reap_excluded(pid: int, stat: _ProcStat) -> bool:
+    """Whether ``pid`` (with its current ``stat``) must never be recorded or
+    reaped: a worker or anchor of a launch in progress (by pid alone while
+    its start ticks are unknown), a child in this process's own session that
+    the sweep has not seen born to another child, or a pid registered with
+    :func:`exclude_from_reaping`. Callers hold :data:`_SPAWN_LOCK`."""
+    if pid in _REAP_EXCLUDED:
+        return True
+    if pid in _LAUNCH_CHILDREN:
+        ticks = _LAUNCH_CHILDREN[pid]
+        if ticks is None or ticks == stat.start_ticks:
+            return True
+    return stat.session == os.getsid(0) and _FOREIGN_BORN.get(pid) != stat.start_ticks
+
+
+def _record_adopted(pid: int, stat: _ProcStat) -> None:
+    """The one writer of :data:`_ADOPTED`: records ``pid`` unless
+    :func:`_reap_excluded` excludes it."""
+    with _SPAWN_LOCK:
+        if not _reap_excluded(pid, stat):
+            _ADOPTED.setdefault(pid, stat.start_ticks)
+
 
 def _reap_adopted() -> None:
     """``waitpid(pid, WNOHANG)`` for every adopted pid -- never
     ``waitpid(-1)``, so the worker's own exit status is never stolen from
-    ``Popen``."""
-    for pid in list(_ADOPTED):
+    ``Popen``. Each recorded pid's ``stat`` is re-read first: a pid that is
+    gone, now names another process (other start ticks), or is excluded by
+    :func:`_reap_excluded` is dropped without a ``waitpid``; one whose
+    ``stat`` cannot be read is kept and skipped this time."""
+    with _SPAWN_LOCK:
+        root = _proc_root()
+        for pid, ticks in list(_ADOPTED.items()):
+            try:
+                stat = _read_stat(root / str(pid) / "stat")
+            except _NoAnswer:
+                continue
+            if stat is None or (ticks is not None and stat.start_ticks != ticks) or _reap_excluded(pid, stat):
+                _ADOPTED.pop(pid, None)
+                continue
+            try:
+                reaped, _status = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                reaped = pid
+            if reaped:
+                _ADOPTED.pop(pid, None)
+                _FOREIGN_BORN.pop(pid, None)
+
+
+def reap_adopted_children() -> None:
+    """Reap, each by its own pid, every recorded child that has finished
+    (between launches, steps and at the end of a run)."""
+    _reap_adopted()
+
+
+@contextlib.contextmanager
+def exclude_from_reaping(spawn: Callable[[], subprocess.Popen]):
+    """Spawn a child with ``spawn()`` and keep this process's reaper away
+    from it for the block, which yields the ``Popen``. The only way for code
+    outside :func:`launch` to protect a child it starts **in a new session**
+    while a launch supervises in the same process and whose exit status it
+    reads; the caller waits for it inside the block. The spawn and the
+    registration happen under one hold of :data:`_SPAWN_LOCK`."""
+    with _SPAWN_LOCK:
+        child = spawn()
+        _REAP_EXCLUDED[child.pid] = _REAP_EXCLUDED.get(child.pid, 0) + 1
+    try:
+        yield child
+    finally:
+        with _SPAWN_LOCK:
+            count = _REAP_EXCLUDED.get(child.pid, 0) - 1
+            if count > 0:
+                _REAP_EXCLUDED[child.pid] = count
+            else:
+                _REAP_EXCLUDED.pop(child.pid, None)
+
+
+def _direct_children(pid: int | None = None) -> set[int] | None:
+    """The direct children of ``pid`` (default: this process): the union of
+    ``/proc/<pid>/task/<tid>/children`` over every thread, or ``None`` when
+    the ``children`` file does not exist (``CONFIG_PROC_CHILDREN`` off). A
+    thread that exits while it is read is skipped; another ``pid`` that has
+    exited has no children (a patchable seam)."""
+    own = pid is None
+    task = _proc_root() / str(os.getpid() if own else pid) / "task"
+    try:
+        tids = os.listdir(task)
+    except FileNotFoundError:
+        return None if own else set()
+    except OSError:
+        return None
+    children: set[int] = set()
+    supported = False
+    for tid in tids:
         try:
-            reaped, _status = os.waitpid(pid, os.WNOHANG)
-        except ChildProcessError:
-            _ADOPTED.pop(pid, None)
+            with open(task / tid / "children") as fh:
+                text = fh.read()
+        except FileNotFoundError:
+            if (task / tid).is_dir():
+                return None  # the thread is there, the file is not
+            continue  # the thread exited
+        except OSError:
             continue
-        if reaped:
-            _ADOPTED.pop(pid, None)
+        supported = True
+        children.update(int(item) for item in text.split() if item.isdigit())
+    if not supported and own:
+        return None
+    return children
+
+
+def _scan_proc_stats() -> dict[int, _ProcStat] | None:
+    """Every process's ``stat`` by a full ``/proc`` scan, or ``None`` when
+    ``/proc`` cannot be listed. Unreadable and vanished entries are
+    skipped."""
+    root = _proc_root()
+    try:
+        names = _list_proc(root)
+    except OSError:
+        return None
+    stats: dict[int, _ProcStat] = {}
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            stat = _read_stat(root / name / "stat")
+        except _NoAnswer:
+            continue
+        if stat is not None:
+            stats[int(name)] = stat
+    return stats
+
+
+def _update_foreign_born(children: Mapping[int, _ProcStat], all_stats: Mapping[int, _ProcStat] | None) -> None:
+    """Admit to :data:`_FOREIGN_BORN` every same-session descendant of a
+    same-session child in ``children`` (walked only through same-session
+    descendants), when the ``stat`` read that gives its start ticks also
+    shows the walked parent as its ``ppid``; then drop every entry whose
+    process is gone or whose pid names another process. ``all_stats`` (the
+    full-scan fallback) supplies the ``ppid`` links where ``children`` files
+    are missing. Callers hold :data:`_SPAWN_LOCK`."""
+    sid = os.getsid(0)
+    root = _proc_root()
+    seen: dict[int, int] = {pid: stat.start_ticks for pid, stat in children.items()}
+    walk = [pid for pid, stat in children.items() if stat.session == sid]
+    while walk:
+        parent = walk.pop()
+        if all_stats is not None:
+            kids = {pid: stat for pid, stat in all_stats.items() if stat.ppid == parent}
+        else:
+            kids = {}
+            for pid in _direct_children(parent) or ():
+                try:
+                    stat = _read_stat(root / str(pid) / "stat")
+                except _NoAnswer:
+                    continue
+                if stat is not None and stat.ppid == parent:
+                    kids[pid] = stat
+        for pid, stat in kids.items():
+            if stat.session != sid or pid in seen:
+                continue
+            _FOREIGN_BORN[pid] = stat.start_ticks
+            seen[pid] = stat.start_ticks
+            walk.append(pid)
+    for pid, ticks in list(_FOREIGN_BORN.items()):
+        if seen.get(pid) == ticks:
+            continue
+        try:
+            stat = _read_stat(root / str(pid) / "stat")
+        except _NoAnswer:
+            continue
+        if stat is None or stat.start_ticks != ticks:
+            _FOREIGN_BORN.pop(pid, None)
+
+
+def _collect_children(exclude: Mapping[int, int | None], baseline: set[int], *, force_full: bool = False) -> None:
+    """The sweep: record every child of this process except ``baseline``,
+    ``exclude`` (this launch's worker and anchor, ``pid -> start_ticks``,
+    ``None`` for pid alone) and what :func:`_reap_excluded` excludes, then
+    reap every recorded pid. The children come from :func:`_direct_children`
+    or, without ``children`` files, from the full ``/proc`` scan at most
+    once per :data:`_OWNERSHIP_SCAN_SECONDS` (always with ``force_full``).
+    A child whose ``stat`` cannot be read is left for the next sweep. It
+    publishes nothing."""
+    global _last_full_scan
+    with _SPAWN_LOCK:
+        me = os.getpid()
+        root = _proc_root()
+        listed = _direct_children()
+        all_stats = None
+        children: dict[int, _ProcStat] = {}
+        if listed is None:
+            now = time.monotonic()
+            if force_full or _last_full_scan is None or now - _last_full_scan >= _OWNERSHIP_SCAN_SECONDS:
+                _last_full_scan = now
+                all_stats = _scan_proc_stats()
+            if all_stats is not None:
+                children = {pid: stat for pid, stat in all_stats.items() if stat.ppid == me}
+        else:
+            for pid in listed:
+                try:
+                    stat = _read_stat(root / str(pid) / "stat")
+                except _NoAnswer:
+                    continue
+                if stat is not None and stat.ppid == me:
+                    children[pid] = stat
+        if children:
+            _update_foreign_born(children, all_stats)
+        for pid, stat in children.items():
+            if pid in baseline:
+                continue
+            if pid in exclude and exclude[pid] in (None, stat.start_ticks):
+                continue
+            _record_adopted(pid, stat)
+        _reap_adopted()
+
+
+def _idle_reap_loop() -> None:
+    """The between-launch reaper: reap every :data:`_IDLE_REAP_SECONDS`
+    until nothing is recorded. The reap, the emptiness check and the exit
+    are one hold of :data:`_SPAWN_LOCK`, so a record made concurrently
+    either keeps this loop going or finds no reaper and starts one."""
+    global _idle_reaper
+    while True:
+        with _SPAWN_LOCK:
+            _reap_adopted()
+            if not _ADOPTED or _idle_reaper_stop.is_set():
+                _idle_reaper = None
+                return
+        _idle_reaper_stop.wait(_IDLE_REAP_SECONDS)
+
+
+def _ensure_idle_reaper() -> None:
+    """Start the between-launch reaper if a child is recorded and none
+    runs."""
+    global _idle_reaper
+    with _SPAWN_LOCK:
+        if not _ADOPTED or _idle_reaper is not None:
+            return
+        _idle_reaper = threading.Thread(target=_idle_reap_loop, name=_IDLE_REAPER_NAME, daemon=True)
+        _idle_reaper.start()
+
+
+def _stop_idle_reaper(timeout: float) -> None:
+    """Test support: end a running between-launch reaper and wait for it.
+    :data:`_ADOPTED` is left as it is; use :func:`_reset_reaping_for_tests`,
+    which never strands a live recorded child."""
+    with _SPAWN_LOCK:
+        thread = _idle_reaper
+    if thread is None:
+        return
+    _idle_reaper_stop.set()
+    try:
+        thread.join(timeout)
+    finally:
+        _idle_reaper_stop.clear()
+
+
+def _reset_reaping_for_tests(timeout: float) -> list[int]:
+    """Test support: stop the between-launch reaper, then settle every
+    record against the **real** ``/proc`` (never the patchable seam): a
+    record that is this process's child with the recorded start ticks and
+    that :func:`_reap_excluded` admits is killed (unless already a zombie)
+    and collected by its pid; every other record is dropped untouched.
+    :data:`_ADOPTED` and :data:`_FOREIGN_BORN` are then cleared. Returns the
+    pids collected."""
+    _stop_idle_reaper(timeout)
+    collected: list[int] = []
+    with _SPAWN_LOCK:
+        me = os.getpid()
+        for pid, ticks in list(_ADOPTED.items()):
+            try:
+                stat = _read_stat(Path("/proc") / str(pid) / "stat")
+            except _NoAnswer:
+                continue
+            if stat is None or stat.ppid != me or stat.start_ticks != ticks or _reap_excluded(pid, stat):
+                continue
+            if stat.state not in _GONE_STATES:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(pid, signal.SIGKILL)
+            with contextlib.suppress(ChildProcessError):
+                os.waitpid(pid, 0)
+            collected.append(pid)
+        _ADOPTED.clear()
+        _FOREIGN_BORN.clear()
+    return collected
+
+
+class _LaunchExclusions:
+    """What one launch's sweeps skip, filled as it comes to exist: the
+    baseline, then the worker (pid first, start ticks once captured), then
+    the anchor. Every identity is also entered in :data:`_LAUNCH_CHILDREN`
+    until the launch's final sweep has run."""
+
+    def __init__(self) -> None:
+        self.baseline: set[int] | None = None
+        self.children: dict[int, int | None] = {}
+
+    def add(self, pid: int, start_ticks: int | None = None) -> None:
+        with _SPAWN_LOCK:
+            self.children[pid] = start_ticks
+            _LAUNCH_CHILDREN[pid] = start_ticks
+            _LAUNCH_OWNERS[pid] = self
+
+    def collect(self, *, force_full: bool = False) -> None:
+        if self.baseline is not None:
+            _collect_children(self.children, self.baseline, force_full=force_full)
+
+    def final_sweep(self) -> None:
+        """Run once the launch has given up the subreaper (I5): the sweep,
+        then this launch's entries leave :data:`_LAUNCH_CHILDREN` (only those
+        it still owns: an entry another launch registered for a reused pid
+        stays), then the between-launch reaper starts if anything is still
+        recorded."""
+        try:
+            self.collect(force_full=True)
+        finally:
+            with _SPAWN_LOCK:
+                for pid in self.children:
+                    if _LAUNCH_OWNERS.get(pid) is self:
+                        del _LAUNCH_OWNERS[pid]
+                        _LAUNCH_CHILDREN.pop(pid, None)
+        _ensure_idle_reaper()
 
 
 def _reap_killed_children(baseline: set[int], pgid: int, others: Iterable[int] = ()) -> None:
@@ -589,7 +947,7 @@ def _reap_killed_children(baseline: set[int], pgid: int, others: Iterable[int] =
                 continue
             pid = int(name)
             if stat.state in _GONE_STATES:
-                _ADOPTED.setdefault(pid, stat.start_ticks)
+                _record_adopted(pid, stat)
             elif stat.pgrp == pgid or pid in others:
                 running = True
         _reap_adopted()
@@ -737,7 +1095,7 @@ class _Ownership:
                 continue
             adopted = self.adopting and stat.ppid == me and pid not in self.baseline
             if adopted:
-                _ADOPTED.setdefault(pid, stat.start_ticks)
+                _record_adopted(pid, stat)
             if stat.state in _GONE_STATES:
                 continue
             recorded = self.owned.get(pid)
@@ -976,19 +1334,26 @@ def launch(
     with contextlib.ExitStack() as stack:
         if supervisor_lock_path is None:
             supervisor_lock_path = stack.enter_context(_private_supervisor_lock())
+        # The final sweep is registered before the subreaper is entered, so
+        # on unwind it runs after the subreaper has been given up (I5).
+        reaping = _LaunchExclusions()
+        stack.callback(reaping.final_sweep)
         adopting = stack.enter_context(_child_subreaper())
         _reap_adopted()
         baseline = _own_children()
+        reaping.baseline = baseline
 
         read_end, write_end = os.pipe()
         stream_fds: list[int] = []
         try:
             for path in (stdout_path, stderr_path):
                 stream_fds.append(os.open(path, os.O_WRONLY | os.O_APPEND))
-            proc = subprocess.Popen(
-                args, cwd=cwd, stdin=read_end, stdout=stream_fds[0], stderr=stream_fds[1],
-                start_new_session=True, env=env, pass_fds=pass_fds,
-            )
+            with _SPAWN_LOCK:
+                proc = subprocess.Popen(
+                    args, cwd=cwd, stdin=read_end, stdout=stream_fds[0], stderr=stream_fds[1],
+                    start_new_session=True, env=env, pass_fds=pass_fds,
+                )
+                reaping.add(proc.pid)
         except OSError as exc:
             os.close(write_end)
             raise WorkerLaunchError(
@@ -1001,9 +1366,12 @@ def launch(
                 os.close(fd)
 
         worker_process = capture_worker_process(proc.pid)
+        reaping.add(proc.pid, worker_process.start_ticks)
         try:
             _write_task(write_end, task)
-            anchor = _spawn_anchor(write_end, worker_process, tag, Path(supervisor_lock_path), pass_fds)
+            with _SPAWN_LOCK:
+                anchor = _spawn_anchor(write_end, worker_process, tag, Path(supervisor_lock_path), pass_fds)
+                reaping.add(anchor.pid)
         except BaseException as exc:
             _kill_process_group(proc.pid)
             proc.wait()
@@ -1038,6 +1406,7 @@ def launch(
             on_state_change=on_state_change, on_group_drain=on_group_drain,
             ownership=_Ownership(tag=tag, worker_process=worker_process, anchor_pid=anchor.pid,
                                  baseline=baseline | {anchor.pid}, adopting=adopting),
+            reaping=reaping,
         )
         return supervision.run()
 
@@ -1047,8 +1416,10 @@ class _Supervision:
 
     def __init__(self, *, proc: subprocess.Popen, anchor: subprocess.Popen, worker_process: WorkerProcess,
                  reader, stdout_path, stderr_path, timeout: float | None,
-                 on_state_change, on_group_drain, ownership: _Ownership) -> None:
+                 on_state_change, on_group_drain, ownership: _Ownership,
+                 reaping: _LaunchExclusions | None = None) -> None:
         self.proc = proc
+        self.reaping = reaping
         self.anchor = anchor
         self.worker_process = worker_process
         self.reader = reader
@@ -1086,6 +1457,7 @@ class _Supervision:
     def run(self) -> WorkerResult | DrainDetached:
         while True:
             self._consume()
+            self._collect()
             if self.proc.poll() is not None:
                 break
             if self._expired():
@@ -1105,6 +1477,13 @@ class _Supervision:
         if self.ending_offset is None and self.stream.quiescent():
             interval = min(interval, max(0.01, self.last_bytes_at + quiescence_confirm_seconds(self.stream) - now))
         return interval
+
+    def _collect(self, *, force_full: bool = False) -> None:
+        """Record and reap the finished children this Controller holds as
+        a subreaper (every tick, in every state). A re-attached supervision
+        adopted nothing and has no sweep."""
+        if self.reaping is not None:
+            self.reaping.collect(force_full=force_full)
 
     def _wait_for_exit(self, seconds: float) -> None:
         if self.deadline is not None:
@@ -1365,6 +1744,7 @@ class _Supervision:
         self.timed_out = True
         self.ownership.scan()
         self._end_everything()
+        self._collect(force_full=True)
         return self._finish()
 
     def _drain(self) -> WorkerResult | DrainDetached:
@@ -1399,7 +1779,7 @@ class _Supervision:
             if time.monotonic() - started >= DRAIN_DETACH_SECONDS:
                 return self._detach()
             self._sleep(_DRAIN_POLL_SECONDS)
-            _reap_adopted()
+            self._collect()
             empty = _group_members(worker_process)[0]
             if empty or time.monotonic() >= self.next_scan:
                 self._scan_and_publish()
@@ -1409,6 +1789,7 @@ class _Supervision:
     def _detach(self) -> DrainDetached:
         """Stop waiting and end nothing: the anchor keeps the lifecycle lock
         (plan C, step 3)."""
+        self._collect(force_full=True)
         self.ownership.scan()
         return DrainDetached(
             drain_detached_at=_utc_now(),
@@ -1420,7 +1801,7 @@ class _Supervision:
 
     def _finish(self) -> WorkerResult:
         _end_anchor(self.anchor)
-        _reap_adopted()
+        self._collect(force_full=True)
         self.state = ENDED
         self._publish()
         with open(self.stdout_path, "rb") as fh:
@@ -1782,13 +2163,15 @@ class _ProcStat:
     state: str
     pgrp: int
     start_ticks: int
+    session: int
     ppid: int = 0
 
 
 def _parse_stat(text: str) -> _ProcStat:
     """Fields are counted after the line's **last** ``)``: ``comm`` (field
     2) may itself contain spaces and parentheses. Field 3 is the state,
-    field 4 ``ppid``, field 5 ``pgrp``, field 22 ``starttime``."""
+    field 4 ``ppid``, field 5 ``pgrp``, field 6 ``session``, field 22
+    ``starttime``."""
     close = text.rfind(")")
     if close < 0:
         raise _NoAnswer(f"stat line does not parse: {text!r}")
@@ -1796,7 +2179,8 @@ def _parse_stat(text: str) -> _ProcStat:
     if len(rest) < 20:
         raise _NoAnswer(f"stat line has too few fields: {text!r}")
     try:
-        return _ProcStat(state=rest[0], pgrp=int(rest[2]), start_ticks=int(rest[19]), ppid=int(rest[1]))
+        return _ProcStat(state=rest[0], pgrp=int(rest[2]), start_ticks=int(rest[19]), session=int(rest[3]),
+                         ppid=int(rest[1]))
     except ValueError:
         raise _NoAnswer(f"stat line does not parse: {text!r}") from None
 

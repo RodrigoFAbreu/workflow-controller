@@ -19,7 +19,8 @@ from controller import forge as forge_mod, gitrepo, milestone_branch as mb, repo
 from controller.errors import BranchBindingError  # noqa: E402
 from tests import fake_gh  # noqa: E402
 from tests.fixtures import (  # noqa: E402
-    FAKE_GH_REPOSITORY, build_origin_pair, commit_all, current_head, fake_gh_env, run, trailer_message,
+    FAKE_GH_REPOSITORY, build_origin_pair, commit_all, current_head, fake_gh_env, git_clone, run,
+    trailer_message,
 )
 
 WID = "wi-alpha"
@@ -406,7 +407,7 @@ class TrunkStartTest(_Case):
 
     def test_behind_gates_and_ahead_or_diverged_refuse(self) -> None:
         other = self.tmp / "other"
-        run(["git", "clone", "-q", str(self.origin), str(other)])
+        git_clone(self.origin, other)
         run(["git", "-c", "user.email=o@example.invalid", "-c", "user.name=O", "commit", "-q", "--allow-empty",
              "-m", "remote work"], cwd=other)
         run(["git", "push", "-q", "origin", "main"], cwd=other)
@@ -600,7 +601,7 @@ class LaterPreflightTest(_Case):
         self.commit_file("one.txt")
         self.push(BRANCH)
         other = self.tmp / "other"
-        run(["git", "clone", "-q", "--branch", BRANCH, str(self.origin), str(other)])
+        git_clone(self.origin, other, "--branch", BRANCH)
         run(["git", "-c", "user.email=o@example.invalid", "-c", "user.name=O", "commit", "-q", "--allow-empty",
              "-m", "Merge branch main (Update branch)"], cwd=other)
         run(["git", "push", "-q", "origin", BRANCH], cwd=other)

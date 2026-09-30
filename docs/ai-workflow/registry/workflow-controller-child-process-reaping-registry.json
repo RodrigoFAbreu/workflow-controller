@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-child-process-reaping",
+  "plan_revision": 8,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Test hygiene: tests/fixtures.py git_init and git_clone writing maintenance.auto=false and gc.auto=0 into each throwaway repository's own config, every git init and git clone in tests/ routed through them, an AST guard test (list, helper and shell-string forms, tests/workflow_releases/ excluded) that no other site creates a repository, and a read-back test with GIT_CONFIG_* cleared",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Reaping every finished child in every state: controller/worker.py reading /proc/<pid>/task/<tid>/children (full /proc fallback, rate-limited), a session field in _ProcStat, recording every child except any launch's worker and anchor, the baseline, children the process spawned in its own session (same-session orphans collected once observed as another child's descendants, _FOREIGN_BORN) and explicit exclusions (exclude_from_reaping) and reaping recorded pids on every supervision tick, in the drain, at finish, detach and interrupt and after the subreaper is given up; a between-launch reaper thread while recorded children remain; cli reaping between steps and at the end of run and step; fake_claude orphan_burst; the RUNNING, WAITING and DRAINING regression tests with per-state tick-derived bounds with the red run at 6a24f64, the between-launches, paused-boundary, same-session-grandchild, final-sweep ordering and sweep unit tests, the waited-for-child exit-status tests, the observe.py no-spawn test, ownership and published state unchanged",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Documentation and full verification (terminal): docs/guide/workers.md reaping paragraph, docs/guide/development.md throwaway-repository rule, ADR 0004 amendment note, the orphan measurement at 6a24f64 and at the head under a counting subreaper, the unchanged-path check, the 1.4.1 notes as the pull request body, and the full sharded suite",
+      "depends_on": [
+        "CP1",
+        "CP2"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

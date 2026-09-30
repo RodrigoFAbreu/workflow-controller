@@ -3000,7 +3000,7 @@ class ReleaseRecheckBeforeDecisionTest(test_trunk_preflight._PolicyCase):
         self.assertEqual(self.cli("step").code, cli.EXIT_GATE)
         self.assertEqual(self.record()["state"], mb.READY)
         human = self.tmp_root / "human"
-        fixtures.run(["git", "clone", "-q", str(self.origin), str(human)])
+        fixtures.git_clone(self.origin, human)
         self.git("config", "user.email", "human@example.invalid", cwd=human)
         self.git("config", "user.name", "Human", cwd=human)
         self.git("merge", "-q", "--no-ff", "--no-commit", f"origin/{BRANCH}", cwd=human)

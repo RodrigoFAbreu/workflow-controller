@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import gitrepo  # noqa: E402
 from controller.errors import GitOperationError  # noqa: E402
-from tests.fixtures import build_origin_pair, commit_all, current_head, run  # noqa: E402
+from tests.fixtures import build_origin_pair, commit_all, current_head, git_clone, git_init, run  # noqa: E402
 
 
 class _Spy:
@@ -50,7 +50,7 @@ class _Case(unittest.TestCase):
 
     def second_clone(self) -> Path:
         other = self.tmp / "other"
-        run(["git", "clone", "-q", str(self.origin), str(other)])
+        git_clone(self.origin, other)
         run(["git", "config", "user.email", "other@example.invalid"], cwd=other)
         run(["git", "config", "user.name", "Other"], cwd=other)
         return other
@@ -64,7 +64,7 @@ class ReadTest(_Case):
         self.assertTrue(state.detached)
         self.assertEqual(state.commit, self.base)
         unborn = self.tmp / "unborn"
-        run(["git", "init", "-q", "--initial-branch=trunk", str(unborn)])
+        git_init(unborn, "--initial-branch=trunk")
         self.assertEqual(gitrepo.head_state(unborn), gitrepo.HeadState("trunk", None))
 
     def test_ref_reads(self) -> None:

@@ -200,7 +200,7 @@ def _seed_target(target: Path) -> None:
     this repository's own installed release -- `REQ-T18` step 2, revision
     69), and a trivial committed milestone for `/milestone-plan` to plan."""
     target.mkdir(parents=True, exist_ok=True)
-    fixtures.run(["git", "init", "-q"], cwd=target)
+    fixtures.git_init(target)
     fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
     fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
     (target / "README.md").write_text("disposable integration fixture\n")
@@ -408,7 +408,7 @@ class RealManagerMigrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td).resolve() / "target"
             target.mkdir()
-            fixtures.run(["git", "init", "-q"], cwd=target)
+            fixtures.git_init(target)
             fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
             fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
             (target / "README.md").write_text("disposable migration fixture\n")
@@ -537,7 +537,7 @@ class RealManagerMigrationTest(unittest.TestCase):
         phase, updated to 2.6.0 by the real Manager."""
         target = td / "target"
         target.mkdir()
-        fixtures.run(["git", "init", "-q"], cwd=target)
+        fixtures.git_init(target)
         fixtures.run(["git", "config", "user.email", "controller-live-test@example.invalid"], cwd=target)
         fixtures.run(["git", "config", "user.name", "Controller Live Test"], cwd=target)
         (target / "README.md").write_text("disposable migration fixture\n")

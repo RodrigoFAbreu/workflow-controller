@@ -185,12 +185,12 @@ class _E2ECase(lifecycle._LifecycleTestCase):
         fixtures.write_workflow_state(seed, {"schema_version": 1, "active_work_item_id": None, "work_items": {}})
         fixtures.commit_all(seed, "Add the policy and the Workflow state")
         origin = tmp / "origin.git"
-        fixtures.run(["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)])
+        fixtures.git_init(origin, "--bare", "--initial-branch=main")
         # Every ref update on the origin is logged, so a forced update is visible.
         fixtures.run(["git", "config", "core.logAllRefUpdates", "always"], cwd=origin)
         fixtures.run(["git", "push", "-q", str(origin), "main"], cwd=seed)
         clone = tmp / "clone"
-        fixtures.run(["git", "clone", "-q", str(origin), str(clone)])
+        fixtures.git_clone(origin, clone)
         fixtures.run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=clone)
         fixtures.run(["git", "config", "user.name", "Controller Tests"], cwd=clone)
         return origin, clone.resolve()
@@ -245,7 +245,7 @@ class _E2ECase(lifecycle._LifecycleTestCase):
         """A second clone of the origin, on ``main`` at the origin's tip."""
         human = self.tmp_root / "human"
         if not human.exists():
-            fixtures.run(["git", "clone", "-q", str(self.origin), str(human)])
+            fixtures.git_clone(self.origin, human)
             self.git("config", "user.email", "human@example.invalid", cwd=human)
             self.git("config", "user.name", "Human", cwd=human)
         self.git("fetch", "-q", "origin", cwd=human)

@@ -29,6 +29,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import unittest
@@ -1127,6 +1128,70 @@ class FakeStreamingModeTest(unittest.TestCase):
                     self.assertEqual(sid, pid)
                 _kill(pid)
 
+
+    # -- orphan bursts ---------------------------------------------------------
+
+    def test_an_orphan_burst_is_one_bash_call_that_returns_after_the_burst(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marks = os.path.join(tmp, "marks.json")
+            run = self.run_turns([[{"step": "orphan_burst", "count": 5, "spacing": 0.02, "lifetime": 0.05,
+                                    "marks_file": marks}, {"step": "text"}]])
+            self.assertTrue(os.path.exists(marks), "the tool call returned before the burst ended")
+            self.assertEqual(run.finish(), 0)
+            [use] = [c for e in run.events if e.get("type") == "assistant" for c in content(e)
+                     if c.get("type") == "tool_use"]
+            self.assertEqual(use["name"], "Bash")
+            self.assertIn("--orphan-burst", use["input"]["command"])
+            [result] = [c for e in run.events if e.get("type") == "user" for c in content(e)
+                        if c.get("type") == "tool_result"]
+            self.assertEqual(result["tool_use_id"], use["id"])
+            times = json.loads(Path(marks).read_text())
+            self.assertGreaterEqual(times["ended_at"] - times["started_at"], 5 * 0.02)
+
+    def test_a_detached_orphan_burst_runs_after_the_fake_has_exited(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marks = os.path.join(tmp, "marks.json")
+            run = self.run_turns([[{"step": "orphan_burst", "count": 3, "spacing": 0.02, "lifetime": 0.05,
+                                    "detach": True, "marks_file": marks}]])
+            self.assertFalse(os.path.exists(marks))
+            self.assertEqual(run.finish(), 0)
+            exited_at = time.time()
+            self.assertTrue(_wait(lambda: os.path.exists(marks) and os.path.getsize(marks) > 0))
+            self.assertGreaterEqual(json.loads(Path(marks).read_text())["started_at"], exited_at - 0.5)
+
+    def test_every_burst_grandchild_is_a_setsid_orphan_of_the_nearest_subreaper(self):
+        # A child interpreter marks itself a subreaper, runs the burst and
+        # watches its own children: every one besides the burst process is
+        # a session leader, and each is collected here, by that subreaper.
+        probe = textwrap.dedent("""
+            import ctypes, json, os, subprocess, sys, time
+            ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
+            burst = subprocess.Popen([sys.executable, sys.argv[1], "--orphan-burst", "6", "0.02", "0.3"])
+            sessions, reaped = {}, set()
+            while True:
+                for tid in os.listdir("/proc/self/task"):
+                    with open(f"/proc/self/task/{tid}/children") as fh:
+                        for pid in map(int, fh.read().split()):
+                            if pid != burst.pid:
+                                try:
+                                    with open(f"/proc/{pid}/stat") as stat:
+                                        sessions[pid] = int(stat.read().rsplit(")", 1)[1].split()[3])
+                                except OSError:
+                                    pass
+                for pid in list(sessions):
+                    if pid not in reaped and os.waitpid(pid, os.WNOHANG)[0]:
+                        reaped.add(pid)
+                if burst.poll() is not None and reaped >= set(sessions):
+                    break
+                time.sleep(0.01)
+            print(json.dumps({"sessions": sessions, "returncode": burst.returncode}))
+        """)
+        out = subprocess.run([sys.executable, "-c", probe, str(FAKE_CLAUDE)], capture_output=True, text=True,
+                             timeout=60, check=True)
+        report = json.loads(out.stdout)
+        self.assertEqual(report["returncode"], 0)
+        self.assertEqual(len(report["sessions"]), 6)
+        self.assertEqual({int(pid) for pid in report["sessions"]}, set(report["sessions"].values()))
 
 class ReapRecordedWorkersTest(unittest.TestCase):
     """The test-teardown guarantee (plan CP1, round 1's I7)."""

@@ -1043,7 +1043,7 @@ class GitIsolationTest(_SeededTargets):
     def test_a_populated_submodule_is_refused(self) -> None:
         root = self.fresh()
         source = root.parent / "submodule-source"
-        fixtures.run(["git", "init", "-q", str(source)])
+        fixtures.git_init(source)
         fixtures.run(["git", "-C", str(source), "-c", "user.email=s@example.invalid", "-c", "user.name=s",
                       "commit", "-q", "--allow-empty", "-m", "seed"])
         _git(root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(source), "vendor/sub")
@@ -1077,7 +1077,7 @@ class GitIsolationTest(_SeededTargets):
     def test_the_querys_git_environment(self) -> None:
         root = self.fresh()
         remote = root.parent / "remote.git"
-        fixtures.run(["git", "init", "-q", "--bare", str(remote)])
+        fixtures.git_init(remote, "--bare")
         self.git_config("protocol.file.allow", "always")
         spy = _PrivateDirSpy()
         operator = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "user.name", "GIT_CONFIG_VALUE_0": "Operator"}

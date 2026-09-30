@@ -27,6 +27,7 @@ from pathlib import Path
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, target_state,
+    worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -937,7 +938,13 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     run = _start_run("step", runtime_root, ident, target, max_steps=None)
     _start_follower(args, runtime_root, run.run_id)
     run.event("step_started", n=1)
-    exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
+    try:
+        exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
+    finally:
+        # Every finished child the launch recorded is collected before the
+        # command returns (the between-launch reaper keeps collecting the
+        # ones still running).
+        worker.reap_adopted_children()
     return exit_code
 
 
@@ -1011,6 +1018,17 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
     run = _start_run("run", runtime_root, ident, target, max_steps=args.max_steps)
     _start_follower(args, runtime_root, run.run_id)
 
+    try:
+        return _run_steps(args, runtime_root, ident, target, routing_options, run)
+    finally:
+        worker.reap_adopted_children()
+
+
+def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
+               target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions,
+               run: job.RunRecord) -> int:
+    """``cmd_run``'s loop: one step per orchestration boundary, until a
+    step does not finish or ``--max-steps`` is reached."""
     steps_run = 0
     while steps_run < args.max_steps:
         # The orchestration boundary: checked once before every job this
@@ -1024,6 +1042,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
         run.event("step_started", n=steps_run + 1)
         exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
         steps_run += 1
+        worker.reap_adopted_children()
 
         if isinstance(result, dict) and result["status"] == job.STATUS_FINISHED:
             # This checkpoint/action is done -- loop back to the

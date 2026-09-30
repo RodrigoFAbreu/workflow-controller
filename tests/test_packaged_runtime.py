@@ -152,10 +152,10 @@ def _build_policy_target(tmp: Path) -> tuple[Path, Path]:
     fixtures.write_workflow_state(seed, {"schema_version": 1, "active_work_item_id": None, "work_items": {}})
     fixtures.commit_all(seed, "Add the policy and the Workflow state")
     origin = tmp / "origin.git"
-    fixtures.run(["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)])
+    fixtures.git_init(origin, "--bare", "--initial-branch=main")
     fixtures.run(["git", "push", "-q", str(origin), "main"], cwd=seed)
     clone = tmp / "clone"
-    fixtures.run(["git", "clone", "-q", str(origin), str(clone)])
+    fixtures.git_clone(origin, clone)
     fixtures.run(["git", "config", "user.email", "controller-tests@example.invalid"], cwd=clone)
     fixtures.run(["git", "config", "user.name", "Controller Tests"], cwd=clone)
     return origin, clone.resolve()

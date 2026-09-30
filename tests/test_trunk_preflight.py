@@ -429,7 +429,7 @@ class ObservationTest(_PolicyCase):
         self.assertTrue(explained["automatic"])
         # Behind the remote trunk (as of the last fetch), no base is predicted.
         other = self.tmp_root / "other"
-        fixtures.run(["git", "clone", "-q", str(self.origin), str(other)])
+        fixtures.git_clone(self.origin, other)
         fixtures.run(["git", "-c", "user.email=o@example.invalid", "-c", "user.name=O", "commit", "-q",
                       "--allow-empty", "-m", "elsewhere"], cwd=other)
         fixtures.run(["git", "push", "-q", "origin", "main"], cwd=other)
@@ -568,7 +568,7 @@ class MilestoneBindingTest(_PolicyCase):
     def human_merge(self, number: int) -> str:
         """A human merges pull request ``number`` on GitHub with a merge commit."""
         human = self.tmp_root / "human"
-        fixtures.run(["git", "clone", "-q", str(self.origin), str(human)])
+        fixtures.git_clone(self.origin, human)
         self.git("config", "user.email", "human@example.invalid", cwd=human)
         self.git("config", "user.name", "Human", cwd=human)
         head = self.git("--git-dir", str(self.origin), "rev-parse", f"refs/heads/{BRANCH}")

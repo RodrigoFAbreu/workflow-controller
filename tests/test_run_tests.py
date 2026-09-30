@@ -332,20 +332,49 @@ class EnvironmentTest(unittest.TestCase):
         self.assertFalse(env["child_ignores_sigint"])
 
 
+def _import_run_tests():
+    """``tools/run_tests.py`` in this process, for its building blocks
+    (``tools/`` is on ``sys.path`` only while it imports)."""
+    sys.path.insert(0, str(RUN_TESTS.parent))
+    try:
+        import run_tests
+    finally:
+        sys.path.remove(str(RUN_TESTS.parent))
+    return run_tests
+
+
 class ProcessHygieneTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = SyntheticRepo(self)
 
-    def test_a_leaked_process_is_reported_and_killed_without_failing(self) -> None:
+    def test_a_leaked_process_is_reported_killed_and_fails_the_run(self) -> None:
+        # D7 (I8): the test itself passes; its leak fails the shard and the run.
         completed, results = self.repo.run_selection("tests.test_leak")
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
         pid = int((self.repo.probe / "leak.pid").read_text())
         self.assertTrue(_wait_dead(pid), f"leaked pid {pid} is still alive")
-        leaks = self.repo.record(results, 0)["leaked_processes"]
-        self.assertEqual([(leak["pid"], leak["argv"]) for leak in leaks],
+        record = self.repo.record(results, 0)
+        self.assertEqual([(leak["pid"], leak["argv"]) for leak in record["leaked_processes"]],
                          [(pid, ["sleep", "300"])])
-        self.assertIn("## Leaked processes (warning, killed)", completed.stdout)
+        self.assertEqual([entry["outcome"] for entry in record["tests"]], ["pass"])
+        self.assertEqual(record["exit_status"], 1)
+        self.assertIn("# Test run: FAIL (exit 1)", completed.stdout)
+        self.assertIn("| 0 | LEAKED |", completed.stdout)
+        self.assertIn("## Leaked processes (failure, killed)", completed.stdout)
         self.assertIn(f"pid {pid}", completed.stdout)
+
+    def test_a_late_leak_fails_a_passing_record(self) -> None:
+        # The parent's own re-scan (run_shards) finds what the executor missed.
+        run_tests = _import_run_tests()
+        completed, results = self.repo.run_selection("tests.test_pass")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(self.repo.record(results, 0)["exit_status"], 0)
+        late = {"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}
+        run_tests._record_leaks(results, 0, [late])
+        record = self.repo.record(results, 0)
+        self.assertEqual((record["exit_status"], record["leaked_processes"]), (1, [late]))
+        run_tests._record_leaks(results, 0, [late])
+        self.assertEqual(self.repo.record(results, 0)["leaked_processes"], [late])
 
     def test_ctrl_c_interrupts_every_shard_and_leaves_nothing_behind(self) -> None:
         results = self.repo.results()

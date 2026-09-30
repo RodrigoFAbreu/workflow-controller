@@ -367,14 +367,19 @@ def _stream_log(shard: _Shard, results_dir: Path, *, final: bool = False) -> Non
 
 
 def _record_leaks(results_dir: Path, index: int, leaks: list[dict]) -> None:
-    """Add leaks the parent found after a shard exited to its record."""
+    """Add leaks the parent found after a shard exited to its record. A
+    passing record that gains one now fails (exit ``1``), as the executor's
+    own leaks do (``ts.shard_status``)."""
     path = ts.result_path(results_dir, index)
     try:
         record = ts.load_shard_result(path)
     except ts.ResultRecordError:
         return
     known = {leak["pid"] for leak in record["leaked_processes"]}
-    record["leaked_processes"] += [leak for leak in leaks if leak["pid"] not in known]
+    added = [leak for leak in leaks if leak["pid"] not in known]
+    record["leaked_processes"] += added
+    if added and record["exit_status"] == ts.EXIT_PASS:
+        record["exit_status"] = ts.EXIT_FAIL
     ts.write_json_atomic(path, record)
 
 

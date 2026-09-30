@@ -28,7 +28,7 @@ record. A leaked process fails the run (D7); nothing is retried automatically (I
 | CP1 The recorded command line fills once readable | Complete | See below |
 | CP2 The tests wait for the right signal | Complete | See below |
 | CP3 A re-run of failed jobs counts | Complete | See below |
-| CP4 A leaked process fails the run | Not started | |
+| CP4 A leaked process fails the run | Complete | See below |
 | CP5 Documentation and full verification | Not started | |
 
 ### CP1 -- the recorded command line fills once readable
@@ -188,3 +188,42 @@ tests.test_run_tests` passed (248 tests). `python3 tools/ci_workflows.py --check
 full sharded run (`python3 tools/run_tests.py`, 2493 tests, 6 shards) passed and wrote schema 2
 records (`run_attempt` 1). It ran through the same reaping-subreaper wrapper, in the foreground,
 with `FORCE_COLOR` and `PYTHONPATH` unset.
+
+### CP4 -- a leaked process fails the run
+
+- `tools/test_shards.py`:
+  - `shard_status` returns `1` for a record whose tests pass but whose `leaked_processes` is
+    non-empty. A refusal still returns `2`. So a leak-only shard's `exec-shard` exits `1`, its
+    `tests (<i>)` job is red, and "Re-run failed jobs" re-runs it (I8).
+  - `LEAKED`, a new verdict. `_verdict` gives it to a record whose tests pass but which lists a
+    leak, whether its exit status is `1` (the executor's own) or `0` (a pre-1.4.2 record): the
+    leak list decides, so an old record cannot pass by a stale status. Any other exit status is
+    still `CRASHED`, and a refused record is still `REFUSED`.
+  - `aggregate` exits `1` for `LEAKED`, like `FAIL`. `INTERRUPTED`, `REFUSED`, `CRASHED` and
+    `FAIL` keep their precedence.
+  - The summary section is "Leaked processes (failure, killed)", with a line saying a leak is a
+    test that left a process running. Each entry keeps its shard, pid, age and argv.
+  - `shard_verdict` (the executor's own stderr) labels a leak-only shard `LEAKED` and lists each
+    leaked process, so the red job says why.
+- `tools/run_tests.py` `_record_leaks`: a late leak the parent finds moves a passing record's
+  `exit_status` from `0` to `1`.
+- Tests:
+  - `tests/test_test_shards.py`: `LeakedShardTest` (new; `shard_status`, and `execute_shard` with a
+    patched leak scan: a passing shard that leaked exits `1` with `exit_status: 1`, a leak with a
+    refusal exits `2`). In `AggregateTest`, the pinning test becomes "a leaked process is
+    reported, killed and fails the run", plus a leak record read as `LEAKED` at exit status `1`
+    and `0`, and precedence (a leak with a FAIL in the same record is FAIL; `REFUSED`,
+    `CRASHED`, `INTERRUPTED` win; `LEAKED` beside `FAIL` exits `1`). In `AttemptSelectionTest`, a
+    leaked attempt 1 superseded by a clean attempt 2 passes and lists `LEAKED` under "Superseded
+    attempts".
+  - `tests/test_run_tests.py` `ProcessHygieneTest`: the end-to-end pinning test becomes "a leaked
+    process is reported, killed and fails the run" (exit `1`, `LEAKED`, record `exit_status: 1`);
+    `test_a_late_leak_fails_a_passing_record` (new) covers `_record_leaks`.
+
+Red run against the base's `tools/` (the new tests in place): 9 failures and errors -- every new
+or flipped test except the refusal one, which holds at the base as it should. With the fix,
+`tests.test_test_shards`, `tests.test_run_tests` and `tests.test_ci_workflows` pass.
+
+Verification: the full sharded run (`python3 tools/run_tests.py`, 2500 tests, 6 shards) passed
+with exact coverage and no leaked process, through the same reaping-subreaper wrapper, in the
+foreground, with `FORCE_COLOR` and `PYTHONPATH` unset.

@@ -17,6 +17,7 @@ directory, then drop it from ``sys.modules`` and ``sys.path`` again.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -1662,9 +1663,9 @@ class ExecutorRecordingTest(unittest.TestCase):
 
     def test_a_record_that_disagrees_with_unittest_is_refused_either_way(self) -> None:
         passing = {"tests": [{"id": "m.C.t", "outcome": "pass", "seconds": 0}],
-                   "fixture_errors": []}
+                   "fixture_errors": [], "leaked_processes": []}
         failing = {"tests": [{"id": "m.C.t", "outcome": "fail", "seconds": 0}],
-                   "fixture_errors": []}
+                   "fixture_errors": [], "leaked_processes": []}
         for record, was_successful in ((passing, False), (failing, True)):
             with self.subTest(record=record["tests"][0]["outcome"]):
                 problems: list[str] = []
@@ -1795,6 +1796,72 @@ def _fake_record(plan, index, outcomes: dict[str, str] | None = None, *, exit_st
     return shards.validate_shard_result(record)
 
 
+def _leaked(record, *, exit_status=1):
+    """``record`` with one leaked process and ``exit_status`` (``1``, the
+    executor's own status for a leak, by default)."""
+    record["leaked_processes"] = [{"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}]
+    record["exit_status"] = exit_status
+    return shards.validate_shard_result(record)
+
+
+class LeakedShardTest(unittest.TestCase):
+    """D7 (I8): the executor exits ``1`` for a shard whose tests pass but
+    which leaked a process, so its CI job is red and a re-run of failed jobs
+    re-runs it; a refusal still exits ``2``."""
+
+    def setUp(self) -> None:
+        self.tree = SyntheticTree(self, {"test_one": PLAIN})
+        ids, atoms = self.tree.family()
+        inventory = shards.Inventory(test_ids=tuple(ids), atoms=tuple(atoms))
+        self.plan = shards.build_plan(inventory.select(), _params(shards=1))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.results = Path(tmp.name)
+        self.leak = {"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}
+
+    def test_shard_status_fails_a_passing_record_that_leaked(self) -> None:
+        passing = {"tests": [{"id": "m.C.t", "outcome": "pass", "seconds": 0}],
+                   "fixture_errors": [], "leaked_processes": [self.leak]}
+        failing = {**passing, "tests": [{"id": "m.C.t", "outcome": "fail", "seconds": 0}]}
+        self.assertEqual(shards.shard_status(passing, True, []), 1)
+        self.assertEqual(shards.shard_status(passing, None, []), 1)
+        self.assertEqual(shards.shard_status(failing, False, []), 1)
+        self.assertEqual(shards.shard_status(passing, True, ["unmapped unittest event: x"]), 2)
+
+    def execute(self, plan=None):
+        killed = []
+        with unittest.mock.patch.object(shards, "scan_marked_processes",
+                                        return_value=[self.leak]) as scan, \
+                unittest.mock.patch.object(shards, "kill_processes", killed.extend):
+            record, status = shards.execute_shard(
+                plan or self.plan, 0, self.results, self.tree.top, argv=["exec-shard"],
+                environ={shards.SHARD_MARKER_ENV: "leak-run/0/1"})
+        scan.assert_called_once()
+        self.assertEqual(killed, [self.leak])
+        return record, status
+
+    def test_a_passing_shard_that_leaked_exits_1_and_says_so(self) -> None:
+        record, status = self.execute()
+        self.assertEqual(status, 1)
+        self.assertTrue(shards.record_passes(record))
+        self.assertEqual((record["exit_status"], record["leaked_processes"]), (1, [self.leak]))
+        self.assertEqual(shards.load_shard_result(shards.result_path(self.results, 0)), record)
+        verdict = shards.shard_verdict(record, status, self.results)
+        self.assertIn("shard 0: LEAKED (exit 1)", verdict)
+        self.assertIn("- leaked process (killed): pid 4242: `sleep 60`", verdict)
+        result = shards.aggregate(self.plan, {0: record}, self.results)
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.LEAKED, 1))
+
+    def test_a_leak_with_a_refusal_still_exits_2(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["shards"][0]["test_ids"].append(f"{self.tree.pkg}.test_one.ATest.test_gone")
+        record, status = self.execute(plan)
+        self.assertEqual((status, record["exit_status"]), (2, 2))
+        self.assertEqual(record["leaked_processes"], [self.leak])
+        result = shards.aggregate(self.plan, {0: record}, self.results)
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.REFUSED, 2))
+
+
 class AggregateTest(unittest.TestCase):
     """Verdicts, the run-time coverage proof (I2), exit statuses and the
     summary, over a two-shard plan of a synthetic tree."""
@@ -1922,12 +1989,46 @@ class AggregateTest(unittest.TestCase):
         result = self.run_aggregate({1: _fake_record(self.plan, 1)}, shards=[1])
         self.assertEqual((result.exit_status, len(result.shards)), (0, 1))
 
-    def test_leaks_are_listed_as_a_warning(self) -> None:
-        record = _fake_record(self.plan, 0)
-        record["leaked_processes"] = [{"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}]
-        result = self.run_aggregate({0: record, 1: _fake_record(self.plan, 1)})
-        self.assertEqual(result.exit_status, 0)
-        self.assertIn("pid 4242, age 3.0 s: `sleep 60`", result.summary)
+    def test_a_leaked_process_is_reported_killed_and_fails_the_run(self) -> None:
+        # D7 (I8): a leak fails the run, even when every test passed.
+        result = self.run_aggregate({0: _leaked(_fake_record(self.plan, 0)),
+                                     1: _fake_record(self.plan, 1)})
+        self.assertEqual(result.exit_status, 1)
+        self.assertEqual([row["verdict"] for row in result.shards], ["LEAKED", "PASS"])
+        self.assertIn("# Test run: FAIL (exit 1)", result.summary)
+        self.assertIn("| 0 | LEAKED |", result.summary)
+        self.assertIn("## Leaked processes (failure, killed)", result.summary)
+        self.assertNotIn("warning", result.summary)
+        self.assertIn("a test that left a process running", result.summary)
+        self.assertIn("- shard 0: pid 4242, age 3.0 s: `sleep 60`", result.summary)
+
+    def test_a_leak_record_is_leaked_whatever_its_pass_or_fail_status(self) -> None:
+        # Exit 1 is the executor's own status for a leak; exit 0 is a
+        # pre-1.4.2 record, which must not pass by that stale status.
+        for status in (1, 0):
+            with self.subTest(exit_status=status):
+                record = _leaked(_fake_record(self.plan, 0), exit_status=status)
+                result = self.run_aggregate({0: record, 1: _fake_record(self.plan, 1)})
+                self.assertEqual(result.shards[0]["verdict"], shards.LEAKED)
+                self.assertEqual(result.exit_status, 1)
+                self.assertNotIn(0, result.notes)
+
+    def test_a_leak_keeps_the_precedence_of_worse_verdicts(self) -> None:
+        failing = _leaked(_fake_record(self.plan, 0, {self.first: "fail"}))
+        result = self.run_aggregate({0: failing, 1: _fake_record(self.plan, 1)})
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.FAIL, 1))
+        refused = _leaked(_fake_record(self.plan, 0), exit_status=2)
+        result = self.run_aggregate({0: refused, 1: _fake_record(self.plan, 1)})
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.REFUSED, 2))
+        leaked = _leaked(_fake_record(self.plan, 0))
+        result = self.run_aggregate({0: leaked, 1: None})
+        self.assertEqual((result.shards[1]["verdict"], result.exit_status), (shards.CRASHED, 2))
+        result = self.run_aggregate({0: leaked, 1: None}, interrupted={1})
+        self.assertEqual(result.exit_status, 130)
+        result = self.run_aggregate({0: leaked, 1: _fake_record(self.plan, 1, {
+            self.plan["shards"][1]["test_ids"][0]: "fail"})})
+        self.assertEqual([row["verdict"] for row in result.shards], ["LEAKED", "FAIL"])
+        self.assertEqual(result.exit_status, 1)
 
     def test_load_results_names_missing_and_invalid_records(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -1999,6 +2100,23 @@ class AttemptSelectionTest(unittest.TestCase):
                 self.assertEqual([(row["verdict"], row["attempt"]) for row in result.shards],
                                  [("PASS", 1), ("PASS", 2)])
                 self.assertEqual(result.failures, [])
+
+    def test_a_leaked_attempt_is_superseded_by_a_clean_rerun(self) -> None:
+        # I4 with I8: "Re-run failed jobs" re-ran the leaked shard's red job.
+        self.put(0, 1)
+        self.put(1, 1, record=_leaked(_fake_record(self.plan, 1, attempt=1)))
+        self.put(1, 2)
+        result = self.run_aggregate(run_attempt=2, upstream={"plan": "success",
+                                                             "tests": "success"})
+        self.assertEqual(result.exit_status, 0, result.summary)
+        self.assertEqual([(row["verdict"], row["attempt"]) for row in result.shards],
+                         [("PASS", 1), ("PASS", 2)])
+        self.assertEqual(result.superseded, [{"shard": 1, "attempt": 1, "verdict": "LEAKED",
+                                              "failing": [], "note": ""}])
+        self.assertIn("- shard 1, attempt 1: LEAKED; artifact `results-1-attempt-1`\n",
+                      result.summary)
+        self.assertEqual(result.leaks, [])
+        self.assertNotIn("## Leaked processes", result.summary)
 
     def test_a_superseded_failure_is_listed_not_hidden(self) -> None:
         self.replay_36483126576()

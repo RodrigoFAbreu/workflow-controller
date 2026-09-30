@@ -1420,7 +1420,9 @@ def shard_status(record: Mapping, was_successful: bool | None,
     """The executor's exit status for ``record``: ``2`` when ``problems`` is
     non-empty or when the record's controller-family verdict differs from
     ``unittest``'s own ``wasSuccessful()`` in either direction (appending
-    that to ``problems``), else ``0`` if the record passes, else ``1``.
+    that to ``problems``), else ``0`` if the record passes and leaked no
+    process, else ``1``: a leak fails the shard even when every test passed
+    (I8), so its CI job is red and a re-run of failed jobs re-runs it.
     ``was_successful`` is ``None`` when no controller test was run."""
     controller_passes = (all(entry["outcome"] in PASSING_OUTCOMES for entry in record["tests"]
                              if not entry["id"].startswith(CONFORMANCE_PREFIX))
@@ -1431,7 +1433,7 @@ def shard_status(record: Mapping, was_successful: bool | None,
                         f"differs from unittest's wasSuccessful() ({expected})")
     if problems:
         return EXIT_REFUSED
-    return EXIT_PASS if record_passes(record) else EXIT_FAIL
+    return EXIT_PASS if record_passes(record) and not record["leaked_processes"] else EXIT_FAIL
 
 
 def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path = REPO_ROOT,
@@ -1440,10 +1442,11 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
     """Run shard ``index`` of ``plan`` in this process, write
     ``<results_dir>/shard-<index>.json`` (appending the runner output to
     ``shard-<index>.log``), and return the record and the exit status: ``0``
-    pass, ``1`` fail, ``2`` refused. The loaded ids are checked against the
-    planned ids before anything runs; any event the recording rules cannot
-    map, any planned id left without an entry, or a disagreement with
-    ``unittest``'s own verdict refuses the shard after it ran. The record
+    pass, ``1`` fail (a failing test or a leaked process), ``2`` refused.
+    The loaded ids are checked against the planned ids before anything runs;
+    any event the recording rules cannot map, any planned id left without an
+    entry, or a disagreement with ``unittest``'s own verdict refuses the
+    shard after it ran. The record
     carries ``run_attempt`` (a CI run's ``github.run_attempt``; ``1``
     locally)."""
     results_dir = Path(results_dir)
@@ -1573,6 +1576,8 @@ FAIL = "FAIL"
 CRASHED = "CRASHED"
 REFUSED = "REFUSED"
 INTERRUPTED = "INTERRUPTED"
+#: Every test passed, but the shard left a process running (I8): a failure.
+LEAKED = "LEAKED"
 FAILING_OUTCOMES = frozenset({"fail", "error", "unexpected_success"})
 #: The jobs whose current-attempt result ``aggregate`` can be given, and the
 #: results GitHub Actions reports for a job (``needs.<job>.result``).
@@ -1770,11 +1775,17 @@ def _verdict(index: int, planned: list[str], record: Mapping | None, interrupted
         notes.setdefault(index, "the result record does not cover the shard's planned ids")
         return CRASHED
     passes = record_passes(record)
-    if record["exit_status"] != (EXIT_PASS if passes else EXIT_FAIL):
+    if passes and record["leaked_processes"]:
+        # The leak list decides: a pre-1.4.2 record says exit 0 for a leak,
+        # and must not pass by that stale status.
+        expected, verdict = (EXIT_FAIL, EXIT_PASS), LEAKED
+    else:
+        expected, verdict = ((EXIT_PASS,), PASS) if passes else ((EXIT_FAIL,), FAIL)
+    if record["exit_status"] not in expected:
         notes.setdefault(index, f"exit status {record['exit_status']} disagrees with the "
                                 f"record's own verdict")
         return CRASHED
-    return PASS if passes else FAIL
+    return verdict
 
 
 def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir: Path, *,
@@ -1853,7 +1864,7 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
         status = EXIT_INTERRUPTED
     elif verdicts & {REFUSED, CRASHED} or not_run or violations:
         status = EXIT_REFUSED
-    elif FAIL in verdicts:
+    elif verdicts & {FAIL, LEAKED}:
         status = EXIT_FAIL
     else:
         status = EXIT_PASS
@@ -1897,13 +1908,16 @@ def shard_verdict(record: Mapping, status: int, results_dir: Path) -> str:
     failing ids and fixture errors with their traceback tails, and its log,
     so a failed CI shard job says why in its own step log."""
     index = record["shard"]
-    label = "REFUSED" if status == EXIT_REFUSED else "FAIL"
+    leaks_only = status == EXIT_FAIL and record_passes(record)
+    label = "REFUSED" if status == EXIT_REFUSED else "LEAKED" if leaks_only else "FAIL"
     lines = [f"shard {index}: {label} (exit {status}); log: {log_path(results_dir, index)}"]
     for entry in record["tests"]:
         if entry["outcome"] in FAILING_OUTCOMES:
             lines += [f"- {entry['outcome']}: {entry['id']}", _tail(entry.get("detail", ""))]
     for entry in record["fixture_errors"]:
         lines += [f"- fixture error: {entry['description']}", _tail(entry["traceback"])]
+    for leak in record["leaked_processes"]:
+        lines.append(f"- leaked process (killed): pid {leak['pid']}: `{' '.join(leak['argv'])}`")
     if status == EXIT_REFUSED:
         lines.append("- the executor refused the shard; the log's REFUSED lines say why")
     return "\n".join(line for line in lines if line) + "\n"
@@ -2019,7 +2033,9 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
                          f"{entry['verdict']}{note}{where}")
             lines += [f"  - `{test_id}`" for test_id in entry["failing"]]
     if result.leaks:
-        lines += ["", "## Leaked processes (warning, killed)", ""]
+        lines += ["", "## Leaked processes (failure, killed)", "",
+                  "A leak is a test that left a process running; each test must end every "
+                  "process it starts.", ""]
         lines += [f"- shard {index}: pid {leak['pid']}, age {leak['age_seconds']:.1f} s: "
                   f"`{' '.join(leak['argv'])}`" for index, leak in result.leaks]
     return "\n".join(lines) + "\n"

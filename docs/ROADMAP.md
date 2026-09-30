@@ -36,7 +36,7 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 | C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) (complete) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
 | C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance (complete) | — | [11.1.1](#1111-reaping-every-child-process) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count | — | [11.2](#112-ci-reliability) |
-| C3 | Settings file v1, the 1.4 cleanup patches, and telemetry v0 (tokens, cache, cost and time per job) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements) |
+| C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -1084,9 +1084,9 @@ cutover. Merge mode is unchanged in 1.4.0, and the binding keeps the merge mode 
 **Status:** Complete (`workflow-controller-child-process-reaping`, accepted 2026-09-30 under
 Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md`, the 1.4.1
 amendment to `docs/adr/0004-worker-lifecycle-ownership.md`; the narrative is archived at
-`docs/milestones/completed/workflow-controller-child-process-reaping.md`). It releases as 1.4.1
-when PR #11 is squash-merged. The release notes reach neither the PR body nor the GitHub release
-yet; a docs pull request adds `docs/releases/1.4.1.md` after the release.
+`docs/milestones/completed/workflow-controller-child-process-reaping.md`). Released as 1.4.1
+(PR #11, squash `e8cd8f9`, 2026-09-30). Its release notes reached neither the PR body nor the GitHub
+release (see 11.1.2); they are in `docs/releases/1.4.1.md`.
 
 **Step C1b** (added 2026-09-29, ahead of C2). On 2026-09-29 every Claude Code process on the host
 aborted twice within ten minutes: the per-user process limit (125,849, threads included) was full
@@ -1111,6 +1111,26 @@ of zombie `git` processes held by the two lanes' Controllers.
   the same in its own M1b.
 - **Afterwards.** Both lanes drop their stopgap, one step per Controller process (`--max-steps 1`),
   once the patch release is installed. A long-lived Controller (C4, C11) depends on this fix.
+
+## 11.1.2 Release notes follow the milestone
+
+**Part of step C3** (added 2026-09-30, from C1b's functional review, flow H). `docs/README.md` says
+that from 1.4.0 a milestone's release notes are its pull request body, which becomes the squash
+commit's body. The code does not do that:
+- in squash mode the Controller writes a fixed body (`squash_body` in `controller/milestone_branch.py`:
+  the work item, the plan, the "Accepted at" line) and overwrites the pull request body at
+  readiness, so notes written into the body are lost;
+- the GitHub release's notes are the policy's `release.publication.notes`, `workflow-controller {tag}`.
+
+So 1.4.1's notes, written in the milestone's "Pull request body" section, were published nowhere;
+`docs/releases/1.4.1.md` keeps them by hand.
+
+- A milestone's release-notes section (the narrative's "Pull request body" section) becomes the
+  pull request body at readiness, above the Controller's own lines, so the squash commit carries it.
+- The release publishes the squash commit's body as the GitHub release notes.
+- Readiness still refuses a trailer-like line in the body (I8 of the C1 plan), and a milestone
+  without a notes section keeps today's body.
+- `docs/README.md`'s rule and the release guide are corrected to match.
 
 ## 11.2 CI reliability
 
@@ -1159,8 +1179,17 @@ needs no special case.
   where there is one.
 - **Idempotency:** each event carries an `Idempotency-Key` derived from its run, job or event
   identity, so a retry or a `resume` never sends a notification twice.
-- **Configuration:** it lives in the settings file (C3): the server address, which events are sent,
-  and the minimum severity. The API key comes from the environment or a file, never from the
+- **Configuration:** it lives in the settings file (C3): the server address, and **every event is
+  configurable per event type** (the user's requirement, 2026-09-30):
+  - on or off (for example, turn off the per-step state-switch events);
+  - its category and severity (for example, raise "milestone accepted" from NORMAL to HIGH);
+  - an event type's setting overrides its kind's, and the defaults are the mapping the lanes use by
+    hand today: a finished step, a usage pause or a limit wait INFO/LOW; a Codex review, an approval
+    recorded, a milestone started or accepted, a merge or a release INFO/NORMAL; a user gate
+    ACTION_REQUIRED/HIGH; a blocker BLOCKED/CRITICAL.
+
+  Until C5, the lanes read the same settings from `~/.config/signalhub/events.json` through a shared
+  script, with the same event names. The API key comes from the environment or a file, never from the
   repository.
 - **Notifications never steer the lifecycle.** A notification that cannot be delivered is retried
   a bounded number of times and recorded in the run's events. It never blocks, fails or changes a

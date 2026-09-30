@@ -135,7 +135,10 @@ CI_PLACEMENT = {
 EXCLUSIVE_ATOMS: dict[str, str] = {}
 
 #: Result records and timing files.
-RESULT_SCHEMA_VERSION = 1
+#: Version 2 adds the required ``run_attempt``; version 1 records (no
+#: ``run_attempt``) are still read, as attempt 1.
+RESULT_SCHEMA_VERSION = 2
+_RESULT_SCHEMA_VERSIONS = frozenset({1, RESULT_SCHEMA_VERSION})
 TIMINGS_SCHEMA_VERSION = 1
 OUTCOMES = frozenset({"pass", "fail", "error", "skip", "expected_failure",
                       "unexpected_success"})
@@ -406,6 +409,8 @@ class ResultRecordError(Exception):
 _RESULT_KEYS = ("schema_version", "plan_digest", "shard", "argv", "started_at", "ended_at",
                 "wall_seconds", "exit_status", "tests", "fixture_errors", "fixture_skips",
                 "atoms", "leaked_processes")
+#: Keys only a version 2 record carries (and must carry).
+_RESULT_KEYS_V2 = ("run_attempt",)
 
 
 def _is_int(value) -> bool:
@@ -464,15 +469,17 @@ def validate_shard_result(record) -> dict:
     if not isinstance(record, dict):
         raise ResultRecordError("a shard result record is not a JSON object")
     problems = []
-    missing = [key for key in _RESULT_KEYS if key not in record]
-    unknown = sorted(set(record) - set(_RESULT_KEYS))
+    keys = _RESULT_KEYS + (_RESULT_KEYS_V2 if record.get("schema_version") == 2 else ())
+    missing = [key for key in keys if key not in record]
+    unknown = sorted(set(record) - set(keys))
     if missing:
         problems.append("missing keys " + ", ".join(missing))
     if unknown:
         problems.append("unknown keys " + ", ".join(unknown))
     is_str = lambda value: isinstance(value, str)  # noqa: E731
     checks = {
-        "schema_version": lambda value: value == RESULT_SCHEMA_VERSION,
+        "schema_version": lambda value: _is_int(value) and value in _RESULT_SCHEMA_VERSIONS,
+        "run_attempt": lambda value: _is_int(value) and value >= 1,
         "plan_digest": lambda value: is_str(value) and bool(value),
         "shard": lambda value: _is_int(value) and value >= 0,
         "argv": lambda value: isinstance(value, list) and all(map(is_str, value)),
@@ -514,6 +521,12 @@ def load_shard_result(path: Path) -> dict:
         return validate_shard_result(record)
     except ResultRecordError as exc:
         raise ResultRecordError(f"{path}: {exc}")
+
+
+def record_attempt(record: Mapping) -> int:
+    """The GitHub Actions run attempt that wrote ``record``: its
+    ``run_attempt``, or ``1`` for a version 1 record, which has none."""
+    return record.get("run_attempt", 1)
 
 
 def record_passes(record: Mapping) -> bool:
@@ -1407,7 +1420,9 @@ def shard_status(record: Mapping, was_successful: bool | None,
     """The executor's exit status for ``record``: ``2`` when ``problems`` is
     non-empty or when the record's controller-family verdict differs from
     ``unittest``'s own ``wasSuccessful()`` in either direction (appending
-    that to ``problems``), else ``0`` if the record passes, else ``1``.
+    that to ``problems``), else ``0`` if the record passes and leaked no
+    process, else ``1``: a leak fails the shard even when every test passed
+    (I8), so its CI job is red and a re-run of failed jobs re-runs it.
     ``was_successful`` is ``None`` when no controller test was run."""
     controller_passes = (all(entry["outcome"] in PASSING_OUTCOMES for entry in record["tests"]
                              if not entry["id"].startswith(CONFORMANCE_PREFIX))
@@ -1418,19 +1433,22 @@ def shard_status(record: Mapping, was_successful: bool | None,
                         f"differs from unittest's wasSuccessful() ({expected})")
     if problems:
         return EXIT_REFUSED
-    return EXIT_PASS if record_passes(record) else EXIT_FAIL
+    return EXIT_PASS if record_passes(record) and not record["leaked_processes"] else EXIT_FAIL
 
 
 def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path = REPO_ROOT,
-                  *, argv: Iterable[str] = (), environ: Mapping[str, str] = os.environ
-                  ) -> tuple[dict, int]:
+                  *, argv: Iterable[str] = (), environ: Mapping[str, str] = os.environ,
+                  run_attempt: int = 1) -> tuple[dict, int]:
     """Run shard ``index`` of ``plan`` in this process, write
     ``<results_dir>/shard-<index>.json`` (appending the runner output to
     ``shard-<index>.log``), and return the record and the exit status: ``0``
-    pass, ``1`` fail, ``2`` refused. The loaded ids are checked against the
-    planned ids before anything runs; any event the recording rules cannot
-    map, any planned id left without an entry, or a disagreement with
-    ``unittest``'s own verdict refuses the shard after it ran."""
+    pass, ``1`` fail (a failing test or a leaked process), ``2`` refused.
+    The loaded ids are checked against the planned ids before anything runs;
+    any event the recording rules cannot map, any planned id left without an
+    entry, or a disagreement with ``unittest``'s own verdict refuses the
+    shard after it ran. The record
+    carries ``run_attempt`` (a CI run's ``github.run_attempt``; ``1``
+    locally)."""
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     shard = plan["shards"][index]
@@ -1476,8 +1494,9 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
             leaks = scan_marked_processes(marker, exclude={os.getpid()})
             kill_processes(leaks)
         record = {
-            "schema_version": RESULT_SCHEMA_VERSION, "plan_digest": plan["plan_digest"],
-            "shard": index, "argv": list(argv), "started_at": started_at, "ended_at": _now(),
+            "schema_version": RESULT_SCHEMA_VERSION, "run_attempt": run_attempt,
+            "plan_digest": plan["plan_digest"], "shard": index, "argv": list(argv),
+            "started_at": started_at, "ended_at": _now(),
             "wall_seconds": round(time.monotonic() - start, 6), "exit_status": EXIT_REFUSED,
             "tests": [entries[test_id] for test_id in planned if test_id in entries],
             "fixture_errors": fixture_errors, "fixture_skips": fixture_skips,
@@ -1557,15 +1576,29 @@ FAIL = "FAIL"
 CRASHED = "CRASHED"
 REFUSED = "REFUSED"
 INTERRUPTED = "INTERRUPTED"
+#: Every test passed, but the shard left a process running (I8): a failure.
+LEAKED = "LEAKED"
 FAILING_OUTCOMES = frozenset({"fail", "error", "unexpected_success"})
+#: The jobs whose current-attempt result ``aggregate`` can be given, and the
+#: results GitHub Actions reports for a job (``needs.<job>.result``).
+UPSTREAM_JOBS = ("plan", "tests")
+UPSTREAM_RESULTS = ("success", "failure", "cancelled", "skipped")
+UPSTREAM_SUCCESS = "success"
+#: A CI per-attempt results directory, as ``download-artifact`` names it
+#: after the artifact: ``results-<index>-attempt-<attempt>``.
+RESULTS_ARTIFACT_DIR_RE = re.compile(r"^results-(\d+)-attempt-(\d+)$")
 
 
 @dataclass(frozen=True)
 class ArtifactNames:
     """Where a CI run's evidence can be downloaded: the plan's artifact, and
-    the prefix of each shard's results artifact (``<prefix><index>``)."""
+    the prefix of each shard's results artifact
+    (``<prefix><index>-attempt-<attempt>``)."""
     plan: str
     results_prefix: str
+
+    def results(self, index: int, attempt: int) -> str:
+        return f"{self.results_prefix}{index}-attempt-{attempt}"
 
 
 class AggregateError(Exception):
@@ -1587,6 +1620,19 @@ class Aggregate:
     #: The coverage check's counts: ``planned``, ``missing``, ``unplanned``
     #: and ``duplicate``; it is exact when the last three are all zero.
     coverage: dict[str, int] = field(default_factory=dict)
+    #: Each record a later attempt of its shard replaced (I5): ``shard``,
+    #: ``attempt``, ``verdict``, ``failing`` ids and ``note``.
+    superseded: list[dict] = field(default_factory=list)
+    #: The current attempt's jobs that did not succeed: ``(job, result)``.
+    upstream_failures: list[tuple[str, str]] = field(default_factory=list)
+    #: Whether ``upstream_failures`` alone decided the exit status: the
+    #: selected records would pass, so the run exits ``2`` (I4a).
+    upstream_refused: bool = False
+    #: The file each failure's replay command names (``--plan``).
+    plan_path: Path | None = None
+    #: The directory each shard's selected record came from, where its log
+    #: is; a shard not named here has its log directly in ``results_dir``.
+    record_dirs: dict[int, Path] = field(default_factory=dict)
 
 
 def load_results(plan: Mapping, results_dir: Path, indexes: Iterable[int] | None = None
@@ -1607,6 +1653,127 @@ def load_results(plan: Mapping, results_dir: Path, indexes: Iterable[int] | None
     return records, notes
 
 
+@dataclass
+class _Candidate:
+    """One ``shard-<i>.json`` found by ``select_results``: its record, or
+    ``None`` with the reason it is unreadable, and the attempt that wrote it
+    (``None`` when neither the record nor its directory says)."""
+    path: Path
+    index: int
+    attempt: int | None
+    record: dict | None
+    note: str = ""
+
+
+def _candidates(results_dir: Path) -> list[_Candidate]:
+    """Every ``shard-<i>.json`` directly in ``results_dir`` (the local, flat
+    layout) or one directory below it (CI's per-artifact layout). A record
+    in a ``results-<i>-attempt-<a>`` directory must say it is shard ``<i>``
+    of attempt ``<a>``, and a record must say it is the shard its file name
+    names (I7)."""
+    results_dir = Path(results_dir)
+    if not results_dir.is_dir():
+        return []
+    found = []
+    for directory in [results_dir, *sorted(p for p in results_dir.iterdir() if p.is_dir())]:
+        named = RESULTS_ARTIFACT_DIR_RE.match(directory.name) if directory != results_dir \
+            else None
+        for path in sorted(directory.glob("shard-*.json")):
+            match = re.fullmatch(r"shard-(\d+)\.json", path.name)
+            if match is None:
+                continue
+            index = int(match.group(1))
+            try:
+                record = load_shard_result(path)
+            except ResultRecordError as exc:
+                attempt = int(named.group(2)) if named else None
+                found.append(_Candidate(path, index, attempt, None, str(exc)))
+                continue
+            if record["shard"] != index:
+                raise AggregateError(f"{path} says it is shard {record['shard']}")
+            attempt = record_attempt(record)
+            if named and (int(named.group(1)), int(named.group(2))) != (index, attempt):
+                raise AggregateError(
+                    f"{path} is shard {index} of attempt {attempt}, but its directory "
+                    f"{directory.name} names shard {named.group(1)} of attempt "
+                    f"{named.group(2)}")
+            found.append(_Candidate(path, index, attempt, record))
+    return found
+
+
+def select_results(plan: Mapping, results_dir: Path, *, run_attempt: int | None = None
+                   ) -> tuple[dict[int, dict | None], dict[int, str], list[dict],
+                              dict[int, Path]]:
+    """Each planned shard's record from ``results_dir``, in either layout
+    (see ``_candidates``), taking the one with the highest ``run_attempt``
+    (I4); a note for each shard left without one; the records a later
+    attempt superseded (I5), for ``aggregate``'s ``superseded``; and the
+    directory of each shard's deciding record, where its log is, for
+    ``aggregate``'s ``record_dirs``.
+
+    Refused with ``AggregateError`` (I7): two records for the same shard
+    and attempt, a record above ``run_attempt`` (when given), any record
+    carrying another plan's digest, and a directory or file name that
+    disagrees with its record. An unreadable record leaves its shard
+    without one unless its directory proves an older attempt than the
+    selected record's."""
+    by_index: dict[int, list[_Candidate]] = {}
+    for candidate in _candidates(results_dir):
+        if 0 <= candidate.index < plan["shard_count"]:
+            by_index.setdefault(candidate.index, []).append(candidate)
+    records: dict[int, dict | None] = {}
+    notes: dict[int, str] = {}
+    superseded: list[dict] = []
+    directories: dict[int, Path] = {}
+    for index in range(plan["shard_count"]):
+        candidates = by_index.get(index, [])
+        seen: dict[int, Path] = {}
+        for candidate in candidates:
+            if candidate.attempt is None:
+                continue
+            if run_attempt is not None and candidate.attempt > run_attempt:
+                raise AggregateError(f"{candidate.path} is attempt {candidate.attempt}, above "
+                                     f"this run's attempt {run_attempt}")
+            if candidate.record is not None \
+                    and candidate.record["plan_digest"] != plan["plan_digest"]:
+                raise AggregateError(f"{candidate.path} carries plan_digest "
+                                     f"{candidate.record['plan_digest']}, not the plan's "
+                                     f"{plan['plan_digest']}")
+            if candidate.attempt in seen:
+                raise AggregateError(f"shard {index} has two records of attempt "
+                                     f"{candidate.attempt}: {seen[candidate.attempt]} and "
+                                     f"{candidate.path}")
+            seen[candidate.attempt] = candidate.path
+        valid = [c for c in candidates if c.record is not None]
+        chosen = max(valid, key=lambda c: c.attempt) if valid else None
+        blocking = [c for c in candidates if c.record is None
+                    and (chosen is None or c.attempt is None or c.attempt >= chosen.attempt)]
+        # The candidate that decides the shard: the latest readable record,
+        # or an unreadable one not provably older, which leaves it none.
+        taken = blocking[0] if blocking else chosen
+        if taken is not None:
+            directories[index] = taken.path.parent
+        if taken is None:
+            records[index], notes[index] = None, "no result record"
+        elif taken.record is None:
+            records[index], notes[index] = None, taken.note
+        else:
+            records[index] = taken.record
+        planned = plan["shards"][index]["test_ids"]
+        for candidate in sorted(candidates, key=lambda c: (c.attempt or 0, str(c.path))):
+            if candidate is taken:
+                continue
+            own_notes: dict[int, str] = {}
+            verdict = (_verdict(index, planned, candidate.record, False, own_notes)
+                       if candidate.record is not None else CRASHED)
+            failing = [entry["id"] for entry in (candidate.record or {}).get("tests", ())
+                       if entry["outcome"] in FAILING_OUTCOMES]
+            superseded.append({"shard": index, "attempt": candidate.attempt,
+                               "verdict": verdict, "failing": failing,
+                               "note": candidate.note or own_notes.get(index, "")})
+    return records, notes, superseded, directories
+
+
 def _verdict(index: int, planned: list[str], record: Mapping | None, interrupted: bool,
              notes: dict[int, str]) -> str:
     if interrupted:
@@ -1622,23 +1789,39 @@ def _verdict(index: int, planned: list[str], record: Mapping | None, interrupted
         notes.setdefault(index, "the result record does not cover the shard's planned ids")
         return CRASHED
     passes = record_passes(record)
-    if record["exit_status"] != (EXIT_PASS if passes else EXIT_FAIL):
+    if passes and record["leaked_processes"]:
+        # The leak list decides: a pre-1.4.2 record says exit 0 for a leak,
+        # and must not pass by that stale status.
+        expected, verdict = (EXIT_FAIL, EXIT_PASS), LEAKED
+    else:
+        expected, verdict = ((EXIT_PASS,), PASS) if passes else ((EXIT_FAIL,), FAIL)
+    if record["exit_status"] not in expected:
         notes.setdefault(index, f"exit status {record['exit_status']} disagrees with the "
                                 f"record's own verdict")
         return CRASHED
-    return PASS if passes else FAIL
+    return verdict
 
 
 def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir: Path, *,
               shards: Iterable[int] | None = None, interrupted: Iterable[int] = (),
               notes: Mapping[int, str] | None = None, wall_seconds: float | None = None,
-              artifacts: ArtifactNames | None = None) -> Aggregate:
+              artifacts: ArtifactNames | None = None, superseded: Iterable[Mapping] = (),
+              upstream: Mapping[str, str] | None = None, plan_path: Path | None = None,
+              record_dirs: Mapping[int, Path] | None = None) -> Aggregate:
     """Verdicts, the run-time coverage proof (I2), the exit status and the
     summary for ``plan`` given its shards' ``records`` (``None`` for a shard
     that left none). ``shards`` restricts the run to those shards (a
     ``--replay --shard``). A record carrying another plan's digest, or
     another shard's index, refuses the whole aggregate. ``artifacts`` names
-    the CI artifacts that hold each failure's log and the plan."""
+    the CI artifacts that hold each failure's log and the plan.
+    ``superseded`` (from ``select_results``) is listed, never judged (I5).
+    ``upstream`` maps a job of the current CI attempt to its result: any
+    result other than ``success`` turns an otherwise passing run into exit
+    ``2`` (I4a), since an earlier attempt's record or plan cannot stand in
+    for a job that failed in this one. ``plan_path`` is the plan file the
+    replay commands name (default ``<results_dir>/plan.json``), and
+    ``record_dirs`` (from ``select_results``) the directory each shard's
+    record, and so its log, came from (default ``results_dir``)."""
     validate_plan(plan)
     indexes = list(range(plan["shard_count"]) if shards is None else shards)
     interrupted = set(interrupted)
@@ -1692,22 +1875,35 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
         rows.append({"index": index, "verdict": verdict, "tests": len(planned),
                      "wall_seconds": record["wall_seconds"] if record is not None else None,
                      "estimate_seconds": shard["estimate_seconds"],
+                     "attempt": record_attempt(record) if record is not None else None,
                      "atoms": dict(record["atoms"]) if record is not None else {}})
     verdicts = {row["verdict"] for row in rows}
     if INTERRUPTED in verdicts:
         status = EXIT_INTERRUPTED
     elif verdicts & {REFUSED, CRASHED} or not_run or violations:
         status = EXIT_REFUSED
-    elif FAIL in verdicts:
+    elif verdicts & {FAIL, LEAKED}:
         status = EXIT_FAIL
     else:
         status = EXIT_PASS
+    upstream_failures = [(job, outcome) for job, outcome in (upstream or {}).items()
+                         if outcome != UPSTREAM_SUCCESS]
+    upstream_refused = bool(upstream_failures) and status == EXIT_PASS
+    if upstream_refused:
+        status = EXIT_REFUSED
     result = Aggregate(shards=rows, not_run=not_run, violations=violations, failures=failures,
                        fixture_errors=fixture_errors, fixture_skips=fixture_skips, leaks=leaks,
                        exit_status=status, notes=notes,
                        coverage={"planned": sum(row["tests"] for row in rows),
                                  "missing": len(not_run), "unplanned": unplanned,
-                                 "duplicate": duplicate})
+                                 "duplicate": duplicate},
+                       superseded=[dict(entry) for entry in superseded],
+                       upstream_failures=upstream_failures,
+                       upstream_refused=upstream_refused,
+                       plan_path=Path(results_dir) / "plan.json" if plan_path is None
+                       else Path(plan_path),
+                       record_dirs={index: Path(directory)
+                                    for index, directory in (record_dirs or {}).items()})
     result.summary = render_summary(plan, result, results_dir, wall_seconds=wall_seconds,
                                     artifacts=artifacts)
     return result
@@ -1721,14 +1917,14 @@ def _tail(text: str, lines: int = TRACEBACK_TAIL_LINES) -> str:
     return "\n".join(text.rstrip("\n").splitlines()[-lines:])
 
 
-def _reproduce(name: str, index: int, results_dir: Path) -> list[str]:
+def _reproduce(name: str, index: int, plan_path: Path) -> list[str]:
     if name.startswith(CONFORMANCE_PREFIX):
         isolated = f"cd {SCRIPTS_DIR} && python3 {name[len(CONFORMANCE_PREFIX):]}"
     else:
         isolated = f"python3 -m unittest {name}"
     return [f"- reproduce alone: `{isolated}`",
             f"- reproduce in the shard's order: `python3 {RUN_TESTS} --replay "
-            f"{Path(results_dir) / 'plan.json'} --shard {index}`"]
+            f"{plan_path} --shard {index}`"]
 
 
 def shard_verdict(record: Mapping, status: int, results_dir: Path) -> str:
@@ -1736,13 +1932,16 @@ def shard_verdict(record: Mapping, status: int, results_dir: Path) -> str:
     failing ids and fixture errors with their traceback tails, and its log,
     so a failed CI shard job says why in its own step log."""
     index = record["shard"]
-    label = "REFUSED" if status == EXIT_REFUSED else "FAIL"
+    leaks_only = status == EXIT_FAIL and record_passes(record)
+    label = "REFUSED" if status == EXIT_REFUSED else "LEAKED" if leaks_only else "FAIL"
     lines = [f"shard {index}: {label} (exit {status}); log: {log_path(results_dir, index)}"]
     for entry in record["tests"]:
         if entry["outcome"] in FAILING_OUTCOMES:
             lines += [f"- {entry['outcome']}: {entry['id']}", _tail(entry.get("detail", ""))]
     for entry in record["fixture_errors"]:
         lines += [f"- fixture error: {entry['description']}", _tail(entry["traceback"])]
+    for leak in record["leaked_processes"]:
+        lines.append(f"- leaked process (killed): pid {leak['pid']}: `{' '.join(leak['argv'])}`")
     if status == EXIT_REFUSED:
         lines.append("- the executor refused the shard; the log's REFUSED lines say why")
     return "\n".join(line for line in lines if line) + "\n"
@@ -1756,10 +1955,11 @@ def exclusive_registry_line(plan: Mapping) -> str:
             f"exclusive shard")
 
 
-def _where(index: int, results_dir: Path, artifacts: ArtifactNames | None) -> list[str]:
-    lines = [f"- log: `{log_path(results_dir, index)}`"]
+def _where(index: int, record_dir: Path, artifacts: ArtifactNames | None,
+           attempt: int | None) -> list[str]:
+    lines = [f"- log: `{log_path(record_dir, index)}`"]
     if artifacts is not None:
-        lines.append(f"- CI artifacts: the log is in `{artifacts.results_prefix}{index}`; "
+        lines.append(f"- CI artifacts: the log is in `{artifacts.results(index, attempt or 1)}`; "
                      f"`{artifacts.plan}` holds `plan.json` for the replay command")
     return lines
 
@@ -1779,25 +1979,35 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
     """The run's Markdown summary: one row per shard, then every failing
     test and fixture error with its traceback tail, log and reproduction
     commands (and, in CI, the artifacts holding the log and the plan), the
-    NOT RUN ids, coverage violations, fixture skips and leaked
-    processes, and the coverage verdict, wall time, largest atom and balance
-    ratio."""
+    NOT RUN ids, coverage violations, fixture skips, superseded attempts and
+    leaked processes, and the coverage verdict, wall time, largest atom and
+    balance ratio. Each shard's row names the attempt its record is from, and
+    a current-attempt job that did not succeed is named under the status."""
     results_dir = Path(results_dir)
-    lines = [f"# Test run: {_STATUS_WORDS[result.exit_status]} (exit {result.exit_status})", "",
-             f"- plan `{plan['plan_digest']}`, profile `{plan['profile']}`, "
-             f"{len(plan['selected_ids'])} selected tests in {plan['shard_count']} shards",
-             f"- results: `{results_dir}`",
-             f"- {exclusive_registry_line(plan)}", "",
-             "| shard | verdict | tests | wall s | estimate s |",
-             "| --- | --- | --- | --- | --- |"]
+    plan_path = result.plan_path or results_dir / "plan.json"
+    lines = [f"# Test run: {_STATUS_WORDS[result.exit_status]} (exit {result.exit_status})", ""]
+    for job, outcome in result.upstream_failures:
+        # The explanation only when the job's result alone decided the
+        # status; a run whose records fail already says why below.
+        why = (". A job of this attempt did not succeed and left no fresh result; an earlier "
+               "attempt's record does not count for it") if result.upstream_refused else ""
+        lines.append(f"- job `{job}` of this attempt: `{outcome}`{why}")
+    lines += [f"- plan `{plan['plan_digest']}`, profile `{plan['profile']}`, "
+              f"{len(plan['selected_ids'])} selected tests in {plan['shard_count']} shards",
+              f"- results: `{results_dir}`",
+              f"- {exclusive_registry_line(plan)}", "",
+              "| shard | verdict | tests | wall s | estimate s | attempt |",
+              "| --- | --- | --- | --- | --- | --- |"]
+    attempts = {row["index"]: row["attempt"] for row in result.shards}
     for row in result.shards:
         wall = "-" if row["wall_seconds"] is None else f"{row['wall_seconds']:.1f}"
         note = result.notes.get(row["index"])
         verdict = row["verdict"] + (f" ({note})" if note and row["verdict"] != PASS else "")
         index = f"{row['index']} ({EXCLUSIVE})" if is_exclusive(
             plan["shards"][row["index"]]) else row["index"]
+        attempt = "-" if row["attempt"] is None else row["attempt"]
         lines.append(f"| {index} | {verdict} | {row['tests']} | {wall} | "
-                     f"{row['estimate_seconds']:.1f} |")
+                     f"{row['estimate_seconds']:.1f} | {attempt} |")
     walls = [row["wall_seconds"] for row in result.shards if row["wall_seconds"] is not None]
     atoms = [(seconds, key) for row in result.shards for key, seconds in row["atoms"].items()]
     lines.append("")
@@ -1815,16 +2025,19 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
         for failure in result.failures:
             lines += ["", f"### `{failure['id']}`", "",
                       f"- shard {failure['shard']}, outcome `{failure['outcome']}`",
-                      *_where(failure["shard"], results_dir, artifacts),
-                      *_reproduce(failure["id"], failure["shard"], results_dir),
+                      *_where(failure["shard"],
+                              result.record_dirs.get(failure["shard"], results_dir),
+                              artifacts, attempts.get(failure["shard"])),
+                      *_reproduce(failure["id"], failure["shard"], plan_path),
                       "", "```text", _tail(failure["detail"]), "```"]
     if result.fixture_errors:
         lines += ["", "## Fixture errors"]
         for index, entry in result.fixture_errors:
             name = holder_target(entry["description"]) or entry["description"]
             lines += ["", f"### `{entry['description']}`", "", f"- shard {index}",
-                      *_where(index, results_dir, artifacts),
-                      *_reproduce(name, index, results_dir),
+                      *_where(index, result.record_dirs.get(index, results_dir), artifacts,
+                              attempts.get(index)),
+                      *_reproduce(name, index, plan_path),
                       "", "```text", _tail(entry["traceback"]), "```"]
     if result.not_run:
         lines += ["", f"## NOT RUN ({len(result.not_run)})", ""]
@@ -1837,8 +2050,21 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
         lines += [f"- `{entry['description']}` (shard {index}): {entry['reason']} "
                   f"({count} planned tests skipped)"
                   for index, entry, count in result.fixture_skips]
+    if result.superseded:
+        lines += ["", "## Superseded attempts (not counted; a later attempt of the shard ran)",
+                  ""]
+        for entry in result.superseded:
+            attempt = "unknown" if entry["attempt"] is None else entry["attempt"]
+            where = (f"; artifact `{artifacts.results(entry['shard'], entry['attempt'])}`"
+                     if artifacts is not None and entry["attempt"] is not None else "")
+            note = f" ({entry['note']})" if entry["note"] and entry["verdict"] != PASS else ""
+            lines.append(f"- shard {entry['shard']}, attempt {attempt}: "
+                         f"{entry['verdict']}{note}{where}")
+            lines += [f"  - `{test_id}`" for test_id in entry["failing"]]
     if result.leaks:
-        lines += ["", "## Leaked processes (warning, killed)", ""]
+        lines += ["", "## Leaked processes (failure, killed)", "",
+                  "A leak is a test that left a process running; each test must end every "
+                  "process it starts.", ""]
         lines += [f"- shard {index}: pid {leak['pid']}, age {leak['age_seconds']:.1f} s: "
                   f"`{' '.join(leak['argv'])}`" for index, leak in result.leaks]
     return "\n".join(lines) + "\n"

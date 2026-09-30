@@ -124,7 +124,17 @@ PLAN_FILE = "plan.json"
 PLAN_ARTIFACT = "test-plan"
 RESULTS_DIR = "results"
 RESULTS_ARTIFACT_PREFIX = "results-"
-TIMINGS_ARTIFACT = "timings-ci"
+RUN_ATTEMPT = "${{ github.run_attempt }}"
+#: Each attempt's artifacts get their own names, so a re-run of failed jobs
+#: never competes with the attempt it re-ran for one name (download-artifact
+#: keeps one artifact per name, the highest id, not the latest upload).
+RESULTS_ARTIFACT = RESULTS_ARTIFACT_PREFIX + "${{ matrix.shard }}-attempt-" + RUN_ATTEMPT
+TIMINGS_ARTIFACT = "timings-ci-attempt-" + RUN_ATTEMPT
+#: ``tests-result`` downloads every results artifact of every attempt, each
+#: into its own ``<SHARDS_DIR>/<artifact name>/``, and writes the plan and
+#: the records it selected, flat, to ``SELECTED_DIR`` for ``TIMINGS_ARTIFACT``.
+SHARDS_DIR = f"{RESULTS_DIR}/shards"
+SELECTED_DIR = f"{RESULTS_DIR}/selected"
 PLAN_JOB_OUTPUTS = ("shards", "count", "digest")
 
 DIST_DIR = "dist"
@@ -287,7 +297,7 @@ def validate_workflow() -> dict:
     packaged = " ".join(PACKAGE_TEST_MODULES)
     exec_shard = (f"python3 tools/run_tests.py exec-shard {PLANNING_ARGS} "
                   "--shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} "
-                  f"--results-dir {RESULTS_DIR}")
+                  f"--results-dir {RESULTS_DIR} --run-attempt {RUN_ATTEMPT}")
     return {
         "name": "Validate",
         "on": {"workflow_call": None},
@@ -320,12 +330,13 @@ def validate_workflow() -> dict:
                     _install_editable(),
                     {"name": "shard", "run": exec_shard},
                     {"if": "always()", "uses": "actions/upload-artifact@v4",
-                     "with": {"name": RESULTS_ARTIFACT_PREFIX + "${{ matrix.shard }}",
-                              "path": f"{RESULTS_DIR}/"}},
+                     "with": {"name": RESULTS_ARTIFACT, "path": f"{RESULTS_DIR}/"}},
                 ],
             },
             # Never passes vacuously: without the plan, or without a shard's
-            # result, aggregate exits 2 and says which.
+            # result, aggregate exits 2 and says which. Each shard counts its
+            # latest attempt's record, and a plan or tests job of this attempt
+            # that did not succeed fails it even when earlier records pass.
             "tests-result": {
                 "needs": ["plan", "tests"],
                 "if": "always()",
@@ -337,17 +348,19 @@ def validate_workflow() -> dict:
                     {"uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"name": PLAN_ARTIFACT, "path": RESULTS_DIR}},
                     {"uses": "actions/download-artifact@v4", "continue-on-error": True,
-                     "with": {"pattern": RESULTS_ARTIFACT_PREFIX + "*", "merge-multiple": True,
-                              "path": RESULTS_DIR}},
+                     "with": {"pattern": RESULTS_ARTIFACT_PREFIX + "*", "path": SHARDS_DIR}},
                     {"name": "aggregate",
                      "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
-                            f"--results-dir {RESULTS_DIR} --plan-artifact {PLAN_ARTIFACT} "
+                            f"--results-dir {SHARDS_DIR} --run-attempt {RUN_ATTEMPT} "
+                            f"--write-selected {SELECTED_DIR} "
+                            "--upstream-result plan=${{ needs.plan.result }} "
+                            "--upstream-result tests=${{ needs.tests.result }} "
+                            f"--plan-artifact {PLAN_ARTIFACT} "
                             f"--results-artifact-prefix {RESULTS_ARTIFACT_PREFIX}"},
                     # The run's per-atom durations, for
                     # tools/run_tests.py timings merge --into tools/test_timings.json.
                     {"if": "always()", "uses": "actions/upload-artifact@v4",
-                     "with": {"name": TIMINGS_ARTIFACT,
-                              "path": f"{RESULTS_DIR}/{PLAN_FILE}\n{RESULTS_DIR}/shard-*.json"}},
+                     "with": {"name": TIMINGS_ARTIFACT, "path": f"{SELECTED_DIR}/"}},
                 ],
             },
             "package": {

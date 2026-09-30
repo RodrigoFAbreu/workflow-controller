@@ -1041,6 +1041,25 @@ class NonTerminalCoverageTest(_ResumeTestCase):
 # released and gone, and only then reconciles the record.
 # ---------------------------------------------------------------------------
 
+def _events(runtime_root: Path, job_id: str) -> list[dict]:
+    path = runtime_root / "jobs" / job_id / "events.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def _spawn_line_written(runtime_root: Path, record: dict) -> bool:
+    """Whether ``record``'s job log has its ``worker_spawned`` line, the one
+    appended after the ``on_spawn`` record write. Its ``seq`` is the
+    ``event_seq`` that write set: equal to ``record``'s, or lower once a
+    later publication bumped the record. A line still being appended reads
+    as not yet written."""
+    try:
+        log = _events(runtime_root, record["job_id"])
+    except (OSError, ValueError):
+        return False
+    return any(e.get("event") == "worker_spawned" and e.get("seq", 0) <= record.get("event_seq", 0)
+               for e in log)
+
+
 #: A child Controller: one real `execute_step` against `argv[2]`, with the
 #: default (unbounded) worker timeout.
 _CHILD_STEP = (
@@ -1059,15 +1078,35 @@ _CHILD_STEP = (
     "job.execute_step(mr, identity=ident, runtime=Path(sys.argv[3]), claude_bin=sys.argv[4])"
 )
 
+#: :data:`_CHILD_STEP` with the ``worker_spawned`` event line delayed by 1 s
+#: (``workflow-controller-ci-reliability`` CP2): it widens the window between
+#: the ``on_spawn`` record write, which already carries ``worker_process``,
+#: and the line's append. The checkout's ``job.runtime`` is wrapped after the
+#: import, so the wrap binds the module under test; ``argv[5]`` is a marker
+#: file written before the sleep, so a wrap that never ran cannot pass.
+_CHILD_STEP_SLOW_SPAWN_LINE = _CHILD_STEP.replace("; job.execute_step(", (
+    "\nimport time"
+    "\n_append = job.runtime.append_jsonl_best_effort"
+    "\ndef _slow_append(runtime_root, rel_path, obj):"
+    "\n    if obj.get('event') == 'worker_spawned':"
+    "\n        Path(sys.argv[5]).touch(); time.sleep(1)"
+    "\n    return _append(runtime_root, rel_path, obj)"
+    "\njob.runtime.append_jsonl_best_effort = _slow_append"
+    "\njob.execute_step("
+))
+
 
 class _OrphanWorkerCase(_ResumeTestCase):
     """Starts a child Controller whose fake worker hangs until
     ``self.release`` exists, and ``SIGKILL``s the Controller only once the
     record on disk carries ``worker_process`` (round 3, O2): a kill before
     ``Popen`` leaves no worker, and one before the flush leaves no group to
-    wait on. The cleanup, registered before the child starts, creates the
-    release file and kills every recorded worker group, re-reading the job
-    files when it runs -- so no orphan outlives even a failed assertion."""
+    wait on. It also waits for the ``worker_spawned`` event line, which is
+    appended after that record write (``workflow-controller-ci-reliability``
+    CP2): a kill in between leaves a ``seq`` gap. The cleanup, registered
+    before the child starts, creates the release file and kills every
+    recorded worker group, re-reading the job files when it runs -- so no
+    orphan outlives even a failed assertion."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -1099,14 +1138,20 @@ class _OrphanWorkerCase(_ResumeTestCase):
                 record = json.loads(path.read_text())
             except (OSError, ValueError):
                 continue
-            if record.get("status") == job.STATUS_LAUNCHED and "worker_process" in record:
+            if (record.get("status") == job.STATUS_LAUNCHED and "worker_process" in record
+                    and _spawn_line_written(self.runtime_root, record)):
                 return record
         return None
 
-    def _orphan_worker(self, root: Path, *, env: dict | None = None) -> dict:
+    def _orphan_worker(self, root: Path, *, env: dict | None = None,
+                       slow_spawn_line: Path | None = None) -> dict:
+        """``slow_spawn_line``, when given, runs
+        :data:`_CHILD_STEP_SLOW_SPAWN_LINE` with that marker file."""
+        script = _CHILD_STEP if slow_spawn_line is None else _CHILD_STEP_SLOW_SPAWN_LINE
+        marker = [] if slow_spawn_line is None else [str(slow_spawn_line)]
         self._child = subprocess.Popen(
-            [sys.executable, "-c", _CHILD_STEP, str(fixtures.REPO_ROOT), str(root), str(self.runtime_root),
-             str(FAKE_CLAUDE)],
+            [sys.executable, "-c", script, str(fixtures.REPO_ROOT), str(root), str(self.runtime_root),
+             str(FAKE_CLAUDE), *marker],
             env={**os.environ, "FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
                  "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations), **(env or {})},
         )
@@ -1115,7 +1160,8 @@ class _OrphanWorkerCase(_ResumeTestCase):
             timeout=30,
         )
         record = self._record_with_worker_process()
-        self.assertTrue(appeared and record is not None, "the LAUNCHED record never carried worker_process")
+        self.assertTrue(appeared and record is not None,
+                        "the LAUNCHED record never carried worker_process with its worker_spawned line")
         self._child.send_signal(signal.SIGKILL)
         self._child.wait(timeout=10)
         # The orphaned worker is running on its own now (its start may
@@ -2317,11 +2363,6 @@ class ResumeLockScopeTest(_DispositionCase):
 # ---------------------------------------------------------------------------
 
 
-def _events(runtime_root: Path, job_id: str) -> list[dict]:
-    path = runtime_root / "jobs" / job_id / "events.jsonl"
-    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
-
-
 class ReconciliationEventTest(_DispositionCase):
     def test_a_planned_record_without_event_seq_reconciles_as_seq_one(self) -> None:
         _write_record(self.runtime_root, _record(job_id="j1", target_repo=str(self.root),
@@ -2436,6 +2477,23 @@ class CrossProcessEventSeqTest(_OrphanWorkerCase):
             self.assertEqual([e["seq"] for e in log], [1, 2, 3, 4])
             self.assertEqual(_read_record(self.runtime_root, record["job_id"])["event_seq"], 4)
         self.assertEqual(_read_record(self.runtime_root, second["job_id"])["status"], job.STATUS_FAILED)
+
+    def test_the_kill_waits_for_a_delayed_worker_spawned_line(self) -> None:
+        # CP2's widened regression: the child Controller sleeps 1 s between
+        # the `worker_process` record write and the `worker_spawned` append,
+        # so a kill on the record alone always loses the line.
+        managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
+        marker = self.tmp_root / "spawn-line-delayed"
+        record = self._orphan_worker(managed_repo.root, slow_spawn_line=marker)
+        self.assertTrue(marker.exists(), "the worker_spawned append was never delayed")
+        self.assertEqual(record["event_seq"], 3)
+        self.release.touch()
+        self._await_worker_gone(record, managed_repo.root)
+        [result] = job.resume(managed_repo, identity=FAKE_IDENTITY, runtime=self.runtime_root)
+        self.assertEqual(result["status"], job.STATUS_INTERRUPTED)
+        log = _events(self.runtime_root, record["job_id"])
+        self.assertEqual([e["event"] for e in log], ["planned", "launched", "worker_spawned", "reconciled"])
+        self.assertEqual([e["seq"] for e in log], [1, 2, 3, 4])
 
 
 class ObservationPathsNeverReadTest(_DispositionCase):

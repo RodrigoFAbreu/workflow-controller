@@ -109,16 +109,22 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   run and is named. The summary states the check's verdict either way
   (`coverage: exact; ...` or `coverage: NOT exact; ...`, with the
   missing, unplanned and duplicate counts). A failed test is never
-  retried. The exit status is 0 (pass), 1 (a test or fixture failed), 2 (refused, crashed, not run,
-  or a coverage violation) or 130 (interrupted: Ctrl-C stops every
-  shard's process group).
+  retried. The exit status is 0 (pass), 1 (a test or fixture failed, or
+  a process leaked), 2 (refused, crashed, not run, or a coverage
+  violation) or 130 (interrupted: Ctrl-C stops every shard's process
+  group).
 - **Results.** Each run writes `plan.json`, one `shard-<i>.json` and
   `shard-<i>.log` per shard, and `SUMMARY.md` under
   `$TMPDIR/workflow-controller-tests/<run_id>/` (or `--results-dir`). The
   summary names every failing test with its traceback, its shard's log,
   and two reproduction commands: `python3 -m unittest <id>` alone, and
-  `--replay ... --shard <i>` for the exact co-resident order. A process
-  that outlives its shard is reported, then killed, as a warning.
+  `--replay ... --shard <i>` for the exact co-resident order.
+- **Leaks.** A test must end every process it starts. A process that
+  outlives its shard is reported, then killed, and fails the run: the
+  shard's verdict is `LEAKED` (exit 1) even if every test passed, unless
+  something worse happened to it. The summary's "Leaked processes
+  (failure, killed)" section names each one with its shard, pid, age and
+  command line.
 - **Timings.** Durations only decide where a test runs, never whether it
   runs. Local runs plan from the untracked
   `$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json`
@@ -130,7 +136,9 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   not local seconds, so only local-machine estimates can hold the local
   shard count down. The committed
   profile changes only through an explicit, reviewed refresh, for
-  example from a CI run's `timings-ci` artifact:
+  example from the `timings-ci-attempt-<a>` artifact of a CI run's
+  highest attempt, which holds the plan and only the records
+  `tests-result` counted:
   `python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`.
   Ordinary drift needs no refresh and costs wall time (the shard count
   and the balance), never coverage: a class

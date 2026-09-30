@@ -17,12 +17,14 @@ directory, then drop it from ``sys.modules`` and ``sys.path`` again.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
 import math
 import os
 import random
+import shutil
 import re
 import subprocess
 import sys
@@ -448,7 +450,9 @@ class ResultRecordTest(unittest.TestCase):
         cases = {
             "missing keys leaked_processes": lambda r: r.pop("leaked_processes"),
             "unknown keys extra": lambda r: r.update(extra=1),
-            "schema_version": lambda r: r.update(schema_version=2),
+            "schema_version": lambda r: r.update(schema_version=3),
+            "missing keys run_attempt": lambda r: r.update(schema_version=2),
+            "unknown keys run_attempt": lambda r: r.update(run_attempt=1),
             "shard": lambda r: r.update(shard=True),
             "started_at": lambda r: r.update(started_at="yesterday"),
             "wall_seconds": lambda r: r.update(wall_seconds=math.inf),
@@ -470,6 +474,17 @@ class ResultRecordTest(unittest.TestCase):
                     shards.validate_shard_result(record)
         with self.assertRaisesRegex(shards.ResultRecordError, "not a JSON object"):
             shards.validate_shard_result([])
+
+    def test_version_2_requires_a_run_attempt_and_version_1_is_attempt_1(self) -> None:
+        v1 = _record({self.A: 1.0})
+        self.assertEqual(shards.record_attempt(v1), 1)
+        v2 = dict(v1, schema_version=2, run_attempt=3)
+        self.assertIs(shards.validate_shard_result(v2), v2)
+        self.assertEqual(shards.record_attempt(v2), 3)
+        for attempt in (0, -1, True, "2", 1.0):
+            with self.subTest(attempt=attempt):
+                with self.assertRaisesRegex(shards.ResultRecordError, "run_attempt is invalid"):
+                    shards.validate_shard_result(dict(v2, run_attempt=attempt))
 
     def test_an_unreadable_record_is_refused_naming_the_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1648,9 +1663,9 @@ class ExecutorRecordingTest(unittest.TestCase):
 
     def test_a_record_that_disagrees_with_unittest_is_refused_either_way(self) -> None:
         passing = {"tests": [{"id": "m.C.t", "outcome": "pass", "seconds": 0}],
-                   "fixture_errors": []}
+                   "fixture_errors": [], "leaked_processes": []}
         failing = {"tests": [{"id": "m.C.t", "outcome": "fail", "seconds": 0}],
-                   "fixture_errors": []}
+                   "fixture_errors": [], "leaked_processes": []}
         for record, was_successful in ((passing, False), (failing, True)):
             with self.subTest(record=record["tests"][0]["outcome"]):
                 problems: list[str] = []
@@ -1761,12 +1776,16 @@ class ExecutorRefusalTest(unittest.TestCase):
 
 
 def _fake_record(plan, index, outcomes: dict[str, str] | None = None, *, exit_status=None,
-                 digest=None, extra=()):
+                 digest=None, extra=(), attempt=None):
+    """A valid record of shard ``index``: version 1 without ``attempt``,
+    version 2 of that run attempt with it."""
     ids = plan["shards"][index]["test_ids"]
     outcomes = outcomes or {}
     tests = [{"id": test_id, "outcome": outcomes.get(test_id, "pass"), "seconds": 0.5}
              for test_id in list(ids) + list(extra) if outcomes.get(test_id) != "missing"]
-    record = {"schema_version": 1, "plan_digest": digest or plan["plan_digest"], "shard": index,
+    version = {"schema_version": 1} if attempt is None else {"schema_version": 2,
+                                                             "run_attempt": attempt}
+    record = {**version, "plan_digest": digest or plan["plan_digest"], "shard": index,
               "argv": ["exec-shard"], "started_at": "2026-09-26T00:00:00Z",
               "ended_at": "2026-09-26T00:00:01Z", "wall_seconds": 1.0, "exit_status": 0,
               "tests": tests, "fixture_errors": [], "fixture_skips": [],
@@ -1775,6 +1794,72 @@ def _fake_record(plan, index, outcomes: dict[str, str] | None = None, *, exit_st
     passes = shards.record_passes(record)
     record["exit_status"] = exit_status if exit_status is not None else (0 if passes else 1)
     return shards.validate_shard_result(record)
+
+
+def _leaked(record, *, exit_status=1):
+    """``record`` with one leaked process and ``exit_status`` (``1``, the
+    executor's own status for a leak, by default)."""
+    record["leaked_processes"] = [{"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}]
+    record["exit_status"] = exit_status
+    return shards.validate_shard_result(record)
+
+
+class LeakedShardTest(unittest.TestCase):
+    """D7 (I8): the executor exits ``1`` for a shard whose tests pass but
+    which leaked a process, so its CI job is red and a re-run of failed jobs
+    re-runs it; a refusal still exits ``2``."""
+
+    def setUp(self) -> None:
+        self.tree = SyntheticTree(self, {"test_one": PLAIN})
+        ids, atoms = self.tree.family()
+        inventory = shards.Inventory(test_ids=tuple(ids), atoms=tuple(atoms))
+        self.plan = shards.build_plan(inventory.select(), _params(shards=1))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.results = Path(tmp.name)
+        self.leak = {"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}
+
+    def test_shard_status_fails_a_passing_record_that_leaked(self) -> None:
+        passing = {"tests": [{"id": "m.C.t", "outcome": "pass", "seconds": 0}],
+                   "fixture_errors": [], "leaked_processes": [self.leak]}
+        failing = {**passing, "tests": [{"id": "m.C.t", "outcome": "fail", "seconds": 0}]}
+        self.assertEqual(shards.shard_status(passing, True, []), 1)
+        self.assertEqual(shards.shard_status(passing, None, []), 1)
+        self.assertEqual(shards.shard_status(failing, False, []), 1)
+        self.assertEqual(shards.shard_status(passing, True, ["unmapped unittest event: x"]), 2)
+
+    def execute(self, plan=None):
+        killed = []
+        with unittest.mock.patch.object(shards, "scan_marked_processes",
+                                        return_value=[self.leak]) as scan, \
+                unittest.mock.patch.object(shards, "kill_processes", killed.extend):
+            record, status = shards.execute_shard(
+                plan or self.plan, 0, self.results, self.tree.top, argv=["exec-shard"],
+                environ={shards.SHARD_MARKER_ENV: "leak-run/0/1"})
+        scan.assert_called_once()
+        self.assertEqual(killed, [self.leak])
+        return record, status
+
+    def test_a_passing_shard_that_leaked_exits_1_and_says_so(self) -> None:
+        record, status = self.execute()
+        self.assertEqual(status, 1)
+        self.assertTrue(shards.record_passes(record))
+        self.assertEqual((record["exit_status"], record["leaked_processes"]), (1, [self.leak]))
+        self.assertEqual(shards.load_shard_result(shards.result_path(self.results, 0)), record)
+        verdict = shards.shard_verdict(record, status, self.results)
+        self.assertIn("shard 0: LEAKED (exit 1)", verdict)
+        self.assertIn("- leaked process (killed): pid 4242: `sleep 60`", verdict)
+        result = shards.aggregate(self.plan, {0: record}, self.results)
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.LEAKED, 1))
+
+    def test_a_leak_with_a_refusal_still_exits_2(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["shards"][0]["test_ids"].append(f"{self.tree.pkg}.test_one.ATest.test_gone")
+        record, status = self.execute(plan)
+        self.assertEqual((status, record["exit_status"]), (2, 2))
+        self.assertEqual(record["leaked_processes"], [self.leak])
+        result = shards.aggregate(self.plan, {0: record}, self.results)
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.REFUSED, 2))
 
 
 class AggregateTest(unittest.TestCase):
@@ -1842,8 +1927,8 @@ class AggregateTest(unittest.TestCase):
         # the summary must also say which artifacts to download.
         records = {0: _fake_record(self.plan, 0, {self.first: "fail"}),
                    1: _fake_record(self.plan, 1)}
-        line = ("- CI artifacts: the log is in `results-0`; `test-plan` holds `plan.json` "
-                "for the replay command")
+        line = ("- CI artifacts: the log is in `results-0-attempt-1`; `test-plan` holds "
+                "`plan.json` for the replay command")
         self.assertNotIn("CI artifacts", self.run_aggregate(records).summary)
         result = self.run_aggregate(records, artifacts=shards.ArtifactNames(
             plan="test-plan", results_prefix="results-"))
@@ -1904,12 +1989,46 @@ class AggregateTest(unittest.TestCase):
         result = self.run_aggregate({1: _fake_record(self.plan, 1)}, shards=[1])
         self.assertEqual((result.exit_status, len(result.shards)), (0, 1))
 
-    def test_leaks_are_listed_as_a_warning(self) -> None:
-        record = _fake_record(self.plan, 0)
-        record["leaked_processes"] = [{"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}]
-        result = self.run_aggregate({0: record, 1: _fake_record(self.plan, 1)})
-        self.assertEqual(result.exit_status, 0)
-        self.assertIn("pid 4242, age 3.0 s: `sleep 60`", result.summary)
+    def test_a_leaked_process_is_reported_killed_and_fails_the_run(self) -> None:
+        # D7 (I8): a leak fails the run, even when every test passed.
+        result = self.run_aggregate({0: _leaked(_fake_record(self.plan, 0)),
+                                     1: _fake_record(self.plan, 1)})
+        self.assertEqual(result.exit_status, 1)
+        self.assertEqual([row["verdict"] for row in result.shards], ["LEAKED", "PASS"])
+        self.assertIn("# Test run: FAIL (exit 1)", result.summary)
+        self.assertIn("| 0 | LEAKED |", result.summary)
+        self.assertIn("## Leaked processes (failure, killed)", result.summary)
+        self.assertNotIn("warning", result.summary)
+        self.assertIn("a test that left a process running", result.summary)
+        self.assertIn("- shard 0: pid 4242, age 3.0 s: `sleep 60`", result.summary)
+
+    def test_a_leak_record_is_leaked_whatever_its_pass_or_fail_status(self) -> None:
+        # Exit 1 is the executor's own status for a leak; exit 0 is a
+        # pre-1.4.2 record, which must not pass by that stale status.
+        for status in (1, 0):
+            with self.subTest(exit_status=status):
+                record = _leaked(_fake_record(self.plan, 0), exit_status=status)
+                result = self.run_aggregate({0: record, 1: _fake_record(self.plan, 1)})
+                self.assertEqual(result.shards[0]["verdict"], shards.LEAKED)
+                self.assertEqual(result.exit_status, 1)
+                self.assertNotIn(0, result.notes)
+
+    def test_a_leak_keeps_the_precedence_of_worse_verdicts(self) -> None:
+        failing = _leaked(_fake_record(self.plan, 0, {self.first: "fail"}))
+        result = self.run_aggregate({0: failing, 1: _fake_record(self.plan, 1)})
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.FAIL, 1))
+        refused = _leaked(_fake_record(self.plan, 0), exit_status=2)
+        result = self.run_aggregate({0: refused, 1: _fake_record(self.plan, 1)})
+        self.assertEqual((result.shards[0]["verdict"], result.exit_status), (shards.REFUSED, 2))
+        leaked = _leaked(_fake_record(self.plan, 0))
+        result = self.run_aggregate({0: leaked, 1: None})
+        self.assertEqual((result.shards[1]["verdict"], result.exit_status), (shards.CRASHED, 2))
+        result = self.run_aggregate({0: leaked, 1: None}, interrupted={1})
+        self.assertEqual(result.exit_status, 130)
+        result = self.run_aggregate({0: leaked, 1: _fake_record(self.plan, 1, {
+            self.plan["shards"][1]["test_ids"][0]: "fail"})})
+        self.assertEqual([row["verdict"] for row in result.shards], ["LEAKED", "FAIL"])
+        self.assertEqual(result.exit_status, 1)
 
     def test_load_results_names_missing_and_invalid_records(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -1920,6 +2039,275 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual(records, {0: None, 1: None})
         self.assertEqual(notes[0], "no result record")
         self.assertIn("cannot read", notes[1])
+
+
+class AttemptSelectionTest(unittest.TestCase):
+    """A re-run of failed jobs counts (Design C): each shard's latest
+    attempt decides (I4), the current attempt's job results are checked
+    (I4a), superseded records are listed (I5), and ambiguity is refused
+    (I7). Over the same two-shard plan as ``AggregateTest``."""
+
+    def setUp(self) -> None:
+        tree = SyntheticTree(self, {"test_one": PLAIN, "test_two": PLAIN})
+        ids, atoms = tree.family()
+        inventory = shards.Inventory(test_ids=tuple(ids), atoms=tuple(atoms))
+        self.plan = shards.build_plan(inventory.select(), _params(shards=2))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.results = Path(tmp.name) / "shards"
+        self.results.mkdir()
+        self.failing = self.plan["shards"][1]["test_ids"][0]
+
+    def put(self, index, attempt, outcomes=None, *, directory=None, record=None):
+        """Write shard ``index``'s record of ``attempt`` into its artifact
+        directory (``directory`` overrides the name; ``""`` is flat)."""
+        if directory is None:
+            directory = f"results-{index}-attempt-{attempt}"
+        target = self.results / directory
+        target.mkdir(parents=True, exist_ok=True)
+        if record is None:
+            record = _fake_record(self.plan, index, outcomes, attempt=attempt)
+        shards.result_path(target, index).write_text(json.dumps(record))
+        return target
+
+    def select(self, **kwargs):
+        return shards.select_results(self.plan, self.results, **kwargs)
+
+    def run_aggregate(self, *, run_attempt=None, upstream=None, plan_path=None):
+        records, notes, superseded, record_dirs = self.select(run_attempt=run_attempt)
+        return shards.aggregate(self.plan, records, self.results, notes=notes,
+                                superseded=superseded, upstream=upstream,
+                                artifacts=shards.ArtifactNames(plan="test-plan",
+                                                               results_prefix="results-"),
+                                plan_path=plan_path, record_dirs=record_dirs)
+
+    def replay_36483126576(self) -> None:
+        """Run 36483126576's shape: shard 1 failed in attempt 1 and passed
+        when "Re-run failed jobs" re-ran it; shard 0 ran once."""
+        self.put(0, 1)
+        self.put(1, 1, {self.failing: "fail"})
+        self.put(1, 2)
+
+    def test_the_run_36483126576_replay_passes_in_any_discovery_order(self) -> None:
+        self.replay_36483126576()
+        real = shards._candidates
+        for order in ("sorted", "reversed"):
+            with self.subTest(order=order), unittest.mock.patch.object(
+                    shards, "_candidates",
+                    lambda d: real(d)[::-1] if order == "reversed" else real(d)):
+                result = self.run_aggregate(run_attempt=2, upstream={"plan": "success",
+                                                                     "tests": "success"})
+                self.assertEqual(result.exit_status, 0, result.summary)
+                self.assertEqual([(row["verdict"], row["attempt"]) for row in result.shards],
+                                 [("PASS", 1), ("PASS", 2)])
+                self.assertEqual(result.failures, [])
+
+    def test_a_leaked_attempt_is_superseded_by_a_clean_rerun(self) -> None:
+        # I4 with I8: "Re-run failed jobs" re-ran the leaked shard's red job.
+        self.put(0, 1)
+        self.put(1, 1, record=_leaked(_fake_record(self.plan, 1, attempt=1)))
+        self.put(1, 2)
+        result = self.run_aggregate(run_attempt=2, upstream={"plan": "success",
+                                                             "tests": "success"})
+        self.assertEqual(result.exit_status, 0, result.summary)
+        self.assertEqual([(row["verdict"], row["attempt"]) for row in result.shards],
+                         [("PASS", 1), ("PASS", 2)])
+        self.assertEqual(result.superseded, [{"shard": 1, "attempt": 1, "verdict": "LEAKED",
+                                              "failing": [], "note": ""}])
+        self.assertIn("- shard 1, attempt 1: LEAKED; artifact `results-1-attempt-1`\n",
+                      result.summary)
+        self.assertEqual(result.leaks, [])
+        self.assertNotIn("## Leaked processes", result.summary)
+
+    def test_a_superseded_failure_is_listed_not_hidden(self) -> None:
+        self.replay_36483126576()
+        result = self.run_aggregate(run_attempt=2)
+        self.assertEqual(result.superseded, [{"shard": 1, "attempt": 1, "verdict": "FAIL",
+                                              "failing": [self.failing], "note": ""}])
+        self.assertIn("## Superseded attempts", result.summary)
+        self.assertIn("- shard 1, attempt 1: FAIL; artifact `results-1-attempt-1`\n"
+                      f"  - `{self.failing}`\n", result.summary)
+        self.assertRegex(result.summary, r"\| 1 \| PASS \|[^\n]*\| 2 \|\n")
+
+    def test_a_failing_later_attempt_fails_even_when_the_first_passed(self) -> None:
+        self.put(0, 1)
+        self.put(1, 1)
+        self.put(1, 2, {self.failing: "fail"})
+        result = self.run_aggregate(run_attempt=2)
+        self.assertEqual(result.exit_status, 1)
+        self.assertEqual([f["id"] for f in result.failures], [self.failing])
+        self.assertIn("the log is in `results-1-attempt-2`", result.summary)
+        self.assertEqual([(e["shard"], e["attempt"], e["verdict"]) for e in result.superseded],
+                         [(1, 1, "PASS")])
+
+    def test_a_per_attempt_failure_names_its_own_log_and_the_given_plan(self) -> None:
+        # Functional review round 1, F1: in CI's per-attempt layout the log
+        # is in the selected record's own directory, and the replay command
+        # names the plan aggregate was given, not <results>/plan.json.
+        self.put(0, 1)
+        self.put(1, 1)
+        self.put(1, 2, {self.failing: "fail"})
+        plan_path = self.results.parent / "plan.json"
+        summary = self.run_aggregate(run_attempt=2, plan_path=plan_path).summary
+        log = self.results / "results-1-attempt-2" / "shard-1.log"
+        self.assertIn(f"- log: `{log}`\n- CI artifacts: the log is in `results-1-attempt-2`",
+                      summary)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {plan_path} --shard 1`", summary)
+        self.assertNotIn(f"`{self.results / 'shard-1.log'}`", summary)
+        self.assertNotIn(str(self.results / "plan.json"), summary)
+
+    def test_a_flat_layout_failure_keeps_its_paths(self) -> None:
+        # F1's counterpart: the flat layout's log and plan stay where they were.
+        self.put(0, None, directory="")
+        self.put(1, None, {self.failing: "fail"}, directory="")
+        summary = self.run_aggregate().summary
+        self.assertIn(f"- log: `{self.results / 'shard-1.log'}`", summary)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {self.results / 'plan.json'} "
+                      f"--shard 1`", summary)
+        given = self.results.parent / "given-plan.json"
+        self.assertIn(f"--replay {given} --shard 1`",
+                      self.run_aggregate(plan_path=given).summary)
+
+    def test_two_records_of_one_shard_and_attempt_are_refused(self) -> None:
+        self.put(0, 1)
+        self.put(1, 1)
+        self.put(1, 1, directory="elsewhere")
+        with self.assertRaisesRegex(shards.AggregateError, "shard 1 has two records of attempt 1"):
+            self.select()
+
+    def test_a_flat_version_1_record_is_attempt_1_and_duplicates_a_per_attempt_one(self) -> None:
+        self.put(0, 1)
+        self.put(1, None, directory="")
+        records, _, _, _ = self.select()
+        self.assertEqual(shards.record_attempt(records[1]), 1)
+        self.put(1, 1)
+        with self.assertRaisesRegex(shards.AggregateError, "two records of attempt 1"):
+            self.select()
+
+    def test_an_attempt_above_the_run_attempt_is_refused(self) -> None:
+        self.put(0, 1)
+        self.put(1, 3)
+        self.assertEqual(shards.record_attempt(self.select(run_attempt=3)[0][1]), 3)
+        with self.assertRaisesRegex(shards.AggregateError, "attempt 3, above this run's attempt 2"):
+            self.select(run_attempt=2)
+
+    def test_a_directory_disagreeing_with_its_record_is_refused(self) -> None:
+        cases = {
+            "attempt": dict(index=1, attempt=3, directory="results-1-attempt-2"),
+            "shard": dict(index=1, attempt=2, directory="results-0-attempt-2"),
+        }
+        for name, case in cases.items():
+            with self.subTest(name=name):
+                for child in self.results.iterdir():
+                    shutil.rmtree(child)
+                self.put(**case)
+                with self.assertRaisesRegex(shards.AggregateError, "but its directory"):
+                    self.select()
+
+    def test_a_record_disagreeing_with_its_file_name_is_refused(self) -> None:
+        target = self.results / "results-0-attempt-1"
+        target.mkdir()
+        (target / "shard-0.json").write_text(
+            json.dumps(_fake_record(self.plan, 1, attempt=1)))
+        with self.assertRaisesRegex(shards.AggregateError, "says it is shard 1"):
+            self.select()
+
+    def test_another_plans_digest_is_refused_even_when_superseded(self) -> None:
+        self.put(0, 1)
+        self.put(1, 1, record=_fake_record(self.plan, 1, attempt=1, digest="f" * 64))
+        self.put(1, 2)
+        with self.assertRaisesRegex(shards.AggregateError, "plan_digest"):
+            self.select(run_attempt=2)
+
+    def test_an_unreadable_record_blocks_its_shard_unless_provably_older(self) -> None:
+        self.put(0, 1)
+        self.put(1, 2)
+        broken = self.results / "results-1-attempt-1"
+        broken.mkdir()
+        (broken / "shard-1.json").write_text("{")
+        records, notes, superseded, _ = self.select(run_attempt=2)
+        self.assertEqual(shards.record_attempt(records[1]), 2)
+        self.assertEqual([(e["attempt"], e["verdict"]) for e in superseded], [(1, "CRASHED")])
+        self.assertIn("cannot read", superseded[0]["note"])
+        shutil.rmtree(self.results / "results-1-attempt-2")
+        self.put(1, 1, directory="results-1-attempt-0-old")
+        broken.rename(self.results / "results-1-attempt-2")
+        records, notes, superseded, record_dirs = self.select(run_attempt=2)
+        self.assertIsNone(records[1])
+        # The unreadable record decides the shard, so its log is beside it.
+        self.assertEqual(record_dirs[1], self.results / "results-1-attempt-2")
+        self.assertIn("cannot read", notes[1])
+        self.assertEqual([(e["attempt"], e["verdict"]) for e in superseded], [(1, "PASS")])
+
+    def test_the_flat_layout_selects_what_load_results_loads(self) -> None:
+        self.put(0, None, directory="")
+        self.put(1, None, {self.failing: "fail"}, directory="")
+        (self.results / "shard-0").mkdir()
+        records, notes, superseded, record_dirs = self.select()
+        self.assertEqual((records, notes), shards.load_results(self.plan, self.results))
+        self.assertEqual(superseded, [])
+        self.assertEqual(record_dirs, {0: self.results, 1: self.results})
+        self.assertEqual(self.run_aggregate().exit_status, 1)
+        empty, notes, _, none = shards.select_results(self.plan, self.results / "absent")
+        self.assertEqual(none, {})
+        self.assertEqual((empty, notes), ({0: None, 1: None},
+                                          {0: "no result record", 1: "no result record"}))
+
+    # -- I4a: the current attempt's jobs ----------------------------------------------------
+
+    def test_a_full_rerun_whose_shard_left_no_record_fails(self) -> None:
+        # Attempt 2 re-ran everything; a tests job failed before uploading,
+        # so only attempt 1's passing records are there.
+        self.put(0, 1)
+        self.put(1, 1)
+        result = self.run_aggregate(run_attempt=2, upstream={"plan": "success",
+                                                             "tests": "failure"})
+        self.assertEqual(result.exit_status, 2)
+        self.assertEqual(result.upstream_failures, [("tests", "failure")])
+        self.assertTrue(result.upstream_refused)
+        self.assertTrue(result.summary.startswith(
+            "# Test run: ERROR (exit 2)\n\n- job `tests` of this attempt: `failure`. A job of "
+            "this attempt did not succeed and left no fresh result; an earlier attempt's "
+            "record does not count for it\n"), result.summary)
+
+    def test_a_full_rerun_whose_plan_failed_fails(self) -> None:
+        self.put(0, 1)
+        self.put(1, 1)
+        result = self.run_aggregate(run_attempt=2, upstream={"plan": "failure",
+                                                             "tests": "skipped"})
+        self.assertEqual(result.exit_status, 2)
+        self.assertEqual(result.upstream_failures, [("plan", "failure"), ("tests", "skipped")])
+        self.assertIn("- job `plan` of this attempt: `failure`", result.summary)
+        self.assertIn("- job `tests` of this attempt: `skipped`", result.summary)
+
+    def test_a_rerun_of_failed_jobs_that_passed_is_green(self) -> None:
+        self.replay_36483126576()
+        result = self.run_aggregate(run_attempt=2, upstream={"plan": "success",
+                                                             "tests": "success"})
+        self.assertEqual((result.exit_status, result.upstream_failures), (0, []))
+        self.assertNotIn("of this attempt", result.summary)
+
+    def test_failing_records_keep_exit_1_and_still_name_the_job(self) -> None:
+        self.put(0, 1)
+        self.put(1, 1, {self.failing: "fail"})
+        result = self.run_aggregate(run_attempt=1, upstream={"plan": "success",
+                                                             "tests": "failure"})
+        self.assertEqual(result.exit_status, 1)
+        self.assertFalse(result.upstream_refused)
+        # Functional review round 1, F2: the shard did leave a fresh result,
+        # so the line names the job and claims nothing more.
+        self.assertIn("- job `tests` of this attempt: `failure`\n", result.summary)
+        self.assertNotIn("left no fresh result", result.summary)
+
+    def test_records_that_already_refuse_name_the_job_without_the_claim(self) -> None:
+        # F2: exit 2 from the records themselves (shard 1 left none) is not
+        # the job result's doing, so the I4a explanation is not given.
+        self.put(0, 1)
+        result = self.run_aggregate(run_attempt=1, upstream={"plan": "success",
+                                                             "tests": "failure"})
+        self.assertEqual((result.exit_status, result.upstream_refused), (2, False))
+        self.assertIn("- job `tests` of this attempt: `failure`\n", result.summary)
+        self.assertNotIn("left no fresh result", result.summary)
 
 
 class EnvironmentShapingTest(unittest.TestCase):

@@ -24,9 +24,13 @@ Building blocks (used by the local runner and by CI):
   prints its failing ids with traceback tails, and its log, to stderr;
 - ``plan``: compute and write a plan (``--github-output`` also hands its
   shard indexes, count and digest to a GitHub Actions job's outputs);
-- ``aggregate``: verdicts, coverage and summary for a results directory
+- ``aggregate``: verdicts, coverage and summary for a results directory,
+  flat or holding one directory per CI results artifact, taking each
+  shard's record from the latest attempt that ran it
   (``--plan-artifact``/``--results-artifact-prefix`` name the CI artifacts
-  a failure's evidence can be downloaded from);
+  a failure's evidence can be downloaded from; ``--upstream-result`` fails
+  a run whose current-attempt ``plan`` or ``tests`` job did not succeed;
+  ``--write-selected`` copies the plan and the selected records, flat);
 - ``timings merge --into FILE DIR...``: fold results into a timing profile,
   the explicit way to refresh the committed ``tools/test_timings.json``.
 
@@ -164,6 +168,8 @@ def cmd_exec_shard(args) -> int:
                                                  else [])) + ")")
     if args.plan is None and not args.expect_digest:
         raise UsageError("exec-shard needs --plan, or the planning inputs with --expect-digest")
+    if args.run_attempt < 1:
+        raise UsageError("--run-attempt must be at least 1")
     repo_root = args.repo_root.resolve()
     # As `python -m unittest` from the repository root: the tests import from
     # it, and SIGINT is at its default even when the runner was started with
@@ -193,7 +199,8 @@ def cmd_exec_shard(args) -> int:
     inherited = os.environ.get(ts.SHARD_MARKER_ENV) or f"{plan['plan_digest'][:16]}/{args.shard}"
     os.environ[ts.SHARD_MARKER_ENV] = f"{inherited}/{os.getpid()}"
     record, status = ts.execute_shard(plan, args.shard, args.results_dir, repo_root,
-                                      argv=[sys.executable, *sys.argv])
+                                      argv=[sys.executable, *sys.argv],
+                                      run_attempt=args.run_attempt)
     if status != ts.EXIT_PASS:
         sys.stderr.write(ts.shard_verdict(record, status, args.results_dir))
     return status
@@ -228,6 +235,9 @@ def cmd_plan(args) -> int:
 
 
 def _publish_summary(summary: str, results_dir: Path) -> None:
+    # In CI the results directory exists only if some results artifact was
+    # downloaded; the summary saying none was must still be written.
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
     (Path(results_dir) / "SUMMARY.md").write_text(summary, encoding="utf-8")
     step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if step_summary:
@@ -236,7 +246,35 @@ def _publish_summary(summary: str, results_dir: Path) -> None:
     print(summary, end="")
 
 
+def _upstream_results(given: list[str]) -> dict[str, str]:
+    """``--upstream-result JOB=RESULT`` options as a mapping."""
+    upstream: dict[str, str] = {}
+    for option in given:
+        job, sep, outcome = option.partition("=")
+        if not sep or job not in ts.UPSTREAM_JOBS or outcome not in ts.UPSTREAM_RESULTS:
+            raise UsageError(f"--upstream-result {option!r} is not JOB=RESULT with JOB one of "
+                             f"{', '.join(ts.UPSTREAM_JOBS)} and RESULT one of "
+                             f"{', '.join(ts.UPSTREAM_RESULTS)}")
+        if job in upstream:
+            raise UsageError(f"--upstream-result gives job {job} twice")
+        upstream[job] = outcome
+    return upstream
+
+
+def _write_selected(directory: Path, plan: dict, records: dict) -> None:
+    """The plan and each selected record, flat, as ``timings merge`` reads them."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    _write_plan(directory / "plan.json", plan)
+    for index, record in sorted(records.items()):
+        if record is not None:
+            ts.write_json_atomic(ts.result_path(directory, index), record)
+
+
 def cmd_aggregate(args) -> int:
+    upstream = _upstream_results(args.upstream_result)
+    if args.run_attempt is not None and args.run_attempt < 1:
+        raise UsageError("--run-attempt must be at least 1")
     if not Path(args.plan).exists():
         # In CI: the plan job failed or was cancelled, so no shard ran either.
         return _error(f"there is no plan at {args.plan}: the plan was never produced, so "
@@ -246,8 +284,15 @@ def cmd_aggregate(args) -> int:
     artifacts = None if args.plan_artifact is None else ts.ArtifactNames(
         plan=args.plan_artifact, results_prefix=args.results_artifact_prefix)
     plan = load_plan(args.plan)
-    records, notes = ts.load_results(plan, args.results_dir)
-    result = ts.aggregate(plan, records, args.results_dir, notes=notes, artifacts=artifacts)
+    records, notes, superseded, record_dirs = ts.select_results(
+        plan, args.results_dir, run_attempt=args.run_attempt)
+    result = ts.aggregate(plan, records, args.results_dir, notes=notes, artifacts=artifacts,
+                          superseded=superseded, upstream=upstream, plan_path=args.plan,
+                          record_dirs=record_dirs)
+    if args.write_selected is not None:
+        # Written whatever the verdict (timings merge folds passing atoms
+        # only); not written when the results were refused outright.
+        _write_selected(args.write_selected, plan, records)
     _publish_summary(result.summary, args.results_dir)
     return result.exit_status
 
@@ -323,14 +368,19 @@ def _stream_log(shard: _Shard, results_dir: Path, *, final: bool = False) -> Non
 
 
 def _record_leaks(results_dir: Path, index: int, leaks: list[dict]) -> None:
-    """Add leaks the parent found after a shard exited to its record."""
+    """Add leaks the parent found after a shard exited to its record. A
+    passing record that gains one now fails (exit ``1``), as the executor's
+    own leaks do (``ts.shard_status``)."""
     path = ts.result_path(results_dir, index)
     try:
         record = ts.load_shard_result(path)
     except ts.ResultRecordError:
         return
     known = {leak["pid"] for leak in record["leaked_processes"]}
-    record["leaked_processes"] += [leak for leak in leaks if leak["pid"] not in known]
+    added = [leak for leak in leaks if leak["pid"] not in known]
+    record["leaked_processes"] += added
+    if added and record["exit_status"] == ts.EXIT_PASS:
+        record["exit_status"] = ts.EXIT_FAIL
     ts.write_json_atomic(path, record)
 
 
@@ -489,7 +539,7 @@ def cmd_run(args) -> int:
         if records.get(index) is None:
             notes[index] = (notes.get(index, "") + f"; leaked {len(found)} processes").lstrip("; ")
     result = ts.aggregate(plan, records, results_dir, shards=indexes, interrupted=interrupted,
-                          notes=notes, wall_seconds=wall)
+                          notes=notes, wall_seconds=wall, plan_path=plan_path)
     _publish_summary(result.summary, results_dir)
     if inventory is None:
         try:
@@ -534,6 +584,8 @@ def _exec_shard_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expect-digest")
     parser.add_argument("--shard", type=int, required=True)
     parser.add_argument("--results-dir", type=Path, required=True)
+    parser.add_argument("--run-attempt", type=int, default=1, metavar="N",
+                        help="the CI run attempt recorded in the result (default 1)")
     _add_repo_root(parser)
     return parser
 
@@ -559,7 +611,16 @@ def _aggregate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--plan-artifact", metavar="NAME",
                         help="the CI artifact holding the plan, named in the summary")
     parser.add_argument("--results-artifact-prefix", metavar="PREFIX",
-                        help="shard <i>'s CI results artifact is PREFIX<i>, named in the summary")
+                        help="shard <i>'s CI results artifact of attempt <a> is "
+                             "PREFIX<i>-attempt-<a>, named in the summary")
+    parser.add_argument("--run-attempt", type=int, metavar="N",
+                        help="refuse a record of an attempt above N")
+    parser.add_argument("--upstream-result", action="append", default=[],
+                        metavar="JOB=RESULT",
+                        help="the current attempt's result of JOB (plan or tests); any "
+                             "result but success fails an otherwise passing run (exit 2)")
+    parser.add_argument("--write-selected", type=Path, metavar="DIR",
+                        help="write the plan and each shard's selected record, flat, to DIR")
     _add_repo_root(parser)
     return parser
 

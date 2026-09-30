@@ -1118,9 +1118,14 @@ class _Ownership:
                                                "cmdline": " ".join(cmdline)[:200]})
                 continue
             # A recorded entry keeps its first-seen identity and cmdline, but
-            # its source says why this scan owns it (Design H).
+            # its source says why this scan owns it (Design H). A cmdline first
+            # read empty (mid-execve, or on the exit path) takes the first
+            # non-empty read, once; a non-empty one is never replaced.
             if recorded is not None:
                 entry = dict(recorded, source=source)
+                if not entry["cmdline"] and cmdline:
+                    entry["cmdline"] = " ".join(cmdline)[:200]
+                    self._fill_sample(pid, stat.start_ticks, entry["cmdline"])
             else:
                 entry = {"pid": pid, "start_ticks": stat.start_ticks, "source": source,
                          "cmdline": " ".join(cmdline)[:200]}
@@ -1136,6 +1141,11 @@ class _Ownership:
         self.owned = found
         self.outside_group = sorted(outside)
         self.verifiable = verifiable
+
+    def _fill_sample(self, pid: int, start_ticks: int, cmdline: str) -> None:
+        for kept in self.sample:
+            if kept["pid"] == pid and kept["start_ticks"] == start_ticks and not kept["cmdline"]:
+                kept["cmdline"] = cmdline
 
     def entries(self) -> list[dict]:
         return [dict(self.owned[pid]) for pid in sorted(self.owned)]
@@ -1665,7 +1675,7 @@ class _Supervision:
         waiting_on = details["waiting_on"]
         return json.dumps([
             self.state,
-            [(p["pid"], p["start_ticks"], p["source"]) for p in details["owned_processes"]],
+            [(p["pid"], p["start_ticks"], p["source"], p["cmdline"]) for p in details["owned_processes"]],
             [p["pid"] for p in details["excluded_processes"]],
             details["scan"],
             [t["task_id"] for t in waiting_on["tasks"]],

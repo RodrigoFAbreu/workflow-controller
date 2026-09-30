@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci-reliability",
+  "requirements": {
+    "R1": {
+      "description": "An owned process first seen with an empty command line is recorded, persisted and published with its first non-empty command line; a non-empty one is never replaced (Flake 1, I1, I2)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "CrossProcessEventSeqTest and every _OrphanWorkerCase test kill the child Controller only after the worker_spawned line is in the event log; the event-log contract is unchanged (Flake 2, I3)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "InProcessConcurrencyTest starts the second step only after worker_process and worker_anchor are flushed (Flake 3)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Each flake fix has a regression that widens its race window through a patchable seam, red against the base and green after",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "A GitHub re-run of failed jobs counts: records carry their run attempt, artifacts are per attempt, and tests-result aggregates each shard's latest attempt, failing closed on ambiguity and when a job of the current attempt did not succeed, so an earlier attempt's record or plan never stands in for it (I4, I4a, I7, I9)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "A superseded attempt is reported in the summary with its verdict and failing tests, so a re-run never hides a failure; no automatic retry is added (I5, I6, Decision 2)",
+      "checkpoint_ids": [
+        "CP3",
+        "CP5"
+      ]
+    },
+    "R7": {
+      "description": "A leaked process fails the run with a LEAKED verdict, and its shard's executor exits 1 so a re-run of failed jobs re-runs and can clear it (D7, I8, Decision 3)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R8": {
+      "description": "The guides and ADRs 0004/0005 match the new behaviour, the 1.4.2 notes are the pull request body, and the full sharded suite passes",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

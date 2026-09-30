@@ -158,6 +158,16 @@ until none is left. It still reaps only by specific pid, never a child it
 spawned in its own session, and collecting a zombie is still not owning it.
 The decision itself is unchanged.
 
+Amendment (1.4.2, 2026-09-30, `workflow-controller-ci-reliability`): an
+owned process first seen inside an `execve` reads an empty command line,
+and 1.4.1 kept that empty text for the life of the entry, so a drain
+detach could name a pid with no command line. A recorded entry whose
+command line is empty now takes the first non-empty read, once, and the
+fill is published (at most one extra `worker_state` publication per such
+entry, re-attach included). A non-empty command line is never replaced,
+and never by an empty read. Which processes are owned, and every entry's
+`pid`, `start_ticks` and `source`, are unchanged.
+
 **Daemon policy** (plan decision 9). Tool daemons a worker starts meet the
 tag and adoption tests by construction, and later jobs reuse them. A closed
 tuple of command-line patterns, `worker.RECOGNISED_DAEMONS`, is never owned:

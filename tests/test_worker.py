@@ -205,6 +205,26 @@ def _orphan_cmdline_re(argv0: str, seconds: int) -> str:
     return rf"^({re.escape(f'{argv0} {seconds}')}|(setsid )?bash -c .*{stage}.*)$"
 
 
+def _empty_first_cmdline_read(marker: str) -> tuple[object, list[int]]:
+    """A ``worker._read_cmdline`` that reads empty the first time a pid's
+    real command line contains ``marker``, as ``/proc/<pid>/cmdline`` does
+    mid-``execve`` or on the exit path (ci-reliability CP1). It matches on
+    content, because the orphan's pid file may not exist yet at its first
+    scan. Returns the function and the pids it emptied, so a test can show
+    its widening ran."""
+    real_read_cmdline = worker._read_cmdline
+    emptied: list[int] = []
+
+    def read_cmdline(root, pid: int) -> list[str]:
+        cmdline = real_read_cmdline(root, pid)
+        if pid not in emptied and any(marker in part for part in cmdline):
+            emptied.append(pid)
+            return []
+        return cmdline
+
+    return read_cmdline, emptied
+
+
 def _pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -2230,11 +2250,8 @@ def _open_gate(gate: Path, *, deadline: float | None = None) -> None:
         time.sleep(0.01)
 
 
-class OwnershipProvenanceTest(unittest.TestCase):
-    """Design H (adaptive-test-sharding CP5B): an owned entry's ``source``
-    follows the basis of the latest scan that found it, while its identity,
-    its ``cmdline`` and the first-sighting sample do not change, and nor
-    does which processes are owned (I10). Over a fixture ``/proc``."""
+class _FixtureOwnershipCase(unittest.TestCase):
+    """An ``_Ownership`` scanning a fixture ``/proc``, with one escapee."""
 
     TAG = "cp5b-tag"
     PGID = 4_100_000  # the worker's group, not a real process here
@@ -2258,6 +2275,13 @@ class OwnershipProvenanceTest(unittest.TestCase):
         environ = f"{worker.OWNERSHIP_VAR}={self.TAG}\0" if tag else "PATH=/bin\0"
         self.fake.write(f"{pid}/environ", environ)
         self.fake.write(f"{pid}/cmdline", cmdline.replace(" ", "\0") + "\0")
+
+
+class OwnershipProvenanceTest(_FixtureOwnershipCase):
+    """Design H (adaptive-test-sharding CP5B): an owned entry's ``source``
+    follows the basis of the latest scan that found it, while its identity,
+    its ``cmdline`` and the first-sighting sample do not change, and nor
+    does which processes are owned (I10). Over a fixture ``/proc``."""
 
     def _first_sighting(self) -> worker._Ownership:
         ownership = self._ownership()
@@ -2344,6 +2368,75 @@ class OwnershipProvenanceTest(unittest.TestCase):
         self.assertEqual(published, ["group", "tag"])
 
 
+class CmdlineFillTest(_FixtureOwnershipCase):
+    """ci-reliability CP1 (I1, I2): an entry first read with an empty
+    command line (mid-``execve``, or on the exit path) takes the first
+    non-empty read, once; a non-empty one is never replaced, and never by
+    an empty read. Nothing else about the entry, or what is owned, moves."""
+
+    def _cmdline(self, text: str) -> None:
+        self.fake.write(f"{self.ESCAPEE}/cmdline", text.replace(" ", "\0") + ("\0" if text else ""))
+
+    def _scan(self, ownership: worker._Ownership, cmdline: str) -> dict:
+        self._cmdline(cmdline)
+        ownership.scan()
+        [entry] = ownership.entries()
+        return entry
+
+    def test_an_entry_first_read_empty_takes_the_next_non_empty_read_once(self) -> None:
+        ownership = self._ownership()
+        self._process(self.ESCAPEE, pgrp=self.PGID, tag=True)
+        first = self._scan(ownership, "")
+        self.assertEqual(first["cmdline"], "")
+        self.assertEqual(ownership.sample[0]["cmdline"], "")
+        self.assertEqual(self._scan(ownership, "")["cmdline"], "", "an empty read filled the entry")
+        filled = self._scan(ownership, "bash -c gated")
+        self.assertEqual(filled, dict(first, cmdline="bash -c gated"))
+        self.assertEqual(ownership.sample, [filled], "the first-sighting sample kept the empty command line")
+        self.assertEqual(self._scan(ownership, "")["cmdline"], "bash -c gated")
+        self.assertEqual(self._scan(ownership, "sleep 3")["cmdline"], "bash -c gated")
+        self.assertEqual(ownership.sample[0]["cmdline"], "bash -c gated")
+        self.assertEqual(ownership.seen_count, 1)
+
+    def test_a_non_empty_entry_keeps_its_text_through_an_empty_and_a_different_read(self) -> None:
+        ownership = self._ownership()
+        self._process(self.ESCAPEE, pgrp=self.PGID, tag=True)
+        first = self._scan(ownership, "bash -c gated")
+        self.assertEqual(self._scan(ownership, ""), first)
+        self.assertEqual(self._scan(ownership, "fake-claude-orphan 2"), first)
+        self.assertEqual(ownership.sample, [first])
+
+    def test_an_empty_recorded_entry_fills_after_a_reattach(self) -> None:
+        # Re-attach reuses the same scan over the record's entries (I2).
+        process = worker.WorkerProcess(pid=self.PGID, pgid=self.PGID, start_ticks=1, boot_id=None,
+                                       pid_namespace=None, hostname=None, machine_id=None)
+        self._process(self.ESCAPEE, pgrp=self.ESCAPEE, tag=False)
+        ownership = worker._recorded_ownership(
+            tag=self.TAG, worker_process=process, anchor_pid=None,
+            owned_processes=[{"pid": self.ESCAPEE, "start_ticks": 500, "source": "tag", "cmdline": ""}])
+        entry = self._scan(ownership, "fake-claude-orphan 2")
+        self.assertEqual(entry, {"pid": self.ESCAPEE, "start_ticks": 500, "source": "tag",
+                                 "cmdline": "fake-claude-orphan 2"})
+
+    def test_the_fill_is_published_once_and_nothing_else_is(self) -> None:
+        supervision = worker._Supervision.__new__(worker._Supervision)
+        supervision.state, supervision.published = worker.DRAINING, None
+        published: list[str] = []
+        supervision.on_state_change = lambda state, details: published.append(
+            details["owned_processes"][0]["cmdline"])
+        waiting_on = {"tasks": [], "wakeups": [], "command_lifecycles": []}
+
+        def details(cmdline: str) -> dict:
+            return {"owned_processes": [{"pid": self.ESCAPEE, "start_ticks": 500, "source": "group",
+                                         "cmdline": cmdline}],
+                    "excluded_processes": [], "scan": "verified", "waiting_on": waiting_on}
+
+        for cmdline in ("", "", "bash -c gated", "bash -c gated"):
+            supervision.details = lambda current=details(cmdline): current
+            supervision._publish()
+        self.assertEqual(published, ["", "bash -c gated"])
+
+
 class OwnershipTest(_SupervisedCase):
     """Owned descendants (plan C, step 3): by the process group, the tag,
     adoption and the record of what was seen owned; recognised daemons
@@ -2371,11 +2464,16 @@ class OwnershipTest(_SupervisedCase):
                     # escapee has been reparented, before the worker exits.
                     seen[entry["pid"]] = int(stat.read_text().rsplit(")", 1)[1].split()[1])
 
+        # Every first read of the orphan's command line comes back empty, as
+        # it can mid-execve: the entry still names it (ci-reliability CP1).
+        read_cmdline, emptied = _empty_first_cmdline_read("fake-claude-orphan")
+        self.patch(worker, "_read_cmdline", read_cmdline)
         pid_file = self.dir / "orphan.pid"
         result = self.launch([[{"step": "bash_bg", "seconds": 0.2, "orphan": orphan, "orphan_seconds": 2,
                                 "orphan_pid_file": str(pid_file)}],
                               [{"step": "text"}]], on_state=on_state)
         entry = self._orphan(self.details(worker.DRAINING), int(pid_file.read_text()))
+        self.assertIn(entry["pid"], emptied, "the widening never ran")
         self.assertRegex(entry["cmdline"], _orphan_cmdline_re("fake-claude-orphan", 2))
         return result, entry, seen
 
@@ -2438,7 +2536,11 @@ class OwnershipTest(_SupervisedCase):
         entries = [e for _at, _state, details in self.log for e in details["owned_processes"] if e["pid"] == pid]
         self.assertTrue(entries, "the escapee was never published")
         self.assertEqual({(e["pid"], e["start_ticks"]) for e in entries}, {(pid, entries[0]["start_ticks"])})
-        self.assertEqual({e["cmdline"] for e in entries}, {entries[0]["cmdline"]}, "cmdline is not the first-seen one")
+        # The first-seen cmdline is kept, except that one read empty (mid
+        # execve) takes the first non-empty read, once (ci-reliability CP1).
+        runs = [cmdline for cmdline, _ in itertools.groupby(e["cmdline"] for e in entries)]
+        self.assertTrue(runs == [runs[0]] or (len(runs) == 2 and runs[0] == "" and runs[1]),
+                        f"cmdline is not the first-seen one: {runs}")
         for sampled in result.owned_processes_seen["sample"]:
             if sampled["pid"] == pid:
                 self.assertEqual(sampled["source"], "group", "the sample is not first-sighting history")
@@ -2630,6 +2732,8 @@ class OwnershipTest(_SupervisedCase):
         lock_file.touch()
         lock_fd = os.open(lock_file, os.O_RDONLY)
         self.addCleanup(os.close, lock_fd)
+        read_cmdline, emptied = _empty_first_cmdline_read("fake-claude-daemon")
+        self.patch(worker, "_read_cmdline", read_cmdline)
         pid_file = self.dir / "orphan.pid"
         result = self.launch([[{"step": "bash_bg", "seconds": 0.3, "orphan": "daemon",
                                 "orphan_pid_file": str(pid_file)}], [{"step": "text"}]],
@@ -2638,6 +2742,7 @@ class OwnershipTest(_SupervisedCase):
         [remaining] = result.remaining
         self.extra_pids.append(remaining["pid"])
         self.assertEqual(remaining["pid"], int(pid_file.read_text()))
+        self.assertIn(remaining["pid"], emptied, "the widening never ran")
         self.assertRegex(remaining["cmdline"], _orphan_cmdline_re("fake-claude-daemon", 3600))
         self.assertEqual(result.remaining_pids, [remaining["pid"]])
         self.assertTrue(_running(remaining["pid"]), "the drain bound ended the escapee")

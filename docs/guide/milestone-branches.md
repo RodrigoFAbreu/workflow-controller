@@ -80,7 +80,7 @@ close-out are 1.3.0's.
   | Gate | Meaning | What you do |
   |---|---|---|
   | `checks_pending` | no check reported yet, or one still running; the common case just after the final push. In squash mode also right after readiness edited the title or body, whose checks then re-run | wait, then `run` again |
-  | `checks_failing` | a check failed | re-run it on GitHub if it is flaky; a fix committed on the branch follows the acceptance commit, so readiness then gates `post_acceptance_commits` |
+  | `checks_failing` | a check failed | if it is flaky, "Re-run failed jobs" on GitHub is enough, for a failed test and a leaked process alike: the failed shard's job is red, so it re-runs, and `tests-result` counts its latest attempt (see [Re-running failed jobs](ci-and-releases.md#re-running-failed-jobs)); a fix committed on the branch follows the acceptance commit, so readiness then gates `post_acceptance_commits` |
   | `checks_cancelled` | a check was cancelled, none pending or failing | re-run it on GitHub |
   | `post_acceptance_commits` | commits follow the acceptance commit | merge anyway on GitHub ("Squash and merge"), or leave the gate standing; the Controller never removes them |
   | `integration_required` | `main` moved after the branch point | the manual merge procedure below |

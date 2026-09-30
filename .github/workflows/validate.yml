@@ -51,11 +51,11 @@ jobs:
       - name: "install (editable)"
         run: "pip install -e ."
       - name: shard
-        run: "python3 tools/run_tests.py exec-shard --profile ci --ci-placement --shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} --results-dir results"
+        run: "python3 tools/run_tests.py exec-shard --profile ci --ci-placement --shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} --results-dir results --run-attempt ${{ github.run_attempt }}"
       - if: "always()"
         uses: actions/upload-artifact@v4
         with:
-          name: "results-${{ matrix.shard }}"
+          name: "results-${{ matrix.shard }}-attempt-${{ github.run_attempt }}"
           path: results/
   tests-result:
     needs:
@@ -81,17 +81,14 @@ jobs:
         continue-on-error: true
         with:
           pattern: "results-*"
-          merge-multiple: true
-          path: results
+          path: results/shards
       - name: aggregate
-        run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir results --plan-artifact test-plan --results-artifact-prefix results-"
+        run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir results/shards --run-attempt ${{ github.run_attempt }} --write-selected results/selected --upstream-result plan=${{ needs.plan.result }} --upstream-result tests=${{ needs.tests.result }} --plan-artifact test-plan --results-artifact-prefix results-"
       - if: "always()"
         uses: actions/upload-artifact@v4
         with:
-          name: timings-ci
-          path: |
-            results/plan.json
-            results/shard-*.json
+          name: "timings-ci-attempt-${{ github.run_attempt }}"
+          path: results/selected/
   package:
     runs-on: ubuntu-latest
     permissions:

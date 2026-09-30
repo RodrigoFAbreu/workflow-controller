@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -331,20 +332,49 @@ class EnvironmentTest(unittest.TestCase):
         self.assertFalse(env["child_ignores_sigint"])
 
 
+def _import_run_tests():
+    """``tools/run_tests.py`` in this process, for its building blocks
+    (``tools/`` is on ``sys.path`` only while it imports)."""
+    sys.path.insert(0, str(RUN_TESTS.parent))
+    try:
+        import run_tests
+    finally:
+        sys.path.remove(str(RUN_TESTS.parent))
+    return run_tests
+
+
 class ProcessHygieneTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = SyntheticRepo(self)
 
-    def test_a_leaked_process_is_reported_and_killed_without_failing(self) -> None:
+    def test_a_leaked_process_is_reported_killed_and_fails_the_run(self) -> None:
+        # D7 (I8): the test itself passes; its leak fails the shard and the run.
         completed, results = self.repo.run_selection("tests.test_leak")
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
         pid = int((self.repo.probe / "leak.pid").read_text())
         self.assertTrue(_wait_dead(pid), f"leaked pid {pid} is still alive")
-        leaks = self.repo.record(results, 0)["leaked_processes"]
-        self.assertEqual([(leak["pid"], leak["argv"]) for leak in leaks],
+        record = self.repo.record(results, 0)
+        self.assertEqual([(leak["pid"], leak["argv"]) for leak in record["leaked_processes"]],
                          [(pid, ["sleep", "300"])])
-        self.assertIn("## Leaked processes (warning, killed)", completed.stdout)
+        self.assertEqual([entry["outcome"] for entry in record["tests"]], ["pass"])
+        self.assertEqual(record["exit_status"], 1)
+        self.assertIn("# Test run: FAIL (exit 1)", completed.stdout)
+        self.assertIn("| 0 | LEAKED |", completed.stdout)
+        self.assertIn("## Leaked processes (failure, killed)", completed.stdout)
         self.assertIn(f"pid {pid}", completed.stdout)
+
+    def test_a_late_leak_fails_a_passing_record(self) -> None:
+        # The parent's own re-scan (run_shards) finds what the executor missed.
+        run_tests = _import_run_tests()
+        completed, results = self.repo.run_selection("tests.test_pass")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(self.repo.record(results, 0)["exit_status"], 0)
+        late = {"pid": 4242, "argv": ["sleep", "60"], "age_seconds": 3.0}
+        run_tests._record_leaks(results, 0, [late])
+        record = self.repo.record(results, 0)
+        self.assertEqual((record["exit_status"], record["leaked_processes"]), (1, [late]))
+        run_tests._record_leaks(results, 0, [late])
+        self.assertEqual(self.repo.record(results, 0)["leaked_processes"], [late])
 
     def test_ctrl_c_interrupts_every_shard_and_leaves_nothing_behind(self) -> None:
         results = self.repo.results()
@@ -487,7 +517,7 @@ class BuildingBlocksTest(unittest.TestCase):
         aggregated = self.repo.run(*base, "--plan-artifact", "test-plan",
                                    "--results-artifact-prefix", "results-")
         self.assertEqual(aggregated.returncode, 1, aggregated.stdout + aggregated.stderr)
-        self.assertIn("- CI artifacts: the log is in `results-0`; `test-plan` holds "
+        self.assertIn("- CI artifacts: the log is in `results-0-attempt-1`; `test-plan` holds "
                       "`plan.json` for the replay command", aggregated.stdout)
         alone = self.repo.run(*base, "--plan-artifact", "test-plan")
         self.assertEqual(alone.returncode, 2)
@@ -559,6 +589,135 @@ class BuildingBlocksTest(unittest.TestCase):
                                    "--results-dir", str(self.results))
         self.assertEqual(aggregated.returncode, 2, aggregated.stdout)
         self.assertIn("no result record", aggregated.stdout)
+
+    def ci_layout(self) -> tuple[Path, Path]:
+        """Run 36483126576's shape through the real commands: one shard
+        passes in attempt 1; the conformance suite's shard fails in attempt 1
+        and passes when re-run as attempt 2. Each result is written into the
+        directory download-artifact would extract its artifact into."""
+        plan_path = self.results / "plan.json"
+        planned = self.repo.run("plan", "tests.test_pass", f"conformance:{SUITE}", "--profile",
+                                "ci", "--shards", "2", "--output", str(plan_path))
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        plan = json.loads(plan_path.read_text())
+        self.assertEqual(plan["shard_count"], 2)
+        probe = next(i for i, shard in enumerate(plan["shards"])
+                     if f"conformance:{SUITE}" in shard["test_ids"])
+        shards_dir = self.results / "shards"
+        for index in range(2):
+            for attempt in ((1, 2) if index == probe else (1,)):
+                target = shards_dir / f"results-{index}-attempt-{attempt}"
+                env = {"FAKE_SUITE_STATUS": "1"} if (index, attempt) == (probe, 1) else {}
+                completed = self.repo.run("exec-shard", "--plan", str(plan_path), "--shard",
+                                          str(index), "--results-dir", str(target),
+                                          "--run-attempt", str(attempt), env=env)
+                self.assertEqual(completed.returncode, 1 if env else 0, completed.stderr)
+        return plan_path, shards_dir
+
+    def aggregate(self, plan_path: Path, results: Path, *extra: str):
+        return self.repo.run("aggregate", "--plan", str(plan_path), "--results-dir",
+                             str(results), *extra)
+
+    def test_exec_shard_records_its_run_attempt(self) -> None:
+        self.plan()
+        plan_path = str(self.results / "plan.json")
+        completed = self.exec_shard("--plan", plan_path, "--run-attempt", "4")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        record = self.repo.record(self.results, 0)
+        self.assertEqual((record["schema_version"], record["run_attempt"]), (2, 4))
+        refused = self.exec_shard("--plan", plan_path, "--run-attempt", "0")
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("--run-attempt must be at least 1", refused.stderr)
+
+    def test_aggregate_takes_each_shards_latest_attempt_and_writes_it_flat(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        selected = self.results / "selected"
+        aggregated = self.aggregate(plan_path, shards_dir, "--run-attempt", "2",
+                                    "--upstream-result", "plan=success",
+                                    "--upstream-result", "tests=success",
+                                    "--write-selected", str(selected))
+        self.assertEqual(aggregated.returncode, 0, aggregated.stdout + aggregated.stderr)
+        self.assertIn("## Superseded attempts", aggregated.stdout)
+        self.assertIn(f"  - `conformance:{SUITE}`", aggregated.stdout)
+        self.assertEqual(sorted(p.name for p in selected.iterdir()),
+                         ["plan.json", "shard-0.json", "shard-1.json"])
+        self.assertEqual(json.loads((selected / "plan.json").read_text()),
+                         json.loads(plan_path.read_text()))
+        attempts = sorted(self.repo.record(selected, i)["run_attempt"] for i in range(2))
+        self.assertEqual(attempts, [1, 2])
+        # The selected records are what timings merge reads.
+        merged = self.repo.run("timings", "merge", "--into", str(self.results / "t.json"),
+                               str(selected))
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        # Attempt 1 alone (before the re-run) fails on the probe.
+        shutil.rmtree(next(shards_dir.glob("results-*-attempt-2")))
+        again = self.aggregate(plan_path, shards_dir, "--run-attempt", "1")
+        self.assertEqual(again.returncode, 1, again.stdout + again.stderr)
+
+    def test_aggregate_refuses_an_attempt_above_its_own(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        selected = self.results / "selected"
+        aggregated = self.aggregate(plan_path, shards_dir, "--run-attempt", "1",
+                                    "--write-selected", str(selected))
+        self.assertEqual(aggregated.returncode, 2)
+        self.assertIn("above this run's attempt 1", aggregated.stderr)
+        self.assertFalse(selected.exists())
+
+    def test_a_current_attempt_job_that_failed_fails_over_passing_records(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        for upstream in (("plan=success", "tests=failure"), ("plan=failure", "tests=skipped"),
+                         ("plan=success", "tests=cancelled")):
+            with self.subTest(upstream=upstream):
+                selected = self.results / f"selected-{'-'.join(upstream)}"
+                aggregated = self.aggregate(
+                    plan_path, shards_dir, "--run-attempt", "2", "--write-selected",
+                    str(selected), *[arg for u in upstream for arg in ("--upstream-result", u)])
+                self.assertEqual(aggregated.returncode, 2, aggregated.stdout)
+                failed = [u for u in upstream if not u.endswith("=success")]
+                for option in failed:
+                    job, result = option.split("=")
+                    self.assertIn(f"- job `{job}` of this attempt: `{result}`",
+                                  aggregated.stdout)
+                # LOCAL-R3-001: the selection is still written for timings.
+                self.assertTrue((selected / "plan.json").exists())
+
+    def test_a_failed_attempt_names_its_artifact_log_and_the_given_plan(self) -> None:
+        # Functional review round 1: CI run 36711525245's attempt 1 (F1, F2).
+        plan_path, shards_dir = self.ci_layout()
+        shutil.rmtree(next(shards_dir.glob("results-*-attempt-2")))
+        failed = next(d for d in shards_dir.glob("results-*-attempt-1")
+                      if self.repo.record(d, int(d.name.split("-")[1]))["exit_status"] == 1)
+        index = int(failed.name.split("-")[1])
+        aggregated = self.aggregate(plan_path, shards_dir, "--run-attempt", "1",
+                                    "--upstream-result", "plan=success",
+                                    "--upstream-result", "tests=failure")
+        self.assertEqual(aggregated.returncode, 1, aggregated.stdout + aggregated.stderr)
+        log = failed / f"shard-{index}.log"
+        self.assertTrue(log.exists())
+        self.assertIn(f"- log: `{log}`", aggregated.stdout)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {plan_path} --shard {index}`",
+                      aggregated.stdout)
+        self.assertIn("- job `tests` of this attempt: `failure`\n", aggregated.stdout)
+        self.assertNotIn("left no fresh result", aggregated.stdout)
+
+    def test_upstream_results_are_checked_for_usage(self) -> None:
+        plan_path, shards_dir = self.ci_layout()
+        for bad in ("package=success", "tests=passed", "tests", "tests=success,plan=success"):
+            with self.subTest(bad=bad):
+                aggregated = self.aggregate(plan_path, shards_dir, "--upstream-result", bad)
+                self.assertEqual(aggregated.returncode, 2)
+                self.assertIn("is not JOB=RESULT", aggregated.stderr)
+        twice = self.aggregate(plan_path, shards_dir, "--upstream-result", "tests=success",
+                               "--upstream-result", "tests=failure")
+        self.assertEqual(twice.returncode, 2)
+        self.assertIn("gives job tests twice", twice.stderr)
+
+    def test_aggregate_with_no_results_artifact_at_all_says_so(self) -> None:
+        self.plan()
+        missing = self.results / "shards"
+        aggregated = self.aggregate(self.results / "plan.json", missing, "--run-attempt", "1")
+        self.assertEqual(aggregated.returncode, 2, aggregated.stderr)
+        self.assertIn("no result record", (missing / "SUMMARY.md").read_text())
 
     def test_timings_merge_folds_a_results_directory_into_a_profile(self) -> None:
         completed, results = self.repo.run_selection("tests.test_pass", "tests.test_fail")

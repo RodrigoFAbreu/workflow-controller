@@ -1607,7 +1607,15 @@ class InProcessConcurrencyTest(_LifecycleCase):
     ``LifecycleWorkerActiveError``, ``cli.main`` maps it to 45 (not 20), and
     only one worker ever ran."""
 
+    def _spawn_flushed(self) -> bool:
+        records = self._records()
+        return bool(records) and "worker_process" in records[0] and "worker_anchor" in records[0]
+
     def _start_first_step(self) -> tuple[threading.Thread, dict]:
+        """Starts the first step and waits until its fake worker runs and the
+        ``on_spawn`` flush recorded ``worker_process`` and ``worker_anchor``
+        (``workflow-controller-ci-reliability`` CP2): the fake starts when
+        ``Popen`` returns, before that flush."""
         outcome: dict = {}
 
         def run() -> None:
@@ -1621,9 +1629,31 @@ class InProcessConcurrencyTest(_LifecycleCase):
         self.addCleanup(thread.join, 30)
         self.assertTrue(process_fixtures.wait_until(lambda: len(_read_lines(self.invocations)) == 1),
                         "the first worker never started")
+        self.assertTrue(process_fixtures.wait_until(self._spawn_flushed),
+                        "the first record never carried worker_process and worker_anchor")
         return thread, outcome
 
     def test_a_second_step_refuses_with_exit_45_and_launches_nothing(self) -> None:
+        self._assert_a_second_step_refuses()
+
+    def test_the_second_step_waits_for_a_delayed_spawn_flush(self) -> None:
+        # CP2's widened regression: the `worker_spawned` record write, which
+        # carries `worker_process` and `worker_anchor`, trails the fake
+        # worker's start by 1 s.
+        persist = job._persist
+        delayed: list[str] = []
+
+        def slow_persist(runtime_root, job_id, record, *, event, details=None):
+            if event == "worker_spawned":
+                delayed.append(job_id)
+                time.sleep(1)
+            return persist(runtime_root, job_id, record, event=event, details=details)
+
+        with unittest.mock.patch.object(job, "_persist", slow_persist):
+            self._assert_a_second_step_refuses()
+        self.assertEqual(len(delayed), 1, "the worker_spawned write was never delayed")
+
+    def _assert_a_second_step_refuses(self) -> None:
         env = {"FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
                "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations)}
         with unittest.mock.patch.dict("os.environ", env):
@@ -2654,9 +2684,22 @@ class DrainDetachJobTest(_StreamingCase):
                 probes.append((held, on_disk))
             return real_append(runtime_root, rel_path, obj)
 
+        # The escapee's first command-line read comes back empty, as it can
+        # mid-execve: the message still names it (ci-reliability CP1).
+        real_read_cmdline = worker._read_cmdline
+        emptied: list[int] = []
+
+        def read_cmdline(root, pid: int) -> list[str]:
+            cmdline = real_read_cmdline(root, pid)
+            if pid not in emptied and any("fake-escapee" in part for part in cmdline):
+                emptied.append(pid)
+                return []
+            return cmdline
+
         with unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 2), \
                 unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_TURNS": json.dumps(turns)}), \
                 unittest.mock.patch.object(job.runtime, "append_jsonl_best_effort", append), \
+                unittest.mock.patch.object(worker, "_read_cmdline", read_cmdline), \
                 self.assertRaises(OwnedWorkDetachedError) as ctx:
             self._step(timeout=60)
         self.assertIsInstance(ctx.exception, LifecycleWorkerActiveError)
@@ -2664,6 +2707,8 @@ class DrainDetachJobTest(_StreamingCase):
         [remaining] = ctx.exception.evidence["remaining"]
         pid = remaining["pid"]
         self.assertEqual(pid, int(pid_file.read_text()))
+        self.assertIn(pid, emptied, "the widening never ran")
+        self.assertNotIn(f"{pid} ()", ctx.exception.message)
         self.assertTrue(_alive(pid), "the detach ended the escapee")
         # The message names the pid with the command line the supervisor
         # recorded for it, which is the one it first saw: an owned process's

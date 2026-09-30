@@ -5,7 +5,7 @@
 **Functional review.** `workflow-controller-ci-reliability` (`docs/ROADMAP.md` step C2, section 11.2
 "CI reliability"). The plan is `docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md`, revision 3,
 approved at `fdb925a` (`EXTERNAL_APPROVE`). The base commit is `93b82de`. Governing workflow
-version `2.2`, lifecycle authority Workflow 2.6.0. Technical approval `43008bd`. Pull request title
+version `2.2`, lifecycle authority Workflow 2.6.0. Technical approval `f7fae98` (revision 2; revision 1 `43008bd`). Pull request title
 `fix: stop the known CI flakes and make a re-run of failed jobs count` (1.4.2).
 
 `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for phase and checkpoint status. The
@@ -271,6 +271,12 @@ record `373f2ad`). Nothing in flows A-G and I writes to the repository, its remo
 installed Controller (1.4.1). Flow H pushes a throwaway branch and pull request, and runs only
 with the operator's authorization.
 
+**Round 2**, implementation revision 2 (technical approval `f7fae98`, reviewed head `dbaddce`,
+bundle record `b32cefc`). Round 1 passed flows A-I and found F1 and F2 in the `tests-result`
+summary text (`FUNCTIONAL_REVIEW.md`, consumed); `02b75f6` and `a4ab7b5` fix them. Round 2 runs
+flow J and re-runs E (behaviour unchanged) and G; A-D, F, H and I are not repeated, because
+revision 2 changes only the summary text in `tools/test_shards.py` and `tools/run_tests.py`.
+
 ### Setup
 
 - A scratch directory outside the repository, here `$S` (for example `/tmp/c2-fr`).
@@ -374,6 +380,16 @@ Then close the pull request unmerged and delete the branch.
 - the 1.4.2 amendment notes in `docs/adr/0005-adaptive-test-sharding.md` and
   `docs/adr/0004-worker-lifecycle-ownership.md`;
 - the PR body (the 1.4.2 release notes below).
+
+**J. The summary names real paths and claims only what decides (round 2, F1 and F2).** With
+flow E's setup at `f7fae98`, aggregate E2 (only a failing attempt 1) with `--plan
+"$S/e/plan.json"` over the per-attempt layout. Expected: exit 1; the failure's `- log:` line names
+`$S/e/<case>/shards/results-0-attempt-1/shard-0.log`, which exists; the "reproduce in the
+shard's order" command names `--replay $S/e/plan.json`; with `--upstream-result tests=failure`
+the summary says only "job `tests` of this attempt: `failure`", without "left no fresh result".
+E3 (a passing attempt 1, `tests=failure`) still exits 2 and does say "left no fresh result". The
+flat layout (E7) keeps `<results-dir>/shard-<i>.log` and `<results-dir>/plan.json`. The new
+tests pass: `python3 -m unittest tests.test_test_shards tests.test_run_tests`.
 
 ### Known limitations and out of scope
 

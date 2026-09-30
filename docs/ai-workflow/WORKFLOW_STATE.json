@@ -4839,7 +4839,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-reliability-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-reliability-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -4901,7 +4901,127 @@
         "waived_guarantees": [],
         "recorded_at": "2026-09-30T08:46:37Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "e6e2d2ccd6e599e47459619c40d07218ad59c4252a860b36ed1b583572a54e0d",
+        "approved_review_content_id": "b8deef458a141d6d9cc38d618415e97967a8fff5f2b57253908a739c16206019",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d0feea2a38cae1dcab01b4ccdef2aaddf4bfa1c2"
+          },
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e29780ade05f719e1469b53eded562b0dbc69617"
+          },
+          {
+            "path": "docs/adr/0004-worker-lifecycle-ownership.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b78d6a3f334225def30d91b1e404ea01b4c2c619"
+          },
+          {
+            "path": "docs/adr/0005-adaptive-test-sharding.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f464599244795cc4bd87b72b301fc77fe193432c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci-reliability-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6b77d93dacdb62356c714c19c593775c8e76ee60"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3d354bed41607991c4bc750f98c5cbc3539291ac"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "51b7e94e75904dbe8e4fb9d3321c354cd1b41c5a"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "25f6dc59b89854c88128ab5a3ebced20f6a3a327"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0ab241f5382a60eb72d4d20003467f82181310d"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "56a48ef6c2a6446047c4f96a00e9d8c8dcf85b53"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ced1a0e232985e79939b36ff887b21c9a049054b"
+          },
+          {
+            "path": "tests/test_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2f5d4ec93eef06e77864bacdb663a778b44b026c"
+          },
+          {
+            "path": "tests/test_run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0cd5449c97e27709ce32a09e41488982de181b71"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "93ecb864102eb11ece24e26ecfe094a7ac6fab61"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1908d59e392fd99528d052e05c1e47d6eefdc19f"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cb9b5818dd42c97f8a4e5129b7b82ff305be2496"
+          },
+          {
+            "path": "tools/run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aabc48a07b0f78de42e8f3d247bf22b8000ba182"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e74dae7b1f705a20786a8b622856bdfd18de829"
+          }
+        ],
+        "reviewed_content_commit": "104cfd484577696658b238a26bc9a6f2c170aa43",
+        "legacy_evidence": null,
+        "user_confirmation": "implementation workflow-controller-ci-reliability",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-30T11:36:09Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "31b7eea1bea16719530945fe9f69ae7cdec9b0a8d922af883e121df2e24da4a9",
@@ -4920,8 +5040,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 24,
-      "last_transition": "2026-09-30T09:51:25Z",
+      "state_revision": 27,
+      "last_transition": "2026-09-30T11:36:09Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -4939,6 +5059,21 @@
           "review_content_id": "31b7eea1bea16719530945fe9f69ae7cdec9b0a8d922af883e121df2e24da4a9",
           "bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
           "plan_revision": 3
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "b8deef458a141d6d9cc38d618415e97967a8fff5f2b57253908a739c16206019",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e6e2d2ccd6e599e47459619c40d07218ad59c4252a860b36ed1b583572a54e0d",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-30T10:00:24Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e6e2d2ccd6e599e47459619c40d07218ad59c4252a860b36ed1b583572a54e0d",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-09-30T10:13:34Z"
         }
       }
     }

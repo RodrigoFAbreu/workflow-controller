@@ -26,7 +26,7 @@ record. A leaked process fails the run (D7); nothing is retried automatically (I
 | Checkpoint | Status | Notes |
 |---|---|---|
 | CP1 The recorded command line fills once readable | Complete | See below |
-| CP2 The tests wait for the right signal | Not started | |
+| CP2 The tests wait for the right signal | Complete | See below |
 | CP3 A re-run of failed jobs counts | Not started | |
 | CP4 A leaked process fails the run | Not started | |
 | CP5 Documentation and full verification | Not started | |
@@ -71,3 +71,41 @@ Verification: `tests/golden/generate_*.py --check`: `external_implementation_rev
 2469 tests, 6 shards) passed. It ran inside a Controller-launched worker, so it went through a
 reaping-subreaper wrapper (`PR_SET_CHILD_SUBREAPER` + `waitpid(-1)` loop), in the foreground, with
 `FORCE_COLOR` and `PYTHONPATH` unset.
+
+### CP2 -- the tests wait for the right signal
+
+No change outside `tests/`.
+
+- `tests/test_resume.py`:
+  - `_OrphanWorkerCase._record_with_worker_process` returns a `LAUNCHED` record with
+    `worker_process` only once its job log has the `worker_spawned` line (`_spawn_line_written`),
+    so the `SIGKILL` never lands between the `on_spawn` record write and the line's append. The
+    line's `seq` is the `event_seq` that write set. The helper accepts it when it is equal to the
+    record's `event_seq` or lower, so a later `worker_state` publication that bumps the record
+    cannot make the wait hang. Every `_OrphanWorkerCase` class inherits the wait.
+  - `_CHILD_STEP_SLOW_SPAWN_LINE`: `_CHILD_STEP` with the checkout's
+    `job.runtime.append_jsonl_best_effort` wrapped after the import, so it writes a marker file
+    (`argv[5]`) and sleeps 1 s before the `worker_spawned` append. `_orphan_worker` runs it when
+    it is given `slow_spawn_line=<marker>`.
+  - `CrossProcessEventSeqTest.test_the_kill_waits_for_a_delayed_worker_spawned_line` (new): asserts
+    that the marker exists and `event_seq` is 3, and that after `resume` the log is exactly
+    `planned, launched, worker_spawned, reconciled` with `seq` `1..4`.
+- `tests/test_job.py` `InProcessConcurrencyTest`:
+  - `_start_first_step` also waits until the record carries `worker_process` and
+    `worker_anchor`.
+  - `test_the_second_step_waits_for_a_delayed_spawn_flush` (new) runs the existing test's body
+    (now `_assert_a_second_step_refuses`) with `job._persist` patched to sleep 1 s before the
+    `worker_spawned` write. It asserts that the delay ran exactly once.
+
+Red run against the base's helpers (the base `_record_with_worker_process` and
+`_start_first_step`, with the new tests in place): both new tests fail with the CI symptoms. The
+resume test fails with `['planned', 'launched', 'reconciled'] != ['planned', 'launched',
+'worker_spawned', 'reconciled']`, and the job test with `KeyError: 'worker_process'`. With the
+fix, every `_OrphanWorkerCase` class and `InProcessConcurrencyTest` pass.
+
+Stress (informative): `CrossProcessEventSeqTest` + `InProcessConcurrencyTest`, 6 parallel copies
+under `taskset -c 0,1`, 5 rounds: 30/30 OK.
+
+Verification: the full sharded run (`python3 tools/run_tests.py`, 2471 tests, 6 shards) passed,
+through the same reaping-subreaper wrapper, in the foreground, with `FORCE_COLOR` and
+`PYTHONPATH` unset.

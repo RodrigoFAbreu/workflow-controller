@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci-reliability",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -4827,6 +4827,97 @@
           "verdict": "APPROVE",
           "round": 2,
           "completed_at": "2026-09-29T23:11:54Z"
+        }
+      }
+    },
+    "workflow-controller-ci-reliability": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci-reliability",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-reliability-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-reliability-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "93b82de04371d4ae4deedee6448b21e8057481c7",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
+        "approved_review_content_id": "31b7eea1bea16719530945fe9f69ae7cdec9b0a8d922af883e121df2e24da4a9",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3c3a33087b8605d4af874c83af22992bdcb62e92"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci-reliability-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ff6a26157f4f4db6934f7e26f12495599ca231c2"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci-reliability-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d31e092c39ec98bd15220fe551affa0128c2d133"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "plan workflow-controller-ci-reliability",
+        "waived_guarantees": [],
+        "recorded_at": "2026-09-30T08:46:37Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "31b7eea1bea16719530945fe9f69ae7cdec9b0a8d922af883e121df2e24da4a9",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-30T01:57:28Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-09-30T02:00:47Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 13,
+      "last_transition": "2026-09-30T08:46:37Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-09-30T01:54:50Z",
+        "consumed": {
+          "review_content_id": "13b47858407a49923b53a62651f0267aa9af45b5f7fe30b0a2c0a0eb4de67ced",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "31b7eea1bea16719530945fe9f69ae7cdec9b0a8d922af883e121df2e24da4a9",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "31b7eea1bea16719530945fe9f69ae7cdec9b0a8d922af883e121df2e24da4a9",
+          "bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
+          "plan_revision": 3
         }
       }
     }

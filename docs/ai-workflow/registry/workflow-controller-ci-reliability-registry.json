@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci-reliability",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The recorded command line fills once readable: controller/worker.py _Ownership.scan takes the first non-empty read for an entry recorded with an empty cmdline (never overwritten, never by an empty read) and _Supervision._signature includes cmdline so the fill is published; the widened _read_cmdline regression for OwnershipTest's _escaped family, the daemon-detach test and test_job DrainDetachJobTest with the red run at 93b82de, the scan unit test, the one-extra-publication test, _gated_escapee relaxed to the single empty-to-value step, goldens --check",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The tests wait for the right signal: tests/test_resume.py _OrphanWorkerCase waits for the worker_spawned event line whose seq equals the record's event_seq before the SIGKILL, tests/test_job.py InProcessConcurrencyTest waits for worker_process and worker_anchor before the second step; permanent widened regressions (a _CHILD_STEP variant wrapping job.runtime.append_jsonl_best_effort to delay the worker_spawned append, a patched job._persist delaying the worker_spawned write), each asserting its delay ran, with red runs against the base helpers; no change outside tests/",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "A re-run of failed jobs counts: shard record schema 2 with a required run_attempt (schema 1 read as attempt 1), exec-shard --run-attempt, per-attempt artifacts results-<i>-attempt-<a> downloaded without merge-multiple into per-artifact directories, aggregate selecting each shard's highest attempt with duplicate, above-bound and directory-mismatch refusals, a Superseded attempts summary section, --upstream-result failing tests-result with exit 2 when a current-attempt plan or tests job did not succeed but the selected records pass, --write-selected feeding timings-ci-attempt-<a>; tools/ci_workflows.py model and the rendered validate.yml; tests in test_test_shards, test_run_tests and test_ci_workflows including the run 36483126576 replay and the full-rerun missing-record and missing-plan cases",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "A leaked process fails the run (D7): shard_status and exec-shard exit 1 for a leak-only shard so its tests job is red and a re-run of failed jobs re-runs it, run_tests _record_leaks moving a passing record to exit 1, a LEAKED verdict for an otherwise passing shard with leaked_processes with _verdict's consistency check changed together, exit 1 unless something worse, FAIL/CRASHED/REFUSED/INTERRUPTED keeping precedence, the summary section renamed to failure, the two pinning tests flipped, a leak with a FAIL, and a leaked attempt 1 superseded by a clean attempt 2 covered",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documentation and full verification (terminal): docs/guide/ci-and-releases.md, development.md, milestone-branches.md and workers.md, the ADR 0005 and ADR 0004 amendment notes, the 1.4.2 notes as the pull request body, the stress runs recorded, the unchanged-path check, ci_workflows --check and the full sharded suite",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

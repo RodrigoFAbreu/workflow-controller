@@ -1625,6 +1625,11 @@ class Aggregate:
     superseded: list[dict] = field(default_factory=list)
     #: The current attempt's jobs that did not succeed: ``(job, result)``.
     upstream_failures: list[tuple[str, str]] = field(default_factory=list)
+    #: The file each failure's replay command names (``--plan``).
+    plan_path: Path | None = None
+    #: The directory each shard's selected record came from, where its log
+    #: is; a shard not named here has its log directly in ``results_dir``.
+    record_dirs: dict[int, Path] = field(default_factory=dict)
 
 
 def load_results(plan: Mapping, results_dir: Path, indexes: Iterable[int] | None = None
@@ -1694,11 +1699,14 @@ def _candidates(results_dir: Path) -> list[_Candidate]:
 
 
 def select_results(plan: Mapping, results_dir: Path, *, run_attempt: int | None = None
-                   ) -> tuple[dict[int, dict | None], dict[int, str], list[dict]]:
+                   ) -> tuple[dict[int, dict | None], dict[int, str], list[dict],
+                              dict[int, Path]]:
     """Each planned shard's record from ``results_dir``, in either layout
     (see ``_candidates``), taking the one with the highest ``run_attempt``
-    (I4); a note for each shard left without one; and the records a later
-    attempt superseded (I5), for ``aggregate``'s ``superseded``.
+    (I4); a note for each shard left without one; the records a later
+    attempt superseded (I5), for ``aggregate``'s ``superseded``; and the
+    directory of each shard's deciding record, where its log is, for
+    ``aggregate``'s ``record_dirs``.
 
     Refused with ``AggregateError`` (I7): two records for the same shard
     and attempt, a record above ``run_attempt`` (when given), any record
@@ -1713,6 +1721,7 @@ def select_results(plan: Mapping, results_dir: Path, *, run_attempt: int | None 
     records: dict[int, dict | None] = {}
     notes: dict[int, str] = {}
     superseded: list[dict] = []
+    directories: dict[int, Path] = {}
     for index in range(plan["shard_count"]):
         candidates = by_index.get(index, [])
         seen: dict[int, Path] = {}
@@ -1739,6 +1748,8 @@ def select_results(plan: Mapping, results_dir: Path, *, run_attempt: int | None 
         # The candidate that decides the shard: the latest readable record,
         # or an unreadable one not provably older, which leaves it none.
         taken = blocking[0] if blocking else chosen
+        if taken is not None:
+            directories[index] = taken.path.parent
         if taken is None:
             records[index], notes[index] = None, "no result record"
         elif taken.record is None:
@@ -1757,7 +1768,7 @@ def select_results(plan: Mapping, results_dir: Path, *, run_attempt: int | None 
             superseded.append({"shard": index, "attempt": candidate.attempt,
                                "verdict": verdict, "failing": failing,
                                "note": candidate.note or own_notes.get(index, "")})
-    return records, notes, superseded
+    return records, notes, superseded, directories
 
 
 def _verdict(index: int, planned: list[str], record: Mapping | None, interrupted: bool,
@@ -1792,7 +1803,8 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
               shards: Iterable[int] | None = None, interrupted: Iterable[int] = (),
               notes: Mapping[int, str] | None = None, wall_seconds: float | None = None,
               artifacts: ArtifactNames | None = None, superseded: Iterable[Mapping] = (),
-              upstream: Mapping[str, str] | None = None) -> Aggregate:
+              upstream: Mapping[str, str] | None = None, plan_path: Path | None = None,
+              record_dirs: Mapping[int, Path] | None = None) -> Aggregate:
     """Verdicts, the run-time coverage proof (I2), the exit status and the
     summary for ``plan`` given its shards' ``records`` (``None`` for a shard
     that left none). ``shards`` restricts the run to those shards (a
@@ -1803,7 +1815,10 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
     ``upstream`` maps a job of the current CI attempt to its result: any
     result other than ``success`` turns an otherwise passing run into exit
     ``2`` (I4a), since an earlier attempt's record or plan cannot stand in
-    for a job that failed in this one."""
+    for a job that failed in this one. ``plan_path`` is the plan file the
+    replay commands name (default ``<results_dir>/plan.json``), and
+    ``record_dirs`` (from ``select_results``) the directory each shard's
+    record, and so its log, came from (default ``results_dir``)."""
     validate_plan(plan)
     indexes = list(range(plan["shard_count"]) if shards is None else shards)
     interrupted = set(interrupted)
@@ -1879,7 +1894,11 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
                                  "missing": len(not_run), "unplanned": unplanned,
                                  "duplicate": duplicate},
                        superseded=[dict(entry) for entry in superseded],
-                       upstream_failures=upstream_failures)
+                       upstream_failures=upstream_failures,
+                       plan_path=Path(results_dir) / "plan.json" if plan_path is None
+                       else Path(plan_path),
+                       record_dirs={index: Path(directory)
+                                    for index, directory in (record_dirs or {}).items()})
     result.summary = render_summary(plan, result, results_dir, wall_seconds=wall_seconds,
                                     artifacts=artifacts)
     return result
@@ -1893,14 +1912,14 @@ def _tail(text: str, lines: int = TRACEBACK_TAIL_LINES) -> str:
     return "\n".join(text.rstrip("\n").splitlines()[-lines:])
 
 
-def _reproduce(name: str, index: int, results_dir: Path) -> list[str]:
+def _reproduce(name: str, index: int, plan_path: Path) -> list[str]:
     if name.startswith(CONFORMANCE_PREFIX):
         isolated = f"cd {SCRIPTS_DIR} && python3 {name[len(CONFORMANCE_PREFIX):]}"
     else:
         isolated = f"python3 -m unittest {name}"
     return [f"- reproduce alone: `{isolated}`",
             f"- reproduce in the shard's order: `python3 {RUN_TESTS} --replay "
-            f"{Path(results_dir) / 'plan.json'} --shard {index}`"]
+            f"{plan_path} --shard {index}`"]
 
 
 def shard_verdict(record: Mapping, status: int, results_dir: Path) -> str:
@@ -1931,9 +1950,9 @@ def exclusive_registry_line(plan: Mapping) -> str:
             f"exclusive shard")
 
 
-def _where(index: int, results_dir: Path, artifacts: ArtifactNames | None,
+def _where(index: int, record_dir: Path, artifacts: ArtifactNames | None,
            attempt: int | None) -> list[str]:
-    lines = [f"- log: `{log_path(results_dir, index)}`"]
+    lines = [f"- log: `{log_path(record_dir, index)}`"]
     if artifacts is not None:
         lines.append(f"- CI artifacts: the log is in `{artifacts.results(index, attempt or 1)}`; "
                      f"`{artifacts.plan}` holds `plan.json` for the replay command")
@@ -1960,6 +1979,7 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
     balance ratio. Each shard's row names the attempt its record is from, and
     a current-attempt job that did not succeed is named under the status."""
     results_dir = Path(results_dir)
+    plan_path = result.plan_path or results_dir / "plan.json"
     lines = [f"# Test run: {_STATUS_WORDS[result.exit_status]} (exit {result.exit_status})", ""]
     for job, outcome in result.upstream_failures:
         lines.append(f"- job `{job}` of this attempt: `{outcome}`. A job of this attempt did "
@@ -1998,17 +2018,19 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
         for failure in result.failures:
             lines += ["", f"### `{failure['id']}`", "",
                       f"- shard {failure['shard']}, outcome `{failure['outcome']}`",
-                      *_where(failure["shard"], results_dir, artifacts,
-                              attempts.get(failure["shard"])),
-                      *_reproduce(failure["id"], failure["shard"], results_dir),
+                      *_where(failure["shard"],
+                              result.record_dirs.get(failure["shard"], results_dir),
+                              artifacts, attempts.get(failure["shard"])),
+                      *_reproduce(failure["id"], failure["shard"], plan_path),
                       "", "```text", _tail(failure["detail"]), "```"]
     if result.fixture_errors:
         lines += ["", "## Fixture errors"]
         for index, entry in result.fixture_errors:
             name = holder_target(entry["description"]) or entry["description"]
             lines += ["", f"### `{entry['description']}`", "", f"- shard {index}",
-                      *_where(index, results_dir, artifacts, attempts.get(index)),
-                      *_reproduce(name, index, results_dir),
+                      *_where(index, result.record_dirs.get(index, results_dir), artifacts,
+                              attempts.get(index)),
+                      *_reproduce(name, index, plan_path),
                       "", "```text", _tail(entry["traceback"]), "```"]
     if result.not_run:
         lines += ["", f"## NOT RUN ({len(result.not_run)})", ""]

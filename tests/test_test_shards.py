@@ -2073,12 +2073,13 @@ class AttemptSelectionTest(unittest.TestCase):
     def select(self, **kwargs):
         return shards.select_results(self.plan, self.results, **kwargs)
 
-    def run_aggregate(self, *, run_attempt=None, upstream=None):
-        records, notes, superseded = self.select(run_attempt=run_attempt)
+    def run_aggregate(self, *, run_attempt=None, upstream=None, plan_path=None):
+        records, notes, superseded, record_dirs = self.select(run_attempt=run_attempt)
         return shards.aggregate(self.plan, records, self.results, notes=notes,
                                 superseded=superseded, upstream=upstream,
                                 artifacts=shards.ArtifactNames(plan="test-plan",
-                                                               results_prefix="results-"))
+                                                               results_prefix="results-"),
+                                plan_path=plan_path, record_dirs=record_dirs)
 
     def replay_36483126576(self) -> None:
         """Run 36483126576's shape: shard 1 failed in attempt 1 and passed
@@ -2139,6 +2140,34 @@ class AttemptSelectionTest(unittest.TestCase):
         self.assertEqual([(e["shard"], e["attempt"], e["verdict"]) for e in result.superseded],
                          [(1, 1, "PASS")])
 
+    def test_a_per_attempt_failure_names_its_own_log_and_the_given_plan(self) -> None:
+        # Functional review round 1, F1: in CI's per-attempt layout the log
+        # is in the selected record's own directory, and the replay command
+        # names the plan aggregate was given, not <results>/plan.json.
+        self.put(0, 1)
+        self.put(1, 1)
+        self.put(1, 2, {self.failing: "fail"})
+        plan_path = self.results.parent / "plan.json"
+        summary = self.run_aggregate(run_attempt=2, plan_path=plan_path).summary
+        log = self.results / "results-1-attempt-2" / "shard-1.log"
+        self.assertIn(f"- log: `{log}`\n- CI artifacts: the log is in `results-1-attempt-2`",
+                      summary)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {plan_path} --shard 1`", summary)
+        self.assertNotIn(f"`{self.results / 'shard-1.log'}`", summary)
+        self.assertNotIn(str(self.results / "plan.json"), summary)
+
+    def test_a_flat_layout_failure_keeps_its_paths(self) -> None:
+        # F1's counterpart: the flat layout's log and plan stay where they were.
+        self.put(0, None, directory="")
+        self.put(1, None, {self.failing: "fail"}, directory="")
+        summary = self.run_aggregate().summary
+        self.assertIn(f"- log: `{self.results / 'shard-1.log'}`", summary)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {self.results / 'plan.json'} "
+                      f"--shard 1`", summary)
+        given = self.results.parent / "given-plan.json"
+        self.assertIn(f"--replay {given} --shard 1`",
+                      self.run_aggregate(plan_path=given).summary)
+
     def test_two_records_of_one_shard_and_attempt_are_refused(self) -> None:
         self.put(0, 1)
         self.put(1, 1)
@@ -2149,7 +2178,7 @@ class AttemptSelectionTest(unittest.TestCase):
     def test_a_flat_version_1_record_is_attempt_1_and_duplicates_a_per_attempt_one(self) -> None:
         self.put(0, 1)
         self.put(1, None, directory="")
-        records, _, _ = self.select()
+        records, _, _, _ = self.select()
         self.assertEqual(shards.record_attempt(records[1]), 1)
         self.put(1, 1)
         with self.assertRaisesRegex(shards.AggregateError, "two records of attempt 1"):
@@ -2196,15 +2225,17 @@ class AttemptSelectionTest(unittest.TestCase):
         broken = self.results / "results-1-attempt-1"
         broken.mkdir()
         (broken / "shard-1.json").write_text("{")
-        records, notes, superseded = self.select(run_attempt=2)
+        records, notes, superseded, _ = self.select(run_attempt=2)
         self.assertEqual(shards.record_attempt(records[1]), 2)
         self.assertEqual([(e["attempt"], e["verdict"]) for e in superseded], [(1, "CRASHED")])
         self.assertIn("cannot read", superseded[0]["note"])
         shutil.rmtree(self.results / "results-1-attempt-2")
         self.put(1, 1, directory="results-1-attempt-0-old")
         broken.rename(self.results / "results-1-attempt-2")
-        records, notes, superseded = self.select(run_attempt=2)
+        records, notes, superseded, record_dirs = self.select(run_attempt=2)
         self.assertIsNone(records[1])
+        # The unreadable record decides the shard, so its log is beside it.
+        self.assertEqual(record_dirs[1], self.results / "results-1-attempt-2")
         self.assertIn("cannot read", notes[1])
         self.assertEqual([(e["attempt"], e["verdict"]) for e in superseded], [(1, "PASS")])
 
@@ -2212,11 +2243,13 @@ class AttemptSelectionTest(unittest.TestCase):
         self.put(0, None, directory="")
         self.put(1, None, {self.failing: "fail"}, directory="")
         (self.results / "shard-0").mkdir()
-        records, notes, superseded = self.select()
+        records, notes, superseded, record_dirs = self.select()
         self.assertEqual((records, notes), shards.load_results(self.plan, self.results))
         self.assertEqual(superseded, [])
+        self.assertEqual(record_dirs, {0: self.results, 1: self.results})
         self.assertEqual(self.run_aggregate().exit_status, 1)
-        empty, notes, _ = shards.select_results(self.plan, self.results / "absent")
+        empty, notes, _, none = shards.select_results(self.plan, self.results / "absent")
+        self.assertEqual(none, {})
         self.assertEqual((empty, notes), ({0: None, 1: None},
                                           {0: "no result record", 1: "no result record"}))
 

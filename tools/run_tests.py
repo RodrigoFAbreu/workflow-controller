@@ -284,10 +284,11 @@ def cmd_aggregate(args) -> int:
     artifacts = None if args.plan_artifact is None else ts.ArtifactNames(
         plan=args.plan_artifact, results_prefix=args.results_artifact_prefix)
     plan = load_plan(args.plan)
-    records, notes, superseded = ts.select_results(plan, args.results_dir,
-                                                   run_attempt=args.run_attempt)
+    records, notes, superseded, record_dirs = ts.select_results(
+        plan, args.results_dir, run_attempt=args.run_attempt)
     result = ts.aggregate(plan, records, args.results_dir, notes=notes, artifacts=artifacts,
-                          superseded=superseded, upstream=upstream)
+                          superseded=superseded, upstream=upstream, plan_path=args.plan,
+                          record_dirs=record_dirs)
     if args.write_selected is not None:
         # Written whatever the verdict (timings merge folds passing atoms
         # only); not written when the results were refused outright.
@@ -538,7 +539,7 @@ def cmd_run(args) -> int:
         if records.get(index) is None:
             notes[index] = (notes.get(index, "") + f"; leaked {len(found)} processes").lstrip("; ")
     result = ts.aggregate(plan, records, results_dir, shards=indexes, interrupted=interrupted,
-                          notes=notes, wall_seconds=wall)
+                          notes=notes, wall_seconds=wall, plan_path=plan_path)
     _publish_summary(result.summary, results_dir)
     if inventory is None:
         try:

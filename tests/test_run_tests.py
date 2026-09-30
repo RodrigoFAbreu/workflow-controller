@@ -681,6 +681,23 @@ class BuildingBlocksTest(unittest.TestCase):
                 # LOCAL-R3-001: the selection is still written for timings.
                 self.assertTrue((selected / "plan.json").exists())
 
+    def test_a_failed_attempt_names_its_artifact_log_and_the_given_plan(self) -> None:
+        # Functional review round 1, F1: CI run 36711525245's attempt 1.
+        plan_path, shards_dir = self.ci_layout()
+        shutil.rmtree(next(shards_dir.glob("results-*-attempt-2")))
+        failed = next(d for d in shards_dir.glob("results-*-attempt-1")
+                      if self.repo.record(d, int(d.name.split("-")[1]))["exit_status"] == 1)
+        index = int(failed.name.split("-")[1])
+        aggregated = self.aggregate(plan_path, shards_dir, "--run-attempt", "1",
+                                    "--upstream-result", "plan=success",
+                                    "--upstream-result", "tests=failure")
+        self.assertEqual(aggregated.returncode, 1, aggregated.stdout + aggregated.stderr)
+        log = failed / f"shard-{index}.log"
+        self.assertTrue(log.exists())
+        self.assertIn(f"- log: `{log}`", aggregated.stdout)
+        self.assertIn(f"`python3 tools/run_tests.py --replay {plan_path} --shard {index}`",
+                      aggregated.stdout)
+
     def test_upstream_results_are_checked_for_usage(self) -> None:
         plan_path, shards_dir = self.ci_layout()
         for bad in ("package=success", "tests=passed", "tests", "tests=success,plan=success"):

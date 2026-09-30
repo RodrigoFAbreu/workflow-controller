@@ -1141,7 +1141,7 @@ narrative is archived at `docs/milestones/completed/workflow-controller-ci-relia
 three flakes are fixed, each with a regression that widens its window. A re-run of failed jobs
 counts: each shard's latest attempt decides, superseded attempts are listed, and `tests-result`
 fails when a job of the current attempt did not succeed. A leaked process fails the run (D7), and
-nothing is retried automatically. Releases as 1.4.2 when PR #13 is squash-merged.
+nothing is retried automatically. Released as 1.4.2 (PR #13, squash `0de0fd5`).
 
 **Step C2.** An unattended merge stalls on every flaky run, and the Workflow 2.6 milestone needed
 five re-runs.

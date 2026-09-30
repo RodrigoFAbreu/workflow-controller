@@ -2654,9 +2654,22 @@ class DrainDetachJobTest(_StreamingCase):
                 probes.append((held, on_disk))
             return real_append(runtime_root, rel_path, obj)
 
+        # The escapee's first command-line read comes back empty, as it can
+        # mid-execve: the message still names it (ci-reliability CP1).
+        real_read_cmdline = worker._read_cmdline
+        emptied: list[int] = []
+
+        def read_cmdline(root, pid: int) -> list[str]:
+            cmdline = real_read_cmdline(root, pid)
+            if pid not in emptied and any("fake-escapee" in part for part in cmdline):
+                emptied.append(pid)
+                return []
+            return cmdline
+
         with unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 2), \
                 unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_TURNS": json.dumps(turns)}), \
                 unittest.mock.patch.object(job.runtime, "append_jsonl_best_effort", append), \
+                unittest.mock.patch.object(worker, "_read_cmdline", read_cmdline), \
                 self.assertRaises(OwnedWorkDetachedError) as ctx:
             self._step(timeout=60)
         self.assertIsInstance(ctx.exception, LifecycleWorkerActiveError)
@@ -2664,6 +2677,8 @@ class DrainDetachJobTest(_StreamingCase):
         [remaining] = ctx.exception.evidence["remaining"]
         pid = remaining["pid"]
         self.assertEqual(pid, int(pid_file.read_text()))
+        self.assertIn(pid, emptied, "the widening never ran")
+        self.assertNotIn(f"{pid} ()", ctx.exception.message)
         self.assertTrue(_alive(pid), "the detach ended the escapee")
         # The message names the pid with the command line the supervisor
         # recorded for it, which is the one it first saw: an owned process's

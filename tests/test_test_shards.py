@@ -2264,6 +2264,7 @@ class AttemptSelectionTest(unittest.TestCase):
                                                              "tests": "failure"})
         self.assertEqual(result.exit_status, 2)
         self.assertEqual(result.upstream_failures, [("tests", "failure")])
+        self.assertTrue(result.upstream_refused)
         self.assertTrue(result.summary.startswith(
             "# Test run: ERROR (exit 2)\n\n- job `tests` of this attempt: `failure`. A job of "
             "this attempt did not succeed and left no fresh result; an earlier attempt's "
@@ -2292,7 +2293,21 @@ class AttemptSelectionTest(unittest.TestCase):
         result = self.run_aggregate(run_attempt=1, upstream={"plan": "success",
                                                              "tests": "failure"})
         self.assertEqual(result.exit_status, 1)
-        self.assertIn("- job `tests` of this attempt: `failure`", result.summary)
+        self.assertFalse(result.upstream_refused)
+        # Functional review round 1, F2: the shard did leave a fresh result,
+        # so the line names the job and claims nothing more.
+        self.assertIn("- job `tests` of this attempt: `failure`\n", result.summary)
+        self.assertNotIn("left no fresh result", result.summary)
+
+    def test_records_that_already_refuse_name_the_job_without_the_claim(self) -> None:
+        # F2: exit 2 from the records themselves (shard 1 left none) is not
+        # the job result's doing, so the I4a explanation is not given.
+        self.put(0, 1)
+        result = self.run_aggregate(run_attempt=1, upstream={"plan": "success",
+                                                             "tests": "failure"})
+        self.assertEqual((result.exit_status, result.upstream_refused), (2, False))
+        self.assertIn("- job `tests` of this attempt: `failure`\n", result.summary)
+        self.assertNotIn("left no fresh result", result.summary)
 
 
 class EnvironmentShapingTest(unittest.TestCase):

@@ -682,7 +682,7 @@ class BuildingBlocksTest(unittest.TestCase):
                 self.assertTrue((selected / "plan.json").exists())
 
     def test_a_failed_attempt_names_its_artifact_log_and_the_given_plan(self) -> None:
-        # Functional review round 1, F1: CI run 36711525245's attempt 1.
+        # Functional review round 1: CI run 36711525245's attempt 1 (F1, F2).
         plan_path, shards_dir = self.ci_layout()
         shutil.rmtree(next(shards_dir.glob("results-*-attempt-2")))
         failed = next(d for d in shards_dir.glob("results-*-attempt-1")
@@ -697,6 +697,8 @@ class BuildingBlocksTest(unittest.TestCase):
         self.assertIn(f"- log: `{log}`", aggregated.stdout)
         self.assertIn(f"`python3 tools/run_tests.py --replay {plan_path} --shard {index}`",
                       aggregated.stdout)
+        self.assertIn("- job `tests` of this attempt: `failure`\n", aggregated.stdout)
+        self.assertNotIn("left no fresh result", aggregated.stdout)
 
     def test_upstream_results_are_checked_for_usage(self) -> None:
         plan_path, shards_dir = self.ci_layout()

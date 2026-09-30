@@ -1625,6 +1625,9 @@ class Aggregate:
     superseded: list[dict] = field(default_factory=list)
     #: The current attempt's jobs that did not succeed: ``(job, result)``.
     upstream_failures: list[tuple[str, str]] = field(default_factory=list)
+    #: Whether ``upstream_failures`` alone decided the exit status: the
+    #: selected records would pass, so the run exits ``2`` (I4a).
+    upstream_refused: bool = False
     #: The file each failure's replay command names (``--plan``).
     plan_path: Path | None = None
     #: The directory each shard's selected record came from, where its log
@@ -1885,7 +1888,8 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
         status = EXIT_PASS
     upstream_failures = [(job, outcome) for job, outcome in (upstream or {}).items()
                          if outcome != UPSTREAM_SUCCESS]
-    if upstream_failures and status == EXIT_PASS:
+    upstream_refused = bool(upstream_failures) and status == EXIT_PASS
+    if upstream_refused:
         status = EXIT_REFUSED
     result = Aggregate(shards=rows, not_run=not_run, violations=violations, failures=failures,
                        fixture_errors=fixture_errors, fixture_skips=fixture_skips, leaks=leaks,
@@ -1895,6 +1899,7 @@ def aggregate(plan: Mapping, records: Mapping[int, Mapping | None], results_dir:
                                  "duplicate": duplicate},
                        superseded=[dict(entry) for entry in superseded],
                        upstream_failures=upstream_failures,
+                       upstream_refused=upstream_refused,
                        plan_path=Path(results_dir) / "plan.json" if plan_path is None
                        else Path(plan_path),
                        record_dirs={index: Path(directory)
@@ -1982,9 +1987,11 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
     plan_path = result.plan_path or results_dir / "plan.json"
     lines = [f"# Test run: {_STATUS_WORDS[result.exit_status]} (exit {result.exit_status})", ""]
     for job, outcome in result.upstream_failures:
-        lines.append(f"- job `{job}` of this attempt: `{outcome}`. A job of this attempt did "
-                     f"not succeed and left no fresh result; an earlier attempt's record does "
-                     f"not count for it")
+        # The explanation only when the job's result alone decided the
+        # status; a run whose records fail already says why below.
+        why = (". A job of this attempt did not succeed and left no fresh result; an earlier "
+               "attempt's record does not count for it") if result.upstream_refused else ""
+        lines.append(f"- job `{job}` of this attempt: `{outcome}`{why}")
     lines += [f"- plan `{plan['plan_digest']}`, profile `{plan['profile']}`, "
               f"{len(plan['selected_ids'])} selected tests in {plan['shard_count']} shards",
               f"- results: `{results_dir}`",

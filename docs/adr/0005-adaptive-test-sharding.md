@@ -17,6 +17,27 @@ The version, the exit-code contract of
 schema, `controller/GENERATION.json` and the release pipeline's
 classification are untouched.
 
+Amendment (1.4.2, 2026-09-30, `workflow-controller-ci-reliability`,
+`docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md`):
+
+- **D7 is decided: a leaked process fails the run.** A shard whose tests
+  pass but which leaked a process gets the verdict `LEAKED`; its executor
+  exits 1, so its CI job is red, and the aggregate exits 1 unless
+  something worse happened (`FAIL`, `CRASHED`, `REFUSED` and `INTERRUPTED`
+  keep their precedence). The process is still reported and killed.
+- **Attempts are selected.** Shard records are schema version 2 and carry
+  their `run_attempt` (version 1 is read as attempt 1). Each CI attempt
+  uploads `results-<i>-attempt-<a>`, and `tests-result` counts each
+  shard's highest attempt, lists the superseded records, fails (exit 2)
+  when a job of the current attempt did not succeed but the selected
+  records would pass, and uploads `timings-ci-attempt-<a>`. A GitHub
+  "Re-run failed jobs" therefore counts.
+- **I6 is kept.** Nothing retries a test or a shard by itself; the only
+  re-run is a person's, and its summary shows what it superseded.
+- **I10's first-sighting command line** now fills once: an entry recorded
+  with an empty command line takes the first non-empty read (see
+  [ADR 0004](0004-worker-lifecycle-ownership.md)).
+
 It supersedes one operational detail of two earlier ADRs, without editing
 them: [ADR 0002](0002-release-runtime-identity-and-observability.md) runs
 "the Controller suite in seven named shards", and

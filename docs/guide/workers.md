@@ -146,6 +146,11 @@ This is what catches a background command that detaches itself
 own session, outside the worker's process group. The Controller never
 trusts the harness's `killed` status and scans `/proc` itself.
 
+Each owned entry records the process's command line. A process first
+seen inside an `execve` reads an empty one, so its entry is recorded
+with an empty command line and takes the first non-empty read, once:
+a recorded command line is never replaced, and never by an empty read.
+
 **Recognised daemons are never owned.** Long-lived tool daemons are
 shared infrastructure that later jobs reuse, so a process whose command
 line matches `worker.RECOGNISED_DAEMONS` is not waited for, never ended

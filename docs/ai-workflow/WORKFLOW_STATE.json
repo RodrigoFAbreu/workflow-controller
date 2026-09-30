@@ -4839,14 +4839,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-reliability-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-reliability-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 3,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "93b82de04371d4ae4deedee6448b21e8057481c7",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP4",
+      "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -4863,6 +4863,10 @@
         "CP4": {
           "status": "COMPLETE",
           "start_commit": "5add3cfae932ea5c8a8375f9c5b93f07626dfed1"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "01fa87f5a0fec4abd472a70e0e5bf990755afd58"
         }
       },
       "current_bundle_id": "574bc2153bcafd122a1ddc76d73f1b37be640337a312652f2b06aec127b8a618",
@@ -4916,8 +4920,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 21,
-      "last_transition": "2026-09-30T09:31:33.209455+00:00",
+      "state_revision": 23,
+      "last_transition": "2026-09-30T09:42:14Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

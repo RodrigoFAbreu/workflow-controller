@@ -17,14 +17,18 @@ each on `ubuntu-latest` with Python 3.12 and read-only permissions:
 - `tests`: one matrix job per planned shard (`fail-fast: false`). Each
   recomputes the plan from the checked-out commit, refuses to run unless
   its digest equals `plan`'s, runs its shard and uploads its result
-  record and log as the `results-<i>` artifact. A shard that does not
-  pass prints its failing tests with their traceback tails in its own
-  step log;
+  record and log as the `results-<i>-attempt-<a>` artifact, where `<a>`
+  is the run attempt (`github.run_attempt`), also written into the
+  record. A shard that does not pass, or that leaked a process, fails its
+  job and prints its failing tests with their traceback tails, or the
+  leaked processes, in its own step log;
 - `tests-result`: runs even when a shard failed or never started, and
-  aggregates every shard's result. It passes only if every planned test
-  ran exactly once and passed; a missing plan or a missing shard result
-  fails it. It uploads the run's durations as the `timings-ci` artifact.
-  `tools/test_shards.py`'s CI placement keeps `tests.test_packaged_runtime`
+  aggregates every shard's result (see
+  [Re-running failed jobs](#re-running-failed-jobs)). It passes only if
+  every planned test ran exactly once and passed and no shard leaked a
+  process; a missing plan or a missing shard result fails it. It uploads
+  the plan and the records it counted as the `timings-ci-attempt-<a>`
+  artifact. `tools/test_shards.py`'s CI placement keeps `tests.test_packaged_runtime`
   (run by `package`) and `tests.test_integration_disposable_repo` (which
   needs the live `claude` binary and real spend) out of the plan;
 - `package`: builds the wheel, verifies it with
@@ -66,8 +70,45 @@ deterministic: each `tests` job recomputes it and refuses to run on a
 digest mismatch, so the matrix carries only shard indexes. Every
 `tests-result` summary states the coverage check's verdict. A failing
 run's summary also names each failing test, its shard, the shard's log,
-the artifacts to download (`results-<i>` holds the log, `test-plan` the
-`plan.json` the replay command reads) and the reproduction commands.
+the artifacts to download (`results-<i>-attempt-<a>` holds the log,
+`test-plan` the `plan.json` the replay command reads) and the
+reproduction commands.
+
+### Re-running failed jobs
+
+GitHub's "Re-run failed jobs" counts. Each attempt uploads its own
+`results-<i>-attempt-<a>` artifacts, and `tests-result` downloads every
+attempt's, one directory each. For each planned shard it takes the
+record with the highest attempt, and only those records decide the
+result. A shard the re-run did not schedule keeps its earlier record. So
+after a flaky shard fails, re-running the failed jobs re-runs that shard
+(and `tests-result`), and a green re-run turns `tests-result` green.
+
+Nothing is hidden. The summary gives each shard's attempt, and a
+"Superseded attempts" section lists every record it did not count, with
+its attempt, its verdict and its failing tests. `tests-result` also
+fails (exit 2), naming the job, when this attempt's `plan` or `tests`
+job did not succeed but the records it found would pass: a job scheduled
+in this attempt failed without leaving a fresh record or plan, and an
+earlier attempt's passing record must not stand in for it. The same exit
+refuses two records of one shard and attempt, a record from a later
+attempt than the aggregating one, and an artifact directory whose name
+disagrees with its record.
+
+**A leaked process fails the run.** A test that leaves a process running
+after its shard ends gets the verdict `LEAKED`: the process is reported
+and killed, and the shard's job and `tests-result` are red, even if
+every test passed. The summary's "Leaked processes (failure, killed)"
+section names each process, with its shard, pid, age and command line.
+Since the shard's own job is red, "Re-run failed jobs" re-runs it, as for
+a failed test.
+
+**Nothing is retried automatically.** A failed test is reported failed,
+and never run a second time by the runner or the workflows. A retry
+would turn an intermittent defect, in a test or in the Controller, into
+a green run (one of the flakes 1.4.2 fixed was a Controller defect).
+The only re-run is the one a person asks for, and its summary still
+shows what it superseded.
 
 `pr-title.yml` (check `PR title`) runs on every pull request when it is
 opened, reopened or edited, and on every push to it. It runs

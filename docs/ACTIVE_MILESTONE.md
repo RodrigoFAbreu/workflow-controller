@@ -29,7 +29,7 @@ record. A leaked process fails the run (D7); nothing is retried automatically (I
 | CP2 The tests wait for the right signal | Complete | See below |
 | CP3 A re-run of failed jobs counts | Complete | See below |
 | CP4 A leaked process fails the run | Complete | See below |
-| CP5 Documentation and full verification | Not started | |
+| CP5 Documentation and full verification | Complete | See below |
 
 ### CP1 -- the recorded command line fills once readable
 
@@ -227,3 +227,75 @@ or flipped test except the refusal one, which holds at the base as it should. Wi
 Verification: the full sharded run (`python3 tools/run_tests.py`, 2500 tests, 6 shards) passed
 with exact coverage and no leaked process, through the same reaping-subreaper wrapper, in the
 foreground, with `FORCE_COLOR` and `PYTHONPATH` unset.
+
+### CP5 -- documentation and full verification
+
+- `docs/guide/ci-and-releases.md`: the `tests` and `tests-result` jobs name the per-attempt
+  artifacts (`results-<i>-attempt-<a>`, `timings-ci-attempt-<a>`); a new "Re-running failed jobs"
+  section says that a re-run of failed jobs counts (each shard's highest attempt decides, a shard
+  not re-run keeps its record, superseded attempts are listed, the exit-2 refusals including the
+  current-attempt job check), that a leaked process fails the run, and that nothing is retried
+  automatically, and why.
+- `docs/guide/development.md`: exit status 1 includes a leak; a "Leaks" item (a test must end
+  every process it starts; the `LEAKED` verdict and the summary section); the committed-profile
+  refresh reads the highest attempt's `timings-ci-attempt-<a>` artifact, which holds the plan and
+  only the selected records (`LOCAL-R1-003`).
+- `docs/guide/milestone-branches.md`: the `checks_failing` row says "Re-run failed jobs" is
+  enough for a failed test and a leak alike.
+- `docs/guide/workers.md`: an owned entry's command line is recorded empty when first seen inside
+  an `execve`, and takes the first non-empty read, once.
+- `docs/adr/0005-adaptive-test-sharding.md`: a 1.4.2 amendment note (D7 decided, attempts
+  selected, I6 kept, I10's command line fills once). `docs/adr/0004-worker-lifecycle-ownership.md`:
+  a 1.4.2 amendment note for the command-line fill (I2).
+- `tools/test_timings.json` is unchanged: `CommittedTimingsTest` passes.
+
+Stress (informative): CP1's classes (`tests.test_worker.OwnershipTest`,
+`tests.test_worker.CmdlineFillTest`, `tests.test_job.DrainDetachJobTest`, 23 tests), 6 parallel
+copies under `taskset -c 0,1`, 5 rounds: 30/30 OK. CP2's stress is recorded under CP2 (30/30 OK).
+
+Verification:
+- `tests/golden/generate_*.py --check`: `external_implementation_review_decisions` and
+  `no_policy_lifecycle` current; `plan_stage_decisions` differs, identically to the base (as at
+  CP1).
+- `python3 tools/ci_workflows.py --check` is clean.
+- `git diff 93b82de -- .workflow-controller/ pyproject.toml setup.py .github/workflows/ci.yml
+  .github/workflows/main.yml .github/workflows/pr-title.yml` is empty.
+- The full sharded run (`python3 tools/run_tests.py`, 2500 tests, 6 shards) passed with exact
+  coverage and no leaked process, through the same reaping-subreaper wrapper, in the foreground,
+  with `FORCE_COLOR` and `PYTHONPATH` unset.
+
+## Pull request body (1.4.2 release notes)
+
+From 1.4.0 the pull request body is the release notes (`docs/README.md`). After the release, a
+docs pull request adds `docs/releases/1.4.2.md` from it, as for 1.4.1. The Draft PR for this
+milestone carries:
+
+> **Stop the known CI flakes and make a re-run of failed jobs count (1.4.2)**
+>
+> **The command line fills once readable.** An owned process the Controller first saw inside an
+> `execve` read an empty command line, and 1.4.1 kept that empty text for the life of the entry,
+> so a drain detach could name `<pid> ()`. A recorded entry whose command line is empty now takes
+> the first non-empty read, once, and the fill is published: at most one extra `worker_state`
+> publication per such entry, re-attach included. A non-empty command line is never replaced, and
+> never by an empty read. Ownership, and each entry's `pid`, `start_ticks` and `source`, are
+> unchanged; job records keep 1.4.1's format, and 1.4.1 and 1.4.2 re-attach to each other's jobs.
+>
+> **The tests wait for the right signal.** Two tests acted inside the on-spawn window: one killed
+> the worker before its `worker_spawned` event line was written, one started a second step
+> before the record carried `worker_process`. Both now wait for the signal they depend on, and
+> each has a regression that widens the window on purpose.
+>
+> **A re-run of failed jobs counts.** Shard records are schema version 2 and carry their
+> `run_attempt` (version 1 is still read, as attempt 1). Each CI attempt uploads
+> `results-<i>-attempt-<a>`, and `tests-result` takes each shard's latest attempt, lists the
+> attempts it superseded, and fails when a job of the current attempt did not succeed but older
+> records would pass. It uploads `timings-ci-attempt-<a>`. "Re-run failed jobs" on a flaky shard
+> can now turn the run green, and the summary still shows what it replaced.
+>
+> **A leaked process fails the run.** A test that leaves a process running gets the verdict
+> `LEAKED`: the process is reported and killed, and the shard's job and `tests-result` are red
+> even if every test passed. Nothing is retried automatically.
+>
+> **Operator note.** The CI artifacts are renamed (`results-<i>-attempt-<a>`,
+> `timings-ci-attempt-<a>`); the required checks and their names are unchanged. Refresh the
+> committed timings from the highest attempt's `timings-ci-attempt-<a>` artifact.

@@ -488,6 +488,23 @@ findings, both reproduced before fixing:
 - Verified: the full sharded suite passed (2691 tests, 6 shards, exact coverage, exit 0, under a
   reaping subreaper); the three golden `--check` runs and `tools/ci_workflows.py --check` exit 0.
 
+### Implementation review round 2 fixes
+
+The local review of implementation revision 2 returned `REVISE` with one Important finding,
+reproduced before fixing:
+- `e38d0d5`: LIR2-I1, the round 1 fix overcorrected. `settings clean` removed a known, valid
+  value when an unknown dotted key shared its path (the role `review-plan.model` beside
+  `review-plan`'s `model`; the routing key `default.effort` beside `default`'s `effort`). A reading
+  of an unknown path is now removed only when its last segment is unknown at its own level.
+  The reviewer's suggested `_defaults_written` check found the same collision: an unknown
+  top-level key named `worker.timeout_seconds` dropped the known setting's record. Records are
+  now matched by segments. The missing `CleanTest` cases are added.
+- Verified: the full sharded suite passed (2693 tests, 6 shards, exact coverage, exit 0, under a
+  reaping subreaper). `tools/ci_workflows.py --check` and two of the three golden `--check` runs
+  exit 0. `tests/golden/generate_plan_stage_decisions.py --check` now reports its
+  `AMENDING_PLAN` cases differ in this environment. It fails the same way at the milestone base
+  `a47e695`, so this milestone did not cause it. `tests.test_golden_plan_stage_decisions` passes.
+
 ## Release notes
 
 ### Settings, telemetry and release notes from the milestone (1.5.0)

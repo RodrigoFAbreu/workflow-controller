@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 import unittest.mock
@@ -194,6 +195,23 @@ class GroupingTest(_RuntimeCase):
         self.assertEqual(code, cli.EXIT_OK, err)
         self.assertEqual([g["key"] for g in json.loads(out)["groups"]],
                          [{"role": None, "model": None}, {"role": "milestone-plan", "model": None}])
+
+    def test_the_by_usage_names_one_grouping_and_the_values_are_unchanged(self) -> None:
+        """Functional review F5: the usage reads ``--by GROUPING``, not
+        ``{model,role,role,model}``; the help lists the three values, and
+        an unknown one is still a usage error."""
+        # Plain help text whatever the session's FORCE_COLOR says.
+        with unittest.mock.patch.dict(os.environ, {"PYTHON_COLORS": "0"}):
+            code, out, _err = self.cli("telemetry", "--help")
+        self.assertEqual(code, 0)
+        self.assertIn("--by GROUPING", out)
+        self.assertNotIn("{model,role,role,model}", out)
+        self.assertIn("role, model, or role,model", " ".join(out.split()))
+        code, _out, err = self.cli("telemetry", "--by", "effort")
+        self.assertEqual(code, 2)
+        self.assertIn("invalid choice: 'effort'", err)
+        for by in sorted(telemetry.GROUPINGS):
+            self.assertEqual(self.cli("telemetry", "--by", by)[0], cli.EXIT_OK, by)
 
     def test_the_command_writes_nothing_and_refuses_a_bad_since(self) -> None:
         before = sorted(p.relative_to(self.runtime_root) for p in self.runtime_root.rglob("*"))

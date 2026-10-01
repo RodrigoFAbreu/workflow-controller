@@ -374,8 +374,8 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_p.add_argument("--since", metavar="ISO", type=_since, default=None,
                              help="only jobs created at or after this UTC date or time "
                                   "(YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)")
-    telemetry_p.add_argument("--by", choices=sorted(telemetry.GROUPINGS), default=None,
-                             help="group by role, model, or both (default: one group)")
+    telemetry_p.add_argument("--by", choices=sorted(telemetry.GROUPINGS), default=None, metavar="GROUPING",
+                             help="group the jobs: role, model, or role,model for both (default: one group)")
     telemetry_p.add_argument("repo", nargs="?", default=None,
                              help="only this target repository's jobs (default: every target)")
 

@@ -38,7 +38,7 @@ Four things, each opt-in or behaviour-preserving by default:
 | CP3 Telemetry v0 | Complete | See below |
 | CP4 Release notes follow the milestone | Complete | See below |
 | CP5 The hints parse and the manual-external gate tells the truth | Complete | See below |
-| CP6 Relaunch-bound tests and `status` | Not started | |
+| CP6 Relaunch-bound tests and `status` | Complete | See below |
 | CP7 Documentation and full verification | Not started | |
 
 ### CP1 -- the settings file
@@ -383,4 +383,51 @@ Four things, each opt-in or behaviour-preserving by default:
   `generate_external_implementation_review_decisions.py --check` and
   `generate_plan_stage_decisions.py --release 2.6.0 --check` are current;
   `generate_plan_stage_decisions.py --check` differs exactly as at HEAD (CP2's note).
+  `.workflow-controller/policy.json` is byte-unchanged from `a47e695`.
+
+### CP6 -- relaunch-bound tests and `status`
+
+- E.3, tests only; they found no defect, so `controller/job.py` and `controller/evidence.py` are
+  unchanged:
+  - `tests/test_job.py` `LastLaunchedApplyJobViewTest`: a seeded `FAILED` apply record with
+    `reconciliation_evidence.code` `OperatorAbandoned` or `UnreconcilableJobError` is J, and
+    `relaunch_bound_applies` holds against its bundle and not another; an abandoned record that
+    never reached `LAUNCHED` (no `expected_transition`) is not J, and an earlier real attempt
+    behind it still counts.
+  - `ApplyingReviewFeedbackExecuteTest`: the same two records bind the gate through
+    `execute_step` (`GATE_BLOCKED`, "job earlier-apply, ended FAILED", the explain hint), and the
+    never-launched abandoned record does not (the apply launches).
+  - `tests/test_lifecycle_orchestration.py` `AbandonedApplyRelaunchBoundTest`, end to end: a
+    launched apply job (no-op worker, left `LAUNCHED` on disk as a lost Controller would),
+    `resume --abandon` marks it `FAILED`/`OperatorAbandoned` (exit 0), and the next `step` stops
+    at the relaunch-bound gate naming it, launches nothing, and its `safe_resume_command` parses
+    with the live parser as `--work-item wi explain <repo>`.
+- E.4, `status`:
+  - `controller/cli.py`: `cmd_status` renders `_status_view`, one JSON-ready object, so the text
+    and `--json` (the global flag, now honoured) carry the same fields: `controller`,
+    `runtime_root`, `ladder_row`, `runtime_state` and, with runtime state, `pinned_identity`,
+    `jobs` (`count`, `recent`), `handoff`, `active` (`runs`, `jobs`), `last_job_telemetry` and
+    `bindings`. The jobs are still those recorded when the process started. The `jobs:` line is
+    `jobs: <n> recorded` (`jobs: none` when there are none), followed by the 10 newest, newest
+    first, one per line: `<id> <status> <command> (work item <id>): age 2 h` while active, `...:
+    wall 1400 s, cost $11.66` once terminal (the cost only with telemetry figures). An active
+    run's line gains `started <time>`; an active job's line gains its command, work item and
+    `started <time>`. Every other line is unchanged.
+  - `controller/observe.py`: `job_command`, `job_summary`, `recent_jobs` (`STATUS_RECENT_JOBS =
+    10`), `job_summary_text` and `age_text` (`s` under 2 min, `min` under 2 h, `h` under 2 days,
+    then `d`). The wall time is the telemetry block's `job_seconds`, else `created_at` to
+    `updated_at`.
+  - `controller/milestone_branch.py`: `binding_entries` (the bindings as objects);
+    `binding_lines` renders them, unchanged.
+  - `controller/telemetry.py`: `last_job_entry`, the `last_job_telemetry` object now shared by
+    `inspect --json` and `status --json`; `_money` is public as `money_text`.
+  - Tests: `tests/test_observe.py` `StatusJobSummaryTest`; `tests/test_cli.py` `StatusJobsTest`
+    (the count and the ten newest, a job recorded after the process started not reported, the
+    `--json` object, and `--json` with no runtime state) and `StatusActiveSectionTest`'s new
+    line shapes; `JobActivitySurfacesTest`'s pinned active line updated.
+- Verified: the touched tests pass; the full sharded suite (`python3 tools/run_tests.py`, under a
+  reaping subreaper, without `PYTHONPATH` or `FORCE_COLOR`) passed: 2687 tests in 6 shards,
+  exact coverage, exit 0. `generate_no_policy_lifecycle.py --check`,
+  `generate_external_implementation_review_decisions.py --check` and
+  `generate_plan_stage_decisions.py --release 2.6.0 --check` are current.
   `.workflow-controller/policy.json` is byte-unchanged from `a47e695`.

@@ -1364,6 +1364,30 @@ class LastLaunchedApplyJobViewTest(unittest.TestCase):
         self._seed("the-one", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
         self.assertEqual(self._view().job_id, "the-one")
 
+    def test_an_abandoned_or_unreconcilable_record_is_j_and_binds(self) -> None:
+        """Settings-and-telemetry CP6 (E.3): ``resume --abandon`` marks a
+        launched record ``FAILED``/``OperatorAbandoned`` in place, and an
+        unreconcilable one is ``FAILED``/``UnreconcilableJobError``; either
+        is J, and the bound applies against the same bundle."""
+        for day, code in enumerate((job.OPERATOR_ABANDONED_CODE, job.UNRECONCILABLE_JOB_CODE), start=1):
+            with self.subTest(code=code):
+                self._seed(f"j-{code}", job.STATUS_FAILED, f"2026-01-0{day}T00:00:00Z", code=code)
+                view = self._view()
+                self.assertEqual(view.job_id, f"j-{code}")
+                self.assertEqual(view.status, job.STATUS_FAILED)
+                self.assertTrue(evidence.relaunch_bound_applies(view, "b" * 64))
+                self.assertFalse(evidence.relaunch_bound_applies(view, "a" * 64))
+
+    def test_an_abandoned_record_that_never_reached_launched_is_not_j(self) -> None:
+        """E.3: no ``expected_transition`` (the job never reached
+        ``LAUNCHED``), so no worker touched the bundle -- abandoned or not,
+        it is not J, and an earlier real attempt behind it still counts."""
+        self._seed("never-launched", job.STATUS_FAILED, "2026-01-09T00:00:00Z", launched=False,
+                   code=job.OPERATOR_ABANDONED_CODE)
+        self.assertIsNone(self._view())
+        self._seed("earlier", job.STATUS_FAILED, "2026-01-01T00:00:00Z")
+        self.assertEqual(self._view().job_id, "earlier")
+
     def test_a_record_without_the_pre_state_bundle_id_reads_as_none(self) -> None:
         record = _apply_job_record(self.TARGET, job_id="pre-cp2", status=job.STATUS_FAILED,
                                    created_at="2026-01-01T00:00:00Z")
@@ -1450,6 +1474,26 @@ class ApplyingReviewFeedbackExecuteTest(unittest.TestCase):
                 gate = record["human_gate_pending"]
                 self.assertIn(f"job earlier-apply, ended {status}", gate["what_is_required"])
                 self.assertEqual(gate["safe_resume_command"], decision.explain_gate_command(Path(gate["repository"]), "wi-1"))
+
+    def test_an_abandoned_or_unreconcilable_attempt_is_the_relaunch_bound(self) -> None:
+        """Settings-and-telemetry CP6 (E.3): the gate, not only the view."""
+        for code in (job.OPERATOR_ABANDONED_CODE, job.UNRECONCILABLE_JOB_CODE):
+            with self.subTest(code=code):
+                record, _diag, _runtime = self._execute(
+                    seeded=(self._record("earlier-apply", job.STATUS_FAILED, code=code),), launches=False,
+                )
+                self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+                gate = record["human_gate_pending"]
+                self.assertIn("job earlier-apply, ended FAILED", gate["what_is_required"])
+                self.assertEqual(gate["safe_resume_command"],
+                                 decision.explain_gate_command(Path(gate["repository"]), "wi-1"))
+
+    def test_an_abandoned_attempt_that_never_launched_is_no_bound(self) -> None:
+        record, _diag, _runtime = self._execute(
+            seeded=(self._record("never-launched", job.STATUS_FAILED, launched=False,
+                                 code=job.OPERATOR_ABANDONED_CODE),), launches=True,
+        )
+        self.assertEqual(record["selected_action"]["command"], "/apply-implementation-review wi-1")
 
     def test_a_null_recorded_bundle_is_the_bound(self) -> None:
         record, _diag, _runtime = self._execute(

@@ -1106,3 +1106,60 @@ def select_pipe_buf() -> int:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StatusJobSummaryTest(unittest.TestCase):
+    """Settings-and-telemetry CP6 (E.4): ``status``'s per-job view."""
+
+    NOW = "2026-01-01T02:00:00Z"
+
+    @staticmethod
+    def _record(job_id: str, status: str, **fields) -> dict:
+        return {"job_id": job_id, "status": status, "work_item_id": "wi-1", "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:20:00Z",
+                "selected_action": {"command": "/milestone-implement wi-1"}, **fields}
+
+    def test_an_active_job_has_an_age(self) -> None:
+        entry = observe.job_summary(self._record("j-1", job.STATUS_LAUNCHED), now=self.NOW)
+        self.assertEqual(entry, {
+            "job_id": "j-1", "status": job.STATUS_LAUNCHED, "command": "/milestone-implement wi-1",
+            "work_item_id": "wi-1", "created_at": "2026-01-01T00:00:00Z", "finished": False,
+            "age_seconds": 7200, "wall_seconds": None, "cost_usd": None,
+        })
+        self.assertEqual(observe.job_summary_text(entry),
+                         "j-1 LAUNCHED /milestone-implement wi-1 (work item wi-1): age 2 h")
+
+    def test_a_finished_job_has_its_wall_time_and_cost(self) -> None:
+        block = {"results": 1, "cost_usd": 11.66, "job_seconds": 1400}
+        entry = observe.job_summary(self._record("j-1", job.STATUS_FINISHED, telemetry=block), now=self.NOW)
+        self.assertEqual((entry["wall_seconds"], entry["cost_usd"], entry["age_seconds"]), (1400, 11.66, None))
+        self.assertEqual(observe.job_summary_text(entry),
+                         "j-1 FINISHED /milestone-implement wi-1 (work item wi-1): wall 1400 s, cost $11.66")
+
+    def test_without_telemetry_the_wall_time_is_the_records_and_no_cost(self) -> None:
+        for name, fields in (("no block", {}), ("failed block", {"telemetry": {"failed": True, "cost_usd": 3.0}})):
+            with self.subTest(name):
+                entry = observe.job_summary(self._record("j-1", job.STATUS_GATE_BLOCKED, selected_action=None,
+                                                         work_item_id=None, **fields), now=self.NOW)
+                self.assertEqual((entry["wall_seconds"], entry["cost_usd"]), (1200, None))
+                self.assertEqual(observe.job_summary_text(entry),
+                                 "j-1 GATE_BLOCKED no command (work item none): wall 1200 s")
+
+    def test_unknown_times(self) -> None:
+        entry = observe.job_summary(self._record("j-1", job.STATUS_LAUNCHED, created_at=None), now=self.NOW)
+        self.assertTrue(observe.job_summary_text(entry).endswith(": age unknown"))
+        entry = observe.job_summary(self._record("j-1", job.STATUS_FAILED, updated_at="x"), now=self.NOW)
+        self.assertTrue(observe.job_summary_text(entry).endswith(": wall unknown"))
+
+    def test_age_text(self) -> None:
+        for seconds, text in ((0, "0 s"), (119, "119 s"), (120, "2 min"), (7199, "119 min"), (7200, "2 h"),
+                              (48 * 3600 - 1, "47 h"), (48 * 3600, "2 d"), (None, "unknown"), (True, "unknown")):
+            with self.subTest(seconds=seconds):
+                self.assertEqual(observe.age_text(seconds), text)
+
+    def test_recent_jobs_are_the_newest_ten_newest_first(self) -> None:
+        records = [self._record(f"j-{n:02d}", job.STATUS_FINISHED) for n in range(12)]
+        recent = observe.recent_jobs(records, now=self.NOW)
+        self.assertEqual([e["job_id"] for e in recent], [f"j-{n:02d}" for n in range(11, 1, -1)])
+        self.assertEqual(observe.recent_jobs(records[:3], now=self.NOW, limit=0), [])
+        self.assertEqual(len(observe.recent_jobs(records[:3], now=self.NOW)), 3)

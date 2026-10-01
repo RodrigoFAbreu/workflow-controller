@@ -399,36 +399,39 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     for evidence of prior work.
 
     The first line always describes the *running* process, the same text
-    as ``--version``'s line 2."""
-    print(f"controller: {version_text(ident)} -- {identity.describe_runtime(ident)}")
-    if not pre_existing["had_any_state"]:
-        print(f"no Controller runtime state at {runtime_root} (ladder row {pre_existing['ladder_row']})")
+    as ``--version``'s line 2. ``--json`` (settings-and-telemetry CP6,
+    E.4) prints the same fields as one object."""
+    view = _status_view(runtime_root, ident, pre_existing)
+    if getattr(args, "json", False):
+        print(json.dumps(view, sort_keys=True))
+        return EXIT_OK
+    print(f"controller: {view['controller']}")
+    if not view["runtime_state"]:
+        print(f"no Controller runtime state at {runtime_root} (ladder row {view['ladder_row']})")
         return EXIT_OK
 
-    if pre_existing["identity"] is not None:
-        prev = pre_existing["identity"]
+    prev = view["pinned_identity"]
+    if prev is not None:
         print(f"pinned identity: source_kind={prev.get('source_kind')} "
               f"source_commit={prev.get('source_commit')} generation={prev.get('generation')} "
               f"tree_digest={prev.get('tree_digest')}")
     else:
         print("pinned identity: none recorded yet")
 
-    job_ids = pre_existing["job_ids"]
-    if job_ids:
-        print(f"jobs: {', '.join(sorted(job_ids))}")
-    else:
-        print("jobs: none")
+    # Settings-and-telemetry CP6 (E.4): the count, then the newest jobs,
+    # one per line.
+    jobs = view["jobs"]
+    print(f"jobs: {jobs['count']} recorded" if jobs["count"] else "jobs: none")
+    for entry in jobs["recent"]:
+        print(f"  {observe.job_summary_text(entry)}")
 
-    if pre_existing["handoff"] is not None:
-        print(f"handoff: pending ({pre_existing['handoff']})")
-    else:
-        print("handoff: none")
+    print(f"handoff: pending ({view['handoff']})" if view["handoff"] is not None else "handoff: none")
 
-    _print_active(runtime_root)
+    _print_active(view["active"])
 
     # Settings-and-telemetry CP3: the newest job with a telemetry block --
     # its cost and wall time -- only when one exists.
-    last = telemetry.last_finished(observe.list_jobs(runtime_root))
+    last = view["last_job_telemetry"]
     if last is not None:
         print(telemetry.last_job_text(last))
 
@@ -437,29 +440,73 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     for line in milestone_branch.binding_lines(runtime_root):
         print(line)
 
-    print(f"runtime root: {runtime_root} (ladder row {pre_existing['ladder_row']})")
+    print(f"runtime root: {runtime_root} (ladder row {view['ladder_row']})")
     return EXIT_OK
 
 
-def _print_active(runtime_root: Path) -> None:
-    """``status``'s ``active:`` section (release-runtime-observability
+def _status_view(runtime_root: Path, ident: identity.ControllerIdentity, pre_existing: dict) -> dict:
+    """Everything ``status`` reports, as one JSON-ready object. The jobs
+    are those recorded when this process started (``pre_existing``)."""
+    view = {
+        "controller": f"{version_text(ident)} -- {identity.describe_runtime(ident)}",
+        "runtime_root": str(runtime_root),
+        "ladder_row": pre_existing["ladder_row"],
+        "runtime_state": bool(pre_existing["had_any_state"]),
+    }
+    if not view["runtime_state"]:
+        return view
+    recorded = set(pre_existing["job_ids"])
+    records = [record for record in observe.list_jobs(runtime_root) if record["job_id"] in recorded]
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    last = telemetry.last_finished(records)
+    view.update({
+        "pinned_identity": pre_existing["identity"],
+        "jobs": {"count": len(recorded), "recent": observe.recent_jobs(records, now=now)},
+        "handoff": pre_existing["handoff"],
+        "active": _active_view(runtime_root),
+        "last_job_telemetry": None if last is None else telemetry.last_job_entry(last),
+        "bindings": milestone_branch.binding_entries(runtime_root),
+    })
+    return view
+
+
+def _active_view(runtime_root: Path) -> dict:
+    """``status``'s ``active`` section (release-runtime-observability
     CP6): every ``running`` run with its Controller's liveness and every
     non-terminal job with its worker's (read-only), across every target in
-    this runtime root, each with the command that follows it."""
-    runs, jobs = observe.active_runs(runtime_root), observe.active_jobs(runtime_root)
-    if not runs and not jobs:
+    this runtime root, each with the command that follows it. Settings-
+    and-telemetry CP6 adds each one's start time, and a job's command and
+    work item."""
+    runs = [{
+        "run_id": run.get("run_id"), "command": run.get("command"), "target_repo": run.get("target_repo"),
+        "started_at": run.get("started_at"),
+        "controller_pid": (run.get("controller_process") or {}).get("pid"), "liveness": liveness,
+        "follow": job.follow_command(runtime_root, run.get("target_repo")),
+    } for run, liveness in observe.active_runs(runtime_root)]
+    jobs = [{
+        "job_id": record.get("job_id"), "status": record.get("status"), "command": observe.job_command(record),
+        "work_item_id": record.get("work_item_id"), "target_repo": record.get("target_repo"),
+        "started_at": record.get("created_at"), "liveness": liveness,
+        "activity": _job_activity_text(runtime_root, record, liveness),
+        "follow": job.follow_command(runtime_root, record.get("target_repo")),
+    } for record, liveness in observe.active_jobs(runtime_root)]
+    return {"runs": runs, "jobs": jobs}
+
+
+def _print_active(active: dict) -> None:
+    if not active["runs"] and not active["jobs"]:
         print("active: none")
         return
     print("active:")
-    for run, liveness in runs:
-        process = run.get("controller_process") or {}
-        print(f"  run {run.get('run_id')} ({run.get('command')}, target {run.get('target_repo')}): "
-              f"controller pid {process.get('pid')} {liveness}")
-        print(f"    follow: {job.follow_command(runtime_root, run.get('target_repo'))}")
-    for record, liveness in jobs:
-        print(f"  job {record.get('job_id')} ({record.get('status')}, target {record.get('target_repo')}): "
-              f"{_job_activity_text(runtime_root, record, liveness)}")
-        print(f"    follow: {job.follow_command(runtime_root, record.get('target_repo'))}")
+    for run in active["runs"]:
+        print(f"  run {run['run_id']} ({run['command']}, target {run['target_repo']}, started {run['started_at']}): "
+              f"controller pid {run['controller_pid']} {run['liveness']}")
+        print(f"    follow: {run['follow']}")
+    for entry in active["jobs"]:
+        print(f"  job {entry['job_id']} ({entry['status']}, {entry['command'] or 'no command'}, "
+              f"work item {entry['work_item_id'] or 'none'}, target {entry['target_repo']}, "
+              f"started {entry['started_at']}): {entry['activity']}")
+        print(f"    follow: {entry['follow']}")
 
 
 def _job_activity_text(runtime_root: Path, record: dict, liveness: str | None) -> str:
@@ -714,11 +761,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # block, omitted -- never `null` -- when there is none.
     last = telemetry.last_finished(observe.list_jobs(runtime_root), target_repo=str(target.root))
     if last is not None:
-        jobs_block["last_job_telemetry"] = {
-            "job_id": last.get("job_id"), "status": last.get("status"),
-            "work_item_id": last.get("work_item_id"),
-            "telemetry": telemetry.completed_summary(last["telemetry"]),
-        }
+        jobs_block["last_job_telemetry"] = telemetry.last_job_entry(last)
     # CP8 (trunk-branch-pr-release-orchestration): `repository_policy` and
     # `milestone_branch`, from local Git and the binding records only, each
     # omitted -- never `null` -- when it does not apply (I1, I10).

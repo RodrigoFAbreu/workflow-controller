@@ -36,6 +36,7 @@ import dataclasses
 import io
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -1621,6 +1622,41 @@ class ApplyRelaunchBoundTest(_LifecycleTestCase):
         )
         self.assertIn(bundle_id(1), gate["what_is_required"])
         self.assertEqual(len(second.records), 1)
+
+
+class AbandonedApplyRelaunchBoundTest(_LifecycleTestCase):
+    """Settings-and-telemetry CP6 (E.3), end to end: a launched apply job
+    the Controller lost (``LAUNCHED`` on disk), disposed of with ``resume
+    --abandon``, is the relaunch bound -- the next ``step`` stops at the
+    gate naming it, launches nothing, and the gate's hint parses."""
+
+    def test_an_abandoned_apply_job_binds_the_next_step(self) -> None:
+        lc = self.at_applying("abandoned")
+        lc.add(APPLY_PENDING, [])
+        first = self.cli(lc, "step")
+        self.assertEqual(first.code, cli.EXIT_WORKER_FAILED, first.stderr)
+        [launched] = first.records
+        self.assertEqual(launched["pre_state"]["bundle_manifest_bundle_id"], bundle_id(1))
+        self.rewrite_as(lc, launched, job.STATUS_LAUNCHED)
+
+        abandoned = self.cli(lc, "resume", "--abandon", launched["job_id"])
+        self.assertEqual(abandoned.code, cli.EXIT_OK, abandoned.stderr)
+        on_disk = self.read_record(lc, launched["job_id"])
+        self.assertEqual(on_disk["status"], job.STATUS_FAILED)
+        self.assertEqual(on_disk["reconciliation_evidence"]["code"], job.OPERATOR_ABANDONED_CODE)
+        self.assertEqual(on_disk["reconciliation_evidence"]["abandoned_status"], job.STATUS_LAUNCHED)
+
+        second = self.cli(lc, "step", fail_if_invoked=True)
+        gate = self.assert_gate(
+            second, lc, processes_before=1,
+            contains=(f"job {launched['job_id']}, ended FAILED", "review-bundle.tar.gz"),
+            safe=decision.explain_gate_command(lc.root, WI),
+        )
+        self.assertIn(bundle_id(1), gate["what_is_required"])
+        hint = shlex.split(gate["safe_resume_command"])
+        self.assertEqual(hint[0], "workflow-controller")
+        parsed = cli.build_parser().parse_args(hint[1:])
+        self.assertEqual((parsed.command, parsed.work_item, parsed.repo), ("explain", WI, str(lc.root)))
 
 
 # ---------------------------------------------------------------------------

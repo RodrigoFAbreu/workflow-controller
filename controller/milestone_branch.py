@@ -2244,19 +2244,30 @@ def observation(ctx: Context) -> dict:
     return out
 
 
-def binding_lines(runtime_root: Path) -> list[str]:
-    """``status``'s ``milestone:`` lines: one per live binding record under
+def binding_entries(runtime_root: Path) -> list[dict]:
+    """``status``'s bindings: one entry per live binding record under
     ``runtime_root``, for every repository. Read-only."""
     base = Path(runtime_root) / "repositories"
     if not base.is_dir():
         return []
-    lines = []
+    entries = []
     for directory in sorted(p for p in base.iterdir() if p.is_dir()):
         for work_item_id, record in live_records(runtime_root, directory.name).items():
             pr = record.get("pr")
-            pr_text = "" if pr is None else f", pull request #{pr.get('number')}"
-            lines.append(f"milestone: {work_item_id} {record['state']} on {record['branch']}{pr_text} "
-                         f"(worktree {record['repository'].get('worktree_root')})")
+            entries.append({"work_item_id": work_item_id, "state": record["state"], "branch": record["branch"],
+                            "pull_request": None if pr is None else pr.get("number"),
+                            "worktree_root": record["repository"].get("worktree_root")})
+    return entries
+
+
+def binding_lines(runtime_root: Path) -> list[str]:
+    """``status``'s ``milestone:`` lines, one per :func:`binding_entries`
+    entry."""
+    lines = []
+    for entry in binding_entries(runtime_root):
+        pr_text = "" if entry["pull_request"] is None else f", pull request #{entry['pull_request']}"
+        lines.append(f"milestone: {entry['work_item_id']} {entry['state']} on {entry['branch']}{pr_text} "
+                     f"(worktree {entry['worktree_root']})")
     return lines
 
 

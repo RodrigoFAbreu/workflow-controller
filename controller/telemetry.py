@@ -233,7 +233,8 @@ def completed_summary(block: Mapping) -> dict | str:
         "tokens": token_total(block)}
 
 
-def _money(value: Any) -> str:
+def money_text(value: Any) -> str:
+    """``cost $11.66``, or ``cost unknown`` when ``value`` is no number."""
     return f"cost ${value:.2f}" if _number(value) else "cost unknown"
 
 
@@ -246,7 +247,7 @@ def summary_text(summary: Mapping | str | None) -> str:
         return "telemetry unavailable"
     tokens = summary.get("tokens")
     tokens = token_total(summary) if isinstance(tokens, Mapping) else tokens
-    parts = [_money(summary.get("cost_usd"))]
+    parts = [money_text(summary.get("cost_usd"))]
     if _number(summary.get("turns")):
         parts.append(f"{summary['turns']} turns")
     if _number(tokens):
@@ -268,6 +269,14 @@ def last_finished(records: Iterable[Mapping], *, target_repo: str | None = None)
     if not candidates:
         return None
     return max(candidates, key=lambda r: (str(r.get("created_at")), str(r.get("job_id"))))
+
+
+def last_job_entry(record: Mapping) -> dict:
+    """The ``last_job_telemetry`` object ``inspect --json`` and ``status
+    --json`` print for :func:`last_finished`'s record."""
+    return {"job_id": record.get("job_id"), "status": record.get("status"),
+            "work_item_id": record.get("work_item_id"),
+            "telemetry": completed_summary(record["telemetry"])}
 
 
 def last_job_text(record: Mapping) -> str:

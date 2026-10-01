@@ -947,6 +947,75 @@ def last_run(runtime_root: Path, target_repo: str) -> dict | None:
     return runs[-1] if runs else None
 
 
+#: How many of the newest job records ``status`` lists (settings-and-
+#: telemetry CP6, E.4).
+STATUS_RECENT_JOBS = 10
+
+
+def job_command(record: Mapping) -> str | None:
+    """The job's selected command, ``None`` when it selected none."""
+    action = record.get("selected_action")
+    return action.get("command") if isinstance(action, Mapping) else None
+
+
+def job_summary(record: Mapping, *, now: str) -> dict:
+    """``status``'s view of one job record (settings-and-telemetry CP6,
+    E.4): its id, status, command, work item and start time, and either
+    its age at ``now`` (still active) or, once terminal, its wall time
+    (the telemetry block's ``job_seconds``, else ``created_at`` to
+    ``updated_at``) and cost (``None`` without telemetry figures)."""
+    finished = _is_terminal(record)
+    block = record.get("telemetry") if isinstance(record.get("telemetry"), Mapping) else None
+    wall = block.get("job_seconds") if block is not None else None
+    if finished and wall is None:
+        wall = telemetry.seconds_between(record.get("created_at"), record.get("updated_at"))
+    cost = None if block is None or telemetry.unavailable(block) else block.get("cost_usd")
+    return {
+        "job_id": record.get("job_id"),
+        "status": record.get("status"),
+        "command": job_command(record),
+        "work_item_id": record.get("work_item_id"),
+        "created_at": record.get("created_at"),
+        "finished": finished,
+        "age_seconds": None if finished else telemetry.seconds_between(record.get("created_at"), now),
+        "wall_seconds": wall if finished else None,
+        "cost_usd": cost if finished else None,
+    }
+
+
+def recent_jobs(records: list[dict], *, now: str, limit: int = STATUS_RECENT_JOBS) -> list[dict]:
+    """:func:`job_summary` of the ``limit`` newest of ``records`` (oldest
+    first, as :func:`list_jobs` returns them), newest first."""
+    return [job_summary(record, now=now) for record in reversed(records[-limit:] if limit else [])]
+
+
+def _seconds_text(seconds: Any) -> str:
+    return f"{seconds} s" if isinstance(seconds, int) and not isinstance(seconds, bool) else "unknown"
+
+
+def age_text(seconds: Any) -> str:
+    """A job's age, in the largest unit that keeps two digits readable:
+    ``45 s``, ``12 min``, ``5 h``, ``3 d``; ``unknown`` without one."""
+    if not isinstance(seconds, int) or isinstance(seconds, bool):
+        return "unknown"
+    for unit, size, limit in (("s", 1, 120), ("min", 60, 120 * 60), ("h", 3600, 48 * 3600)):
+        if seconds < limit:
+            return f"{seconds // size} {unit}"
+    return f"{seconds // 86400} d"
+
+
+def job_summary_text(entry: Mapping) -> str:
+    """One ``status`` line for a :func:`job_summary` entry:
+    ``<id> <status> <command> (work item <id>): age 12 min`` while active,
+    ``...: wall 1400 s, cost $11.66`` once finished."""
+    head = (f"{entry['job_id']} {entry['status']} {entry['command'] or 'no command'} "
+            f"(work item {entry['work_item_id'] or 'none'})")
+    if not entry["finished"]:
+        return f"{head}: age {age_text(entry['age_seconds'])}"
+    cost = "" if entry["cost_usd"] is None else f", {telemetry.money_text(entry['cost_usd'])}"
+    return f"{head}: wall {_seconds_text(entry['wall_seconds'])}{cost}"
+
+
 def drain_text(record: Mapping) -> str | None:
     """``worker exited; waiting on process group: ...`` for a ``LAUNCHED``
     record carrying ``worker_group_drain``, else ``None``."""

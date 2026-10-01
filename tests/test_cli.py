@@ -1745,7 +1745,8 @@ class JobActivitySurfacesTest(unittest.TestCase):
         pid = self._waiting()
         self._attach("j-wait")
         text = self._status()
-        self.assertRegex(text, rf"  job j-wait \(LAUNCHED, target {self.target}\): worker pid {pid} waiting on "
+        self.assertRegex(text, rf"  job j-wait \(LAUNCHED, no command, work item none, target {self.target}, "
+                               rf"started [0-9TZ:-]+\): worker pid {pid} waiting on "
                                r"1 background task \(suite \"Run the suite\"\) and 0 wakeups and 1 harness "
                                r"command \(command_uuid 6ff491e4, no turn yet; stalled \d+:\d\d of 5:00\)\n")
 
@@ -2380,15 +2381,18 @@ class FollowSourceCheckoutTest(unittest.TestCase):
         self.assertEqual(_tree_listing(runtime_root), before)
 
 
-class StatusActiveSectionTest(_FollowCliCase):
-    def _status(self) -> str:
+class _StatusCase(_FollowCliCase):
+    def _status(self, *, json_out: bool = False) -> str:
         pre_existing = cli._capture_pre_existing_state(self.runtime_root)
         pre_existing["ladder_row"] = 1
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            cli.cmd_status(_Args(str(self.repo)), self.runtime_root, FAKE_IDENTITY, pre_existing=pre_existing)
+            cli.cmd_status(_Args(str(self.repo), json_out=json_out), self.runtime_root, FAKE_IDENTITY,
+                           pre_existing=pre_existing)
         return out.getvalue()
 
+
+class StatusActiveSectionTest(_StatusCase):
     def test_idle(self) -> None:
         self._run("r-1")
         self._job("j-1", status=job.STATUS_FINISHED)
@@ -2403,13 +2407,95 @@ class StatusActiveSectionTest(_FollowCliCase):
         text = self._status()
         follow = f"    follow: workflow-controller --runtime-dir {self.runtime_root} follow {self.repo}"
         self.assertIn("active:\n", text)
-        self.assertIn(f"  run r-live (step, target {self.repo}): controller pid {os.getpid()} active\n{follow}\n",
+        started = "started 2026-01-01T00:00:00Z"
+        self.assertIn(f"  run r-live (step, target {self.repo}, {started}): controller pid {os.getpid()} active\n"
+                      f"{follow}\n", text)
+        self.assertIn(f"  job j-live (LAUNCHED, no command, work item none, target {self.repo}, {started}): "
+                      f"worker pid {sleeper.pid} active\n{follow}\n", text)
+        self.assertIn(f"  job j-drain (LAUNCHED, no command, work item none, target {self.repo}, {started}): "
+                      f"worker exited; waiting on process group: 2 process(es) at drain start (7 8)\n{follow}\n",
                       text)
-        self.assertIn(f"  job j-live (LAUNCHED, target {self.repo}): worker pid {sleeper.pid} active\n{follow}\n",
-                      text)
-        self.assertIn(f"  job j-drain (LAUNCHED, target {self.repo}): worker exited; waiting on process group: "
-                      f"2 process(es) at drain start (7 8)\n{follow}\n", text)
         self.assertNotIn("r-1", text)
+
+    def test_an_active_jobs_line_names_its_command_and_work_item(self) -> None:
+        """Settings-and-telemetry CP6 (E.4)."""
+        self._job("j-live", work_item_id="wi-1", selected_action={"command": "/milestone-implement wi-1"},
+                  created_at="2026-01-02T03:04:05Z")
+        self.assertIn(f"  job j-live (LAUNCHED, /milestone-implement wi-1, work item wi-1, target {self.repo}, "
+                      f"started 2026-01-02T03:04:05Z): no worker recorded\n", self._status())
+
+
+class StatusJobsTest(_StatusCase):
+    """Settings-and-telemetry CP6 (E.4): ``jobs: <n> recorded`` and the ten
+    newest jobs, one per line; ``--json`` with the same fields."""
+
+    def _finished(self, job_id: str, created_at: str, **fields) -> None:
+        self._job(job_id, status=job.STATUS_FINISHED, work_item_id="wi-1", created_at=created_at,
+                  updated_at=created_at, selected_action={"command": "/milestone-implement wi-1"}, **fields)
+
+    def test_the_count_and_the_ten_newest(self) -> None:
+        for n in range(12):
+            self._finished(f"j-{n:02d}", f"2026-01-01T00:{n:02d}:00Z")
+        text = self._status()
+        lines = text.splitlines()
+        at = lines.index("jobs: 12 recorded")
+        self.assertEqual(lines[at + 1:at + 11], [
+            f"  j-{n:02d} FINISHED /milestone-implement wi-1 (work item wi-1): wall 0 s" for n in range(11, 1, -1)])
+        self.assertEqual(lines[at + 11], "handoff: none")
+        self.assertNotIn("j-01", text)
+        self.assertNotIn("j-00", text)
+
+    def test_a_job_recorded_after_the_process_started_is_not_reported(self) -> None:
+        self._finished("j-1", "2026-01-01T00:00:00Z")
+        pre_existing = cli._capture_pre_existing_state(self.runtime_root)
+        pre_existing["ladder_row"] = 1
+        self._finished("j-2", "2026-01-02T00:00:00Z")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.cmd_status(_Args(str(self.repo)), self.runtime_root, FAKE_IDENTITY, pre_existing=pre_existing)
+        self.assertIn("jobs: 1 recorded\n  j-1 FINISHED", out.getvalue())
+        self.assertNotIn("j-2", out.getvalue())
+
+    def test_json(self) -> None:
+        self._run("r-1")
+        self._finished("j-1", "2026-01-01T00:00:00Z",
+                       telemetry={"results": 1, "cost_usd": 2.5, "job_seconds": 60, "turns": 3})
+        self._job("j-live", work_item_id="wi-1", created_at="2026-01-02T00:00:00Z",
+                  selected_action={"command": "/milestone-implement wi-1"})
+        view = json.loads(self._status(json_out=True))
+        self.assertEqual(set(view), {"controller", "runtime_root", "ladder_row", "runtime_state", "pinned_identity",
+                                     "jobs", "handoff", "active", "last_job_telemetry", "bindings"})
+        self.assertEqual(view["controller"], self._status().splitlines()[0].removeprefix("controller: "))
+        self.assertEqual((view["runtime_root"], view["ladder_row"], view["runtime_state"]),
+                         (str(self.runtime_root), 1, True))
+        self.assertIsNone(view["pinned_identity"])
+        self.assertIsNone(view["handoff"])
+        self.assertEqual(view["bindings"], [])
+        self.assertEqual(view["jobs"]["count"], 2)
+        self.assertEqual([e["job_id"] for e in view["jobs"]["recent"]], ["j-live", "j-1"])
+        self.assertEqual({k: view["jobs"]["recent"][1][k] for k in ("finished", "wall_seconds", "cost_usd")},
+                         {"finished": True, "wall_seconds": 60, "cost_usd": 2.5})
+        self.assertEqual(view["active"]["runs"], [])
+        [active] = view["active"]["jobs"]
+        self.assertEqual({k: active[k] for k in ("job_id", "status", "command", "work_item_id", "started_at",
+                                                  "activity")},
+                         {"job_id": "j-live", "status": job.STATUS_LAUNCHED, "command": "/milestone-implement wi-1",
+                          "work_item_id": "wi-1", "started_at": "2026-01-02T00:00:00Z",
+                          "activity": "no worker recorded"})
+        self.assertEqual(active["follow"], job.follow_command(self.runtime_root, str(self.repo)))
+        self.assertEqual(view["last_job_telemetry"]["job_id"], "j-1")
+
+    def test_json_without_runtime_state(self) -> None:
+        empty = self.tmp_root / "empty-runtime"
+        pre_existing = cli._capture_pre_existing_state(empty)
+        pre_existing["ladder_row"] = 1
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.cmd_status(_Args(str(self.repo), json_out=True), empty, FAKE_IDENTITY, pre_existing=pre_existing)
+        self.assertEqual(json.loads(out.getvalue()), {
+            "controller": f"{cli.version_text(FAKE_IDENTITY)} -- {identity.describe_runtime(FAKE_IDENTITY)}",
+            "runtime_root": str(empty), "ladder_row": 1, "runtime_state": False,
+        })
 
 
 class FollowHintTest(_StepFixture, unittest.TestCase):

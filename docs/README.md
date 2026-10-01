@@ -24,12 +24,13 @@ These guides are maintained by hand in this repository.
 
 | Release notes | Read it for |
 |---|---|
+| [1.5.0](releases/1.5.0.md) | the settings file, telemetry v0 (tokens, cache, cost and time per job) and the `telemetry` command, release notes that follow the milestone, and the 1.4 cleanup patches |
 | [1.4.2](releases/1.4.2.md) | the recorded command line fills once readable, the tests wait for the right signal, a re-run of failed CI jobs counts, and a leaked process fails the run |
 | [1.4.1](releases/1.4.1.md) | the Controller collects every finished child process it holds as a subreaper, in every state (the zombie leak), and test repositories without Git's automatic maintenance |
 | [1.4.0](releases/1.4.0.md) | squash merges, release versions derived from Conventional Commit pull request titles and the release tags, `MERGED_SQUASHED`, and the cutover |
 | [1.3.0](releases/1.3.0.md) | Workflow 2.6.0 admitted beside 2.5.1, the new error codes and gates, and the 1.2.1 changes that shipped without notes |
 
-Releases 1.3.0, 1.4.0, 1.4.1 and 1.4.2 have their notes in `releases/`. From
+Releases 1.3.0, 1.4.0, 1.4.1, 1.4.2 and 1.5.0 have their notes in `releases/`. From
 1.5.0 on, release notes can follow the milestone, as a policy opt-in: a
 repository that sets `milestone_branches.pull_request.release_notes` and uses
 `{release_notes}` in its release notes template gets each milestone's notes

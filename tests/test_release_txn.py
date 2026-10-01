@@ -1285,6 +1285,49 @@ class ReleaseNotesTransactionTest(_ReleaseCase):
         self.assertRefused(later, "unreadable", "injected", "rerun", built=m,
                            ctx=dataclasses.replace(ctx, git_runner=failing))
 
+    # -- a lost tag-push race ----------------------------------------------
+
+    def race(self, commit: str, *tag_args: str):
+        """A git ``before`` hook: another run pushes ``v1.1.0`` at
+        ``commit``, created with ``git tag <tag_args>``, just before ours."""
+        def before(argv):
+            if "push" in argv and "refs/tags/v1.1.0:refs/tags/v1.1.0" in argv:
+                other = self.tmp / "other"
+                if not other.exists():
+                    git_clone(self.origin, other)
+                    run(["git", "config", "user.email", "other@example.invalid"], cwd=other)
+                    run(["git", "config", "user.name", "Other"], cwd=other)
+                run(["git", "fetch", "-q", "origin"], cwd=other)
+                run(["git", "tag", *tag_args, "v1.1.0", commit], cwd=other)
+                run(["git", "push", "-q", "origin", "refs/tags/v1.1.0"], cwd=other)
+        return before
+
+    def test_a_concurrent_tag_with_the_right_notes_is_released_with_its_message(self) -> None:
+        m = self.milestone()
+        expected = f"pkg v1.1.0\n\n{NOTES}"
+        outcome = self.release(m, before_git=self.race(m, "-a", "--cleanup=verbatim", "-m", expected + "\n"))
+        self.assertEqual((outcome.state, outcome.tagged, outcome.action), (RELEASE_DUE, False, "created"))
+        self.assertIn("reused from tag v1.1.0", outcome.notes)
+        self.assertEqual(self.release_state("v1.1.0")["notes"], expected)
+
+    def test_a_concurrent_tag_with_other_notes_or_lightweight_refuses_before_create_release(self) -> None:
+        for name, tag_args, fragment in (
+                ("other notes", ("-a", "--cleanup=verbatim", "-m", f"other v1.1.0\n\n{NOTES}\n"), "unverified tag"),
+                ("lightweight", (), "not an annotated tag")):
+            with self.subTest(name):
+                self.tearDown()
+                self.setUp()
+                m = self.milestone()
+                creates = len(self.gh_creates())
+                with self.assertRaises(ReleaseTransactionError) as caught:
+                    self.release(m, before_git=self.race(m, *tag_args))
+                self.assertIn(fragment, str(caught.exception))
+                self.assertIn("create the release for v1.1.0 by hand", str(caught.exception))
+                self.assertEqual(len(self.gh_creates()), creates)
+                self.assertIsNone(self.release_state("v1.1.0"))
+                # Our own tag stays local; the read wrote no ref.
+                self.assertEqual(self.tag_message("v1.1.0"), f"pkg v1.1.0\n\n{NOTES}\n")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -289,6 +289,25 @@ class TagTest(_Case):
                 # Read as "exists", never moved.
                 self.assertEqual(gitrepo.remote_tag_commit(self.clone, "origin", tag), target)
 
+    def test_the_remote_tags_message_is_read_without_writing_a_ref(self) -> None:
+        other = self.second_clone()
+        target = self.commit("remote-only.txt", "x\n", root=other)
+        run(["git", "push", "-q", "origin", "HEAD:refs/heads/side"], cwd=other)
+        run(["git", "tag", "-a", "--cleanup=verbatim", "-m", "# theirs\n", "v-annotated", target], cwd=other)
+        run(["git", "tag", "v-light", target], cwd=other)
+        run(["git", "push", "-q", "origin", "refs/tags/v-annotated", "refs/tags/v-light"], cwd=other)
+        gitrepo.create_annotated_tag(self.clone, "v-annotated", self.base, "ours")
+        refs = run(["git", "for-each-ref"], cwd=self.clone).stdout
+        fetch_head = self.clone / ".git" / "FETCH_HEAD"
+        fetched = fetch_head.read_bytes() if fetch_head.exists() else None
+        self.assertEqual(gitrepo.remote_tag_message(self.clone, "origin", "v-annotated"), b"# theirs\n")
+        self.assertIsNone(gitrepo.remote_tag_message(self.clone, "origin", "v-light"))
+        self.assertEqual(gitrepo.tag_message(self.clone, "v-annotated"), b"ours\n")
+        self.assertEqual(run(["git", "for-each-ref"], cwd=self.clone).stdout, refs)
+        self.assertEqual(fetch_head.read_bytes() if fetch_head.exists() else None, fetched)
+        with self.assertRaises(GitOperationError):
+            gitrepo.remote_tag_message(self.clone, "origin", "v-absent")
+
 
 class MergeTrunkTest(_Case):
     def _branch_and_trunk(self, *, conflict: bool) -> tuple[str, str]:

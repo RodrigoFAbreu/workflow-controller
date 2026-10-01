@@ -394,7 +394,10 @@ message must be equal byte for byte. Any difference refuses as an
 the old fixed text, but also a tag made under another template or from
 a range whose blocks changed. A tag that is not annotated, or whose
 message is not valid UTF-8, also refuses; a failed read clears on a
-rerun. The publish never edits or re-creates a pushed tag. The fix is to
+rerun. When another run pushes the same tag at the same commit just
+before this run's push, this run checks the winning tag the same way,
+reading its message from the remote rather than from its own local tag.
+The publish never edits or re-creates a pushed tag. The fix is to
 create the release for that tag by hand, with the right notes. Create it
 as a draft: the next run then uploads what the draft lacks and publishes
 it, keeping the draft's notes, which are yours.

@@ -748,16 +748,19 @@ def _first_difference(a: str, b: str) -> str:
     return f"line {min(len(left), len(right)) + 1}: the texts hold {len(left)} and {len(right)} lines"
 
 
-def resumed_tag_notes(ctx: ReleaseContext, tag: str, version: str, tag_commit: str) -> tuple[str, release_notes.Resolution]:
+def resumed_tag_notes(ctx: ReleaseContext, tag: str, version: str, tag_commit: str, *,
+                      remote: bool = False) -> tuple[str, release_notes.Resolution]:
     """``RESUME`` with no release, opted in (D.3, MPR13-002): the existing
     tag's message, only once the notes recomputed over the tag's own range
     (base: the highest matching ancestor tag below it) and rendered by the
     current template equal it byte for byte. A tag that is not annotated, a
     failed or non-UTF-8 read, and any difference refuse before the release
-    is created."""
+    is created. ``remote`` reads the remote's tag instead of the local one:
+    after a lost tag-push race the local tag is this run's own."""
     by_hand = f"fix: create the release for {tag} by hand, with the right notes"
     try:
-        raw = gitrepo.tag_message(ctx.repo_root, tag, runner=ctx.git_runner)
+        raw = (gitrepo.remote_tag_message(ctx.repo_root, ctx.remote, tag, runner=ctx.git_runner) if remote
+               else gitrepo.tag_message(ctx.repo_root, tag, runner=ctx.git_runner))
     except GitOperationError as exc:
         raise _refuse(f"the release notes of {tag} are unreadable: reading the tag failed "
                       f"({exc.message}); fix: rerun the publish, or {by_hand.removeprefix('fix: ')}",
@@ -815,7 +818,7 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
     built = {path.name: path for path in files}
 
     # 2. Tag after validation; opted in, the notes come from the range first.
-    tagged = False
+    tagged = raced = False
     notes_message: str | None = None
     notes_summary = ""
     if state.state == RELEASE_DUE:
@@ -843,6 +846,8 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
                 raise _refuse(f"pushing {tag} was rejected and {tag} is now {again.state} "
                               f"({again.detail})", tag=tag, state=again.state,
                               push=exc.evidence) from exc
+            # The winning tag's message is the notes, not this run's text.
+            raced, notes_message, notes_summary = True, None, ""
 
     # 3. The remote tag names the target.
     remote_commit = gitrepo.remote_tag_commit(ctx.repo_root, ctx.remote, tag, runner=ctx.git_runner)
@@ -858,7 +863,7 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
         if found is None:
             action = "created"
             if ctx.release.uses_release_notes and notes_message is None:
-                notes_message, resolution = resumed_tag_notes(ctx, tag, version, target)
+                notes_message, resolution = resumed_tag_notes(ctx, tag, version, target, remote=raced)
                 notes_summary = f"reused from tag {tag} ({resolution.summary()})"
             digests = {name: sha256_file(path) for name, path in built.items()}
             (scratch / "stage").mkdir()

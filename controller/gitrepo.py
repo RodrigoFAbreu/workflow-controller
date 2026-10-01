@@ -449,14 +449,34 @@ def tag_message(repo_root: Path, tag: str, *, runner: Runner | None = None) -> b
     exactly as stored (``git cat-file tag``, after the header's blank line).
     ``None`` when the ref names no tag object (a lightweight tag); a failed
     read, an absent tag included, refuses."""
+    return _tag_object_message(repo_root, f"refs/tags/{tag}", runner, tag=tag)
+
+
+def remote_tag_message(repo_root: Path, remote: str, tag: str, *, runner: Runner | None = None) -> bytes | None:
+    """The message of ``remote``'s tag ``tag``, as :func:`tag_message` reads
+    a local one, whatever the local ``refs/tags/<tag>`` holds: the object
+    ``ls-remote`` names is fetched with no destination and no
+    ``FETCH_HEAD``, so no local ref changes, and read by its id. ``None``
+    for a lightweight tag; an absent tag, or a failed fetch or read,
+    refuses."""
     ref = f"refs/tags/{tag}"
-    kind = _single_line(_git(repo_root, ["cat-file", "-t", ref], runner), f"git cat-file -t {ref}")
+    out = _git(repo_root, ["ls-remote", "--", remote, ref], runner)
+    direct = [oid for oid, _, name in (line.partition("\t") for line in out.splitlines()) if name == ref]
+    if len(direct) != 1:
+        raise GitOperationError(f"{remote} has no single tag {tag} to read",
+                                evidence={"tag": tag, "remote": remote, "stdout": out})
+    _git(repo_root, ["fetch", "--no-tags", "--no-write-fetch-head", "--", remote, ref], runner)
+    return _tag_object_message(repo_root, direct[0], runner, tag=tag, remote=remote)
+
+
+def _tag_object_message(repo_root: Path, rev: str, runner: Runner | None, **evidence: str) -> bytes | None:
+    kind = _single_line(_git(repo_root, ["cat-file", "-t", rev], runner), f"git cat-file -t {rev}")
     if kind != "tag":
         return None
-    argv, result = _run(repo_root, ["cat-file", "tag", ref], runner)
+    argv, result = _run(repo_root, ["cat-file", "tag", rev], runner)
     if result.returncode != 0:
-        raise _failure(f"git cat-file tag {ref} failed (exit {result.returncode}): "
-                       f"{_text(result.stderr).strip()}", argv, result, tag=tag)
+        raise _failure(f"git cat-file tag {rev} failed (exit {result.returncode}): "
+                       f"{_text(result.stderr).strip()}", argv, result, **evidence)
     raw = result.stdout if isinstance(result.stdout, bytes) else result.stdout.encode()
     return _object_message(raw)
 
@@ -651,9 +671,10 @@ def create_annotated_tag(repo_root: Path, tag: str, commit: str, message: str, *
 
     The message is stored verbatim (``--cleanup=verbatim``), so a Markdown
     heading in it survives, with the one newline Git's default cleanup ends
-    a message with added when ``message`` lacks it: a message with no
-    ``#``-leading line and no trailing whitespace is stored as before
-    (settings-and-telemetry D.3). The tag is never signed, so its stored
+    a message with added when ``message`` lacks it: a message that
+    cleanup would leave alone (no ``#``-leading line, no trailing
+    whitespace, no leading, trailing or consecutive blank lines) is stored
+    as before (settings-and-telemetry D.3). The tag is never signed, so its stored
     message is exactly that text."""
     existing = tag_commit(repo_root, tag, runner=runner)
     if existing is not None:

@@ -2,79 +2,113 @@
 
 ## Status
 
-**Complete.** `workflow-controller-ci-reliability` (`docs/ROADMAP.md` step C2, section 11.2) reached
-`MILESTONE_COMPLETE` on 2026-09-30. It fixes the three timing flakes CI showed and makes "Re-run
-failed jobs" count:
-- an owned process's command line, first read empty inside an `execve`, now fills once readable (a
-  product fix, in `controller/worker.py`);
-- two tests now wait for the signal they depend on in the on-spawn window;
-- shard records carry their `run_attempt`, each attempt uploads its own artifacts, and
-  `tests-result` takes each shard's latest attempt, lists what it superseded, and fails when a job of
-  the current attempt did not succeed;
-- a leaked process fails the run (`LEAKED`, D7). Nothing is retried automatically (I6).
+**Implementing.** `workflow-controller-settings-and-telemetry` (`docs/ROADMAP.md` step C3, sections
+1.4, 8 and 11.1.2). The plan is `docs/ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md`,
+revision 14, approved at `b0e2f9a` (`EXTERNAL_APPROVE`, review content id `db313bbe`). The base
+commit is `a47e695`. Governing workflow version `2.2`, lifecycle authority Workflow 2.6.0. Pull
+request title
+`feat: a settings file, telemetry v0, release notes from the milestone and the 1.4 cleanup patches`
+(1.5.0).
 
-The user accepted it in functional review round 2 (implementation revision 2), against checklist
-evidence commit `24e8464e9697abb3a45f19163ad429aaef3e984f` (checklist blob
-`8045d315ed03ae335d6321e798d9a1d24b412951`).
-- Implementation revision 1: both implementation-review stages approved it (technical approval
-  `43008bd`). Functional review round 1 passed flows A-I, including the live "Re-run failed jobs"
-  probe on the throwaway PR #14 (closed unmerged, branch deleted). It found two defects in the
-  `tests-result` summary text: F1, the log and replay paths were wrong in the per-attempt layout;
-  F2, the "left no fresh result" line also appeared on ordinary red runs. Both were fixed as a
-  bounded functional fix (`02b75f6`, `a4ab7b5`).
-- Implementation revision 2 was approved by both implementation-review stages (technical approval
-  `f7fae98`, `EXTERNAL_APPROVE`, `CURRENT`). Functional review round 2 ran flow J (F1 and F2) and
-  re-ran flows E and G. All three passed.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for phase and checkpoint status. The
+previous milestone's narrative is archived at
+`docs/milestones/completed/workflow-controller-ci-reliability.md`.
 
-All five registry checkpoints (`CP1`-`CP5`) are `COMPLETE`, and the registry declares no completion
-obligations. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of this transition,
-and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks section 11.2 and step C2 of "At a
-glance" complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-ci-reliability.md`. It covers the goal, checkpoint
-progress, both functional-review rounds' checklist and the 1.4.2 release notes.
+## Goal
 
-This milestone's own deliverables remain live in the tree, unmoved (the archive file's own preface
-says why):
-- `docs/ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md` and its registry/mapping files, still at the
-  paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry declares;
-- the command-line fill in `controller/worker.py`;
-- attempt selection, `--upstream-result`, `--write-selected` and the `LEAKED` verdict in
-  `tools/test_shards.py` and `tools/run_tests.py`, and the per-attempt artifacts in
-  `tools/ci_workflows.py` and `.github/workflows/validate.yml`;
-- the regressions in `tests/test_worker.py`, `tests/test_job.py`, `tests/test_resume.py`,
-  `tests/test_test_shards.py`, `tests/test_run_tests.py` and `tests/test_ci_workflows.py`;
-- `docs/guide/ci-and-releases.md` ("Re-running failed jobs"), `docs/guide/development.md`,
-  `docs/guide/milestone-branches.md`, `docs/guide/workers.md`, and the 1.4.2 amendments to
-  `docs/adr/0004-worker-lifecycle-ownership.md` and `docs/adr/0005-adaptive-test-sharding.md`.
+Four things, each opt-in or behaviour-preserving by default:
+- **Settings file v1 (1.4).** One user-level JSON file holds every operational tunable and the
+  routing defaults. The Controller fills in missing settings, records which defaults it wrote and
+  at which generation, and moves an untouched value only forward. Unknown keys are warned about,
+  and `settings clean` removes them, but never a newer release's.
+- **Telemetry v0 (8).** Each job records its session's totals over every `result` event, and a
+  read-only `telemetry` command summarises them, deriving older jobs from `worker.stdout`.
+- **Release notes follow the milestone (11.1.2).** Readiness puts the milestone's notes section
+  into the pull request body, bound by a marker carrying the work-item id and a digest, and the
+  release publishes the verified blocks from the squash commits of its range, or refuses.
+- **The four open 1.4 patches**: parsing resume hints, a truthful manual-external gate,
+  relaunch-bound tests, and a useful `status` with `--json`.
 
-`.workflow-controller/policy.json`, `pyproject.toml`, `setup.py` and `.github/workflows/ci.yml`,
-`main.yml` and `pr-title.yml` are unchanged from the base `93b82de`.
+## Checkpoint progress
 
-Deferred follow-ups, not conditions of acceptance:
-- **Release 1.4.2.** The milestone branch is on Draft PR #13, titled
-  `fix: stop the known CI flakes and make a re-run of failed jobs count`. The pushed head is
-  `24e8464`; this acceptance commit is local only. The next Controller step pushes it and runs
-  readiness. Once every check passes, the PR is marked ready and merged with "Squash and merge",
-  without editing the commit message. `main.yml` then classifies `RELEASE_DUE` 1.4.2 from `v1.4.1`
-  and publishes it, and the next Controller step closes the milestone out (`MERGED_SQUASHED` →
-  `CLOSED`).
-- **Release notes.** As for 1.4.1, the notes (the archived "Pull request body" section) reach
-  neither the squash commit nor the GitHub release until step C3 (11.1.2). After the release, a
-  docs pull request adds `docs/releases/1.4.2.md` from that section.
-- **Install timing.** 1.4.2 goes into the shared install only between Workflow Manager milestones
-  (shared lane plan), since the Manager lane's Controller runs from it.
-- Left as the plan scoped them: `--write-selected` inside `--results-dir` makes a later local
-  `aggregate` over that directory see duplicate records and refuse (LOCAL-IMPL-R1-001, optional;
-  CI writes to a sibling directory), and a 1.4.1 checkout cannot read schema-2 shard records (only
-  a local `--replay` across versions is affected).
-- The 2.5.1 `plan_stage_decisions` golden `--check` differs at the base too (the documented
-  `AMENDING_PLAN` difference), unchanged by this milestone.
-- Carried over, unchanged: the vendored Workflow conformance suites' Git-maintenance hygiene (a
-  Workflow repository item), and the deferred items of the earlier milestones, listed in their
-  acceptance commits.
+| Checkpoint | Status | Notes |
+|---|---|---|
+| CP1 The settings file | Complete | See below |
+| CP2 The settings wired in | Not started | |
+| CP3 Telemetry v0 | Not started | |
+| CP4 Release notes follow the milestone | Not started | |
+| CP5 The hints parse and the manual-external gate tells the truth | Not started | |
+| CP6 Relaunch-bound tests and `status` | Not started | |
+| CP7 Documentation and full verification | Not started | |
 
-**Next action:** release 1.4.2 as above. After close-out, run `/milestone-plan` for step C3 of "At a
-glance": the settings file v1, the 1.4 cleanup patches, telemetry v0 and release notes that follow
-the milestone (sections 1.4, 8 and 11.1.2). It is the next incomplete roadmap step. Plan it from
-`main`'s tip, with that base passed explicitly (`/milestone-plan <main tip>`). `/milestone-plan`
-creates a fresh `work_items` entry and claims `active_work_item_id`, ready for `PLANNING`.
+### CP1 -- the settings file
+
+- `controller/settings.py` (new, after `routing` in the dependency order):
+  - `TABLE`, the closed table of `Setting(key, type, default, minimum, maximum, cli_flag,
+    generation)` (A.3), and `TABLE_GENERATION = 1`. Every default equals the constant it will
+    replace.
+  - `resolve_path`: `--settings`, `$WORKFLOW_CONTROLLER_SETTINGS`,
+    `$XDG_CONFIG_HOME/workflow-controller/settings.json`,
+    `~/.config/workflow-controller/settings.json`, each made absolute (A.1).
+  - Validation (I2) refuses with `SettingsError` (exit 20), naming the path and the dotted key, and
+    never rewrites the file: not UTF-8 or JSON, a duplicate key, `schema_version` other than 1, a
+    section that is not an object, a wrong type (a boolean is not an integer) or out-of-bounds
+    value, a malformed `_table_generation` or `_defaults_written` (not `{value, generation}` with a
+    positive integer generation, or an entry for a key the file does not hold), and a malformed
+    routing section. An absent `schema_version` is filled in as 1, like any missing key.
+  - `load` (read-only), `fill` and `clean`. The fill and `clean` run their whole
+    read-modify-write under the sibling lock `settings.json.lock`, re-reading the bytes there, and
+    write only when the content changes (I4). The fill adds each missing setting with
+    `_defaults_written[key] = {value, generation}`, moves an untouched value forward only when this
+    release's generation for the key is greater than the recorded one, and never lowers
+    `_table_generation`. When it cannot write, one warning says so, and the file's values still
+    apply. `clean` refuses (exit 20, nothing removed) a file whose `_table_generation` is newer
+    than this release's; otherwise it fills, then removes every unknown key and its bookkeeping.
+  - Unknown keys (top level, inside a section, and in the routing section) are ignored with one
+    warning per invocation, which says when the file was last filled by a newer release.
+  - `resolve` gives `EffectiveSettings`: each value and its source (`cli`, `file`, `default`), and
+    the routing in force (`--routing-config` replaces the section whole, I1). CP2 wires it into
+    every command.
+- `controller/routing.py`: `validate_routing_mapping(data, *, path, where, require_schema_version,
+  unknown)`, the one validator. `parse_routing_config` calls it strictly with `where=""`, so
+  `--routing-config` keeps its messages and evidence, and every `tests/test_routing.py` case
+  passes unchanged. The settings section uses `where="routing."`, no `schema_version` (reserved
+  there, and refused) and `unknown="ignore"` (unknown roles, route fields and keys directly under
+  `routing` are left out and reported). `SECTION_KEYS` names `default` and `roles`.
+- `controller/runtime.py`: `settings_target`, `settings_lock` (an `flock` on the sibling lock
+  file), `read_settings_bytes` and `write_settings_atomically` (`write_json` contained against the
+  file's own directory, symlinks resolved first, so a symlinked file stays a symlink).
+- `controller/errors.py`: `SettingsError` (`SETTINGS_ERROR`).
+- `controller/cli.py`: the global `--settings PATH`, passed on absolute across the re-exec; the
+  `settings show|path|clean` subcommand (A.6), dispatched before pinning, like `follow`, since it
+  touches only the settings file. `show` prints each effective value with its source (`--timeout`
+  and `--routing-config` are the global overrides it can see) and writes nothing; `--json` is
+  honoured.
+- `tests/__init__.py` (I5): at package import, `XDG_CONFIG_HOME` points at a fresh temporary
+  directory and `WORKFLOW_CONTROLLER_SETTINGS` is removed. One side effect for developers: Git
+  reads `$XDG_CONFIG_HOME/git/config`, so a Git identity kept only there is not seen by the tests
+  (this machine and CI use `~/.gitconfig`).
+- `tests/test_settings.py` (new, 41 tests): the pinned table and the compatibility rule checked
+  against every generation's bounds and type; the location order and the re-exec argv; every
+  refusal, for `load`, `fill` and `clean`, with the file left unchanged; the fill (create,
+  additive, write only on change, never lowering the generation, the unwritable-directory warning
+  with the file's values still applied); the unknown-key warning; `clean`; the two-release test
+  (N+1 moves the untouched value and adds a key; N never moves it back, warns, and its `clean`
+  refuses and keeps N+1's key; an operator-set value never moves); the shared-file routing test
+  (N loads with exit 0 and one warning naming `routing.roles.new-role`, the extra field and
+  `routing.budgets`, resolves the known role as before, and its `clean` refuses; N+1 routes the
+  new role; a refused value and a non-object `roles` still exit 20; `--routing-config` with the
+  unknown role still raises `RoutingConfigError`); the routing parse tests; the lock tests (four
+  concurrent fills; the fill and `clean` each re-read under a lock the test holds while it edits
+  the file; a `clean` racing a fill keeps both changes); and the I5 guard (this process is
+  isolated; a child started with `WORKFLOW_CONTROLLER_SETTINGS` naming a sentinel runs `settings
+  clean`, `settings show` and a fill under an audit hook that fails on any open of
+  `~/.config/workflow-controller/`, the sentinel or the parent's `XDG_CONFIG_HOME`; an invalid
+  sentinel stays byte-identical and a missing one is never created; a direct `python3 -m unittest
+  tests.test_settings...` run is isolated too).
+- `tests/test_package_structure.py`: `settings` in the dependency order.
+- Verified: `tests.test_settings`, `tests.test_routing`, `tests.test_cli`, `tests.test_runtime`,
+  `tests.test_write_containment` and `tests.test_package_structure` pass; the full sharded suite
+  (`python3 tools/run_tests.py`, in the foreground, without `PYTHONPATH` or `FORCE_COLOR`, under a
+  reaping-subreaper wrapper since this session is a Controller-launched worker) passed: 2545 tests
+  in 6 shards, exit 0. `~/.config/workflow-controller/` did not exist before or after the runs (I5).

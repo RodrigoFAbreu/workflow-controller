@@ -591,6 +591,27 @@ class RoutingConfigError(ControllerError):
 
 
 # ---------------------------------------------------------------------------
+# workflow-controller-settings-and-telemetry CP1 -- the user settings file
+# (``controller.settings``).
+# ---------------------------------------------------------------------------
+
+
+class SettingsError(ControllerError):
+    """The user settings file cannot be used: it is unreadable, not JSON or
+    carries a duplicate key, its ``schema_version`` is not ``1``, a known
+    setting has the wrong type or is out of bounds, its routing section is
+    malformed, or its ``_table_generation``/``_defaults_written``
+    bookkeeping is malformed. Also ``settings clean`` refusing a file last
+    filled by a newer release. Raised before any job record is written:
+    exit ``20``, like ``RoutingConfigError``, and the file is never
+    rewritten. ``evidence`` names the ``path`` and the dotted ``key``.
+
+    A missing file is never this error."""
+
+    code = "SETTINGS_ERROR"
+
+
+# ---------------------------------------------------------------------------
 # workflow-controller-trunk-branch-pr-release-orchestration CP2 -- the
 # repository policy (``controller.repo_policy``).
 # ---------------------------------------------------------------------------

@@ -234,7 +234,6 @@ def parse_role_assignment(text: str) -> tuple[str, str]:
 
 
 CONFIG_SCHEMA_VERSION = 1
-_CONFIG_TOP_LEVEL_KEYS = frozenset({"schema_version", "default", "roles"})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -254,24 +253,118 @@ def _refuse(path: str, problem: str, **evidence: Any) -> RoutingConfigError:
     )
 
 
-def _field_entry(path: str, where: str, entry: object) -> Mapping[str, str]:
-    if not isinstance(entry, dict):
-        raise _refuse(path, f"{where} must be an object, got {entry!r}", where=where)
-    unknown = sorted(set(entry) - set(FIELDS))
-    if unknown:
-        raise _refuse(path, f"{where} carries unknown key(s) {unknown} (only {list(FIELDS)} are routable)",
-                      where=where, unknown_keys=unknown)
-    checked: dict[str, str] = {}
-    for field, value in entry.items():
-        try:
-            checked[field] = check_value(value)
-        except ValueError as exc:
-            raise _refuse(path, f"{where}.{field}: {exc}", where=f"{where}.{field}") from None
-    return MappingProxyType(checked)
+#: :func:`validate_routing_mapping`'s two ways with a key it does not know.
+UNKNOWN_REFUSE = "refuse"
+UNKNOWN_IGNORE = "ignore"
+
+#: The keys a routing mapping may hold besides ``schema_version``. With
+#: :data:`ROLES` and :data:`FIELDS`, part of the settings table
+#: ``controller.settings`` pins: a release that adds one raises its
+#: ``TABLE_GENERATION``.
+SECTION_KEYS: tuple[str, ...] = ("default", "roles")
+
+
+class _Validator:
+    """One validation of a parsed routing mapping. ``where`` prefixes every
+    location it names (``""`` for a ``--routing-config`` file, so that
+    file's messages and evidence stay what they were; ``"routing."`` for
+    the settings file's section, whose refusals also carry the dotted
+    ``key``)."""
+
+    def __init__(self, path: str, where: str, unknown: str) -> None:
+        if unknown not in (UNKNOWN_REFUSE, UNKNOWN_IGNORE):
+            raise ValueError(f"unknown must be {UNKNOWN_REFUSE!r} or {UNKNOWN_IGNORE!r}, got {unknown!r}")
+        self.path, self.where, self.unknown = path, where, unknown
+        self.ignored: list[str] = []
+
+    def refuse(self, problem: str, key: str, **evidence: Any) -> RoutingConfigError:
+        if self.where:
+            evidence["key"] = key
+        return _refuse(self.path, problem, **evidence)
+
+    def field_entry(self, where: str, entry: object) -> Mapping[str, str]:
+        if not isinstance(entry, dict):
+            raise self.refuse(f"{where} must be an object, got {entry!r}", where, where=where)
+        unknown = sorted(set(entry) - set(FIELDS))
+        if unknown and self.unknown == UNKNOWN_REFUSE:
+            raise self.refuse(f"{where} carries unknown key(s) {unknown} (only {list(FIELDS)} are routable)",
+                              where, where=where, unknown_keys=unknown)
+        self.ignored.extend(f"{where}.{field}" for field in unknown)
+        checked: dict[str, str] = {}
+        for field, value in entry.items():
+            if field not in FIELDS:
+                continue
+            try:
+                checked[field] = check_value(value)
+            except ValueError as exc:
+                raise self.refuse(f"{where}.{field}: {exc}", f"{where}.{field}", where=f"{where}.{field}") from None
+        return MappingProxyType(checked)
+
+
+def validate_routing_mapping(
+    data: object, *, path: str, where: str = "", require_schema_version: bool = True,
+    unknown: str = UNKNOWN_REFUSE,
+) -> tuple[RoutingConfig, list[str]]:
+    """Validate an already-parsed routing mapping: the ``--routing-config``
+    file's top level (``require_schema_version=True``, ``unknown="refuse"``,
+    ``where=""``), or the settings file's ``routing`` section
+    (``require_schema_version=False``, ``unknown="ignore"``,
+    ``where="routing."``). Returns the config and the dotted paths left out
+    as unknown (always empty under ``"refuse"``).
+
+    Under ``"ignore"`` an unknown key directly under the mapping, an unknown
+    role name and an unknown route field are left out, so a newer
+    release's additions never make a shared file unusable. Everything else
+    stays strict: a section or entry that is not an object, a value
+    :func:`check_value` refuses, and -- when ``require_schema_version`` is
+    false -- a ``schema_version`` key, which is reserved (it marks a
+    ``--routing-config`` file pasted in whole). Every problem is
+    :class:`~controller.errors.RoutingConfigError`, never a partial
+    config."""
+    v = _Validator(path, where, unknown)
+    if not isinstance(data, dict):
+        if where:
+            raise v.refuse(f"{where.rstrip('.')} must be an object, got {data!r}", where.rstrip("."))
+        raise _refuse(path, "its top level must be a JSON object")
+    allowed = set(SECTION_KEYS) | ({"schema_version"} if require_schema_version else set())
+    unknown_keys = sorted(set(data) - allowed - {"schema_version"})
+    if unknown_keys and unknown == UNKNOWN_REFUSE:
+        raise _refuse(path, f"unknown top-level key(s) {unknown_keys}", unknown_keys=unknown_keys)
+    v.ignored.extend(f"{where}{key}" for key in unknown_keys)
+    if require_schema_version:
+        version = data.get("schema_version")
+        if type(version) is not int or version != CONFIG_SCHEMA_VERSION:
+            raise _refuse(path, f"schema_version must be {CONFIG_SCHEMA_VERSION}, got {version!r}",
+                          schema_version=version)
+    elif "schema_version" in data:
+        raise v.refuse(
+            f"{where}schema_version is reserved: a routing section carries no schema_version "
+            f"(it looks like a --routing-config file pasted in whole; drop the key)",
+            f"{where}schema_version",
+        )
+    default = v.field_entry(f"{where}default", data.get("default", {}))
+    roles_entry = data.get("roles", {})
+    if not isinstance(roles_entry, dict):
+        if where:
+            raise v.refuse(f"{where}roles must be an object, got {roles_entry!r}", f"{where}roles")
+        raise _refuse(path, f"roles must be an object, got {roles_entry!r}")
+    unknown_roles = sorted(set(roles_entry) - ROLES)
+    if unknown_roles and unknown == UNKNOWN_REFUSE:
+        raise _refuse(path, f"unknown role(s) {unknown_roles}; known roles: {', '.join(sorted(ROLES))}",
+                      unknown_roles=unknown_roles)
+    v.ignored.extend(f"{where}roles.{role}" for role in unknown_roles)
+    roles = {
+        role: v.field_entry(f"{where}roles.{role}", entry)
+        for role, entry in roles_entry.items() if role in ROLES
+    }
+    config = RoutingConfig(path=path, default=default, roles=MappingProxyType(roles))
+    return config, v.ignored
 
 
 def parse_routing_config(text: str, *, path: str) -> RoutingConfig:
-    """Parse and validate a routing config's text. Every problem is
+    """Parse and validate a ``--routing-config`` file's text, strictly
+    (:func:`validate_routing_mapping` with ``schema_version`` required and
+    every unknown key refused). Every problem is
     :class:`~controller.errors.RoutingConfigError`, never a partial
     config."""
 
@@ -286,25 +379,8 @@ def parse_routing_config(text: str, *, path: str) -> RoutingConfig:
         data = json.loads(text, object_pairs_hook=no_duplicate_keys)
     except json.JSONDecodeError as exc:
         raise _refuse(path, f"it is not JSON ({exc})") from None
-    if not isinstance(data, dict):
-        raise _refuse(path, "its top level must be a JSON object")
-    unknown = sorted(set(data) - _CONFIG_TOP_LEVEL_KEYS)
-    if unknown:
-        raise _refuse(path, f"unknown top-level key(s) {unknown}", unknown_keys=unknown)
-    version = data.get("schema_version")
-    if type(version) is not int or version != CONFIG_SCHEMA_VERSION:
-        raise _refuse(path, f"schema_version must be {CONFIG_SCHEMA_VERSION}, got {version!r}",
-                      schema_version=version)
-    default = _field_entry(path, "default", data.get("default", {}))
-    roles_entry = data.get("roles", {})
-    if not isinstance(roles_entry, dict):
-        raise _refuse(path, f"roles must be an object, got {roles_entry!r}")
-    unknown_roles = sorted(set(roles_entry) - ROLES)
-    if unknown_roles:
-        raise _refuse(path, f"unknown role(s) {unknown_roles}; known roles: {', '.join(sorted(ROLES))}",
-                      unknown_roles=unknown_roles)
-    roles = {role: _field_entry(path, f"roles.{role}", entry) for role, entry in roles_entry.items()}
-    return RoutingConfig(path=path, default=default, roles=MappingProxyType(roles))
+    config, _ignored = validate_routing_mapping(data, path=path)
+    return config
 
 
 def load_routing_config(path: str | Path) -> RoutingConfig:

@@ -26,8 +26,8 @@ import time
 from pathlib import Path
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, target_state,
-    worker,
+    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, settings,
+    target_state, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -35,9 +35,12 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: The three read-only commands. Positive guard: everything not in this set
 #: requires a pinned identity (`source_kind != "unpinned"`), by construction
 #: rather than by a denylist a future command could be added without
-#: updating.
+#: updating. ``settings`` is dispatched before pinning, like ``follow``, and
+#: touches only the user settings file, never a target or the runtime root.
 READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow"})
-ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding"})
+ALL_COMMANDS = frozenset({
+    "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
+})
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
 #: "Exit codes"). ``2`` is argparse's own default usage-error code and is
@@ -101,38 +104,46 @@ def require_pinned_execution() -> None:
         )
 
 
-def _strip_runtime_dir(argv: list[str]) -> list[str]:
-    """Drop any caller-supplied ``--runtime-dir``/``--runtime-dir=X`` from
-    the argv the re-exec is about to build -- the resolved absolute value
-    this process just computed supersedes it, and leaving both would make
-    the child's runtime root depend on argparse's last-wins ordering."""
+def _strip_option(argv: list[str], option: str) -> list[str]:
+    """Drop any caller-supplied ``option``/``option=X`` from the argv the
+    re-exec is about to build -- the resolved absolute value this process
+    just computed supersedes it, and leaving both would make the child's
+    value depend on argparse's last-wins ordering."""
     out: list[str] = []
     skip_next = False
     for token in argv:
         if skip_next:
             skip_next = False
             continue
-        if token == "--runtime-dir":
+        if token == option:
             skip_next = True
             continue
-        if token.startswith("--runtime-dir="):
+        if token.startswith(f"{option}="):
             continue
         out.append(token)
     return out
 
 
+def _strip_runtime_dir(argv: list[str]) -> list[str]:
+    return _strip_option(argv, "--runtime-dir")
+
+
 def _reexec(*, snapshot_dir: Path, runtime_root: Path, argv: list[str],
-            exec_depth_seen: int, source_kind: str, source_commit: str | None) -> None:
+            exec_depth_seen: int, source_kind: str, source_commit: str | None,
+            settings_path: str | None = None) -> None:
     """Replace this process with a fresh interpreter importing exactly the
     snapshot: ``-P`` suppresses the working-directory `sys.path` entry
     `python -m` would otherwise prepend (the exact defect that made
     revision 32's exec loop), and ``-B`` stops the import from writing
     `__pycache__` into the snapshot, which would otherwise change its own
-    digest on its very first execution. Never returns."""
+    digest on its very first execution. ``--settings``, when given, is
+    passed on made absolute (settings-and-telemetry CP1, A.1). Never
+    returns."""
+    settings_argv = [] if settings_path is None else ["--settings", str(settings.resolve_path(settings_path))]
     child_argv = [
         sys.executable, "-P", "-B", "-m", "controller",
-        "--runtime-dir", str(runtime_root),
-        *_strip_runtime_dir(argv),
+        "--runtime-dir", str(runtime_root), *settings_argv,
+        *_strip_option(_strip_runtime_dir(argv), "--settings"),
     ]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(snapshot_dir)
@@ -262,6 +273,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="effort for one role's workers (repeatable, once per role)")
     parser.add_argument("--routing-config", metavar="PATH", default=None,
                         help="JSON routing config: {\"schema_version\": 1, \"default\": {...}, \"roles\": {...}}")
+    parser.add_argument("--settings", metavar="PATH", default=None,
+                        help="the user settings file (default: $WORKFLOW_CONTROLLER_SETTINGS, else "
+                             "$XDG_CONFIG_HOME/workflow-controller/settings.json, else "
+                             "~/.config/workflow-controller/settings.json)")
     parser.add_argument("--allow-dirty-source", action="store_true", default=False)
     parser.add_argument("--json", action="store_true", default=False)
 
@@ -320,6 +335,14 @@ def build_parser() -> argparse.ArgumentParser:
     follow_p.add_argument("--from-start", action="store_true", default=False,
                           help="replay every event, not only the last 20")
     follow_p.add_argument("repo", nargs="?", default=".")
+
+    # settings-and-telemetry CP1 (A.6): the user settings file.
+    settings_p = subparsers.add_parser("settings", help="show, locate or clean the user settings file")
+    settings_actions = settings_p.add_subparsers(dest="settings_action", required=True)
+    settings_actions.add_parser("show", help="print each effective setting and its source (cli, file, default)")
+    settings_actions.add_parser("path", help="print the settings file's path")
+    settings_actions.add_parser(
+        "clean", help="fill the settings file, then remove the keys this release does not know")
 
     return parser
 
@@ -1215,12 +1238,58 @@ def _capture_pre_existing_state(runtime_root: Path) -> dict:
     }
 
 
+def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.RoutingConfig | None]:
+    """The settings the global options given on this command line
+    override (I1): ``--timeout`` and ``--routing-config``, the latter
+    parsed strictly as today."""
+    config_path = getattr(args, "routing_config", None)
+    cli_routing = None if config_path is None else routing.load_routing_config(config_path)
+    return {"worker.timeout_seconds": getattr(args, "timeout", None)}, cli_routing
+
+
+def cmd_settings(args: argparse.Namespace) -> int:
+    """``settings show|path|clean`` (settings-and-telemetry CP1, A.6).
+
+    Dispatched before pinning and the runtime root, like ``follow``: it
+    touches only the settings file. ``show`` and ``path`` write nothing;
+    ``clean`` fills the file, then removes the keys this release does not
+    know, or refuses (exit 20) a file last filled by a newer release."""
+    path = settings.resolve_path(args.settings)
+    if args.settings_action == "path":
+        print(json.dumps({"path": str(path)}) if args.json else path)
+        return EXIT_OK
+    if args.settings_action == "clean":
+        _loaded, removed = settings.clean(path)
+        if args.json:
+            print(json.dumps({"path": str(path), "removed": removed}, sort_keys=True))
+        elif removed:
+            print(f"removed from {path}: {', '.join(removed)}")
+        else:
+            print(f"nothing to remove from {path}")
+        return EXIT_OK
+    cli_values, cli_routing = _settings_cli_overrides(args)
+    loaded = settings.load(path)
+    effective = settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
+    if args.json:
+        print(json.dumps({
+            "path": str(path), "exists": loaded.exists, "sha256": loaded.sha256,
+            "values": dict(effective.values), "sources": dict(effective.sources),
+        }, indent=2, sort_keys=True))
+        return EXIT_OK
+    print(f"settings file: {path}" + ("" if loaded.exists else " (not created yet)"))
+    for key in effective.values:
+        print(f"{key} = {json.dumps(effective.values[key], sort_keys=True)} ({effective.sources[key]})")
+    return EXIT_OK
+
+
 def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     command = args.command
     if command == "follow":
         # Before pinning, runtime-root creation, materialisation and the
         # identity write: `follow` only reads.
         return cmd_follow(args)
+    if command == "settings":
+        return cmd_settings(args)
     ident = identity.pin()
 
     handoff = identity.read_exec_handoff()
@@ -1257,7 +1326,7 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
         _reexec(
             snapshot_dir=snapshot_dir, runtime_root=runtime_root, argv=argv,
             exec_depth_seen=exec_depth, source_kind=snapshot_pin["source_kind"],
-            source_commit=snapshot_pin.get("source_commit"),
+            source_commit=snapshot_pin.get("source_commit"), settings_path=getattr(args, "settings", None),
         )
         raise AssertionError("os.execve returned, which should be impossible")
 

@@ -511,11 +511,19 @@ reproduced before fixing:
 
 ## Functional review checklist
 
-Round 1, implementation revision 3: technical approval `2683558`, reviewed implementation head
-`96bbded`, implementation bundle `6cc2ab3b`, PR #16 (draft) at `2683558`. Every expected result
-below was measured on 2026-10-01 against `2683558` in a scratch directory (`/tmp/c3-fr`), by
+Round 2, implementation revision 4: technical approval `9f7a2b0`, reviewed implementation head
+`e18fe9a`, implementation bundle `8cb2f71f`, PR #16 (draft) at `9f7a2b0`. Every expected result
+below was measured on 2026-10-01 against `9f7a2b0` in a scratch directory (`/tmp/c3-fr`), by
 running the commands exactly as written. Values that cannot repeat (commit ids made by
 `git commit-tree`, job ids, pids, times) are shown as `<...>`.
+
+**Round 2 focus.** Round 1 (checklist `f04faed`) passed every flow and found five wording
+findings, fixed in revision 4. Their flows: G and H (F1: a missing work item prints `none`, a
+route with no model groups as `model=inherit`; JSON keeps `null`), L2 and P (F2:
+`docs/guide/commands.md` says `status` writes `identity.json`), J (F3: the tab and trailing-space
+remedies), L1 (F4: the incoherent-ledger gate states the two content ids once) and G (F5: the
+`telemetry` usage shows `--by GROUPING`). M's counts include the new tests. Every other flow is
+unchanged and is rerun as a regression check.
 
 Nothing here writes to this repository, its remote, GitHub, the user's settings file
 (`~/.config/workflow-controller/`, which does not exist and must still not exist afterwards), the
@@ -543,7 +551,7 @@ cat > "$S/fr.sh" <<'XEOF'
 unset FORCE_COLOR PYTHONPATH WORKFLOW_CONTROLLER_SETTINGS GH_TOKEN GITHUB_OUTPUT
 export S=/tmp/c3-fr R=/home/rodrigo/Workspace/workflow-controller
 export W=$S/venv/bin/workflow-controller XDG_CONFIG_HOME=$S/xdg
-export H=268355881fb709f1395b2f96eb9d4dbe149bb01b BASE=a47e6955cd4aebdee5482ba7cc2c788c2eb057c3
+export H=9f7a2b0f87d8588481cae5ecb7081db51376f4f6 BASE=a47e6955cd4aebdee5482ba7cc2c788c2eb057c3
 export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=maintenance.auto GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=gc.auto GIT_CONFIG_VALUE_1=0
 TITLE='feat: a settings file, telemetry v0, release notes from the milestone and the 1.4 cleanup patches (#16)'
 WI=workflow-controller-settings-and-telemetry
@@ -678,7 +686,7 @@ git diff --stat "$BASE" "$H" -- .workflow-controller/ pyproject.toml setup.py .g
 (cd "$S/src" && python3 tools/ci_workflows.py --check; echo "ci_workflows --check exit $?")
 ```
 Expected:
-- `workflow-controller 1.4.2` and `runtime: package (local build from 268355881fb7)`: the version
+- `workflow-controller 1.4.2` and `runtime: package (local build from 9f7a2b0f87d8)`: the version
   stays tag-derived until the 1.5.0 tag exists;
 - `inspect: 1.4.2 exit 0, local exit 0`, `inspect: byte-identical`, and the same for `explain`
   (both read this repository at the same moment, each with an empty scratch runtime root, so no
@@ -923,7 +931,7 @@ Expected:
 - `` error: worker pid <p> exited, but 1 owned process(es) are still running after 60 s: <o> (fake-claude-orphan 600) -- job <id> stays held (LAUNCHED, DRAINING); either run `workflow-controller resume /tmp/c3-fr/drain/t` to re-attach and keep draining, or end them, then run it ``,
   `exit 45 after 61 s` (60 to 62), `LAUNCHED DRAINING 60 telemetry results None`;
 - the status activity line contains `detached after 1:00 -- end them, then workflow-controller --runtime-dir /tmp/c3-fr/drain/rt resume /tmp/c3-fr/drain/t`;
-- `resume --drain-timeout 5`: the same message with `after 5 s`, `exit 45 after 5 s`,
+- `resume --drain-timeout 5`: the same message with `after 5 s`, `exit 45 after 5 s` (5 to 6),
   `LAUNCHED DRAINING 5 …`; the status line now says `detached after 0:05` (the recorded bound,
   read back in a later invocation);
 - `hint: workflow-controller --runtime-dir /tmp/c3-fr/drain/rt resume /tmp/c3-fr/drain/t`: the
@@ -975,11 +983,15 @@ Expected:
 - `telemetry`: `jobs: 1`, `all jobs: 1 job(s), telemetry unavailable 0`, `turns 144 (mean 144)`,
   `tokens 5,984 (mean 5,984)`, `cost $6.00 (mean $6.00)`, `API time 2 s (mean 2 s)`,
   `job wall time <n> s (mean <n> s)`, `worker wall time <n> s (mean <n> s)`, `exit 0`;
-- `jobs: 1, grouped by role,model` and `role=milestone-plan, model=None: 1 job(s), telemetry unavailable 0`;
+- `jobs: 1, grouped by role,model` and `role=milestone-plan, model=inherit: 1 job(s), telemetry unavailable 0`
+  (the route sets no model, so the worker inherits the harness's; `--json` keeps `null`);
 - `['by', 'groups', 'rows'] False {'jobs': 1, 'mean': 6.0, 'total': 6.0}`;
-- `jobs: 0`; then the usage error `workflow-controller telemetry: error: argument --since: not a UTC date or time (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ): 'yesterday'`, `exit 2`;
+- `jobs: 0`; then the usage `usage: workflow-controller telemetry [-h] [--run RUN_ID] [--since ISO]`,
+  `[--by GROUPING]`, `[repo]` (three lines; `--by` is one `GROUPING`, not a list of choices) and the
+  error `workflow-controller telemetry: error: argument --since: not a UTC date or time (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ): 'yesterday'`, `exit 2`;
 - `status`: `jobs: 1 recorded`, `  <id> FAILED /milestone-plan (work item none): wall <n> s, cost $6.00`,
-  `last job telemetry: <id> (FAILED, None): cost $6.00, 144 turns, 5,984 tokens, API 2 s, job <n> s, worker <n> s`;
+  `last job telemetry: <id> (FAILED, none): cost $6.00, 144 turns, 5,984 tokens, API 2 s, job <n> s, worker <n> s`
+  (no work item reads `none`, as on the `jobs:` line);
 - `['active', 'bindings', 'controller', 'handoff', 'jobs', 'ladder_row', 'last_job_telemetry', 'pinned_identity', 'runtime_root', 'runtime_state']`
   and `1 <n> 6.0 6.0`;
 - `inspect` prints the same `last job telemetry:` line;
@@ -1005,7 +1017,7 @@ diff <(sed 's/rt-good/RT/g; s/t-good/T/g' "$D/good.out") <(sed 's/rt-tf/RT/g; s/
 Expected: both `step exit 30`; `good: FAILED SUCCESS 8 6.0 {"controller_version": …}` and
 `tf: FAILED SUCCESS 8 6.0 {"failed": true, "problems": [{"error": "RuntimeError: functional review: injected telemetry failure", "kind": "telemetry_failed"}], "version": 1}`;
 `good: completed event {… 'results': 4 …}`, `tf: completed event failed`; `tf`'s status line
-`last job telemetry: <id> (FAILED, None): telemetry unavailable`, its summary
+`last job telemetry: <id> (FAILED, none): telemetry unavailable`, its summary
 `all jobs: 1 job(s), telemetry unavailable 1`, and its `COMPLETED (worker SUCCESS, exit 0); session: telemetry unavailable`;
 `step output identical` (status, outcome, the `worker` block, the exit code and the printed output
 do not depend on telemetry).
@@ -1086,9 +1098,9 @@ Expected:
   | `l72`, `acc72` | exit 0 (72 bytes; 36 `é` are 72 bytes) |
   | `l73` | exit 1: `release.py notes-block: refused: notes: l73.txt: line 1 'xxxx…': the line holds 73 bytes of UTF-8, over the limit of 72; wrap the section at 72 columns or remove the text` |
   | `acc37` | exit 1: `… the line holds 74 bytes of UTF-8, over the limit of 72; …` (37 characters) |
-  | `trail` | exit 1: `… line 1 'Fixed the thing. ': the line ends in a space; wrap the section at 72 columns or remove the text` |
+  | `trail` | exit 1: `… line 1 'Fixed the thing. ': the line ends in a space; remove the trailing space` |
   | `marker` | exit 1: `… the notes contain the Controller marker text '<!-- workflow-controller:'; remove the text` |
-  | `tab` | exit 1: `… line 1 'a\tb': the line holds a tab; …` |
+  | `tab` | exit 1: `… line 1 'a\tb': the line holds a tab; replace the tab with spaces` |
   | `trailer` | exit 1: `… 'Fixes: the thing': the paragraph parses as a Git trailer block; reword the paragraph or join it to its neighbour` |
   | `url` | exit 1: `… 'https://example.com/x': the paragraph parses as a Git trailer block; …` |
   | `blank`, `empty` | exit 1: `release.py notes-block: refused: notes: <f>.txt holds no notes (it is empty or only blank lines)` |
@@ -1200,12 +1212,12 @@ kept). `old`: the `unverified tag` refusal of step 4 (`first difference at line 
 **L. The 1.4 patches.**
 
 **L1.** The manual-external gate tells the truth, live on a scratch clone of this repository at
-`d32b9ac` (the implementation bundle generation 3 record), with a copy of its bundle and the
+`d41d377` (the implementation bundle generation 4 record), with a copy of its bundle and the
 Workflow state edited back to `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` with only the local
 `APPROVE` recorded:
 ```bash
 . /tmp/c3-fr/fr.sh; G=$S/gate; git clone -q "$S/origin.git" "$G/repo"; cd "$G/repo"
-git checkout -q -b milestone/workflow-controller-settings-and-telemetry d32b9acc9579f75ae0cecae9013cbc787ac1720c
+git checkout -q -b milestone/workflow-controller-settings-and-telemetry d41d3776121ada1c3d8af7061907b94daee4e310
 mkdir -p ".ai-review/$WI/feedback"; cp -a "$R/.ai-review/$WI/current" ".ai-review/$WI/"
 sed -i "s#^worktree_root: .*#worktree_root: $G/repo#" ".ai-review/$WI/current/MANIFEST.md"
 ledger() { python3 - "$1" <<'EOF'
@@ -1213,31 +1225,35 @@ import json, sys
 p = "docs/ai-workflow/WORKFLOW_STATE.json"; s = json.load(open(p)); w = s["work_items"]["workflow-controller-settings-and-telemetry"]
 w["phase"] = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
 w["implementation_review_stages"] = {"review_content_id": sys.argv[1], "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-    "bundle_id": "6cc2ab3b5214bbc63a651bc8053fda4d4e0d66b6f8cad18c92eb737aae33d0e1", "verdict": "APPROVE", "round": 3,
-    "completed_at": "2026-10-01T08:01:20Z"}}
+    "bundle_id": "8cb2f71fc541ad1ca414820494dd183212a73bbeb4c9a6d866ea5f598afc5385", "verdict": "APPROVE", "round": 4,
+    "completed_at": "2026-10-01T13:10:19Z"}}
 json.dump(s, open(p, "w"), indent=2); open(p, "a").write("\n")
 EOF
 }
-ledger 01ee6cdb88885c96760e4b35d23edfade4789d7ce510f70948100cf91f2c32e4; "$W" --runtime-dir "$G/rt" explain "$G/repo" | grep -E "^reason|what is required|safe resume"
+ledger e2e61175a8a41df1ec16923fef441d181c8fc1b9956dac1ce11e4248e48b2243; "$W" --runtime-dir "$G/rt" explain "$G/repo" | grep -E "^reason|what is required|safe resume"
 ledger 5af5569cd63244183285496c536ca197f6043b332ae1a77b14420c7e8e9c5636; "$W" --runtime-dir "$G/rt" explain "$G/repo" | grep -E "^reason|what is required|safe resume"; echo "exit ${PIPESTATUS[0]}"
 workflow-controller --runtime-dir "$G/rt-old" explain "$G/repo" | grep "what is required" | cut -c1-300
 ```
 Expected:
 - coherent ledger (today's gate, unchanged): `reason: AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW: no current-round REVIEW_FEEDBACK.md on file`,
-  `human gate -- what is required: upload .ai-review/workflow-controller-settings-and-telemetry/current (bundle_id 6cc2ab3b…, review_content_id 01ee6cdb… from the ledger) to a manual external reviewer and paste the verdict into .ai-review/workflow-controller-settings-and-telemetry/feedback/REVIEW_FEEDBACK.md, declaring Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`,
+  `human gate -- what is required: upload .ai-review/workflow-controller-settings-and-telemetry/current (bundle_id 8cb2f71f…, review_content_id e2e61175… from the ledger) to a manual external reviewer and paste the verdict into .ai-review/workflow-controller-settings-and-telemetry/feedback/REVIEW_FEEDBACK.md, declaring Reviewer role: MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`,
   `safe resume command: /record-manual-implementation-review workflow-controller-settings-and-telemetry`;
 - the ledger's id from round 1: `reason: AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW: manual_external_ledger_incoherent -- the ledger's review_content_id differs from the manifest's`,
-  `human gate -- what is required: do not send .ai-review/workflow-controller-settings-and-telemetry/current for external review: the implementation_review_stages ledger is not coherent with the bundle -- the ledger's review_content_id differs from the manifest's (the ledger records '5af5569c…', MANIFEST.md states '01ee6cdb…'; …). No Workflow command moves AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW back (its only exits are /record-manual-implementation-review's verdicts), so the Workflow state needs explicit user resolution before any external review.`,
+  `human gate -- what is required: do not send .ai-review/workflow-controller-settings-and-telemetry/current for external review: the implementation_review_stages ledger is not coherent with the bundle -- the ledger's review_content_id differs from the manifest's (MANIFEST.md's review_content_id is e2e61175…, the ledger's is 5af5569c…). No Workflow command moves AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW back (its only exits are /record-manual-implementation-review's verdicts), so the Workflow state needs explicit user resolution before any external review.`,
   `safe resume command: explicit user resolution of workflow-controller-settings-and-telemetry's Workflow state before any external review`,
-  `exit 0`. No "upload", no "from the ledger";
+  `exit 0`. Each id is stated once (printed in full; shortened here with `…`). No "upload", no "from the ledger";
 - the installed 1.4.2 on the same state still offers the bundle with the wrong id:
-  `human gate -- what is required: upload .ai-review/workflow-controller-settings-and-telemetry/current (bundle_id 6cc2ab3b…, review_content_id 5af5569c… from the ledger) to a manual external r`.
+  `human gate -- what is required: upload .ai-review/workflow-controller-settings-and-telemetry/current (bundle_id 8cb2f71f…, review_content_id 5af5569c… from the ledger) to a manual external r`.
 
-**L2.** `status` with no runtime state, as JSON:
+**L2.** `status` with no runtime state, as JSON, the one file it writes, and a second `status`:
 ```bash
 . /tmp/c3-fr/fr.sh; "$W" --runtime-dir "$S/rt-empty" --json status
+ls -A "$S/rt-empty"; "$W" --runtime-dir "$S/rt-empty" status | head -2
 ```
-Expected: `{"controller": "workflow-controller 1.4.2 -- package (local build from 268355881fb7)", "ladder_row": 1, "runtime_root": "/tmp/c3-fr/rt-empty", "runtime_state": false}`.
+Expected: `{"controller": "workflow-controller 1.4.2 -- package (local build from 9f7a2b0f87d8)", "ladder_row": 1, "runtime_root": "/tmp/c3-fr/rt-empty", "runtime_state": false}`;
+then `identity.json` alone; then `controller: workflow-controller 1.4.2 -- package (local build from 9f7a2b0f87d8)`
+and `pinned identity: source_kind=unpinned source_commit=9f7a2b0f87d8588481cae5ecb7081db51376f4f6 generation=None tree_digest=None`:
+the second `status` finds runtime state, as `docs/guide/commands.md`'s `status` section says.
 The populated `status` (text and `--json`) is flow G; the printed resume hint with
 `--runtime-dir` that parses is flow F.
 
@@ -1252,10 +1268,11 @@ python3 "$S/reap.py" python3 -m unittest tests.test_hints_parse tests.test_evide
 ```
 Expected: `Ran 85 tests` OK (settings: the table and compatibility rule, location, every refusal,
 the fill, the two-release and shared-routing tests, the locks, the I5 isolation guard,
-`ProcessDefaultsTest` for the leaf values); `Ran 30 tests` OK (telemetry: totals, the failure
-boundary on both completion paths, derivation, the command); `Ran 66 tests` OK (release notes:
-the line rules, the per-paragraph trailer parse under hostile Git configuration, readiness's
-included/absent/empty/refused bodies with no edit, every publish case); `Ran 47 tests` OK (every
+`ProcessDefaultsTest` for the leaf values); `Ran 33 tests` OK (telemetry: totals, the failure
+boundary on both completion paths, derivation, the command, the `none`/`inherit` labels, the
+`--by GROUPING` usage); `Ran 67 tests` OK (release notes: the line rules and their remedies, the
+per-paragraph trailer parse under hostile Git configuration, readiness's included/absent/empty/
+refused bodies with no edit, every publish case); `Ran 47 tests` OK (every
 printed hint parses with the live parser, both incoherent-ledger stages and their way-out texts,
 the relaunch-bound records including the end-to-end abandoned apply, `status`). The full suite
 is PR #16's CI (flow O).
@@ -1284,7 +1301,8 @@ and `workflow-conformance`. The title is the plan's declared
   (B3), "Which value wins" and the exit-2 flags (E), the fill and the forward-only rule (B4, C),
   the lock, "When the file is refused" (B3, E), unknown keys and `settings clean` (B5, C), the
   routing section (B5, D);
-- `docs/guide/commands.md`: `status` (G, L2), `settings` (B), `telemetry` (G, I), "Worker routing"
+- `docs/guide/commands.md`: `status` (G, L2: it writes only `identity.json`, in the table row and the
+  section), `settings` (B), `telemetry` (G, I), "Worker routing"
   (D), the global `--settings`;
 - `docs/guide/workers.md`: "The drain bound" (F), "Telemetry" (G, H, I);
 - `docs/guide/milestone-branches.md`, "Release notes in the pull request body", and
@@ -1305,10 +1323,6 @@ and `workflow-conformance`. The title is the plan's declared
   release will publish the fixed text; 1.5.0's notes are copied into `docs/releases/` by hand.
 - The leaf timeouts, the pull-request list limit and the follow heartbeat are verified by tests,
   not by a shell flow (E).
-- `last job telemetry:` prints a job with no work item as `None` (`(FAILED, None)`), while the
-  `jobs:` lines say `work item none`.
-- `status` on a runtime root with no state writes `identity.json` there, as 1.4.2 does, although
-  `commands.md` says it writes nothing there. This predates the milestone.
 - The resume error text printed by a drain detach (F) names `workflow-controller resume <repo>`
   without `--runtime-dir`, by design (CP5 kept the error texts); the activity hint carries it.
 - A Git identity kept only in `$XDG_CONFIG_HOME/git/config` is not seen by the test suite, which

@@ -414,6 +414,22 @@ class CleanTest(_TempSettings):
         expected["routing"]["roles"]["review-plan"] = {"model": "x"}
         self.assertEqual(_read(self.path), expected)
 
+    def test_clean_removes_an_unknown_dotted_role_named_after_a_known_one(self) -> None:
+        # ``routing.roles.review-plan.future`` reads as the unknown role
+        # ``review-plan.future`` or as ``review-plan``'s field ``future``.
+        for roles in ({"review-plan.future": {"model": "m"}},
+                      {"review-plan.future": {"model": "m"}, "review-plan": {"model": "x", "future": 1}}):
+            with self.subTest(roles=sorted(roles)):
+                data = _defaults_file()
+                data["routing"]["roles"] = roles
+                _write(self.path, data)
+                _loaded, removed = settings.clean(self.path)
+                self.assertEqual(removed, ["routing.roles.review-plan.future"])
+                expected = _defaults_file()
+                expected["routing"]["roles"] = {"review-plan": {"model": "x"}} if "review-plan" in roles else {}
+                self.assertEqual(_read(self.path), expected)
+                self.assertEqual(settings.load(self.path).unknown, ())
+
     def test_clean_fills_a_missing_file(self) -> None:
         loaded, removed = settings.clean(self.path)
         self.assertEqual(removed, [])

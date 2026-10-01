@@ -48,7 +48,7 @@ import hashlib
 import json
 import os
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -195,24 +195,27 @@ def _drop(data: dict, segments: tuple[str, ...]) -> None:
         node.pop(segments[-1], None)
 
 
-def _routing_segments(dotted: str) -> tuple[str, ...]:
-    """The segments of a dotted path :func:`routing.validate_routing_mapping`
-    left out. Role names may hold a dot only when unknown, so an unknown
-    role's path is ``routing.roles.<the rest>`` unless the rest starts with
-    a known role (then it is that role's unknown field)."""
-    rest = dotted.removeprefix(ROUTING_KEY + ".")
-    for section in ("default", "roles"):
-        prefix = section + "."
-        if not rest.startswith(prefix):
-            continue
-        tail = rest.removeprefix(prefix)
-        if section == "default":
-            return (ROUTING_KEY, "default", tail)
-        for role in routing.ROLES:
-            if tail.startswith(role + "."):
-                return (ROUTING_KEY, "roles", role, tail.removeprefix(role + "."))
-        return (ROUTING_KEY, "roles", tail)
-    return (ROUTING_KEY, rest)
+def _routing_unknown(section: Mapping, ignored: Sequence[str]) -> list[tuple[str, tuple[str, ...]]]:
+    """Each dotted path :func:`routing.validate_routing_mapping` left out of
+    the routing ``section``, with the segments of every key of the section
+    it names. A dotted role name is unknown, so ``roles.review-plan.x``
+    reads as the role ``review-plan.x`` or as ``review-plan``'s field
+    ``x``: each reading present in ``section`` is listed, both when both
+    are (the path is reported once and both are removed)."""
+    found: list[tuple[str, tuple[str, ...]]] = []
+    for dotted in dict.fromkeys(ignored):
+        rest = dotted.removeprefix(ROUTING_KEY + ".")
+        readings = [(rest,)]
+        for name in ("default", "roles"):
+            if rest.startswith(name + "."):
+                tail = rest.removeprefix(name + ".")
+                readings.append((name, tail))
+                if name == "roles":
+                    readings.extend(("roles", role, tail.removeprefix(role + "."))
+                                    for role in sorted(routing.ROLES) if tail.startswith(role + "."))
+        found.extend((dotted, (ROUTING_KEY, *segments)) for segments in readings
+                     if _lookup(section, segments)[0])
+    return found
 
 
 def _same(left: Any, right: Any) -> bool:
@@ -325,7 +328,7 @@ def _validate(data: dict, path: Path) -> _Checked:
             continue
         if setting.type == TYPE_ROUTING:
             routing_config, ignored = _check_routing(path, value)
-            unknown.extend((dotted, _routing_segments(dotted)) for dotted in ignored)
+            unknown.extend(_routing_unknown(value, ignored))
             value = routing_mapping(routing_config)
         else:
             _check_setting(path, setting, value)
@@ -387,7 +390,7 @@ def _settings_file(path: Path, raw: bytes | None) -> tuple[SettingsFile, dict, _
     loaded = SettingsFile(
         path=path, exists=raw is not None, sha256=None if raw is None else hashlib.sha256(raw).hexdigest(),
         values=checked.values, routing_config=checked.routing_config,
-        unknown=tuple(dotted for dotted, _ in checked.unknown), table_generation=checked.table_generation,
+        unknown=tuple(dict.fromkeys(dotted for dotted, _ in checked.unknown)), table_generation=checked.table_generation,
     )
     return loaded, data, checked
 
@@ -525,7 +528,7 @@ def clean(path: Path) -> tuple[SettingsFile, list[str]]:
             _drop(new, segments)
             for key in [key for key in new[_DEFAULTS_WRITTEN] if key == dotted or key.startswith(dotted + ".")]:
                 del new[_DEFAULTS_WRITTEN][key]
-        return _rewrite(path, raw, data, new), [dotted for dotted, _ in unknown]
+        return _rewrite(path, raw, data, new), list(dict.fromkeys(dotted for dotted, _ in unknown))
 
 
 # ---------------------------------------------------------------------------

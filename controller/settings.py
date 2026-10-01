@@ -200,19 +200,27 @@ def _routing_unknown(section: Mapping, ignored: Sequence[str]) -> list[tuple[str
     the routing ``section``, with the segments of every key of the section
     it names. A dotted role name is unknown, so ``roles.review-plan.x``
     reads as the role ``review-plan.x`` or as ``review-plan``'s field
-    ``x``: each reading present in ``section`` is listed, both when both
-    are (the path is reported once and both are removed)."""
+    ``x``: each reading present in ``section`` whose last segment is
+    unknown at its own level is listed, both when both are (the path is
+    reported once and both are removed). A reading naming a known key --
+    ``roles.review-plan.model`` beside the role ``review-plan.model`` --
+    is never listed."""
     found: list[tuple[str, tuple[str, ...]]] = []
     for dotted in dict.fromkeys(ignored):
         rest = dotted.removeprefix(ROUTING_KEY + ".")
-        readings = [(rest,)]
-        for name in ("default", "roles"):
-            if rest.startswith(name + "."):
-                tail = rest.removeprefix(name + ".")
-                readings.append((name, tail))
-                if name == "roles":
-                    readings.extend(("roles", role, tail.removeprefix(role + "."))
-                                    for role in sorted(routing.ROLES) if tail.startswith(role + "."))
+        readings = [(rest,)] if rest not in routing.SECTION_KEYS else []
+        if rest.startswith("default."):
+            field = rest.removeprefix("default.")
+            if field not in routing.FIELDS:
+                readings.append(("default", field))
+        if rest.startswith("roles."):
+            tail = rest.removeprefix("roles.")
+            if tail not in routing.ROLES:
+                readings.append(("roles", tail))
+            for role in sorted(routing.ROLES):
+                field = tail.removeprefix(role + ".")
+                if tail.startswith(role + ".") and field not in routing.FIELDS:
+                    readings.append(("roles", role, field))
         found.extend((dotted, (ROUTING_KEY, *segments)) for segments in readings
                      if _lookup(section, segments)[0])
     return found
@@ -524,9 +532,12 @@ def clean(path: Path) -> tuple[SettingsFile, list[str]]:
             )
         new = _filled(data)
         unknown = _validate(new, path).unknown
-        for dotted, segments in unknown:
+        for _dotted, segments in unknown:
             _drop(new, segments)
-            for key in [key for key in new[_DEFAULTS_WRITTEN] if key == dotted or key.startswith(dotted + ".")]:
+            # By segments, not the dotted form: a top-level key named
+            # ``worker.timeout_seconds`` is not the known setting's record.
+            for key in [key for key in new[_DEFAULTS_WRITTEN]
+                        if _segments(key)[:len(segments)] == segments]:
                 del new[_DEFAULTS_WRITTEN][key]
         return _rewrite(path, raw, data, new), list(dict.fromkeys(dotted for dotted, _ in unknown))
 

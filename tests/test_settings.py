@@ -430,6 +430,40 @@ class CleanTest(_TempSettings):
                 self.assertEqual(_read(self.path), expected)
                 self.assertEqual(settings.load(self.path).unknown, ())
 
+    def test_clean_keeps_a_known_value_whose_path_an_unknown_dotted_key_shares(self) -> None:
+        # The unknown role ``review-plan.model`` and the unknown routing key
+        # ``default.effort`` share a dotted path with a known, valid value.
+        cases = (
+            ("routing.roles.review-plan.model",
+             {"default": {}, "roles": {"review-plan": {"model": "opus"}, "review-plan.model": {"model": "x"}}},
+             {"default": {}, "roles": {"review-plan": {"model": "opus"}}}),
+            ("routing.default.effort",
+             {"default": {"effort": "high"}, "default.effort": 1, "roles": {}},
+             {"default": {"effort": "high"}, "roles": {}}),
+        )
+        for dotted, section, kept in cases:
+            with self.subTest(dotted=dotted):
+                data = _defaults_file()
+                data["routing"] = section
+                _write(self.path, data)
+                _loaded, removed = settings.clean(self.path)
+                self.assertEqual(removed, [dotted])
+                expected = _defaults_file()
+                expected["routing"] = kept
+                self.assertEqual(_read(self.path), expected)
+                self.assertEqual(settings.load(self.path).unknown, ())
+
+    def test_clean_keeps_the_record_of_a_known_key_an_unknown_dotted_key_names(self) -> None:
+        # A top-level key named ``worker.timeout_seconds`` is unknown; the
+        # known setting's ``_defaults_written`` record must survive it.
+        data = _defaults_file()
+        data["worker.timeout_seconds"] = 5
+        _write(self.path, data)
+        _loaded, removed = settings.clean(self.path)
+        self.assertEqual(removed, ["worker.timeout_seconds"])
+        self.assertEqual(_read(self.path), _defaults_file())
+        self.assertEqual(settings.load(self.path).unknown, ())
+
     def test_clean_fills_a_missing_file(self) -> None:
         loaded, removed = settings.clean(self.path)
         self.assertEqual(removed, [])

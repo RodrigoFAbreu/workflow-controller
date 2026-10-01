@@ -471,6 +471,23 @@ Four things, each opt-in or behaviour-preserving by default:
   `tests.test_golden_plan_stage_decisions` passes. `git diff a47e695 -- .workflow-controller/
   pyproject.toml setup.py .github/workflows/` is empty.
 
+### Implementation review round 1 fixes
+
+The manual external review of implementation revision 1 returned `REVISE` with two Important
+findings, both reproduced before fixing:
+- `4d87e48`: `settings clean` reported an unknown dotted role such as
+  `routing.roles.review-plan.future` as removed but left it, because the path decoder read it as
+  `review-plan`'s field. Unknown routing paths are now decoded against the section, every
+  reading present is removed, and the path is reported once.
+- `c5b00e7`: opted in, a publish that lost the tag-push race to a same-commit tag kept its own
+  rendered notes and skipped verification. The race path now verifies the winning remote tag as
+  a `RESUME` does (`gitrepo.remote_tag_message`, which writes no ref); a lightweight tag or other
+  notes refuse before the release is created. The `create_annotated_tag` docstring wording
+  (Optional) is fixed in the same commit; LIR1-O1 (exact end-marker matching) follows the
+  approved plan and is unchanged.
+- Verified: the full sharded suite passed (2691 tests, 6 shards, exact coverage, exit 0, under a
+  reaping subreaper); the three golden `--check` runs and `tools/ci_workflows.py --check` exit 0.
+
 ## Release notes
 
 ### Settings, telemetry and release notes from the milestone (1.5.0)

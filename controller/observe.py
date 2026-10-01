@@ -49,11 +49,15 @@ from controller import job, worker
 POLL_SECONDS = 0.2
 
 #: Silence, while a job is ``LAUNCHED``, before a heartbeat line is printed
-#: (and between two heartbeats). Tests override it.
+#: (and between two heartbeats). Tests override it. The built-in default of
+#: the ``follow.heartbeat_seconds`` setting, which :func:`follow_run` and
+#: :func:`follow_job` take as ``heartbeat_seconds`` (settings-and-telemetry
+#: CP2).
 HEARTBEAT_SECONDS = 30.0
 
 #: How many presentation events ``follow`` replays before going live
-#: without ``--from-start``.
+#: without ``--from-start``. The built-in default of the
+#: ``follow.replay_events`` setting (``replay_events``).
 REPLAY_EVENTS = 20
 
 #: How long a follower keeps draining after the record it follows reads
@@ -581,8 +585,10 @@ class _Follower:
     one-time warnings."""
 
     def __init__(self, runtime_root: Path, sink: Callable[[str], Any], *, json_output: bool,
-                 stop: Any) -> None:
+                 stop: Any, heartbeat_seconds: float | None = None, replay_events: int | None = None) -> None:
         self.runtime_root = Path(runtime_root)
+        self.heartbeat_seconds = HEARTBEAT_SECONDS if heartbeat_seconds is None else heartbeat_seconds
+        self.replay_events = REPLAY_EVENTS if replay_events is None else replay_events
         self.sink = sink
         self.render = render_json if json_output else render_text
         self.stop = stop
@@ -690,7 +696,10 @@ class _Follower:
             self.last_event = time.monotonic()
 
     def replay(self, events: list[dict], *, from_start: bool) -> None:
-        self.emit(events if from_start else events[-REPLAY_EVENTS:])
+        if from_start:
+            self.emit(events)
+        elif self.replay_events > 0:
+            self.emit(events[-self.replay_events:])
 
     def say(self, message: str) -> None:
         self.sink(self.render(notice(message)))
@@ -702,7 +711,7 @@ class _Follower:
 
     def heartbeat(self, record: Mapping | None) -> None:
         """While ``record``'s job is ``LAUNCHED`` and nothing new arrived for
-        :data:`HEARTBEAT_SECONDS`: what the worker is doing. A record
+        ``heartbeat_seconds``: what the worker is doing. A record
         carrying ``worker_state`` (worker-lifecycle-ownership CP7) is
         described by :func:`job_activity` while it is not terminal --
         ``WAITING`` included."""
@@ -712,7 +721,7 @@ class _Follower:
         if record.get("status") != job.STATUS_LAUNCHED and not tracked:
             return
         now = time.monotonic()
-        if now - self.last_event < HEARTBEAT_SECONDS or now - self.last_heartbeat < HEARTBEAT_SECONDS:
+        if now - self.last_event < self.heartbeat_seconds or now - self.last_heartbeat < self.heartbeat_seconds:
             return
         self.last_heartbeat = now
         if tracked:
@@ -744,7 +753,8 @@ class _Follower:
 
 
 def follow_run(runtime_root: Path, run_id: str, sink: Callable[[str], Any], *, from_start: bool = False,
-               stop: Any = None, json_output: bool = False) -> None:
+               stop: Any = None, json_output: bool = False, heartbeat_seconds: float | None = None,
+               replay_events: int | None = None) -> None:
     """Follow run ``run_id`` into ``sink`` (called with each rendered line):
     the run's events, and each of its jobs' events, ``worker.stdout`` and
     ``worker.stderr``.
@@ -755,8 +765,11 @@ def follow_run(runtime_root: Path, run_id: str, sink: Callable[[str], Any], *, f
     current job's worker is still ``active``, which is then followed as
     :func:`follow_job` would. ``stop`` (a ``threading.Event``) ends it
     after one final drain. Without ``from_start`` only the last
-    :data:`REPLAY_EVENTS` events already written are shown."""
-    follower = _Follower(runtime_root, sink, json_output=json_output, stop=stop)
+    ``replay_events`` (``None``: :data:`REPLAY_EVENTS`) events already
+    written are shown; ``heartbeat_seconds`` (``None``:
+    :data:`HEARTBEAT_SECONDS`) is the heartbeat's silence."""
+    follower = _Follower(runtime_root, sink, json_output=json_output, stop=stop,
+                         heartbeat_seconds=heartbeat_seconds, replay_events=replay_events)
     follower.add_run(run_id)
     record = read_run(runtime_root, run_id) or {}
     for job_id in record.get("job_ids") or []:
@@ -799,7 +812,8 @@ def follow_run(runtime_root: Path, run_id: str, sink: Callable[[str], Any], *, f
 
 
 def follow_job(runtime_root: Path, job_id: str, sink: Callable[[str], Any], *, from_start: bool = False,
-               stop: Any = None, json_output: bool = False) -> None:
+               stop: Any = None, json_output: bool = False, heartbeat_seconds: float | None = None,
+               replay_events: int | None = None) -> None:
     """Follow job ``job_id`` into ``sink``: its events, ``worker.stdout``
     and ``worker.stderr``. Ends, after draining every log, when the job
     record is terminal, or when it is not and its worker is no longer
@@ -808,8 +822,10 @@ def follow_job(runtime_root: Path, job_id: str, sink: Callable[[str], Any], *, f
     finishes it. An ``unverifiable`` worker keeps it following, with a
     one-time warning. A record carrying ``worker_state`` ends only at its
     terminal record, or once nothing but ``resume`` can advance it
-    (:func:`_follow_tracked_job`)."""
-    follower = _Follower(runtime_root, sink, json_output=json_output, stop=stop)
+    (:func:`_follow_tracked_job`). ``heartbeat_seconds`` and
+    ``replay_events`` are :func:`follow_run`'s."""
+    follower = _Follower(runtime_root, sink, json_output=json_output, stop=stop,
+                         heartbeat_seconds=heartbeat_seconds, replay_events=replay_events)
     follower.add_job(job_id)
     follower.replay(follower.poll(), from_start=from_start)
     _follow_job_loop(follower, job_id)
@@ -1126,7 +1142,9 @@ def job_activity(record: Mapping, runtime_root: Path, *, last_event_seconds: flo
         elif not verifiable:
             text += "; its owned processes cannot be verified from here"
         if record.get("drain_detached_at"):
-            text += (f"; detached after {_minutes(worker.DRAIN_DETACH_SECONDS)} -- end them, then {resume}")
+            # Settings-and-telemetry CP2: the bound the drain applied, as
+            # recorded, never this invocation's setting.
+            text += (f"; detached after {_minutes(job.applied_drain_bound(record))} -- end them, then {resume}")
     else:
         activity = ACTIVITY_PENDING
         outcome = record.get("worker_outcome") or "not classified"

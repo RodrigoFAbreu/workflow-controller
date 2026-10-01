@@ -122,6 +122,37 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "controller_settings": {
+            "path": "<TMP>/bootstrap_step/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
+          },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
@@ -264,6 +295,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": null,
             "fresh_session": true,
             "model": null,
@@ -470,6 +502,37 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
+          },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
@@ -612,6 +675,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -655,6 +719,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -803,6 +898,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -846,6 +942,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -996,6 +1123,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1039,6 +1167,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -1191,6 +1350,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1234,6 +1394,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -1387,6 +1578,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1430,6 +1622,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -1582,6 +1805,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1925,6 +2149,37 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "controller_settings": {
+            "path": "<TMP>/unborn_head_step/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
+          },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
@@ -2067,6 +2322,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": null,
             "fresh_session": true,
             "model": null,

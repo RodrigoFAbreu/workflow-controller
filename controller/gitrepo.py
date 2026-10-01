@@ -32,20 +32,34 @@ from .errors import GitOperationError
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess]
 
 #: Generous: a fetch or push over a slow network is still a bounded wait.
+#: The built-in default of the ``timeouts.git_seconds`` setting.
 DEFAULT_TIMEOUT_SECONDS = 600
+
+#: The process-wide ``timeouts.git_seconds``, set once by ``cli.main``
+#: through ``settings.apply_process_defaults`` (settings-and-telemetry
+#: CP2); ``None`` is :data:`DEFAULT_TIMEOUT_SECONDS`.
+process_timeout_seconds: float | None = None
+
+
+def timeout_seconds() -> float:
+    """The git and ``gh`` timeout in force, read at call time."""
+    return DEFAULT_TIMEOUT_SECONDS if process_timeout_seconds is None else process_timeout_seconds
 
 
 def subprocess_runner(env: dict[str, str] | None = None, *,
-                      timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Runner:
+                      timeout: float | None = None) -> Runner:
     """A runner executing ``argv`` for real, with stdin closed, bytes output,
     ``LC_ALL=C`` (so stderr fragments are stable) and no credential or
-    terminal prompt. ``env`` replaces ``os.environ`` as the base."""
+    terminal prompt. ``env`` replaces ``os.environ`` as the base.
+    ``timeout`` ``None`` is :func:`timeout_seconds`, read when the runner
+    runs, so a runner built at import applies the value set later."""
     base = dict(os.environ if env is None else env)
     base.update({"LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0", "GH_PROMPT_DISABLED": "1"})
 
     def run(argv: Sequence[str]) -> subprocess.CompletedProcess:
         return subprocess.run(list(argv), capture_output=True, stdin=subprocess.DEVNULL,
-                              check=False, env=base, timeout=timeout)
+                              check=False, env=base,
+                              timeout=timeout_seconds() if timeout is None else timeout)
 
     return run
 

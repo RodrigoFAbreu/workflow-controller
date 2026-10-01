@@ -558,6 +558,38 @@ class HeartbeatTest(_FollowCase):
         self.assertFalse(any(body.startswith("worker running") for body in bodies))
 
 
+class FollowSettingsTest(_FollowCase):
+    """Settings-and-telemetry CP2: ``follow.heartbeat_seconds`` and
+    ``follow.replay_events`` reach the follower as parameters, the module
+    constants staying the built-in defaults."""
+
+    def test_the_heartbeat_parameter_beats_the_constant(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self.write_job("j1", worker_process=process_fixtures.worker_process_dict(sleeper.pid))
+        stop = threading.Event()
+        # The constant stays at 30 s: only the parameter can produce a
+        # heartbeat within the wait below.
+        thread = self.in_thread(observe.follow_job, self.runtime_root, "j1", self.sink, stop=stop,
+                                heartbeat_seconds=0.2)
+        self.assertTrue(process_fixtures.wait_until(lambda: len(self.lines) >= 2))
+        stop.set()
+        thread.join(10)
+        self.assertRegex(self.bodies()[0], r"^worker running: pid \d+")
+
+    def test_the_replay_parameter_bounds_the_replay(self) -> None:
+        self.write_run("r1", state="ended", exit_code=0, job_ids=[])
+        for seq in range(1, 6):
+            self.run_event("r1", seq, "step_started", n=seq)
+        for replay_events, expected in ((2, ["step 4", "step 5"]), (0, []), (None, [f"step {n}" for n in range(1, 6)])):
+            with self.subTest(replay_events=replay_events):
+                self.lines.clear()
+                follower = observe._Follower(self.runtime_root, self.sink, json_output=False, stop=None,
+                                             replay_events=replay_events)
+                follower.add_run("r1")
+                follower.replay(follower.poll(), from_start=False)
+                self.assertEqual([body for body in self.bodies() if body.startswith("step ")], expected)
+
+
 # ---------------------------------------------------------------------------
 # worker-lifecycle-ownership CP7: the job activity presenter (plan G).
 # ---------------------------------------------------------------------------
@@ -741,6 +773,24 @@ class JobActivityTest(_ActivityCase):
                          f"-- end them, then workflow-controller resume /repo; not owned: pid {daemon.pid} "
                          f"({self.daemon_entry(daemon)['cmdline']})")
         self.assertEqual([entry["pid"] for entry in activity["not_owned"]], [daemon.pid])
+
+    def test_a_recorded_drain_bound_is_printed_not_the_constant(self) -> None:
+        # Settings-and-telemetry CP2: the bound the drain applied, recorded
+        # as `drain_detach_seconds`, is what `status` and `follow` print in
+        # any later invocation; the test above, with no recorded bound (an
+        # older record), prints the constant.
+        self.attach()
+        owned = process_fixtures.spawn_sleeper(self)
+        self.tracked_job(state=worker.DRAINING, worker_process=self.dead_process(), owned=(owned,),
+                         drain_detached_at="2026-01-01T00:10:00Z", drain_detach_seconds=120)
+        self.assertIn("; detached after 2:00 -- end them, then workflow-controller resume /repo",
+                      self.activity()["text"])
+        sink: list[str] = []
+        follower = observe._Follower(self.runtime_root, sink.append, json_output=False, stop=None,
+                                     heartbeat_seconds=0)
+        follower.last_event = 0.0
+        follower.heartbeat(observe.read_job(self.runtime_root, "j1"))
+        self.assertIn("detached after 2:00", "\n".join(sink))
 
     def test_pending_reconciliation(self) -> None:
         for status, outcome, expected in ((job.STATUS_COMPLETED, "SUCCESS", "SUCCESS"),

@@ -990,6 +990,7 @@ class WorkerRouteTest(unittest.TestCase):
         expected = {
             "role": "milestone-plan", "model": None, "effort": None, "single_agent": False,
             "fresh_session": True, "sources": {"model": "inherit", "effort": "inherit"},
+            "config_source": "none",
         }
         self.assertEqual(writes[0]["status"], job.STATUS_PLANNED)
         for write in writes:

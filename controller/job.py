@@ -2737,7 +2737,8 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
                     details=_reconciled_details(reconciled))
 
 
-def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord]:
+def resume(managed_repo: Any, *, identity: Any, runtime: Path,
+           drain_detach_seconds: float | None = None) -> list[JobRecord]:
     """Restart reconciliation: load every job record this Controller ever
     wrote for ``managed_repo`` (``<runtime>/jobs/*.json`` whose own
     ``target_repo`` equals ``str(managed_repo.root)`` -- the runtime root
@@ -2812,14 +2813,18 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path) -> list[JobRecord
     Phase 2 is today's path under the lifecycle lock, with the ownership
     hold generalised (:func:`_owned_work_hold`): a ``LAUNCHED`` or
     ``COMPLETED`` record whose worker or any owned process is alive, or
-    whose ownership scan is unverifiable, is never reconciled."""
+    whose ownership scan is unverifiable, is never reconciled.
+
+    ``drain_detach_seconds`` (settings-and-telemetry CP2) bounds phase 1's
+    re-attached drain (``None``: :data:`worker.DRAIN_DETACH_SECONDS`)."""
     if not managed_repo.root.is_dir():
         return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
     # Worker-lifecycle-ownership CP5 (plan E): phase 1, the supervision
     # pre-pass, runs before the lifecycle lock -- the recorded anchor holds
     # that lock for as long as the worker or its owned work lives -- and
     # only then phase 2, today's reconciliation under the lock.
-    _supervise_records(managed_repo, identity=identity, runtime_root=runtime)
+    _supervise_records(managed_repo, identity=identity, runtime_root=runtime,
+                       drain_detach_seconds=drain_detach_seconds)
     with _acquire_lifecycle_lock(runtime, managed_repo):
         return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
 
@@ -3526,17 +3531,20 @@ def _supervision_candidate(path: Path, managed_repo: Any, identity: Any, *, vali
     return record
 
 
-def _supervise_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> None:
+def _supervise_records(managed_repo: Any, *, identity: Any, runtime_root: Path,
+                       drain_detach_seconds: float | None = None) -> None:
     """Phase 1 of :func:`resume`: under each candidate job's supervisor lock
     (never the lifecycle lock), :func:`_supervise_record`. Only one job per
     target can have held the lifecycle lock at a time, so at most one is
     actually re-attached to."""
     for path in _job_file_paths(runtime_root):
         if _supervision_candidate(path, managed_repo, identity) is not None:
-            _supervise_record(managed_repo, identity=identity, runtime_root=runtime_root, path=path)
+            _supervise_record(managed_repo, identity=identity, runtime_root=runtime_root, path=path,
+                              drain_detach_seconds=drain_detach_seconds)
 
 
-def _supervise_record(managed_repo: Any, *, identity: Any, runtime_root: Path, path: Path) -> None:
+def _supervise_record(managed_repo: Any, *, identity: Any, runtime_root: Path, path: Path,
+                      drain_detach_seconds: float | None = None) -> None:
     """One phase-1 record, under its supervisor lock (plan E, "Re-attach").
     Another Controller attached -> exit 45 naming it, nothing touched. A
     ``COMPLETED`` record is left to phase 2. A ``LAUNCHED`` one:
@@ -3553,7 +3561,8 @@ def _supervise_record(managed_repo: Any, *, identity: Any, runtime_root: Path, p
       owned work with the same bound, end the anchor, and leave the record
       to phase 2's fail-closed ``_reconcile_launched`` (I7).
 
-    A drain that outlives :data:`worker.DRAIN_DETACH_SECONDS` detaches as
+    A drain that outlives ``drain_detach_seconds`` (``None``:
+    :data:`worker.DRAIN_DETACH_SECONDS`) detaches as
     ``execute_step`` does: ``drain_detached_at`` and
     ``worker_drain_detached`` are written, the supervisor lock released and
     :class:`~controller.errors.OwnedWorkDetachedError` raised (exit 45)."""
@@ -3578,7 +3587,8 @@ def _supervise_record(managed_repo: Any, *, identity: Any, runtime_root: Path, p
         if leader is None:
             return
         alive = assessment.verdict == worker.ACTIVE and leader
-        _reattach(runtime_root, root, record, streams, classify=alive or record.get("ending_offset") is not None)
+        _reattach(runtime_root, root, record, streams, classify=alive or record.get("ending_offset") is not None,
+                  drain_detach_seconds=drain_detach_seconds)
 
 
 def _refuse_unrecorded_worker(record: JobRecord, root: Path) -> None:
@@ -3613,7 +3623,8 @@ def anchor_orphan_seconds() -> float:
     return worker.anchor_module.ANCHOR_ORPHAN_SECONDS
 
 
-def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mapping, *, classify: bool) -> None:
+def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mapping, *, classify: bool,
+              drain_detach_seconds: float | None = None) -> None:
     """Run :func:`worker.reattach` for ``record``, persisting each
     ``on_state_change`` exactly as ``execute_step`` does (the record stays
     ``LAUNCHED``), then the drain detach, or ``COMPLETED`` (after
@@ -3643,7 +3654,7 @@ def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mappin
         command_lifecycle_overdue_declared_at=record.get("command_lifecycle_overdue_declared_at"),
         command_lifecycle_overdue_command_uuid=record.get("command_lifecycle_overdue_command_uuid"),
         settled_wakeups=settled if isinstance(settled, list) else (),
-        on_state_change=on_state_change, classify=classify,
+        on_state_change=on_state_change, classify=classify, drain_detach_seconds=drain_detach_seconds,
     )
     record = current["record"]
     if isinstance(result, worker.DrainDetached):
@@ -3675,14 +3686,18 @@ def _record_drain_detached(runtime_root: Path, root: Path, job_id: str, record: 
     record = _with_worker_state(record, worker.DRAINING, {
         **result.worker_state, "supervisor_facts": result.supervisor_facts,
     })
-    record = {**record, "drain_detached_at": result.drain_detached_at}
+    # Settings-and-telemetry CP2: the bound this drain applied, next to
+    # `drain_detached_at`, so every message printing it -- this one and
+    # `status`/`follow`'s, in any later invocation -- prints the real one.
+    record = {**record, "drain_detached_at": result.drain_detached_at,
+              "drain_detach_seconds": result.drain_detach_seconds}
     remaining = [{"pid": entry.get("pid"), "cmdline": entry.get("cmdline")} for entry in result.remaining]
     _persist(runtime_root, job_id, record, event="worker_drain_detached", details={
         "drain_detached_at": result.drain_detached_at, "remaining": remaining,
     })
     raise OwnedWorkDetachedError(
         f"worker pid {worker_pid} exited, but {len(remaining)} owned "
-        f"process(es) are still running after {worker.DRAIN_DETACH_SECONDS} s: "
+        f"process(es) are still running after {applied_drain_bound(record)} s: "
         + ", ".join(f"{entry['pid']} ({entry['cmdline']})" for entry in remaining)
         + f" -- job {job_id} stays held (LAUNCHED, DRAINING); either run "
         f"`{_resume_command(root)}` to re-attach and keep draining, or end them, "
@@ -3690,6 +3705,16 @@ def _record_drain_detached(runtime_root: Path, root: Path, job_id: str, record: 
         evidence={"job_id": job_id, "drain_detached_at": result.drain_detached_at,
                   "remaining": list(result.remaining)},
     )
+
+
+def applied_drain_bound(record: Mapping) -> Any:
+    """The drain bound ``record``'s detached drain applied: its recorded
+    ``drain_detach_seconds``, or, for a record written before the field
+    existed, :data:`worker.DRAIN_DETACH_SECONDS`."""
+    recorded = record.get("drain_detach_seconds")
+    if isinstance(recorded, (int, float)) and not isinstance(recorded, bool):
+        return recorded
+    return worker.DRAIN_DETACH_SECONDS
 
 
 def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path, path: Path,
@@ -4481,6 +4506,8 @@ def execute_step(
     claude_bin: str | None = None,
     routing: routing.RoutingOptions = routing.NO_OVERRIDES,
     run_id: str | None = None,
+    drain_detach_seconds: float | None = None,
+    controller_settings: Mapping | None = None,
 ) -> JobRecord | Decision:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -4508,13 +4535,21 @@ def execute_step(
     recorded as the job record's additive ``run_id``, and when that run is
     open in this process (:func:`open_run`) the job's start and end are
     mirrored into its log. Every job-record write also appends its named
-    event to ``jobs/<job_id>/events.jsonl`` (:func:`_persist`)."""
+    event to ``jobs/<job_id>/events.jsonl`` (:func:`_persist`).
+
+    ``drain_detach_seconds`` (settings-and-telemetry CP2) bounds the
+    launched worker's owned-process drain (``None``:
+    :data:`worker.DRAIN_DETACH_SECONDS`). ``controller_settings``, when
+    given, is recorded as the launched job's optional
+    ``controller_settings`` block (the settings file's path and digest, and
+    each effective value with its source)."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
             managed_repo, work_item_id=work_item_id, identity=identity, runtime=runtime,
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
             lifecycle_lock=lifecycle_lock, routing=routing, run_id=run_id,
+            drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
         )
 
 
@@ -4572,6 +4607,8 @@ def _execute_step_locked(
     lifecycle_lock: lock.LifecycleLock,
     routing: routing.RoutingOptions,
     run_id: str | None = None,
+    drain_detach_seconds: float | None = None,
+    controller_settings: Mapping | None = None,
 ) -> JobRecord | Decision:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -4713,12 +4750,19 @@ def _execute_step_locked(
         "lifecycle_lock": {"path": str(lifecycle_lock.path)},
         # CP6: the resolved route -- role, model, effort, single-agent, and
         # where each field came from -- which the launch below applies.
-        "worker_route": route.to_record(),
+        # Settings-and-telemetry CP2: `config_source` says which routing
+        # config was in force (the settings file's section, --routing-config,
+        # or none).
+        "worker_route": {**route.to_record(), "config_source": routing.config_source},
         "created_at": now,
         "updated_at": now,
     }
     if run_id is not None:
         record["run_id"] = run_id
+    if controller_settings is not None:
+        # Settings-and-telemetry CP2: optional, additive (SCHEMA_VERSION
+        # stays 1); readers tolerate its absence.
+        record["controller_settings"] = dict(controller_settings)
     if binding is not None:
         # CP8 (trunk-branch-pr-release-orchestration): the governing
         # binding and the pre-step tip the post-step verification checks
@@ -4739,6 +4783,7 @@ def _execute_step_locked(
             resolved_work_item_id=resolved_work_item_id, governing_workflow_version=governing_workflow_version,
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
             lifecycle_lock=lifecycle_lock, supervisor_lock_path=supervisor_lock_path,
+            drain_detach_seconds=drain_detach_seconds,
         )
 
 
@@ -4842,6 +4887,7 @@ def _launch_job(
     claude_bin: str | None,
     lifecycle_lock: lock.LifecycleLock,
     supervisor_lock_path: Path,
+    drain_detach_seconds: float | None = None,
 ) -> JobRecord:
     """Steps 4 (from the LAUNCHED flush) to 9 of :func:`execute_step`,
     under the job's supervisor lock."""
@@ -4965,6 +5011,7 @@ def _launch_job(
             ownership_tag=job_id,
             supervisor_lock_path=supervisor_lock_path,
             on_state_change=on_state_change,
+            drain_detach_seconds=drain_detach_seconds,
         )
     except (UserOnlyCommandError, WorkerLaunchError) as exc:
         if "worker_process" not in spawned:

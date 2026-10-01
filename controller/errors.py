@@ -501,8 +501,9 @@ class LifecycleWorkerUnverifiableError(LifecycleWorkerActiveError):
 
 class OwnedWorkDetachedError(LifecycleWorkerActiveError):
     """``step``'s worker exited, but processes it owned were still alive
-    after ``controller.worker.DRAIN_DETACH_SECONDS``
-    (``workflow-controller-worker-lifecycle-ownership`` plan D). Nothing was
+    after the drain bound (the ``worker.drain_detach_seconds`` setting,
+    recorded as the job's ``drain_detach_seconds``;
+    ``workflow-controller-worker-lifecycle-ownership`` plan D). Nothing was
     ended: the job record stays ``LAUNCHED`` at ``worker_state:
     DRAINING`` with ``drain_detached_at``, the stdin anchor keeps the
     lifecycle lock, and the job stays held until ``resume`` drains it.

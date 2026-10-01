@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import tests  # noqa: E402
+from tests import fixtures  # noqa: E402
 from controller import cli, routing, runtime, settings  # noqa: E402
 from controller.errors import RoutingConfigError, SettingsError  # noqa: E402
 
@@ -785,3 +786,132 @@ class IsolationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# CP2 (Design B): the process-wide leaf values.
+# ---------------------------------------------------------------------------
+
+
+def _completed(argv, *, stdout=b"", returncode=0):
+    return subprocess.CompletedProcess(list(argv), returncode, stdout=stdout, stderr=b"")
+
+
+class ProcessDefaultsTest(unittest.TestCase):
+    """The four leaf settings with no options path are process-wide values
+    each leaf module reads at call time (LPR5-002): a runner or forge built
+    before :func:`settings.apply_process_defaults` still applies the value
+    set later, and the module constant stays the built-in default."""
+
+    def setUp(self) -> None:
+        self.enterContext(settings.process_defaults({}))
+
+    def _run_timeouts(self, module, call) -> list:
+        seen = []
+
+        def run(argv, **kwargs):
+            seen.append(kwargs.get("timeout"))
+            return _completed(argv)
+
+        with mock.patch.object(module.subprocess, "run", run):
+            call()
+        return seen
+
+    def test_git_seconds_reaches_the_runner_built_at_import_and_a_forge_built_before(self) -> None:
+        from controller import forge, gitrepo
+        built_before = forge.GhForge("owner/name")
+        calls = (lambda: gitrepo._DEFAULT_RUNNER(["git", "--version"]),
+                 lambda: built_before._runner(["gh", "--version"]))
+        self.assertEqual(self._run_timeouts(gitrepo, lambda: [call() for call in calls]), [600, 600])
+        with settings.process_defaults({"timeouts.git_seconds": 75}):
+            self.assertEqual(self._run_timeouts(gitrepo, lambda: [call() for call in calls]), [75, 75])
+        # An explicit `timeout=` keeps its meaning.
+        explicit = gitrepo.subprocess_runner(timeout=5)
+        with settings.process_defaults({"timeouts.git_seconds": 75}):
+            self.assertEqual(self._run_timeouts(gitrepo, lambda: explicit(["git", "--version"])), [5])
+
+    def test_pr_list_limit_reaches_gh_pr_list(self) -> None:
+        from controller import forge
+        argvs = []
+
+        def runner(argv):
+            argvs.append(list(argv))
+            return _completed(argv, stdout=b"[]")
+
+        built_before = forge.GhForge("owner/name", runner=runner)
+        with settings.process_defaults({"forge.pr_list_limit": 123}):
+            self.assertEqual(built_before.list_prs("feature"), [])
+        built_before.list_prs("feature")
+        limits = [argv[argv.index("--limit") + 1] for argv in argvs]
+        self.assertEqual(limits, ["123", "200"])
+
+    def test_release_command_seconds_reaches_the_policy_commands(self) -> None:
+        from controller import release_txn
+        call = lambda: release_txn.run_command(["true"], {}, Path("."))  # noqa: E731
+        with settings.process_defaults({"timeouts.release_command_seconds": 90}):
+            self.assertEqual(self._run_timeouts(release_txn, call), [90])
+        self.assertEqual(self._run_timeouts(release_txn, call), [1800])
+
+    def test_workflow_query_seconds_reaches_the_query(self) -> None:
+        from types import SimpleNamespace
+
+        from controller import workflow_contract
+        seen = []
+
+        def execute(private_dir, sources, script, args, *, root, timeout, context):
+            seen.append(timeout)
+            return _completed(["query"])
+
+        contract = SimpleNamespace(release="2.6.0", query_script_sha256="0" * 64)
+        query = lambda: workflow_contract._run_query(  # noqa: E731
+            Path("."), contract, workflow_contract.STATE_SCRIPT, [], query="q", work_item_id="w")
+        with mock.patch.object(workflow_contract, "_verified_sources", return_value={}), \
+                mock.patch.object(workflow_contract, "_copy_and_execute", execute):
+            with settings.process_defaults({"timeouts.workflow_query_seconds": 45}):
+                query()
+            query()
+        self.assertEqual(seen, [45, 120.0])
+
+    def test_process_defaults_restores_what_was_there(self) -> None:
+        from controller import gitrepo
+        with settings.process_defaults({"timeouts.git_seconds": 31}):
+            with settings.process_defaults({"timeouts.git_seconds": 32}):
+                self.assertEqual(gitrepo.timeout_seconds(), 32)
+            self.assertEqual(gitrepo.timeout_seconds(), 31)
+        self.assertEqual(gitrepo.timeout_seconds(), gitrepo.DEFAULT_TIMEOUT_SECONDS)
+
+    def test_apply_process_defaults_has_one_production_caller(self) -> None:
+        """``cli._apply_settings`` is the only production call, and ``cli``'s
+        ``main`` path (``_dispatch``) its only caller -- once per invocation,
+        before any thread starts (the ``--follow`` renderer starts in
+        dispatch)."""
+        import ast
+        calls: dict[str, list[tuple[str, str]]] = {"apply_process_defaults": [], "_apply_settings": []}
+        for path in sorted((REPO_ROOT / "controller").glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for function in ast.walk(tree):
+                if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for node in ast.walk(function):
+                    if isinstance(node, ast.Call):
+                        func = node.func
+                        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+                        if name in calls:
+                            calls[name].append((path.name, function.name))
+        self.assertEqual(calls["apply_process_defaults"], [("cli.py", "_apply_settings")])
+        self.assertEqual({site for site in calls["_apply_settings"]}, {("cli.py", "_dispatch")})
+
+    def test_main_applies_the_files_values(self) -> None:
+        from controller import forge, gitrepo, release_txn, workflow_contract
+        tmp = self.enterContext(tempfile.TemporaryDirectory())
+        path = Path(tmp) / "settings.json"
+        _write(path, {"timeouts": {"git_seconds": 61, "release_command_seconds": 62,
+                                   "workflow_query_seconds": 63}, "forge": {"pr_list_limit": 64}})
+        repo = fixtures.build_target_git_repo(Path(tmp) / "repo")
+        code, out, err = _main(["--runtime-dir", str(Path(tmp) / "runtime"), "--settings", str(path),
+                                "follow", str(repo)])
+        self.assertEqual(code, 0, err)
+        self.assertEqual((gitrepo.timeout_seconds(), release_txn.command_timeout_seconds(),
+                          workflow_contract.query_timeout_seconds(), forge.pr_list_limit()), (61, 62, 63, 64))
+        # `follow` is read-only: the file was loaded, never filled.
+        self.assertNotIn("_defaults_written", _read(path))

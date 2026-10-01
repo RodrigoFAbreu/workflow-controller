@@ -80,7 +80,7 @@ stdin closed), ``DRAINING`` while owned processes outlive the worker, and
 :data:`OWNERSHIP_VAR`, the process group, adoption by the Controller as a
 child subreaper, and the record of what was already seen owned; recognised
 tool daemons (:data:`RECOGNISED_DAEMONS`) never are. The drain is bounded by
-:data:`DRAIN_DETACH_SECONDS`, after which ``launch`` returns
+``drain_detach_seconds`` (default :data:`DRAIN_DETACH_SECONDS`), after which ``launch`` returns
 :class:`DrainDetached` and ends nothing.
 
 CP5 adds :func:`reattach` (plan E): the same supervision, resumed by a
@@ -418,10 +418,11 @@ COMMAND_LIFECYCLE_GRACE_SECONDS = 300
 WAKEUP_SETTLE_SECONDS = WAKEUP_GRACE_SECONDS + worker_stream.WAKEUP_SKEW_SECONDS
 
 #: How long, after the worker exited, the supervisor waits for owned
-#: processes before it detaches (plan decision 9). It ends nothing. An
-#: interim 3-hour bound (amendment 1 of adaptive test sharding): legitimate
-#: background verification outlives 600 s. Making it configurable is
-#: deferred (ROADMAP 1.4).
+#: processes before it detaches (plan decision 9). It ends nothing. The
+#: built-in default of the ``worker.drain_detach_seconds`` setting
+#: (settings-and-telemetry CP2), which ``launch``/``reattach`` take as
+#: ``drain_detach_seconds``: legitimate background verification outlives
+#: 600 s.
 DRAIN_DETACH_SECONDS = 10800
 
 #: How many owned processes ``WorkerResult.owned_processes_seen`` lists.
@@ -448,9 +449,9 @@ def quiescence_confirm_seconds(stream: worker_stream.WorkerStream) -> float:
 @dataclasses.dataclass(frozen=True)
 class DrainDetached:
     """What :func:`launch` returns when owned processes outlived the worker
-    by :data:`DRAIN_DETACH_SECONDS` (plan C, step 3). Nothing was ended: the
-    anchor still holds the lifecycle lock, and the caller keeps the job
-    held. ``remaining`` lists each live owned process (``pid``,
+    by the drain bound, ``drain_detach_seconds`` (plan C, step 3). Nothing
+    was ended: the anchor still holds the lifecycle lock, and the caller
+    keeps the job held. ``remaining`` lists each live owned process (``pid``,
     ``start_ticks``, ``source``, ``cmdline``); ``worker_state`` is the last
     ``DRAINING`` details; ``supervisor_facts`` the facts a later classifier
     needs."""
@@ -460,6 +461,8 @@ class DrainDetached:
     returncode: int | None
     worker_state: dict
     supervisor_facts: dict
+    #: The bound this drain applied, in seconds.
+    drain_detach_seconds: float = DRAIN_DETACH_SECONDS
 
     @property
     def remaining_pids(self) -> list[int]:
@@ -1252,6 +1255,7 @@ def launch(
     on_state_change: Callable[[str, dict], None] | None = None,
     ownership_tag: str | None = None,
     supervisor_lock_path: str | Path | None = None,
+    drain_detach_seconds: float | None = None,
 ) -> WorkerResult | DrainDetached:
     """Launch one fresh streaming-input ``claude`` worker against ``cwd``
     and supervise it until it and every process it owns have ended.
@@ -1299,8 +1303,9 @@ def launch(
     and it propagates.
 
     **Drain** (step 3). Once the worker has exited, ``DRAINING`` lasts while
-    an owned process lives, for at most :data:`DRAIN_DETACH_SECONDS`, after
-    which ``launch`` returns :class:`DrainDetached` and ends nothing.
+    an owned process lives, for at most ``drain_detach_seconds`` (``None``:
+    :data:`DRAIN_DETACH_SECONDS`), after which ``launch`` returns
+    :class:`DrainDetached` and ends nothing.
     ``on_group_drain(pid, remaining_pids)`` keeps its contract: called once
     when the worker exited and members of its process group remain; if it
     raises, the group is ended and the exception propagates.
@@ -1416,7 +1421,7 @@ def launch(
             on_state_change=on_state_change, on_group_drain=on_group_drain,
             ownership=_Ownership(tag=tag, worker_process=worker_process, anchor_pid=anchor.pid,
                                  baseline=baseline | {anchor.pid}, adopting=adopting),
-            reaping=reaping,
+            reaping=reaping, drain_detach_seconds=drain_detach_seconds,
         )
         return supervision.run()
 
@@ -1427,8 +1432,9 @@ class _Supervision:
     def __init__(self, *, proc: subprocess.Popen, anchor: subprocess.Popen, worker_process: WorkerProcess,
                  reader, stdout_path, stderr_path, timeout: float | None,
                  on_state_change, on_group_drain, ownership: _Ownership,
-                 reaping: _LaunchExclusions | None = None) -> None:
+                 reaping: _LaunchExclusions | None = None, drain_detach_seconds: float | None = None) -> None:
         self.proc = proc
+        self.drain_detach_seconds = DRAIN_DETACH_SECONDS if drain_detach_seconds is None else drain_detach_seconds
         self.reaping = reaping
         self.anchor = anchor
         self.worker_process = worker_process
@@ -1786,7 +1792,7 @@ class _Supervision:
         while True:
             if self._expired():
                 return self._interrupt()
-            if time.monotonic() - started >= DRAIN_DETACH_SECONDS:
+            if time.monotonic() - started >= self.drain_detach_seconds:
                 return self._detach()
             self._sleep(_DRAIN_POLL_SECONDS)
             self._collect()
@@ -1807,6 +1813,7 @@ class _Supervision:
             returncode=self.proc.returncode,
             worker_state=self.details(),
             supervisor_facts=self.facts().to_dict(),
+            drain_detach_seconds=self.drain_detach_seconds,
         )
 
     def _finish(self) -> WorkerResult:
@@ -2028,6 +2035,7 @@ def reattach(
     settled_wakeups: Iterable[str] = (),
     on_state_change: Callable[[str, dict], None] | None = None,
     classify: bool = True,
+    drain_detach_seconds: float | None = None,
 ) -> "WorkerResult | DrainDetached | None":
     """Resume supervision of a worker a lost Controller launched (plan E,
     "Re-attach"), from its job record. Never launches anything (I1).
@@ -2049,7 +2057,8 @@ def reattach(
     its exit, re-sending the release in case the lost Controller died
     before sending it. Once it is gone, drain the owned processes (the
     recorded group, the tag, and the recorded ``owned_processes``; this
-    Controller adopted nothing) for at most :data:`DRAIN_DETACH_SECONDS`,
+    Controller adopted nothing) for at most ``drain_detach_seconds``
+    (``None``: :data:`DRAIN_DETACH_SECONDS`),
     returning :class:`DrainDetached` and ending nothing if any outlives the
     bound. Otherwise end the recorded anchor (identity-checked) and, with
     ``classify``, publish ``ENDED`` and return the stream's classification
@@ -2069,6 +2078,7 @@ def reattach(
             classify=classify, proc=_FollowedProcess(worker_process), anchor=anchor_proc, worker_process=worker,
             reader=reader, stdout_path=stdout_path, stderr_path=stderr_path, timeout=None,
             on_state_change=on_state_change, on_group_drain=None, ownership=ownership,
+            drain_detach_seconds=drain_detach_seconds,
         )
         settled = [item for item in settled_wakeups if isinstance(item, str) and item]
         supervision.stream = replay_stream(reader.read(), settled)

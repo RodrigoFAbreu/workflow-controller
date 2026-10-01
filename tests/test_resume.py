@@ -3235,7 +3235,18 @@ class DrainDetachedReattachTest(_LostControllerCase):
 
     def setUp(self) -> None:
         super().setUp()
-        patcher = unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 1)
+        # Settings-and-telemetry CP2: `cli.main` passes the drain bound in
+        # force to both the launch (`step`) and the re-attach (`resume`), so
+        # the one-second bound comes in as a command-line override (as
+        # `resume --drain-timeout 1` would), below the file's bounds; the
+        # module constant stays 10800.
+        real_overrides = cli._settings_cli_overrides
+
+        def overrides(args):
+            values, cli_routing = real_overrides(args)
+            return {**values, "worker.drain_detach_seconds": 1}, cli_routing
+
+        patcher = unittest.mock.patch.object(cli, "_settings_cli_overrides", overrides)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -3244,8 +3255,10 @@ class DrainDetachedReattachTest(_LostControllerCase):
         lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}, escapee]]})
         result = self.cli(lc, "step")
         self.assertEqual(result.code, cli.EXIT_WORKER_ACTIVE, result.stderr)
+        self.assertIn("still running after 1 s", result.stderr)
         [record] = result.records
         self.assertEqual((record["status"], record["worker_state"]["state"]), (job.STATUS_LAUNCHED, DRAINING))
+        self.assertEqual(record["drain_detach_seconds"], 1)
         [entry] = record["worker_state"]["owned_processes"]
         self.addCleanup(lambda: worker.identity_alive(entry["pid"], entry["start_ticks"])
                         and os.kill(entry["pid"], signal.SIGKILL))

@@ -412,6 +412,15 @@ SOURCES: tuple[str, ...] = (
 )
 
 
+#: Which routing config was in force (``worker_route.config_source``,
+#: settings-and-telemetry CP2): the settings file's ``routing`` section,
+#: the ``--routing-config`` file, or none.
+CONFIG_SOURCE_SETTINGS = "settings"
+CONFIG_SOURCE_ROUTING_CONFIG = "routing-config"
+CONFIG_SOURCE_NONE = "none"
+CONFIG_SOURCES: tuple[str, ...] = (CONFIG_SOURCE_SETTINGS, CONFIG_SOURCE_ROUTING_CONFIG, CONFIG_SOURCE_NONE)
+
+
 @dataclasses.dataclass(frozen=True)
 class ResolvedRoute:
     """A role's route after overrides, with where each field came from.
@@ -492,16 +501,26 @@ def _frozen_assignments(assignments: Mapping[str, str]) -> Mapping[str, str]:
 class RoutingOptions:
     """The operator's routing overrides for one Controller invocation: the
     command line's (``--model``, ``--effort``, ``--role-model``,
-    ``--role-effort``) and the parsed ``--routing-config`` file, if any.
-    :data:`NO_OVERRIDES` is the built-in routing alone."""
+    ``--role-effort``) and the routing config in force, if any -- the
+    ``--routing-config`` file, else the settings file's ``routing`` section
+    (settings-and-telemetry CP2, I1). ``config_source`` names which
+    (:data:`CONFIG_SOURCES`; ``None`` derives it: ``none`` without a config,
+    else ``routing-config``). :data:`NO_OVERRIDES` is the built-in routing
+    alone."""
 
     cli_model: str | None = None
     cli_effort: str | None = None
     cli_role_models: Mapping[str, str] = dataclasses.field(default_factory=dict)
     cli_role_efforts: Mapping[str, str] = dataclasses.field(default_factory=dict)
     config: RoutingConfig | None = None
+    config_source: str | None = None
 
     def __post_init__(self) -> None:
+        if self.config_source is None:
+            derived = CONFIG_SOURCE_NONE if self.config is None else CONFIG_SOURCE_ROUTING_CONFIG
+            object.__setattr__(self, "config_source", derived)
+        if self.config_source not in CONFIG_SOURCES:
+            raise ValueError(f"config_source {self.config_source!r} is not one of {CONFIG_SOURCES}")
         for name in ("cli_model", "cli_effort"):
             value = getattr(self, name)
             if value is not None:

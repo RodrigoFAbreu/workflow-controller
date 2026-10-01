@@ -32,6 +32,13 @@ And once for the 1.2.0 release, whose bump alone broke it: every
 ``inspect``/``explain`` ``controller.version`` became ``<VERSION>`` (see
 **Normalisation**). Nothing else moved.
 
+And once by ``workflow-controller-settings-and-telemetry`` CP2, whose
+settings are wired into every launch, policy or not: each launched job's
+record gains the optional ``controller_settings`` block (the settings file
+each case now names with ``--settings``, inside its own case directory, and
+every effective value with its source) and ``worker_route.config_source``
+(``settings``: the filled file's empty routing section). Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:
@@ -141,7 +148,8 @@ class _Harness:
         before = {p.name for p in jobs_dir.glob("*.json")} if jobs_dir.is_dir() else set()
         env = {"FAKE_CLAUDE_SCRIPT": str(script_path), "FAKE_CLAUDE_DIAG_LOG": str(case_dir / "argv.jsonl")}
         argv = ["--runtime-dir", str(runtime_dir), "--workflow-manager", str(self.stub_manager),
-                "--claude-binary", str(FAKE_CLAUDE), "--timeout", "60"]
+                "--claude-binary", str(FAKE_CLAUDE), "--timeout", "60",
+                "--settings", str(case_dir / "settings.json")]
         if json_out:
             argv.append("--json")
         argv += [command, str(root)]

@@ -69,8 +69,19 @@ PUBLISHING_STATES = frozenset({RESUME, RELEASE_DUE})
 #: The one tag refspec :func:`gitrepo.fetch` admits.
 TAGS_REFSPEC = "refs/tags/*:refs/tags/*"
 
-#: A build or verify command is still a bounded wait.
+#: A build or verify command is still a bounded wait. The built-in default
+#: of the ``timeouts.release_command_seconds`` setting.
 COMMAND_TIMEOUT_SECONDS = 1800
+
+#: The process-wide ``timeouts.release_command_seconds``, set once by
+#: ``cli.main`` through ``settings.apply_process_defaults``
+#: (settings-and-telemetry CP2); ``None`` is :data:`COMMAND_TIMEOUT_SECONDS`.
+process_command_timeout_seconds: float | None = None
+
+
+def command_timeout_seconds() -> float:
+    """The build and verify command timeout in force, read at call time."""
+    return COMMAND_TIMEOUT_SECONDS if process_command_timeout_seconds is None else process_command_timeout_seconds
 
 _CHECKSUM_LINE_RE = re.compile(r"^([0-9a-f]{64}) [ *](.+)$")
 
@@ -83,7 +94,7 @@ def run_command(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> subpr
     """Run a policy command without a shell, in ``cwd``, with ``env`` over
     ``os.environ`` and stdin closed."""
     return subprocess.run(list(argv), cwd=cwd, env={**os.environ, **env}, capture_output=True,
-                          stdin=subprocess.DEVNULL, check=False, timeout=COMMAND_TIMEOUT_SECONDS)
+                          stdin=subprocess.DEVNULL, check=False, timeout=command_timeout_seconds())
 
 
 @dataclasses.dataclass(frozen=True)

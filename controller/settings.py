@@ -29,10 +29,19 @@ it, and the *generation* of the release that last set its default.
 
 The read-only commands call :func:`load`; the writing ones call
 :func:`fill`. Every file primitive is ``controller.runtime``'s.
+
+**Wiring** (CP2, Design B): ``cli.main`` resolves :class:`EffectiveSettings`
+once and passes the values that have a call path explicitly. The leaf
+values that have none -- the git, release-command and Workflow-query
+timeouts and the ``gh pr list`` limit -- are process-wide:
+:func:`apply_process_defaults` sets them once, before any thread starts,
+and each leaf module reads its value at call time. :func:`process_defaults`
+is the tests' only other writer, and restores them.
 """
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import dataclasses
 import hashlib
@@ -44,7 +53,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from controller import routing, runtime
+from controller import forge, gitrepo, release_txn, routing, runtime, workflow_contract
 from controller.errors import RoutingConfigError, RuntimeContainmentError, SettingsError
 
 SCHEMA_VERSION = 1
@@ -418,6 +427,12 @@ def warn_unknown(loaded: SettingsFile) -> None:
     _warn(f"the settings file {loaded.path} has unknown key(s) {', '.join(fresh)}; they are ignored ({why})")
 
 
+def empty(path: Path) -> SettingsFile:
+    """The loaded form of no file at ``path``: every setting takes its
+    built-in default. Reads nothing."""
+    return _settings_file(path, None)[0]
+
+
 def load(path: Path) -> SettingsFile:
     """Read and validate the settings file without writing anything (the
     read-only commands, A.4). A missing file loads as empty: every setting
@@ -564,3 +579,43 @@ def resolve(loaded: SettingsFile, *, cli: Mapping[str, Any] | None = None,
         path=loaded.path, sha256=loaded.sha256, values=MappingProxyType(values),
         sources=MappingProxyType(sources), routing_config=config,
     )
+
+
+# ---------------------------------------------------------------------------
+# The process-wide leaf values (CP2, Design B).
+# ---------------------------------------------------------------------------
+
+
+#: Each leaf setting with no options path, and the module attribute its
+#: process-wide value lives in (``None``: the module's built-in constant).
+PROCESS_DEFAULTS: tuple[tuple[str, Any, str], ...] = (
+    ("timeouts.git_seconds", gitrepo, "process_timeout_seconds"),
+    ("timeouts.release_command_seconds", release_txn, "process_command_timeout_seconds"),
+    ("timeouts.workflow_query_seconds", workflow_contract, "process_query_timeout_seconds"),
+    ("forge.pr_list_limit", forge, "process_pr_list_limit"),
+)
+
+
+def _set_process_values(values: Mapping[str, Any]) -> None:
+    for key, module, attribute in PROCESS_DEFAULTS:
+        setattr(module, attribute, values.get(key))
+
+
+def apply_process_defaults(effective: EffectiveSettings) -> None:
+    """Set the process-wide leaf values from ``effective``. Called once, by
+    ``cli.main``, after the settings are resolved and before any thread
+    starts."""
+    _set_process_values({key: effective[key] for key, _module, _attribute in PROCESS_DEFAULTS})
+
+
+@contextlib.contextmanager
+def process_defaults(values: Mapping[str, Any]):
+    """The tests' writer of the process-wide leaf values: set ``values``
+    (setting key -> value; a key left out is the built-in default) for the
+    block, then restore what was there."""
+    saved = {key: getattr(module, attribute) for key, module, attribute in PROCESS_DEFAULTS}
+    _set_process_values(values)
+    try:
+        yield
+    finally:
+        _set_process_values(saved)

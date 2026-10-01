@@ -186,6 +186,20 @@ def _route_value(text: str) -> str:
         raise argparse.ArgumentTypeError(str(exc)) from None
 
 
+def _positive_int(text: str) -> int:
+    """``--timeout``/``--max-steps``/``--drain-timeout``'s ``type=``: a
+    positive integer (settings-and-telemetry CP2, I1); ``0``, a negative
+    number or a non-integer is a usage error (exit 2). The table's bounds
+    apply to the settings file's values, not to these flags."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid positive integer: {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, not {value}")
+    return value
+
+
 def _role_assignment(text: str) -> tuple[str, str]:
     """``--role-model``/``--role-effort``'s ``type=``: ``ROLE=VALUE`` with
     ``ROLE`` one of ``routing.ROLES``. A missing ``=``, an unknown role or
@@ -257,7 +271,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workflow-manager", default=None)
     parser.add_argument("--claude-binary", default=None)
     parser.add_argument("--permission-mode", default=None)
-    parser.add_argument("--timeout", type=int, default=None)
+    parser.add_argument("--timeout", type=_positive_int, default=None,
+                        help="seconds a launched worker may run (default: the worker.timeout_seconds setting)")
     # Role-based worker routing (automatic-lifecycle-orchestration CP6). The
     # per-role options beat the global ones, which beat the config file's
     # role entry, then its default, then the built-in route.
@@ -297,7 +312,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("repo")
     run_p.add_argument("--follow", action="store_true", default=False,
                        help="render the run's events and worker output on stderr while it runs")
-    run_p.add_argument("--max-steps", type=int, default=20)
+    run_p.add_argument("--max-steps", type=_positive_int, default=None,
+                       help="stop after this many steps (default: the run.max_steps setting, 20)")
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
@@ -309,6 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
     resume_p.add_argument(
         "--acknowledge-unverifiable-worker", action="store_true", default=False,
         help="with --abandon only: state that a worker whose liveness cannot be verified here is gone",
+    )
+    resume_p.add_argument(
+        "--drain-timeout", metavar="SECONDS", type=_positive_int, default=None,
+        help="bound this re-attach drain of a worker's owned processes (default: the "
+             "worker.drain_detach_seconds setting)",
     )
     resume_p.add_argument("repo")
 
@@ -333,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     follow_target.add_argument("--job", metavar="JOB_ID", default=None)
     follow_target.add_argument("--run", metavar="RUN_ID", default=None)
     follow_p.add_argument("--from-start", action="store_true", default=False,
-                          help="replay every event, not only the last 20")
+                          help="replay every event, not only the last follow.replay_events (default 20)")
     follow_p.add_argument("repo", nargs="?", default=".")
 
     # settings-and-telemetry CP1 (A.6): the user settings file.
@@ -527,7 +548,10 @@ def _follow(args: argparse.Namespace) -> int:
         )
     follow = observe.follow_run if kind == "run" else observe.follow_job
     try:
-        follow(runtime_root, record_id, _stdout_sink, from_start=args.from_start, json_output=args.json)
+        effective = _effective(args)
+        follow(runtime_root, record_id, _stdout_sink, from_start=args.from_start, json_output=args.json,
+               heartbeat_seconds=effective["follow.heartbeat_seconds"],
+               replay_events=effective["follow.replay_events"])
     except KeyboardInterrupt:
         pass  # the operator stopped following; nothing else is affected
     return EXIT_OK
@@ -555,18 +579,21 @@ def _start_follower(args: argparse.Namespace, runtime_root: Path, run_id: str) -
         return
     sink = observe.FdSink(fd)
     stop = threading.Event()
-    thread = threading.Thread(target=_render_run, args=(runtime_root, run_id, sink, stop),
+    heartbeat_seconds = _effective(args)["follow.heartbeat_seconds"]
+    thread = threading.Thread(target=_render_run, args=(runtime_root, run_id, sink, stop, heartbeat_seconds),
                               name="workflow-controller-follow", daemon=True)
     thread.start()
     _follower = (thread, stop)
 
 
-def _render_run(runtime_root: Path, run_id: str, sink: observe.FdSink, stop: threading.Event) -> None:
+def _render_run(runtime_root: Path, run_id: str, sink: observe.FdSink, stop: threading.Event,
+                heartbeat_seconds: float | None = None) -> None:
     """The renderer thread's body. Any exception disables rendering for the
     rest of the process (one note, if the descriptor still works) and is
     never propagated."""
     try:
-        observe.follow_run(runtime_root, run_id, sink, from_start=True, stop=stop)
+        observe.follow_run(runtime_root, run_id, sink, from_start=True, stop=stop,
+                           heartbeat_seconds=heartbeat_seconds)
     except Exception as exc:  # noqa: BLE001 -- a renderer failure never reaches the lifecycle
         sink.fail(exc)
     finally:
@@ -868,20 +895,31 @@ def _print_last_job(last_job: dict | None) -> None:
         print(f"  {line}")
 
 
+#: ``EffectiveSettings.sources["routing"]`` -> ``worker_route.config_source``.
+_ROUTING_CONFIG_SOURCES = {
+    settings.SOURCE_CLI: routing.CONFIG_SOURCE_ROUTING_CONFIG,
+    settings.SOURCE_FILE: routing.CONFIG_SOURCE_SETTINGS,
+    settings.SOURCE_DEFAULT: routing.CONFIG_SOURCE_NONE,
+}
+
+
 def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
-    """The operator's routing overrides (CP6), with the ``--routing-config``
-    file parsed now -- before any job record is written -- so a malformed
-    one is ``RoutingConfigError`` (exit 20) and nothing runs. Read with
-    ``getattr`` defaults, as ``cmd_resume`` reads ``--abandon``, so a
-    caller's hand-built namespace without these options routes by the
-    built-in table."""
-    config_path = getattr(args, "routing_config", None)
+    """The operator's routing overrides (CP6) over the routing config in
+    force (settings-and-telemetry CP2, I1): the ``--routing-config`` file
+    when given, which replaces the settings file's ``routing`` section
+    whole, else that section. Both were parsed with the settings, before
+    any job record is written, so a malformed one is exit 20 and nothing
+    runs. Read with ``getattr`` defaults, as ``cmd_resume`` reads
+    ``--abandon``, so a caller's hand-built namespace without these options
+    routes by the built-in table."""
+    effective = _effective(args)
     return routing.RoutingOptions(
         cli_model=getattr(args, "model", None),
         cli_effort=getattr(args, "effort", None),
         cli_role_models=getattr(args, "role_model", None) or {},
         cli_role_efforts=getattr(args, "role_effort", None) or {},
-        config=None if config_path is None else routing.load_routing_config(config_path),
+        config=effective.routing_config,
+        config_source=_ROUTING_CONFIG_SOURCES[effective.sources[settings.ROUTING_KEY]],
     )
 
 
@@ -917,16 +955,19 @@ def _run_one_step(
             run.event("handoff_detected")
         return EXIT_HANDOFF_PENDING, None
 
+    effective = _effective(args)
     result = job.execute_step(
         target,
         work_item_id=args.work_item,
         identity=ident,
         runtime=runtime_root,
         permission_mode=args.permission_mode or job.DEFAULT_PERMISSION_MODE,
-        timeout=args.timeout,
+        timeout=effective["worker.timeout_seconds"],
         claude_bin=args.claude_binary,
         routing=routing_options,
         run_id=None if run is None else run.run_id,
+        drain_detach_seconds=effective["worker.drain_detach_seconds"],
+        controller_settings=_controller_settings_block(effective),
     )
 
     if isinstance(result, Decision):
@@ -1038,7 +1079,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
 
     routing_options = _routing_options(args)
     target = _inspect_target(args)
-    run = _start_run("run", runtime_root, ident, target, max_steps=args.max_steps)
+    run = _start_run("run", runtime_root, ident, target, max_steps=_effective(args)["run.max_steps"])
     _start_follower(args, runtime_root, run.run_id)
 
     try:
@@ -1051,9 +1092,11 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
                target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions,
                run: job.RunRecord) -> int:
     """``cmd_run``'s loop: one step per orchestration boundary, until a
-    step does not finish or ``--max-steps`` is reached."""
+    step does not finish or ``run.max_steps`` (``--max-steps``, else the
+    settings file, else 20) is reached."""
+    max_steps = _effective(args)["run.max_steps"]
     steps_run = 0
-    while steps_run < args.max_steps:
+    while steps_run < max_steps:
         # The orchestration boundary: checked once before every job this
         # loop starts, including the first -- never mid-job. Both halves
         # (the test-support pause and the real handoff detection, inside
@@ -1132,7 +1175,8 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
             print(_abandon_summary(abandoned, runtime_root))
         return EXIT_OK
 
-    records = job.resume(target, identity=ident, runtime=runtime_root)
+    records = job.resume(target, identity=ident, runtime=runtime_root,
+                         drain_detach_seconds=_effective(args)["worker.drain_detach_seconds"])
 
     if args.json:
         # `O1` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): `job.py`'s
@@ -1239,12 +1283,62 @@ def _capture_pre_existing_state(runtime_root: Path) -> dict:
 
 
 def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.RoutingConfig | None]:
-    """The settings the global options given on this command line
-    override (I1): ``--timeout`` and ``--routing-config``, the latter
-    parsed strictly as today."""
+    """The settings the options given on this command line override (I1):
+    ``--timeout``, ``run --max-steps``, ``resume --drain-timeout`` and
+    ``--routing-config``, the latter parsed strictly as today. Read with
+    ``getattr`` defaults: each is only on its own subcommand."""
     config_path = getattr(args, "routing_config", None)
     cli_routing = None if config_path is None else routing.load_routing_config(config_path)
-    return {"worker.timeout_seconds": getattr(args, "timeout", None)}, cli_routing
+    return {
+        "worker.timeout_seconds": getattr(args, "timeout", None),
+        "run.max_steps": getattr(args, "max_steps", None),
+        "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
+    }, cli_routing
+
+
+def _resolve_settings(args: argparse.Namespace, *, write: bool | None) -> settings.EffectiveSettings:
+    """The settings in force for this invocation (settings-and-telemetry
+    CP2, Design B): the file filled first by a writing command, only loaded
+    by a read-only one (A.4), an invalid one refused (exit 20, I2), and the
+    command line's overrides applied (I1). ``write`` ``None`` reads no file
+    at all: the built-in defaults under the overrides."""
+    cli_values, cli_routing = _settings_cli_overrides(args)
+    path = settings.resolve_path(getattr(args, "settings", None))
+    if write is None:
+        loaded = settings.empty(path)
+    else:
+        loaded = settings.fill(path) if write else settings.load(path)
+    return settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
+
+
+def _apply_settings(args: argparse.Namespace, *, write: bool) -> settings.EffectiveSettings:
+    """:func:`main`'s one settings resolution, after the re-exec and before
+    dispatch: the resolved settings are put on ``args`` for the commands
+    (``args.effective_settings``), and the process-wide leaf values are set
+    -- the only production call of :func:`settings.apply_process_defaults`,
+    made before any thread starts (the ``--follow`` renderer starts in
+    dispatch)."""
+    effective = _resolve_settings(args, write=write)
+    settings.apply_process_defaults(effective)
+    args.effective_settings = effective
+    return effective
+
+
+def _effective(args: argparse.Namespace) -> settings.EffectiveSettings:
+    """The settings :func:`_apply_settings` put on ``args``. A namespace
+    that did not come through :func:`main` (a direct call) is no
+    invocation: it gets the built-in defaults under its own options, and no
+    file is read."""
+    effective = getattr(args, "effective_settings", None)
+    return effective if effective is not None else _resolve_settings(args, write=None)
+
+
+def _controller_settings_block(effective: settings.EffectiveSettings) -> dict:
+    """The job record's optional ``controller_settings`` block (CP2): the
+    file's path and the SHA-256 of the bytes read (``null`` with no file),
+    and each effective value with its source."""
+    return {"path": str(effective.path), "sha256": effective.sha256,
+            "values": dict(effective.values), "sources": dict(effective.sources)}
 
 
 def cmd_settings(args: argparse.Namespace) -> int:
@@ -1286,7 +1380,8 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     command = args.command
     if command == "follow":
         # Before pinning, runtime-root creation, materialisation and the
-        # identity write: `follow` only reads.
+        # identity write: `follow` only reads, the settings file included.
+        _apply_settings(args, write=False)
         return cmd_follow(args)
     if command == "settings":
         return cmd_settings(args)
@@ -1334,6 +1429,13 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     pre_existing["ladder_row"] = ladder_row
 
     _write_identity_record(runtime_root, ident, exec_depth=exec_depth)
+
+    # Settings-and-telemetry CP2: resolved once, after the re-exec (the
+    # unpinned branch above never returns) and before anything is
+    # dispatched -- a refusal (exit 20) leaves the ordinary dispatch
+    # footprint, `identity.json` and no job record. A writing command fills
+    # the file first (A.4).
+    _apply_settings(args, write=not read_only)
 
     if command == "status":
         return cmd_status(args, runtime_root, ident, pre_existing=pre_existing)

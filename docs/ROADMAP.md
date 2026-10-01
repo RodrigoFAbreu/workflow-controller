@@ -8,10 +8,10 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-01).** Controller 1.4.2 is the latest release. It admits Workflow
+**Where things stand (2026-10-01).** Controller 1.5.0 is the latest release. It admits Workflow
 2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C3, the settings
 file, telemetry v0, release notes from the milestone and the 1.4 patches (1.4, 8, 11.1.2, accepted
-2026-10-01), is complete. C3 is released as 1.5.0 when its pull request (#16) is squash-merged.
+2026-10-01), is complete. C3 was released as 1.5.0 (PR #16, squash `f92f31b`).
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -107,6 +107,12 @@ These are not blockers for the baseline, but should remain visible in later mile
    - `OperatorAbandoned`;
    - `UnreconcilableJobError`.
 4. Operator-facing liveness/recovery wording and rare process-state edge cases may still benefit from follow-up hardening.
+5. `explain` and next-action selection exit with an error on a plan-stage `UnclassifiedPathError`
+   (reported 2026-10-01 with 1.4.2: in `AMENDING_PLAN`, a checkpoint had added files under a path
+   the approved plan did not classify, and the plan-review publication-status probe crashed while
+   computing the plan-stage content id). The Controller then can neither explain nor select
+   `/milestone-plan <id>`, the step that repairs the classification. It should fail closed with a
+   named reason and that sanctioned resume command, never an error exit.
 
 ---
 
@@ -283,8 +289,8 @@ The four patches below and the settings file v1 were step C3
 `docs/ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md`, ADR
 `docs/adr/0008-controller-settings-file.md`; the narrative is archived at
 `docs/milestones/completed/workflow-controller-settings-and-telemetry.md`), together with
-telemetry v0 (section 8) and release notes from the milestone (11.1.2). Releases as 1.5.0 when PR
-#16 is squash-merged.
+telemetry v0 (section 8) and release notes from the milestone (11.1.2). Released as 1.5.0 (PR #16,
+squash `f92f31b`).
 
 **Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
 plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR
@@ -1273,7 +1279,7 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 11.1   C1: squash merges and PR-title versions               COMPLETE (released as 1.4.0 at its cutover)
 11.1.1 C1b: reaping every child process                    COMPLETE (released as 1.4.1)
 11.2   C2: CI reliability                                    COMPLETE (released as 1.4.2)
-1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (releases as 1.5.0)
+1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (released as 1.5.0)
 ```
 
 ---

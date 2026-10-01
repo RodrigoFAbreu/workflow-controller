@@ -139,7 +139,7 @@ def notes_problem(notes: str) -> NotesProblem | None:
             return NotesProblem(f"the notes contain the Controller marker text {CONTROLLER_MARKER_TEXT!r}",
                                 number, _excerpt(line), "remove the text")
         if "\t" in line:
-            return NotesProblem("the line holds a tab", number, _excerpt(line), _WRAP)
+            return NotesProblem("the line holds a tab", number, _excerpt(line), "replace the tab with spaces")
         if "\r" in line:
             return NotesProblem("the line holds a carriage return (CRLF line endings)", number, _excerpt(line),
                                 "use LF line endings")
@@ -148,7 +148,7 @@ def notes_problem(notes: str) -> NotesProblem | None:
             return NotesProblem(f"the line holds {size} bytes of UTF-8, over the limit of {MAX_LINE_BYTES}",
                                 number, _excerpt(line), _WRAP)
         if line.endswith(" "):
-            return NotesProblem("the line ends in a space", number, _excerpt(line), _WRAP)
+            return NotesProblem("the line ends in a space", number, _excerpt(line), "remove the trailing space")
     return None
 
 

@@ -108,6 +108,13 @@ class LineRuleTest(unittest.TestCase):
         self.assertRule("one\r\ntwo", "carriage return", 1)
         self.assertRule("see <!-- workflow-controller: x -->", "marker text", 1)
 
+    def test_each_line_rule_names_its_own_remedy(self) -> None:
+        """Functional review F3: wrapping fixes only the length rule."""
+        remedies = {notes: rn.notes_problem(notes).remedy for notes in ("a line \nnext", "a\tb", "x" * 73)}
+        self.assertEqual(remedies, {"a line \nnext": "remove the trailing space",
+                                    "a\tb": "replace the tab with spaces",
+                                    "x" * 73: "wrap the section at 72 columns or remove the text"})
+
     def test_notes_need_a_non_blank_line(self) -> None:
         for notes in ("", "\n", "  \n \n"):
             self.assertRule(notes, "no non-blank line", None)

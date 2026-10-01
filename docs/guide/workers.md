@@ -5,7 +5,8 @@
 How the Controller runs a worker, knows when it has really finished, recovers after
 a crash or Ctrl-C, and lets you watch it. Sections: [concurrency and worker
 lifecycle](#concurrency-and-worker-lifecycle), [job dispositions](#job-dispositions)
-(recovering job records) and [observing workers](#observing-workers).
+(recovering job records), [observing workers](#observing-workers) and
+[telemetry](#telemetry) (what each worker cost).
 
 ## Concurrency and worker lifecycle
 
@@ -183,23 +184,29 @@ before the spawn, pass a callable that returns the `Popen`, and wait for
 the child inside the block.
 
 **The drain bound.** After `claude` exits, the Controller waits for
-the remaining owned processes for at most 3 hours (10800 s,
-`worker.DRAIN_DETACH_SECONDS`). If any is still alive then, it ends
-**nothing**. It *detaches*: the record stays `LAUNCHED` at `DRAINING`
-with `drain_detached_at`, a `worker_drain_detached` event names the
+the remaining owned processes for at most the drain bound: the
+`worker.drain_detach_seconds` setting, 3 hours (10800 s) by default (see
+[The settings file](runtime.md#the-settings-file)). If any is still alive
+then, it ends **nothing**. It *detaches*: the record stays `LAUNCHED` at
+`DRAINING` with `drain_detached_at`, and the bound it applied as
+`drain_detach_seconds`. A `worker_drain_detached` event names the
 processes, the anchor keeps the lock, and the command exits 45 naming
 each pid with its command line. Either run `workflow-controller resume
 <repo>`, which re-attaches and drains again with a fresh bound, or end
 the processes and then run `resume`. No later action can start while
-they run.
+they run. Every message that prints the bound (the exit-45 message, and
+the activity line in `status` and `follow`, in any later invocation)
+reads the recorded one, so it shows the bound that was really applied. A
+record from before 1.5 has no such field and shows 3 hours.
 
 `--timeout` bounds only the drain of the `step` or `run` that launched
 the worker. `resume` takes no `--timeout`, and its re-attach drain has
-none, so `resume` may wait in the foreground for up to 3 hours per call.
-To stop sooner, end the named pids (the drain then finishes at once), or
-interrupt `resume` with Ctrl-C: that ends only the Controller, nothing
-it owns, and the job stays `LAUNCHED` at `DRAINING` for a later
-`resume`.
+none, so `resume` may wait in the foreground for up to the drain bound
+per call. `resume --drain-timeout SECONDS` sets that bound for this
+re-attach only. To stop sooner, end the named pids (the drain then
+finishes at once), or interrupt `resume` with Ctrl-C: that ends only the
+Controller, nothing it owns, and the job stays `LAUNCHED` at `DRAINING`
+for a later `resume`.
 
 ### Scheduled wakeups
 
@@ -261,9 +268,10 @@ harness-contract fixtures and the live probe.
 
 ### Time is not termination
 
-There is no default worker timeout: `step` and `run` wait for as long
-as the worker owns work. `--timeout SECONDS` is an explicit opt-in, now
-over the whole owned lifetime; when it fires, the Controller ends the
+There is no worker timeout by default: `step` and `run` wait for as
+long as the worker owns work. A timeout is an explicit opt-in, over the
+whole owned lifetime: `--timeout SECONDS`, or the
+`worker.timeout_seconds` setting (`null`, no limit, by default); when it fires, the Controller ends the
 worker's process group, every owned process (never a recognised
 daemon) and the anchor, reaps them, and classifies the run
 `INTERRUPTED`.
@@ -513,7 +521,9 @@ Three ways to watch:
   after Ctrl-C). With nothing active it names the last run and the
   command that replays it, and exits `0`. `--run RUN_ID` or `--job
   JOB_ID` follows that run or job, live or finished. It replays the last
-  20 events before going live; `--from-start` replays everything. With
+  events before going live, as many as the `follow.replay_events`
+  setting (20 by default; `0` replays none); `--from-start` replays
+  everything. With
   the global `--json` it prints normalised events, one JSON object per
   line. It ends with exit `0` when the followed run or job ends, printing
   the run's own exit code rather than returning it. Ctrl-C, or a stdout
@@ -522,8 +532,10 @@ Three ways to watch:
   record or an unreadable record is exit `20`.
 - **`workflow-controller status`** lists what is active across the
   runtime root under `active:` (or `active: none`): each running run with
-  its Controller's liveness, each non-terminal job with its worker's
-  liveness, and the exact `follow` command for each. When `resume`, a
+  its start time and its Controller's liveness, each non-terminal job
+  with its command, work item, start time and what its worker is doing,
+  and the exact `follow` command for each (see
+  [`status`](commands.md#status)). When `resume`, a
   held lock (exit `45`) or a Ctrl-C reports a running worker, it prints
   the `follow` command too.
 
@@ -534,8 +546,11 @@ its turn), waiting (on which background tasks, which wakeups and their
 due times, which harness commands, and which wakeups are presumed fired
 but not yet settled), draining (which owned processes are still alive,
 and which recognised daemons are not owned), whether a Controller is
-attached (else `no Controller attached -- workflow-controller resume
-<repo> re-attaches`), and whether the job only awaits reconciliation.
+attached (else `no Controller attached -- workflow-controller
+--runtime-dir <root> resume <repo> re-attaches`), and whether the job
+only awaits reconciliation. The `resume` command these lines print
+carries `--runtime-dir`, as the `follow` command does, so it works from
+any terminal.
 Stall and settle times are shown only while a Controller is attached,
 since only it keeps them. `--json` carries the same fields. For the
 newest finished job of the target, `explain` also prints its stream
@@ -554,9 +569,12 @@ the full command.
 
 The rendering shows the worker's session, its text, each tool call
 (`tool Bash: <command>`), each tool result (the first 20 lines), its
-stderr, and the final result with turns, cost and duration, interleaved
-with the Controller's job and run events. After 30 s with no new event
-it prints a heartbeat naming the worker's pid and elapsed time. Thinking
+stderr, and each result with turns, cost and duration, interleaved
+with the Controller's job and run events. The job's `COMPLETED` line
+adds the whole session's totals (`; session: cost $11.66, 144 turns,
+...`, or `telemetry unavailable`; see [Telemetry](#telemetry)). After
+the `follow.heartbeat_seconds` setting (30 s by default) with no new
+event it prints a heartbeat naming the worker's pid and elapsed time. Thinking
 blocks are never rendered, not even as a marker. The Controller requests
 no thinking output, and the raw `worker.stdout` keeps whatever the CLI
 emitted, as evidence.
@@ -571,3 +589,65 @@ reader block the Controller. Killing a follower, or closing the pipe it
 writes to, changes neither the worker nor the exit code. A test runs the
 same lifecycle unfollowed, with `--follow` and with a `follow` attached
 and killed mid-job, and requires identical durable results.
+
+## Telemetry
+
+Every job that completes records what its worker's session cost, in a
+`telemetry` block on the job record. The figures come from the worker's
+own stream (`worker.stdout`). Nothing is sent anywhere, and no
+lifecycle decision reads them. `workflow-controller telemetry` sums them
+up (see [`telemetry`](commands.md#telemetry)). `status` shows the
+newest such job's cost and wall times as `last job telemetry:`, and
+`inspect` the newest for its target.
+
+**Session totals, not the last turn.** A session can end many turns, and
+each turn's end is a `result` event. The block covers every one:
+
+- `turns`, `duration_ms` and the token counts (`tokens`: `input`,
+  `output`, `cache_creation`, `cache_read`, from each result's `usage`)
+  are per turn, so they are summed;
+- `cost_usd` (`total_cost_usd`), `duration_api_ms` and each model's
+  figures in `models` (from `modelUsage`) are running totals, so each is
+  the **maximum** over all results. The last result's value is not used:
+  a subagent's handback can repeat it unchanged, or lower;
+- `results` is the number of results counted.
+
+A figure the stream does not give, or gives as something other than a
+number, is `null`, and an entry in `problems` names the field and the
+result. A session with no result has `null` figures and a `no_result`
+problem. A result that reports token usage but whose running totals did
+not move adds a `cumulative_not_advanced` problem with its
+`result_index`; it is reported, not corrected.
+
+The block also holds:
+
+- the wall times: `job_seconds`, from the job's creation to its
+  completion, and `worker_seconds`, from the worker's spawn to its exit
+  (`null` when the spawn time is not known, for example a re-attached
+  job whose `worker_spawned` event is missing);
+- the dimensions kept apart for comparison: `role`, `model` and `effort`
+  (from `worker_route`), `harness` (`claude-code`), `workflow_version`
+  (the target's Workflow release) and `controller_version`.
+
+**Telemetry never changes a job's outcome.** If reading the stream or
+computing the figures fails, the block is
+`{"version": 1, "failed": true, "problems": [{"kind": "telemetry_failed", ...}]}`
+with no figures. The job's status, outcome, events and reconciliation
+are exactly what they would be without telemetry. Readers count such a
+job as `telemetry unavailable`.
+
+The job record's `worker` block keeps its old meaning: the **last**
+result's figures, as before. Use `telemetry` for the session.
+
+The `completed` event carries a summary of the block, and `follow`
+prints it on the job's `COMPLETED` line. A job recorded before
+telemetry existed has no block; the `telemetry` command derives the same
+figures from its `worker.stdout` each time it runs, marked
+`"derived": true`, and writes nothing back.
+
+**Also on the job record.** Each launched job records the settings it
+ran with, in a `controller_settings` block: the settings file's `path`,
+the `sha256` of the bytes read (`null` with no file), and each effective
+value with its source (`cli`, `file` or `default`). Its `worker_route`
+gains `config_source`: `settings`, `routing-config` or `none`. Both are
+optional, and older records lack them.

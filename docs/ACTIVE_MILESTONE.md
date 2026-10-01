@@ -39,7 +39,7 @@ Four things, each opt-in or behaviour-preserving by default:
 | CP4 Release notes follow the milestone | Complete | See below |
 | CP5 The hints parse and the manual-external gate tells the truth | Complete | See below |
 | CP6 Relaunch-bound tests and `status` | Complete | See below |
-| CP7 Documentation and full verification | Not started | |
+| CP7 Documentation and full verification | Complete | See below |
 
 ### CP1 -- the settings file
 
@@ -431,3 +431,87 @@ Four things, each opt-in or behaviour-preserving by default:
   `generate_external_implementation_review_decisions.py --check` and
   `generate_plan_stage_decisions.py --release 2.6.0 --check` are current.
   `.workflow-controller/policy.json` is byte-unchanged from `a47e695`.
+
+### CP7 -- documentation and full verification
+
+- `docs/guide/runtime.md`: a new section, "The settings file": the location order, the table
+  (rendered from `settings.TABLE`), precedence, the fill and forward-only migration, the lock,
+  the refusals, unknown keys and `settings clean`, and the routing section. It says that the file
+  is shared by every repository and lane on the machine.
+- `docs/guide/commands.md`: `settings show|path|clean`, `telemetry`, `status` (its lines and
+  `--json` keys), `resume --drain-timeout`, the global `--settings`, the exit-2 positive-integer
+  flags, `WORKFLOW_CONTROLLER_SETTINGS`, and the routing levels now naming the settings section.
+- `docs/guide/workers.md`: the drain bound, worker timeout and follow values as settings
+  (`drain_detach_seconds` recorded and printed), the `COMPLETED` line's session summary, the
+  resume hint's `--runtime-dir`, and a new "Telemetry" section.
+- `docs/guide/milestone-branches.md`: a new section, "Release notes in the pull request body",
+  and the `release_notes_invalid` gate (the refused shapes, the line rules, the 62-character id
+  note, and the exit: mark ready, merge, supply the notes at release).
+- `docs/guide/ci-and-releases.md`: a new subsection, "Release notes from the milestones", covering
+  every Design F item: `{release_notes}`, the range read and digest check, the squash message
+  setting and the measured wrap, the included and refused outcomes, the fixes and the opt-out,
+  marker lines only, `--cleanup=verbatim`, supersession, the accepted lost-body gap, the binding
+  snapshot, the `RESUME` tag check (fix: create that release by hand as a draft with the right
+  notes, so the publish uploads the assets), empty blocks, no tag yet, and the cutover.
+- `docs/guide/troubleshooting.md`: `SettingsError` and its warnings, the incoherent
+  manual-external gate, a `release_notes_invalid` pointer; the drain and query-timeout entries no
+  longer hard-code their bounds.
+- `docs/README.md`: the release-notes rule as the policy opt-in, and ADR 0008 in the table.
+- `docs/adr/0008-controller-settings-file.md` (new): location, precedence, validation, the fill
+  and forward-only migration, unknown keys and the routing section, and the settings/constant
+  boundary.
+- This narrative's `## Release notes` section holds the 1.5.0 notes; it passes
+  `release_notes.notes_problem` and, rendered as a block, `paragraph_problem`.
+- Verified: the full sharded suite (`python3 tools/run_tests.py`, under a reaping subreaper,
+  without `PYTHONPATH` or `FORCE_COLOR`) passed: 2687 tests in 6 shards, exact coverage, exit 0.
+  `generate_no_policy_lifecycle.py --check`,
+  `generate_external_implementation_review_decisions.py --check` and
+  `generate_plan_stage_decisions.py --release 2.6.0 --check` are current;
+  `generate_plan_stage_decisions.py --check` differs exactly as at `a47e695` (CP2's note) and
+  `tests.test_golden_plan_stage_decisions` passes. `git diff a47e695 -- .workflow-controller/
+  pyproject.toml setup.py .github/workflows/` is empty.
+
+## Release notes
+
+### Settings, telemetry and release notes from the milestone (1.5.0)
+
+**A settings file.** Every operational tunable is now a setting in one
+user-level JSON file, shared by every repository and lane on the
+machine: the drain detach bound, the worker timeout, the run's step
+limit, the follower's heartbeat and replay count, the Git,
+release-command and Workflow-query timeouts, the pull-request list
+limit, and the routing defaults. The file is found through `--settings`,
+`$WORKFLOW_CONTROLLER_SETTINGS`, `$XDG_CONFIG_HOME` or `~/.config`, in
+that order. A command-line flag beats the file, and the file beats the
+built-in default. `step`, `run`, `resume` and `milestone-binding` fill
+in missing settings, and move a value the operator never changed to a
+newer default, forward only. Unknown keys are ignored with a warning. An
+invalid file is refused with exit 20 and is never rewritten. New
+commands: `settings show|path|clean` and `resume --drain-timeout`.
+`--routing-config` still works, and replaces the file's routing section.
+
+**Telemetry v0.** Each finished job records its session totals over
+every result: turns, tokens, cost, API time and per-model usage, with
+the job's and the worker's wall times. A telemetry failure never changes
+a job's outcome. The read-only `telemetry` command summarises jobs by
+work item, run, date, role or model, and derives older jobs from their
+worker streams. `status`, `inspect` and `follow` print the figures.
+
+**Release notes follow the milestone.** A repository can opt in through
+its policy (`milestone_branches.pull_request.release_notes` and the
+`{release_notes}` placeholder). Readiness then puts the milestone's
+notes section into the pull request body, bound by a marker and a
+digest, and the release publishes the verified notes of its range from
+the squash commits, or refuses and names the fix. Notes lines are
+limited to 72 bytes. `tools/release.py notes-block` supplies notes by
+hand. This repository has not opted in yet.
+
+**Smaller fixes.** Every printed `resume` and `explain` hint now parses,
+and the resume hint carries `--runtime-dir`. A manual-external review
+gate whose ledger does not match the bundle now says so, instead of
+offering the bundle. `status` shows the job count, the ten newest jobs
+and the active runs' and jobs' start times, and honours `--json`.
+
+**Operator note.** Tags are now created with `--cleanup=verbatim`; their
+messages are unchanged. The tests redirect `XDG_CONFIG_HOME`, so a Git
+identity kept only in `$XDG_CONFIG_HOME/git/config` is not seen by them.

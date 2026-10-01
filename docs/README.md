@@ -13,8 +13,8 @@ Where to find what, and who maintains it. Start with the
 | [What the Controller automates, and how it stays safe](guide/automation.md) | the safety model, the rule that decides what is launched, the phase table, implementation-review apply rounds |
 | [Workers: lifecycle, recovery and observation](guide/workers.md) | how workers run and end, background work, the lifecycle lock, `resume`, job records and their recovery, `follow` |
 | [Runtime state and runtime identity](guide/runtime.md) | where the Controller keeps its state, and how it knows and records what code it is running |
-| [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, merge and close-out, stuck milestones |
-| [Continuous integration and releases](guide/ci-and-releases.md) | the CI workflows, how a release is made, and this repository's GitHub settings |
+| [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, the release notes in the pull request body, merge and close-out, stuck milestones |
+| [Continuous integration and releases](guide/ci-and-releases.md) | the CI workflows, how a release is made, release notes from the milestones, and this repository's GitHub settings |
 | [Development and the test runner](guide/development.md) | working from a checkout, running tests, the sharded test runner |
 | [Troubleshooting](guide/troubleshooting.md) | exit codes and the usual situations |
 
@@ -29,13 +29,17 @@ These guides are maintained by hand in this repository.
 | [1.4.0](releases/1.4.0.md) | squash merges, release versions derived from Conventional Commit pull request titles and the release tags, `MERGED_SQUASHED`, and the cutover |
 | [1.3.0](releases/1.3.0.md) | Workflow 2.6.0 admitted beside 2.5.1, the new error codes and gates, and the 1.2.1 changes that shipped without notes |
 
-Releases 1.3.0, 1.4.0, 1.4.1 and 1.4.2 have their notes in `releases/`. The intent
-from 1.4.0 on is that a milestone's notes are its pull request body, which
-becomes the squash commit body and the GitHub release notes; the Controller
-does not do that yet ([roadmap 11.1.2](ROADMAP.md#1112-release-notes-follow-the-milestone)),
-so until then each release's notes are added to `releases/` after it is published. The
-GitHub release itself carries the wheel and `SHA256SUMS`
-([Releasing](guide/ci-and-releases.md#releasing)).
+Releases 1.3.0, 1.4.0, 1.4.1 and 1.4.2 have their notes in `releases/`. From
+1.5.0 on, release notes can follow the milestone, as a policy opt-in: a
+repository that sets `milestone_branches.pull_request.release_notes` and uses
+`{release_notes}` in its release notes template gets each milestone's notes
+section in its pull request body, from there in the squash commit, and from
+there in the GitHub release notes
+([Release notes from the milestones](guide/ci-and-releases.md#release-notes-from-the-milestones)).
+This repository opts in with a cutover pull request after 1.5.0 is installed;
+until then, each release's notes are still copied into `releases/` by hand
+after it is published. The GitHub release itself carries the wheel and
+`SHA256SUMS` ([Releasing](guide/ci-and-releases.md#releasing)).
 
 ## Direction
 
@@ -55,6 +59,7 @@ stay stable; the code and the guides must agree with them.
 | [0005](adr/0005-adaptive-test-sharding.md) | the test inventory, planner and sharded runner |
 | [0006](adr/0006-workflow-release-admission-and-per-release-contracts.md) | which Workflow releases are admitted, what the Controller consumes from each, and why trunk integration stays manual |
 | [0007](adr/0007-tag-derived-versions-and-squash-merges.md) | Conventional Commit pull request titles, tag-derived versions, squash close-out and the cutover |
+| [0008](adr/0008-controller-settings-file.md) | the user-level settings file: location, precedence, fill and forward-only migration, and which values are settings |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

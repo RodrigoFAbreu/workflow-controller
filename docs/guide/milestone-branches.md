@@ -86,6 +86,7 @@ close-out are 1.3.0's.
   | `integration_required` | `main` moved after the branch point | the manual merge procedure below |
   | `pr_head_not_accepted` | GitHub does not show the pushed acceptance commit as the PR head yet | `run` again once it does |
   | `pr_title_invalid` | squash mode: the plan declares no valid title, and the PR's title is not a valid Conventional Commit | set a valid title on the PR on GitHub, then `run` again |
+  | `release_notes_invalid` | squash mode with release notes: the milestone's notes section cannot be carried by the squash commit (see [below](#release-notes-in-the-pull-request-body)); the PR is not edited | mark the PR ready and merge it on GitHub ("Squash and merge"), then supply the notes at release |
   | `merge_pull_request` | the PR is ready | merge it on GitHub with "Squash and merge", without editing the commit message |
 
 - **Merge and close-out.** You merge; the Controller never does. The
@@ -169,8 +170,10 @@ title.
   longer be amended after acceptance, so the exit is to set a valid
   title on GitHub.
 - The body becomes the squash commit's body. It is created as the first
-  and last lines below, and readiness adds the middle one. No line in it
-  parses as a Git trailer.
+  and last lines below, and readiness adds the middle one. No paragraph
+  in it parses as a Git trailer block. With release notes configured,
+  readiness also puts the milestone's notes block above these lines (see
+  [below](#release-notes-in-the-pull-request-body)).
 
   ```text
   Milestone `<id>`, planned in `<plan path>`, driven by workflow-controller.
@@ -185,7 +188,8 @@ title.
 
 **Merge with "Squash and merge", and do not edit the commit message**
 in GitHub's merge dialog. The repository's default squash message
-("Pull request title and description") is what close-out recognises.
+("Pull request title and description") is what close-out recognises,
+and it is how the notes block reaches the release.
 
 **`MERGED_SQUASHED` and close-out.** The merged head is not on `main`
 after a squash, so the next step verifies the merge before it records
@@ -224,6 +228,98 @@ While a binding is active, workers additionally run with `gh`,
 guarantee is that after every worker job `HEAD` must still be on the
 bound branch and the new tip must descend from the old one, or the job
 fails (`BranchInvariantViolated`).
+
+## Release notes in the pull request body
+
+In squash mode a milestone's release notes can travel in its pull
+request body, through the squash commit, to the release. A repository
+opts in with the optional policy key
+`milestone_branches.pull_request.release_notes`, which says where a
+milestone's notes live:
+
+```json
+"release_notes": {"path": "docs/milestones/completed/{work_item_id}.md", "heading": "Release notes"}
+```
+
+`path` is a relative, normalised POSIX path, and its only placeholder is
+`{work_item_id}`. `heading` is a non-empty single line. Without the key
+the body is the one [above](#squash-merges-and-the-pull-request-title),
+unchanged. Controller 1.4.x refuses a policy that has the key. The
+release side, the `{release_notes}` placeholder, is in
+[Release notes from the milestones](ci-and-releases.md#release-notes-from-the-milestones).
+
+**Where readiness reads the notes.** Like the merge mode, the path and
+heading come from the policy snapshot taken when the branch was bound,
+so a milestone keeps the notes location it started with. A policy edit
+on the milestone's own branch does not move it, and a milestone bound
+before the repository opted in carries no notes. Readiness reads the
+file at the acceptance commit (never the working tree) and takes the
+section under the line `## <heading>`, up to the next `## ` line or the
+end of the file, with outer blank lines trimmed. The body becomes:
+
+```text
+<!-- workflow-controller: release-notes work_item=<id> sha256=<digest> -->
+<notes>
+<!-- workflow-controller: release-notes end -->
+
+Milestone `<id>`, planned in `<plan path>`, driven by workflow-controller.
+Accepted at <acceptance commit> on `milestone/<id>`; merge with "Squash and merge".
+
+<!-- workflow-controller: work_item=<id> -->
+```
+
+`<digest>` is the SHA-256 of the notes' UTF-8 bytes. Only readiness
+writes this start marker, and only for notes that passed the checks
+below; the release checks the digest. When the file or the section is
+missing, or the section is empty, the body carries no block and
+readiness does not refuse. A release that uses `{release_notes}` then
+refuses unless the notes are supplied later
+([the fix](ci-and-releases.md#release-notes-from-the-milestones)), so
+write the section. The `pr_edited` and `ready` events record
+`release_notes: absent`, `empty` or `included` when the snapshot
+configures notes.
+
+**Write the section for the squash commit.** GitHub rewraps lines of
+the squash commit body longer than 72 characters, so the notes must
+reach it with no line that long. Readiness checks the notes, and the
+whole body around them, before any edit:
+
+- wrap the section at 72 bytes per line: 72 columns of ASCII, fewer
+  characters on a line with accented letters, which take two bytes
+  each;
+- no line ends in a space;
+- no tab and no carriage return (use LF line endings);
+- no Controller marker text (`<!-- workflow-controller:`);
+- no paragraph (a run of non-blank lines), read on its own, parses as a
+  Git trailer block;
+- the whole body holds at most 65536 characters, GitHub's limit.
+
+The trailer rule refuses two ordinary shapes: a one-line paragraph such
+as `Note: this release changes the default.`, and a paragraph that is
+only a bare URL (`https://example.com/x` parses as a trailer). Reword
+the paragraph or join it to its neighbour. A colon inside prose or a
+list item passes, and so do `Upgrade note: ...` (a space in the key),
+`**Breaking:** none` and a Markdown table. The check runs
+`git interpret-trailers --parse` with no Git configuration at all, so a
+local `trailer.separators` setting does not change the answer.
+
+A work-item id longer than 62 characters makes the marker's
+`work_item=` token longer than 72 characters. That one token cannot be
+broken at a space, and how GitHub wraps it has not been measured.
+
+**`release_notes_invalid`.** Notes that break a rule, a body that is
+too long, or a notes file that is not valid UTF-8 gate
+`release_notes_invalid`. The gate names the path, the line number or
+the paragraph's first line, and the rule. The pull request is not
+edited, and it is not marked ready. This cannot be fixed on the branch:
+a commit that fixes the section follows the acceptance commit, so
+readiness would stop at `post_acceptance_commits`, and the plan can no
+longer be amended. The exit is to mark the pull request ready and merge
+it on GitHub with "Squash and merge", without notes, and then to supply
+the notes at release with `python3 tools/release.py notes-block
+--work-item <id> <file>` (see
+[the fix](ci-and-releases.md#release-notes-from-the-milestones)). To
+avoid it, wrap the section at 72 columns while you write it.
 
 ## When a milestone gets stuck: the refusal-state exits
 

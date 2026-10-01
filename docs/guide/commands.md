@@ -12,7 +12,7 @@
 | `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
 | `workflow-controller resume [--drain-timeout SECONDS] <repo>` | re-attach to a job whose worker still runs with no Controller supervising it and supervise it to its end, then reconcile this target's non-terminal job records and report; never launches a worker. `--drain-timeout` bounds this re-attach's drain (see [the drain bound](workers.md#owned-processes-the-daemon-list-and-the-drain-bound)) |
 | `workflow-controller resume --abandon JOB_ID [--acknowledge-unverifiable-worker] <repo>` | mark one pending job file terminal instead of reconciling it (see [Job dispositions](workers.md#job-dispositions)) |
-| `workflow-controller status` | Controller-owned view: the running Controller, pinned identity, job records, pending handoff, active runs and jobs, the last job's telemetry, milestone bindings; read-only (see [`status`](#status)) |
+| `workflow-controller status` | Controller-owned view: the running Controller, pinned identity, job records, pending handoff, active runs and jobs, the last job's telemetry, milestone bindings; writes only `identity.json` (see [`status`](#status)) |
 | `workflow-controller follow [--job JOB_ID \| --run RUN_ID] [--from-start] [<repo>]` | render a run's or job's events and worker output (see [Observing workers](workers.md#observing-workers)); writes nothing |
 | `workflow-controller --work-item <id> milestone-binding --new-pr <repo>` | continue a milestone whose binding is in a refusal state on the same branch, with a new Draft PR (see [Milestone branches and pull requests](milestone-branches.md)); launches no worker and touches no ref or pull request |
 | `workflow-controller --work-item <id> milestone-binding --abandon <repo>` | retire such a binding, under the preconditions stated there; exactly one of `--new-pr`/`--abandon` is required |
@@ -61,12 +61,19 @@ orchestration work. Version 1.1 adds no exit code: `follow` uses only
 
 ## `status`
 
-`workflow-controller status` reads the runtime root and writes nothing
-there. Its text output, in order:
+`workflow-controller status` reads the runtime root. The one file it
+writes there is `identity.json`, the record of the running Controller,
+which every command except `follow`, `settings` and `telemetry` writes
+before it runs; the root is created if it is missing. Its text output,
+in order:
 
 - `controller:` the running Controller, as `--version`'s line 2. With no
-  runtime state yet, one more line says so, and that is all;
-- `pinned identity:` the identity recorded by the last acting command;
+  runtime state yet, one more line says so, and that is all. That
+  `status` still writes `identity.json`, so a later `status` finds
+  runtime state and shows that record as `pinned identity:
+  source_kind=unpinned ...`;
+- `pinned identity:` the identity recorded by the last command that
+  wrote `identity.json`;
 - `jobs: <n> recorded` (or `jobs: none`), then the 10 newest jobs, newest
   first, one per line: id, status, command and work item, then
   `age 12 min` while the job is active, or `wall 1400 s, cost $11.66`

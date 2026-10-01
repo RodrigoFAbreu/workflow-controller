@@ -322,6 +322,9 @@ class StatusFirstLineTest(unittest.TestCase):
                 expected_first,
                 f"no Controller runtime state at {runtime_root.resolve()} (ladder row 1)",
             ])
+            # `commands.md`'s `status` section (functional review F2): the
+            # one file `status` writes is `identity.json`.
+            self.assertEqual(sorted(p.name for p in runtime_root.iterdir()), ["identity.json"])
 
             second = fixtures.run(argv, cwd=tmp_path, env=env, check=False)
             lines = second.stdout.splitlines()

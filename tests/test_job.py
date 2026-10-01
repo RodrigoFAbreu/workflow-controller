@@ -232,7 +232,7 @@ class NoLaunchRecordTest(unittest.TestCase):
         gate = record["human_gate_pending"]
         self.assertEqual(gate["phase"], "IMPLEMENTING")
         self.assertIn("step 1a", gate["what_is_required"])
-        self.assertEqual(gate["safe_resume_command"], "workflow-controller explain --work-item wi-1")
+        self.assertEqual(gate["safe_resume_command"], decision.explain_gate_command(Path(gate["repository"]), "wi-1"))
         self.assertFalse(record["handoff_pending"])
         self.assertIsNone(record["selected_action"]["command"])
         self.assertNotIn("worker", record)
@@ -1449,7 +1449,7 @@ class ApplyingReviewFeedbackExecuteTest(unittest.TestCase):
                 self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
                 gate = record["human_gate_pending"]
                 self.assertIn(f"job earlier-apply, ended {status}", gate["what_is_required"])
-                self.assertEqual(gate["safe_resume_command"], "workflow-controller explain --work-item wi-1")
+                self.assertEqual(gate["safe_resume_command"], decision.explain_gate_command(Path(gate["repository"]), "wi-1"))
 
     def test_a_null_recorded_bundle_is_the_bound(self) -> None:
         record, _diag, _runtime = self._execute(

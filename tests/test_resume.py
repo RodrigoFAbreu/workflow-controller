@@ -2787,8 +2787,8 @@ class ReattachAfterControllerLossTest(_LostControllerCase):
         self.assertEqual(activity["activity"], observe.ACTIVITY_UNSUPERVISED)
         self.assertRegex(activity["text"], rf"^worker pid {record['worker_process']['pid']} waiting on "
                                            r"1 background task \(")
-        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- workflow-controller resume "
-                                                  f"{lc.root} re-attaches"), activity["text"])
+        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- workflow-controller --runtime-dir "
+                                                  f"{lc.runtime} resume {lc.root} re-attaches"), activity["text"])
 
         # step and run exit 45 at the lock the anchor holds, naming it and
         # `resume` (the exit-45 text of plan E).
@@ -3280,7 +3280,7 @@ class DrainDetachedReattachTest(_LostControllerCase):
         activity = observe.job_activity(self.job_record(lc, record["job_id"]), lc.runtime)
         self.assertIn(activity["activity"], (observe.ACTIVITY_DRAINING, observe.ACTIVITY_UNSUPERVISED))
         self.assertIn(f"worker ended; 1 owned process still running (pids {entry['pid']}); detached after 0:01 "
-                      f"-- end them, then workflow-controller resume {lc.root}", activity["text"])
+                      f"-- end them, then workflow-controller --runtime-dir {lc.runtime} resume {lc.root}", activity["text"])
         again, _writes = self.resume(lc)
         self.assertEqual(again.code, cli.EXIT_WORKER_ACTIVE, again.stderr)
         self.assertIn(str(entry["pid"]), again.stderr)

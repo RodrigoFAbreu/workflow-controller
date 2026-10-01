@@ -605,6 +605,12 @@ class _ActivityCase(_FollowCase):
     this test process may hold (an attached Controller), and live sleepers
     standing in for the worker, owned processes and recognised daemons."""
 
+    @property
+    def resume(self) -> str:
+        """The activity text's ``resume`` hint for ``/repo``, carrying
+        ``--runtime-dir`` as ``follow``'s does (CP5, E.1)."""
+        return f"workflow-controller --runtime-dir {self.runtime_root} resume /repo"
+
     def tracked_job(self, job_id: str = "j1", *, state: str, worker_process: dict | None = None,
                     waiting_on: dict | None = None, owned: tuple = (), excluded: tuple = (), **fields) -> dict:
         worker_state = {"state": state, "since": "2026-01-01T00:00:00Z", "turns": 3,
@@ -731,7 +737,7 @@ class JobActivityTest(_ActivityCase):
         self.assertIn("1 harness command (command_uuid 6ff491e4, turn ended, awaiting completion; "
                       "stall time unknown (no Controller attached))", activity["text"])
         self.assertNotIn("stalled", activity["text"])
-        self.assertTrue(activity["text"].endswith("; no Controller attached -- workflow-controller resume /repo "
+        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- {self.resume} "
                                                   "re-attaches"))
 
     def test_a_fire_matched_wakeup_is_presumed_fired_never_quiescent(self) -> None:
@@ -770,7 +776,7 @@ class JobActivityTest(_ActivityCase):
         self.assertEqual(activity["activity"], observe.ACTIVITY_DRAINING)
         self.assertEqual(activity["text"],
                          f"worker ended; 1 owned process still running (pids {owned.pid}); detached after 180:00 "
-                         f"-- end them, then workflow-controller resume /repo; not owned: pid {daemon.pid} "
+                         f"-- end them, then {self.resume}; not owned: pid {daemon.pid} "
                          f"({self.daemon_entry(daemon)['cmdline']})")
         self.assertEqual([entry["pid"] for entry in activity["not_owned"]], [daemon.pid])
 
@@ -783,7 +789,7 @@ class JobActivityTest(_ActivityCase):
         owned = process_fixtures.spawn_sleeper(self)
         self.tracked_job(state=worker.DRAINING, worker_process=self.dead_process(), owned=(owned,),
                          drain_detached_at="2026-01-01T00:10:00Z", drain_detach_seconds=120)
-        self.assertIn("; detached after 2:00 -- end them, then workflow-controller resume /repo",
+        self.assertIn(f"; detached after 2:00 -- end them, then {self.resume}",
                       self.activity()["text"])
         sink: list[str] = []
         follower = observe._Follower(self.runtime_root, sink.append, json_output=False, stop=None,
@@ -801,7 +807,7 @@ class JobActivityTest(_ActivityCase):
                 activity = self.activity()
                 self.assertEqual(activity["activity"], observe.ACTIVITY_PENDING)
                 self.assertEqual(activity["text"], f"worker ended ({expected}); pending reconciliation -- "
-                                                   f"workflow-controller resume /repo")
+                                                   f"{self.resume}")
 
     def test_presenting_writes_nothing(self) -> None:
         self.tracked_job(state=worker.WAITING)
@@ -891,9 +897,9 @@ class TrackedFollowTest(_ActivityCase):
     def test_an_unsupervised_live_job_is_followed_with_one_notice_naming_resume(self) -> None:
         self.tracked_job(state=worker.WAITING)
         bodies = self._follow_until(2)
-        self.assertEqual(bodies[0], "no Controller is attached to job j1 -- workflow-controller resume /repo "
+        self.assertEqual(bodies[0], f"no Controller is attached to job j1 -- {self.resume} "
                                     "re-attaches; following")
-        self.assertIn("no Controller attached -- workflow-controller resume /repo re-attaches", bodies[1])
+        self.assertIn(f"no Controller attached -- {self.resume} re-attaches", bodies[1])
         self.assertNotIn("awaits resume", "\n".join(bodies))
 
     @unittest.skipUnless(_INIT_NS, "the supervisor probe reads unknown outside the init pid namespace")
@@ -902,7 +908,7 @@ class TrackedFollowTest(_ActivityCase):
                          worker_outcome="SUCCESS")
         observe.follow_job(self.runtime_root, "j1", self.sink)
         self.assertEqual(self.bodies()[-1], "job j1: worker ended (SUCCESS); pending reconciliation -- "
-                                            "workflow-controller resume /repo")
+                                            f"{self.resume}")
 
     def test_select_active_picks_a_live_tracked_job_whose_worker_has_exited(self) -> None:
         self.attach()

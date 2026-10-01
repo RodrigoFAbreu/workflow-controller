@@ -43,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, evidence, identity, job, lock, managed_repo, observe, routing, runtime, settings, worker,
+    cli, decision, evidence, identity, job, lock, managed_repo, observe, routing, runtime, settings, worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
@@ -564,7 +564,7 @@ class ExplainCommandTest(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("human gate", out)
         self.assertIn("entry validation (step 1a)", out)
-        self.assertIn("safe resume command: workflow-controller explain --work-item wi-1", out)
+        self.assertIn(f"safe resume command: {decision.explain_gate_command(repo, 'wi-1')}", out)
         self.assertNotIn("declined", out)
 
     def test_declined_phase_reports_the_declined_action(self) -> None:
@@ -1755,7 +1755,8 @@ class JobActivitySurfacesTest(unittest.TestCase):
         self._waiting()
         text = self._status()
         self.assertIn("stall time unknown (no Controller attached)", text)
-        self.assertIn(f"; no Controller attached -- workflow-controller resume {self.target} re-attaches\n", text)
+        self.assertIn(f"; no Controller attached -- workflow-controller --runtime-dir {self.runtime_root} resume "
+                      f"{self.target} re-attaches\n", text)
 
     def test_inspect_gains_a_jobs_block_only_when_a_job_is_pending(self) -> None:
         self.assertNotIn("jobs:", self._run(cli.cmd_inspect))
@@ -1797,7 +1798,7 @@ class JobActivitySurfacesTest(unittest.TestCase):
                   worker={"stream_diagnosis": diagnosis})
         text = self._run(cli.cmd_explain)
         self.assertIn("    activity: worker ended (AMBIGUOUS); pending reconciliation -- "
-                      f"workflow-controller resume {self.target}\n", text)
+                      f"workflow-controller --runtime-dir {self.runtime_root} resume {self.target}\n", text)
         self.assertIn("    worker outcome AMBIGUOUS: command_lifecycle_irregular (also: wakeup_not_delivered)\n", text)
         self.assertIn(f"    command_lifecycle anomaly: wakeup_count_mismatch, command_uuid {self.BRACKET}, offset 7, "
                       f"cancelledWakeups 2, expected 1\n", text)

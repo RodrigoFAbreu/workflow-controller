@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import identity, job, lock, routing, worker  # noqa: E402
+from controller import decision, identity, job, lock, routing, worker  # noqa: E402
 from controller.cli import (  # noqa: E402
     EXIT_FAIL_CLOSED, EXIT_GATE, EXIT_INCOMPLETE, EXIT_INTERRUPTED, EXIT_OK, EXIT_WORKER_ACTIVE, EXIT_WORKER_FAILED,
 )
@@ -895,7 +895,7 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                 self.assertEqual(record_5["status"], job.STATUS_GATE_BLOCKED)
                 gate_5 = record_5["human_gate_pending"]
                 self.assertEqual(
-                    gate_5["safe_resume_command"], f"workflow-controller explain --work-item {work_item_id}",
+                    gate_5["safe_resume_command"], decision.explain_gate_command(Path(gate_5["repository"]), work_item_id),
                 )
                 self.assertIn("/approve-review implementation would refuse", gate_5["what_is_required"])
                 self.assertIn("LOCAL_MODEL_IMPLEMENTATION_REVIEW", gate_5["what_is_required"])
@@ -952,7 +952,7 @@ class Protocol22ImplementationReviewGatesTest(unittest.TestCase):
                 self.assertIn(f"job {record_6['job_id']}, ended FAILED", gate_7["what_is_required"])
                 self.assertIn("review-bundle.tar.gz", gate_7["what_is_required"])
                 self.assertEqual(
-                    gate_7["safe_resume_command"], f"workflow-controller explain --work-item {work_item_id}",
+                    gate_7["safe_resume_command"], decision.explain_gate_command(Path(gate_7["repository"]), work_item_id),
                 )
 
             # A `controller resume` pass across the same seeded states must

@@ -3074,8 +3074,14 @@ def _is_regular_job_file(path: Path) -> bool:
     return _job_entry_kind(path) == _JOB_ENTRY_REGULAR
 
 
-def _resume_command(root: Path) -> str:
-    return f"workflow-controller resume {root}"
+def _resume_command(root: Path, runtime_root: Path | None = None) -> str:
+    """``resume``'s hint for ``root``. With ``runtime_root`` (the
+    ``status``/``inspect``/``explain``/``follow`` activity hint,
+    :func:`controller.observe.resume_command`) it carries ``--runtime-dir``,
+    exactly as :func:`follow_command` does."""
+    if runtime_root is None:
+        return f"workflow-controller resume {root}"
+    return f"workflow-controller --runtime-dir {runtime_root} resume {root}"
 
 
 def follow_command(runtime_root: Path, root: Path) -> str:

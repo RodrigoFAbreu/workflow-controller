@@ -886,6 +886,167 @@ class AwaitingManualExternalImplementationReviewTest(unittest.TestCase):
         _assert_regeneration_steps(self, result, "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
 
 
+_STALE_ID = "d" * 64
+
+
+class _LedgerIncoherentAssertions(unittest.TestCase):
+    """Shared assertions for the ``manual_external_ledger_incoherent``
+    gate (``workflow-controller-settings-and-telemetry`` CP5, Design E.2)."""
+
+    def assert_incoherent(self, result, *, check: str, ledger_id: str | None) -> str:
+        self.assertIsNone(result.action)
+        self.assertFalse(result.automatic)
+        self.assertFalse(result.declined)
+        self.assertIsNotNone(result.gate)
+        self.assertIn("manual_external_ledger_incoherent", result.reason)
+        self.assertIn(check, result.reason)
+        text = result.gate.what_is_required
+        self.assertTrue(text.startswith("do not send "), text)
+        self.assertIn(check, text)
+        self.assertIn(f"MANIFEST.md's review_content_id is {'c' * 64}", text)
+        self.assertIn(f"the ledger's is {ledger_id or 'none'}", text)
+        # Never the stale id as the one to hand over, never a review stage the
+        # Workflow refuses at this phase, never `explain`.
+        self.assertNotIn("from the ledger", text)
+        self.assertNotIn("upload", text)
+        for refused in ("/review-plan", "/review-implementation", "explain"):
+            self.assertNotIn(refused, text)
+            self.assertNotIn(refused, result.gate.safe_resume_command)
+        return text
+
+
+class ManualExternalPlanLedgerIncoherentTest(_LedgerIncoherentAssertions):
+    """The plan stage: ``plan_review_stages`` against the plan bundle's
+    ``MANIFEST.md``; the way out is the ``/milestone-plan`` withdrawal."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        fixtures.write_manifest(
+            self.root, ".ai-review/wi-1/current",
+            fixtures.build_plan_manifest_text("wi-1", 1, generation_head=fixtures.current_head(self.root)),
+        )
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, stages):
+        work_item = fixtures.build_work_item_view(
+            phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", base_commit="0" * 40, plan_review_stages=stages,
+        )
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def assert_plan_way_out(self, result) -> None:
+        # The withdrawal is named as text only: no ready-phase gate offers
+        # /milestone-plan as its command (NoMilestonePlanAtPlanReviewReadyPhaseTest).
+        self.assertNotIn("/milestone-plan", result.gate.safe_resume_command)
+        self.assertIn("withdraw", result.gate.safe_resume_command)
+        text = result.gate.what_is_required
+        self.assertIn("Withdraw with /milestone-plan wi-1", text)
+        self.assertIn("REVISING_PLAN", text)
+        self.assertIn("discards both recorded plan-review stages", text)
+        self.assertIn("can never re-bind unchanged", text)
+
+    def test_malformed_ledger(self) -> None:
+        for stages in (
+            [],
+            {"review_content_id": 7, "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE"}},
+            {"review_content_id": "c" * 64, "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "REVISE"}},
+            {"review_content_id": "c" * 64, "MANUAL_EXTERNAL_PLAN_REVIEW": {"verdict": "APPROVE"}},
+        ):
+            with self.subTest(stages=stages):
+                result = self._decide(stages)
+                self.assert_incoherent(result, check=evidence._LEDGER_MALFORMED, ledger_id=None)
+                self.assert_plan_way_out(result)
+
+    def test_ledger_id_differs_from_the_manifest(self) -> None:
+        result = self._decide({"review_content_id": _STALE_ID,
+                               "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64}})
+        self.assert_incoherent(result, check=evidence._LEDGER_ID_MISMATCH, ledger_id=_STALE_ID)
+        self.assert_plan_way_out(result)
+
+    def test_absent_ledger_is_a_mismatch_with_none(self) -> None:
+        result = self._decide(None)
+        self.assert_incoherent(result, check=evidence._LEDGER_ID_MISMATCH, ledger_id=None)
+
+    def test_no_local_approve(self) -> None:
+        result = self._decide({"review_content_id": "c" * 64})
+        self.assert_incoherent(result, check=evidence._LEDGER_NO_LOCAL_APPROVE, ledger_id="c" * 64)
+        self.assert_plan_way_out(result)
+
+    def test_a_coherent_ledger_gives_todays_gate(self) -> None:
+        result = self._decide({"review_content_id": "c" * 64,
+                               "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64}})
+        self.assertEqual(result.gate.what_is_required,
+                         "upload the current plan bundle to a manual external reviewer and paste the verdict "
+                         "into REVIEW_FEEDBACK.md, declaring Reviewer role: MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.assertEqual(result.gate.safe_resume_command, "/record-manual-plan-review wi-1")
+        self.assertEqual(result.reason, "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW: no current-round "
+                                        "REVIEW_FEEDBACK.md on file")
+        self.assertEqual(result.evidence, ())
+
+
+class ManualExternalImplementationLedgerIncoherentTest(_LedgerIncoherentAssertions):
+    """The implementation stage: ``implementation_review_stages`` against
+    the implementation bundle's ``MANIFEST.md``; no Workflow command moves
+    the phase back, so the way out is explicit user resolution."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = _make_target(Path(self._tmp.name))
+        fixtures.copy_real_commands_dir(self.root / ".claude" / "commands")
+        fixtures.write_implementation_bundle(
+            self.root, "wi-1", 1, scoped=False, reviewed_implementation_head=_REVIEWED_HEAD,
+        )
+        self.managed_repo = fixtures.build_target_managed_repository(self.root)
+
+    def _decide(self, ledger):
+        work_item = _implementation_work_item("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+                                              implementation_review_stages=ledger)
+        return evidence.decide(self.managed_repo, snapshot=None, work_item=work_item)
+
+    def assert_user_resolution(self, result) -> None:
+        text = result.gate.what_is_required
+        self.assertIn("No Workflow command moves AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW back", text)
+        self.assertIn("explicit user resolution before any external review", text)
+        self.assertIn("explicit user resolution", result.gate.safe_resume_command)
+        self.assertNotIn("/milestone-plan", text)
+
+    def test_malformed_ledger(self) -> None:
+        for ledger in (
+            "not-a-ledger",
+            {"review_content_id": "c" * 64, _LOCAL_ROLE: {"verdict": "REVISE", "bundle_id": "b" * 64, "round": 1}},
+            fixtures.implementation_review_ledger("c" * 64, manual_bundle_id="b" * 64),
+        ):
+            with self.subTest(ledger=ledger):
+                result = self._decide(ledger)
+                self.assert_incoherent(result, check=evidence._LEDGER_MALFORMED, ledger_id=None)
+                self.assert_user_resolution(result)
+
+    def test_ledger_id_differs_from_the_manifest(self) -> None:
+        result = self._decide(fixtures.implementation_review_ledger(_STALE_ID, local_bundle_id="b" * 64))
+        self.assert_incoherent(result, check=evidence._LEDGER_ID_MISMATCH, ledger_id=_STALE_ID)
+        self.assert_user_resolution(result)
+
+    def test_no_local_approve(self) -> None:
+        result = self._decide(fixtures.implementation_review_ledger("c" * 64))
+        self.assert_incoherent(result, check=evidence._LEDGER_NO_LOCAL_APPROVE, ledger_id="c" * 64)
+        self.assert_user_resolution(result)
+
+    def test_a_coherent_ledger_gives_todays_gate(self) -> None:
+        result = self._decide(_LOCAL_APPROVE_LEDGER)
+        feedback_path = Path(".ai-review/feedback/REVIEW_FEEDBACK.md")
+        self.assertEqual(
+            result.gate.what_is_required,
+            f"upload {Path('.ai-review/current')} (bundle_id {'b' * 64}, review_content_id {'c' * 64} "
+            f"from the ledger) to a manual external reviewer and paste the verdict into {feedback_path}, "
+            f"declaring Reviewer role: {_MANUAL_ROLE}",
+        )
+        self.assertEqual(result.gate.safe_resume_command, "/record-manual-implementation-review wi-1")
+        self.assertEqual(result.evidence, ())
+
+
 class AwaitingFunctionalReviewTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -1052,7 +1213,9 @@ class StalePlanBundleGateTest(unittest.TestCase):
         result = self._decide("AWAITING_LOCAL_PLAN_REVIEW")
         self.assertTrue(result.automatic)
         self.assertEqual(result.action.command, "/review-plan wi-1")
-        result = self._decide("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        result = self._decide("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", plan_review_stages={
+            "review_content_id": "c" * 64, "LOCAL_MODEL_PLAN_REVIEW": {"verdict": "APPROVE", "bundle_id": "b" * 64},
+        })
         self.assertEqual(result.gate.safe_resume_command, "/record-manual-plan-review wi-1")
 
     def test_staleness_is_checked_ahead_of_the_local_block_gate(self) -> None:
@@ -2115,7 +2278,7 @@ def _assert_regeneration_steps(test: unittest.TestCase, result, phase: str) -> N
         test.assertIn("refuses at preflight", text)
         test.assertNotIn("/recover-implementation-provenance", text)
     test.assertNotEqual(gate.safe_resume_command, evidence._regeneration_command(phase, "wi-1"))
-    test.assertNotEqual(gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+    test.assertNotEqual(gate.safe_resume_command, decision.explain_gate_command(Path(gate.repository), "wi-1"))
 
 
 def _assert_provenance_only(test: unittest.TestCase, result, *, head: str, paths: tuple[str, ...]) -> None:
@@ -2227,7 +2390,8 @@ class AwaitingExternalImplementationReviewTwoStageTest(unittest.TestCase):
         self.assertFalse(result.automatic)
         self.assertIsNotNone(result.gate)
         self.assertNotEqual(result.gate.safe_resume_command, "/approve-review implementation wi-1")
-        self.assertEqual(result.gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+        self.assertEqual(result.gate.safe_resume_command,
+                         decision.explain_gate_command(Path(result.gate.repository), "wi-1"))
         self.assertIn("/approve-review implementation would refuse", result.gate.what_is_required)
         for fragment in fragments:
             self.assertIn(fragment, result.gate.what_is_required)
@@ -2644,7 +2808,7 @@ class ImplementationRejectedMarkerGateTest(unittest.TestCase):
                     "feedback's Reviewed bundle ID",
                 ])
                 self.assertIn("the bundle REVIEW_FEEDBACK.md reviewed was withdrawn", gate.what_is_required)
-                self.assertEqual(gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+                self.assertEqual(gate.safe_resume_command, decision.explain_gate_command(Path(gate.repository), "wi-1"))
                 for text in (gate.what_is_required, gate.safe_resume_command):
                     self.assertNotIn("prepare-ai-review.sh", text)
                     self.assertNotIn(evidence._regeneration_command("APPLYING_REVIEW_FEEDBACK", "wi-1"), text)
@@ -2811,7 +2975,7 @@ class ImplementationBundleRecoveryGateTest(unittest.TestCase):
             "generation-record commit",
             "/apply-implementation-review step 7",
         ])
-        self.assertEqual(gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+        self.assertEqual(gate.safe_resume_command, decision.explain_gate_command(Path(gate.repository), "wi-1"))
         for text in (gate.what_is_required, gate.safe_resume_command):
             self.assertNotIn("prepare-ai-review.sh", text)
             self.assertNotIn("/recover-implementation-provenance", text)
@@ -3065,7 +3229,7 @@ class ApplyingReviewFeedbackAutomaticPathTest(unittest.TestCase):
                     f"({Path('.ai-review/wi-1/review-bundle.tar.gz')})",
                     "in a supervised session", "or completes the round by hand",
                 ])
-                self.assertEqual(gate.safe_resume_command, "workflow-controller explain --work-item wi-1")
+                self.assertEqual(gate.safe_resume_command, decision.explain_gate_command(Path(gate.repository), "wi-1"))
                 self.assertIn(self.JOB_ID, result.evidence[0])
 
     def test_a_null_recorded_bundle_counts_as_the_same_bundle(self) -> None:
@@ -3189,7 +3353,7 @@ class UncommittedImplementationStateGateTest(unittest.TestCase):
         self.assertEqual(gate.work_item_id, _WI)
         self.assertEqual(gate.repository, str(self.root))
         self.assertEqual(gate.artifact_path, str(self.root / _STATE_REL))
-        self.assertEqual(gate.safe_resume_command, f"workflow-controller explain --work-item {_WI}")
+        self.assertEqual(gate.safe_resume_command, decision.explain_gate_command(self.root, _WI))
         self.assertTrue(gate.what_is_required.startswith(
             f"the working tree's {_STATE_REL} records state that HEAD does not durably record: "
             + "; ".join(facts) + ". "

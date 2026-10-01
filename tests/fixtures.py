@@ -1073,13 +1073,15 @@ def build_manifest_text(
 
 def build_plan_manifest_text(
     work_item_id: str, plan_revision: int | str, *, bundle_id: str = "b" * 64,
-    generation_head: str | None = "0" * 40,
+    generation_head: str | None = "0" * 40, review_content_id: str | None = "c" * 64,
 ) -> str:
     """A plan-stage ``MANIFEST.md`` coherent with ``work_item_id`` at
-    ``plan_revision`` (``evidence.plan_bundle_coherence``)."""
+    ``plan_revision`` (``evidence.plan_bundle_coherence``), stating
+    ``review_content_id`` as the generator does -- by default the id the
+    fixtures' ``plan_review_stages`` ledgers record."""
     return build_manifest_text(
         bundle_id=bundle_id, generation_head=generation_head, stage="plan",
-        work_item_id=work_item_id, plan_revision=plan_revision,
+        work_item_id=work_item_id, plan_revision=plan_revision, review_content_id=review_content_id,
     )
 
 

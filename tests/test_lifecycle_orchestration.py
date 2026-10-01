@@ -49,7 +49,7 @@ from typing import Callable, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, evidence, identity, job, lock, runtime, worker  # noqa: E402
+from controller import cli, decision, evidence, identity, job, lock, runtime, worker  # noqa: E402
 from controller.errors import LifecycleWorkerActiveError  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
@@ -618,7 +618,7 @@ class _LifecycleTestCase(unittest.TestCase):
         self.assertIn("A human reconciles the working tree with HEAD first", what)
         self.assertNotIn("prepare-ai-review.sh", what)
         self.assertEqual(gate["artifact_path"], str(lc.root / STATE_REL))
-        self.assertEqual(gate["safe_resume_command"], f"workflow-controller explain --work-item {WI}")
+        self.assertEqual(gate["safe_resume_command"], decision.explain_gate_command(lc.root, WI))
 
     def assert_no_user_only_task(self, lc: Lifecycle) -> None:
         """No worker was ever handed a user-only command."""
@@ -873,14 +873,19 @@ def _rejected_next(stage: str):
 
 def _manual_gate_next(test: "FailClosedArtifactTest", lc: Lifecycle) -> None:
     """A local ``APPROVE`` recorded against other content is not a bundle
-    fault, so no bundle gate applies: the next decision is the manual gate,
-    which launches nothing, and names the ledger's (wrong) content."""
-    gate = test.next_step_gate(lc, safe=RECORD_MANUAL)
-    test.assertIn(f"review_content_id {OTHER_CONTENT} from the ledger", gate["what_is_required"])
+    fault, so no bundle gate applies: the next decision is the manual
+    phase's ``manual_external_ledger_incoherent`` gate (CP5, E.2), which
+    launches nothing, says not to send the bundle and never offers the
+    ledger's (wrong) content as the id to hand over."""
+    gate = test.next_step_gate(lc, safe=f"explicit user resolution of {WI}'s Workflow state before any external "
+                                        "review")
+    test.assertTrue(gate["what_is_required"].startswith("do not send "), gate["what_is_required"])
+    test.assertIn(f"the ledger's is {OTHER_CONTENT}", gate["what_is_required"])
+    test.assertNotIn(f"review_content_id {OTHER_CONTENT} from the ledger", gate["what_is_required"])
 
 
 def _approval_refusal_next(test: "FailClosedArtifactTest", lc: Lifecycle) -> None:
-    gate = test.next_step_gate(lc, safe=f"workflow-controller explain --work-item {WI}")
+    gate = test.next_step_gate(lc, safe=decision.explain_gate_command(lc.root, WI))
     test.assertIn("/approve-review implementation would refuse here", gate["what_is_required"])
     test.assertIn(f"the ledger's review_content_id '{OTHER_CONTENT}' is not the current content's",
                   gate["what_is_required"])
@@ -907,7 +912,7 @@ def _uncommitted_state_next(*facts: str):
     launches nothing -- another ``/milestone-implement`` worker could
     otherwise build on the uncommitted completion or commit it."""
     def check(test: "FailClosedArtifactTest", lc: Lifecycle) -> None:
-        gate = test.next_step_gate(lc, safe=f"workflow-controller explain --work-item {WI}")
+        gate = test.next_step_gate(lc, safe=decision.explain_gate_command(lc.root, WI))
         test.assert_uncommitted_state_gate(gate, lc, facts)
         test.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD")["phase"], IMPLEMENTING)
     return check
@@ -1424,10 +1429,15 @@ class PlanStageUnchangedTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+_EXPLAIN = "<the explain gate command>"
+
+
 def _seed_gate(test: "GatesLaunchNothingTest", name: str, case: str) -> tuple[Lifecycle, str | None, str]:
     """The pre-state of one gate sub-case: ``(lifecycle, expected
-    safe_resume_command or None, a fragment of what_is_required)``."""
-    explain = f"workflow-controller explain --work-item {WI}"
+    safe_resume_command or None, a fragment of what_is_required)``; the
+    ``explain`` gate's command, which names the repository, is
+    :data:`_EXPLAIN`, resolved by the caller."""
+    explain = _EXPLAIN
     if case == "IMPLEMENTING, no plan approval":
         return test.seed(name, IMPLEMENTING, plan_approval=None), explain, "step 1a"
     if case == "SELF_REVIEWING_IMPLEMENTATION, a stale plan approval":
@@ -1520,6 +1530,8 @@ class GatesLaunchNothingTest(_LifecycleTestCase):
         for i, case in enumerate(GATE_CASES):
             with self.subTest(case=case):
                 lc, safe, fragment = _seed_gate(self, f"gate-{i}", case)
+                if safe == _EXPLAIN:
+                    safe = decision.explain_gate_command(lc.root, WI)
                 result = self.cli(lc, "run", fail_if_invoked=True)
                 self.assertEqual(len(result.records), 1)
                 gate = self.assert_gate(result, lc, processes_before=0, contains=(fragment,), safe=safe)
@@ -1560,7 +1572,7 @@ class LiteralApplyWorkerTest(_LifecycleTestCase):
         self.assertEqual(evidence.committed_work_item(lc.root, WI, "HEAD^")["phase"], AWAITING_LOCAL)
         gated = self.cli(lc, "step", fail_if_invoked=True)
         gate = self.assert_gate(gated, lc, processes_before=1, contains=(t, "OPUS-R101-001"),
-                                safe=f"workflow-controller explain --work-item {WI}")
+                                safe=decision.explain_gate_command(lc.root, WI))
         self.assertNotIn("perform in order", gate["what_is_required"])
         self.assertNotIn("prepare-ai-review.sh", gate["what_is_required"])
 
@@ -1605,7 +1617,7 @@ class ApplyRelaunchBoundTest(_LifecycleTestCase):
         gate = self.assert_gate(
             second, lc, processes_before=1,
             contains=(f"job {failed['job_id']}, ended FAILED", "review-bundle.tar.gz"),
-            safe=f"workflow-controller explain --work-item {WI}",
+            safe=decision.explain_gate_command(lc.root, WI),
         )
         self.assertIn(bundle_id(1), gate["what_is_required"])
         self.assertEqual(len(second.records), 1)
@@ -1887,7 +1899,7 @@ class WaitingWorkerRegressionTest(_WaitingWorkerCase):
                     second = self.cli(lc, "run", fail_if_invoked=True)
                     gate = self.assert_gate(second, lc, processes_before=1,
                                             contains=(f"job {record['job_id']}, ended FAILED",),
-                                            safe=f"workflow-controller explain --work-item {WI}")
+                                            safe=decision.explain_gate_command(lc.root, WI))
                     self.assertIn(bundle_id(1), gate["what_is_required"])
 
 

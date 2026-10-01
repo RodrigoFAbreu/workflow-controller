@@ -97,7 +97,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
-import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -471,12 +470,9 @@ def evaluate_manual_stage_admissibility(
             f"{current_content_id!r}",
         ))
 
-    local = stages.get("LOCAL_MODEL_PLAN_REVIEW")
-    if not (isinstance(local, dict) and local.get("verdict") == "APPROVE"):
-        failures.append(ClauseFailure(
-            "local approval",
-            "no current LOCAL_MODEL_PLAN_REVIEW APPROVE is recorded for this review_content_id",
-        ))
+    local_failure = _plan_local_approval_failure(stages)
+    if local_failure is not None:
+        failures.append(local_failure)
 
     manifest_head = manifest.get("generation_head")
     if manifest_head is None or current_head is None or manifest_head != current_head:
@@ -488,6 +484,20 @@ def evaluate_manual_stage_admissibility(
 
     return AdmissibilityResult(
         admissible=not failures, failures=tuple(failures), advisories=tuple(advisories),
+    )
+
+
+def _plan_local_approval_failure(stages: Any) -> ClauseFailure | None:
+    """The plan-stage "local approval" clause: a ``LOCAL_MODEL_PLAN_REVIEW``
+    ``APPROVE`` recorded in ``plan_review_stages`` -- shared by
+    :func:`evaluate_manual_stage_admissibility` and
+    :func:`_manual_external_ledger_problem`."""
+    local = stages.get("LOCAL_MODEL_PLAN_REVIEW") if isinstance(stages, dict) else None
+    if isinstance(local, dict) and local.get("verdict") == "APPROVE":
+        return None
+    return ClauseFailure(
+        "local approval",
+        "no current LOCAL_MODEL_PLAN_REVIEW APPROVE is recorded for this review_content_id",
     )
 
 
@@ -1077,6 +1087,31 @@ def generation_record_view(
 # --- admissibility at the implementation stage ------------------------------
 
 
+def _implementation_ledger_id_failure(ledger: LedgerView, manifest_content_id: Any) -> ClauseFailure | None:
+    """The "ledger review_content_id" clause: the ledger's
+    ``review_content_id`` is the bundle manifest's -- shared by
+    :func:`evaluate_manual_implementation_stage_admissibility` and
+    :func:`_manual_external_ledger_problem`."""
+    if ledger.review_content_id is not None and ledger.review_content_id == manifest_content_id:
+        return None
+    return ClauseFailure(
+        "ledger review_content_id",
+        f"the ledger records {ledger.review_content_id!r}, MANIFEST.md states {manifest_content_id!r}",
+    )
+
+
+def _implementation_local_approval_failure(ledger: LedgerView) -> ClauseFailure | None:
+    """The implementation-stage "local approval" clause: a
+    ``LOCAL_MODEL_IMPLEMENTATION_REVIEW`` ``APPROVE`` in the ledger."""
+    if ledger.local is not None:
+        return None
+    return ClauseFailure(
+        "local approval",
+        f"no {LOCAL_IMPLEMENTATION_ROLE} APPROVE is recorded in the ledger"
+        + (f" (ledger malformed: {ledger.malformed})" if ledger.malformed else ""),
+    )
+
+
 def evaluate_manual_implementation_stage_admissibility(
     *, feedback: dict[str, str | None], manifest: dict[str, Any], review_request: dict[str, Any],
     work_item: Any, current_head: str | None, current_worktree_root: str | None,
@@ -1161,12 +1196,9 @@ def evaluate_manual_implementation_stage_admissibility(
         ))
 
     manifest_content_id = manifest.get("review_content_id")
-    if ledger.review_content_id is None or ledger.review_content_id != manifest_content_id:
-        failures.append(ClauseFailure(
-            "ledger review_content_id",
-            f"the ledger records {ledger.review_content_id!r}, MANIFEST.md states "
-            f"{manifest_content_id!r}",
-        ))
+    ledger_id_failure = _implementation_ledger_id_failure(ledger, manifest_content_id)
+    if ledger_id_failure is not None:
+        failures.append(ledger_id_failure)
 
     stated = tuple(review_request.get("review_content_ids") or ())
     if manifest_content_id is None or stated != (manifest_content_id,):
@@ -1177,12 +1209,9 @@ def evaluate_manual_implementation_stage_admissibility(
             + f", MANIFEST.md states {manifest_content_id!r}",
         ))
 
-    if ledger.local is None:
-        failures.append(ClauseFailure(
-            "local approval",
-            f"no {LOCAL_IMPLEMENTATION_ROLE} APPROVE is recorded in the ledger"
-            + (f" (ledger malformed: {ledger.malformed})" if ledger.malformed else ""),
-        ))
+    local_failure = _implementation_local_approval_failure(ledger)
+    if local_failure is not None:
+        failures.append(local_failure)
     if ledger.manual is not None:
         failures.append(ClauseFailure(
             "manual stage",
@@ -1364,6 +1393,114 @@ def _decide_awaiting_local_plan_review(
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class LedgerProblem:
+    """Why a manual-external stage's review ledger is not coherent with the
+    bundle a reviewer would be sent (:func:`_manual_external_ledger_problem`):
+    the failed ``check``, its ``detail``, and the manifest's and the
+    ledger's ``review_content_id`` (``None`` when absent or unreadable)."""
+
+    check: str
+    detail: str
+    manifest_content_id: str | None
+    ledger_content_id: str | None
+
+
+_LEDGER_MALFORMED = "the ledger is malformed"
+_LEDGER_ID_MISMATCH = "the ledger's review_content_id differs from the manifest's"
+_LEDGER_NO_LOCAL_APPROVE = "no local-stage APPROVE is recorded"
+
+
+def _plan_ledger_malformed(stages: Any) -> str | None:
+    """The shape defect of a present ``plan_review_stages`` ledger, or
+    ``None``: Workflow records ``review_content_id`` as a non-empty string
+    and a stage only as a completed ``APPROVE`` object, never the manual
+    stage without the local one (``_validate_plan_review_stages``)."""
+    if not isinstance(stages, dict):
+        return f"plan_review_stages is {type(stages).__name__}, not a JSON object"
+    review_content_id = stages.get("review_content_id")
+    if not isinstance(review_content_id, str) or not review_content_id:
+        return f"review_content_id is {review_content_id!r}, not a non-empty string"
+    for name in ("LOCAL_MODEL_PLAN_REVIEW", "MANUAL_EXTERNAL_PLAN_REVIEW"):
+        value = stages.get(name)
+        if value is None:
+            continue
+        if not isinstance(value, dict):
+            return f"{name} is {type(value).__name__}, not a JSON object"
+        if value.get("verdict") != "APPROVE":
+            return f"{name}.verdict is {value.get('verdict')!r}, not 'APPROVE' (the only verdict Workflow records)"
+    if stages.get("MANUAL_EXTERNAL_PLAN_REVIEW") is not None and stages.get("LOCAL_MODEL_PLAN_REVIEW") is None:
+        return "MANUAL_EXTERNAL_PLAN_REVIEW is recorded without LOCAL_MODEL_PLAN_REVIEW"
+    return None
+
+
+def _manual_external_ledger_problem(stage: str, work_item: Any, manifest: Mapping) -> LedgerProblem | None:
+    """Whether the ``stage`` (``"plan"`` or ``"implementation"``) review
+    ledger is coherent with the bundle's ``MANIFEST.md`` before the
+    manual-external gate offers that bundle for review: the ledger is well
+    formed, its ``review_content_id`` is the manifest's, and a local-stage
+    ``APPROVE`` is recorded (for that id: Workflow clears the stages
+    whenever it rebinds the id). The first failed check, or ``None``. It
+    reuses the admissibility evaluators' own clauses; the plan stage's
+    ledger-to-manifest comparison is new, since a plan verdict is matched
+    against the ledger alone."""
+    manifest_content_id = manifest.get("review_content_id")
+    if stage == "implementation":
+        ledger = read_implementation_review_ledger(work_item)
+        if ledger.malformed:
+            return LedgerProblem(_LEDGER_MALFORMED, ledger.malformed, manifest_content_id, None)
+        failure = _implementation_ledger_id_failure(ledger, manifest_content_id)
+        if failure is not None:
+            return LedgerProblem(_LEDGER_ID_MISMATCH, failure.detail, manifest_content_id, ledger.review_content_id)
+        failure = _implementation_local_approval_failure(ledger)
+        if failure is not None:
+            return LedgerProblem(_LEDGER_NO_LOCAL_APPROVE, failure.detail, manifest_content_id,
+                                 ledger.review_content_id)
+        return None
+    stages = getattr(work_item, "plan_review_stages", None)
+    if stages is not None:
+        malformed = _plan_ledger_malformed(stages)
+        if malformed is not None:
+            return LedgerProblem(_LEDGER_MALFORMED, malformed, manifest_content_id, None)
+    ledger_content_id = stages.get("review_content_id") if isinstance(stages, dict) else None
+    if ledger_content_id is None or ledger_content_id != manifest_content_id:
+        return LedgerProblem(_LEDGER_ID_MISMATCH,
+                             f"the ledger records {ledger_content_id!r}, MANIFEST.md states {manifest_content_id!r}",
+                             manifest_content_id, ledger_content_id)
+    failure = _plan_local_approval_failure(stages)
+    if failure is not None:
+        return LedgerProblem(_LEDGER_NO_LOCAL_APPROVE, failure.detail, manifest_content_id, ledger_content_id)
+    return None
+
+
+def _ledger_incoherent_gate(
+    root: Path, work_item_id: str, phase: str, bundle_dir: Path, problem: LedgerProblem, *,
+    ledger_name: str, way_out: str, safe_resume_command: str,
+) -> Decision:
+    """The ``manual_external_ledger_incoherent`` gate: still a human gate at
+    the manual-external phase, but it says not to send the bundle, never
+    offers the ledger's id as the one to use, and names the way out the
+    Workflow accepts at ``phase``. The Controller repairs nothing."""
+    ids = (f"MANIFEST.md's review_content_id is {problem.manifest_content_id or 'none'}, "
+           f"the ledger's is {problem.ledger_content_id or 'none'}")
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"manual_external_ledger_incoherent: {problem.check} ({problem.detail}); {ids}",),
+        action=None, automatic=False,
+        gate=HumanGate(
+            repository=str(root), work_item_id=work_item_id, phase=phase,
+            what_is_required=(
+                f"do not send {bundle_dir} for external review: {ledger_name} is not coherent with the "
+                f"bundle -- {problem.check} ({problem.detail}; {ids}). {way_out}"
+            ),
+            artifact_path=str(bundle_dir / "MANIFEST.md"),
+            safe_resume_command=safe_resume_command,
+        ),
+        declined=False,
+        reason=f"{phase}: manual_external_ledger_incoherent -- {problem.check}",
+    )
+
+
 def _decide_awaiting_manual_external_plan_review(
     root: Path, work_item_id: str, work_item: Any, bound: BoundContract,
 ) -> Decision:
@@ -1376,6 +1513,23 @@ def _decide_awaiting_manual_external_plan_review(
     if feedback is None or role != "MANUAL_EXTERNAL_PLAN_REVIEW":
         # The local stage's own feedback must never satisfy the manual
         # stage's arrival test (round 3's B1).
+        problem = _manual_external_ledger_problem("plan", work_item, read_manifest_fields(root, bundle_dir))
+        if problem is not None:
+            return _ledger_incoherent_gate(
+                root, work_item_id, phase, bundle_dir, problem, ledger_name="the plan_review_stages ledger",
+                way_out=(
+                    f"Withdraw with /milestone-plan {work_item_id}: it returns the item to REVISING_PLAN, "
+                    "from which the plan is republished for a fresh local review. The withdrawal discards "
+                    "both recorded plan-review stages and consumes the withdrawn content, which can never "
+                    "re-bind unchanged -- only an edit plus regeneration can."
+                ),
+                # Named as text only: /milestone-plan at a plan-review-ready phase withdraws
+                # the item, so no gate offers it as its command (Workflow 2.6.0's I4).
+                safe_resume_command=(
+                    f"the user's decision to withdraw {work_item_id}'s plan, as the gate's text names, "
+                    "before any external review"
+                ),
+            )
         reason = (
             f"{phase}: no current-round REVIEW_FEEDBACK.md on file"
             if feedback is None else
@@ -1522,10 +1676,6 @@ def _decide_awaiting_external_plan_review(
 # implementation-bundle gate (:func:`decide`), so it reads a bundle that
 # belongs to the work item's current implementation round.
 # ---------------------------------------------------------------------------
-
-
-def _explain_command(work_item_id: str) -> str:
-    return f"workflow-controller explain --work-item {work_item_id}"
 
 
 def _decide_awaiting_external_implementation_review_legacy(
@@ -1731,7 +1881,7 @@ def _decide_awaiting_external_implementation_review_two_stage(
                 "that first"
             ),
             artifact_path=str(bundle_dir),
-            safe_resume_command=_explain_command(work_item_id),
+            safe_resume_command=_explain_gate_command(root, work_item_id),
         ),
         declined=False,
         reason=f"{phase}: the technical-approval gate is not reachable ({summary})",
@@ -1804,8 +1954,11 @@ def _decide_awaiting_manual_external_implementation_review(
     - no feedback, or feedback not declaring the manual role (matched on the
       literal string -- no legacy-cased alias at this stage,
       ``validate_manual_implementation_review_preconditions`` refuses an
-      exact-spelling mismatch) -> the genuine manual gate, naming the bundle
-      and the ``bundle_id``/``review_content_id`` the user must hand over;
+      exact-spelling mismatch) -> the ``manual_external_ledger_incoherent``
+      gate when the ledger is not coherent with the bundle
+      (:func:`_manual_external_ledger_problem`), else the genuine manual
+      gate, naming the bundle and the ``bundle_id``/``review_content_id``
+      the user must hand over;
     - inadmissible (:func:`evaluate_manual_implementation_stage_admissibility`)
       -> a gate naming every failing clause (a ``REVISE`` bound to another
       bundle included: ingesting it would wedge the item at
@@ -1826,6 +1979,21 @@ def _decide_awaiting_manual_external_implementation_review(
 
     role = feedback.get("reviewer_role") if feedback is not None else None
     if feedback is None or role != MANUAL_IMPLEMENTATION_ROLE:
+        problem = _manual_external_ledger_problem("implementation", work_item, manifest)
+        if problem is not None:
+            return _ledger_incoherent_gate(
+                root, work_item_id, phase, bundle_dir, problem,
+                ledger_name="the implementation_review_stages ledger",
+                way_out=(
+                    f"No Workflow command moves {phase} back (its only exits are "
+                    "/record-manual-implementation-review's verdicts), so the Workflow state needs "
+                    "explicit user resolution before any external review."
+                ),
+                safe_resume_command=(
+                    f"explicit user resolution of {work_item_id}'s Workflow state before any external "
+                    "review"
+                ),
+            )
         ledger = read_implementation_review_ledger(work_item)
         return Decision(
             observed_phase=phase, evidence=(), action=None, automatic=False,
@@ -1966,7 +2134,7 @@ def _decide_awaiting_functional_review(
                     f"non-terminal: {', '.join(incomplete_children)} -- resolve it first"
                 ),
                 artifact_path=str(findings_path),
-                safe_resume_command=f"workflow-controller explain --work-item {work_item_id}",
+                safe_resume_command=_explain_gate_command(root, work_item_id),
             ),
             declined=False,
             reason=f"{phase}: findings consumed, but incomplete_children is non-empty",
@@ -2247,11 +2415,9 @@ def plan_review_bound(root: Path, work_item_id: str, phase: str, bound: BoundCon
 
 def _explain_gate_command(root: Path, work_item_id: str) -> str:
     """The ``safe_resume_command`` of a gate with no automatic
-    continuation that this milestone adds: a valid ``explain`` invocation,
-    which changes nothing (Decision 12). The older
-    :func:`_explain_command` form is left as it is, since every gate using
-    it is reachable at 2.5.1."""
-    return f"workflow-controller --work-item {shlex.quote(work_item_id)} explain {shlex.quote(str(root))}"
+    continuation: a valid ``explain`` invocation, which changes nothing
+    (:func:`controller.decision.explain_gate_command`)."""
+    return _decision.explain_gate_command(root, work_item_id)
 
 
 def _with_evidence(decision: Decision, extra: tuple[str, ...]) -> Decision:
@@ -2728,7 +2894,7 @@ def _malformed_generation_record_gate(
         gate=HumanGate(
             repository=str(root), work_item_id=work_item_id, phase=phase,
             what_is_required=what, artifact_path=str(bundle_dir / "MANIFEST.md"),
-            safe_resume_command=_explain_command(work_item_id),
+            safe_resume_command=_explain_gate_command(root, work_item_id),
         ),
         declined=False,
         reason=f"{phase}: HEAD {view.head} is a malformed bundle-generation-record commit "
@@ -2954,7 +3120,7 @@ def _rejected_marker_gate(root: Path, work_item: Any, detail: str | None, bound:
             "assert_feedback_matches_bundle) -- otherwise the verdict has to be obtained again, "
             "for the regenerated bundle"
         )
-        safe_resume_command = _explain_command(work_item_id)
+        safe_resume_command = _explain_gate_command(root, work_item_id)
     else:
         regen = _regeneration_command(phase, work_item_id)
         what_is_required = (
@@ -3065,7 +3231,7 @@ def _uncommitted_implementation_state_gate(root: Path, work_item: Any, facts: tu
         gate=HumanGate(
             repository=str(root), work_item_id=work_item_id, phase=phase,
             what_is_required=what, artifact_path=str(root / _STATE_REL_PATH),
-            safe_resume_command=_explain_command(work_item_id),
+            safe_resume_command=_explain_gate_command(root, work_item_id),
         ),
         declined=False,
         reason=f"{phase}: the working tree records a checkpoint completion or phase transition that "
@@ -3242,7 +3408,7 @@ def _decide_applying_review_feedback_two_stage(
                     f"{work_item_id} in a supervised session, or completes the round by hand"
                 ),
                 artifact_path=str(bundle_dir),
-                safe_resume_command=_explain_command(work_item_id),
+                safe_resume_command=_explain_gate_command(root, work_item_id),
             ),
             declined=False,
             reason=f"{phase}: the previous {_APPLY_IMPLEMENTATION_REVIEW} job {last_apply_job.job_id} ended "

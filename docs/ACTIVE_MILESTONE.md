@@ -37,7 +37,7 @@ Four things, each opt-in or behaviour-preserving by default:
 | CP2 The settings wired in | Complete | See below |
 | CP3 Telemetry v0 | Complete | See below |
 | CP4 Release notes follow the milestone | Complete | See below |
-| CP5 The hints parse and the manual-external gate tells the truth | Not started | |
+| CP5 The hints parse and the manual-external gate tells the truth | Complete | See below |
 | CP6 Relaunch-bound tests and `status` | Not started | |
 | CP7 Documentation and full verification | Not started | |
 
@@ -315,5 +315,72 @@ Four things, each opt-in or behaviour-preserving by default:
   foreground, under a reaping subreaper, without `PYTHONPATH` or `FORCE_COLOR`) passed: 2657
   tests in 6 shards, exact coverage, exit 0. `generate_no_policy_lifecycle.py --check` and
   `generate_external_implementation_review_decisions.py --check` are current;
+  `generate_plan_stage_decisions.py --check` differs exactly as at HEAD (CP2's note).
+  `.workflow-controller/policy.json` is byte-unchanged from `a47e695`.
+
+### CP5 -- the hints parse and the manual-external gate tells the truth
+
+- Hints (E.1). `decision.explain_gate_command(root, id)` is now the one `explain` hint
+  (`workflow-controller --work-item <id> explain <repo>`, both values `shlex`-quoted), defined in
+  `decision.py` because `evidence.py` imports `decision` and not the other way round;
+  `evidence._explain_gate_command` delegates to it. `evidence._explain_command` is deleted, and its
+  five callers, `decision.py`'s plan-approval gate and `evidence.py`'s incomplete-children gate
+  use the parsing form. `job._resume_command(root, runtime_root)` carries `--runtime-dir` when
+  given one, as `follow_command` does; the activity hint `status`, `inspect`, `explain` and
+  `follow` print passes it (`observe.resume_command(record, runtime_root)` in `job_activity`).
+  The pending-job clearing commands and the `resume` error texts keep their form, beside their
+  `--abandon` siblings. The I10 test found one more hint that did
+  not parse: `decision.branch_human_gate`'s fallback `workflow-controller step` named no
+  repository; it now names the gate's repository, quoted.
+- I10 (`tests/test_hints_parse.py`, new): an AST scan of every string and f-string in
+  `controller/` (docstrings aside) holding `workflow-controller <subcommand or option>` renders
+  each interpolation from a table of sample values (every alternative, e.g. both `resume
+  --abandon` forms and both `milestone-binding` dispositions; an unknown interpolation fails,
+  so a new hint must be added to the table) and parses the command, up to its closing backtick
+  or the end of the string, with `build_parser().parse_args`; the builders themselves are
+  parsed too, with a repository path that needs quoting, and `explain --work-item` may appear
+  nowhere in `controller/`.
+- Manual-external gate (E.2). `evidence._manual_external_ledger_problem(stage, work_item,
+  manifest)` runs in both manual-external handlers' "no feedback" branch, before today's gate:
+  the ledger is well formed (`read_implementation_review_ledger`'s `malformed`; for the plan
+  stage the new `_plan_ledger_malformed`, mirroring Workflow's `_validate_plan_review_stages`),
+  its `review_content_id` is the bundle manifest's, and a local-stage `APPROVE` is recorded. The
+  comparisons are shared with the admissibility evaluators, not copied: the implementation
+  evaluator's "ledger review_content_id" and "local approval" clauses and the plan evaluator's
+  "local approval" clause are now `_implementation_ledger_id_failure`,
+  `_implementation_local_approval_failure` and `_plan_local_approval_failure`, used by both
+  sides (the plan stage's ledger-to-manifest comparison is new: a plan verdict is matched
+  against the ledger alone). A failed check gives a human gate at the same phase whose reason is
+  `manual_external_ledger_incoherent`; its text starts "do not send <bundle> for external
+  review", names the check, the manifest's id and the ledger's (or "none"), never "upload" or
+  "from the ledger", and names the way out: the `/milestone-plan <id>` withdrawal for the plan
+  stage, as text only (with the discards-both-stages, never-re-binds-unchanged clause; the safe
+  resume command names the user's decision to withdraw, since Workflow 2.6.0's I4, pinned by
+  `NoMilestonePlanAtPlanReviewReadyPhaseTest`, forbids `/milestone-plan` as a ready-phase gate's
+  command), explicit user resolution of the Workflow state for the
+  implementation stage (no Workflow command moves that phase back). Neither names
+  `/review-plan`, `/review-implementation` or `explain`. A coherent ledger gives today's gate,
+  byte for byte.
+- `tests/golden/plan_stage_decisions.2.6.0.json` regenerated deliberately: its 58 changed
+  cases are all `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` scenarios whose plan manifest is missing,
+  foreign or states no `review_content_id` while the replayed publication status is `BOUND`;
+  they now give the incoherent-ledger gate instead of offering that bundle. The reference
+  release's fresh derivation is byte-identical before and after CP5.
+- `tests/fixtures.build_plan_manifest_text` now writes `review_content_id` (default `c` * 64,
+  the id every fixture ledger records), as the real generator does.
+- Tests: `tests/test_evidence.py` `ManualExternalPlanLedgerIncoherentTest` and
+  `ManualExternalImplementationLedgerIncoherentTest` (malformed ledgers of each shape, an id
+  differing from the manifest, an absent plan ledger, no local `APPROVE`, each way-out text, and
+  the coherent ledger's exact gate text); `test_lifecycle_orchestration`'s "local review
+  records an APPROVE bound to other content" case, which pinned the old gate offering the
+  ledger's wrong id, now expects the incoherent gate. The activity-hint pins in `test_observe`,
+  `test_cli` and `test_resume` carry `--runtime-dir`. The pinned `explain --work-item` strings in
+  `test_cli`, `test_job`, `test_evidence`, `test_integration_disposable_repo`,
+  `test_lifecycle_orchestration` and `test_decision` now expect `explain_gate_command`.
+- Verified: the touched modules' tests pass; the full sharded suite (`python3 tools/run_tests.py`,
+  under a reaping subreaper, without `PYTHONPATH` or `FORCE_COLOR`) passed: 2671 tests in 6
+  shards, exact coverage, exit 0. `generate_no_policy_lifecycle.py --check`,
+  `generate_external_implementation_review_decisions.py --check` and
+  `generate_plan_stage_decisions.py --release 2.6.0 --check` are current;
   `generate_plan_stage_decisions.py --check` differs exactly as at HEAD (CP2's note).
   `.workflow-controller/policy.json` is byte-unchanged from `a47e695`.

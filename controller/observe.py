@@ -985,9 +985,10 @@ def _uuid8(value: Any) -> str:
     return str(value)[:8] if value is not None else "unknown"
 
 
-def resume_command(record: Mapping) -> str:
-    """The command that re-attaches to, or reconciles, ``record``'s job."""
-    return job._resume_command(Path(str(record.get("target_repo"))))
+def resume_command(record: Mapping, runtime_root: Path) -> str:
+    """The command that re-attaches to, or reconciles, ``record``'s job,
+    carrying ``--runtime-dir`` as :func:`job.follow_command` does."""
+    return job._resume_command(Path(str(record.get("target_repo"))), runtime_root)
 
 
 def _stream_age(record: Mapping, runtime_root: Path) -> float | None:
@@ -1106,7 +1107,7 @@ def job_activity(record: Mapping, runtime_root: Path, *, last_event_seconds: flo
     worker_state = worker_state if isinstance(worker_state, Mapping) else {}
     state = worker_state.get("state")
     waiting_on = worker_state.get("waiting_on") if isinstance(worker_state.get("waiting_on"), Mapping) else {}
-    resume = resume_command(record)
+    resume = resume_command(record, runtime_root)
     status = record.get("status")
     base = {"worker_state": state, "waiting_on": dict(waiting_on), "resume_command": resume}
     if status in job.TERMINAL_STATUSES:

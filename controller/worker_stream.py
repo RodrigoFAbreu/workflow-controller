@@ -30,6 +30,10 @@ given, so replaying a stream with the same facts reaches the same state.
 :func:`classify` runs once, after the worker has exited, and returns
 ``(outcome, terminal_result, stream_diagnosis)`` by the plan's nine ordered
 rows, keeping the closed four outcomes of ``controller.worker``.
+
+:func:`session_telemetry` (settings-and-telemetry CP3) reduces the
+``result`` events to the session's totals; it reads nothing else and never
+steers the classification.
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import json
+import math
 import re
 from collections.abc import Iterable
 
@@ -762,3 +767,171 @@ def classify(
         **stream.diagnosis(ending=ending),
     }
     return outcome, terminal, diagnosis
+
+
+# ---------------------------------------------------------------------------
+# Telemetry v0 (workflow-controller-settings-and-telemetry CP3, plan
+# Design C, I6, I7).
+# ---------------------------------------------------------------------------
+
+#: The ``telemetry`` block's own version.
+TELEMETRY_VERSION = 1
+
+#: ``usage`` field -> ``tokens`` key: summed over every result (per turn).
+_USAGE_TOKENS = (
+    ("input_tokens", "input"),
+    ("output_tokens", "output"),
+    ("cache_creation_input_tokens", "cache_creation"),
+    ("cache_read_input_tokens", "cache_read"),
+)
+
+#: ``modelUsage[<model>]`` field -> ``models[<model>]`` key: cumulative, so
+#: the maximum over every result.
+_MODEL_FIELDS = (
+    ("inputTokens", "input"),
+    ("outputTokens", "output"),
+    ("cacheCreationInputTokens", "cache_creation"),
+    ("cacheReadInputTokens", "cache_read"),
+    ("costUSD", "cost_usd"),
+)
+
+PROBLEM_NO_RESULT = "no_result"
+PROBLEM_MISSING_FIELD = "missing_field"
+PROBLEM_INVALID_FIELD = "invalid_field"
+PROBLEM_CUMULATIVE_NOT_ADVANCED = "cumulative_not_advanced"
+
+_ABSENT = object()
+
+
+def _number(value: object) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
+class _Figure:
+    """One reduced figure: ``None`` from the first contribution that is
+    absent or not a number on, with one problem entry per such
+    contribution (I6)."""
+
+    def __init__(self, reduce, field: str, problems: list) -> None:
+        self.reduce, self.field, self.problems = reduce, field, problems
+        self.value: float | int | None = None
+        self.valid = True
+
+    def add(self, value: object, index: int) -> None:
+        if value is _ABSENT or not _number(value):
+            kind = PROBLEM_MISSING_FIELD if value is _ABSENT else PROBLEM_INVALID_FIELD
+            self.problems.append({"kind": kind, "field": self.field, "result_index": index})
+            self.valid = False
+            return
+        self.value = value if self.value is None else self.reduce(self.value, value)
+
+    def final(self) -> float | int | None:
+        return self.value if self.valid else None
+
+
+def _get(mapping: object, key: str) -> object:
+    return mapping.get(key, _ABSENT) if isinstance(mapping, dict) else _ABSENT
+
+
+def _cumulative_projection(event: dict) -> tuple:
+    """A result's cumulative figures, as compared for
+    ``cumulative_not_advanced``: cost, API time and the per-model fields."""
+    usage = event.get("modelUsage")
+    models = tuple(sorted(
+        (str(model), tuple(_get(fields, name) if isinstance(fields, dict) else _ABSENT
+                           for name, _key in _MODEL_FIELDS))
+        for model, fields in usage.items()
+    )) if isinstance(usage, dict) else None
+    return (event.get("total_cost_usd"), event.get("duration_api_ms"), models)
+
+
+def _usage_nonzero(event: dict) -> bool:
+    usage = event.get("usage")
+    return isinstance(usage, dict) and any(
+        _number(usage.get(name)) and usage.get(name) != 0 for name, _key in _USAGE_TOKENS)
+
+
+def session_telemetry(results: Iterable[dict]) -> dict:
+    """The session totals of ``results``, the ``result`` events in stream
+    order (plan Design C, I7).
+
+    Turns, ``duration_ms`` and the ``usage`` tokens are per turn, so they
+    are summed. Cost, API time and every ``modelUsage`` field are
+    cumulative, so each is the **maximum** over all results -- never the
+    last result's value, which a subagent handback (``origin.kind:
+    "peer"``) can repeat unchanged or lower. A result with non-zero
+    ``usage`` whose cumulative figures equal the previous result's adds a
+    ``cumulative_not_advanced`` problem; it is reported, not corrected.
+
+    A contribution that is absent or not a number makes its figure
+    ``None`` and adds a problem entry (I6); a session with no result has
+    ``None`` figures and a ``no_result`` problem. Pure: it never raises on
+    any shape of event list."""
+    events = [event if isinstance(event, dict) else {} for event in results]
+    problems: list[dict] = []
+    block: dict = {"version": TELEMETRY_VERSION, "results": len(events)}
+    if not events:
+        problems.append({"kind": PROBLEM_NO_RESULT})
+        block.update(turns=None, duration_ms=None, duration_api_ms=None, cost_usd=None,
+                     tokens={key: None for _name, key in _USAGE_TOKENS}, models=None, problems=problems)
+        return block
+
+    def total(a, b):
+        return a + b
+
+    turns = _Figure(total, "num_turns", problems)
+    duration = _Figure(total, "duration_ms", problems)
+    api = _Figure(max, "duration_api_ms", problems)
+    cost = _Figure(max, "total_cost_usd", problems)
+    tokens = {key: _Figure(total, f"usage.{name}", problems) for name, key in _USAGE_TOKENS}
+    models: dict[str, dict[str, _Figure]] = {}
+    models_valid = True
+    previous = None
+    for index, event in enumerate(events):
+        turns.add(event.get("num_turns", _ABSENT), index)
+        duration.add(event.get("duration_ms", _ABSENT), index)
+        api.add(event.get("duration_api_ms", _ABSENT), index)
+        cost.add(event.get("total_cost_usd", _ABSENT), index)
+        usage = event.get("usage", _ABSENT)
+        if not isinstance(usage, dict):
+            problems.append({"kind": PROBLEM_MISSING_FIELD if usage is _ABSENT else PROBLEM_INVALID_FIELD,
+                             "field": "usage", "result_index": index})
+            for figure in tokens.values():
+                figure.valid = False
+        else:
+            for name, key in _USAGE_TOKENS:
+                tokens[key].add(usage.get(name, _ABSENT), index)
+        model_usage = event.get("modelUsage", _ABSENT)
+        if not isinstance(model_usage, dict):
+            problems.append({"kind": PROBLEM_MISSING_FIELD if model_usage is _ABSENT else PROBLEM_INVALID_FIELD,
+                             "field": "modelUsage", "result_index": index})
+            models_valid = False
+        else:
+            for model, fields in model_usage.items():
+                figures = models.setdefault(str(model), {
+                    key: _Figure(max, f"modelUsage.{model}.{name}", problems) for name, key in _MODEL_FIELDS})
+                if not isinstance(fields, dict):
+                    problems.append({"kind": PROBLEM_INVALID_FIELD, "field": f"modelUsage.{model}",
+                                     "result_index": index})
+                    for figure in figures.values():
+                        figure.valid = False
+                    continue
+                for name, key in _MODEL_FIELDS:
+                    figures[key].add(fields.get(name, _ABSENT), index)
+        projection = _cumulative_projection(event)
+        if previous is not None and _usage_nonzero(event) and projection == previous:
+            problems.append({"kind": PROBLEM_CUMULATIVE_NOT_ADVANCED, "result_index": index})
+        previous = projection
+
+    block.update(
+        turns=turns.final(),
+        duration_ms=duration.final(),
+        duration_api_ms=api.final(),
+        cost_usd=cost.final(),
+        tokens={key: figure.final() for key, figure in tokens.items()},
+        models={model: {key: figure.final() for key, figure in figures.items()}
+                for model, figures in sorted(models.items())} if models_valid else None,
+        problems=problems,
+    )
+    return block

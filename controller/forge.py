@@ -40,7 +40,18 @@ RELEASE_FIELDS = "tagName,isDraft,assets,url"
 CHECK_FIELDS = "name,state,bucket"
 
 #: ``gh pr list`` truncates at ``--limit``; a full page is undecidable.
+#: The built-in default of the ``forge.pr_list_limit`` setting.
 PR_LIST_LIMIT = 200
+
+#: The process-wide ``forge.pr_list_limit``, set once by ``cli.main``
+#: through ``settings.apply_process_defaults`` (settings-and-telemetry
+#: CP2); ``None`` is :data:`PR_LIST_LIMIT`.
+process_pr_list_limit: int | None = None
+
+
+def pr_list_limit() -> int:
+    """The ``gh pr list --limit`` in force, read at call time."""
+    return PR_LIST_LIMIT if process_pr_list_limit is None else process_pr_list_limit
 
 #: The closed ``bucket`` set ``gh pr checks --json`` documents (``gh``
 #: 2.101.0). Anything else is undecidable, never guessed into one of these.
@@ -241,11 +252,12 @@ class GhForge:
         ``head`` (``gh`` filters by name only). The base and repository are
         the caller's identity checks to make, not a filter here: a PR with
         the right head and the wrong base must still be seen."""
+        limit = pr_list_limit()
         argv, out = self._ok(["pr", "list", "--head", head, "--state", "all", "--json", PR_FIELDS,
-                              "--limit", str(PR_LIST_LIMIT)])
+                              "--limit", str(limit)])
         records = self._json(argv, out, list)
-        if len(records) >= PR_LIST_LIMIT:
-            raise _undecidable(f"gh pr list returned a full page of {PR_LIST_LIMIT}; the list may "
+        if len(records) >= limit:
+            raise _undecidable(f"gh pr list returned a full page of {limit}; the list may "
                                f"be truncated", argv)
         prs = [self._pr(argv, record) for record in records]
         if any(pr.head_ref != head for pr in prs):

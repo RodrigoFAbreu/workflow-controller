@@ -558,6 +558,38 @@ class HeartbeatTest(_FollowCase):
         self.assertFalse(any(body.startswith("worker running") for body in bodies))
 
 
+class FollowSettingsTest(_FollowCase):
+    """Settings-and-telemetry CP2: ``follow.heartbeat_seconds`` and
+    ``follow.replay_events`` reach the follower as parameters, the module
+    constants staying the built-in defaults."""
+
+    def test_the_heartbeat_parameter_beats_the_constant(self) -> None:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self.write_job("j1", worker_process=process_fixtures.worker_process_dict(sleeper.pid))
+        stop = threading.Event()
+        # The constant stays at 30 s: only the parameter can produce a
+        # heartbeat within the wait below.
+        thread = self.in_thread(observe.follow_job, self.runtime_root, "j1", self.sink, stop=stop,
+                                heartbeat_seconds=0.2)
+        self.assertTrue(process_fixtures.wait_until(lambda: len(self.lines) >= 2))
+        stop.set()
+        thread.join(10)
+        self.assertRegex(self.bodies()[0], r"^worker running: pid \d+")
+
+    def test_the_replay_parameter_bounds_the_replay(self) -> None:
+        self.write_run("r1", state="ended", exit_code=0, job_ids=[])
+        for seq in range(1, 6):
+            self.run_event("r1", seq, "step_started", n=seq)
+        for replay_events, expected in ((2, ["step 4", "step 5"]), (0, []), (None, [f"step {n}" for n in range(1, 6)])):
+            with self.subTest(replay_events=replay_events):
+                self.lines.clear()
+                follower = observe._Follower(self.runtime_root, self.sink, json_output=False, stop=None,
+                                             replay_events=replay_events)
+                follower.add_run("r1")
+                follower.replay(follower.poll(), from_start=False)
+                self.assertEqual([body for body in self.bodies() if body.startswith("step ")], expected)
+
+
 # ---------------------------------------------------------------------------
 # worker-lifecycle-ownership CP7: the job activity presenter (plan G).
 # ---------------------------------------------------------------------------
@@ -572,6 +604,12 @@ class _ActivityCase(_FollowCase):
     """Hand-written records carrying ``worker_state``, a supervisor lock
     this test process may hold (an attached Controller), and live sleepers
     standing in for the worker, owned processes and recognised daemons."""
+
+    @property
+    def resume(self) -> str:
+        """The activity text's ``resume`` hint for ``/repo``, carrying
+        ``--runtime-dir`` as ``follow``'s does (CP5, E.1)."""
+        return f"workflow-controller --runtime-dir {self.runtime_root} resume /repo"
 
     def tracked_job(self, job_id: str = "j1", *, state: str, worker_process: dict | None = None,
                     waiting_on: dict | None = None, owned: tuple = (), excluded: tuple = (), **fields) -> dict:
@@ -699,7 +737,7 @@ class JobActivityTest(_ActivityCase):
         self.assertIn("1 harness command (command_uuid 6ff491e4, turn ended, awaiting completion; "
                       "stall time unknown (no Controller attached))", activity["text"])
         self.assertNotIn("stalled", activity["text"])
-        self.assertTrue(activity["text"].endswith("; no Controller attached -- workflow-controller resume /repo "
+        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- {self.resume} "
                                                   "re-attaches"))
 
     def test_a_fire_matched_wakeup_is_presumed_fired_never_quiescent(self) -> None:
@@ -738,9 +776,27 @@ class JobActivityTest(_ActivityCase):
         self.assertEqual(activity["activity"], observe.ACTIVITY_DRAINING)
         self.assertEqual(activity["text"],
                          f"worker ended; 1 owned process still running (pids {owned.pid}); detached after 180:00 "
-                         f"-- end them, then workflow-controller resume /repo; not owned: pid {daemon.pid} "
+                         f"-- end them, then {self.resume}; not owned: pid {daemon.pid} "
                          f"({self.daemon_entry(daemon)['cmdline']})")
         self.assertEqual([entry["pid"] for entry in activity["not_owned"]], [daemon.pid])
+
+    def test_a_recorded_drain_bound_is_printed_not_the_constant(self) -> None:
+        # Settings-and-telemetry CP2: the bound the drain applied, recorded
+        # as `drain_detach_seconds`, is what `status` and `follow` print in
+        # any later invocation; the test above, with no recorded bound (an
+        # older record), prints the constant.
+        self.attach()
+        owned = process_fixtures.spawn_sleeper(self)
+        self.tracked_job(state=worker.DRAINING, worker_process=self.dead_process(), owned=(owned,),
+                         drain_detached_at="2026-01-01T00:10:00Z", drain_detach_seconds=120)
+        self.assertIn(f"; detached after 2:00 -- end them, then {self.resume}",
+                      self.activity()["text"])
+        sink: list[str] = []
+        follower = observe._Follower(self.runtime_root, sink.append, json_output=False, stop=None,
+                                     heartbeat_seconds=0)
+        follower.last_event = 0.0
+        follower.heartbeat(observe.read_job(self.runtime_root, "j1"))
+        self.assertIn("detached after 2:00", "\n".join(sink))
 
     def test_pending_reconciliation(self) -> None:
         for status, outcome, expected in ((job.STATUS_COMPLETED, "SUCCESS", "SUCCESS"),
@@ -751,7 +807,7 @@ class JobActivityTest(_ActivityCase):
                 activity = self.activity()
                 self.assertEqual(activity["activity"], observe.ACTIVITY_PENDING)
                 self.assertEqual(activity["text"], f"worker ended ({expected}); pending reconciliation -- "
-                                                   f"workflow-controller resume /repo")
+                                                   f"{self.resume}")
 
     def test_presenting_writes_nothing(self) -> None:
         self.tracked_job(state=worker.WAITING)
@@ -841,9 +897,9 @@ class TrackedFollowTest(_ActivityCase):
     def test_an_unsupervised_live_job_is_followed_with_one_notice_naming_resume(self) -> None:
         self.tracked_job(state=worker.WAITING)
         bodies = self._follow_until(2)
-        self.assertEqual(bodies[0], "no Controller is attached to job j1 -- workflow-controller resume /repo "
+        self.assertEqual(bodies[0], f"no Controller is attached to job j1 -- {self.resume} "
                                     "re-attaches; following")
-        self.assertIn("no Controller attached -- workflow-controller resume /repo re-attaches", bodies[1])
+        self.assertIn(f"no Controller attached -- {self.resume} re-attaches", bodies[1])
         self.assertNotIn("awaits resume", "\n".join(bodies))
 
     @unittest.skipUnless(_INIT_NS, "the supervisor probe reads unknown outside the init pid namespace")
@@ -852,7 +908,7 @@ class TrackedFollowTest(_ActivityCase):
                          worker_outcome="SUCCESS")
         observe.follow_job(self.runtime_root, "j1", self.sink)
         self.assertEqual(self.bodies()[-1], "job j1: worker ended (SUCCESS); pending reconciliation -- "
-                                            "workflow-controller resume /repo")
+                                            f"{self.resume}")
 
     def test_select_active_picks_a_live_tracked_job_whose_worker_has_exited(self) -> None:
         self.attach()
@@ -1050,3 +1106,60 @@ def select_pipe_buf() -> int:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StatusJobSummaryTest(unittest.TestCase):
+    """Settings-and-telemetry CP6 (E.4): ``status``'s per-job view."""
+
+    NOW = "2026-01-01T02:00:00Z"
+
+    @staticmethod
+    def _record(job_id: str, status: str, **fields) -> dict:
+        return {"job_id": job_id, "status": status, "work_item_id": "wi-1", "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:20:00Z",
+                "selected_action": {"command": "/milestone-implement wi-1"}, **fields}
+
+    def test_an_active_job_has_an_age(self) -> None:
+        entry = observe.job_summary(self._record("j-1", job.STATUS_LAUNCHED), now=self.NOW)
+        self.assertEqual(entry, {
+            "job_id": "j-1", "status": job.STATUS_LAUNCHED, "command": "/milestone-implement wi-1",
+            "work_item_id": "wi-1", "created_at": "2026-01-01T00:00:00Z", "finished": False,
+            "age_seconds": 7200, "wall_seconds": None, "cost_usd": None,
+        })
+        self.assertEqual(observe.job_summary_text(entry),
+                         "j-1 LAUNCHED /milestone-implement wi-1 (work item wi-1): age 2 h")
+
+    def test_a_finished_job_has_its_wall_time_and_cost(self) -> None:
+        block = {"results": 1, "cost_usd": 11.66, "job_seconds": 1400}
+        entry = observe.job_summary(self._record("j-1", job.STATUS_FINISHED, telemetry=block), now=self.NOW)
+        self.assertEqual((entry["wall_seconds"], entry["cost_usd"], entry["age_seconds"]), (1400, 11.66, None))
+        self.assertEqual(observe.job_summary_text(entry),
+                         "j-1 FINISHED /milestone-implement wi-1 (work item wi-1): wall 1400 s, cost $11.66")
+
+    def test_without_telemetry_the_wall_time_is_the_records_and_no_cost(self) -> None:
+        for name, fields in (("no block", {}), ("failed block", {"telemetry": {"failed": True, "cost_usd": 3.0}})):
+            with self.subTest(name):
+                entry = observe.job_summary(self._record("j-1", job.STATUS_GATE_BLOCKED, selected_action=None,
+                                                         work_item_id=None, **fields), now=self.NOW)
+                self.assertEqual((entry["wall_seconds"], entry["cost_usd"]), (1200, None))
+                self.assertEqual(observe.job_summary_text(entry),
+                                 "j-1 GATE_BLOCKED no command (work item none): wall 1200 s")
+
+    def test_unknown_times(self) -> None:
+        entry = observe.job_summary(self._record("j-1", job.STATUS_LAUNCHED, created_at=None), now=self.NOW)
+        self.assertTrue(observe.job_summary_text(entry).endswith(": age unknown"))
+        entry = observe.job_summary(self._record("j-1", job.STATUS_FAILED, updated_at="x"), now=self.NOW)
+        self.assertTrue(observe.job_summary_text(entry).endswith(": wall unknown"))
+
+    def test_age_text(self) -> None:
+        for seconds, text in ((0, "0 s"), (119, "119 s"), (120, "2 min"), (7199, "119 min"), (7200, "2 h"),
+                              (48 * 3600 - 1, "47 h"), (48 * 3600, "2 d"), (None, "unknown"), (True, "unknown")):
+            with self.subTest(seconds=seconds):
+                self.assertEqual(observe.age_text(seconds), text)
+
+    def test_recent_jobs_are_the_newest_ten_newest_first(self) -> None:
+        records = [self._record(f"j-{n:02d}", job.STATUS_FINISHED) for n in range(12)]
+        recent = observe.recent_jobs(records, now=self.NOW)
+        self.assertEqual([e["job_id"] for e in recent], [f"j-{n:02d}" for n in range(11, 1, -1)])
+        self.assertEqual(observe.recent_jobs(records[:3], now=self.NOW, limit=0), [])
+        self.assertEqual(len(observe.recent_jobs(records[:3], now=self.NOW)), 3)

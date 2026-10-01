@@ -501,8 +501,9 @@ class LifecycleWorkerUnverifiableError(LifecycleWorkerActiveError):
 
 class OwnedWorkDetachedError(LifecycleWorkerActiveError):
     """``step``'s worker exited, but processes it owned were still alive
-    after ``controller.worker.DRAIN_DETACH_SECONDS``
-    (``workflow-controller-worker-lifecycle-ownership`` plan D). Nothing was
+    after the drain bound (the ``worker.drain_detach_seconds`` setting,
+    recorded as the job's ``drain_detach_seconds``;
+    ``workflow-controller-worker-lifecycle-ownership`` plan D). Nothing was
     ended: the job record stays ``LAUNCHED`` at ``worker_state:
     DRAINING`` with ``drain_detached_at``, the stdin anchor keeps the
     lifecycle lock, and the job stays held until ``resume`` drains it.
@@ -588,6 +589,27 @@ class RoutingConfigError(ControllerError):
     """
 
     code = "ROUTING_CONFIG_ERROR"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-settings-and-telemetry CP1 -- the user settings file
+# (``controller.settings``).
+# ---------------------------------------------------------------------------
+
+
+class SettingsError(ControllerError):
+    """The user settings file cannot be used: it is unreadable, not JSON or
+    carries a duplicate key, its ``schema_version`` is not ``1``, a known
+    setting has the wrong type or is out of bounds, its routing section is
+    malformed, or its ``_table_generation``/``_defaults_written``
+    bookkeeping is malformed. Also ``settings clean`` refusing a file last
+    filled by a newer release. Raised before any job record is written:
+    exit ``20``, like ``RoutingConfigError``, and the file is never
+    rewritten. ``evidence`` names the ``path`` and the dotted ``key``.
+
+    A missing file is never this error."""
+
+    code = "SETTINGS_ERROR"
 
 
 # ---------------------------------------------------------------------------

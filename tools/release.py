@@ -37,7 +37,11 @@ thin CLI:
 - ``check-title TITLE`` validates a pull request title against the policy
   committed at ``HEAD`` (for a ``pull_request`` run, the merge ref): under
   the ``conventional_commit`` trigger it prints ``ok: <type> → <bump>`` or
-  refuses; under ``version_change`` the title is not release input.
+  refuses; under ``version_change`` the title is not release input;
+- ``notes-block --work-item ID FILE`` prints the release-notes block for
+  the notes in ``FILE`` (outer blank lines trimmed), after the checks
+  readiness applies, for an operator to supply a milestone's notes in a
+  later trunk commit's message. Empty notes refuse.
 
 There is no tag-first subcommand: a release tag is created only by
 ``publish``, after validation, so a hand-pushed ``v*`` tag triggers nothing.
@@ -63,7 +67,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from controller import buildinfo  # noqa: E402
 from controller import conventional_commit  # noqa: E402
 from controller import forge as forge_module  # noqa: E402
-from controller import gitrepo, release_txn, repo_policy  # noqa: E402
+from controller import gitrepo, release_notes, release_txn, repo_policy  # noqa: E402
 from controller import version as version_module  # noqa: E402
 from controller.errors import ControllerError  # noqa: E402
 
@@ -254,6 +258,9 @@ def build_parser() -> argparse.ArgumentParser:
     sums.add_argument("directory", type=Path)
     title = sub.add_parser("check-title", help="validate a pull request title against the committed policy")
     title.add_argument("title")
+    notes = sub.add_parser("notes-block", help="print a release-notes block for a later trunk commit's message")
+    notes.add_argument("--work-item", required=True, help="the work item the notes belong to")
+    notes.add_argument("file", type=Path, help="the notes, UTF-8")
     return parser
 
 
@@ -353,6 +360,26 @@ def cmd_publish(repo_root: Path, target: str) -> None:
     _require_commit(target)
     outcome = release_txn.publish(release_context(repo_root), _head(repo_root), target, tagger=TAGGER)
     print(f"ok: {outcome.tag} at {outcome.target}: {outcome.action} ({outcome.url})")
+    if outcome.notes:
+        print(f"ok: release notes: {outcome.notes}")
+
+
+def notes_block(work_item_id: str, path: Path) -> str:
+    """The block for the notes in ``path``, trimmed as readiness trims a
+    section, after every D.2 check; a failed one refuses, naming it."""
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except OSError as exc:
+        raise Refusal("notes", f"cannot read {path}: {exc}") from None
+    except UnicodeDecodeError as exc:
+        raise Refusal("notes", f"{path} is not valid UTF-8 ({exc})") from None
+    notes = release_notes.trim(text)
+    if not notes:
+        raise Refusal("notes", f"{path} holds no notes (it is empty or only blank lines)")
+    problem = release_notes.block_problem(work_item_id, notes)
+    if problem is not None:
+        raise Refusal("notes", f"{path}: {problem.describe()}")
+    return release_notes.render_block(work_item_id, notes)
 
 
 def check_title(repo_root: Path, title: str) -> str:
@@ -389,6 +416,8 @@ def main(argv: list[str] | None = None, *, repo_root: Path = REPO_ROOT) -> int:
             print(f"ok: wrote {checksums(args.directory)}")
         elif args.command == "check-title":
             print(check_title(repo_root, args.title))
+        elif args.command == "notes-block":
+            print(notes_block(args.work_item, args.file))
     except (Refusal, ControllerError) as exc:
         reason = f"{exc.code}: {exc}" if isinstance(exc, ControllerError) else str(exc)
         reason = " | ".join(line for line in reason.splitlines() if line.strip())

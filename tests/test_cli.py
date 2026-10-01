@@ -26,6 +26,7 @@ import ast
 import contextlib
 import dataclasses
 import errno
+import hashlib
 import io
 import json
 import os
@@ -42,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, evidence, identity, job, lock, managed_repo, observe, routing, runtime, worker,
+    cli, decision, evidence, identity, job, lock, managed_repo, observe, routing, runtime, settings, worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
@@ -162,7 +163,9 @@ class ParserTest(unittest.TestCase):
     def test_run_max_steps_default_and_pause_file_are_run_only(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["run", "/target"])
-        self.assertEqual(args.max_steps, 20)
+        # Settings-and-telemetry CP2 (I1): `default=None`, so an omitted
+        # flag never beats the settings file; the effective default is 20.
+        self.assertIsNone(args.max_steps)
         self.assertIsNone(args.pause_file)
         # `--max-steps` is `run`'s own option, not a global -- absent from
         # `step`'s subparser.
@@ -319,6 +322,9 @@ class StatusFirstLineTest(unittest.TestCase):
                 expected_first,
                 f"no Controller runtime state at {runtime_root.resolve()} (ladder row 1)",
             ])
+            # `commands.md`'s `status` section (functional review F2): the
+            # one file `status` writes is `identity.json`.
+            self.assertEqual(sorted(p.name for p in runtime_root.iterdir()), ["identity.json"])
 
             second = fixtures.run(argv, cwd=tmp_path, env=env, check=False)
             lines = second.stdout.splitlines()
@@ -561,7 +567,7 @@ class ExplainCommandTest(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("human gate", out)
         self.assertIn("entry validation (step 1a)", out)
-        self.assertIn("safe resume command: workflow-controller explain --work-item wi-1", out)
+        self.assertIn(f"safe resume command: {decision.explain_gate_command(repo, 'wi-1')}", out)
         self.assertNotIn("declined", out)
 
     def test_declined_phase_reports_the_declined_action(self) -> None:
@@ -939,6 +945,7 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
         self.assertEqual(record["worker_route"], {
             "role": "milestone-plan", "model": "claude-sonnet-5", "effort": "low", "single_agent": False,
             "fresh_session": True, "sources": {"model": "config-role", "effort": "config-default"},
+            "config_source": "routing-config",
         })
         argv = json.loads(diag.read_text())["argv"]
         # Worker-lifecycle-ownership CP3: the system note and the unownable
@@ -1741,7 +1748,8 @@ class JobActivitySurfacesTest(unittest.TestCase):
         pid = self._waiting()
         self._attach("j-wait")
         text = self._status()
-        self.assertRegex(text, rf"  job j-wait \(LAUNCHED, target {self.target}\): worker pid {pid} waiting on "
+        self.assertRegex(text, rf"  job j-wait \(LAUNCHED, no command, work item none, target {self.target}, "
+                               rf"started [0-9TZ:-]+\): worker pid {pid} waiting on "
                                r"1 background task \(suite \"Run the suite\"\) and 0 wakeups and 1 harness "
                                r"command \(command_uuid 6ff491e4, no turn yet; stalled \d+:\d\d of 5:00\)\n")
 
@@ -1751,7 +1759,8 @@ class JobActivitySurfacesTest(unittest.TestCase):
         self._waiting()
         text = self._status()
         self.assertIn("stall time unknown (no Controller attached)", text)
-        self.assertIn(f"; no Controller attached -- workflow-controller resume {self.target} re-attaches\n", text)
+        self.assertIn(f"; no Controller attached -- workflow-controller --runtime-dir {self.runtime_root} resume "
+                      f"{self.target} re-attaches\n", text)
 
     def test_inspect_gains_a_jobs_block_only_when_a_job_is_pending(self) -> None:
         self.assertNotIn("jobs:", self._run(cli.cmd_inspect))
@@ -1793,7 +1802,7 @@ class JobActivitySurfacesTest(unittest.TestCase):
                   worker={"stream_diagnosis": diagnosis})
         text = self._run(cli.cmd_explain)
         self.assertIn("    activity: worker ended (AMBIGUOUS); pending reconciliation -- "
-                      f"workflow-controller resume {self.target}\n", text)
+                      f"workflow-controller --runtime-dir {self.runtime_root} resume {self.target}\n", text)
         self.assertIn("    worker outcome AMBIGUOUS: command_lifecycle_irregular (also: wakeup_not_delivered)\n", text)
         self.assertIn(f"    command_lifecycle anomaly: wakeup_count_mismatch, command_uuid {self.BRACKET}, offset 7, "
                       f"cancelledWakeups 2, expected 1\n", text)
@@ -2375,15 +2384,18 @@ class FollowSourceCheckoutTest(unittest.TestCase):
         self.assertEqual(_tree_listing(runtime_root), before)
 
 
-class StatusActiveSectionTest(_FollowCliCase):
-    def _status(self) -> str:
+class _StatusCase(_FollowCliCase):
+    def _status(self, *, json_out: bool = False) -> str:
         pre_existing = cli._capture_pre_existing_state(self.runtime_root)
         pre_existing["ladder_row"] = 1
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            cli.cmd_status(_Args(str(self.repo)), self.runtime_root, FAKE_IDENTITY, pre_existing=pre_existing)
+            cli.cmd_status(_Args(str(self.repo), json_out=json_out), self.runtime_root, FAKE_IDENTITY,
+                           pre_existing=pre_existing)
         return out.getvalue()
 
+
+class StatusActiveSectionTest(_StatusCase):
     def test_idle(self) -> None:
         self._run("r-1")
         self._job("j-1", status=job.STATUS_FINISHED)
@@ -2398,13 +2410,95 @@ class StatusActiveSectionTest(_FollowCliCase):
         text = self._status()
         follow = f"    follow: workflow-controller --runtime-dir {self.runtime_root} follow {self.repo}"
         self.assertIn("active:\n", text)
-        self.assertIn(f"  run r-live (step, target {self.repo}): controller pid {os.getpid()} active\n{follow}\n",
+        started = "started 2026-01-01T00:00:00Z"
+        self.assertIn(f"  run r-live (step, target {self.repo}, {started}): controller pid {os.getpid()} active\n"
+                      f"{follow}\n", text)
+        self.assertIn(f"  job j-live (LAUNCHED, no command, work item none, target {self.repo}, {started}): "
+                      f"worker pid {sleeper.pid} active\n{follow}\n", text)
+        self.assertIn(f"  job j-drain (LAUNCHED, no command, work item none, target {self.repo}, {started}): "
+                      f"worker exited; waiting on process group: 2 process(es) at drain start (7 8)\n{follow}\n",
                       text)
-        self.assertIn(f"  job j-live (LAUNCHED, target {self.repo}): worker pid {sleeper.pid} active\n{follow}\n",
-                      text)
-        self.assertIn(f"  job j-drain (LAUNCHED, target {self.repo}): worker exited; waiting on process group: "
-                      f"2 process(es) at drain start (7 8)\n{follow}\n", text)
         self.assertNotIn("r-1", text)
+
+    def test_an_active_jobs_line_names_its_command_and_work_item(self) -> None:
+        """Settings-and-telemetry CP6 (E.4)."""
+        self._job("j-live", work_item_id="wi-1", selected_action={"command": "/milestone-implement wi-1"},
+                  created_at="2026-01-02T03:04:05Z")
+        self.assertIn(f"  job j-live (LAUNCHED, /milestone-implement wi-1, work item wi-1, target {self.repo}, "
+                      f"started 2026-01-02T03:04:05Z): no worker recorded\n", self._status())
+
+
+class StatusJobsTest(_StatusCase):
+    """Settings-and-telemetry CP6 (E.4): ``jobs: <n> recorded`` and the ten
+    newest jobs, one per line; ``--json`` with the same fields."""
+
+    def _finished(self, job_id: str, created_at: str, **fields) -> None:
+        self._job(job_id, status=job.STATUS_FINISHED, work_item_id="wi-1", created_at=created_at,
+                  updated_at=created_at, selected_action={"command": "/milestone-implement wi-1"}, **fields)
+
+    def test_the_count_and_the_ten_newest(self) -> None:
+        for n in range(12):
+            self._finished(f"j-{n:02d}", f"2026-01-01T00:{n:02d}:00Z")
+        text = self._status()
+        lines = text.splitlines()
+        at = lines.index("jobs: 12 recorded")
+        self.assertEqual(lines[at + 1:at + 11], [
+            f"  j-{n:02d} FINISHED /milestone-implement wi-1 (work item wi-1): wall 0 s" for n in range(11, 1, -1)])
+        self.assertEqual(lines[at + 11], "handoff: none")
+        self.assertNotIn("j-01", text)
+        self.assertNotIn("j-00", text)
+
+    def test_a_job_recorded_after_the_process_started_is_not_reported(self) -> None:
+        self._finished("j-1", "2026-01-01T00:00:00Z")
+        pre_existing = cli._capture_pre_existing_state(self.runtime_root)
+        pre_existing["ladder_row"] = 1
+        self._finished("j-2", "2026-01-02T00:00:00Z")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.cmd_status(_Args(str(self.repo)), self.runtime_root, FAKE_IDENTITY, pre_existing=pre_existing)
+        self.assertIn("jobs: 1 recorded\n  j-1 FINISHED", out.getvalue())
+        self.assertNotIn("j-2", out.getvalue())
+
+    def test_json(self) -> None:
+        self._run("r-1")
+        self._finished("j-1", "2026-01-01T00:00:00Z",
+                       telemetry={"results": 1, "cost_usd": 2.5, "job_seconds": 60, "turns": 3})
+        self._job("j-live", work_item_id="wi-1", created_at="2026-01-02T00:00:00Z",
+                  selected_action={"command": "/milestone-implement wi-1"})
+        view = json.loads(self._status(json_out=True))
+        self.assertEqual(set(view), {"controller", "runtime_root", "ladder_row", "runtime_state", "pinned_identity",
+                                     "jobs", "handoff", "active", "last_job_telemetry", "bindings"})
+        self.assertEqual(view["controller"], self._status().splitlines()[0].removeprefix("controller: "))
+        self.assertEqual((view["runtime_root"], view["ladder_row"], view["runtime_state"]),
+                         (str(self.runtime_root), 1, True))
+        self.assertIsNone(view["pinned_identity"])
+        self.assertIsNone(view["handoff"])
+        self.assertEqual(view["bindings"], [])
+        self.assertEqual(view["jobs"]["count"], 2)
+        self.assertEqual([e["job_id"] for e in view["jobs"]["recent"]], ["j-live", "j-1"])
+        self.assertEqual({k: view["jobs"]["recent"][1][k] for k in ("finished", "wall_seconds", "cost_usd")},
+                         {"finished": True, "wall_seconds": 60, "cost_usd": 2.5})
+        self.assertEqual(view["active"]["runs"], [])
+        [active] = view["active"]["jobs"]
+        self.assertEqual({k: active[k] for k in ("job_id", "status", "command", "work_item_id", "started_at",
+                                                  "activity")},
+                         {"job_id": "j-live", "status": job.STATUS_LAUNCHED, "command": "/milestone-implement wi-1",
+                          "work_item_id": "wi-1", "started_at": "2026-01-02T00:00:00Z",
+                          "activity": "no worker recorded"})
+        self.assertEqual(active["follow"], job.follow_command(self.runtime_root, str(self.repo)))
+        self.assertEqual(view["last_job_telemetry"]["job_id"], "j-1")
+
+    def test_json_without_runtime_state(self) -> None:
+        empty = self.tmp_root / "empty-runtime"
+        pre_existing = cli._capture_pre_existing_state(empty)
+        pre_existing["ladder_row"] = 1
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.cmd_status(_Args(str(self.repo), json_out=True), empty, FAKE_IDENTITY, pre_existing=pre_existing)
+        self.assertEqual(json.loads(out.getvalue()), {
+            "controller": f"{cli.version_text(FAKE_IDENTITY)} -- {identity.describe_runtime(FAKE_IDENTITY)}",
+            "runtime_root": str(empty), "ladder_row": 1, "runtime_state": False,
+        })
 
 
 class FollowHintTest(_StepFixture, unittest.TestCase):
@@ -2803,6 +2897,169 @@ class ChildReapingCliTest(_StepFixture, unittest.TestCase):
         pause.unlink()
         runner.join(10)
         self.assertEqual(outcome.get("code"), cli.EXIT_GATE)
+
+
+
+# ---------------------------------------------------------------------------
+# settings-and-telemetry CP2 (Design B): the settings wired in -- one test
+# per row of the settings table, from the file to the setting's consumer;
+# the four leaf rows' consumers are pinned in `tests/test_settings.py`
+# (`ProcessDefaultsTest`), which also covers `cli.main` applying them.
+# ---------------------------------------------------------------------------
+
+
+class SettingsWiringTest(_StepFixture, unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.enterContext(settings.process_defaults({}))
+        self.addCleanup(setattr, cli, "_open_run", None)
+        self.settings_path = self.tmp_root / "config" / "settings.json"
+
+    def _args(self, file: dict | None = None, *, write: bool = True, **attrs) -> _Args:
+        """``_Args`` resolved as ``cli.main`` resolves them (``_apply_settings``)
+        against a settings file holding ``file``."""
+        if file is not None:
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+            self.settings_path.write_text(json.dumps(file))
+        args = _Args(str(self.repo), workflow_manager=str(self.stub_manager))
+        args.max_steps = None
+        args.settings = str(self.settings_path)
+        for name, value in attrs.items():
+            setattr(args, name, value)
+        cli._apply_settings(args, write=write)
+        return args
+
+    def _spy(self, status: str = job.STATUS_GATE_BLOCKED) -> list[dict]:
+        calls: list[dict] = []
+
+        def fake_execute_step(*a, **k):
+            calls.append(k)
+            return {"status": status}
+
+        job.execute_step = fake_execute_step
+        return calls
+
+    def test_worker_timeout_seconds_from_the_file_and_the_flag_beats_it(self) -> None:
+        calls = self._spy()
+        for timeout, expected in ((None, 300), (70, 70)):
+            with self.subTest(timeout=timeout):
+                args = self._args({"worker": {"timeout_seconds": 300}}, timeout=timeout)
+                self.assertEqual(cli.cmd_step(args, self.runtime_root, self.ident), cli.EXIT_GATE)
+                self.assertEqual(calls[-1]["timeout"], expected)
+
+    def test_worker_drain_detach_seconds_reaches_step_and_resume(self) -> None:
+        calls = self._spy()
+        args = self._args({"worker": {"drain_detach_seconds": 120}})
+        cli.cmd_step(args, self.runtime_root, self.ident)
+        self.assertEqual(calls[-1]["drain_detach_seconds"], 120)
+        received = []
+
+        def fake_resume(*a, **k):
+            received.append(k["drain_detach_seconds"])
+            return []
+
+        self.enterContext(unittest.mock.patch.object(job, "resume", fake_resume))
+        for drain_timeout, expected in ((None, 120), (90, 90)):
+            with self.subTest(drain_timeout=drain_timeout):
+                args = self._args(drain_timeout=drain_timeout, abandon=None)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli.cmd_resume(args, self.runtime_root, self.ident), cli.EXIT_OK)
+                self.assertEqual(received[-1], expected)
+
+    def test_run_max_steps_from_the_file_and_the_flag_beats_it(self) -> None:
+        calls = self._spy(job.STATUS_FINISHED)
+        for max_steps, expected in ((None, 3), (2, 2)):
+            with self.subTest(max_steps=max_steps):
+                calls.clear()
+                args = self._args({"run": {"max_steps": 3}}, max_steps=max_steps)
+                self.assertEqual(cli.cmd_run(args, self.runtime_root, self.ident), cli.EXIT_MAX_STEPS)
+                self.assertEqual(len(calls), expected)
+                self.assertEqual(cli._open_run.record["max_steps"], expected)
+
+    def test_follow_heartbeat_and_replay_reach_the_follower(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        self.settings_path.write_text(json.dumps({"follow": {"heartbeat_seconds": 7, "replay_events": 3}}))
+        target = str(self.repo.resolve())
+        runtime.write_json(self.runtime_root, "runs/r1.json", {"run_id": "r1", "target_repo": target})
+        received = []
+        self.enterContext(unittest.mock.patch.object(
+            observe, "follow_run", lambda *a, **k: received.append(k)))
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["--runtime-dir", str(self.runtime_root), "--settings", str(self.settings_path),
+                             "follow", "--run", "r1", target])
+        self.assertEqual(code, cli.EXIT_OK)
+        [kwargs] = received
+        self.assertEqual((kwargs["heartbeat_seconds"], kwargs["replay_events"]), (7, 3))
+        # `--follow`'s renderer takes the same heartbeat.
+        rendered = []
+        self.enterContext(unittest.mock.patch.object(
+            observe, "follow_run", lambda *a, **k: rendered.append(k["heartbeat_seconds"])))
+        cli._render_run(self.runtime_root, "r1", observe.FdSink(os.open(os.devnull, os.O_WRONLY)),
+                        threading.Event(), 7)
+        self.assertEqual(rendered, [7])
+
+    def test_routing_from_the_settings_section_unless_routing_config_replaces_it(self) -> None:
+        section = {"routing": {"roles": {"milestone-plan": {"model": "claude-sonnet-5"}}}}
+        options = cli._routing_options(self._args(section))
+        self.assertEqual((options.config_source, dict(options.config.roles["milestone-plan"])),
+                         (routing.CONFIG_SOURCE_SETTINGS, {"model": "claude-sonnet-5"}))
+        config_path = self.tmp_root / "routing.json"
+        config_path.write_text(json.dumps({"schema_version": 1, "roles": {"review-plan": {"effort": "max"}}}))
+        options = cli._routing_options(self._args(routing_config=str(config_path)))
+        # I1: the --routing-config file replaces the section as a whole.
+        self.assertEqual(options.config_source, routing.CONFIG_SOURCE_ROUTING_CONFIG)
+        self.assertEqual(set(options.config.roles), {"review-plan"})
+        self.settings_path.unlink()
+        options = cli._routing_options(self._args(write=False))
+        self.assertEqual((options.config_source, options.config), (routing.CONFIG_SOURCE_NONE, None))
+
+    def test_the_real_job_records_controller_settings_and_the_routes_source(self) -> None:
+        job.execute_step = self._orig_execute_step
+        args = self._args({"routing": {"default": {"effort": "low"},
+                                       "roles": {"milestone-plan": {"model": "claude-sonnet-5"}}},
+                           "worker": {"timeout_seconds": 600}},
+                          claude_binary=str(FAKE_CLAUDE))
+        diag = self.tmp_root / "diag.json"
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_DIAG_FILE": str(diag)}):
+            self.assertEqual(cli.cmd_step(args, self.runtime_root, self.ident), cli.EXIT_WORKER_FAILED)
+        [record] = [json.loads(path.read_text()) for path in self.runtime_root.glob("jobs/*.json")]
+        self.assertEqual(record["worker_route"]["config_source"], "settings")
+        self.assertEqual(record["worker_route"]["sources"], {"model": "config-role", "effort": "config-default"})
+        self.assertEqual(json.loads(diag.read_text())["argv"][-8:-4],
+                         ["--model", "claude-sonnet-5", "--effort", "low"])
+        block = record["controller_settings"]
+        self.assertEqual(block["path"], str(self.settings_path))
+        self.assertEqual(block["sha256"], hashlib.sha256(self.settings_path.read_bytes()).hexdigest())
+        self.assertEqual(block["values"]["worker.timeout_seconds"], 600)
+        self.assertEqual(block["values"]["run.max_steps"], 20)
+        self.assertEqual(block["sources"]["worker.timeout_seconds"], "file")
+        self.assertEqual(set(block["values"]), {row.key for row in settings.TABLE})
+
+    def test_an_invalid_settings_file_exits_20_before_any_job_record(self) -> None:
+        job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
+        self.settings_path.parent.mkdir(parents=True)
+        self.settings_path.write_text('{"run": {"max_steps": 0}}')
+        before = self.settings_path.read_bytes()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = cli.main(["--runtime-dir", str(self.runtime_root), "--workflow-manager", str(self.stub_manager),
+                             "--settings", str(self.settings_path), "step", str(self.repo)])
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED, err.getvalue())
+        self.assertIn("run.max_steps", err.getvalue())
+        self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
+        self.assertEqual(self.settings_path.read_bytes(), before)
+
+    def test_non_positive_flags_are_usage_errors(self) -> None:
+        parser = cli.build_parser()
+        for argv in (["--timeout", "0", "step", "/r"], ["--timeout", "-5", "step", "/r"],
+                     ["run", "--max-steps", "0", "/r"], ["resume", "--drain-timeout", "0", "/r"],
+                     ["resume", "--drain-timeout", "x", "/r"]):
+            with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as caught:
+                    parser.parse_args(argv)
+                self.assertEqual(caught.exception.code, 2)
+        args = parser.parse_args(["resume", "--drain-timeout", "90", "/r"])
+        self.assertEqual(args.drain_timeout, 90)
 
 
 if __name__ == "__main__":

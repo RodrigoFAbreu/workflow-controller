@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-settings-and-telemetry",
+  "plan_revision": 14,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The settings file: controller/settings.py's closed table (type, default, bounds, CLI flag, default generation), location order (--settings, WORKFLOW_CONTROLLER_SETTINGS, XDG_CONFIG_HOME, ~/.config), strict validation refusing with SettingsError exit 20 (including malformed _table_generation/_defaults_written), the additive fill with _defaults_written {value, generation} and _table_generation and the forward-only untouched-value migration under the table compatibility rule (no default outside an earlier generation's bounds, no type change), the whole read-modify-write of the fill and of clean under the lock through runtime.py writing only on change, unknown-key warnings (the settings file's routing section ignoring unknown role names, route fields and keys directly under routing (routing.schema_version reserved and refused) with a warning, one validate_routing_mapping shared with --routing-config, the section with no schema_version and unknown=ignore, its refusals SettingsError at dotted keys, --routing-config byte-for-byte strict), settings show|path|clean with clean refusing a file filled by a newer release, the two-release, shared-file routing and clean-racing-fill tests, and the I5 isolation guard in tests/__init__.py (XDG_CONFIG_HOME redirected, WORKFLOW_CONTROLLER_SETTINGS removed, sentinel never touched)",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The settings wired in: EffectiveSettings resolved once in cli.main after the re-exec; CLI overrides declared default=None and --timeout/--max-steps/--drain-timeout refusing non-positive values with exit 2; the drain detach bound, worker timeout, max_steps and follow heartbeat/replay passed explicitly; the git, release-command, workflow-query timeouts and PR list limit through apply_process_defaults set once before any thread; resume --drain-timeout; the applied drain bound recorded as drain_detach_seconds and read by every message that prints it; routing from the settings section unless --routing-config replaces it (I1), worker_route.config_source; the optional controller_settings job-record block; one test per table row",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Telemetry v0: worker_stream.session_telemetry over every result (usage and turns/duration summed, cost, API time and modelUsage (per model and per field) as the maximum over all results, never the last result's, a cumulative_not_advanced problem when a result's cumulative figures did not change), the telemetry job-record block on both completion paths with wall times and the role/model/effort/harness/workflow/controller dimensions, null figures plus problems for malformed input and a failure boundary (job._telemetry_block catching every Exception into a failed block, so an injected telemetry failure leaves status, outcome, events and reconciliation unchanged) (I6), controller/telemetry.py deriving old records from worker.stdout, the read-only telemetry command with --work-item/--run/--since/--by and --json, and the cost/time lines in inspect, status and follow",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Release notes follow the milestone: optional policy keys milestone_branches.pull_request.release_notes {path, heading} and the {release_notes} publication placeholder; controller/release_notes.py shared by readiness, the release and tools/release.py notes-block (which refuses empty notes); readiness reads the notes section, at the path and heading of the binding's policy snapshot, at the acceptance commit into a block above the Controller's lines, refusing release_notes_invalid with no edit on any paragraph that parses as a trailer block (git interpret-trailers --parse per paragraph, no Git configuration), an over-long body, a notes line over 72 UTF-8 bytes, ending in a space or holding a tab or carriage return, or Controller marker text in the notes; the start marker binding the notes with the work-item id and the SHA-256 of the validated section; release_txn rendering {release_notes} on RELEASE_DUE only from the notes blocks on marker lines (a line starting with the marker) in the commit messages of classify's release range (Classification.release_range), each verified against its marker's digest, the newest block of a work item superseding older ones, in commit order under ### <work_item_id> when several, with no tree, narrative or policy-history read and no forge call; on RESUME with no release from the existing annotated tag's message, only after recomputing the notes over the tag's own range (the shared base-tag helper) and rendering the current template, which must equal the message byte for byte, a tag created before the opt-in refused as unverified tag; tags created with --cleanup=verbatim; refused before any tag or release is created when no block is in the range, a Git read fails, a message holding a marker line is not UTF-8, a used block is damaged (two blocks for one work item in one commit, a block with empty notes, and a start marker with no end marker included; a damaged start marker consumes its end line) or its digest mismatches, or a marker line names no work item, each refusal naming a fix that clears it (the operator supplies the notes in a later trunk commit, through the pull request's block or tools/release.py notes-block; a rerun; or, for the two refusals no block can clear, the policy's opt-out); marker text quoted mid-line and messages with no marker line never refuse; this repository's policy.json byte-unchanged",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "The hints parse and the manual-external gate tells the truth: _explain_command removed in favour of _explain_gate_command at every caller plus decision.py:850 and evidence.py:1969, the resume hint carrying --runtime-dir like follow's, the I10 test parsing every printed hint, the pinned test strings updated; _manual_external_ledger_problem for both stages (malformed ledger, id differing from the manifest, no local APPROVE) giving a manual_external_ledger_incoherent gate that never offers the stale id and names a way out the Workflow accepts at that phase (the /milestone-plan withdrawal for the plan stage, explicit user resolution for the implementation stage), a coherent ledger giving today's gate text",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Relaunch-bound tests and status: seeded OperatorAbandoned and UnreconcilableJobError apply records bind the bound in the view and the gate, an abandoned never-LAUNCHED record is not J, an end-to-end launch/resume --abandon/step case; status prints a job count and the ten most recent jobs, active jobs and runs with work item, command and start time, and honours --json",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Documentation and full verification (terminal): docs/guide runtime, commands, workers, milestone-branches, ci-and-releases and troubleshooting, docs/README.md's release-notes rule, ADR 0008 for the settings file, the milestone narrative's Release notes section, goldens --check, the full sharded suite, and an empty diff from a47e695 for .workflow-controller/, pyproject.toml, setup.py and .github/workflows/",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5",
+        "CP6"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

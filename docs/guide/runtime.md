@@ -124,3 +124,149 @@ The version is always a plain `MAJOR.MINOR.PATCH`. Where it comes from:
 The version and the generation (`controller/GENERATION.json`) are
 separate. The generation is the compatibility axis that handoff and
 job-record validation compare. Version 1.2.1 is still generation 1.
+
+## The settings file
+
+One JSON file holds the Controller's tunables and its default worker
+routing. It belongs to the user, not to a repository: every repository
+and every lane on the machine that runs as that user shares it. Change
+it with care while another Controller runs. The design record is
+[`docs/adr/0008-controller-settings-file.md`](../adr/0008-controller-settings-file.md).
+
+### Where it is
+
+The first of these that is set wins:
+
+1. the global `--settings PATH` option;
+2. `$WORKFLOW_CONTROLLER_SETTINGS`;
+3. `$XDG_CONFIG_HOME/workflow-controller/settings.json`;
+4. `~/.config/workflow-controller/settings.json`.
+
+`workflow-controller settings path` prints the one in use. A missing
+file is never an error: every setting then takes its built-in default.
+
+### What it holds
+
+| Key | Type | Default | Bounds | Command-line override |
+|---|---|---|---|---|
+| `worker.drain_detach_seconds` | integer | `10800` | 60 to 604800 | `resume --drain-timeout` |
+| `worker.timeout_seconds` | integer or `null` | `null` (no limit) | 60 to 172800 | `--timeout` |
+| `run.max_steps` | integer | `20` | 1 to 1000 | `run --max-steps` |
+| `follow.heartbeat_seconds` | integer | `30` | 1 to 3600 | none |
+| `follow.replay_events` | integer | `20` | 0 to 10000 | `follow --from-start` |
+| `timeouts.git_seconds` | integer | `600` | 30 to 7200 | none |
+| `timeouts.release_command_seconds` | integer | `1800` | 60 to 21600 | none |
+| `timeouts.workflow_query_seconds` | integer | `120` | 10 to 3600 | none |
+| `forge.pr_list_limit` | integer | `200` | 50 to 1000 | none |
+| `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
+
+Each default is the value the Controller used before the file existed,
+so a file holding only defaults behaves as no file. A boolean is not an
+integer: `true` is refused where an integer is expected.
+
+A file filled by this release looks like this (the `_defaults_written`
+entries are shortened):
+
+```json
+{
+  "_defaults_written": {"run.max_steps": {"generation": 1, "value": 20}, "...": "..."},
+  "_table_generation": 1,
+  "follow": {"heartbeat_seconds": 30, "replay_events": 20},
+  "forge": {"pr_list_limit": 200},
+  "routing": {"default": {}, "roles": {}},
+  "run": {"max_steps": 20},
+  "schema_version": 1,
+  "timeouts": {"git_seconds": 600, "release_command_seconds": 1800, "workflow_query_seconds": 120},
+  "worker": {"drain_detach_seconds": 10800, "timeout_seconds": null}
+}
+```
+
+### Which value wins
+
+For each setting, a flag given on the command line wins, then the file,
+then the built-in default. The bounds apply to the file only. A flag
+has its own rule: `--timeout`, `run --max-steps` and
+`resume --drain-timeout` accept any positive integer, and refuse `0`, a
+negative number or a non-integer as a usage error (exit `2`).
+`workflow-controller settings show` prints each value with where it came
+from (`cli`, `file` or `default`).
+
+`--routing-config PATH` replaces the file's `routing` section whole, for
+that invocation. The precedence of the routing flags is in
+[Worker routing](commands.md#worker-routing).
+
+### The fill: how the file is created and kept current
+
+Only the commands that already write fill the file: `step`, `run`,
+`resume` and `milestone-binding` (and `settings clean`, below). The
+read-only commands (`inspect`, `explain`, `status`, `follow`,
+`telemetry`, `settings show`, `settings path`) only read it, and never
+create it.
+
+The fill is additive. It creates the file if needed, and adds each
+missing key with its default. For each key it adds, it records what it
+wrote in `_defaults_written`, as `{"value": ..., "generation": ...}`.
+The generation is a number each release gives each default; a release
+that changes a default raises it.
+
+A later release may move a value forward to its new default, but only
+when all three hold:
+
+- the value still equals the one recorded in `_defaults_written`, so you
+  never changed it;
+- the new default differs from it;
+- the new release's generation for the key is greater than the recorded
+  one.
+
+So a value you set yourself never moves. A value is never moved back to
+an older default either: an older release sharing the file leaves a newer
+release's value alone. `_table_generation` records the newest release
+that filled the file, and is never lowered.
+
+The fill writes only when something changed. It runs under an exclusive
+`flock` on a sibling lock file (`settings.json.lock`), so two Controllers
+filling the file at once never lose each other's changes. If the file
+or its directory cannot be written, one warning says so, and the file's
+current values still apply; missing keys take their defaults.
+
+### When the file is refused
+
+A file that cannot be used is refused with `SettingsError` (exit `20`)
+before any job record is written, and is never rewritten. The message
+names the file and the key. See
+[Troubleshooting](troubleshooting.md#the-settings-file-is-refused-settingserror).
+
+### Unknown keys and `settings clean`
+
+A key this release does not know is ignored, with one warning per
+invocation naming it. This happens when a newer release added the key,
+or when this release retired it. If the file was last filled by a newer
+release, the warning says so.
+
+`workflow-controller settings clean` fills the file, then removes every
+unknown key and its `_defaults_written` entry, and prints what it
+removed. It refuses (exit `20`), removing nothing, when the file was last
+filled by a newer release: this release cannot tell that release's new
+keys from retired ones. Run `settings clean` from the newest installed
+release instead.
+
+### The routing section
+
+The `routing` section has the same shape as a `--routing-config` file
+(see [Worker routing](commands.md#worker-routing)), without
+`schema_version`. Because releases share the file, it is more lenient
+than that file:
+
+- an unknown role under `roles`, an unknown field in `default` or in a
+  role's entry, and an unknown key directly under `routing` are ignored,
+  with the unknown-key warning above (`routing.roles.<role>`,
+  `routing.default.<field>`, `routing.<key>`);
+- `routing.schema_version` is reserved and refused (exit `20`): it means
+  a `--routing-config` file was pasted in whole;
+- everything else is strict, as in that file: a section or entry that is
+  not an object, or an unusable model or effort value, is refused.
+
+The fill only ever adds an empty `{"default": {}, "roles": {}}`. The
+contents are yours, and no release migrates them. A `--routing-config`
+file keeps its own strict rules, byte for byte: there an unknown role or
+field is still `RoutingConfigError` (exit `20`).

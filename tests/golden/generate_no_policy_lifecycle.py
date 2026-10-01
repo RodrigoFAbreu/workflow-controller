@@ -32,6 +32,21 @@ And once for the 1.2.0 release, whose bump alone broke it: every
 ``inspect``/``explain`` ``controller.version`` became ``<VERSION>`` (see
 **Normalisation**). Nothing else moved.
 
+And once by ``workflow-controller-settings-and-telemetry`` CP2, whose
+settings are wired into every launch, policy or not: each launched job's
+record gains the optional ``controller_settings`` block (the settings file
+each case now names with ``--settings``, inside its own case directory, and
+every effective value with its source) and ``worker_route.config_source``
+(``settings``: the filled file's empty routing section). Nothing else moved.
+
+And once by that work item's CP3, telemetry v0: each completed job's record
+gains the ``telemetry`` block (the fake's results carry no ``usage``,
+``modelUsage`` or ``duration_api_ms``, so its figures are ``null`` with
+their problems; a job with no result has ``no_result``), and each ``after``
+``inspect`` document gains ``last_job_telemetry``. The wall times
+``job_seconds``/``worker_seconds`` are volatile keys and
+``controller_version`` normalises like ``version``. Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:
@@ -47,7 +62,7 @@ stub Workflow Manager and ``tests/fake_claude.py``:
 **Normalisation** (:func:`normalise`): the temporary directory becomes
 ``<TMP>``; job and run ids become ``<ID>``; ISO timestamps ``<TS>``; 40- and
 64-hex-digit tokens ``<SHA>``; the values of process- and host-specific keys
-(:data:`VOLATILE_KEYS`) ``<V>``; a ``version`` equal to this checkout's own
+(:data:`VOLATILE_KEYS`) ``<V>``; a ``version`` (or ``controller_version``) equal to this checkout's own
 Controller version (``pyproject.toml``'s, which the pinned test identity
 reports) ``<VERSION>``, so a release bump is not a behaviour change -- any
 other ``version`` value still shows verbatim. The file is canonical JSON
@@ -92,7 +107,15 @@ VOLATILE_KEYS = frozenset({
     # embeds the (normalised) temporary directory, so they vary with its
     # length; every ``*_offset`` key is volatile too (:func:`_volatile`).
     "offset", "ending_point",
+    # Settings-and-telemetry CP3: the telemetry block's wall times.
+    "job_seconds", "worker_seconds",
 })
+
+
+#: The keys whose value, equal to this checkout's own version, is
+#: ``<VERSION>``: ``controller_version`` is the telemetry block's
+#: (settings-and-telemetry CP3).
+_VERSION_KEYS = frozenset({"version", "controller_version"})
 
 
 def _volatile(key: str) -> bool:
@@ -106,7 +129,7 @@ _SHA_RE = re.compile(r"\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b")
 def normalise(value: Any, tmp: str) -> Any:
     if isinstance(value, dict):
         return {key: "<V>" if _volatile(key) and value[key] is not None else
-                "<VERSION>" if key == "version" and item == fixtures.CONTROLLER_VERSION else normalise(item, tmp)
+                "<VERSION>" if key in _VERSION_KEYS and item == fixtures.CONTROLLER_VERSION else normalise(item, tmp)
                 for key, item in value.items()}
     if isinstance(value, list):
         return [normalise(item, tmp) for item in value]
@@ -141,7 +164,8 @@ class _Harness:
         before = {p.name for p in jobs_dir.glob("*.json")} if jobs_dir.is_dir() else set()
         env = {"FAKE_CLAUDE_SCRIPT": str(script_path), "FAKE_CLAUDE_DIAG_LOG": str(case_dir / "argv.jsonl")}
         argv = ["--runtime-dir", str(runtime_dir), "--workflow-manager", str(self.stub_manager),
-                "--claude-binary", str(FAKE_CLAUDE), "--timeout", "60"]
+                "--claude-binary", str(FAKE_CLAUDE), "--timeout", "60",
+                "--settings", str(case_dir / "settings.json")]
         if json_out:
             argv.append("--json")
         argv += [command, str(root)]

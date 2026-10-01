@@ -21,7 +21,7 @@ What each code usually means in practice:
 | `10` | stopped at a human gate | the normal end of a run. `explain` says what to do; do it, then `run` again |
 | `15` | the next action is valid but not automated (declined) | do it yourself; `explain` names the phase and command |
 | `16` | `run` reached `--max-steps` with work left | `run` again, or raise `--max-steps` |
-| `20` | fail-closed refusal: unmanaged or drifted repository, malformed state, an unreconciled job file, a bad routing config, a changed Workflow release, a failed Workflow query | read the message; for a pending job run `workflow-controller resume <repo>`; for the last two see [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries) |
+| `20` | fail-closed refusal: unmanaged or drifted repository, malformed state, an unreconciled job file, a bad routing config, an unusable settings file, a changed Workflow release, a failed Workflow query | read the message; for a pending job run `workflow-controller resume <repo>`; for the settings file see [The settings file is refused](#the-settings-file-is-refused-settingserror); for the last two see [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries) |
 | `30` | a worker ran and failed its expected outcome | `explain` shows what was checked; fix and rerun, or finish the step by hand |
 | `35` | a worker stopped without completing its action | `explain` and the job's log show why |
 | `40` | the Controller was interrupted | `workflow-controller resume <repo>` |
@@ -37,8 +37,11 @@ message printed on Ctrl-C names it) and then `resume`. See
 [Ctrl-C ends only the Controller](workers.md#restart-resume-re-attaches).
 
 **"The drain timed out and the command exited 45."** A worker's background
-processes were still alive 3 hours after it ended. Nothing was killed. End
-the named processes, or run `workflow-controller resume <repo>` to wait again.
+processes were still alive when the drain bound ran out after it ended (the
+`worker.drain_detach_seconds` setting, 3 hours by default; the message
+names the bound applied). Nothing was killed. End the named processes, or
+run `workflow-controller resume <repo>` to wait again;
+`resume --drain-timeout SECONDS` sets a different bound for that wait.
 See [the drain bound](workers.md#owned-processes-the-daemon-list-and-the-drain-bound).
 
 **"`step` refuses because of a pending job."** A previous job was never
@@ -62,6 +65,11 @@ not a valid Conventional Commit either. The plan cannot be amended after
 acceptance: set a valid title on the pull request on GitHub, then `run`
 again. See
 [Squash merges and the pull request title](milestone-branches.md#squash-merges-and-the-pull-request-title).
+
+**"The milestone stopped at `release_notes_invalid`."** In squash mode with
+release notes, the milestone's notes section cannot be carried by the squash
+commit. See
+[Release notes in the pull request body](milestone-branches.md#release-notes-in-the-pull-request-body).
 
 **"The pull request was closed, or merged too early."** The milestone is in a
 refusal state until you choose an exit. See
@@ -97,6 +105,61 @@ that stopped in between leaves this state (Workflow 2.6.0's status query
 calls it row 7, `NEEDS_EDIT`). The Controller cannot launch the command
 again from there: finish `/milestone-plan <id>` in a supervised session,
 then `run` again.
+
+## The settings file
+
+The user settings file is described in
+[The settings file](runtime.md#the-settings-file).
+`workflow-controller settings path` prints the one in use, and
+`workflow-controller settings show` each value with its source.
+
+### The settings file is refused (`SettingsError`)
+
+Every command except `settings path` reads the settings file before it
+does its work. A file that cannot be used stops the command with
+`SettingsError` (exit `20`): no job record is written and no worker
+runs. The file is never
+rewritten. The message names the file and the key, and the evidence has
+`path` and the dotted `key`. A missing file is never an error.
+
+The file is refused when:
+
+- it cannot be read, is not UTF-8 or not JSON, or repeats a key;
+- `schema_version` is not `1`;
+- a section such as `worker` is not an object;
+- a setting has the wrong type or is out of bounds (a boolean is not an
+  integer). The message gives the bounds;
+- the routing section is malformed: a part that is not an object, an
+  unusable model or effort value, or a `routing.schema_version` (a
+  `--routing-config` file pasted in whole: remove that line);
+- `_table_generation` or `_defaults_written` is malformed, or
+  `_defaults_written` names a key the file does not hold. These are the
+  Controller's own bookkeeping. Fix the entry, or delete it: a deleted
+  `_table_generation` is written again by the next fill, and a value
+  whose `_defaults_written` entry is gone counts as one you set, so no
+  release moves it.
+
+Fix the named key by hand, then run again. To start over, move the file
+aside: the next `step`, `run`, `resume` or `milestone-binding` creates a
+fresh one with every default.
+
+### Warnings about the settings file
+
+These are warnings on stderr, not refusals. The command goes on.
+
+- **`has unknown key(s) ...; they are ignored`.** The file holds keys
+  this release does not know, perhaps a misspelt one. They have no
+  effect. `workflow-controller settings clean` removes them.
+- **`... last filled by a newer Controller release ... whose keys these
+  probably are`.** A newer release shares the file and added keys this
+  one does not know. Leave them: the newer release uses them. Here
+  `settings clean` refuses (exit `20`) and removes nothing, because this
+  release cannot tell that release's keys from retired ones. Run
+  `settings clean` from the newest installed release, if at all.
+- **`could not fill the settings file ...`.** The file or its directory
+  cannot be written, so the missing keys were not added. The file's
+  current values still apply, and missing keys take their built-in
+  defaults. Make the directory writable, or ignore the warning.
 
 ## Workflow releases and Workflow's queries
 
@@ -186,7 +249,7 @@ The evidence's `reason` names the step that failed:
 | `query_script_modified` | the target's `scripts/workflow_state.py` or `scripts/workflow_fingerprint.py` is missing, unreadable, or not the admitted release's bytes (the evidence has the path and both digests). Nothing was executed | run Workflow Manager's `verify`; restore the file, then run again |
 | `query_private_copy_failed` | the Controller could not create, write or remove its private copy in the temporary directory (for example a full disk) | free space in `$TMPDIR`, then run again |
 | `query_git_not_isolated` | the query's Git would run a program the target or the operator configures, and the Controller cannot switch it off without perhaps changing Workflow's answer, or cannot switch it off at all. The evidence's `facility` says which: `hook` (an executable `post-index-change` hook, with its `path`: `git diff` fires it when it refreshes the index), a `hook.<name>.event` key (a configured hook for that event, from any configuration file, with its `scope`), `fsmonitor` (a `core.fsmonitor` program, or `GIT_TEST_FSMONITOR`, with the `program`; with Git before 2.36, which runs a boolean value as a program, any non-empty `core.fsmonitor`, with `git_release` too), `filter` (a filter program Git would have run on a path the query hashes, with the drivers in `filters`: the query ran, Git started the Controller's probe instead, and the answer is discarded), a `hook.<name>.command` key (a configured hook in the target's own `.git/config`, `config.worktree` or a file they include), `submodule` (a populated submodule, with its `path`), a Git setting (Git ignored the Controller's override: Git before 2.31, or a later `GIT_CONFIG_PARAMETERS` in the environment), `GIT_CONFIG_COUNT` (not a count), `index` (the target's index is not a regular file) or `git` (a Git command failed; `git_argv` and `detail` say which). No program the facility names was run. Two hook refusals are stricter than Git: a `hook.<name>.event` whose hook `hook.<name>.enabled = false` turns off, and, with `core.hooksPath` set empty (Git then runs no hook), an executable `post-index-change` at the worktree's root | for `hook`, remove the hook or its executable bit; for a hook key, remove the hook or its `post-index-change` event; for `fsmonitor`, unset `core.fsmonitor` or set it to `true` (Git's own daemon, which needs Git 2.36 or later; with an older Git, unset it or set it empty), or unset `GIT_TEST_FSMONITOR`. For `filter`, remove the `filter=` attribute from the plan-stage files, which the status query hashes. `git diff` also re-hashes any tracked file whose index entry is stale: refresh the index in the target (`git update-index --refresh`, which runs the filter there, under your control) for a file whose content is unchanged, and stage, commit or restore an edited one. For `submodule`, deinitialize it in the target (`git submodule deinit <path>`, which empties its directory). Otherwise run the Controller with Git 2.31 or later and without a conflicting `GIT_CONFIG_PARAMETERS`. Then run again |
-| `query_launch_failed`, `query_timeout` | the interpreter could not start, or the query did not finish within 120 s | run again; if it persists, run the query by hand (below) |
+| `query_launch_failed`, `query_timeout` | the interpreter could not start, or the query did not finish in time (the `timeouts.workflow_query_seconds` setting, 120 s by default) | run again; if it persists, run the query by hand (below) |
 | `query_failed` | Workflow's query exited non-zero without an answer, usually with a traceback: for example an undecidable state file, an unknown or `null` `feedback_layout`, or a deleted plan document | the evidence's `stderr` tail has Workflow's own error; fix what it names, or run Workflow's own command yourself |
 | `query_output_invalid` | the answer did not have the documented shape | a contract change the Controller does not act on: report it |
 
@@ -254,3 +317,38 @@ Both stop the Controller at any plan phase of a `"2.1"`/`"2.2"` item on a
 - `unexpected_plan_review_status`: Workflow answered a status that does not
   belong to the phase, or answered for another phase. Workflow 2.6.0 never
   does either, so this is a contract change the Controller does not act on.
+
+## The manual-external review gate says "do not send" the bundle
+
+At `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` or
+`AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`, before it offers the
+bundle for external review, the Controller checks that the stage's
+review ledger in Workflow's state matches the bundle:
+
+- the ledger is well formed;
+- its `review_content_id` is the one in the bundle's `MANIFEST.md`;
+- a local-stage `APPROVE` is recorded for it.
+
+If one check fails, the gate's reason is
+`manual_external_ledger_incoherent`. Its text starts
+`do not send <bundle> for external review`, then names the failed check,
+the manifest's id and the ledger's id (or `none`). Do not send the
+bundle: the ledger does not describe it, so a verdict on it would not
+match what Workflow has recorded. The Controller repairs nothing; Workflow owns the ledger.
+
+The way out depends on the stage, and is a human decision:
+
+- **Plan stage.** Withdraw the plan with `/milestone-plan <id>`. It
+  returns the item to `REVISING_PLAN`, and the republished plan gets a
+  fresh local review. The withdrawal discards both recorded plan-review
+  stages, and the withdrawn content can never be bound again unchanged:
+  only an edit plus regeneration can. The Controller never runs this
+  command; the gate names it as text, as the user's decision.
+- **Implementation stage.** No Workflow command moves this phase back,
+  so the Workflow state needs explicit resolution by the user before any
+  external review.
+
+Rerunning `/review-plan`, `/review-implementation` or `explain` does not
+help: the first two do not write the ledger at this phase, and `explain`
+derives the same gate again. When the ledger is coherent, the gate is
+the usual one.

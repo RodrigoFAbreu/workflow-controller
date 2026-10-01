@@ -26,8 +26,8 @@ import time
 from pathlib import Path
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, target_state,
-    worker,
+    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, settings,
+    target_state, telemetry, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -35,9 +35,13 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: The three read-only commands. Positive guard: everything not in this set
 #: requires a pinned identity (`source_kind != "unpinned"`), by construction
 #: rather than by a denylist a future command could be added without
-#: updating.
-READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow"})
-ALL_COMMANDS = frozenset({"inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding"})
+#: updating. ``settings`` is dispatched before pinning, like ``follow``, and
+#: touches only the user settings file, never a target or the runtime root.
+READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry"})
+ALL_COMMANDS = frozenset({
+    "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
+    "telemetry",
+})
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
 #: "Exit codes"). ``2`` is argparse's own default usage-error code and is
@@ -101,38 +105,46 @@ def require_pinned_execution() -> None:
         )
 
 
-def _strip_runtime_dir(argv: list[str]) -> list[str]:
-    """Drop any caller-supplied ``--runtime-dir``/``--runtime-dir=X`` from
-    the argv the re-exec is about to build -- the resolved absolute value
-    this process just computed supersedes it, and leaving both would make
-    the child's runtime root depend on argparse's last-wins ordering."""
+def _strip_option(argv: list[str], option: str) -> list[str]:
+    """Drop any caller-supplied ``option``/``option=X`` from the argv the
+    re-exec is about to build -- the resolved absolute value this process
+    just computed supersedes it, and leaving both would make the child's
+    value depend on argparse's last-wins ordering."""
     out: list[str] = []
     skip_next = False
     for token in argv:
         if skip_next:
             skip_next = False
             continue
-        if token == "--runtime-dir":
+        if token == option:
             skip_next = True
             continue
-        if token.startswith("--runtime-dir="):
+        if token.startswith(f"{option}="):
             continue
         out.append(token)
     return out
 
 
+def _strip_runtime_dir(argv: list[str]) -> list[str]:
+    return _strip_option(argv, "--runtime-dir")
+
+
 def _reexec(*, snapshot_dir: Path, runtime_root: Path, argv: list[str],
-            exec_depth_seen: int, source_kind: str, source_commit: str | None) -> None:
+            exec_depth_seen: int, source_kind: str, source_commit: str | None,
+            settings_path: str | None = None) -> None:
     """Replace this process with a fresh interpreter importing exactly the
     snapshot: ``-P`` suppresses the working-directory `sys.path` entry
     `python -m` would otherwise prepend (the exact defect that made
     revision 32's exec loop), and ``-B`` stops the import from writing
     `__pycache__` into the snapshot, which would otherwise change its own
-    digest on its very first execution. Never returns."""
+    digest on its very first execution. ``--settings``, when given, is
+    passed on made absolute (settings-and-telemetry CP1, A.1). Never
+    returns."""
+    settings_argv = [] if settings_path is None else ["--settings", str(settings.resolve_path(settings_path))]
     child_argv = [
         sys.executable, "-P", "-B", "-m", "controller",
-        "--runtime-dir", str(runtime_root),
-        *_strip_runtime_dir(argv),
+        "--runtime-dir", str(runtime_root), *settings_argv,
+        *_strip_option(_strip_runtime_dir(argv), "--settings"),
     ]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(snapshot_dir)
@@ -173,6 +185,20 @@ def _route_value(text: str) -> str:
         return routing.check_value(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _positive_int(text: str) -> int:
+    """``--timeout``/``--max-steps``/``--drain-timeout``'s ``type=``: a
+    positive integer (settings-and-telemetry CP2, I1); ``0``, a negative
+    number or a non-integer is a usage error (exit 2). The table's bounds
+    apply to the settings file's values, not to these flags."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid positive integer: {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, not {value}")
+    return value
 
 
 def _role_assignment(text: str) -> tuple[str, str]:
@@ -246,7 +272,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workflow-manager", default=None)
     parser.add_argument("--claude-binary", default=None)
     parser.add_argument("--permission-mode", default=None)
-    parser.add_argument("--timeout", type=int, default=None)
+    parser.add_argument("--timeout", type=_positive_int, default=None,
+                        help="seconds a launched worker may run (default: the worker.timeout_seconds setting)")
     # Role-based worker routing (automatic-lifecycle-orchestration CP6). The
     # per-role options beat the global ones, which beat the config file's
     # role entry, then its default, then the built-in route.
@@ -262,6 +289,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="effort for one role's workers (repeatable, once per role)")
     parser.add_argument("--routing-config", metavar="PATH", default=None,
                         help="JSON routing config: {\"schema_version\": 1, \"default\": {...}, \"roles\": {...}}")
+    parser.add_argument("--settings", metavar="PATH", default=None,
+                        help="the user settings file (default: $WORKFLOW_CONTROLLER_SETTINGS, else "
+                             "$XDG_CONFIG_HOME/workflow-controller/settings.json, else "
+                             "~/.config/workflow-controller/settings.json)")
     parser.add_argument("--allow-dirty-source", action="store_true", default=False)
     parser.add_argument("--json", action="store_true", default=False)
 
@@ -282,7 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("repo")
     run_p.add_argument("--follow", action="store_true", default=False,
                        help="render the run's events and worker output on stderr while it runs")
-    run_p.add_argument("--max-steps", type=int, default=20)
+    run_p.add_argument("--max-steps", type=_positive_int, default=None,
+                       help="stop after this many steps (default: the run.max_steps setting, 20)")
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
@@ -294,6 +326,11 @@ def build_parser() -> argparse.ArgumentParser:
     resume_p.add_argument(
         "--acknowledge-unverifiable-worker", action="store_true", default=False,
         help="with --abandon only: state that a worker whose liveness cannot be verified here is gone",
+    )
+    resume_p.add_argument(
+        "--drain-timeout", metavar="SECONDS", type=_positive_int, default=None,
+        help="bound this re-attach drain of a worker's owned processes (default: the "
+             "worker.drain_detach_seconds setting)",
     )
     resume_p.add_argument("repo")
 
@@ -318,10 +355,39 @@ def build_parser() -> argparse.ArgumentParser:
     follow_target.add_argument("--job", metavar="JOB_ID", default=None)
     follow_target.add_argument("--run", metavar="RUN_ID", default=None)
     follow_p.add_argument("--from-start", action="store_true", default=False,
-                          help="replay every event, not only the last 20")
+                          help="replay every event, not only the last follow.replay_events (default 20)")
     follow_p.add_argument("repo", nargs="?", default=".")
 
+    # settings-and-telemetry CP1 (A.6): the user settings file.
+    settings_p = subparsers.add_parser("settings", help="show, locate or clean the user settings file")
+    settings_actions = settings_p.add_subparsers(dest="settings_action", required=True)
+    settings_actions.add_parser("show", help="print each effective setting and its source (cli, file, default)")
+    settings_actions.add_parser("path", help="print the settings file's path")
+    settings_actions.add_parser(
+        "clean", help="fill the settings file, then remove the keys this release does not know")
+
+    # settings-and-telemetry CP3 (Design C): the read-only telemetry
+    # summary. `--work-item` and `--json` are the global options.
+    telemetry_p = subparsers.add_parser(
+        "telemetry", help="summarise the recorded jobs' cost, tokens and time, read-only")
+    telemetry_p.add_argument("--run", metavar="RUN_ID", default=None, help="only this run's jobs")
+    telemetry_p.add_argument("--since", metavar="ISO", type=_since, default=None,
+                             help="only jobs created at or after this UTC date or time "
+                                  "(YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)")
+    telemetry_p.add_argument("--by", choices=sorted(telemetry.GROUPINGS), default=None, metavar="GROUPING",
+                             help="group the jobs: role, model, or role,model for both (default: one group)")
+    telemetry_p.add_argument("repo", nargs="?", default=None,
+                             help="only this target repository's jobs (default: every target)")
+
     return parser
+
+
+def _since(value: str) -> datetime.datetime:
+    """``telemetry --since``: a bad value is argparse's usage error (exit 2)."""
+    try:
+        return telemetry.parse_since(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
 
 
 def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
@@ -333,61 +399,114 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     for evidence of prior work.
 
     The first line always describes the *running* process, the same text
-    as ``--version``'s line 2."""
-    print(f"controller: {version_text(ident)} -- {identity.describe_runtime(ident)}")
-    if not pre_existing["had_any_state"]:
-        print(f"no Controller runtime state at {runtime_root} (ladder row {pre_existing['ladder_row']})")
+    as ``--version``'s line 2. ``--json`` (settings-and-telemetry CP6,
+    E.4) prints the same fields as one object."""
+    view = _status_view(runtime_root, ident, pre_existing)
+    if getattr(args, "json", False):
+        print(json.dumps(view, sort_keys=True))
+        return EXIT_OK
+    print(f"controller: {view['controller']}")
+    if not view["runtime_state"]:
+        print(f"no Controller runtime state at {runtime_root} (ladder row {view['ladder_row']})")
         return EXIT_OK
 
-    if pre_existing["identity"] is not None:
-        prev = pre_existing["identity"]
+    prev = view["pinned_identity"]
+    if prev is not None:
         print(f"pinned identity: source_kind={prev.get('source_kind')} "
               f"source_commit={prev.get('source_commit')} generation={prev.get('generation')} "
               f"tree_digest={prev.get('tree_digest')}")
     else:
         print("pinned identity: none recorded yet")
 
-    job_ids = pre_existing["job_ids"]
-    if job_ids:
-        print(f"jobs: {', '.join(sorted(job_ids))}")
-    else:
-        print("jobs: none")
+    # Settings-and-telemetry CP6 (E.4): the count, then the newest jobs,
+    # one per line.
+    jobs = view["jobs"]
+    print(f"jobs: {jobs['count']} recorded" if jobs["count"] else "jobs: none")
+    for entry in jobs["recent"]:
+        print(f"  {observe.job_summary_text(entry)}")
 
-    if pre_existing["handoff"] is not None:
-        print(f"handoff: pending ({pre_existing['handoff']})")
-    else:
-        print("handoff: none")
+    print(f"handoff: pending ({view['handoff']})" if view["handoff"] is not None else "handoff: none")
 
-    _print_active(runtime_root)
+    _print_active(view["active"])
+
+    # Settings-and-telemetry CP3: the newest job with a telemetry block --
+    # its cost and wall time -- only when one exists.
+    last = view["last_job_telemetry"]
+    if last is not None:
+        print(telemetry.last_job_text(last))
 
     # CP8 (trunk-branch-pr-release-orchestration): one line per binding
     # record, only when one exists.
     for line in milestone_branch.binding_lines(runtime_root):
         print(line)
 
-    print(f"runtime root: {runtime_root} (ladder row {pre_existing['ladder_row']})")
+    print(f"runtime root: {runtime_root} (ladder row {view['ladder_row']})")
     return EXIT_OK
 
 
-def _print_active(runtime_root: Path) -> None:
-    """``status``'s ``active:`` section (release-runtime-observability
+def _status_view(runtime_root: Path, ident: identity.ControllerIdentity, pre_existing: dict) -> dict:
+    """Everything ``status`` reports, as one JSON-ready object. The jobs
+    are those recorded when this process started (``pre_existing``)."""
+    view = {
+        "controller": f"{version_text(ident)} -- {identity.describe_runtime(ident)}",
+        "runtime_root": str(runtime_root),
+        "ladder_row": pre_existing["ladder_row"],
+        "runtime_state": bool(pre_existing["had_any_state"]),
+    }
+    if not view["runtime_state"]:
+        return view
+    recorded = set(pre_existing["job_ids"])
+    records = [record for record in observe.list_jobs(runtime_root) if record["job_id"] in recorded]
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    last = telemetry.last_finished(records)
+    view.update({
+        "pinned_identity": pre_existing["identity"],
+        "jobs": {"count": len(recorded), "recent": observe.recent_jobs(records, now=now)},
+        "handoff": pre_existing["handoff"],
+        "active": _active_view(runtime_root),
+        "last_job_telemetry": None if last is None else telemetry.last_job_entry(last),
+        "bindings": milestone_branch.binding_entries(runtime_root),
+    })
+    return view
+
+
+def _active_view(runtime_root: Path) -> dict:
+    """``status``'s ``active`` section (release-runtime-observability
     CP6): every ``running`` run with its Controller's liveness and every
     non-terminal job with its worker's (read-only), across every target in
-    this runtime root, each with the command that follows it."""
-    runs, jobs = observe.active_runs(runtime_root), observe.active_jobs(runtime_root)
-    if not runs and not jobs:
+    this runtime root, each with the command that follows it. Settings-
+    and-telemetry CP6 adds each one's start time, and a job's command and
+    work item."""
+    runs = [{
+        "run_id": run.get("run_id"), "command": run.get("command"), "target_repo": run.get("target_repo"),
+        "started_at": run.get("started_at"),
+        "controller_pid": (run.get("controller_process") or {}).get("pid"), "liveness": liveness,
+        "follow": job.follow_command(runtime_root, run.get("target_repo")),
+    } for run, liveness in observe.active_runs(runtime_root)]
+    jobs = [{
+        "job_id": record.get("job_id"), "status": record.get("status"), "command": observe.job_command(record),
+        "work_item_id": record.get("work_item_id"), "target_repo": record.get("target_repo"),
+        "started_at": record.get("created_at"), "liveness": liveness,
+        "activity": _job_activity_text(runtime_root, record, liveness),
+        "follow": job.follow_command(runtime_root, record.get("target_repo")),
+    } for record, liveness in observe.active_jobs(runtime_root)]
+    return {"runs": runs, "jobs": jobs}
+
+
+def _print_active(active: dict) -> None:
+    if not active["runs"] and not active["jobs"]:
         print("active: none")
         return
     print("active:")
-    for run, liveness in runs:
-        process = run.get("controller_process") or {}
-        print(f"  run {run.get('run_id')} ({run.get('command')}, target {run.get('target_repo')}): "
-              f"controller pid {process.get('pid')} {liveness}")
-        print(f"    follow: {job.follow_command(runtime_root, run.get('target_repo'))}")
-    for record, liveness in jobs:
-        print(f"  job {record.get('job_id')} ({record.get('status')}, target {record.get('target_repo')}): "
-              f"{_job_activity_text(runtime_root, record, liveness)}")
-        print(f"    follow: {job.follow_command(runtime_root, record.get('target_repo'))}")
+    for run in active["runs"]:
+        print(f"  run {run['run_id']} ({run['command']}, target {run['target_repo']}, started {run['started_at']}): "
+              f"controller pid {run['controller_pid']} {run['liveness']}")
+        print(f"    follow: {run['follow']}")
+    for entry in active["jobs"]:
+        print(f"  job {entry['job_id']} ({entry['status']}, {entry['command'] or 'no command'}, "
+              f"work item {entry['work_item_id'] or 'none'}, target {entry['target_repo']}, "
+              f"started {entry['started_at']}): {entry['activity']}")
+        print(f"    follow: {entry['follow']}")
 
 
 def _job_activity_text(runtime_root: Path, record: dict, liveness: str | None) -> str:
@@ -425,6 +544,32 @@ def _print_target_jobs(entries: list[dict]) -> None:
     print("jobs:")
     for entry in entries:
         print(f"  job {entry['job_id']} ({entry['status']}): {entry['text']}")
+
+
+def _print_last_telemetry(record: dict | None) -> None:
+    if record is not None:
+        print(telemetry.last_job_text(record))
+
+
+def cmd_telemetry(args: argparse.Namespace) -> int:
+    """``telemetry`` (settings-and-telemetry CP3, Design C): the recorded
+    jobs' turns, tokens, cost, API time and wall time, as totals and
+    per-job means, grouped by ``--by``; ``--json`` prints the rows and the
+    groups. Dispatched before pinning like ``follow``: it reads the job
+    records (deriving the figures of a record written before telemetry
+    from its ``worker.stdout``) and writes nothing."""
+    runtime_root = _follow_runtime_root(args)
+    target_repo = (str(managed_repo._resolve_repository_root(Path(args.repo)))
+                   if args.repo is not None else None)
+    selected = telemetry.rows(observe.list_jobs(runtime_root), work_item=args.work_item, run=args.run,
+                              since=args.since, target_repo=target_repo)
+    grouped = telemetry.groups(selected, args.by)
+    if args.json:
+        print(json.dumps({"by": args.by, "rows": selected, "groups": grouped}, sort_keys=True))
+        return EXIT_OK
+    for line in telemetry.render_text(grouped, args.by, job_count=len(selected)):
+        print(line)
+    return EXIT_OK
 
 
 def _follow_runtime_root(args: argparse.Namespace) -> Path:
@@ -504,7 +649,10 @@ def _follow(args: argparse.Namespace) -> int:
         )
     follow = observe.follow_run if kind == "run" else observe.follow_job
     try:
-        follow(runtime_root, record_id, _stdout_sink, from_start=args.from_start, json_output=args.json)
+        effective = _effective(args)
+        follow(runtime_root, record_id, _stdout_sink, from_start=args.from_start, json_output=args.json,
+               heartbeat_seconds=effective["follow.heartbeat_seconds"],
+               replay_events=effective["follow.replay_events"])
     except KeyboardInterrupt:
         pass  # the operator stopped following; nothing else is affected
     return EXIT_OK
@@ -532,18 +680,21 @@ def _start_follower(args: argparse.Namespace, runtime_root: Path, run_id: str) -
         return
     sink = observe.FdSink(fd)
     stop = threading.Event()
-    thread = threading.Thread(target=_render_run, args=(runtime_root, run_id, sink, stop),
+    heartbeat_seconds = _effective(args)["follow.heartbeat_seconds"]
+    thread = threading.Thread(target=_render_run, args=(runtime_root, run_id, sink, stop, heartbeat_seconds),
                               name="workflow-controller-follow", daemon=True)
     thread.start()
     _follower = (thread, stop)
 
 
-def _render_run(runtime_root: Path, run_id: str, sink: observe.FdSink, stop: threading.Event) -> None:
+def _render_run(runtime_root: Path, run_id: str, sink: observe.FdSink, stop: threading.Event,
+                heartbeat_seconds: float | None = None) -> None:
     """The renderer thread's body. Any exception disables rendering for the
     rest of the process (one note, if the descriptor still works) and is
     never propagated."""
     try:
-        observe.follow_run(runtime_root, run_id, sink, from_start=True, stop=stop)
+        observe.follow_run(runtime_root, run_id, sink, from_start=True, stop=stop,
+                           heartbeat_seconds=heartbeat_seconds)
     except Exception as exc:  # noqa: BLE001 -- a renderer failure never reaches the lifecycle
         sink.fail(exc)
     finally:
@@ -606,6 +757,11 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # what each is doing, beside the lock; omitted when there is none.
     jobs = _target_jobs(runtime_root, target)
     jobs_block = {"jobs": jobs} if jobs else {}
+    # Settings-and-telemetry CP3: the target's newest job with a telemetry
+    # block, omitted -- never `null` -- when there is none.
+    last = telemetry.last_finished(observe.list_jobs(runtime_root), target_repo=str(target.root))
+    if last is not None:
+        jobs_block["last_job_telemetry"] = telemetry.last_job_entry(last)
     # CP8 (trunk-branch-pr-release-orchestration): `repository_policy` and
     # `milestone_branch`, from local Git and the binding records only, each
     # omitted -- never `null` -- when it does not apply (I1, I10).
@@ -632,6 +788,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
         print(f"lifecycle lock: {lock_state}")
         _print_target_jobs(jobs)
+        _print_last_telemetry(last)
         print("work item: none -- no non-terminal work item exists and none was explicitly named")
         _print_branch_blocks(branch_blocks)
         return EXIT_OK
@@ -654,6 +811,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
     print(f"lifecycle lock: {lock_state}")
     _print_target_jobs(jobs)
+    _print_last_telemetry(last)
     print(f"work item: {work_item.work_item_id} "
           f"(type={work_item.work_item_type} kind={work_item.work_item_kind} "
           f"governing_workflow_version={work_item.governing_workflow_version})")
@@ -845,20 +1003,31 @@ def _print_last_job(last_job: dict | None) -> None:
         print(f"  {line}")
 
 
+#: ``EffectiveSettings.sources["routing"]`` -> ``worker_route.config_source``.
+_ROUTING_CONFIG_SOURCES = {
+    settings.SOURCE_CLI: routing.CONFIG_SOURCE_ROUTING_CONFIG,
+    settings.SOURCE_FILE: routing.CONFIG_SOURCE_SETTINGS,
+    settings.SOURCE_DEFAULT: routing.CONFIG_SOURCE_NONE,
+}
+
+
 def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
-    """The operator's routing overrides (CP6), with the ``--routing-config``
-    file parsed now -- before any job record is written -- so a malformed
-    one is ``RoutingConfigError`` (exit 20) and nothing runs. Read with
-    ``getattr`` defaults, as ``cmd_resume`` reads ``--abandon``, so a
-    caller's hand-built namespace without these options routes by the
-    built-in table."""
-    config_path = getattr(args, "routing_config", None)
+    """The operator's routing overrides (CP6) over the routing config in
+    force (settings-and-telemetry CP2, I1): the ``--routing-config`` file
+    when given, which replaces the settings file's ``routing`` section
+    whole, else that section. Both were parsed with the settings, before
+    any job record is written, so a malformed one is exit 20 and nothing
+    runs. Read with ``getattr`` defaults, as ``cmd_resume`` reads
+    ``--abandon``, so a caller's hand-built namespace without these options
+    routes by the built-in table."""
+    effective = _effective(args)
     return routing.RoutingOptions(
         cli_model=getattr(args, "model", None),
         cli_effort=getattr(args, "effort", None),
         cli_role_models=getattr(args, "role_model", None) or {},
         cli_role_efforts=getattr(args, "role_effort", None) or {},
-        config=None if config_path is None else routing.load_routing_config(config_path),
+        config=effective.routing_config,
+        config_source=_ROUTING_CONFIG_SOURCES[effective.sources[settings.ROUTING_KEY]],
     )
 
 
@@ -894,16 +1063,19 @@ def _run_one_step(
             run.event("handoff_detected")
         return EXIT_HANDOFF_PENDING, None
 
+    effective = _effective(args)
     result = job.execute_step(
         target,
         work_item_id=args.work_item,
         identity=ident,
         runtime=runtime_root,
         permission_mode=args.permission_mode or job.DEFAULT_PERMISSION_MODE,
-        timeout=args.timeout,
+        timeout=effective["worker.timeout_seconds"],
         claude_bin=args.claude_binary,
         routing=routing_options,
         run_id=None if run is None else run.run_id,
+        drain_detach_seconds=effective["worker.drain_detach_seconds"],
+        controller_settings=_controller_settings_block(effective),
     )
 
     if isinstance(result, Decision):
@@ -1015,7 +1187,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
 
     routing_options = _routing_options(args)
     target = _inspect_target(args)
-    run = _start_run("run", runtime_root, ident, target, max_steps=args.max_steps)
+    run = _start_run("run", runtime_root, ident, target, max_steps=_effective(args)["run.max_steps"])
     _start_follower(args, runtime_root, run.run_id)
 
     try:
@@ -1028,9 +1200,11 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
                target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions,
                run: job.RunRecord) -> int:
     """``cmd_run``'s loop: one step per orchestration boundary, until a
-    step does not finish or ``--max-steps`` is reached."""
+    step does not finish or ``run.max_steps`` (``--max-steps``, else the
+    settings file, else 20) is reached."""
+    max_steps = _effective(args)["run.max_steps"]
     steps_run = 0
-    while steps_run < args.max_steps:
+    while steps_run < max_steps:
         # The orchestration boundary: checked once before every job this
         # loop starts, including the first -- never mid-job. Both halves
         # (the test-support pause and the real handoff detection, inside
@@ -1109,7 +1283,8 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
             print(_abandon_summary(abandoned, runtime_root))
         return EXIT_OK
 
-    records = job.resume(target, identity=ident, runtime=runtime_root)
+    records = job.resume(target, identity=ident, runtime=runtime_root,
+                         drain_detach_seconds=_effective(args)["worker.drain_detach_seconds"])
 
     if args.json:
         # `O1` (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW round 2): `job.py`'s
@@ -1215,12 +1390,113 @@ def _capture_pre_existing_state(runtime_root: Path) -> dict:
     }
 
 
+def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.RoutingConfig | None]:
+    """The settings the options given on this command line override (I1):
+    ``--timeout``, ``run --max-steps``, ``resume --drain-timeout`` and
+    ``--routing-config``, the latter parsed strictly as today. Read with
+    ``getattr`` defaults: each is only on its own subcommand."""
+    config_path = getattr(args, "routing_config", None)
+    cli_routing = None if config_path is None else routing.load_routing_config(config_path)
+    return {
+        "worker.timeout_seconds": getattr(args, "timeout", None),
+        "run.max_steps": getattr(args, "max_steps", None),
+        "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
+    }, cli_routing
+
+
+def _resolve_settings(args: argparse.Namespace, *, write: bool | None) -> settings.EffectiveSettings:
+    """The settings in force for this invocation (settings-and-telemetry
+    CP2, Design B): the file filled first by a writing command, only loaded
+    by a read-only one (A.4), an invalid one refused (exit 20, I2), and the
+    command line's overrides applied (I1). ``write`` ``None`` reads no file
+    at all: the built-in defaults under the overrides."""
+    cli_values, cli_routing = _settings_cli_overrides(args)
+    path = settings.resolve_path(getattr(args, "settings", None))
+    if write is None:
+        loaded = settings.empty(path)
+    else:
+        loaded = settings.fill(path) if write else settings.load(path)
+    return settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
+
+
+def _apply_settings(args: argparse.Namespace, *, write: bool) -> settings.EffectiveSettings:
+    """:func:`main`'s one settings resolution, after the re-exec and before
+    dispatch: the resolved settings are put on ``args`` for the commands
+    (``args.effective_settings``), and the process-wide leaf values are set
+    -- the only production call of :func:`settings.apply_process_defaults`,
+    made before any thread starts (the ``--follow`` renderer starts in
+    dispatch)."""
+    effective = _resolve_settings(args, write=write)
+    settings.apply_process_defaults(effective)
+    args.effective_settings = effective
+    return effective
+
+
+def _effective(args: argparse.Namespace) -> settings.EffectiveSettings:
+    """The settings :func:`_apply_settings` put on ``args``. A namespace
+    that did not come through :func:`main` (a direct call) is no
+    invocation: it gets the built-in defaults under its own options, and no
+    file is read."""
+    effective = getattr(args, "effective_settings", None)
+    return effective if effective is not None else _resolve_settings(args, write=None)
+
+
+def _controller_settings_block(effective: settings.EffectiveSettings) -> dict:
+    """The job record's optional ``controller_settings`` block (CP2): the
+    file's path and the SHA-256 of the bytes read (``null`` with no file),
+    and each effective value with its source."""
+    return {"path": str(effective.path), "sha256": effective.sha256,
+            "values": dict(effective.values), "sources": dict(effective.sources)}
+
+
+def cmd_settings(args: argparse.Namespace) -> int:
+    """``settings show|path|clean`` (settings-and-telemetry CP1, A.6).
+
+    Dispatched before pinning and the runtime root, like ``follow``: it
+    touches only the settings file. ``show`` and ``path`` write nothing;
+    ``clean`` fills the file, then removes the keys this release does not
+    know, or refuses (exit 20) a file last filled by a newer release."""
+    path = settings.resolve_path(args.settings)
+    if args.settings_action == "path":
+        print(json.dumps({"path": str(path)}) if args.json else path)
+        return EXIT_OK
+    if args.settings_action == "clean":
+        _loaded, removed = settings.clean(path)
+        if args.json:
+            print(json.dumps({"path": str(path), "removed": removed}, sort_keys=True))
+        elif removed:
+            print(f"removed from {path}: {', '.join(removed)}")
+        else:
+            print(f"nothing to remove from {path}")
+        return EXIT_OK
+    cli_values, cli_routing = _settings_cli_overrides(args)
+    loaded = settings.load(path)
+    effective = settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
+    if args.json:
+        print(json.dumps({
+            "path": str(path), "exists": loaded.exists, "sha256": loaded.sha256,
+            "values": dict(effective.values), "sources": dict(effective.sources),
+        }, indent=2, sort_keys=True))
+        return EXIT_OK
+    print(f"settings file: {path}" + ("" if loaded.exists else " (not created yet)"))
+    for key in effective.values:
+        print(f"{key} = {json.dumps(effective.values[key], sort_keys=True)} ({effective.sources[key]})")
+    return EXIT_OK
+
+
 def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     command = args.command
     if command == "follow":
         # Before pinning, runtime-root creation, materialisation and the
-        # identity write: `follow` only reads.
+        # identity write: `follow` only reads, the settings file included.
+        _apply_settings(args, write=False)
         return cmd_follow(args)
+    if command == "settings":
+        return cmd_settings(args)
+    if command == "telemetry":
+        # Read-only like `follow`: the settings file is only validated.
+        _apply_settings(args, write=False)
+        return cmd_telemetry(args)
     ident = identity.pin()
 
     handoff = identity.read_exec_handoff()
@@ -1257,7 +1533,7 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
         _reexec(
             snapshot_dir=snapshot_dir, runtime_root=runtime_root, argv=argv,
             exec_depth_seen=exec_depth, source_kind=snapshot_pin["source_kind"],
-            source_commit=snapshot_pin.get("source_commit"),
+            source_commit=snapshot_pin.get("source_commit"), settings_path=getattr(args, "settings", None),
         )
         raise AssertionError("os.execve returned, which should be impossible")
 
@@ -1265,6 +1541,13 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     pre_existing["ladder_row"] = ladder_row
 
     _write_identity_record(runtime_root, ident, exec_depth=exec_depth)
+
+    # Settings-and-telemetry CP2: resolved once, after the re-exec (the
+    # unpinned branch above never returns) and before anything is
+    # dispatched -- a refusal (exit 20) leaves the ordinary dispatch
+    # footprint, `identity.json` and no job record. A writing command fills
+    # the file first (A.4).
+    _apply_settings(args, write=not read_only)
 
     if command == "status":
         return cmd_status(args, runtime_root, ident, pre_existing=pre_existing)

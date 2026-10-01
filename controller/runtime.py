@@ -8,11 +8,14 @@ state (the runtime root)".
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import secrets
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from controller.errors import RuntimeContainmentError, RuntimeRootUnwritableError
@@ -330,3 +333,56 @@ def read_json(path: Path) -> dict | None:
     except FileNotFoundError:
         return None
     return json.loads(raw)
+
+
+# ---------------------------------------------------------------------------
+# The user settings file (workflow-controller-settings-and-telemetry CP1).
+# It lives outside the runtime root, so its primitives are contained against
+# the settings file's own directory.
+# ---------------------------------------------------------------------------
+
+#: The sibling lock file's suffix: ``settings.json`` is locked through
+#: ``settings.json.lock`` in the same directory.
+SETTINGS_LOCK_SUFFIX = ".lock"
+
+
+def settings_target(path: str | os.PathLike) -> Path:
+    """The file a settings path names, with symlinks resolved: the lock,
+    the read and the write all act on it, so two spellings of one file
+    share one lock and a symlinked file stays a symlink."""
+    return Path(path).expanduser().resolve()
+
+
+@contextlib.contextmanager
+def settings_lock(path: str | os.PathLike) -> Iterator[Path]:
+    """Hold the exclusive ``flock`` on the settings file's sibling lock
+    file for the whole read-modify-write (I4), creating the directory and
+    the lock file as needed. Blocks until the lock is free. Yields the
+    resolved settings path. An ``OSError`` (an unwritable directory, say)
+    propagates to the caller, which decides whether to skip its write."""
+    target = settings_target(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd = open_lock_file(target.parent, target.name + SETTINGS_LOCK_SUFFIX)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield target
+    finally:
+        os.close(fd)
+
+
+def read_settings_bytes(path: str | os.PathLike) -> bytes | None:
+    """The settings file's bytes, or ``None`` when it does not exist. Any
+    other ``OSError`` propagates."""
+    try:
+        return settings_target(path).read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def write_settings_atomically(path: str | os.PathLike, obj: dict) -> Path:
+    """Write ``obj`` to the settings file as canonical JSON, atomically
+    (:func:`write_json`'s temporary file, ``fsync`` and rename), contained
+    against the file's own directory. The caller holds
+    :func:`settings_lock`."""
+    target = settings_target(path)
+    return write_json(target.parent, target.name, obj)

@@ -86,6 +86,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -555,6 +556,15 @@ class HumanGate:
     safe_resume_command: str
 
 
+def explain_gate_command(root: Path, work_item_id: str) -> str:
+    """The ``safe_resume_command`` of a gate with no automatic
+    continuation: ``workflow-controller --work-item <id> explain <repo>``,
+    a valid ``explain`` invocation (``--work-item`` is a global option, and
+    ``explain`` takes only the repository), which changes nothing. Both
+    values are quoted with :func:`shlex.quote`."""
+    return f"workflow-controller --work-item {shlex.quote(work_item_id)} explain {shlex.quote(str(root))}"
+
+
 #: The phase a milestone-branch gate reports: the gate comes from the
 #: repository preflight (``controller.milestone_branch``), ahead of any
 #: Workflow phase handler.
@@ -586,6 +596,8 @@ BRANCH_GATE_TEXTS = {
     "dirty_tree": "commit, stash or discard the tracked changes",
     "pr_title_invalid": "the pull request's title is not a valid Conventional Commit; set a valid title "
                         "on GitHub",
+    "release_notes_invalid": "the milestone's release notes cannot be carried by the squash commit; fix "
+                             "the notes section",
 }
 
 #: The texts a squash-mode gate (``merge_method: "squash"`` in the binding's
@@ -613,7 +625,7 @@ def branch_human_gate(repository: str, gate: Any, *, phase: str = BRANCH_GATE_PH
         phase=phase,
         what_is_required=f"{texts.get(gate.code, BRANCH_GATE_TEXTS[gate.code])} ({gate.code}): {gate.message}",
         artifact_path=None,
-        safe_resume_command=gate.exits[0] if gate.exits else "workflow-controller step",
+        safe_resume_command=gate.exits[0] if gate.exits else f"workflow-controller step {shlex.quote(repository)}",
     )
 
 
@@ -847,7 +859,7 @@ def _decide_implementing(managed_repo: Any, work_item: Any) -> Decision:
                     "or stale plan approval"
                 ),
                 artifact_path=None,
-                safe_resume_command=f"workflow-controller explain --work-item {wid}",
+                safe_resume_command=explain_gate_command(managed_repo.root, wid),
             ),
             declined=False,
             reason=f"{phase}: plan_approval is {status}, not CURRENT -- /milestone-implement "

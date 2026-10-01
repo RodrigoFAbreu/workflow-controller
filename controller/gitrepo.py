@@ -24,6 +24,7 @@ import dataclasses
 import os
 import re
 import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -32,20 +33,34 @@ from .errors import GitOperationError
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess]
 
 #: Generous: a fetch or push over a slow network is still a bounded wait.
+#: The built-in default of the ``timeouts.git_seconds`` setting.
 DEFAULT_TIMEOUT_SECONDS = 600
+
+#: The process-wide ``timeouts.git_seconds``, set once by ``cli.main``
+#: through ``settings.apply_process_defaults`` (settings-and-telemetry
+#: CP2); ``None`` is :data:`DEFAULT_TIMEOUT_SECONDS`.
+process_timeout_seconds: float | None = None
+
+
+def timeout_seconds() -> float:
+    """The git and ``gh`` timeout in force, read at call time."""
+    return DEFAULT_TIMEOUT_SECONDS if process_timeout_seconds is None else process_timeout_seconds
 
 
 def subprocess_runner(env: dict[str, str] | None = None, *,
-                      timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Runner:
+                      timeout: float | None = None) -> Runner:
     """A runner executing ``argv`` for real, with stdin closed, bytes output,
     ``LC_ALL=C`` (so stderr fragments are stable) and no credential or
-    terminal prompt. ``env`` replaces ``os.environ`` as the base."""
+    terminal prompt. ``env`` replaces ``os.environ`` as the base.
+    ``timeout`` ``None`` is :func:`timeout_seconds`, read when the runner
+    runs, so a runner built at import applies the value set later."""
     base = dict(os.environ if env is None else env)
     base.update({"LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0", "GH_PROMPT_DISABLED": "1"})
 
     def run(argv: Sequence[str]) -> subprocess.CompletedProcess:
         return subprocess.run(list(argv), capture_output=True, stdin=subprocess.DEVNULL,
-                              check=False, env=base, timeout=timeout)
+                              check=False, env=base,
+                              timeout=timeout_seconds() if timeout is None else timeout)
 
     return run
 
@@ -410,6 +425,88 @@ def commit_trailers(repo_root: Path, commit: str, *, runner: Runner | None = Non
     return trailers
 
 
+def _object_message(raw: bytes) -> bytes:
+    """The message of a raw commit or tag object: the bytes after the
+    header's first blank line (empty when there is none)."""
+    _, sep, message = raw.partition(b"\n\n")
+    return message if sep else b""
+
+
+def commit_message(repo_root: Path, commit: str, *, runner: Runner | None = None) -> bytes:
+    """``commit``'s full message as bytes, exactly as stored: ``git
+    cat-file commit``'s output after the header's blank line. No encoding
+    is assumed (settings-and-telemetry D.3 step 2)."""
+    argv, result = _run(repo_root, ["cat-file", "commit", commit], runner)
+    if result.returncode != 0:
+        raise _failure(f"git cat-file commit {commit} failed (exit {result.returncode}): "
+                       f"{_text(result.stderr).strip()}", argv, result, commit=commit)
+    raw = result.stdout if isinstance(result.stdout, bytes) else result.stdout.encode()
+    return _object_message(raw)
+
+
+def tag_message(repo_root: Path, tag: str, *, runner: Runner | None = None) -> bytes | None:
+    """The message of the annotated tag object ``refs/tags/<tag>`` as bytes,
+    exactly as stored (``git cat-file tag``, after the header's blank line).
+    ``None`` when the ref names no tag object (a lightweight tag); a failed
+    read, an absent tag included, refuses."""
+    return _tag_object_message(repo_root, f"refs/tags/{tag}", runner, tag=tag)
+
+
+def remote_tag_message(repo_root: Path, remote: str, tag: str, *, runner: Runner | None = None) -> bytes | None:
+    """The message of ``remote``'s tag ``tag``, as :func:`tag_message` reads
+    a local one, whatever the local ``refs/tags/<tag>`` holds: the object
+    ``ls-remote`` names is fetched with no destination and no
+    ``FETCH_HEAD``, so no local ref changes, and read by its id. ``None``
+    for a lightweight tag; an absent tag, or a failed fetch or read,
+    refuses."""
+    ref = f"refs/tags/{tag}"
+    out = _git(repo_root, ["ls-remote", "--", remote, ref], runner)
+    direct = [oid for oid, _, name in (line.partition("\t") for line in out.splitlines()) if name == ref]
+    if len(direct) != 1:
+        raise GitOperationError(f"{remote} has no single tag {tag} to read",
+                                evidence={"tag": tag, "remote": remote, "stdout": out})
+    _git(repo_root, ["fetch", "--no-tags", "--no-write-fetch-head", "--", remote, ref], runner)
+    return _tag_object_message(repo_root, direct[0], runner, tag=tag, remote=remote)
+
+
+def _tag_object_message(repo_root: Path, rev: str, runner: Runner | None, **evidence: str) -> bytes | None:
+    kind = _single_line(_git(repo_root, ["cat-file", "-t", rev], runner), f"git cat-file -t {rev}")
+    if kind != "tag":
+        return None
+    argv, result = _run(repo_root, ["cat-file", "tag", rev], runner)
+    if result.returncode != 0:
+        raise _failure(f"git cat-file tag {rev} failed (exit {result.returncode}): "
+                       f"{_text(result.stderr).strip()}", argv, result, **evidence)
+    raw = result.stdout if isinstance(result.stdout, bytes) else result.stdout.encode()
+    return _object_message(raw)
+
+
+def parse_trailers(paragraph: str) -> str:
+    """What ``git interpret-trailers --parse`` prints for a blank line
+    followed by ``paragraph`` (settings-and-telemetry I8): empty when the
+    paragraph is no trailer block.
+
+    No Git configuration is read, since ``trailer.separators`` and
+    ``trailer.<token>.*`` change what parses: every ``GIT_*`` variable is
+    removed, the system and global files are disabled, and Git runs in a
+    private empty directory whose parent is a ceiling, so no repository and
+    no repository configuration is found. The paragraph is fed on stdin."""
+    env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    with tempfile.TemporaryDirectory(prefix="trailer-parse-") as scratch:
+        env.update({"LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_NOSYSTEM": "1",
+                    "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CEILING_DIRECTORIES": str(Path(scratch).parent)})
+        argv = ["git", "interpret-trailers", "--parse"]
+        try:
+            result = subprocess.run(argv, cwd=scratch, env=env, input=("\n" + paragraph + "\n").encode("utf-8"),
+                                    capture_output=True, check=False, timeout=timeout_seconds())
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise _failure(f"git interpret-trailers could not run: {exc}", argv) from None
+    if result.returncode != 0:
+        raise _failure(f"git interpret-trailers failed (exit {result.returncode}): "
+                       f"{_text(result.stderr).strip()}", argv, result)
+    return _text(result.stdout)
+
+
 def worktree_branches(repo_root: Path, *, runner: Runner | None = None) -> dict[str, str | None]:
     """``{worktree path: branch short name, or None when detached}`` for
     every worktree of the repository (the main one included; a bare main
@@ -570,13 +667,23 @@ def create_annotated_tag(repo_root: Path, tag: str, commit: str, message: str, *
                          tagger: tuple[str, str] | None = None, runner: Runner | None = None) -> None:
     """Create the annotated tag ``tag`` at ``commit``, as ``tagger``
     (``(name, email)``) when given, else the configured identity. Refuses
-    when a local tag of that name exists, at any commit."""
+    when a local tag of that name exists, at any commit.
+
+    The message is stored verbatim (``--cleanup=verbatim``), so a Markdown
+    heading in it survives, with the one newline Git's default cleanup ends
+    a message with added when ``message`` lacks it: a message that
+    cleanup would leave alone (no ``#``-leading line, no trailing
+    whitespace, no leading, trailing or consecutive blank lines) is stored
+    as before (settings-and-telemetry D.3). The tag is never signed, so its stored
+    message is exactly that text."""
     existing = tag_commit(repo_root, tag, runner=runner)
     if existing is not None:
         raise GitOperationError(f"refusing to create tag {tag}: it already exists at {existing}",
                                 evidence={"tag": tag, "local_commit": existing, "reason": "exists"})
     identity = [] if tagger is None else ["-c", f"user.name={tagger[0]}", "-c", f"user.email={tagger[1]}"]
-    _git(repo_root, identity + ["tag", "-a", "-m", message, "--", tag, commit], runner)
+    stored = message if message.endswith("\n") else message + "\n"
+    _git(repo_root, identity + ["tag", "-a", "--no-sign", "--cleanup=verbatim", "-m", stored, "--", tag, commit],
+         runner)
 
 
 def remote_tag_commit(repo_root: Path, remote: str, tag: str, *, runner: Runner | None = None) -> str | None:

@@ -986,5 +986,130 @@ class StateTest(unittest.TestCase):
             ws.classify("", mode="guess", returncode=0)
 
 
+
+def _telemetry_result(*, turns=1, duration=10, api=100, cost=1.0, tokens=(1, 2, 3, 4), models=None, **extra):
+    """A ``result`` event carrying every figure telemetry reads."""
+    event = {"type": "result", "subtype": "success", "is_error": False, "session_id": "s",
+             "num_turns": turns, "duration_ms": duration, "duration_api_ms": api, "total_cost_usd": cost,
+             "usage": dict(zip(("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                                "cache_read_input_tokens"), tokens)),
+             "modelUsage": models if models is not None else {
+                 "m": {"inputTokens": 10, "outputTokens": 20, "cacheCreationInputTokens": 30,
+                       "cacheReadInputTokens": 40, "costUSD": cost}},
+             **extra}
+    return event
+
+
+class SessionTelemetryTest(unittest.TestCase):
+    """``session_telemetry`` (settings-and-telemetry CP3, plan Design C, I6,
+    I7): session totals over every result."""
+
+    def test_the_two_result_contract_fixture_by_hand(self) -> None:
+        stream = ws.read_stream((CONTRACT_DIR / "job_2857a730_two_results.jsonl").read_bytes())
+        block = ws.session_telemetry([r["event"] for r in stream.results])
+        self.assertEqual(block["results"], 2)
+        self.assertEqual(block["turns"], 127 + 8)
+        self.assertEqual(block["duration_ms"], 2224988 + 288682)
+        # The summed per-turn usage of both results.
+        self.assertEqual(block["tokens"], {"input": 244 + 18, "output": 174346 + 10729,
+                                           "cache_creation": 454660 + 18641,
+                                           "cache_read": 33010876 + 3800308})
+        # The cumulative figures: the maximum (both results carry the same).
+        self.assertEqual(block["cost_usd"], 24.249237599999997)
+        self.assertEqual(block["duration_api_ms"], 2719274)
+        self.assertEqual(block["models"]["claude-opus-5-5"]["output"], 326896)
+        self.assertEqual(block["models"]["claude-opus-5-5"]["cost_usd"], 24.249237599999997)
+        # The peer handback repeats the cumulative figures: reported once.
+        self.assertEqual(block["problems"], [{"kind": ws.PROBLEM_CUMULATIVE_NOT_ADVANCED, "result_index": 1}])
+
+    def test_a_lower_later_cumulative_figure_keeps_the_maximum(self) -> None:
+        high = {"m": {"inputTokens": 9, "outputTokens": 90, "cacheCreationInputTokens": 900,
+                      "cacheReadInputTokens": 9000, "costUSD": 5.0}}
+        low = {"m": {"inputTokens": 1, "outputTokens": 10, "cacheCreationInputTokens": 100,
+                     "cacheReadInputTokens": 1000, "costUSD": 2.0}}
+        block = ws.session_telemetry([_telemetry_result(api=500, cost=5.0, models=high),
+                                      _telemetry_result(api=200, cost=2.0, models=low)])
+        self.assertEqual(block["cost_usd"], 5.0)
+        self.assertEqual(block["duration_api_ms"], 500)
+        self.assertEqual(block["models"], {"m": {"input": 9, "output": 90, "cache_creation": 900,
+                                                 "cache_read": 9000, "cost_usd": 5.0}})
+        # Not the last result's values, and not "not advanced": they changed.
+        self.assertEqual(block["problems"], [])
+
+    def test_per_field_maximum_across_models_and_results(self) -> None:
+        first = {"a": {"inputTokens": 5, "outputTokens": 1, "cacheCreationInputTokens": 1,
+                       "cacheReadInputTokens": 1, "costUSD": 1.0}}
+        second = {"a": {"inputTokens": 1, "outputTokens": 7, "cacheCreationInputTokens": 1,
+                        "cacheReadInputTokens": 1, "costUSD": 1.5},
+                  "b": {"inputTokens": 2, "outputTokens": 2, "cacheCreationInputTokens": 2,
+                        "cacheReadInputTokens": 2, "costUSD": 0.5}}
+        block = ws.session_telemetry([_telemetry_result(cost=1.0, models=first),
+                                      _telemetry_result(cost=2.0, models=second)])
+        self.assertEqual(block["models"]["a"], {"input": 5, "output": 7, "cache_creation": 1, "cache_read": 1,
+                                                "cost_usd": 1.5})
+        self.assertEqual(block["models"]["b"]["cost_usd"], 0.5)
+
+    def test_four_results_sum_and_advance(self) -> None:
+        results = [_telemetry_result(turns=t, duration=10 * t, api=100 * (i + 1), cost=float(i + 1),
+                                     tokens=(t, t, t, t)) for i, t in enumerate((107, 18, 11, 8))]
+        block = ws.session_telemetry(results)
+        self.assertEqual((block["results"], block["turns"], block["duration_ms"]), (4, 144, 1440))
+        self.assertEqual((block["cost_usd"], block["duration_api_ms"]), (4.0, 400))
+        self.assertEqual(block["tokens"], {"input": 144, "output": 144, "cache_creation": 144, "cache_read": 144})
+
+    def test_not_advanced_needs_non_zero_usage(self) -> None:
+        same = _telemetry_result()
+        idle = _telemetry_result(tokens=(0, 0, 0, 0))
+        block = ws.session_telemetry([same, idle])
+        self.assertEqual(block["problems"], [])
+        block = ws.session_telemetry([same, dict(same), dict(same)])
+        self.assertEqual([p["result_index"] for p in block["problems"]], [1, 2])
+
+    def test_malformed_usage_gives_null_figures_and_problems(self) -> None:
+        cases = {
+            "usage missing": ({k: v for k, v in _telemetry_result().items() if k != "usage"},
+                              ("tokens",), {"kind": "missing_field", "field": "usage", "result_index": 1}),
+            "usage not an object": (_telemetry_result(usage=[1]), ("tokens",),
+                                    {"kind": "invalid_field", "field": "usage", "result_index": 1}),
+            "a token not a number": (_telemetry_result(usage={"input_tokens": "7", "output_tokens": 1,
+                                                              "cache_creation_input_tokens": 1,
+                                                              "cache_read_input_tokens": 1}),
+                                     ("tokens.input",),
+                                     {"kind": "invalid_field", "field": "usage.input_tokens", "result_index": 1}),
+            "cost missing": ({k: v for k, v in _telemetry_result().items() if k != "total_cost_usd"},
+                             ("cost_usd",), {"kind": "missing_field", "field": "total_cost_usd", "result_index": 1}),
+            "turns a boolean": (_telemetry_result(turns=True), ("turns",),
+                                {"kind": "invalid_field", "field": "num_turns", "result_index": 1}),
+            "modelUsage missing": ({k: v for k, v in _telemetry_result().items() if k != "modelUsage"},
+                                   ("models",), {"kind": "missing_field", "field": "modelUsage", "result_index": 1}),
+            "a model not an object": (_telemetry_result(models={"m": 3}), ("models.m",),
+                                      {"kind": "invalid_field", "field": "modelUsage.m", "result_index": 1}),
+        }
+        for name, (bad, nulled, problem) in cases.items():
+            with self.subTest(case=name):
+                block = ws.session_telemetry([_telemetry_result(), bad])
+                self.assertIn(problem, block["problems"])
+                for path in nulled:
+                    value = block
+                    for key in path.split("."):
+                        value = value[key]
+                    if isinstance(value, dict):
+                        self.assertEqual(set(value.values()), {None}, path)
+                    else:
+                        self.assertIsNone(value, path)
+                # The figures the bad result does not touch stay computed.
+                if "turns" not in nulled:
+                    self.assertEqual(block["turns"], 2)
+
+    def test_no_result_and_junk_never_raise(self) -> None:
+        block = ws.session_telemetry([])
+        self.assertEqual((block["results"], block["turns"], block["cost_usd"], block["models"]), (0, None, None, None))
+        self.assertEqual(block["problems"], [{"kind": ws.PROBLEM_NO_RESULT}])
+        block = ws.session_telemetry(["junk", None, {"usage": {"input_tokens": float("nan")}}])
+        self.assertEqual(block["results"], 3)
+        self.assertIsNone(block["turns"])
+        json.dumps(block, allow_nan=False)
+
+
 if __name__ == "__main__":
     unittest.main()

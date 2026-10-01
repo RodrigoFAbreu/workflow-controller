@@ -244,7 +244,13 @@ pipx against `workflow-controller $RELEASE_VERSION` and writes
 or version that differs from what was built, re-verifies the artifacts,
 and only then (for `RELEASE_DUE`) creates the annotated tag at that
 commit and pushes it, then publishes the release and verifies the
-published assets. The release body is the policy's `notes` template.
+published assets. The release body is the policy's `notes` template,
+which is also the annotated tag's message; a template that uses
+`{release_notes}` fills it from the milestones (see
+[Release notes from the milestones](#release-notes-from-the-milestones)).
+Tags are created with `--cleanup=verbatim`, so a `#`-leading line in the
+message survives. A message with no such line and no trailing
+whitespace, like this repository's, is stored exactly as before.
 
 The tag is created only after validation and artifact verification, and
 it is never moved or deleted. A run interrupted at any point -- before
@@ -258,6 +264,154 @@ release is fixed with a new release: merge a `fix:` pull request.
 `build_origin: "release"` in a wheel's `BUILD_INFO.json` is not proof of
 origin (see [Runtime identity](runtime.md#runtime-identity)): check the wheel against the release's
 `SHA256SUMS`.
+
+### Release notes from the milestones
+
+The policy's `release.publication.notes` template may use the
+`{release_notes}` placeholder, which is allowed there only. A repository
+opts in with it and with `milestone_branches.pull_request.release_notes`,
+which makes readiness put each milestone's notes block in its pull
+request body (see
+[Milestone branches and pull requests](milestone-branches.md#release-notes-in-the-pull-request-body)).
+A template without the placeholder renders exactly as before, and
+nothing in this section applies to it.
+
+**Where the text comes from.** Only from the notes blocks in the squash
+commit messages of the release range, verified against their digests.
+The range is the one classification walks: every first-parent commit
+since the base tag, not only the commit being released. A `docs:` merge
+that lands while a milestone's run waits replaces that run (the
+`main-release` concurrency group), and its release still finds the
+milestone's block in the range. The release reads no milestone
+narrative, no file of any commit's tree and no forge data. Each block's
+notes must hash to its marker's `sha256=`. One block gives its notes as
+they stand; several are each preceded by a `### <work_item_id>` line and
+separated by blank lines, in commit order. The rendered template, with
+trailing whitespace stripped, is both the tag message and the release
+notes. A repository with no release tag yet publishes every block its
+history holds, each under its work-item id.
+
+**The squash commit must carry the pull request body.** That needs
+GitHub's default squash merge commit message "Pull request title and
+description" (see [Repository settings](#repository-settings)), and no
+edit in the merge dialog. GitHub then rewraps the body in a way that was
+measured, not documented: a line longer than 72 characters is broken
+greedily, at spaces only; every existing line break is kept, and lines
+are never joined; a line of 72 characters or fewer is left alone. That
+is why readiness refuses a notes line over 72 bytes: shorter lines reach
+the commit byte for byte. A marker line over 72 characters is broken at
+a space, and the release reads it with every run of whitespace as one
+space. If GitHub ever wraps differently, the digest no longer matches
+and the release refuses. It never publishes altered notes.
+
+**Included or refused.** There is no third outcome: an opted-in release
+never publishes empty notes. The publish prints the outcome
+(`ok: release notes: included <id> (<commit>)`, with any superseded
+blocks). The notes are **included** when at least one block is used, and
+every used block is well formed, holds a non-blank line and matches its
+digest. Anything else is **refused** before the tag is created, so
+nothing is tagged or published:
+
+- **missing**: no commit of the range carries a block. A milestone with
+  no notes section, one bound before the opt-in, one merged at
+  `release_notes_invalid`, a squash commit that lost its body, and a
+  release with no milestone in its range all end here;
+- **unreadable**: a Git read failed (rerun the publish), or a message
+  that holds a marker line is not valid UTF-8;
+- **unverified**: a used block is damaged (a malformed start marker, no
+  end marker, empty notes, or two blocks for one work item in one
+  message), its digest does not match, or a marker line names no work
+  item.
+
+An empty notes block is never included, even when its digest is the
+SHA-256 of empty text.
+
+**A newer block supersedes an older one.** For each work item the block
+of the newest commit of the range that carries one is used. An older
+block of the same work item is superseded, whatever it holds, and the
+output names it with its commit.
+
+**The fix: supply the notes in a later trunk commit.** The range's
+commits cannot change, so a later commit on `main` carries a block for
+each work item whose notes are missing or failed. The publish then
+releases that commit: no tag was created, so the range grows to include
+it. The block is either:
+
+- the merged pull request's block, copied verbatim from its body on
+  GitHub, which keeps it as readiness wrote it; or
+- your own notes, rendered by
+  `python3 tools/release.py notes-block --work-item <id> <file>`. It
+  trims outer blank lines, applies readiness's checks, and prints the
+  block with its digest, or refuses naming the failed check (an empty
+  file included). A release with no milestone in its range takes a
+  work-item id of your choosing.
+
+In this repository that commit is the squash merge of a `docs:` pull
+request whose body is the block, or several blocks. A `docs:` title
+releases nothing by itself, and its merge becomes the release commit of
+the pending release. A commit made with `git commit` instead of a squash
+merge needs `--cleanup=verbatim` (for example
+`git commit --cleanup=verbatim -F message.txt`): Git's default cleanup
+strips `#`-leading lines, such as a `### ` heading in the notes, which
+changes the digest.
+
+**The opt-out.** Every refusal also names the policy's explicit opt-out:
+a trunk commit that removes `{release_notes}` from
+`release.publication.notes`. The publish reads the policy committed at
+its release commit, so it then renders the fixed text. Two refusals name
+no work item a block could supersede, so the opt-out is their only fix:
+a marker line that names no work item, and a message that holds a
+marker line and is not valid UTF-8. Every refusal clears for the release
+that hit it, and none carries into later releases: the next range starts
+at the tag this one creates.
+
+**Quoting the marker.** Only marker lines are read: lines that start
+with `<!-- workflow-controller: release-notes`. A pull request or
+commit body may quote the marker mid-line, in backticks for example,
+and that text is ignored. It must never start a line with it outside
+readiness's block. A message with no marker line never refuses, whatever
+its encoding.
+
+**What is not detected.** A squash commit that lost the pull request
+body (a message edited in the merge dialog, or another squash message
+setting) is caught only when no other block is in the range, as
+**missing**. When another milestone's block is in the range, the release
+publishes that block without the lost milestone's notes. Check that the
+publish output names every milestone you expect.
+
+**Milestones bound before the opt-in.** Readiness takes the notes
+location from the binding's policy snapshot, so a milestone bound before
+the repository opted in carries no marker. Its release refuses as
+**missing**, unless another block is in the range, until you supply its
+notes.
+
+**Resuming a release.** On `RESUME` with no release yet, the publish
+reuses the tag's message as the notes, but only after it recomputes the
+notes over the tag's own range (from the highest lower release tag that
+is an ancestor) and renders the current template with them. The tag's
+message must be equal byte for byte. Any difference refuses as an
+**unverified tag**: notably a tag created before the opt-in, which holds
+the old fixed text, but also a tag made under another template or from
+a range whose blocks changed. A tag that is not annotated, or whose
+message is not valid UTF-8, also refuses; a failed read clears on a
+rerun. When another run pushes the same tag at the same commit just
+before this run's push, this run checks the winning tag the same way,
+reading its message from the remote rather than from its own local tag.
+The publish never edits or re-creates a pushed tag. The fix is to
+create the release for that tag by hand, with the right notes. Create it
+as a draft: the next run then uploads what the draft lacks and publishes
+it, keeping the draft's notes, which are yours.
+
+**This repository's cutover.** This repository's
+`.workflow-controller/policy.json` does not opt in yet: the driving
+Controller reads the branch's committed policy at every step, and 1.4.x
+refuses the new keys. Once 1.5.0 is installed, a `chore:` cutover pull
+request, merged between milestones, sets
+`"release_notes": {"path": "docs/milestones/completed/{work_item_id}.md", "heading": "Release notes"}`
+and `"notes": "workflow-controller {tag}\n\n{release_notes}"`. 1.5.0's
+own notes are copied into `docs/releases/` by hand one last time. From
+the cutover on, a milestone's `## Release notes` section is wrapped at
+72 columns.
 
 ### An unclassifiable subject: `INVALID_SUBJECT`
 
@@ -380,7 +534,10 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
   squash commit's subject is the title followed by ` (#<number>)`, and its
   body is the pull request's description. Close-out recognises a milestone
   squash by exactly that subject (see
-  [Milestone branches and pull requests](milestone-branches.md#squash-merges-and-the-pull-request-title)).
+  [Milestone branches and pull requests](milestone-branches.md#squash-merges-and-the-pull-request-title)),
+  and the release reads the milestone's notes block from that body once
+  the repository opts in (see
+  [Release notes from the milestones](#release-notes-from-the-milestones)).
 - **Auto-merge** is allowed, and **head branches are deleted** after a
   merge. The Controller itself never merges.
 - **Do not press "Update branch"** on a milestone pull request. It

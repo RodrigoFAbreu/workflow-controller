@@ -18,6 +18,7 @@ adopter's does.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import subprocess
@@ -898,6 +899,434 @@ class ConventionalTransactionTest(TransactionTest):
                          ["pkg-1.5.0.txt"])
         self.assertEqual([p.name for p in release_txn.verify(self.ctx(legacy), legacy, None)],
                          ["pkg-1.5.0.txt"])
+
+
+# ---------------------------------------------------------------------------
+# Release notes from the milestones (settings-and-telemetry CP4, D.3).
+# ---------------------------------------------------------------------------
+
+from controller import milestone_branch as mb, release_notes as rn  # noqa: E402
+from tests.test_release_notes import NOTES, WID, block_bytes, github_wrap, readiness_body  # noqa: E402
+from tools import release as release_tool  # noqa: E402
+
+NOTES_TEMPLATE = "pkg {tag}\n\n{release_notes}"
+
+
+class ReleaseRangeTest(_ReleaseCase):
+    """``Classification.release_range``: ``(base_commit, commit)`` on every
+    ``RELEASE_DUE`` result under both triggers, ``None`` otherwise."""
+
+    def test_version_change(self) -> None:
+        self.assertEqual(self.classify(self.base).release_range, (None, self.base))
+        self.published("v1.0.0", self.base)
+        self.assertIsNone(self.assertState(self.base, ALREADY_RELEASED).release_range)
+        self.assertIsNone(self.assertState(self.merge(), NO_CHANGE).release_range)
+        bumped = self.bump("1.1.0")
+        self.assertEqual(self.assertState(bumped, RELEASE_DUE).release_range, (self.base, bumped))
+        self.tag("v1.1.0", bumped)
+        self.assertIsNone(self.assertState(self.merge("later"), RESUME).release_range)
+
+    def test_conventional_commit(self) -> None:
+        feat = self.squash("feat: no tag yet")
+        self.assertEqual(self.assertState(feat, RELEASE_DUE).release_range, (None, feat))
+        self.published("v0.1.0", feat)
+        fix = self.squash("fix: since the tag")
+        self.assertEqual(self.assertState(fix, RELEASE_DUE).release_range, (feat, fix))
+        docs = self.squash("docs: nothing")
+        self.assertEqual(self.assertState(docs, RELEASE_DUE).release_range, (feat, docs))
+        self.tag("v0.1.1", fix)
+        self.assertIsNone(self.assertState(self.squash("docs: after"), RESUME).release_range)
+
+
+class ReleaseNotesTransactionTest(_ReleaseCase):
+    """The publish renders ``{release_notes}`` from the notes blocks on the
+    marker lines of the release range's commit messages, verified against
+    their digests, or refuses before any tag or release (D.3)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.opted = True
+        self.template = NOTES_TEMPLATE
+        self.published("v1.0.0", self.base)
+
+    # -- history -----------------------------------------------------------
+
+    def land(self, subject: str, body: str | bytes = "", *, opted: bool | None = None,
+             template: str | None = None, files: dict[str, str] | None = None) -> str:
+        """A trunk commit under the conventional policy (``{release_notes}``
+        in its notes template when ``opted``), its message ``subject`` and
+        ``body`` stored verbatim, as GitHub's squash stores one."""
+        run(["git", "switch", "-q", "main"], cwd=self.clone)
+        if opted is not None:
+            self.opted = opted
+        if template is not None:
+            self.template = template
+        policy = conventional_policy([])
+        if self.opted:
+            policy["release"]["publication"]["notes"] = self.template
+        path = self.clone / repo_policy.POLICY_PATH
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(policy, indent=2))
+        work = self.clone / "work.txt"
+        work.write_text((work.read_text() if work.exists() else "") + f"{subject}\n")
+        for name, text in (files or {}).items():
+            (self.clone / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.clone / name).write_text(text)
+        raw = body if isinstance(body, bytes) else body.encode()
+        message = subject.encode() + (b"\n\n" + raw if raw else b"") + b"\n"
+        run(["git", "add", "-A"], cwd=self.clone)
+        # A raw commit object: `git commit` would re-encode a non-UTF-8 message.
+        tree = run(["git", "write-tree"], cwd=self.clone).stdout.strip()
+        parent = run(["git", "rev-parse", "HEAD"], cwd=self.clone).stdout.strip()
+        who = b"Someone <someone@example.invalid> 1700000000 +0000"
+        obj = (f"tree {tree}\nparent {parent}\n".encode() + b"author " + who + b"\ncommitter " + who
+               + b"\n\n" + message)
+        sha = subprocess.run(["git", "hash-object", "-t", "commit", "-w", "--stdin"], cwd=self.clone, input=obj,
+                             capture_output=True, check=True).stdout.decode().strip()
+        run(["git", "update-ref", "HEAD", sha], cwd=self.clone)
+        run(["git", "push", "-q", "origin", "HEAD:refs/heads/main"], cwd=self.clone)
+        return sha
+
+    def milestone(self, wid: str = WID, notes: str = NOTES, *, subject: str | None = None) -> str:
+        """A milestone's squash commit, its body readiness's, wrapped as
+        GitHub wraps it, with the rule and the co-author trailer."""
+        body = github_wrap(readiness_body(notes, wid)).rstrip("\n")
+        return self.land(subject or f"feat: {wid} (#7)",
+                         f"{body}\n\n---------\n\nCo-authored-by: Someone <someone@example.invalid>")
+
+    # -- the publish -------------------------------------------------------
+
+    def release(self, commit: str, version: str = "1.1.0", *, built: str | None = None,
+                **kw) -> release_txn.PublishOutcome:
+        self.build_version = version
+        self.build_at(built or commit)
+        return release_txn.publish(self.ctx(commit, **kw), commit, built or commit, tagger=TAGGER)
+
+    def tag_message(self, tag: str) -> str:
+        raw = run(["git", "cat-file", "tag", f"refs/tags/{tag}"], cwd=self.clone).stdout
+        return raw.partition("\n\n")[2]
+
+    def assertIncluded(self, commit: str, text: str, version: str = "1.1.0", **kw) -> release_txn.PublishOutcome:
+        outcome = self.release(commit, version, **kw)
+        tag = f"v{version}"
+        expected = f"pkg {tag}\n\n{text}"
+        self.assertEqual(self.release_state(tag)["notes"], expected)
+        self.assertEqual(self.tag_message(tag), expected + "\n")
+        self.assertIn("included", outcome.notes)
+        return outcome
+
+    def gh_creates(self) -> list[list[str]]:
+        return [argv for argv in fake_gh.invocations(Path(self.env["FAKE_GH_LOG"])) if argv[:2] == ["release", "create"]]
+
+    def assertRefused(self, commit: str, *fragments: str, version: str = "1.1.0",
+                      ctx: release_txn.ReleaseContext | None = None, built: str | None = None) -> str:
+        """The publish refuses naming ``fragments``, with no tag created
+        locally or pushed and no release created."""
+        self.build_version = version
+        self.build_at(built or commit)
+        tags = gitrepo.ls_remote_tags(self.clone, "origin")
+        local = run(["git", "tag", "-l"], cwd=self.clone).stdout
+        creates = len(self.gh_creates())
+        releases = fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))["releases"]
+        with self.assertRaises(ReleaseTransactionError) as caught:
+            release_txn.publish(ctx or self.ctx(commit), commit, built or commit, tagger=TAGGER)
+        message = str(caught.exception)
+        for fragment in fragments:
+            self.assertIn(fragment, message)
+        self.assertEqual(gitrepo.ls_remote_tags(self.clone, "origin"), tags)
+        self.assertEqual(run(["git", "tag", "-l"], cwd=self.clone).stdout, local)
+        self.assertEqual(len(self.gh_creates()), creates)
+        self.assertEqual(fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))["releases"], releases)
+        return message
+
+    SUPPLY = "supply the notes in a later trunk commit"
+    OPT_OUT = "removes {release_notes} from release.publication.notes"
+
+    # -- included ----------------------------------------------------------
+
+    def test_notes_from_a_wrapped_squash_commit(self) -> None:
+        m = self.milestone()
+        outcome = self.assertIncluded(m, NOTES)
+        self.assertIn(f"included {WID} ({m})", outcome.notes)
+
+    def test_a_later_docs_commit_is_released_with_the_milestones_notes(self) -> None:
+        self.milestone()
+        self.assertIncluded(self.land("docs: release notes (#8)", "Words."), NOTES)
+
+    def test_two_milestones_in_commit_order_under_their_ids_byte_for_byte_in_the_tag(self) -> None:
+        self.milestone("b-item", "B notes.")
+        self.land("docs: between")
+        last = self.milestone("a-item", "A notes.\n\n### A heading\n# not a comment", subject="fix: a (#9)")
+        self.assertIncluded(last, "### b-item\n\nB notes.\n\n### a-item\n\nA notes.\n\n### A heading\n# not a comment")
+
+    def test_no_base_tag_includes_every_block_of_the_chain(self) -> None:
+        self.tearDown()
+        self.setUp_without_tags()
+        self.milestone("one", "One.")
+        last = self.milestone("two", "Two.")
+        self.assertIncluded(last, "### one\n\nOne.\n\n### two\n\nTwo.", version="0.1.0")
+
+    def setUp_without_tags(self) -> None:
+        _ReleaseCase.setUp(self)
+        self.opted, self.template = True, NOTES_TEMPLATE
+
+    # -- missing, supplied -------------------------------------------------
+
+    def test_missing_refuses_then_the_copied_block_publishes(self) -> None:
+        no_block = github_wrap(mb.squash_body(WID, "plan.md", accepted="a" * 40, branch=f"milestone/{WID}"))
+        for name, body in (("no section", no_block), ("body lost", "")):
+            with self.subTest(name):
+                if name == "body lost":
+                    self.tearDown()
+                    self.setUp()
+                m = self.land(f"feat: {WID} (#7)", body)
+                message = self.assertRefused(m, "missing", "no commit of the release range carries",
+                                             self.SUPPLY, "notes-block", self.OPT_OUT)
+                self.assertNotIn("rerun", message)
+                docs = self.land("docs: supply the notes (#8)", rn.render_block(WID, NOTES))
+                self.assertIncluded(docs, NOTES)
+
+    def test_a_notes_block_tool_block_publishes_and_the_tool_refuses_bad_notes(self) -> None:
+        m = self.land("feat: no notes (#7)")
+        self.assertRefused(m, "missing")
+        notes_file = self.tmp / "notes.md"
+        notes_file.write_text("\nWritten by the operator.\n\n")
+        block = release_tool.notes_block(WID, notes_file)
+        self.assertIncluded(self.land("docs: notes", block), "Written by the operator.")
+        for text in ("", "\n\n", "x" * 73):
+            notes_file.write_text(text)
+            with self.subTest(text=text), self.assertRaises(release_tool.Refusal):
+                release_tool.notes_block(WID, notes_file)
+
+    def test_an_empty_block_is_damaged_until_superseded(self) -> None:
+        m = self.land("feat: x (#7)", block_bytes(WID, ""))
+        self.assertEqual(rn.digest(""), hashlib.sha256(b"").hexdigest())
+        self.assertRefused(m, "unverified", "damaged", "empty", self.SUPPLY)
+        self.assertIncluded(self.land("docs: notes", block_bytes(WID, "Now.")), "Now.")
+
+    def test_a_bad_digest_token_consumes_its_end_and_is_superseded(self) -> None:
+        bad = block_bytes(WID, NOTES, digest="Z" * 64)
+        m = self.land("feat: x (#7)", bad)
+        message = self.assertRefused(m, "unverified", "sha256=", self.SUPPLY)
+        self.assertNotIn("ends no block", message)
+        self.assertIncluded(self.land("docs: notes", block_bytes(WID, NOTES)), NOTES)
+
+    def test_a_digest_mismatch_is_superseded_and_named(self) -> None:
+        edited = github_wrap(readiness_body()).replace("arrives", "arrived")
+        m = self.land(f"feat: {WID} (#7)", edited)
+        self.assertRefused(m, "unverified", rn.digest(NOTES), rn.digest(NOTES.replace("arrives", "arrived")),
+                           m, WID, self.SUPPLY)
+        docs = self.land("docs: notes", block_bytes(WID, NOTES))
+        outcome = self.assertIncluded(docs, NOTES)
+        self.assertIn(f"superseded {WID} ({m})", outcome.notes)
+
+    def test_two_items_in_one_commit_and_two_blocks_of_one_item(self) -> None:
+        both = self.land("feat: two (#7)", block_bytes("a-item", "A.") + "\n\n" + block_bytes("b-item", "B."))
+        self.assertIncluded(both, "### a-item\n\nA.\n\n### b-item\n\nB.")
+        twice = self.land("fix: twice (#8)", block_bytes(WID, "One.") + "\n\n" + block_bytes(WID, "Two."))
+        self.assertRefused(twice, "more than one block", version="1.1.1")
+        self.assertIncluded(self.land("docs: notes", block_bytes(WID, "Settled.")), "Settled.", version="1.1.1")
+
+    # -- refusals ----------------------------------------------------------
+
+    def test_a_failing_commit_read_refuses_naming_the_command_and_the_rerun(self) -> None:
+        m = self.milestone()
+        ctx = self.ctx(m)
+        real = ctx.git_runner
+
+        def failing(argv):
+            if "cat-file" in argv and "commit" in argv:
+                return subprocess.CompletedProcess(argv, 128, b"", b"fatal: injected\n")
+            return real(argv)
+
+        message = self.assertRefused(m, "unreadable", "cat-file commit", "exit 128", "injected", "rerun",
+                                     ctx=dataclasses.replace(ctx, git_runner=failing))
+        self.assertNotIn(self.SUPPLY, message)
+
+    def test_malformed_markers(self) -> None:
+        cases = {
+            "slash id": (block_bytes("a/b", NOTES), False),
+            "dotdot id": (block_bytes("..", NOTES), False),
+            "orphan end": (rn.END_MARKER, False),
+            "start with no end": (rn.start_marker(WID, NOTES) + "\n" + NOTES, True),
+            "bad sha256": (block_bytes(WID, NOTES, digest="abc"), True),
+        }
+        for name, (body, supersedable) in cases.items():
+            with self.subTest(name):
+                self.tearDown()
+                self.setUp()
+                m = self.land("feat: x (#7)", body)
+                message = self.assertRefused(m, "unverified")
+                if supersedable:
+                    self.assertIn(self.SUPPLY, message)
+                    self.assertIncluded(self.land("docs: notes", block_bytes(WID, NOTES)), NOTES)
+                else:
+                    self.assertIn("names no work item", message)
+                    self.assertIn("no supplied block can clear this", message)
+                    self.assertIn(self.OPT_OUT, message)
+                    self.assertNotIn(self.SUPPLY, message)
+                    # A later valid block does not clear it.
+                    self.assertRefused(self.land("docs: notes", block_bytes(WID, NOTES)), "names no work item")
+
+    def test_anchoring_and_encodings(self) -> None:
+        self.milestone()
+        quoted = f"The block starts `{rn.start_marker(WID, NOTES)}` and ends `{rn.END_MARKER}`."
+        self.land("docs: describe the feature (#8)", quoted)
+        latin = self.land("docs: latin-1 (#9)", "caf\xe9 bytes, no marker".encode("latin-1"))
+        self.assertIn(b"caf\xe9", gitrepo.commit_message(self.clone, latin))
+        last = self.land("docs: last")
+        self.assertIncluded(last, NOTES)
+
+    def test_a_marker_line_in_a_non_utf8_message_refuses_naming_the_opt_out(self) -> None:
+        m = self.land("feat: x (#7)", block_bytes(WID, NOTES).encode() + b"\n\xff")
+        message = self.assertRefused(m, "unreadable", "not valid UTF-8", self.OPT_OUT)
+        self.assertNotIn(self.SUPPLY, message)
+
+    def test_opting_out_after_a_refusal_releases_the_fixed_text(self) -> None:
+        m = self.land("feat: no notes (#7)")
+        self.assertRefused(m, "missing")
+        self.template = "pkg {tag}"
+        out = self.land("chore: opt out of release notes for this release")
+        outcome = self.release(out)
+        self.assertEqual(self.release_state("v1.1.0")["notes"], "pkg v1.1.0")
+        self.assertEqual(self.tag_message("v1.1.0"), "pkg v1.1.0\n")
+        self.assertEqual(outcome.notes, "")
+
+    def test_the_publish_reads_no_tree(self) -> None:
+        narrative = f"docs/milestones/completed/{WID}.md"
+        self.milestone()
+        last = self.land("docs: edit the narrative after readiness",
+                         files={narrative: "## Release notes\n\nSomething else entirely.\n"})
+        reads = []
+        real = repo_policy._git
+
+        def spy(root, args):
+            reads.append(list(args))
+            return real(root, args)
+
+        with mock.patch.object(gitrepo, "show", side_effect=AssertionError("a tree was read")), \
+                mock.patch.object(repo_policy, "_git", spy):
+            self.assertIncluded(last, NOTES)
+        argvs = self.git.calls + reads
+        self.assertFalse([argv for argv in argvs if any(narrative in str(a) for a in argv)])
+        self.assertFalse([argv for argv in self.git.calls if "show" in argv or "ls-tree" in argv])
+
+    # -- RESUME and drafts -------------------------------------------------
+
+    def test_a_draft_is_resumed_with_its_own_notes(self) -> None:
+        m = self.milestone()
+        self.tag("v1.1.0", m)
+        self.seed_release("v1.1.0", {}, draft=True)
+        outcome = self.release(self.land("docs: later"), built=m)
+        self.assertEqual((outcome.state, outcome.action), (RESUME, "resumed_draft"))
+        self.assertEqual(self.release_state("v1.1.0")["notes"], "seeded")
+
+    def test_a_pushed_tag_with_no_release_reuses_the_tags_message(self) -> None:
+        m = self.milestone()
+        with self.assertRaises(ForgeUndecidableError):
+            self.release(m, failures={"release create": "server_error"})
+        self.assertIsNone(self.release_state("v1.1.0"))
+        expected = f"pkg v1.1.0\n\n{NOTES}"
+        self.assertEqual(self.tag_message("v1.1.0"), expected + "\n")
+        for name, commit in (("same commit", m), ("a later docs commit", None)):
+            with self.subTest(name):
+                commit = commit or self.land("docs: after the tag")
+                outcome = self.release(commit, built=m)
+                self.assertEqual((outcome.state, outcome.action), (RESUME, "created"))
+                self.assertIn("reused from tag v1.1.0", outcome.notes)
+                self.assertEqual(self.release_state("v1.1.0")["notes"], expected)
+                state = fake_gh.read_state(Path(self.env["FAKE_GH_STATE"]))
+                state["releases"] = [r for r in state["releases"] if r["tagName"] != "v1.1.0"]
+                fake_gh.write_state(Path(self.env["FAKE_GH_STATE"]), state)
+
+    def test_a_tag_that_predates_the_opt_in_is_an_unverified_tag(self) -> None:
+        self.milestone()
+        self.opted = False
+        unopted = self.land("fix: before the opt-in (#8)")
+        with self.assertRaises(ForgeUndecidableError):
+            self.release(unopted, failures={"release create": "server_error"})
+        self.assertEqual(self.tag_message("v1.1.0"), "pkg v1.1.0\n")
+        creates = len(self.gh_creates())
+        later = self.land("chore: opt in", opted=True)
+        message = self.assertRefused(later, "unverified tag", "v1.1.0", "create the release for v1.1.0 by hand",
+                                     built=unopted)
+        self.assertIn("first difference", message)
+        self.assertEqual(len(self.gh_creates()), creates)
+
+    def test_a_tag_under_another_opted_in_template_or_with_no_block_refuses(self) -> None:
+        m = self.milestone()
+        run(["git", "tag", "-a", "--cleanup=verbatim", "-m", f"other v1.1.0\n\n{NOTES}\n", "v1.1.0", m],
+            cwd=self.clone)
+        run(["git", "push", "-q", "origin", "refs/tags/v1.1.0"], cwd=self.clone)
+        self.assertRefused(self.land("docs: later"), "unverified tag", built=m)
+        self.tearDown()
+        self.setUp()
+        bare = self.land("feat: no block (#7)")
+        self.tag("v1.1.0", bare)
+        self.assertRefused(self.land("docs: later"), "missing", self.SUPPLY, built=bare)
+
+    def test_a_lightweight_tag_or_a_failing_tag_read_refuses_before_create_release(self) -> None:
+        m = self.milestone()
+        run(["git", "tag", "v1.1.0", m], cwd=self.clone)
+        run(["git", "push", "-q", "origin", "refs/tags/v1.1.0"], cwd=self.clone)
+        later = self.land("docs: later")
+        self.assertRefused(later, "not an annotated tag", "by hand", built=m)
+        run(["git", "tag", "-d", "v1.1.0"], cwd=self.clone)
+        run(["git", "push", "-q", "origin", ":refs/tags/v1.1.0"], cwd=self.clone)
+        self.tag("v1.1.0", m)
+        ctx = self.ctx(later)
+        real = ctx.git_runner
+
+        def failing(argv):
+            if "cat-file" in argv and "tag" in argv:
+                return subprocess.CompletedProcess(argv, 128, b"", b"fatal: injected\n")
+            return real(argv)
+
+        self.assertRefused(later, "unreadable", "injected", "rerun", built=m,
+                           ctx=dataclasses.replace(ctx, git_runner=failing))
+
+    # -- a lost tag-push race ----------------------------------------------
+
+    def race(self, commit: str, *tag_args: str):
+        """A git ``before`` hook: another run pushes ``v1.1.0`` at
+        ``commit``, created with ``git tag <tag_args>``, just before ours."""
+        def before(argv):
+            if "push" in argv and "refs/tags/v1.1.0:refs/tags/v1.1.0" in argv:
+                other = self.tmp / "other"
+                if not other.exists():
+                    git_clone(self.origin, other)
+                    run(["git", "config", "user.email", "other@example.invalid"], cwd=other)
+                    run(["git", "config", "user.name", "Other"], cwd=other)
+                run(["git", "fetch", "-q", "origin"], cwd=other)
+                run(["git", "tag", *tag_args, "v1.1.0", commit], cwd=other)
+                run(["git", "push", "-q", "origin", "refs/tags/v1.1.0"], cwd=other)
+        return before
+
+    def test_a_concurrent_tag_with_the_right_notes_is_released_with_its_message(self) -> None:
+        m = self.milestone()
+        expected = f"pkg v1.1.0\n\n{NOTES}"
+        outcome = self.release(m, before_git=self.race(m, "-a", "--cleanup=verbatim", "-m", expected + "\n"))
+        self.assertEqual((outcome.state, outcome.tagged, outcome.action), (RELEASE_DUE, False, "created"))
+        self.assertIn("reused from tag v1.1.0", outcome.notes)
+        self.assertEqual(self.release_state("v1.1.0")["notes"], expected)
+
+    def test_a_concurrent_tag_with_other_notes_or_lightweight_refuses_before_create_release(self) -> None:
+        for name, tag_args, fragment in (
+                ("other notes", ("-a", "--cleanup=verbatim", "-m", f"other v1.1.0\n\n{NOTES}\n"), "unverified tag"),
+                ("lightweight", (), "not an annotated tag")):
+            with self.subTest(name):
+                self.tearDown()
+                self.setUp()
+                m = self.milestone()
+                creates = len(self.gh_creates())
+                with self.assertRaises(ReleaseTransactionError) as caught:
+                    self.release(m, before_git=self.race(m, *tag_args))
+                self.assertIn(fragment, str(caught.exception))
+                self.assertIn("create the release for v1.1.0 by hand", str(caught.exception))
+                self.assertEqual(len(self.gh_creates()), creates)
+                self.assertIsNone(self.release_state("v1.1.0"))
+                # Our own tag stays local; the read wrote no ref.
+                self.assertEqual(self.tag_message("v1.1.0"), f"pkg v1.1.0\n\n{NOTES}\n")
 
 
 if __name__ == "__main__":

@@ -451,7 +451,7 @@ class ObservationTest(_PolicyCase):
                          {"observed_at", "tip", "remote_branch", "remote_trunk", "fresh", "behind"})
         # Every pre-existing key is still there, unchanged in shape.
         self.assertEqual(set(inspected) - {"repository_policy", "milestone_branch"},
-                         {"repository", "work_item", "lifecycle_lock", "controller"})
+                         {"repository", "work_item", "lifecycle_lock", "controller", "last_job_telemetry"})
         text = self.cli("inspect").stdout
         self.assertIn(f"milestone branch: {BRANCH} for {WI} (PR_OPEN)", text)
         self.assertIn("repository policy: .workflow-controller/policy.json (binding", text)

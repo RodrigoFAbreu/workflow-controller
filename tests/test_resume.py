@@ -2787,8 +2787,8 @@ class ReattachAfterControllerLossTest(_LostControllerCase):
         self.assertEqual(activity["activity"], observe.ACTIVITY_UNSUPERVISED)
         self.assertRegex(activity["text"], rf"^worker pid {record['worker_process']['pid']} waiting on "
                                            r"1 background task \(")
-        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- workflow-controller resume "
-                                                  f"{lc.root} re-attaches"), activity["text"])
+        self.assertTrue(activity["text"].endswith(f"; no Controller attached -- workflow-controller --runtime-dir "
+                                                  f"{lc.runtime} resume {lc.root} re-attaches"), activity["text"])
 
         # step and run exit 45 at the lock the anchor holds, naming it and
         # `resume` (the exit-45 text of plan E).
@@ -3235,7 +3235,18 @@ class DrainDetachedReattachTest(_LostControllerCase):
 
     def setUp(self) -> None:
         super().setUp()
-        patcher = unittest.mock.patch.object(worker, "DRAIN_DETACH_SECONDS", 1)
+        # Settings-and-telemetry CP2: `cli.main` passes the drain bound in
+        # force to both the launch (`step`) and the re-attach (`resume`), so
+        # the one-second bound comes in as a command-line override (as
+        # `resume --drain-timeout 1` would), below the file's bounds; the
+        # module constant stays 10800.
+        real_overrides = cli._settings_cli_overrides
+
+        def overrides(args):
+            values, cli_routing = real_overrides(args)
+            return {**values, "worker.drain_detach_seconds": 1}, cli_routing
+
+        patcher = unittest.mock.patch.object(cli, "_settings_cli_overrides", overrides)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -3244,8 +3255,10 @@ class DrainDetachedReattachTest(_LostControllerCase):
         lc.add(MILESTONE_IMPLEMENT, {"turns": [[{"step": "actions", "actions": lc.implement("CP1")}, escapee]]})
         result = self.cli(lc, "step")
         self.assertEqual(result.code, cli.EXIT_WORKER_ACTIVE, result.stderr)
+        self.assertIn("still running after 1 s", result.stderr)
         [record] = result.records
         self.assertEqual((record["status"], record["worker_state"]["state"]), (job.STATUS_LAUNCHED, DRAINING))
+        self.assertEqual(record["drain_detach_seconds"], 1)
         [entry] = record["worker_state"]["owned_processes"]
         self.addCleanup(lambda: worker.identity_alive(entry["pid"], entry["start_ticks"])
                         and os.kill(entry["pid"], signal.SIGKILL))
@@ -3267,7 +3280,7 @@ class DrainDetachedReattachTest(_LostControllerCase):
         activity = observe.job_activity(self.job_record(lc, record["job_id"]), lc.runtime)
         self.assertIn(activity["activity"], (observe.ACTIVITY_DRAINING, observe.ACTIVITY_UNSUPERVISED))
         self.assertIn(f"worker ended; 1 owned process still running (pids {entry['pid']}); detached after 0:01 "
-                      f"-- end them, then workflow-controller resume {lc.root}", activity["text"])
+                      f"-- end them, then workflow-controller --runtime-dir {lc.runtime} resume {lc.root}", activity["text"])
         again, _writes = self.resume(lc)
         self.assertEqual(again.code, cli.EXIT_WORKER_ACTIVE, again.stderr)
         self.assertIn(str(entry["pid"]), again.stderr)

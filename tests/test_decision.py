@@ -927,7 +927,7 @@ class ImplementingDispatchTest(unittest.TestCase):
                             "missing or stale plan approval",
                         )
                         self.assertEqual(gate.safe_resume_command,
-                                         "workflow-controller explain --work-item wi-1")
+                                         decision.explain_gate_command(Path(gate.repository), "wi-1"))
                         self.assertTrue(result.evidence[0].startswith("plan_approval: "))
 
     def test_the_gate_never_names_a_user_only_command(self) -> None:

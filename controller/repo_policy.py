@@ -48,7 +48,7 @@ WORK_ITEM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 #: The closed placeholder set. Each templated field admits a subset
 #: (:data:`_FIELD_PLACEHOLDERS`).
-PLACEHOLDERS = frozenset({"work_item_id", "version", "tag", "commit", "artifact"})
+PLACEHOLDERS = frozenset({"work_item_id", "version", "tag", "commit", "artifact", "release_notes"})
 
 _PLACEHOLDER_RE = re.compile(r"\{([^{}]*)\}")
 _FORGE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")
@@ -203,6 +203,9 @@ _FIELD_PLACEHOLDERS = {
     "verify": frozenset({"version", "tag", "commit", "artifact"}),
     "artifacts": frozenset({"version"}),
     "publication": frozenset({"version", "tag", "commit"}),
+    # settings-and-telemetry D.1: the release's notes only.
+    "publication_notes": frozenset({"version", "tag", "commit", "release_notes"}),
+    "release_notes_path": frozenset({"work_item_id"}),
 }
 
 
@@ -237,12 +240,28 @@ class Command:
 
 
 @dataclasses.dataclass(frozen=True)
+class ReleaseNotes:
+    """``milestone_branches.pull_request.release_notes`` (settings-and-
+    telemetry D.1): where a milestone's notes section lives. ``path`` is a
+    template admitting only ``{work_item_id}``; ``heading`` the section's
+    ``## `` heading text."""
+
+    path: str
+    heading: str
+
+    def path_for(self, work_item_id: str) -> str:
+        return render(self.path, {"work_item_id": work_item_id})
+
+
+@dataclasses.dataclass(frozen=True)
 class MilestoneBranches:
     enabled: bool
     branch_format: str
     draft: bool
     ready_requires_green_checks: bool
     merge_method: str = MERGE_METHOD_MERGE
+    #: ``None``: no notes, and the pull request body is 1.4's.
+    release_notes: ReleaseNotes | None = None
 
     def branch_name(self, work_item_id: str) -> str:
         return render(self.branch_format, {"work_item_id": work_item_id})
@@ -292,6 +311,13 @@ class Release:
         """The version ``tag`` names under ``tag_format``, or ``None`` when
         ``tag`` does not render from it."""
         return _version_of_tag(self.tag_format, self.version_scheme, tag)
+
+    @property
+    def uses_release_notes(self) -> bool:
+        """Whether the notes template renders ``{release_notes}``, the
+        release's opt-in to notes from the milestones (settings-and-telemetry
+        D.3)."""
+        return "release_notes" in _PLACEHOLDER_RE.findall(self.publication_notes)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -494,7 +520,8 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
     branches = _object(top["milestone_branches"], "milestone_branches",
                        required={"enabled", "branch_format", "pull_request"})
     pull_request = _object(branches["pull_request"], "milestone_branches.pull_request",
-                           required={"draft", "ready_requires_green_checks"}, optional={"merge_method"})
+                           required={"draft", "ready_requires_green_checks"},
+                           optional={"merge_method", "release_notes"})
     if _boolean(pull_request["draft"], "milestone_branches.pull_request.draft") is not True:
         raise _refuse("must be true: the Controller only opens Draft pull requests",
                       field="milestone_branches.pull_request.draft")
@@ -508,6 +535,8 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
                                              "milestone_branches.pull_request.ready_requires_green_checks"),
         merge_method=_kind(pull_request.get("merge_method", MERGE_METHOD_MERGE),
                            "milestone_branches.pull_request.merge_method", MERGE_METHODS),
+        release_notes=(_release_notes(pull_request["release_notes"]) if "release_notes" in pull_request
+                       else None),
     )
 
     release = _parse_release(top["release"])
@@ -525,6 +554,23 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
         forge_kind=forge_kind, forge_repository=forge_repository,
         milestone_branches=milestone_branches, release=release,
     )
+
+
+def _release_notes(value: object) -> ReleaseNotes:
+    """``milestone_branches.pull_request.release_notes`` (D.1): ``path`` a
+    relative, normalised POSIX path template admitting only
+    ``{work_item_id}``, any number of times; ``heading`` a non-empty single
+    line."""
+    field = "milestone_branches.pull_request.release_notes"
+    section = _object(value, field, required={"path", "heading"})
+    path = _string(section["path"], f"{field}.path")
+    template_placeholders(path, field=f"{field}.path", allowed=_FIELD_PLACEHOLDERS["release_notes_path"])
+    for sample in _SAMPLE_WORK_ITEM_IDS[:2]:
+        _relative_path(render(path, {"work_item_id": sample}), f"{field}.path")
+    heading = _string(section["heading"], f"{field}.heading")
+    if "\n" in heading or "\r" in heading or not heading.strip():
+        raise _refuse(f"{heading!r} must be a non-empty single line", field=f"{field}.heading")
+    return ReleaseNotes(path=path, heading=heading)
 
 
 def _parse_release(value: object) -> Release:
@@ -591,8 +637,9 @@ def _parse_release(value: object) -> Release:
     publication_kind = _kind(publication["kind"], "release.publication.kind", PUBLICATION_KINDS)
     title = _string(publication["title"], "release.publication.title")
     notes = _string(publication["notes"], "release.publication.notes")
-    for field, template in (("release.publication.title", title), ("release.publication.notes", notes)):
-        template_placeholders(template, field=field, allowed=_FIELD_PLACEHOLDERS["publication"])
+    template_placeholders(title, field="release.publication.title", allowed=_FIELD_PLACEHOLDERS["publication"])
+    template_placeholders(notes, field="release.publication.notes",
+                          allowed=_FIELD_PLACEHOLDERS["publication_notes"])
 
     abandoned = section.get("abandoned_tags", [])
     if not isinstance(abandoned, list):

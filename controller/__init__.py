@@ -11,12 +11,12 @@ this literal always names exactly the modules that exist under
 """
 
 from . import (
-    buildinfo, version, errors, conventional_commit, repo_policy, gitrepo, forge, runtime, release_txn, milestone_branch, lock, identity, workflow_contract,
-    decision, managed_repo, target_state, evidence, routing, anchor, worker_stream, worker, handoff, job, observe, cli,
+    buildinfo, version, errors, conventional_commit, repo_policy, gitrepo, release_notes, forge, runtime, release_txn, milestone_branch, lock, identity, workflow_contract,
+    decision, managed_repo, target_state, evidence, routing, settings, anchor, worker_stream, worker, telemetry, handoff, job, observe, cli,
 )
 
 __all__ = [
-    "buildinfo", "version", "errors", "conventional_commit", "repo_policy", "gitrepo", "forge", "runtime", "release_txn", "milestone_branch", "lock", "identity",
-    "workflow_contract", "decision", "managed_repo", "target_state", "evidence", "routing", "anchor", "worker_stream", "worker", "handoff", "job", "observe",
+    "buildinfo", "version", "errors", "conventional_commit", "repo_policy", "gitrepo", "release_notes", "forge", "runtime", "release_txn", "milestone_branch", "lock", "identity",
+    "workflow_contract", "decision", "managed_repo", "target_state", "evidence", "routing", "settings", "anchor", "worker_stream", "worker", "telemetry", "handoff", "job", "observe",
     "cli",
 ]

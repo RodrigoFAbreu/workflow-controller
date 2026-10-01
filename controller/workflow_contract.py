@@ -89,7 +89,18 @@ FINGERPRINT_SCRIPT = "scripts/workflow_fingerprint.py"
 #: target.
 QUERY_SCRIPTS = (STATE_SCRIPT, FINGERPRINT_SCRIPT)
 
+#: The built-in default of the ``timeouts.workflow_query_seconds`` setting.
 QUERY_TIMEOUT_SECONDS = 120.0
+
+#: The process-wide ``timeouts.workflow_query_seconds``, set once by
+#: ``cli.main`` through ``settings.apply_process_defaults``
+#: (settings-and-telemetry CP2); ``None`` is :data:`QUERY_TIMEOUT_SECONDS`.
+process_query_timeout_seconds: float | None = None
+
+
+def query_timeout_seconds() -> float:
+    """The Workflow query timeout in force, read at call time."""
+    return QUERY_TIMEOUT_SECONDS if process_query_timeout_seconds is None else process_query_timeout_seconds
 
 _PRIVATE_DIR_PREFIX = "workflow-controller-query-"
 #: Inside the private directory: the verified scripts (the query's
@@ -473,12 +484,15 @@ def bind_release(release: str) -> BoundContract:
 
 def _run_query(
     root: Path, contract: WorkflowContract, script: str, args: list[str], *,
-    query: str, work_item_id: str, timeout: float = QUERY_TIMEOUT_SECONDS,
+    query: str, work_item_id: str, timeout: float | None = None,
 ) -> tuple[subprocess.CompletedProcess, dict]:
     """Run ``script`` (one of :data:`QUERY_SCRIPTS`) with ``args`` from a
     private copy of the digest-checked bytes, and return the completed
     process (bytes output) with the evidence context for the caller's own
-    validation errors. Raises only :class:`WorkflowQueryError`."""
+    validation errors. Raises only :class:`WorkflowQueryError`. ``timeout``
+    ``None`` is :func:`query_timeout_seconds`, read now."""
+    if timeout is None:
+        timeout = query_timeout_seconds()
     context = {
         "release": contract.release, "query": query, "work_item_id": work_item_id,
         "cwd": str(root), "argv": None, "returncode": None, "stdout_tail": "", "stderr_tail": "",

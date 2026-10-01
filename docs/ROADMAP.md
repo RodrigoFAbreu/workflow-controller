@@ -8,11 +8,11 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-09-30).** Controller 1.4.1 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C2, CI reliability
-(11.2, accepted 2026-09-30), is complete. C2 is released as 1.4.2 when its pull request (#13) is
-squash-merged. Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on
-`main`.
+**Where things stand (2026-10-01).** Controller 1.4.2 is the latest release. It admits Workflow
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C3, the settings
+file, telemetry v0, release notes from the milestone and the 1.4 patches (1.4, 8, 11.1.2, accepted
+2026-10-01), is complete. C3 is released as 1.5.0 when its pull request (#16) is squash-merged.
+Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -36,7 +36,7 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 | C1 | Squash merges, with the release version derived from a Conventional Commit pull request title (as SignalHub) (complete) | — | [11.1](#111-squash-merges-and-pr-title-versions) |
 | C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance (complete) | — | [11.1.1](#1111-reaping-every-child-process) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count (complete) | — | [11.2](#112-ci-reliability) |
-| C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
+| C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -275,11 +275,16 @@ Requirements:
 
 ## 1.4 Follow-up patches to fold in where appropriate
 
-**Status:** One urgent correctness hotfix complete in this slot (`workflow-controller-worker-lifecycle-ownership`,
-accepted 2026-09-26 under Workflow 2.5.1; the narrative is archived at
-`docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`). The four patches
-below remain open. They are step C3 of [At a glance](#at-a-glance), together with the settings
-file below and telemetry v0 (section 8).
+**Status:** Complete. One urgent correctness hotfix came first in this slot
+(`workflow-controller-worker-lifecycle-ownership`, accepted 2026-09-26 under Workflow 2.5.1; the
+narrative is archived at `docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md`).
+The four patches below and the settings file v1 were step C3
+(`workflow-controller-settings-and-telemetry`, accepted 2026-10-01 under Workflow 2.6.0; plan
+`docs/ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md`, ADR
+`docs/adr/0008-controller-settings-file.md`; the narrative is archived at
+`docs/milestones/completed/workflow-controller-settings-and-telemetry.md`), together with
+telemetry v0 (section 8) and release notes from the milestone (11.1.2). Releases as 1.5.0 when PR
+#16 is squash-merged.
 
 **Hotfix: worker lifecycle ownership** (milestone `workflow-controller-worker-lifecycle-ownership`,
 plan `docs/ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md`, ADR
@@ -293,7 +298,7 @@ stdin anchor, reconciles only after the worker has ended and its owned work has 
 `resume` re-attaches to a live job after a Controller loss. `status`, `inspect`, `explain` and
 `follow` show waiting, draining and unsupervised workers. The harness limitations it documents
 rather than solves (the wakeup-fire recogniser's residue, escape windows, daemon recognition by
-name) are in ADR 0004. It was not folded together with the patches below, which stay listed:
+name) are in ADR 0004. It was not folded together with the patches below, which C3 delivered:
 
 - correct misordered `--work-item` resume hints;
 - improve manual-external gate behavior when local review ledger/content is incoherent;
@@ -967,6 +972,13 @@ Initially GitHub-only via `gh`; release discovery moves behind the forge adapter
 
 **Priority:** Ongoing after routing foundation
 
+**Status:** Partly complete. Step C3 (`workflow-controller-settings-and-telemetry`, accepted
+2026-10-01; see 1.4) delivered telemetry v0, which records each job's session totals (turns,
+tokens, cost, API time, per-model usage, wall times) and adds the read-only `telemetry` summary by
+work item, run, date, role or model. It also made the routing defaults a section of the settings
+file. The other items below remain open; hot-reloadable routing is deferred (see
+[At a glance](#at-a-glance)).
+
 The current routing layer supports model and effort overrides.
 
 Future improvements:
@@ -1114,6 +1126,15 @@ of zombie `git` processes held by the two lanes' Controllers.
 
 ## 11.1.2 Release notes follow the milestone
 
+**Status:** Complete (`workflow-controller-settings-and-telemetry`, accepted 2026-10-01; see 1.4).
+The design was narrowed during planning. A repository opts in through its policy
+(`milestone_branches.pull_request.release_notes` and `{release_notes}`). Readiness then puts the
+milestone's `## Release notes` section into the pull request body under a marker bound by the work
+item id and a digest. The release publishes the verified blocks from its range's squash commits,
+or refuses and names the fix (`tools/release.py notes-block`). This repository opts in through a
+small pull request after 1.5.0. Until then, 1.5.0's notes are copied into `docs/releases/` by
+hand. The description below is the original problem statement.
+
 **Part of step C3** (added 2026-09-30, from C1b's functional review, flow H). `docs/README.md` says
 that from 1.4.0 a milestone's release notes are its pull request body, which becomes the squash
 commit's body. The code does not do that:
@@ -1251,7 +1272,8 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 1.6    Workflow 2.6 compatibility integration                COMPLETE (released as 1.3.0)
 11.1   C1: squash merges and PR-title versions               COMPLETE (released as 1.4.0 at its cutover)
 11.1.1 C1b: reaping every child process                    COMPLETE (released as 1.4.1)
-11.2   C2: CI reliability                                    COMPLETE (releases as 1.4.2)
+11.2   C2: CI reliability                                    COMPLETE (released as 1.4.2)
+1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (releases as 1.5.0)
 ```
 
 ---

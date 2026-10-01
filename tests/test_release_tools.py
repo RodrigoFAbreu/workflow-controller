@@ -451,7 +451,7 @@ class RetiredSubcommandsTest(unittest.TestCase):
         commands = next(action for action in release.build_parser()._actions
                         if isinstance(action, argparse._SubParsersAction)).choices
         self.assertEqual(sorted(commands), sorted(["version", "classify", "build", "verify", "publish",
-                                                   "verify-wheel", "checksums", "check-title"]))
+                                                   "verify-wheel", "checksums", "check-title", "notes-block"]))
         for name in RETIRED_SUBCOMMANDS:
             with self.subTest(name=name):
                 self.assertNotIn(name, commands)

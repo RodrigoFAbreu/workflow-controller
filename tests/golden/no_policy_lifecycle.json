@@ -43,6 +43,20 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "last_job_telemetry": {
+            "job_id": "<ID>",
+            "status": "FAILED",
+            "telemetry": {
+              "cost_usd": null,
+              "duration_api_ms": null,
+              "job_seconds": "<V>",
+              "results": 0,
+              "tokens": null,
+              "turns": null,
+              "worker_seconds": "<V>"
+            },
+            "work_item_id": null
+          },
           "lifecycle_lock": "free",
           "repository": {
             "profile": "full",
@@ -122,6 +136,37 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "controller_settings": {
+            "path": "<TMP>/bootstrap_step/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
+          },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
@@ -184,6 +229,34 @@
           "status": "FAILED",
           "target_repo": "<TMP>/bootstrap_step/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": null,
+            "duration_api_ms": null,
+            "duration_ms": null,
+            "effort": null,
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": null,
+            "models": null,
+            "problems": [
+              {
+                "kind": "no_result"
+              }
+            ],
+            "results": 0,
+            "role": "milestone-plan",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": null,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": false,
           "updated_at": "<TS>",
           "work_item_id": null,
@@ -264,6 +337,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": null,
             "fresh_session": true,
             "model": null,
@@ -364,6 +438,20 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "last_job_telemetry": {
+            "job_id": "<ID>",
+            "status": "FINISHED",
+            "telemetry": {
+              "cost_usd": 0.0,
+              "duration_api_ms": null,
+              "job_seconds": "<V>",
+              "results": 1,
+              "tokens": null,
+              "turns": 1,
+              "worker_seconds": "<V>"
+            },
+            "work_item_id": "wi-1"
           },
           "lifecycle_lock": "free",
           "repository": {
@@ -470,6 +558,37 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
+          },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
@@ -528,6 +647,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "milestone-implement",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -612,6 +771,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -655,6 +815,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -719,6 +910,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "milestone-implement",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -803,6 +1034,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -846,6 +1078,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -912,6 +1175,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "milestone-implement-self-review",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -996,6 +1299,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1039,6 +1343,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -1107,6 +1442,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "review-implementation",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1191,6 +1566,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1234,6 +1610,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -1303,6 +1710,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "apply-implementation-review",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1387,6 +1834,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1430,6 +1878,37 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "controller_settings": {
+            "path": "<TMP>/implementation_run/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
           },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
@@ -1498,6 +1977,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "review-implementation",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1582,6 +2101,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
             "model": "claude-opus-5-5",
@@ -1846,6 +2366,20 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "last_job_telemetry": {
+            "job_id": "<ID>",
+            "status": "FAILED",
+            "telemetry": {
+              "cost_usd": null,
+              "duration_api_ms": null,
+              "job_seconds": "<V>",
+              "results": 0,
+              "tokens": null,
+              "turns": null,
+              "worker_seconds": "<V>"
+            },
+            "work_item_id": null
+          },
           "lifecycle_lock": "free",
           "repository": {
             "profile": "full",
@@ -1925,6 +2459,37 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "controller_settings": {
+            "path": "<TMP>/unborn_head_step/settings.json",
+            "sha256": "<SHA>",
+            "sources": {
+              "follow.heartbeat_seconds": "file",
+              "follow.replay_events": "file",
+              "forge.pr_list_limit": "file",
+              "routing": "file",
+              "run.max_steps": "file",
+              "timeouts.git_seconds": "file",
+              "timeouts.release_command_seconds": "file",
+              "timeouts.workflow_query_seconds": "file",
+              "worker.drain_detach_seconds": "file",
+              "worker.timeout_seconds": "cli"
+            },
+            "values": {
+              "follow.heartbeat_seconds": 30,
+              "follow.replay_events": 20,
+              "forge.pr_list_limit": 200,
+              "routing": {
+                "default": {},
+                "roles": {}
+              },
+              "run.max_steps": 20,
+              "timeouts.git_seconds": 600,
+              "timeouts.release_command_seconds": 1800,
+              "timeouts.workflow_query_seconds": 120,
+              "worker.drain_detach_seconds": 10800,
+              "worker.timeout_seconds": 60
+            }
+          },
           "controller_source_commit": "<SHA>",
           "controller_source_tree_digest": "<SHA>",
           "created_at": "<TS>",
@@ -1987,6 +2552,34 @@
           "status": "FAILED",
           "target_repo": "<TMP>/unborn_head_step/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": null,
+            "duration_api_ms": null,
+            "duration_ms": null,
+            "effort": null,
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": null,
+            "models": null,
+            "problems": [
+              {
+                "kind": "no_result"
+              }
+            ],
+            "results": 0,
+            "role": "milestone-plan",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": null,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": false,
           "updated_at": "<TS>",
           "work_item_id": null,
@@ -2067,6 +2660,7 @@
             "start_ticks": "<V>"
           },
           "worker_route": {
+            "config_source": "settings",
             "effort": null,
             "fresh_session": true,
             "model": null,

@@ -52,7 +52,7 @@ from pathlib import Path
 from typing import Any
 
 from . import forge as forge_mod
-from . import conventional_commit, gitrepo, repo_policy, runtime
+from . import conventional_commit, gitrepo, release_notes, repo_policy, runtime
 from .errors import (
     BranchBindingError, BranchInvariantViolatedError, GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError,
 )
@@ -148,6 +148,7 @@ GATE_MERGE_METHOD_REWROTE_HISTORY = "merge_method_rewrote_history"
 GATE_UNMERGED_COMMITS = "unmerged_commits"
 GATE_DIRTY_TREE = "dirty_tree"
 GATE_PR_TITLE_INVALID = "pr_title_invalid"
+GATE_RELEASE_NOTES_INVALID = "release_notes_invalid"
 
 #: Every gate a preflight can return.
 GATE_CODES = frozenset({
@@ -155,6 +156,7 @@ GATE_CODES = frozenset({
     GATE_FAST_FORWARD_TRUNK, GATE_POST_ACCEPTANCE_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_CHECKS_PENDING,
     GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_PR_HEAD_NOT_ACCEPTED, GATE_MERGE_PULL_REQUEST,
     GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE, GATE_PR_TITLE_INVALID,
+    GATE_RELEASE_NOTES_INVALID,
 })
 
 #: The marker line of every Draft PR body the Controller creates.
@@ -1284,22 +1286,73 @@ def declared_title(ctx: Context, work_item_id: str) -> DeclaredTitle:
 
 
 def squash_body(work_item_id: str, plan_path: str | None, *, accepted: str | None = None,
-                branch: str | None = None) -> str:
+                branch: str | None = None, notes_block: str | None = None) -> str:
     """The squash-mode pull request body, which becomes the squash commit's
     body. No line parses as a Git trailer (I8). The "Accepted at" line is
-    added at readiness."""
+    added at readiness, and with it the milestone's release-notes block,
+    when there is one, above the Controller's lines (settings-and-telemetry
+    D.2)."""
     lines = [f"Milestone `{work_item_id}`, planned in `{plan_path or 'unrecorded'}`, driven by workflow-controller."]
     if accepted is not None:
         lines.append(f"Accepted at {accepted} on `{branch}`; merge with \"{SQUASH_BUTTON}\".")
-    return "\n".join(lines) + "\n\n" + PR_MARKER.format(work_item_id=work_item_id) + "\n"
+    head = "" if notes_block is None else notes_block + "\n\n"
+    return head + "\n".join(lines) + "\n\n" + PR_MARKER.format(work_item_id=work_item_id) + "\n"
+
+
+#: Readiness's ``release_notes`` event detail (D.2).
+NOTES_ABSENT = "absent"
+NOTES_EMPTY = "empty"
+NOTES_INCLUDED = "included"
+
+
+@dataclasses.dataclass(frozen=True)
+class _MilestoneNotes:
+    """The milestone's notes at the acceptance commit: ``status`` is
+    :data:`NOTES_ABSENT`, :data:`NOTES_EMPTY` or :data:`NOTES_INCLUDED`,
+    ``block`` the rendered block when included, ``path`` the narrative."""
+
+    status: str
+    path: str
+    block: str | None = None
+    problem: str | None = None
+
+
+def _milestone_notes(ctx: Context, record: Mapping[str, Any], a: str) -> _MilestoneNotes | None:
+    """The notes section at the path and heading of the binding's policy
+    snapshot, read from the acceptance commit ``a``'s tree (never the
+    working tree); ``None`` when the snapshot has no ``release_notes``.
+    ``problem`` names a section that cannot be carried (not UTF-8, or an I8
+    line rule)."""
+    config = binding_policy(record).milestone_branches.release_notes
+    if config is None:
+        return None
+    work_item_id = record["work_item_id"]
+    path = config.path_for(work_item_id)
+    raw = gitrepo.show(ctx.repo_root, a, path, runner=ctx.runner)
+    if raw is None:
+        return _MilestoneNotes(NOTES_ABSENT, path)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return _MilestoneNotes(NOTES_INCLUDED, path, problem=f"{path} at {a} is not valid UTF-8 ({exc})")
+    notes = release_notes.extract_section(text, config.heading)
+    if notes is None:
+        return _MilestoneNotes(NOTES_ABSENT, path)
+    if not notes:
+        return _MilestoneNotes(NOTES_EMPTY, path)
+    problem = release_notes.notes_problem(notes)
+    if problem is not None:
+        return _MilestoneNotes(NOTES_INCLUDED, path,
+                               problem=f"the `## {config.heading}` section of {path}, {problem.describe()}")
+    return _MilestoneNotes(NOTES_INCLUDED, path, block=release_notes.render_block(work_item_id, notes))
 
 
 def _edit_pr(ctx: Context, key: str, record: Mapping[str, Any], number: int, *, title: str | None = None,
-             body: str | None = None) -> None:
+             body: str | None = None, **details: Any) -> None:
     """``gh pr edit``, re-read by the forge. Idempotent: a restart re-reads
     the pull request and finds nothing left to edit."""
     ctx.forge(record["repository"]["forge_repository"]).edit_pr(number, title=title, body=body)
-    _event(ctx, key, record, "pr_edited", pr=number, title=title, body=body is not None)
+    _event(ctx, key, record, "pr_edited", pr=number, title=title, body=body is not None, **details)
 
 
 def _sync_title(ctx: Context, key: str, record: Mapping[str, Any], pr: forge_mod.PullRequest) -> None:
@@ -1311,12 +1364,15 @@ def _sync_title(ctx: Context, key: str, record: Mapping[str, Any], pr: forge_mod
 
 
 def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: forge_mod.PullRequest,
-                        a: str) -> Gate | None:
+                        a: str) -> tuple[Gate | None, str | None]:
     """Readiness in squash mode, after conditions 4-6 and before 7: the
     title decision (the declared title wins; without one a valid current
     title is kept; otherwise ``pr_title_invalid``), then the body with the
-    acceptance commit. An edit ends the step at ``checks_pending``, so
-    ``READY`` is never written on checks sampled before it."""
+    acceptance commit and the milestone's release notes, checked whole
+    against I8 before any edit (``release_notes_invalid``). An edit ends the
+    step at ``checks_pending``, so ``READY`` is never written on checks
+    sampled before it. Also returns the notes status, ``None`` when the
+    binding's policy has no ``release_notes``."""
     work_item_id, branch, number = record["work_item_id"], record["branch"], pr.number
     declared = declared_title(ctx, work_item_id)
     title = None
@@ -1332,16 +1388,34 @@ def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: f
                         f"commit's subject. The plan can no longer be amended after acceptance, so set a valid title "
                         f"on GitHub",
                         (f"set a valid Conventional Commit title on pull request #{number} on GitHub",),
-                        repo_policy.MERGE_METHOD_SQUASH)
-    body = squash_body(work_item_id, declared.plan_path, accepted=a, branch=branch)
+                        repo_policy.MERGE_METHOD_SQUASH), None
+    notes = _milestone_notes(ctx, record, a)
+    status = None if notes is None else notes.status
+    body = squash_body(work_item_id, declared.plan_path, accepted=a, branch=branch,
+                       notes_block=None if notes is None else notes.block)
+    problem = None if notes is None else notes.problem
+    if problem is None and notes is not None and notes.block is not None:
+        found = release_notes.paragraph_problem(body)
+        if found is not None:
+            problem = f"the body carrying the notes of {notes.path}, {found.describe()}"
+    if problem is not None:
+        return Gate(GATE_RELEASE_NOTES_INVALID, work_item_id, branch,
+                    f"the release notes of {work_item_id} cannot go into pull request #{number}'s body: {problem}. "
+                    f"The pull request is not edited. A commit after the acceptance commit {a} stops readiness "
+                    f"(post_acceptance_commits), so the notes are supplied at release instead",
+                    (f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\", then supply the notes in a "
+                     f"later trunk commit whose message carries the block `python3 tools/release.py notes-block "
+                     f"--work-item {work_item_id} <file>` prints",),
+                    repo_policy.MERGE_METHOD_SQUASH), status
     if forge_mod.same_text(pr.body, body):
         body = None
     if title is None and body is None:
-        return None
-    _edit_pr(ctx, key, record, number, title=title, body=body)
+        return None, status
+    extra = {} if status is None else {"release_notes": status}
+    _edit_pr(ctx, key, record, number, title=title, body=body, **extra)
     return Gate(GATE_CHECKS_PENDING, work_item_id, branch,
                 f"pull request #{number}'s title or body was just updated; its checks re-run",
-                ("re-run the step once the checks finish",), repo_policy.MERGE_METHOD_SQUASH)
+                ("re-run the step once the checks finish",), repo_policy.MERGE_METHOD_SQUASH), status
 
 
 # -- readiness --------------------------------------------------------------------------
@@ -1402,8 +1476,9 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
                     (f"mark pull request #{number} ready and merge it on GitHub with \"{button}\"",), method)
     # Squash mode: the title decision and the body sync, before condition 7,
     # whose failing `PR title` check only this sync can fix. An edit ends the step.
+    notes_status = None
     if squash:
-        gate = _sync_for_readiness(ctx, key, record, pr, a)
+        gate, notes_status = _sync_for_readiness(ctx, key, record, pr, a)
         if gate is not None:
             return gate
     # 7. green checks, when the binding's policy requires them.
@@ -1420,8 +1495,9 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
         if pr.is_draft or pr.state != "OPEN":
             raise _refuse(f"pull request #{number} is still {'a draft' if pr.is_draft else pr.state} after "
                           f"`gh pr ready`", work_item_id=work_item_id, branch=branch, pr=number)
+    extra = {} if notes_status is None else {"release_notes": notes_status}
     record = _write(ctx, key, dict(record, state=READY, pr=_pr_ref(pr), accepted_head=a), "ready", pr=number,
-                    accepted_head=a)
+                    accepted_head=a, **extra)
     return _merge_gate(record, tip=tip)
 
 
@@ -2168,19 +2244,30 @@ def observation(ctx: Context) -> dict:
     return out
 
 
-def binding_lines(runtime_root: Path) -> list[str]:
-    """``status``'s ``milestone:`` lines: one per live binding record under
+def binding_entries(runtime_root: Path) -> list[dict]:
+    """``status``'s bindings: one entry per live binding record under
     ``runtime_root``, for every repository. Read-only."""
     base = Path(runtime_root) / "repositories"
     if not base.is_dir():
         return []
-    lines = []
+    entries = []
     for directory in sorted(p for p in base.iterdir() if p.is_dir()):
         for work_item_id, record in live_records(runtime_root, directory.name).items():
             pr = record.get("pr")
-            pr_text = "" if pr is None else f", pull request #{pr.get('number')}"
-            lines.append(f"milestone: {work_item_id} {record['state']} on {record['branch']}{pr_text} "
-                         f"(worktree {record['repository'].get('worktree_root')})")
+            entries.append({"work_item_id": work_item_id, "state": record["state"], "branch": record["branch"],
+                            "pull_request": None if pr is None else pr.get("number"),
+                            "worktree_root": record["repository"].get("worktree_root")})
+    return entries
+
+
+def binding_lines(runtime_root: Path) -> list[str]:
+    """``status``'s ``milestone:`` lines, one per :func:`binding_entries`
+    entry."""
+    lines = []
+    for entry in binding_entries(runtime_root):
+        pr_text = "" if entry["pull_request"] is None else f", pull request #{entry['pull_request']}"
+        lines.append(f"milestone: {entry['work_item_id']} {entry['state']} on {entry['branch']}{pr_text} "
+                     f"(worktree {entry['worktree_root']})")
     return lines
 
 

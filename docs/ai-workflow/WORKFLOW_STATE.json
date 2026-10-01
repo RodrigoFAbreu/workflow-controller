@@ -5086,7 +5086,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-settings-and-telemetry-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-settings-and-telemetry-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 14,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -5175,8 +5175,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 64,
-      "last_transition": "2026-10-01T05:10:18Z",
+      "state_revision": 66,
+      "last_transition": "2026-10-01T07:34:21Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5195,6 +5195,16 @@
           "bundle_id": "452ad5f33d543713b7a33deabfe3e6cc1f4e73bad185aa5c4ca40e904c78f153",
           "plan_revision": 14
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "5af5569cd63244183285496c536ca197f6043b332ae1a77b14420c7e8e9c5636",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e546d5928321519c612d4dd73db101c6524d1d4783582f89e32c93c16eacc3d4",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-01T05:16:44Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

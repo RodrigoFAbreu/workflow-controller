@@ -5086,7 +5086,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-settings-and-telemetry-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-settings-and-telemetry-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 14,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -5157,10 +5157,10 @@
         "recorded_at": "2026-10-01T00:57:11Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "6cc2ab3b5214bbc63a651bc8053fda4d4e0d66b6f8cad18c92eb737aae33d0e1",
-        "approved_review_content_id": "01ee6cdb88885c96760e4b35d23edfade4789d7ce510f70948100cf91f2c32e4",
+        "reviewed_bundle_id": "8cb2f71fc541ad1ca414820494dd183212a73bbeb4c9a6d866ea5f598afc5385",
+        "approved_review_content_id": "e2e61175a8a41df1ec16923fef441d181c8fc1b9956dac1ce11e4248e48b2243",
         "review_content_manifest": [
           {
             "path": "controller/__init__.py",
@@ -5172,7 +5172,7 @@
             "path": "controller/cli.py",
             "exists": true,
             "mode": "100644",
-            "blob": "adfb668aa19b0c9ac4a2bddab10f3917147268e3"
+            "blob": "424405d48ea567b1868a661eaab9e14c6df955b9"
           },
           {
             "path": "controller/decision.py",
@@ -5190,7 +5190,7 @@
             "path": "controller/evidence.py",
             "exists": true,
             "mode": "100644",
-            "blob": "72ca7220c174d8b080b908c9483f3159e856da20"
+            "blob": "818ce84a93ca0ae26cd487bd77988b0e7f7530a1"
           },
           {
             "path": "controller/forge.py",
@@ -5226,7 +5226,7 @@
             "path": "controller/release_notes.py",
             "exists": true,
             "mode": "100644",
-            "blob": "b822f59300cdd6987ed27f292d8eed806915d545"
+            "blob": "ecdae70afcd0d21599134b28eceda49f618b2329"
           },
           {
             "path": "controller/release_txn.py",
@@ -5262,7 +5262,7 @@
             "path": "controller/telemetry.py",
             "exists": true,
             "mode": "100644",
-            "blob": "27c47a005395040edab392ce4ed994d6c3aed985"
+            "blob": "9415f0223632abd7fa2a5929ec043351e71a8527"
           },
           {
             "path": "controller/worker.py",
@@ -5310,7 +5310,7 @@
             "path": "docs/guide/commands.md",
             "exists": true,
             "mode": "100644",
-            "blob": "db0c942aa83023ddc6c370eac565c49db153bcc0"
+            "blob": "f895c29877db20e16b7ddada7b6a077cf06a9859"
           },
           {
             "path": "docs/guide/milestone-branches.md",
@@ -5364,13 +5364,13 @@
             "path": "tests/golden/plan_stage_decisions.2.6.0.json",
             "exists": true,
             "mode": "100644",
-            "blob": "eb123ad51fc7e2359758c2151136a63ebb8b7c68"
+            "blob": "5773a1c201c7559e87ebd76287e926bbf1d01f9d"
           },
           {
             "path": "tests/test_cli.py",
             "exists": true,
             "mode": "100644",
-            "blob": "5d65f8b07b6f0a129615da95f370c561a529a094"
+            "blob": "da2841a4f937b7c2fb31c41c05757b4f1746d0f8"
           },
           {
             "path": "tests/test_decision.py",
@@ -5382,7 +5382,7 @@
             "path": "tests/test_evidence.py",
             "exists": true,
             "mode": "100644",
-            "blob": "4f6b192af290a4187141c8bbf71fb90c2d2c0c4b"
+            "blob": "0eaacd682f599e3b46045e0f6af535d2bbae540b"
           },
           {
             "path": "tests/test_gitrepo.py",
@@ -5442,7 +5442,7 @@
             "path": "tests/test_release_notes.py",
             "exists": true,
             "mode": "100644",
-            "blob": "f329aab95a7ff8a7867ce3101599081b39a0b1a3"
+            "blob": "b80088392202cb252d5cda813de30c19c8de47d5"
           },
           {
             "path": "tests/test_release_tools.py",
@@ -5478,7 +5478,7 @@
             "path": "tests/test_telemetry.py",
             "exists": true,
             "mode": "100644",
-            "blob": "9a822a46ef63771b0921c8c7cc2ef0314536b7cb"
+            "blob": "663bf35632060baa1937cbd7fe7fd005dc5242bb"
           },
           {
             "path": "tests/test_trunk_preflight.py",
@@ -5499,11 +5499,11 @@
             "blob": "ea3afc34b88633f37c8eaf12bcffa7610a7c5ffd"
           }
         ],
-        "reviewed_content_commit": "96bbdeda8ced34958dda16f6a1a7639103f75d37",
+        "reviewed_content_commit": "e18fe9a67493f6cb7bcd727f26800d3018a38a44",
         "legacy_evidence": null,
-        "user_confirmation": "/approve-review implementation workflow-controller-settings-and-telemetry",
+        "user_confirmation": "implementation workflow-controller-settings-and-telemetry",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-01T12:11:39Z"
+        "recorded_at": "2026-10-01T17:14:31Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -5523,8 +5523,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 74,
-      "last_transition": "2026-10-01T13:00:39Z",
+      "state_revision": 77,
+      "last_transition": "2026-10-01T17:14:31Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5545,18 +5545,18 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "01ee6cdb88885c96760e4b35d23edfade4789d7ce510f70948100cf91f2c32e4",
+        "review_content_id": "e2e61175a8a41df1ec16923fef441d181c8fc1b9956dac1ce11e4248e48b2243",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "6cc2ab3b5214bbc63a651bc8053fda4d4e0d66b6f8cad18c92eb737aae33d0e1",
+          "bundle_id": "8cb2f71fc541ad1ca414820494dd183212a73bbeb4c9a6d866ea5f598afc5385",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-01T08:01:20Z"
+          "round": 4,
+          "completed_at": "2026-10-01T13:10:19Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "6cc2ab3b5214bbc63a651bc8053fda4d4e0d66b6f8cad18c92eb737aae33d0e1",
+          "bundle_id": "8cb2f71fc541ad1ca414820494dd183212a73bbeb4c9a6d866ea5f598afc5385",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-01T08:11:33Z"
+          "round": 4,
+          "completed_at": "2026-10-01T13:18:03Z"
         }
       }
     }

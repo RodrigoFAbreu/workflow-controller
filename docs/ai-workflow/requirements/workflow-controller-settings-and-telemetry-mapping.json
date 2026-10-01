@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-settings-and-telemetry",
+  "requirements": {
+    "R1": {
+      "description": "One user-level settings file, located by --settings, WORKFLOW_CONTROLLER_SETTINGS, XDG_CONFIG_HOME or ~/.config, holds the closed table of operational settings; an invalid file refuses with exit 20 before any job record, a missing one is created (I2, I3)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The Controller fills every missing setting with its default, records the defaults it wrote with their generation, moves only untouched values forward to a newer default, warns on unknown keys, and settings clean removes them but refuses a file filled by a newer release; the fill and clean run their whole read-modify-write under the lock, atomic and only on change (I4); the settings file's routing section ignores unknown role names, route fields and keys directly under routing with a warning, so an older release keeps reading a file a newer one filled",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "Tests never read or write the operator's real settings file: XDG_CONFIG_HOME redirected and WORKFLOW_CONTROLLER_SETTINGS removed in tests/__init__.py (I5)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "Every setting reaches its consumer with CLI > file > default precedence, the drain detach bound is configurable and resume --drain-timeout bounds the re-attach drain, routing comes from the settings file unless --routing-config replaces it (I1)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "Each job records the effective settings it ran with (controller_settings) and its routing source",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R6": {
+      "description": "Each job records session-total telemetry (tokens incl. cache, cost, API time, turns, wall times, per-model) computed over every result, with its role, model, effort, harness, Workflow and Controller dimensions, never steering the lifecycle, even when telemetry itself fails (I6, I7)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R7": {
+      "description": "A read-only telemetry command summarises jobs by role and model, deriving jobs recorded before 1.5.0 from their worker.stdout",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R8": {
+      "description": "With the policy opt-in, readiness makes the milestone's Release notes section, at the path and heading of the binding's policy snapshot, the pull request body above the Controller's lines, and refuses without editing any paragraph that parses as a Git trailer block, an over-long body, a notes line over 72 UTF-8 bytes, ending in a space or holding a tab or carriage return, or Controller marker text in the notes (I8)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R9": {
+      "description": "With {release_notes} in the publication notes, the release text comes only from the squash commit bodies: the notes blocks readiness wrote, read from the commit messages of the release range in commit order with no forge call, no tree read and no narrative scanning, each verified against its marker's digest, a newer block of a work item superseding an older one; a block with empty notes is a damaged block and never included, and tools/release.py notes-block refuses empty notes; a damaged start marker consumes its end marker line; a resumed release with no release object reuses its annotated tag's message only when it equals the notes recomputed over the tag's own range rendered by the current template, so a tag created before the opt-in is refused; missing notes (no block in the range) and unreadable or unverifiable notes, an unreadable or unverified tag on RESUME included, refuse the release before a tag or release is created and name a fix that clears them, the operator supplying the notes (the pull request's block or tools/release.py notes-block, or for a resumed tag the release created by hand) or, for a marker line naming no work item or a non-UTF-8 message holding a marker line, the policy's opt-out; only marker lines (a line starting with the marker) are read, so marker text quoted mid-line and messages with no marker line never refuse; no opted-in release publishes empty notes",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R10": {
+      "description": "The branch stays drivable by the installed 1.4.x Controller: policy.json, pyproject.toml, setup.py and the workflows are unchanged (I9)",
+      "checkpoint_ids": [
+        "CP4",
+        "CP7"
+      ]
+    },
+    "R11": {
+      "description": "Every operator command line the Controller prints parses under the live parser (I10)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R12": {
+      "description": "The manual-external review gate names an incoherent local-review ledger instead of advertising a stale or missing review_content_id, at both stages, with a way out the Workflow accepts at that phase",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R13": {
+      "description": "Explicit tests pin that OperatorAbandoned and UnreconcilableJobError apply jobs bind the relaunch bound",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R14": {
+      "description": "status shows a bounded, per-job recent list and active jobs with work item, command and start time, and supports --json",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    },
+    "R15": {
+      "description": "Guides, docs/README.md and ADR 0008 match the code, and the milestone narrative carries its Release notes section",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    }
+  }
+}

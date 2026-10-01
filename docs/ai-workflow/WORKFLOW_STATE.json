@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-settings-and-telemetry",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -5074,6 +5074,97 @@
           "verdict": "APPROVE",
           "round": 2,
           "completed_at": "2026-09-30T13:44:17Z"
+        }
+      }
+    },
+    "workflow-controller-settings-and-telemetry": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-settings-and-telemetry",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-settings-and-telemetry-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-settings-and-telemetry-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 14,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "a47e6955cd4aebdee5482ba7cc2c788c2eb057c3",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "452ad5f33d543713b7a33deabfe3e6cc1f4e73bad185aa5c4ca40e904c78f153",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "452ad5f33d543713b7a33deabfe3e6cc1f4e73bad185aa5c4ca40e904c78f153",
+        "approved_review_content_id": "db313bbe31d44b10b81e16bd80e2b805af7b7302495d5542dfcc2b262e5e6d81",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "df81f71d89b9f3e3fe57a51f3dbf7eb17d6b30c2"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-settings-and-telemetry-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "70f25f05ce367a472d3eaa4a43ac3e7fc02fcf7d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-settings-and-telemetry-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8301943641ed2cd187891e7477f902efb901eb97"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "plan workflow-controller-settings-and-telemetry",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-01T00:57:11Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "db313bbe31d44b10b81e16bd80e2b805af7b7302495d5542dfcc2b262e5e6d81",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "452ad5f33d543713b7a33deabfe3e6cc1f4e73bad185aa5c4ca40e904c78f153",
+          "verdict": "APPROVE",
+          "round": 14,
+          "completed_at": "2026-10-01T00:34:30Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "452ad5f33d543713b7a33deabfe3e6cc1f4e73bad185aa5c4ca40e904c78f153",
+          "verdict": "APPROVE",
+          "round": 14,
+          "completed_at": "2026-10-01T00:36:42Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 49,
+      "last_transition": "2026-10-01T00:57:11Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-01T00:31:21Z",
+        "consumed": {
+          "review_content_id": "d20c9c8de5c0da17aaef1bba653ecdd2a10084f4da5469a4efb41aaa66e8e856",
+          "plan_revision": 13,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "db313bbe31d44b10b81e16bd80e2b805af7b7302495d5542dfcc2b262e5e6d81",
+          "plan_revision": 14
+        },
+        "bound": {
+          "review_content_id": "db313bbe31d44b10b81e16bd80e2b805af7b7302495d5542dfcc2b262e5e6d81",
+          "bundle_id": "452ad5f33d543713b7a33deabfe3e6cc1f4e73bad185aa5c4ca40e904c78f153",
+          "plan_revision": 14
         }
       }
     }

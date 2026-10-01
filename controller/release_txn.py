@@ -35,7 +35,7 @@ import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 
-from . import conventional_commit, gitrepo, repo_policy, runtime
+from . import conventional_commit, gitrepo, release_notes, repo_policy, runtime
 from .errors import (
     GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError, ReleaseTransactionError,
 )
@@ -138,6 +138,10 @@ class Classification:
     detail: str
     unsettled: tuple[str, ...] = ()
     problems: tuple[str, ...] = ()
+    #: ``RELEASE_DUE`` only: ``(base_commit, commit)``, the first-parent
+    #: range the release covers (``base_commit`` ``None`` with no base tag),
+    #: which the release notes are read from (settings-and-telemetry D.3).
+    release_range: tuple[str | None, str] | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -155,7 +159,9 @@ class Classification:
 @dataclasses.dataclass(frozen=True)
 class PublishOutcome:
     """``action`` is ``created`` (a new release), ``resumed_draft`` (a draft
-    completed and published) or ``already_published`` (nothing to do)."""
+    completed and published) or ``already_published`` (nothing to do).
+    ``notes`` names the release-notes outcome when the policy renders
+    ``{release_notes}`` (settings-and-telemetry D.3), else is empty."""
 
     state: str
     tag: str
@@ -164,6 +170,7 @@ class PublishOutcome:
     tagged: bool
     uploaded: tuple[str, ...]
     url: str
+    notes: str = ""
 
 
 def _refuse(message: str, **evidence) -> ReleaseTransactionError:
@@ -412,6 +419,29 @@ def _range_bump(ctx: ReleaseContext, base_commit: str | None, commit: str) -> _R
     return _RangeBump(bump=highest, invalid=tuple(invalid))
 
 
+def _matching_tags(ctx: ReleaseContext, remote_tags: Mapping[str, str]) -> dict[str, tuple[str, str]]:
+    """``{tag: (version, commit)}`` for the tags ``tag_format`` renders
+    canonically from a version."""
+    matching = {}
+    for name, oid in remote_tags.items():
+        tag_version = ctx.release.version_of_tag(name)
+        if tag_version is not None and ctx.release.tag_for(tag_version) == name:
+            matching[name] = (tag_version, oid)
+    return matching
+
+
+def _highest_tag(release: repo_policy.Release, tags: Mapping[str, tuple[str, str]], *,
+                 below: tuple | None = None) -> str | None:
+    """The base-tag rule: the highest-versioned of ``tags`` (``{tag:
+    (version, commit)}``, already narrowed to ancestors), only among those
+    below the version key ``below`` when given; ``None`` when there is none.
+    Both triggers, ``INVALID_TRANSITION`` and a resumed release's notes use
+    it, so they cannot pick different bases."""
+    candidates = [name for name, (version, _) in tags.items()
+                  if below is None or release.version_key(version) < below]
+    return max(candidates, key=lambda name: release.version_key(tags[name][0]), default=None)
+
+
 def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Classification:
     """Classify trunk commit ``commit`` (first matching row of the plan's
     table). Fetches the trunk and, unless ``fetch_tags`` is false, every
@@ -432,11 +462,7 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
         gitrepo.fetch(ctx.repo_root, ctx.remote, [TAGS_REFSPEC], runner=ctx.git_runner)
     remote_tags = gitrepo.ls_remote_tags(ctx.repo_root, ctx.remote, runner=ctx.git_runner)
     # The matching tags: those tag_format renders canonically from a version.
-    matching = {}
-    for name, oid in remote_tags.items():
-        tag_version = release.version_of_tag(name)
-        if tag_version is not None and release.tag_for(tag_version) == name:
-            matching[name] = (tag_version, oid)
+    matching = _matching_tags(ctx, remote_tags)
     ancestors = {name: entry for name, entry in matching.items()
                  if gitrepo.is_ancestor(ctx.repo_root, entry[1], commit, runner=ctx.git_runner)}
 
@@ -444,7 +470,7 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
     if conventional:
         # Design C: the base is the highest ancestor tag; an unsettled base
         # is resumed before anything since it is released.
-        base = max(ancestors, key=lambda name: release.version_key(ancestors[name][0]), default=None)
+        base = _highest_tag(release, ancestors)
         version = "0.0.0" if base is None else ancestors[base][0]
         base_commit = None if base is None else ancestors[base][1]
         settled = True
@@ -520,12 +546,15 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
     if tag_commit is not None:
         return result(RESUME, f"{tag} exists at {tag_commit} with "
                       + ("a draft release" if found is not None else "no release"))
-    if ancestors:
-        highest = max(ancestors, key=lambda name: release.version_key(ancestors[name][0]))
-        if key <= release.version_key(ancestors[highest][0]):
-            return result(INVALID_TRANSITION, f"{version} is not above {highest}, already in "
-                          f"{commit}'s history")
-    return result(RELEASE_DUE, f"{version} has no tag and no release")
+    highest = _highest_tag(release, ancestors)
+    if highest is not None and key <= release.version_key(ancestors[highest][0]):
+        return result(INVALID_TRANSITION, f"{version} is not above {highest}, already in "
+                      f"{commit}'s history")
+    # The range the release covers: under conventional_commit the one
+    # _range_bump walked, under version_change from the same base rule.
+    range_base = (base_commit if conventional
+                  else None if highest is None else ancestors[highest][1])
+    return result(RELEASE_DUE, f"{version} has no tag and no release", release_range=(range_base, commit))
 
 
 # ---------------------------------------------------------------------------
@@ -658,6 +687,104 @@ def _complete_draft(ctx: ReleaseContext, draft: Release, tag: str, version: str,
     return [path.name for path in uploads]
 
 
+# ---------------------------------------------------------------------------
+# Release notes from the milestones (settings-and-telemetry D.3).
+# ---------------------------------------------------------------------------
+
+_OPT_OUT = (f"or opt out for this release: a trunk commit that removes {{release_notes}} from "
+            f"release.publication.notes in {repo_policy.POLICY_PATH} makes the publish render the fixed text")
+
+
+def _supply_fix(work_items: Sequence[str]) -> str:
+    named = ", ".join(work_items) if work_items else "each milestone of the range"
+    return (f"fix: supply the notes in a later trunk commit, which the publish then releases, whose message "
+            f"carries a release-notes block for {named}: the merged pull request's block copied verbatim, or "
+            f"one printed by `python3 tools/release.py notes-block --work-item <id> <file>`; {_OPT_OUT}")
+
+
+def _notes_refusal(what: str, refusal: release_notes.Refusal, **evidence) -> ReleaseTransactionError:
+    fix = _supply_fix(refusal.work_items) if refusal.supersedable else (
+        "fix: no supplied block can clear this; " + _OPT_OUT.removeprefix("or "))
+    return _refuse(f"the release notes of {what} are {refusal.outcome}: " + "; ".join(refusal.problems)
+                   + f"; {fix}", notes_outcome=refusal.outcome, notes_problems=list(refusal.problems),
+                   **evidence)
+
+
+def range_notes(ctx: ReleaseContext, release_range: tuple[str | None, str], what: str) -> release_notes.Resolution:
+    """The notes of ``release_range`` (D.3 steps 1-6): the blocks on the
+    marker lines of every first-parent commit message of the range, read as
+    bytes, oldest first. Reads no tree, no narrative and no other policy, and
+    makes no forge call. Every refusal raises
+    :class:`ReleaseTransactionError` naming its fix."""
+    base, commit = release_range
+    messages = []
+    try:
+        for sha, _ in gitrepo.first_parent_subjects(ctx.repo_root, base, commit, runner=ctx.git_runner):
+            messages.append((sha, gitrepo.commit_message(ctx.repo_root, sha, runner=ctx.git_runner)))
+    except GitOperationError as exc:
+        argv, status = exc.evidence.get("argv"), exc.evidence.get("exit_code")
+        failed = f"failed (exit {status})" if status is not None else "failed"
+        raise _refuse(f"the release notes of {what} are unreadable: {' '.join(map(str, argv or ['git']))} "
+                      f"{failed}: {exc.message}; fix: rerun the publish",
+                      notes_outcome=release_notes.UNREADABLE, git=exc.evidence) from None
+    try:
+        return release_notes.resolve(messages)
+    except release_notes.NotesRefused as exc:
+        raise _notes_refusal(what, exc.refusal, release_range=list(release_range)) from None
+
+
+def render_notes(ctx: ReleaseContext, version: str, commit: str, notes: str) -> str:
+    """The opted-in notes template rendered with ``notes``, trailing
+    whitespace stripped: both the tag message and the release notes."""
+    return repo_policy.render(ctx.release.publication_notes,
+                              {**_values(ctx, version, commit), "release_notes": notes}).rstrip()
+
+
+def _first_difference(a: str, b: str) -> str:
+    left, right = a.split("\n"), b.split("\n")
+    for number, (x, y) in enumerate(zip(left, right), start=1):
+        if x != y:
+            return f"line {number}: {x!r} vs {y!r}"
+    return f"line {min(len(left), len(right)) + 1}: the texts hold {len(left)} and {len(right)} lines"
+
+
+def resumed_tag_notes(ctx: ReleaseContext, tag: str, version: str, tag_commit: str) -> tuple[str, release_notes.Resolution]:
+    """``RESUME`` with no release, opted in (D.3, MPR13-002): the existing
+    tag's message, only once the notes recomputed over the tag's own range
+    (base: the highest matching ancestor tag below it) and rendered by the
+    current template equal it byte for byte. A tag that is not annotated, a
+    failed or non-UTF-8 read, and any difference refuse before the release
+    is created."""
+    by_hand = f"fix: create the release for {tag} by hand, with the right notes"
+    try:
+        raw = gitrepo.tag_message(ctx.repo_root, tag, runner=ctx.git_runner)
+    except GitOperationError as exc:
+        raise _refuse(f"the release notes of {tag} are unreadable: reading the tag failed "
+                      f"({exc.message}); fix: rerun the publish, or {by_hand.removeprefix('fix: ')}",
+                      tag=tag, notes_outcome=release_notes.UNREADABLE, git=exc.evidence) from None
+    if raw is None:
+        raise _refuse(f"the release notes of {tag} are unverified: {tag} is not an annotated tag, so it was "
+                      f"not created by the publish; {by_hand}", tag=tag, notes_outcome=release_notes.UNVERIFIED)
+    try:
+        message = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise _refuse(f"the release notes of {tag} are unreadable: the tag message is not valid UTF-8 ({exc}); "
+                      f"{by_hand}", tag=tag, notes_outcome=release_notes.UNREADABLE) from None
+    remote_tags = gitrepo.ls_remote_tags(ctx.repo_root, ctx.remote, runner=ctx.git_runner)
+    ancestors = {name: entry for name, entry in _matching_tags(ctx, remote_tags).items()
+                 if name != tag and gitrepo.is_ancestor(ctx.repo_root, entry[1], tag_commit, runner=ctx.git_runner)}
+    base = _highest_tag(ctx.release, ancestors, below=ctx.release.version_key(version))
+    resolution = range_notes(ctx, (None if base is None else ancestors[base][1], tag_commit), tag)
+    expected = render_notes(ctx, version, tag_commit, resolution.text)
+    if message != expected + "\n":
+        raise _refuse(f"{tag} is an unverified tag: its message is not the release notes "
+                      f"recomputed for it under the current template (a tag created before the opt-in, under "
+                      f"another template, or from a range whose blocks changed); first difference at "
+                      f"{_first_difference(message.removesuffix(chr(10)), expected)}; {by_hand}",
+                      tag=tag, notes_outcome=release_notes.UNVERIFIED)
+    return expected, resolution
+
+
 def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_root: Path | None = None,
             tagger: tuple[str, str] | None = None) -> PublishOutcome:
     """Carry out the publishing classification of trunk commit ``commit``,
@@ -687,11 +814,17 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
             raise _refuse(failure, artifact=str(path), commit=target)
     built = {path.name: path for path in files}
 
-    # 2. Tag after validation.
+    # 2. Tag after validation; opted in, the notes come from the range first.
     tagged = False
+    notes_message: str | None = None
+    notes_summary = ""
     if state.state == RELEASE_DUE:
-        values = _values(ctx, version, target)
-        message = repo_policy.render(ctx.release.publication_notes, values)
+        if ctx.release.uses_release_notes:
+            resolution = range_notes(ctx, state.release_range, tag)
+            message = notes_message = render_notes(ctx, version, target, resolution.text)
+            notes_summary = resolution.summary()
+        else:
+            message = repo_policy.render(ctx.release.publication_notes, _values(ctx, version, target))
         gitrepo.create_annotated_tag(ctx.repo_root, tag, target, message, tagger=tagger,
                                      runner=ctx.git_runner)
         try:
@@ -724,13 +857,17 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
         scratch = Path(scratch_dir)
         if found is None:
             action = "created"
+            if ctx.release.uses_release_notes and notes_message is None:
+                notes_message, resolution = resumed_tag_notes(ctx, tag, version, target)
+                notes_summary = f"reused from tag {tag} ({resolution.summary()})"
             digests = {name: sha256_file(path) for name, path in built.items()}
             (scratch / "stage").mkdir()
             sums = write_checksums(scratch / "stage", digests, ctx.release.checksums)
             uploads = [*files, sums]
             ctx.forge.create_release(tag, uploads,
                                      repo_policy.render(ctx.release.publication_title, values),
-                                     repo_policy.render(ctx.release.publication_notes, values))
+                                     notes_message if notes_message is not None
+                                     else repo_policy.render(ctx.release.publication_notes, values))
             uploaded = tuple(path.name for path in uploads)
         elif found.is_draft:
             action = "resumed_draft"
@@ -740,4 +877,4 @@ def publish(ctx: ReleaseContext, commit: str, built_commit: str, *, artifacts_ro
 
     # 5. Post-publication verification.
     published = verify_published(ctx, tag, version, target)
-    return PublishOutcome(state.state, tag, target, action, tagged, uploaded, published.url)
+    return PublishOutcome(state.state, tag, target, action, tagged, uploaded, published.url, notes_summary)

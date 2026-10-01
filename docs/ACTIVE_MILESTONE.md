@@ -36,7 +36,7 @@ Four things, each opt-in or behaviour-preserving by default:
 | CP1 The settings file | Complete | See below |
 | CP2 The settings wired in | Complete | See below |
 | CP3 Telemetry v0 | Complete | See below |
-| CP4 Release notes follow the milestone | Not started | |
+| CP4 Release notes follow the milestone | Complete | See below |
 | CP5 The hints parse and the manual-external gate tells the truth | Not started | |
 | CP6 Relaunch-bound tests and `status` | Not started | |
 | CP7 Documentation and full verification | Not started | |
@@ -242,3 +242,78 @@ Four things, each opt-in or behaviour-preserving by default:
   `generate_plan_stage_decisions.py --check` differs exactly as at HEAD (CP2's note). Run against
   the live runtime root, `telemetry --by role --since 2026-09-30` summarised 110 jobs, all derived,
   in 0.4 s. `~/.config/workflow-controller/` does not exist (I5).
+
+### CP4 -- release notes follow the milestone
+
+- `controller/release_notes.py` (new, after `gitrepo` in the dependency order), the one module
+  for the block: `extract_section` (the section under `## <heading>` up to the next `## ` line,
+  outer blank lines trimmed; a CRLF heading still matches, so its notes are refused for the
+  carriage return rather than silently absent), `render_block` (start marker with
+  `work_item=<id> sha256=<digest>`, notes, end marker), the I8 checks (`notes_problem`: a
+  non-blank line, no Controller marker text, no tab or CR, at most 72 bytes of UTF-8 per line, no
+  trailing space; `paragraph_problem`: at most 65536 characters and every paragraph parsed on its
+  own; `block_problem` for `notes-block`), `parse_message` (marker lines only, line-start
+  anchored; UTF-8 required only for a message holding one; a start marker joined with its
+  continuation lines up to `-->`; explicit pairing, so a damaged start consumes its end; empty
+  notes, a bad `sha256=` token, a missing end and two blocks of one work item in one message are
+  damaged blocks of that work item; an orphan end or a marker with no valid `work_item=` is
+  unattributable) and `resolve` (newest block per work item wins, older ones named superseded,
+  digest check, `### <id>` headings in commit then message order when several, refusals
+  `missing`/`unreadable`/`unverified` with `supersedable` false for the two no block can clear).
+- `controller/gitrepo.py`: `commit_message` and `tag_message` (raw bytes after the object
+  header; a lightweight tag is `None`), `parse_trailers` (`git interpret-trailers --parse` on stdin
+  with every `GIT_*` variable removed, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, in
+  a private temporary directory under a `GIT_CEILING_DIRECTORIES` ceiling), and
+  `create_annotated_tag` now passing `--no-sign --cleanup=verbatim` with the one final newline
+  Git's default cleanup adds, so this repository's tag messages are byte-identical to before
+  (measured: default cleanup stores `M\n`, verbatim stores `M`).
+- `controller/repo_policy.py`: optional `milestone_branches.pull_request.release_notes {path,
+  heading}` (`ReleaseNotes`; the path admits only `{work_item_id}`, any number of times, and must
+  render to a normalised relative path; the heading is a non-empty single line) and the
+  `{release_notes}` placeholder, admitted in `release.publication.notes` only
+  (`Release.uses_release_notes`). This repository's `policy.json` is byte-unchanged (I9).
+- `controller/milestone_branch.py`: readiness reads the section at `a` (`git show`, never the
+  working tree) from the path and heading of the binding's policy snapshot, puts the block above
+  the Controller's lines, and checks the whole rendered body (I8) before any edit; a failure is
+  the new `release_notes_invalid` gate (in `GATE_CODES` and `decision.BRANCH_GATE_TEXTS`), which
+  edits nothing. Its exit is to merge on GitHub and supply the notes at release, since a commit
+  after `a` stops readiness at `post_acceptance_commits`. The `pr_edited` and `ready` events
+  carry `release_notes: absent|empty|included` when the snapshot configures notes (unchanged
+  otherwise).
+- `controller/release_txn.py`: `Classification.release_range` on `RELEASE_DUE` only, from the
+  shared base-tag helper `_highest_tag` (both triggers, `INVALID_TRANSITION` and the resume);
+  `range_notes` reads every first-parent commit message of the range as bytes and resolves the
+  blocks, refusing with `ReleaseTransactionError` before the tag, each refusal naming its fix
+  (supply the notes in a later trunk commit, by the merged pull request's block or
+  `tools/release.py notes-block`; rerun for a failed Git read; the policy opt-out for the two
+  unclearable ones, and after the supplied notes for the rest). Opted-in `RESUME` with no release
+  reuses the tag's message only when the notes recomputed over the tag's own range under the
+  current template equal it byte for byte (else `unverified tag`, fix: create that release by
+  hand); a lightweight tag or a failed or non-UTF-8 read refuses before `create_release`.
+  `PublishOutcome.notes` names the outcome (`included ...; superseded ...` or `reused from tag`).
+- `tools/release.py`: `notes-block --work-item ID FILE` (trims outer blank lines, refuses an
+  empty file, a file of blank lines and every D.2 check), and `publish` prints the notes
+  outcome.
+- Tests: `tests/test_release_notes.py` (new: extraction, line rules incl. 72/73 bytes and the
+  accented 72-character line, the per-paragraph trailer rule with the real `git` -- the middle
+  `Fixes:`/`Breaking-Change:` paragraph a whole-body parse accepts, bare URL, one-line `Note:` --
+  and the ordinary shapes; the trailer parse unchanged by `trailer.separators = :=` from a global
+  file, the repository's configuration, `GIT_CONFIG_COUNT` and `GIT_DIR`, each shown to change a
+  plain `git`; the parser round trip as written and wrapped as GitHub wraps it, `0de0fd5`'s and
+  `e8cd8f9`'s marker splits, the rule and co-author trailer appended; pairing, damage,
+  anchoring, encodings; `resolve`; `notes-block`). `tests/test_repo_policy.py`
+  `ReleaseNotesPolicyTest`; `tests/test_pull_request_lifecycle.py` `SquashReleaseNotesTest`
+  (included with a `###` line, absent, empty, the trailer and line-rule and length refusals with
+  no edit, not UTF-8, the snapshot's path and heading winning over `a`'s policy, a snapshot
+  without notes, D.4's exact template, idempotence, the uncommitted section never read);
+  `tests/test_release_txn.py` `ReleaseRangeTest` and `ReleaseNotesTransactionTest` (every
+  publish case of the checkpoint, over disposable repositories with raw commit objects so a
+  non-UTF-8 message survives, the fake forge recording that `release create` never ran on a
+  refusal, and a run spy showing no tree read). `tests/test_integration_disposable_repo.py`
+  needed no change: the disposable-repository publish coverage lives in `test_release_txn`.
+- Verified: the touched modules' tests pass; the full sharded suite (`python3 tools/run_tests.py`,
+  foreground, under a reaping subreaper, without `PYTHONPATH` or `FORCE_COLOR`) passed: 2657
+  tests in 6 shards, exact coverage, exit 0. `generate_no_policy_lifecycle.py --check` and
+  `generate_external_implementation_review_decisions.py --check` are current;
+  `generate_plan_stage_decisions.py --check` differs exactly as at HEAD (CP2's note).
+  `.workflow-controller/policy.json` is byte-unchanged from `a47e695`.

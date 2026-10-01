@@ -1518,6 +1518,183 @@ class SquashReadinessTest(_Squash):
 # ---------------------------------------------------------------------------
 
 
+NOTES_PATH = f"docs/milestones/completed/{WID}.md"
+NOTES = "The settings file arrives.\n\n### Added\n\n- `settings show` prints it.\n- Telemetry v0 records each job."
+
+
+def notes_policy(path: str = "docs/milestones/completed/{work_item_id}.md", heading: str = "Release notes") -> dict:
+    """D.4's exact template (settings-and-telemetry CP4)."""
+    data = squash_policy()
+    data["milestone_branches"]["pull_request"]["release_notes"] = {"path": path, "heading": heading}
+    return data
+
+
+def narrative(notes: str | None, heading: str = "Release notes") -> str:
+    section = "" if notes is None else f"## {heading}\n\n{notes}\n\n"
+    return f"# {WID}\n\n## Goal\n\nThings.\n\n{section}## Afterwards\n\nMore.\n"
+
+
+class SquashReleaseNotesTest(_Squash):
+    """Readiness puts the milestone's notes section, read at the acceptance
+    commit from the binding's policy snapshot's path and heading, into a
+    block above the Controller's lines, or gates ``release_notes_invalid``
+    with no edit (settings-and-telemetry D.2, I8)."""
+
+    policy_data = staticmethod(notes_policy)
+
+    def accept_with(self, text: str | bytes | None, path: str = NOTES_PATH) -> tuple[int, str]:
+        number = self.open_pr()
+        if text is not None:
+            target = self.clone / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(text, bytes):
+                target.write_bytes(text)
+            else:
+                target.write_text(text)
+        a = self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        return number, a
+
+    def expected_body(self, a: str, notes: str | None) -> str:
+        block = None if notes is None else mb.release_notes.render_block(WID, notes)
+        return mb.squash_body(WID, PLAN_PATH, accepted=a, branch=BRANCH, notes_block=block)
+
+    def assertNotesGate(self, number: int, *fragments: str) -> mb.Gate:
+        edits = len(self.calls("pr", "edit"))
+        gate = self.assertGate(self.preflight(), mb.GATE_RELEASE_NOTES_INVALID)
+        for fragment in (NOTES_PATH, *fragments):
+            self.assertIn(fragment, gate.message)
+        self.assertEqual(gate.merge_method, "squash")
+        self.assertEqual(len(self.calls("pr", "edit")), edits)
+        self.assertEqual(self.calls("pr", "ready"), [])
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
+        self.assertNotIn("Accepted at", self.gh_pr_view(number)["body"])
+        human = decision.branch_human_gate("/repo", gate)
+        self.assertIn("release_notes_invalid", human.what_is_required)
+        return gate
+
+    def test_included_notes_go_above_the_controllers_lines_and_parse_as_no_trailer(self) -> None:
+        number, a = self.accept_with(narrative(NOTES))
+        self.assertIn("just updated", self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING).message)
+        body = self.gh_pr_view(number)["body"]
+        self.assertEqual(body, self.expected_body(a, NOTES))
+        self.assertTrue(body.startswith(f"<!-- workflow-controller: release-notes work_item={WID} "
+                                        f"sha256={mb.release_notes.digest(NOTES)} -->\n{NOTES}\n"))
+        self.assertEqual(trailers(self.clone, body), "")
+        self.assertIsNone(mb.release_notes.paragraph_problem(body))
+        self.assertEqual(mb.release_notes.resolve([("m", f"{TITLE}\n\n{body}".encode())]).text, NOTES)
+        # Idempotent: nothing is left to edit, and the record goes READY.
+        edits = len(self.calls("pr", "edit"))
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.assertEqual(len(self.calls("pr", "edit")), edits)
+        statuses = [(e["event"], e.get("release_notes")) for e in self.events() if e["event"] in ("pr_edited", "ready")]
+        self.assertEqual(statuses[-2:], [("pr_edited", "included"), ("ready", "included")])
+
+    def test_absent_and_empty_notes_give_todays_body(self) -> None:
+        cases = {"no file": (None, "absent"), "no section": (narrative(None), "absent"),
+                 "empty section": (narrative("\n   \n"), "empty")}
+        for name, (text, status) in cases.items():
+            with self.subTest(name):
+                self.fresh()
+                number, a = self.accept_with(text)
+                self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+                body = self.gh_pr_view(number)["body"]
+                self.assertEqual(body, self.expected_body(a, None))
+                self.assertNotIn("release-notes", body)
+                self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+                ready = [e for e in self.events() if e["event"] == "ready"][-1]
+                self.assertEqual(ready["release_notes"], status)
+
+    def test_a_trailer_paragraph_refuses_with_no_edit(self) -> None:
+        cases = {
+            "fixes and breaking change": ("Intro.\n\nFixes: the thing\nBreaking-Change: none\n\nOutro.",
+                                          "Fixes: the thing"),
+            "bare url": ("Intro.\n\nhttps://example.com/x\n\nOutro.", "https://example.com/x"),
+            "one-line note": ("Intro.\n\nNote: this release changes the default.\n\nOutro.", "Note: this"),
+        }
+        for name, (notes, excerpt) in cases.items():
+            with self.subTest(name):
+                self.fresh()
+                number, _ = self.accept_with(narrative(notes))
+                gate = self.assertNotesGate(number, excerpt, "parses as a Git trailer block",
+                                            "reword the paragraph or join it to its neighbour")
+                self.assertIn("Squash and merge", gate.exits[0])
+                self.assertIn(f"tools/release.py notes-block --work-item {WID}", gate.exits[0])
+
+    def test_ordinary_shapes_are_accepted(self) -> None:
+        notes = ("A colon: inside prose.\n\n- a list\nFixes: the thing\n\nUpgrade note: read the guide.\n\n"
+                 "**Breaking:** none\n\n| a | b |\n|---|---|\n| 1 | 2 |")
+        number, a = self.accept_with(narrative(notes))
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.gh_pr_view(number)["body"], self.expected_body(a, notes))
+
+    def test_the_line_rules_and_the_length_refuse_with_no_edit(self) -> None:
+        cases = {
+            "73 bytes": ("ok\n" + "x" * 73, "line 2", "73 bytes"),
+            "72 characters with an accent": ("é" + "x" * 71, "line 1", "73 bytes"),
+            "trailing space": ("a line \nnext", "line 1", "ends in a space"),
+            "tab": ("a\tb", "line 1", "tab"),
+            "crlf": (None, "line 1", "carriage return"),
+            "marker text": ("see <!-- workflow-controller: x -->", "line 1", "marker text"),
+            "too long": ("\n".join(["x" * 70] * 1000), "", "65536"),
+        }
+        for name, (notes, line, rule) in cases.items():
+            with self.subTest(name):
+                self.fresh()
+                text = (narrative("one\ntwo").replace("\n", "\r\n").encode() if notes is None
+                        else narrative(notes))
+                number, _ = self.accept_with(text)
+                self.assertNotesGate(number, line, rule)
+        self.fresh()
+        number, a = self.accept_with(narrative("x" * 72))
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.gh_pr_view(number)["body"], self.expected_body(a, "x" * 72))
+
+    def test_not_utf8_refuses(self) -> None:
+        number, _ = self.accept_with(narrative("caf\u00e9").encode().replace("é".encode(), b"\xff"))
+        self.assertNotesGate(number, "not valid UTF-8")
+
+    def test_the_binding_snapshot_decides_the_path_and_heading(self) -> None:
+        """A policy edit on the milestone's branch does not move its notes;
+        the snapshot's location is read."""
+        number = self.open_pr()
+        self.write_policy(notes_policy(path="NOTES-{work_item_id}.md", heading="What changed"))
+        (self.clone / f"NOTES-{WID}.md").write_text(narrative("Elsewhere.", heading="What changed"))
+        target = self.clone / NOTES_PATH
+        target.parent.mkdir(parents=True)
+        target.write_text(narrative(NOTES))
+        commit_all(self.clone, "edit the policy and the notes on the branch")
+        a = self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.gh_pr_view(number)["body"], self.expected_body(a, NOTES))
+
+    def test_a_snapshot_without_release_notes_gives_todays_body(self) -> None:
+        self.write_policy(squash_policy())
+        self.t = commit_all(self.clone, "no notes in the policy")
+        self.push("main")
+        number = self.open_pr()
+        self.write_policy(notes_policy())
+        target = self.clone / NOTES_PATH
+        target.parent.mkdir(parents=True)
+        target.write_text(narrative(NOTES))
+        commit_all(self.clone, "opt in on the branch")
+        a = self.accept()
+        self.set_checks(number, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.gh_pr_view(number)["body"], self.expected_body(a, None))
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        ready = [e for e in self.events() if e["event"] == "ready"][-1]
+        self.assertNotIn("release_notes", ready)
+
+    def test_an_uncommitted_section_is_never_read(self) -> None:
+        number, a = self.accept_with(narrative(NOTES))
+        (self.clone / NOTES_PATH).write_text(narrative("Uncommitted."))
+        self.git("update-index", "--assume-unchanged", NOTES_PATH)
+        self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.gh_pr_view(number)["body"], self.expected_body(a, NOTES))
+
+
 class VerifiedSquashTest(unittest.TestCase):
     """:func:`milestone_branch.verified_squash`, condition by condition, over
     a scratch repository: ``main`` at ``B``, the milestone branch

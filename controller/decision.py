@@ -586,6 +586,8 @@ BRANCH_GATE_TEXTS = {
     "dirty_tree": "commit, stash or discard the tracked changes",
     "pr_title_invalid": "the pull request's title is not a valid Conventional Commit; set a valid title "
                         "on GitHub",
+    "release_notes_invalid": "the milestone's release notes cannot be carried by the squash commit; fix "
+                             "the notes section",
 }
 
 #: The texts a squash-mode gate (``merge_method: "squash"`` in the binding's

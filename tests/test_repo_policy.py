@@ -638,6 +638,76 @@ class MergeMethodTest(unittest.TestCase):
         self.assertEqual(self._parse(data).milestone_branches.merge_method, "merge")
 
 
+class ReleaseNotesPolicyTest(_RefusalCase):
+    """settings-and-telemetry D.1: the optional
+    ``milestone_branches.pull_request.release_notes`` and the
+    ``{release_notes}`` publication placeholder."""
+
+    FIELD = "milestone_branches.pull_request.release_notes"
+
+    def with_notes(self, value: object) -> dict:
+        data = _conventional()
+        data["milestone_branches"]["pull_request"]["release_notes"] = value
+        return data
+
+    def test_absent_means_no_notes_and_the_reference_policy_is_unchanged(self) -> None:
+        self.assertIsNone(repo_policy.parse_policy(_encode(_conventional())).milestone_branches.release_notes)
+        reference = repo_policy.parse_policy(REFERENCE.read_bytes())
+        self.assertIsNone(reference.milestone_branches.release_notes)
+        self.assertFalse(reference.release.uses_release_notes)
+
+    def test_accepted_paths_and_headings(self) -> None:
+        for path in ("docs/milestones/completed/{work_item_id}.md", "NOTES.md",
+                     "docs/{work_item_id}/{work_item_id}.md"):
+            with self.subTest(path=path):
+                parsed = repo_policy.parse_policy(_encode(self.with_notes({"path": path, "heading": "Release notes"})))
+                notes = parsed.milestone_branches.release_notes
+                self.assertEqual((notes.path, notes.heading), (path, "Release notes"))
+                self.assertEqual(notes.path_for("c3"), path.replace("{work_item_id}", "c3"))
+
+    def test_refused_values(self) -> None:
+        cases = [
+            ("not an object", f"{self.FIELD}", "must be a JSON object"),
+            ({"path": "NOTES.md"}, self.FIELD, "missing required"),
+            ({"path": "NOTES.md", "heading": "h", "x": 1}, self.FIELD, "unknown key"),
+            ({"path": "/abs/{work_item_id}.md", "heading": "h"}, f"{self.FIELD}.path", "normalised relative path"),
+            ({"path": "docs/../{work_item_id}.md", "heading": "h"}, f"{self.FIELD}.path", "normalised relative"),
+            ({"path": "docs//x.md", "heading": "h"}, f"{self.FIELD}.path", "normalised relative"),
+            ({"path": "docs\\x.md", "heading": "h"}, f"{self.FIELD}.path", "normalised relative"),
+            ({"path": "docs/{version}.md", "heading": "h"}, f"{self.FIELD}.path", "does not admit"),
+            ({"path": "docs/{nope}.md", "heading": "h"}, f"{self.FIELD}.path", "unknown placeholder"),
+            ({"path": "docs/{work_item_id.md", "heading": "h"}, f"{self.FIELD}.path", "unmatched brace"),
+            ({"path": "", "heading": "h"}, f"{self.FIELD}.path", "non-empty string"),
+            ({"path": "NOTES.md", "heading": ""}, f"{self.FIELD}.heading", "non-empty string"),
+            ({"path": "NOTES.md", "heading": "two\nlines"}, f"{self.FIELD}.heading", "single line"),
+            ({"path": "NOTES.md", "heading": "   "}, f"{self.FIELD}.heading", "single line"),
+        ]
+        for value, field, pattern in cases:
+            with self.subTest(value=value):
+                self.assertRefuses(self.with_notes(value), field, pattern)
+
+    def test_the_release_notes_placeholder_is_confined_to_the_notes_template(self) -> None:
+        data = _conventional()
+        data["release"]["publication"]["notes"] = "pkg {tag}\n\n{release_notes}"
+        parsed = repo_policy.parse_policy(_encode(data))
+        self.assertTrue(parsed.release.uses_release_notes)
+        self.assertFalse(repo_policy.parse_policy(_encode(_conventional())).release.uses_release_notes)
+        refused = [
+            ("release.publication.title", lambda d: d["release"]["publication"].__setitem__("title", "{release_notes}")),
+            ("release.build.argv[0]", lambda d: d["release"]["build"]["argv"].__setitem__(0, "{release_notes}")),
+            ("milestone_branches.branch_format",
+             lambda d: d["milestone_branches"].__setitem__("branch_format", "m/{work_item_id}{release_notes}")),
+            (f"{self.FIELD}.path",
+             lambda d: d["milestone_branches"]["pull_request"].__setitem__(
+                 "release_notes", {"path": "{release_notes}.md", "heading": "h"})),
+        ]
+        for field, edit in refused:
+            with self.subTest(field=field):
+                data = _conventional()
+                edit(data)
+                self.assertRefuses(data, field, "does not admit")
+
+
 class ReadVersionUnderConventionalCommitTest(unittest.TestCase):
     """``Release.read_version`` refuses under the new trigger, naming it.
     Its callers still call it unconditionally at CP1; CP2 and CP3 remove

@@ -645,6 +645,8 @@ class LaunchPathTest(unittest.TestCase):
             "ownership_tag", "worker_state", "worker_anchor",
             # Worker-lifecycle-ownership CP4: flushed with ENDING.
             "ending_offset",
+            # Settings-and-telemetry CP3.
+            "telemetry",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)
@@ -3079,6 +3081,207 @@ class ReleaseRecheckBeforeDecisionTest(test_trunk_preflight._PolicyCase):
         self.assertIn("The repository preflight's bound action completed and was recorded.", message)
         self.assertEqual(self.record()["state"], mb.CLOSED)
         self.assertEqual((self.jobs(), self.worker_count()), (jobs_before, workers_before))
+
+
+def _telemetry_end_turn(index: int, turns: int) -> dict:
+    """A scripted ``end_turn`` carrying every figure telemetry reads; the
+    cumulative ones advance with ``index``."""
+    cost = 1.5 * (index + 1)
+    return {"step": "end_turn", "num_turns": turns, "duration_ms": 1000 * turns,
+            "duration_api_ms": 500 * (index + 1), "total_cost_usd": cost,
+            "usage": {"input_tokens": turns, "output_tokens": 10 * turns, "cache_creation_input_tokens": 100,
+                      "cache_read_input_tokens": 1000},
+            "modelUsage": {"claude-test": {"inputTokens": 2 * turns, "outputTokens": 20 * turns,
+                                           "cacheCreationInputTokens": 200, "cacheReadInputTokens": 2000,
+                                           "costUSD": cost}}}
+
+
+#: Turn 0 starts three background tasks, each of whose completions starts
+#: one more turn: four results.
+_FOUR_RESULT_TURNS = [
+    [{"step": "bash_bg", "id": "a", "seconds": 0.2}, {"step": "bash_bg", "id": "b", "seconds": 0.5},
+     {"step": "bash_bg", "id": "c", "seconds": 0.8}, _telemetry_end_turn(0, 107)],
+    [_telemetry_end_turn(1, 18)],
+    [_telemetry_end_turn(2, 11)],
+    [_telemetry_end_turn(3, 8)],
+]
+
+
+class TelemetryCompletionTest(_StreamingCase):
+    """The ``telemetry`` block on both completion paths, and its failure
+    boundary (settings-and-telemetry CP3, Design C, I6)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(process_fixtures.reap_recorded_workers, self.runtime_root)
+
+    def _completed_step(self, turns: list) -> tuple[dict, dict, list[dict]]:
+        """One step whose worker plays ``turns``: the final record, the
+        ``COMPLETED`` record written, and the job's events."""
+        record, writes = self._spied_step(env={"FAKE_CLAUDE_TURNS": json.dumps(turns)}, timeout=60)
+        completed = next(w for _t, w in writes if w["status"] == job.STATUS_COMPLETED)
+        return record, completed, _job_events(self.runtime_root, record["job_id"])
+
+    def test_a_four_result_session_is_recorded_as_session_totals(self) -> None:
+        record, completed, events = self._completed_step(_FOUR_RESULT_TURNS)
+        block = record["telemetry"]
+        self.assertEqual(completed["telemetry"], block)
+        self.assertEqual(block["results"], 4)
+        self.assertEqual(block["turns"], 107 + 18 + 11 + 8)
+        self.assertEqual(block["duration_ms"], 1000 * 144)
+        self.assertEqual(block["duration_api_ms"], 2000)
+        self.assertEqual(block["cost_usd"], 6.0)
+        self.assertEqual(block["tokens"], {"input": 144, "output": 1440, "cache_creation": 400, "cache_read": 4000})
+        self.assertEqual(block["models"], {"claude-test": {"input": 214, "output": 2140, "cache_creation": 200,
+                                                           "cache_read": 2000, "cost_usd": 6.0}})
+        self.assertEqual(block["problems"], [])
+        # The `worker` block keeps its last-result meaning (I7).
+        self.assertEqual((record["worker"]["num_turns"], record["worker"]["total_cost_usd"]), (8, 6.0))
+        # Wall times and dimensions.
+        self.assertIsInstance(block["job_seconds"], int)
+        self.assertIsInstance(block["worker_seconds"], int)
+        self.assertLessEqual(block["worker_seconds"], block["job_seconds"])
+        route = record["worker_route"]
+        self.assertEqual({k: block[k] for k in ("role", "model", "effort")},
+                         {k: route[k] for k in ("role", "model", "effort")})
+        self.assertEqual((block["harness"], block["workflow_version"], block["controller_version"]),
+                         ("claude-code", record["target_workflow_version"],
+                          record["controller_runtime"]["version"]))
+        # The `completed` event gains only the summary.
+        [event] = [e for e in events if e["event"] == "completed"]
+        self.assertEqual(event["telemetry"], {"results": 4, "turns": 144, "cost_usd": 6.0, "duration_api_ms": 2000,
+                                              "job_seconds": block["job_seconds"],
+                                              "worker_seconds": block["worker_seconds"], "tokens": 5984})
+        self.assertEqual(job.validate_record(completed, managed_repo=self.managed_repo, identity=FAKE_IDENTITY),
+                         job.VALID)
+
+    def test_a_result_with_no_figures_records_nulls_and_problems(self) -> None:
+        record, _completed, _events = self._completed_step([[{"step": "text"}]])
+        block = record["telemetry"]
+        self.assertEqual(block["results"], 1)
+        self.assertIsNone(block["duration_api_ms"])
+        self.assertIsNone(block["models"])
+        self.assertIn({"kind": "missing_field", "field": "usage", "result_index": 0}, block["problems"])
+        self.assertEqual(record["worker_outcome"], "SUCCESS")
+
+    def _without_telemetry(self, record: dict) -> dict:
+        return {k: v for k, v in record.items() if k not in ("telemetry", "updated_at", "created_at", "job_id",
+                                                             "worker", "worker_process", "worker_anchor",
+                                                             "worker_streams", "ownership_tag", "worker_state",
+                                                             "event_seq", "ending_offset", "lifecycle_lock",
+                                                             "run_id")}
+
+    def test_an_injected_telemetry_failure_changes_nothing_else(self) -> None:
+        turns = [[{"step": "text"}, _telemetry_end_turn(0, 3)]]
+        baseline, base_completed, base_events = self._completed_step(turns)
+        self.assertNotIn("failed", baseline["telemetry"])
+        for target in ("session_telemetry", "read_worker_stdout"):
+            with self.subTest(raising=target):
+                owner = job.telemetry.worker_stream if target == "session_telemetry" else job.telemetry
+                with unittest.mock.patch.object(owner, target, side_effect=RuntimeError("injected")):
+                    record, completed, events = self._completed_step(turns)
+                self.assertEqual(record["telemetry"], {
+                    "version": 1, "failed": True,
+                    "problems": [{"kind": "telemetry_failed", "error": "RuntimeError: injected"}]})
+                # Status, outcome, the worker block and step 7's verdict.
+                for key in ("status", "worker_outcome", "observed_phase_after", "transition_verified"):
+                    self.assertEqual(record.get(key), baseline.get(key), key)
+                self.assertEqual(completed["status"], base_completed["status"])
+                volatile = ("session_id", "stdout_path", "stderr_path", "stream_diagnosis", "owned_processes_seen")
+                self.assertEqual({k: v for k, v in record["worker"].items() if k not in volatile},
+                                 {k: v for k, v in baseline["worker"].items() if k not in volatile})
+                self.assertEqual(self._without_telemetry(record), self._without_telemetry(baseline))
+                # The events: the same names, and `completed` keeps its keys.
+                self.assertEqual([e["event"] for e in events], [e["event"] for e in base_events])
+                [event] = [e for e in events if e["event"] == "completed"]
+                [base_event] = [e for e in base_events if e["event"] == "completed"]
+                self.assertEqual(event["telemetry"], "failed")
+                self.assertEqual({k: v for k, v in event.items() if k not in ("telemetry", "at", "seq", "job_id")},
+                                 {k: v for k, v in base_event.items()
+                                  if k not in ("telemetry", "at", "seq", "job_id")})
+
+    def test_keyboard_interrupt_is_not_swallowed(self) -> None:
+        with unittest.mock.patch.object(job.telemetry, "read_worker_stdout", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                job._telemetry_block({}, {"stdout_path": "/nonexistent"}, completed_at="2026-01-01T00:00:00Z")
+        # Any Exception, a missing file included, is the failed block.
+        block = job._telemetry_block({}, {"stdout_path": str(self.tmp_root / "missing")},
+                                     completed_at="2026-01-01T00:00:00Z")
+        self.assertTrue(block["failed"])
+        self.assertTrue(block["problems"][0]["error"].startswith("FileNotFoundError: "))
+
+
+class ReattachTelemetryTest(unittest.TestCase):
+    """The re-attach completion path's ``telemetry`` block and its failure
+    boundary, with ``worker.reattach`` doubled."""
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.runtime_root = Path(self._tmp.name) / "runtime"
+        self.job_dir = self.runtime_root / "jobs" / "j-1"
+        self.job_dir.mkdir(parents=True)
+        self.stdout = self.job_dir / "worker.stdout"
+        self.stdout.write_text("\n".join(json.dumps(fake_claude.result_event(**{
+            k: v for k, v in _telemetry_end_turn(i, t).items() if k != "step"})) for i, t in ((0, 5), (1, 3))) + "\n")
+        os.utime(self.stdout, (1767225900, 1767225900))  # 2026-01-01T00:05:00Z
+        self.streams = {"stdout_path": str(self.stdout), "stderr_path": str(self.job_dir / "worker.stderr"),
+                        "events_path": str(self.job_dir / "events.jsonl")}
+        (self.job_dir / "worker.stderr").write_text("")
+
+    def _record(self) -> dict:
+        return {"job_id": "j-1", "status": job.STATUS_LAUNCHED, "created_at": "2026-01-01T00:00:00Z",
+                "target_workflow_version": "2.6.0", "controller_runtime": {"version": "1.5.0"},
+                "worker_route": {"role": "milestone-implement", "model": "opus", "effort": "high"},
+                "worker_process": {"pid": 1}, "worker_streams": self.streams,
+                "worker_state": {"state": worker.ENDED}}
+
+    def _reattach(self) -> tuple[dict, dict]:
+        job.runtime.append_jsonl(self.runtime_root, "jobs/j-1/events.jsonl",
+                             {"v": 1, "seq": 1, "at": "2026-01-01T00:00:30Z", "job_id": "j-1",
+                              "event": "worker_spawned"})
+        result = worker.WorkerResult(
+            outcome="SUCCESS", returncode=None, session_id="s", is_error=False, subtype="success",
+            terminal_reason=None, stop_reason=None, result="ok", num_turns=3, permission_denials=[],
+            total_cost_usd=3.0, duration_ms=3000, stdout="", stderr="", raw_json={})
+        with unittest.mock.patch.object(job.worker, "reattach", return_value=result), \
+                unittest.mock.patch.object(job, "_now", return_value="2026-01-01T00:10:00Z"):
+            job._reattach(self.runtime_root, Path("/repo"), self._record(), self.streams, classify=True)
+        record = json.loads((self.runtime_root / "jobs" / "j-1.json").read_text())
+        [completed] = [e for e in _job_events(self.runtime_root, "j-1") if e["event"] == "completed"]
+        (self.job_dir / "events.jsonl").unlink()
+        return record, completed
+
+    def test_the_reattached_block(self) -> None:
+        record, event = self._reattach()
+        block = record["telemetry"]
+        self.assertEqual((block["results"], block["turns"], block["cost_usd"], block["duration_api_ms"]),
+                         (2, 8, 3.0, 1000))
+        self.assertEqual(block["job_seconds"], 600)
+        # From the worker_spawned event to the stdout's last write.
+        self.assertEqual(block["worker_seconds"], 270)
+        self.assertEqual((block["role"], block["workflow_version"], block["controller_version"]),
+                         ("milestone-implement", "2.6.0", "1.5.0"))
+        self.assertTrue(event["reattached"])
+        self.assertEqual(event["telemetry"]["turns"], 8)
+
+    def test_a_missing_spawn_event_gives_no_worker_time(self) -> None:
+        with unittest.mock.patch.object(job.telemetry, "read_events", return_value=[]):
+            record, _event = self._reattach()
+        self.assertIsNone(record["telemetry"]["worker_seconds"])
+        self.assertEqual(record["telemetry"]["job_seconds"], 600)
+
+    def test_an_injected_failure_changes_nothing_else(self) -> None:
+        baseline, base_event = self._reattach()
+        for owner, name in ((job.telemetry.worker_stream, "session_telemetry"), (job.telemetry, "read_worker_stdout")):
+            with self.subTest(raising=name), unittest.mock.patch.object(owner, name, side_effect=ValueError("boom")):
+                record, event = self._reattach()
+                self.assertTrue(record["telemetry"]["failed"])
+                self.assertEqual({k: v for k, v in record.items() if k not in ("telemetry", "event_seq")},
+                                 {k: v for k, v in baseline.items() if k not in ("telemetry", "event_seq")})
+                self.assertEqual(event["telemetry"], "failed")
+                self.assertEqual({k: v for k, v in event.items() if k not in ("telemetry", "seq")},
+                                 {k: v for k, v in base_event.items() if k not in ("telemetry", "seq")})
 
 
 if __name__ == "__main__":

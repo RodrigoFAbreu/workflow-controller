@@ -103,7 +103,8 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, identity, lock, milestone_branch, routing, runtime, target_state, worker, workflow_contract,
+    evidence, identity, lock, milestone_branch, routing, runtime, target_state, telemetry, worker,
+    workflow_contract,
 )
 from controller.decision import (
     NO_PHASE,
@@ -3664,15 +3665,58 @@ def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mappin
         return
     if (record.get("worker_state") or {}).get("state") != worker.ENDED:
         record = _with_worker_state(record, worker.ENDED, {})
+    completed_at = _now()
+    block = _telemetry_block(record, streams, completed_at=completed_at, reattached=True)
     record = {
         **record,
         "status": STATUS_COMPLETED,
         "worker": _worker_dict(result, stdout_path=streams["stdout_path"], stderr_path=streams["stderr_path"]),
         "worker_outcome": result.outcome,
-        "updated_at": _now(),
+        "telemetry": block,
+        "updated_at": completed_at,
     }
     _persist(runtime_root, job_id, record, event="completed",
-             details={"outcome": result.outcome, "exit_code": result.returncode, "reattached": True})
+             details={"outcome": result.outcome, "exit_code": result.returncode, "reattached": True,
+                      "telemetry": telemetry.completed_summary(block)})
+
+
+def _telemetry_block(record: Mapping, streams: Mapping, *, completed_at: str,
+                     spawned_at: str | None = None, reattached: bool = False) -> dict:
+    """The completed record's ``telemetry`` block (settings-and-telemetry
+    CP3, plan Design C), and the failure boundary (I6): it never raises an
+    ``Exception``. A read or computation that fails gives
+    :func:`telemetry.failed_block` -- no figures, one ``telemetry_failed``
+    problem -- so the completion write it precedes carries the status,
+    outcome and event it would carry without telemetry. ``KeyboardInterrupt``
+    and ``SystemExit`` are not caught.
+
+    The block is :func:`telemetry.session_block` of the worker's stdout,
+    plus ``job_seconds`` (``created_at`` to ``completed_at``),
+    ``worker_seconds`` and :func:`telemetry.dimensions`. The worker ran
+    from the ``on_spawn`` flush (``spawned_at``; on the re-attach path the
+    ``worker_spawned`` event's time, ``None`` when that line is missing) to
+    its exit: the drain's ``direct_child_exited_at`` when its process group
+    outlived it, else ``completed_at`` live -- ``launch`` returns at the
+    exit -- and the stdout's last write on re-attach, where the worker may
+    have exited long before this Controller looked."""
+    try:
+        block = telemetry.session_block(telemetry.read_worker_stdout(streams["stdout_path"]))
+        drain = record.get("worker_group_drain")
+        exited_at = drain.get("direct_child_exited_at") if isinstance(drain, Mapping) else None
+        if reattached:
+            events_path = streams.get("events_path") or str(Path(streams["stdout_path"]).parent / "events.jsonl")
+            spawned_at = telemetry.first_event_time(telemetry.read_events(events_path), "worker_spawned")
+            exited_at = exited_at or telemetry.mtime_time(streams["stdout_path"])
+        else:
+            exited_at = exited_at or completed_at
+        block.update(
+            job_seconds=telemetry.seconds_between(record.get("created_at"), completed_at),
+            worker_seconds=telemetry.seconds_between(spawned_at, exited_at),
+            **telemetry.dimensions(record),
+        )
+        return block
+    except Exception as exc:  # the failure boundary: never raised into the completion write
+        return telemetry.failed_block(exc)
 
 
 def _record_drain_detached(runtime_root: Path, root: Path, job_id: str, record: JobRecord,
@@ -4964,6 +5008,7 @@ def _launch_job(
         record = _persist(runtime, job_id, record, event="worker_spawned",
                           details={"pid": worker_process.pid, "pgid": worker_process.pgid})
         spawned["flushed"] = True
+        spawned["spawned_at"] = record["updated_at"]
 
     def on_group_drain(pid: int, remaining_pids: list[int]) -> None:
         # CP4 (release-runtime-observability): the worker exited but its
@@ -5045,16 +5090,24 @@ def _launch_job(
     # pre-spawn STARTING, so the state is completed here (I2).
     if (record.get("worker_state") or {}).get("state") != worker.ENDED:
         record = _with_worker_state(record, worker.ENDED, {})
+    # Settings-and-telemetry CP3: the session's telemetry, built through the
+    # failure boundary before the one completion write, whose other fields
+    # never read it (I6).
+    completed_at = _now()
+    block = _telemetry_block(record, worker_streams, completed_at=completed_at,
+                             spawned_at=spawned.get("spawned_at"))
     record = {
         **record,
         "status": STATUS_COMPLETED,
         "worker": _worker_dict(result, stdout_path=worker_streams["stdout_path"],
                                stderr_path=worker_streams["stderr_path"]),
         "worker_outcome": result.outcome,
-        "updated_at": _now(),
+        "telemetry": block,
+        "updated_at": completed_at,
     }
     record = _persist(runtime, job_id, record, event="completed",
-                      details={"outcome": result.outcome, "exit_code": result.returncode})
+                      details={"outcome": result.outcome, "exit_code": result.returncode,
+                               "telemetry": telemetry.completed_summary(block)})
 
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
     # -- never the `snapshot`/`work_item` captured before the worker ran

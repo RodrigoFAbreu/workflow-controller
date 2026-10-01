@@ -43,6 +43,20 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "last_job_telemetry": {
+            "job_id": "<ID>",
+            "status": "FAILED",
+            "telemetry": {
+              "cost_usd": null,
+              "duration_api_ms": null,
+              "job_seconds": "<V>",
+              "results": 0,
+              "tokens": null,
+              "turns": null,
+              "worker_seconds": "<V>"
+            },
+            "work_item_id": null
+          },
           "lifecycle_lock": "free",
           "repository": {
             "profile": "full",
@@ -215,6 +229,34 @@
           "status": "FAILED",
           "target_repo": "<TMP>/bootstrap_step/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": null,
+            "duration_api_ms": null,
+            "duration_ms": null,
+            "effort": null,
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": null,
+            "models": null,
+            "problems": [
+              {
+                "kind": "no_result"
+              }
+            ],
+            "results": 0,
+            "role": "milestone-plan",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": null,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": false,
           "updated_at": "<TS>",
           "work_item_id": null,
@@ -396,6 +438,20 @@
             "source_kind": "commit",
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
+          },
+          "last_job_telemetry": {
+            "job_id": "<ID>",
+            "status": "FINISHED",
+            "telemetry": {
+              "cost_usd": 0.0,
+              "duration_api_ms": null,
+              "job_seconds": "<V>",
+              "results": 1,
+              "tokens": null,
+              "turns": 1,
+              "worker_seconds": "<V>"
+            },
+            "work_item_id": "wi-1"
           },
           "lifecycle_lock": "free",
           "repository": {
@@ -591,6 +647,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "milestone-implement",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -814,6 +910,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "milestone-implement",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1039,6 +1175,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "milestone-implement-self-review",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1266,6 +1442,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "review-implementation",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1494,6 +1710,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "apply-implementation-review",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -1721,6 +1977,46 @@
           "status": "FINISHED",
           "target_repo": "<TMP>/implementation_run/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": 0.0,
+            "duration_api_ms": null,
+            "duration_ms": "<V>",
+            "effort": "xhigh",
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": "claude-opus-5-5",
+            "models": null,
+            "problems": [
+              {
+                "field": "duration_api_ms",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "usage",
+                "kind": "missing_field",
+                "result_index": 0
+              },
+              {
+                "field": "modelUsage",
+                "kind": "missing_field",
+                "result_index": 0
+              }
+            ],
+            "results": 1,
+            "role": "review-implementation",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": 1,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": true,
           "updated_at": "<TS>",
           "work_item_id": "wi-1",
@@ -2070,6 +2366,20 @@
             "tree_digest": "<SHA>",
             "version": "<VERSION>"
           },
+          "last_job_telemetry": {
+            "job_id": "<ID>",
+            "status": "FAILED",
+            "telemetry": {
+              "cost_usd": null,
+              "duration_api_ms": null,
+              "job_seconds": "<V>",
+              "results": 0,
+              "tokens": null,
+              "turns": null,
+              "worker_seconds": "<V>"
+            },
+            "work_item_id": null
+          },
           "lifecycle_lock": "free",
           "repository": {
             "profile": "full",
@@ -2242,6 +2552,34 @@
           "status": "FAILED",
           "target_repo": "<TMP>/unborn_head_step/target",
           "target_workflow_version": "2.5.1",
+          "telemetry": {
+            "controller_version": "<VERSION>",
+            "cost_usd": null,
+            "duration_api_ms": null,
+            "duration_ms": null,
+            "effort": null,
+            "harness": "claude-code",
+            "job_seconds": "<V>",
+            "model": null,
+            "models": null,
+            "problems": [
+              {
+                "kind": "no_result"
+              }
+            ],
+            "results": 0,
+            "role": "milestone-plan",
+            "tokens": {
+              "cache_creation": null,
+              "cache_read": null,
+              "input": null,
+              "output": null
+            },
+            "turns": null,
+            "version": 1,
+            "worker_seconds": "<V>",
+            "workflow_version": "2.5.1"
+          },
           "transition_verified": false,
           "updated_at": "<TS>",
           "work_item_id": null,

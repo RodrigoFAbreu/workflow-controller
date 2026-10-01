@@ -35,7 +35,7 @@ Four things, each opt-in or behaviour-preserving by default:
 |---|---|---|
 | CP1 The settings file | Complete | See below |
 | CP2 The settings wired in | Complete | See below |
-| CP3 Telemetry v0 | Not started | |
+| CP3 Telemetry v0 | Complete | See below |
 | CP4 Release notes follow the milestone | Not started | |
 | CP5 The hints parse and the manual-external gate tells the truth | Not started | |
 | CP6 Relaunch-bound tests and `status` | Not started | |
@@ -178,3 +178,67 @@ Four things, each opt-in or behaviour-preserving by default:
   --check` are current; `generate_plan_stage_decisions.py --check` reports the 2.5.1 golden's
   documented permitted difference, the same at `a47e695` in a clean clone, which
   `tests.test_golden_plan_stage_decisions` reverts before comparing (it passes). `~/.config/workflow-controller/` does not exist (I5).
+
+### CP3 -- telemetry v0
+
+- `controller/worker_stream.py`: `session_telemetry(results)`, pure and never raising, reduces the
+  `result` events to the session totals (Design C): `turns`, `duration_ms` and the four `usage`
+  token counts summed; `cost_usd`, `duration_api_ms` and every `modelUsage` field (per model,
+  per field) the maximum over all results, never the last result's (I7). A result with non-zero
+  `usage` whose cost, API time and per-model figures equal the previous result's adds a
+  `cumulative_not_advanced` problem naming its `result_index`. A contribution that is absent or
+  not a finite number makes its figure `null` with a `missing_field`/`invalid_field` problem; no
+  result gives `null` figures and `no_result` (I6).
+- `controller/telemetry.py` (new; imports neither `job` nor `observe`): building a block
+  (`read_worker_stdout`, `session_block`, `dimensions`, `failed_block`), deriving one for a
+  record written before telemetry from its `worker.stdout` and `events.jsonl`
+  (`derive_block`, `"derived": true`, `no_stream` when the stream is gone, nothing written back),
+  and the reading side: `rows` (filters `--work-item`, `--run`, `--since`, the target), `groups`
+  (`--by role|model|role,model`; totals and per-job means over the jobs carrying each figure, a
+  `telemetry_unavailable` count for `failed` blocks and sessions with no result), the text
+  rendering, and the presentation clause (`summary_text`, `last_finished`, `last_job_text`).
+- `controller/job.py`: `_telemetry_block(record, streams, ...)` is the failure boundary: every
+  read and computation inside one `try`/`except Exception`, a failure giving `{"version": 1,
+  "failed": true, "problems": [{"kind": "telemetry_failed", ...}]}`; `KeyboardInterrupt` and
+  `SystemExit` pass. Both completion paths (`_launch_job` and `_reattach`) call it after `result`
+  is known and before the one `COMPLETED` write, whose other fields never read it, and add the
+  block as `telemetry` plus a `telemetry` summary (totals, or `"failed"`) in the `completed`
+  event's details. Wall times: `job_seconds` from `created_at` to completion; `worker_seconds`
+  from the `on_spawn` flush (on re-attach the `worker_spawned` event, `null` without it) to the
+  exit: the drain's `direct_child_exited_at` when the group outlived the worker, else completion
+  live and the stdout's last write on re-attach. Dimensions: `role`, `model`, `effort`,
+  `harness: "claude-code"`, `workflow_version`, `controller_version`.
+- `controller/cli.py`: the read-only `telemetry [--run ID] [--since ISO] [--by ...] [repo]`
+  subcommand (`--work-item` and `--json` global), dispatched before pinning like `follow`; a bad
+  `--since` exits 2. `status` prints `last job telemetry: <id> (<status>, <work item>): cost ...,
+  job N s, worker N s` for the newest job with a block, and `inspect` the same for its target
+  (JSON `last_job_telemetry`, omitted when none) -- named apart from `explain`'s existing
+  `last job` diagnosis. A `failed` block prints `telemetry unavailable`.
+- `controller/observe.py`: `follow`'s `COMPLETED` line gains `; session: <totals>` when the event
+  carries a summary (`telemetry unavailable` for a failed one; an older event is unchanged).
+- `tests/golden/no_policy_lifecycle.json`: regenerated, deliberately, additions only: each
+  completed job's `telemetry` block (the fake's results carry no `usage`, `modelUsage` or
+  `duration_api_ms`, so those figures are `null` with their problems) and each `after` inspect's
+  `last_job_telemetry`; the generator makes `job_seconds`/`worker_seconds` volatile and
+  normalises `controller_version` like `version`.
+- Tests: `tests/test_worker_stream.py` `SessionTelemetryTest` (the two-result contract fixture by
+  hand: 127 + 8 = 135 turns, the summed tokens, cost 24.2492376, API time 2719274 and
+  `claude-opus-5-5` output 326896 as the maximum, one `cumulative_not_advanced` at index 1; a
+  lower later result keeps the maximum for cost, API time and each per-model field; four results;
+  malformed input; junk never raising); `tests/test_job.py` `TelemetryCompletionTest` (a
+  four-result `FAKE_CLAUDE_TURNS` session through `execute_step`; the failure boundary with
+  `session_telemetry` and the stream read each raising, leaving status, outcome, the `worker`
+  block, step 7's phase and verdict and the events unchanged; `KeyboardInterrupt` not swallowed)
+  and `ReattachTelemetryTest` (the re-attach path's block, wall times, a missing spawn event, and
+  the same failure boundary); `tests/test_telemetry.py` (derivation, filters, grouping, the
+  command's text and `--json` and that it writes nothing, and `status`, `inspect` and `follow`
+  printing figures or `telemetry unavailable`). Pinned key sets updated in
+  `test_job.LaunchPathTest`, `test_trunk_preflight.ObservationTest`, the package order and
+  `test_observation_equivalence`'s normalisation (wall times).
+- Verified: the touched modules' tests pass; the full sharded suite (`python3 tools/run_tests.py`,
+  in the foreground under a reaping subreaper, without `PYTHONPATH` or `FORCE_COLOR`) passed: 2593
+  tests in 6 shards, exact coverage, exit 0. `generate_no_policy_lifecycle.py --check` and
+  `generate_external_implementation_review_decisions.py --check` are current;
+  `generate_plan_stage_decisions.py --check` differs exactly as at HEAD (CP2's note). Run against
+  the live runtime root, `telemetry --by role --since 2026-09-30` summarised 110 jobs, all derived,
+  in 0.4 s. `~/.config/workflow-controller/` does not exist (I5).

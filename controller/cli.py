@@ -27,7 +27,7 @@ from pathlib import Path
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, settings,
-    target_state, worker,
+    target_state, telemetry, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -37,9 +37,10 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: rather than by a denylist a future command could be added without
 #: updating. ``settings`` is dispatched before pinning, like ``follow``, and
 #: touches only the user settings file, never a target or the runtime root.
-READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow"})
+READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry"})
 ALL_COMMANDS = frozenset({
     "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
+    "telemetry",
 })
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
@@ -365,7 +366,28 @@ def build_parser() -> argparse.ArgumentParser:
     settings_actions.add_parser(
         "clean", help="fill the settings file, then remove the keys this release does not know")
 
+    # settings-and-telemetry CP3 (Design C): the read-only telemetry
+    # summary. `--work-item` and `--json` are the global options.
+    telemetry_p = subparsers.add_parser(
+        "telemetry", help="summarise the recorded jobs' cost, tokens and time, read-only")
+    telemetry_p.add_argument("--run", metavar="RUN_ID", default=None, help="only this run's jobs")
+    telemetry_p.add_argument("--since", metavar="ISO", type=_since, default=None,
+                             help="only jobs created at or after this UTC date or time "
+                                  "(YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)")
+    telemetry_p.add_argument("--by", choices=sorted(telemetry.GROUPINGS), default=None,
+                             help="group by role, model, or both (default: one group)")
+    telemetry_p.add_argument("repo", nargs="?", default=None,
+                             help="only this target repository's jobs (default: every target)")
+
     return parser
+
+
+def _since(value: str) -> datetime.datetime:
+    """``telemetry --since``: a bad value is argparse's usage error (exit 2)."""
+    try:
+        return telemetry.parse_since(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
 
 
 def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
@@ -403,6 +425,12 @@ def cmd_status(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         print("handoff: none")
 
     _print_active(runtime_root)
+
+    # Settings-and-telemetry CP3: the newest job with a telemetry block --
+    # its cost and wall time -- only when one exists.
+    last = telemetry.last_finished(observe.list_jobs(runtime_root))
+    if last is not None:
+        print(telemetry.last_job_text(last))
 
     # CP8 (trunk-branch-pr-release-orchestration): one line per binding
     # record, only when one exists.
@@ -469,6 +497,32 @@ def _print_target_jobs(entries: list[dict]) -> None:
     print("jobs:")
     for entry in entries:
         print(f"  job {entry['job_id']} ({entry['status']}): {entry['text']}")
+
+
+def _print_last_telemetry(record: dict | None) -> None:
+    if record is not None:
+        print(telemetry.last_job_text(record))
+
+
+def cmd_telemetry(args: argparse.Namespace) -> int:
+    """``telemetry`` (settings-and-telemetry CP3, Design C): the recorded
+    jobs' turns, tokens, cost, API time and wall time, as totals and
+    per-job means, grouped by ``--by``; ``--json`` prints the rows and the
+    groups. Dispatched before pinning like ``follow``: it reads the job
+    records (deriving the figures of a record written before telemetry
+    from its ``worker.stdout``) and writes nothing."""
+    runtime_root = _follow_runtime_root(args)
+    target_repo = (str(managed_repo._resolve_repository_root(Path(args.repo)))
+                   if args.repo is not None else None)
+    selected = telemetry.rows(observe.list_jobs(runtime_root), work_item=args.work_item, run=args.run,
+                              since=args.since, target_repo=target_repo)
+    grouped = telemetry.groups(selected, args.by)
+    if args.json:
+        print(json.dumps({"by": args.by, "rows": selected, "groups": grouped}, sort_keys=True))
+        return EXIT_OK
+    for line in telemetry.render_text(grouped, args.by, job_count=len(selected)):
+        print(line)
+    return EXIT_OK
 
 
 def _follow_runtime_root(args: argparse.Namespace) -> Path:
@@ -656,6 +710,15 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # what each is doing, beside the lock; omitted when there is none.
     jobs = _target_jobs(runtime_root, target)
     jobs_block = {"jobs": jobs} if jobs else {}
+    # Settings-and-telemetry CP3: the target's newest job with a telemetry
+    # block, omitted -- never `null` -- when there is none.
+    last = telemetry.last_finished(observe.list_jobs(runtime_root), target_repo=str(target.root))
+    if last is not None:
+        jobs_block["last_job_telemetry"] = {
+            "job_id": last.get("job_id"), "status": last.get("status"),
+            "work_item_id": last.get("work_item_id"),
+            "telemetry": telemetry.completed_summary(last["telemetry"]),
+        }
     # CP8 (trunk-branch-pr-release-orchestration): `repository_policy` and
     # `milestone_branch`, from local Git and the binding records only, each
     # omitted -- never `null` -- when it does not apply (I1, I10).
@@ -682,6 +745,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
         print(f"lifecycle lock: {lock_state}")
         _print_target_jobs(jobs)
+        _print_last_telemetry(last)
         print("work item: none -- no non-terminal work item exists and none was explicitly named")
         _print_branch_blocks(branch_blocks)
         return EXIT_OK
@@ -704,6 +768,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
     print(f"lifecycle lock: {lock_state}")
     _print_target_jobs(jobs)
+    _print_last_telemetry(last)
     print(f"work item: {work_item.work_item_id} "
           f"(type={work_item.work_item_type} kind={work_item.work_item_kind} "
           f"governing_workflow_version={work_item.governing_workflow_version})")
@@ -1385,6 +1450,10 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
         return cmd_follow(args)
     if command == "settings":
         return cmd_settings(args)
+    if command == "telemetry":
+        # Read-only like `follow`: the settings file is only validated.
+        _apply_settings(args, write=False)
+        return cmd_telemetry(args)
     ident = identity.pin()
 
     handoff = identity.read_exec_handoff()

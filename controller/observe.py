@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from controller import job, worker
+from controller import job, telemetry, worker
 
 #: How often a follower polls its files.
 POLL_SECONDS = 0.2
@@ -323,7 +323,12 @@ def _job_text(event: Mapping) -> str:
         return (f"job {job_id} worker pid {event.get('pid')} exited; waiting on process group: "
                 f"{len(pids)} process(es) ({' '.join(str(p) for p in pids)})")
     if name == "completed":
-        return f"job {job_id} COMPLETED (worker {event.get('outcome')}, exit {event.get('exit_code')})"
+        text = f"job {job_id} COMPLETED (worker {event.get('outcome')}, exit {event.get('exit_code')})"
+        # Settings-and-telemetry CP3: the session totals, when the event
+        # carries them (an event written before CP3 does not).
+        if "telemetry" in event:
+            text += f"; session: {telemetry.summary_text(event.get('telemetry'))}"
+        return text
     if name in ("finished", "failed", "incomplete"):
         return f"job {job_id} {name.upper()} ({_transition(event)})"
     if name in ("gate_blocked", "declined", "handoff_pending"):

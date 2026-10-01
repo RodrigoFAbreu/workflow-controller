@@ -82,6 +82,10 @@ PROCESS_KEYS = frozenset({"pid", "pgid", "start_ticks"})
 #: differ, so an offset is normalised like a pid.
 OFFSET_KEYS = frozenset({"offset", "ending_point"})
 
+#: The telemetry block's wall times (settings-and-telemetry CP3): whole
+#: seconds that a slower, followed run can round differently.
+WALL_TIME_KEYS = frozenset({"job_seconds", "worker_seconds"})
+
 #: What a ``worker_<state>`` event snapshots at the instant the supervisor
 #: publishes it: which tasks, wakeups and command lifecycles its last poll
 #: of the stream had parsed, and how many owned processes its last
@@ -388,7 +392,8 @@ class _ObservationCase(unittest.TestCase):
 
 def _normalise(value, names: dict[str, str]):
     if isinstance(value, dict):
-        return {key: "<N>" if (key in PROCESS_KEYS or key in OFFSET_KEYS or key.endswith("_offset"))
+        return {key: "<N>" if (key in PROCESS_KEYS or key in OFFSET_KEYS or key in WALL_TIME_KEYS
+                               or key.endswith("_offset"))
                 and isinstance(item, int) else
                 ["<N>"] * len(item) if key == "remaining_pids" and isinstance(item, list) else
                 _normalise(item, names) for key, item in value.items()}

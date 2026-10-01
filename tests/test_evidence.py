@@ -16,6 +16,7 @@ import subprocess
 import sys
 import unittest
 import unittest.mock
+from collections import Counter
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -905,6 +906,14 @@ class _LedgerIncoherentAssertions(unittest.TestCase):
         self.assertIn(check, text)
         self.assertIn(f"MANIFEST.md's review_content_id is {'c' * 64}", text)
         self.assertIn(f"the ledger's is {ledger_id or 'none'}", text)
+        # Functional review F4: each id is stated once, in the gate text and
+        # in the evidence, whatever the check.
+        stated = Counter(content_id for content_id in ("c" * 64, ledger_id) if content_id is not None)
+        for content_id, times in stated.items():
+            self.assertEqual(text.count(content_id), times, text)
+            self.assertEqual(result.evidence[0].count(content_id), times, result.evidence[0])
+        self.assertNotIn("the ledger records", text)
+        self.assertNotIn("the ledger records", result.evidence[0])
         # Never the stale id as the one to hand over, never a review stage the
         # Workflow refuses at this phase, never `explain`.
         self.assertNotIn("from the ledger", text)

@@ -1483,15 +1483,17 @@ def _ledger_incoherent_gate(
     Workflow accepts at ``phase``. The Controller repairs nothing."""
     ids = (f"MANIFEST.md's review_content_id is {problem.manifest_content_id or 'none'}, "
            f"the ledger's is {problem.ledger_content_id or 'none'}")
+    # An id mismatch's own detail already names both ids: state them once.
+    detail = ids if problem.check == _LEDGER_ID_MISMATCH else f"{problem.detail}; {ids}"
     return Decision(
         observed_phase=phase,
-        evidence=(f"manual_external_ledger_incoherent: {problem.check} ({problem.detail}); {ids}",),
+        evidence=(f"manual_external_ledger_incoherent: {problem.check} ({detail})",),
         action=None, automatic=False,
         gate=HumanGate(
             repository=str(root), work_item_id=work_item_id, phase=phase,
             what_is_required=(
                 f"do not send {bundle_dir} for external review: {ledger_name} is not coherent with the "
-                f"bundle -- {problem.check} ({problem.detail}; {ids}). {way_out}"
+                f"bundle -- {problem.check} ({detail}). {way_out}"
             ),
             artifact_path=str(bundle_dir / "MANIFEST.md"),
             safe_resume_command=safe_resume_command,

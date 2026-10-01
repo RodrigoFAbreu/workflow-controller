@@ -177,6 +177,24 @@ class GroupingTest(_RuntimeCase):
         self.assertIn("  cost $3.00 (mean $3.00)", out)
         self.assertIn("role=review-implementation: 1 job(s), telemetry unavailable 0", out)
 
+    def test_a_missing_model_or_role_reads_as_a_word_in_text_and_null_in_json(self) -> None:
+        """Functional review F1: a route that inherits the model groups as
+        ``model=inherit`` (a job with no route as ``role=none``), never
+        Python's ``None``; ``--json`` keeps ``null``."""
+        self.job("j-5", telemetry=_block(turns=1, cost=1.0, role="milestone-plan", model=None),
+                 created_at="2026-01-05T00:00:00Z")
+        self.job("j-6", telemetry=_block(turns=1, cost=1.0, role=None, model=None),
+                 created_at="2026-01-06T00:00:00Z")
+        code, out, err = self.cli("telemetry", "--by", "role,model", "--since", "2026-01-05")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn("role=milestone-plan, model=inherit: 1 job(s), telemetry unavailable 0", out)
+        self.assertIn("role=none, model=inherit: 1 job(s), telemetry unavailable 0", out)
+        self.assertNotIn("None", out)
+        code, out, err = self.cli("--json", "telemetry", "--by", "role,model", "--since", "2026-01-05")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual([g["key"] for g in json.loads(out)["groups"]],
+                         [{"role": None, "model": None}, {"role": "milestone-plan", "model": None}])
+
     def test_the_command_writes_nothing_and_refuses_a_bad_since(self) -> None:
         before = sorted(p.relative_to(self.runtime_root) for p in self.runtime_root.rglob("*"))
         self.assertEqual(self.cli("telemetry")[0], cli.EXIT_OK)
@@ -209,6 +227,16 @@ class PresentationTest(_RuntimeCase):
         self.assertIn("last job telemetry: j-1 (FINISHED, wi-1): cost $2.00, 2 turns", self.status())
         self.job("j-3", telemetry=dict(FAILED), created_at="2026-01-03T00:00:00Z")
         self.assertIn("last job telemetry: j-3 (FINISHED, wi-1): telemetry unavailable\n", self.status())
+
+    def test_a_job_with_no_work_item_reads_none(self) -> None:
+        """Functional review F1: ``(FAILED, none)``, as the ``jobs:`` lines
+        say ``work item none``; ``--json`` keeps ``null``."""
+        self.job("j-1", telemetry=dict(FAILED), status=job.STATUS_FAILED, work_item_id=None)
+        text = self.status()
+        self.assertIn("last job telemetry: j-1 (FAILED, none): telemetry unavailable\n", text)
+        self.assertNotIn("None", text)
+        last = telemetry.last_finished(observe.list_jobs(self.runtime_root))
+        self.assertIsNone(telemetry.last_job_entry(last)["work_item_id"])
 
     def test_status_without_a_block_prints_no_line(self) -> None:
         self.job("j-1", created_at="2026-01-01T00:00:00Z")

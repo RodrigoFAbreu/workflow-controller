@@ -280,8 +280,10 @@ def last_job_entry(record: Mapping) -> dict:
 
 
 def last_job_text(record: Mapping) -> str:
-    return (f"last job telemetry: {record.get('job_id')} ({record.get('status')}, {record.get('work_item_id')}): "
-            f"{summary_text(record.get('telemetry'))}")
+    """``status``'s and ``inspect``'s ``last job telemetry:`` line; a job
+    with no work item reads ``none``, as the ``jobs:`` lines say it."""
+    return (f"last job telemetry: {record.get('job_id')} ({record.get('status')}, "
+            f"{record.get('work_item_id') or 'none'}): {summary_text(record.get('telemetry'))}")
 
 
 # ---------------------------------------------------------------------------
@@ -382,12 +384,19 @@ def _figure_text(group: Mapping, name: str, fmt) -> str:
     return f"{fmt(figure['total'])} (mean {fmt(figure['mean'])})"
 
 
+#: How a group label names a missing value: a route with no model
+#: inherits the harness's model; a job with no route has no role. JSON
+#: output keeps ``null``.
+_GROUP_LABEL_MISSING = {"role": "none", "model": "inherit"}
+
+
 def render_text(grouped: list[Mapping], by: str | None, *, job_count: int) -> list[str]:
     """The command's text output: one block per group, totals and per-job
     means."""
     lines = [f"jobs: {job_count}" + (f", grouped by {by}" if by else "")]
     for group in grouped:
-        label = ", ".join(f"{k}={v}" for k, v in group["key"].items()) or "all jobs"
+        label = ", ".join(f"{k}={_GROUP_LABEL_MISSING[k] if v is None else v}"
+                          for k, v in group["key"].items()) or "all jobs"
         lines.append(f"{label}: {group['jobs']} job(s), telemetry unavailable {group['telemetry_unavailable']}")
         lines.append(f"  turns {_figure_text(group, 'turns', lambda v: f'{v:,.0f}')}")
         lines.append(f"  tokens {_figure_text(group, 'tokens', lambda v: f'{v:,.0f}')}")

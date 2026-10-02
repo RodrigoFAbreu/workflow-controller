@@ -2725,6 +2725,22 @@ def repository_preflight(ctx: Context, *, requested_work_item_id: str | None = N
                      head_policy=_UNSET if found.policy_committed else None)
 
 
+class WaitInterrupted(KeyboardInterrupt):
+    """Ctrl-C while :func:`waiting_preflight` sleeps. It *is* a
+    ``KeyboardInterrupt``, so every handler that ends a step on one still
+    does (the run record reads ``interrupted``, nothing else is written);
+    the CLI alone recognises it to print one line, not a traceback."""
+
+    def __init__(self, code: str, deadline: str) -> None:
+        super().__init__(code, deadline)
+        self.code = code
+        self.deadline = deadline
+
+    def message(self) -> str:
+        return (f"interrupted while waiting at {self.code} (the wait would have ended at {self.deadline}); "
+                f"the next step continues from the binding's last state")
+
+
 def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None,
                       on_wait: Callable[[str, str], None] | None = None,
                       sleep: Callable[[float], None] | None = None,
@@ -2737,7 +2753,7 @@ def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None
     the wall-clock end of the budget, from ``ctx.clock``). Returns the last
     outcome; ``ctx.wait_seconds`` 0 returns the first, never sleeping (I6).
     The sleep is plain, so Ctrl-C ends it like any other point of a step
-    (E.3)."""
+    (E.3), as :class:`WaitInterrupted`, which the CLI reports in one line."""
     sleep = sleep or _sleep
     monotonic = monotonic or _monotonic
     outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
@@ -2757,7 +2773,10 @@ def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None
             announced.add(outcome.code)
             if on_wait is not None:
                 on_wait(outcome.code, deadline)
-        sleep(min(ctx.poll_seconds, remaining))
+        try:
+            sleep(min(ctx.poll_seconds, remaining))
+        except KeyboardInterrupt as exc:
+            raise WaitInterrupted(outcome.code, deadline) from exc
         outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
     return outcome
 

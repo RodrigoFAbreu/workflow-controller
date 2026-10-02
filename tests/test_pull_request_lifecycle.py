@@ -3227,6 +3227,22 @@ class WaitingPreflightTest(_ReleaseWait):
         self.assertEqual(clock.sleeps, [30, 30, 30])
         self.assertEqual([code for code, _ in self.waits], [mb.GATE_CHECKS_PENDING])
 
+    def test_ctrl_c_during_the_sleep_is_a_wait_interrupted(self) -> None:
+        self.to_pending()
+        clock = _Clock()
+
+        def interrupted(seconds: float) -> None:
+            raise KeyboardInterrupt
+
+        clock.sleep = interrupted  # type: ignore[method-assign]
+        with self.assertRaises(mb.WaitInterrupted) as caught:
+            self.wait(clock)
+        self.assertIsInstance(caught.exception, KeyboardInterrupt)
+        self.assertEqual(caught.exception.code, mb.GATE_CHECKS_PENDING)
+        self.assertEqual(self.waits[0][0], mb.GATE_CHECKS_PENDING)
+        self.assertIn(mb.GATE_CHECKS_PENDING, caught.exception.message())
+        self.assertEqual(self.merges(), [])
+
     def test_zero_seconds_never_sleeps(self) -> None:
         self.to_pending()
         clock = _Clock()

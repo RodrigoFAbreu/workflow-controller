@@ -512,7 +512,8 @@ request to the closed-out, released milestone. The run log gets one
 `waiting at <gate> until <deadline>`. When the budget runs out, the step
 ends at its last gate and writes its job record, as any gate does. Every
 other gate ends the step at once. `step` never waits, and neither does
-`merge.wait_seconds: 0`. Ctrl-C during the wait ends the run
+`merge.wait_seconds: 0`. Ctrl-C during the wait prints one line
+(no traceback), exits `130` and ends the run
 `interrupted` with no job record for the waiting step; the binding keeps
 its last written state and the next step continues from it. A waiting
 `run` holds the target's lifecycle lock, so a second `step` or `run`

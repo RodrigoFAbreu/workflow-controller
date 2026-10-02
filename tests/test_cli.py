@@ -1392,6 +1392,31 @@ class ExitCodeTableTest(unittest.TestCase):
                     self.assertEqual(cli.main(["step", "/target"]), expected)
                 self.assertIn(f"error: {error.message}", stderr.getvalue())
 
+    def test_ctrl_c_in_a_wait_is_one_line_and_exit_130(self) -> None:
+        # Functional review F4: no traceback; the run still reads `interrupted`.
+        closed: list[bool] = []
+
+        def raise_it(args, argv):
+            raise milestone_branch.WaitInterrupted("release_pending", "2026-10-02T12:00:00Z")
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(cli, "_dispatch", raise_it), \
+                unittest.mock.patch.object(cli, "_close_open_run",
+                                           lambda code, *, interrupted: closed.append(interrupted)), \
+                contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", "/target"]), 130)
+        text = stderr.getvalue()
+        self.assertEqual(closed, [True])
+        self.assertEqual(len(text.strip().splitlines()), 1, text)
+        self.assertNotIn("Traceback", text)
+        self.assertIn("interrupted while waiting at release_pending", text)
+        self.assertIn("the next step continues from the binding's last state", text)
+        # An interrupt anywhere else keeps its ordinary path.
+        with unittest.mock.patch.object(cli, "_dispatch", lambda a, b: (_ for _ in ()).throw(KeyboardInterrupt())), \
+                contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(KeyboardInterrupt):
+                cli.main(["step", "/target"])
+
     def test_lifecycle_lock_error_is_a_sibling_never_a_subclass(self) -> None:
         self.assertFalse(issubclass(LifecycleLockError, LifecycleWorkerActiveError))
         self.assertTrue(issubclass(LifecycleWorkerUnverifiableError, LifecycleWorkerActiveError))

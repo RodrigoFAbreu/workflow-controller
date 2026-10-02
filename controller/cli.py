@@ -61,6 +61,9 @@ EXIT_INTERRUPTED = 40
 #: worker may still run. Nothing was launched or reconciled.
 EXIT_WORKER_ACTIVE = 45
 EXIT_HANDOFF_PENDING = 50
+#: Ctrl-C in a waiting `run`: what an uncaught SIGINT's ``KeyboardInterrupt``
+#: exits with, now without the traceback.
+EXIT_SIGINT = 130
 
 #: Test-support surface (CP8): `--pause-file` is inert unless this
 #: environment variable is also set to exactly `"1"`, so an ordinary
@@ -1603,6 +1606,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc.message}", file=sys.stderr)
             exit_code = EXIT_FAIL_CLOSED
         return exit_code
+    except milestone_branch.WaitInterrupted as exc:
+        # Ctrl-C in a `run`'s wait for checks, the merge or the release: the
+        # run record reads `interrupted` as for any Ctrl-C; one line, not a
+        # traceback (the exit status is the shell's 128 + SIGINT).
+        interrupted = True
+        print(f"error: {exc.message()}", file=sys.stderr)
+        return EXIT_SIGINT
     except KeyboardInterrupt:
         interrupted = True
         raise

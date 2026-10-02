@@ -112,9 +112,10 @@ waiting run ("Run <id> holds it: it is waiting at <gate> until
 <deadline> ... no worker is running"); the longer text about recorded
 worker process groups and `worker_anchor` appears only when the holder is
 a worker. `status` lists the open run, and `follow --run <id>` shows its
-`waiting at <gate> until <deadline>` line. Wait for it, or press Ctrl-C in the waiting `run` (it ends
-`interrupted`, and the next step continues from the binding's last
-state).
+`waiting at <gate> until <deadline>` line. Wait for it, or press Ctrl-C
+in the waiting `run` (it prints one line, "interrupted while waiting at
+<gate> ...", exits `130`, and ends `interrupted`; the next step continues
+from the binding's last state).
 
 **"An auto-merged milestone closed out, but `run` did not plan the next
 one."** That is intended: after an auto-merged milestone's release

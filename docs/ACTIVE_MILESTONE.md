@@ -442,6 +442,28 @@ Blocking findings. One Important finding is fixed:
   `ReleaseWaitTest.test_a_torn_event_line_does_not_stop_the_release_wait` errors without the fix
   and passes with it.
 
+### Local implementation review, round 4 (implementation revision 5)
+
+`REVISE` on bundle `3db4fff4` (review content id `41282e0c`), no Blocking findings:
+- Important 1 (fixed, `4fd9bbe`): revision 4 recorded a merge as `accepted` only when GitHub's
+  refusal of a duplicate said "already merged", a text plan C.3 says no code keys on. A lost
+  reply exits like a refusal, so duplicates refused with any other wording still reached the
+  terminal manual-merge refusal for a merged pull request. Before counting a failed send as a
+  refusal, and before sending a `sending` record again, the Controller now fetches the trunk and
+  looks for the pull request's squash commit (`_squash_on_trunk`); when it is there, the merge is
+  `accepted` (`merge.squash_commit`) and nothing more is sent. The text match is removed. New
+  tests: `AutoMergeTest.test_a_merge_whose_reply_is_lost_at_the_budget_is_adopted_whatever_the_text`
+  (fails at revision 4 with the terminal refusal) and
+  `test_a_crash_before_the_last_send_waits_and_sends_no_more`; three existing tests now expect
+  one send where a duplicate used to be refused.
+- Important 2 (fixed): this record and `TEST_RESULTS.md` carry revision 5's clean run.
+- Optional 1 (fixed, `4fd9bbe`): the "may already have merged" text no longer names a lost reply.
+- Optional 2 (fixed, `085c6f2`): `docs/guide/troubleshooting.md` names both waits.
+- Verification, colour off, under a reaping subreaper: `tools/run_tests.py` exit 0, 2802 tests,
+  6 shards, every shard PASS on attempt 1, coverage exact. Goldens as at CP6 (the 2.5.1
+  plan-stage generator's documented `AMENDING_PLAN` difference only). The protected-path diff
+  from `854d25c` is empty.
+
 ## Release notes
 
 ### Auto-merge and the wait for the release (1.6.0)

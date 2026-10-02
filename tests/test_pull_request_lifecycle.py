@@ -2352,6 +2352,26 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(self.preflight().action, "closed_out")
         self.assertEqual(len(self.merges()), 1)
 
+    def test_an_accepted_merge_waits_through_lagging_red_checks_and_behind(self) -> None:
+        number, a = self.to_pending()
+        self.gh_edit(number, merge_read_lag=3)
+        self.set_checks(number, ("ci", "pass"))
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+        self.assertEqual(self.record()["merge"]["state"], "accepted")
+        # A lagging read with a red check, then one reporting BEHIND: the
+        # accepted row decides first, waitable, and nothing is sent again.
+        self.set_checks(number, ("ci", "fail"))
+        gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+        self.assertTrue(gate.waitable)
+        self.assertIn("is not visible yet", gate.message)
+        self.gh_edit(number, lagged_view=dict(self.gh_pr_view(number)["lagged_view"], mergeStateStatus="BEHIND"))
+        gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+        self.assertTrue(gate.waitable)
+        self.assertEqual(len(self.merges()), 1)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assertEqual(len(self.merges()), 1)
+        self.assert_closed(a, self.origin_ref("refs/heads/main"))
+
     def test_a_lost_reply_is_adopted_by_the_re_read(self) -> None:
         number, a = self.to_pending()
         self.gh_edit(number, merge_reply_lost=True)

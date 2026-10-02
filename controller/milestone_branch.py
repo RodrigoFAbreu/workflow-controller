@@ -995,6 +995,11 @@ def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
                     f"branch carries later commits. A human decides: merge anyway on GitHub with "
                     f"\"{SQUASH_BUTTON}\", after which the merged-PR handling converges; otherwise this gate persists",
                     (f"merge pull request #{number} on GitHub anyway with \"{SQUASH_BUTTON}\"",), squash)
+    # An accepted merge is never sent again, and no later read of the pull
+    # request, which can lag GitHub's write, gates it otherwise.
+    merge = dict(record.get("merge") or {})
+    if merge.get("state") == "accepted":
+        return _merge_accepted_gate(ctx, record, number)
     remote_branch = (record.get("last_observation") or {}).get("remote_branch")
     if remote_branch != a or pr.head_oid != a:
         return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
@@ -1013,7 +1018,6 @@ def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
         message = gate.message if pending else (f"{gate.message}. The Controller merges the pull request once a "
                                                 f"re-run turns the checks green (the next step)")
         return Gate(gate.code, work_item_id, branch, message, gate.exits, gate.merge_method, waitable=pending)
-    merge = dict(record.get("merge") or {})
     state = pr.merge_state
     if state == "DIRTY":
         return Gate(GATE_MERGE_PENDING, work_item_id, branch,
@@ -1028,8 +1032,6 @@ def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
                     f"procedure: bring the pull request up to date on GitHub and merge it with \"{SQUASH_BUTTON}\"",
                     (f"bring pull request #{number} up to date and merge it on GitHub with \"{SQUASH_BUTTON}\"",),
                     squash)
-    if merge.get("state") == "accepted":
-        return _merge_accepted_gate(ctx, record, number)
     if state not in MERGEABLE_STATES:
         if state == "BLOCKED":
             why = ("GitHub reports it BLOCKED with every check green: a branch-protection requirement other "

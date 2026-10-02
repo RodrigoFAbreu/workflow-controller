@@ -386,19 +386,21 @@ and its checks, and the first of these that holds decides:
 3. the local tip is not the acceptance commit (a commit after it, pushed
    or not): `post_acceptance_commits`. The Controller merges only the
    accepted head; merge anyway on GitHub if you want the later commits;
-4. the pull request's head is not the acceptance commit (GitHub's read
+4. GitHub accepted an earlier merge that is not visible yet:
+   `merge_pending`, without sending again. A read that still shows the
+   pull request open, with whatever checks and merge state, does not
+   change this;
+5. the pull request's head is not the acceptance commit (GitHub's read
    lags, or the remote branch is gone): `pr_head_not_accepted`;
-5. the pull request is a draft again: `merge_held`. Converting it back to
+6. the pull request is a draft again: `merge_held`. Converting it back to
    a draft is how a person holds the merge, and the Controller respects
    it;
-6. a check failed, is pending, or was cancelled: `checks_failing`,
+7. a check failed, is pending, or was cancelled: `checks_failing`,
    `checks_pending` or `checks_cancelled`, exactly as at readiness. After
    a green "Re-run failed jobs" the next step merges;
-7. GitHub reports a conflict (`DIRTY`): `merge_pending` at once, naming
+8. GitHub reports a conflict (`DIRTY`): `merge_pending` at once, naming
    it; or that the branch must be up to date with the trunk (`BEHIND`):
    `integration_required` (the manual procedure above);
-8. GitHub accepted an earlier merge that is not visible yet:
-   `merge_pending`, without sending again;
 9. GitHub reports the pull request mergeable (`CLEAN` or `HAS_HOOKS`):
    the Controller sends the merge;
 10. anything else (`UNKNOWN` just after `gh pr ready`, `BLOCKED` by a

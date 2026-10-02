@@ -953,7 +953,15 @@ def _pr_left_open(ctx: Context, key: str, record: dict, pr: forge_mod.PullReques
                   pr=pr.number)
 
 
-def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
+def _never_merges(switched_off: bool) -> str:
+    return ("Auto-merge is switched off by `merge.auto` in the settings file, so the Controller does not "
+            "merge it" if switched_off else "The Controller never merges")
+
+
+def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None, switched_off: bool = False) -> Gate:
+    """The ``merge_pull_request`` gate. ``switched_off``: the binding's policy
+    opted in to auto-merge and ``merge.auto`` is off on this machine, so the
+    text names the setting instead of saying the Controller never merges."""
     pr, accepted = record["pr"], record.get("accepted_head")
     later = (f". Local commits after the acceptance commit {accepted} (the tip is {tip}) are not pushed to a "
              f"ready pull request" if tip is not None and accepted is not None and tip != accepted else "")
@@ -961,7 +969,7 @@ def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
         return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
                     f"pull request #{pr['number']} ({pr['url']}) is ready; a human merges it on GitHub with "
                     f"\"{SQUASH_BUTTON}\". The squash commit's subject is the pull request's title and its body "
-                    f"the pull request's body. The Controller never merges{later}",
+                    f"the pull request's body. {_never_merges(switched_off)}{later}",
                     (f"merge pull request #{pr['number']} on GitHub with \"{SQUASH_BUTTON}\"",),
                     repo_policy.MERGE_METHOD_SQUASH)
     return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
@@ -981,7 +989,7 @@ def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
     commit ``A`` bound to ``A`` (C.3). Returns the merged record when the
     pull request is merged, after the merged-PR handling."""
     if not auto_merge_applies(record, ctx):
-        return _merge_gate(record, tip=head.commit)
+        return _merge_gate(record, tip=head.commit, switched_off=release_wait_applies(record))
     work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
     remote, number, a = record["repository"]["remote"], pr.number, record["accepted_head"]
     squash = repo_policy.MERGE_METHOD_SQUASH
@@ -1827,7 +1835,7 @@ def squash_body(work_item_id: str, plan_path: str | None, *, accepted: str | Non
     D.2)."""
     lines = [f"Milestone `{work_item_id}`, planned in `{plan_path or 'unrecorded'}`, driven by workflow-controller."]
     if accepted is not None:
-        lines.append(f"Accepted at {accepted} on `{branch}`; merge with \"{SQUASH_BUTTON}\".")
+        lines.append(f"Accepted at {accepted} on `{branch}`; squash-merged into the trunk as one commit.")
     head = "" if notes_block is None else notes_block + "\n\n"
     return head + "\n".join(lines) + "\n\n" + PR_MARKER.format(work_item_id=work_item_id) + "\n"
 

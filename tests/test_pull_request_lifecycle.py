@@ -1391,7 +1391,7 @@ class SquashTitleTest(_Squash):
         a = self.to_ready_squash()
         pr = self.gh_pr_view(self.pr_number())
         self.assertEqual(pr["body"], f"Milestone `{WID}`, planned in `{PLAN_PATH}`, driven by workflow-controller.\n"
-                                     f"Accepted at {a} on `{BRANCH}`; merge with \"Squash and merge\".\n\n"
+                                     f"Accepted at {a} on `{BRANCH}`; squash-merged into the trunk as one commit.\n\n"
                                      f"<!-- workflow-controller: work_item={WID} -->\n")
         self.assertEqual(trailers(self.clone, pr["body"]), "")
         self.assertEqual(pr["title"], TITLE)
@@ -2714,8 +2714,10 @@ class AutoMergeTest(_AutoMerge):
         self.ctx = dataclasses.replace(self.ctx, auto_merge=False)
         self.set_checks(number, ("ci", "pass"))
         gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
-        self.assertEqual(gate, mb._merge_gate(self.record(), tip=a))
-        self.assertIn("The Controller never merges", gate.message)
+        self.assertEqual(gate, mb._merge_gate(self.record(), tip=a, switched_off=True))
+        # Functional review F6: the gate names the setting, not "never merges".
+        self.assertIn("switched off by `merge.auto` in the settings file", gate.message)
+        self.assertNotIn("never merges", gate.message)
         self.assertEqual(self.merges(), [])
         self.assertEqual(self.predict()["action"], "gate")
         # A record the Controller already tried to merge: still today's gate.

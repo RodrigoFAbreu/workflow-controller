@@ -1048,7 +1048,7 @@ Expected:
 - the events end `... pr_edited ready merge_sent merge_accepted merged_squashed release_settled closed`;
 - `PR #1 MERGED draft=False head=<A> mergeStateStatus=UNKNOWN; pr merge calls: 1; origin main <m> 'feat: the auto-merge lifecycle (#1)'`;
 - the one `gh pr merge` argv, exactly:
-  `` ["pr", "merge", "1", "--squash", "--match-head-commit", "<A>", "--subject", "feat: the auto-merge lifecycle (#1)", "--body", "Milestone `wi-1`, planned in `docs/plans/wi-1.md`, driven by workflow-controller.\nAccepted at <A> on `milestone/wi-1`; merge with \"Squash and merge\".\n\n<!-- workflow-controller: work_item=wi-1 -->\n", "--repo", "example-owner/example-repo"] ``
+  `` ["pr", "merge", "1", "--squash", "--match-head-commit", "<A>", "--subject", "feat: the auto-merge lifecycle (#1)", "--body", "Milestone `wi-1`, planned in `docs/plans/wi-1.md`, driven by workflow-controller.\nAccepted at <A> on `milestone/wi-1`; squash-merged into the trunk as one commit.\n\n<!-- workflow-controller: work_item=wi-1 -->\n", "--repo", "example-owner/example-repo"] ``
   and `0` (no `--auto` or `--disable-auto` anywhere in the gh log);
 - `main`, `<m>` (close-out switched to the trunk and fast-forwarded), the squash subject
   `feat: the auto-merge lifecycle (#1)` and its body's first lines (`Milestone ...`,
@@ -1579,4 +1579,5 @@ up to `merge.wait_seconds` (3600) per step, without a worker. `status`,
 **Compatibility.** A policy without the key behaves exactly as 1.5.0.
 Controller 1.5.x refuses a policy with the new keys, so install 1.6.0
 before opting in. The settings file gains three `merge` rows (table
-generation 2); a 1.5.0 Controller sharing it warns about them.
+generation 2); a 1.5.0 Controller sharing it warns about them, and its
+`settings clean` refuses the generation-2 file (exit 20).

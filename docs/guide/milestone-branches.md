@@ -194,7 +194,7 @@ title.
 
   ```text
   Milestone `<id>`, planned in `<plan path>`, driven by workflow-controller.
-  Accepted at <acceptance commit> on `milestone/<id>`; merge with "Squash and merge".
+  Accepted at <acceptance commit> on `milestone/<id>`; squash-merged into the trunk as one commit.
 
   <!-- workflow-controller: work_item=<id> -->
   ```
@@ -280,7 +280,7 @@ end of the file, with outer blank lines trimmed. The body becomes:
 <!-- workflow-controller: release-notes end -->
 
 Milestone `<id>`, planned in `<plan path>`, driven by workflow-controller.
-Accepted at <acceptance commit> on `milestone/<id>`; merge with "Squash and merge".
+Accepted at <acceptance commit> on `milestone/<id>`; squash-merged into the trunk as one commit.
 
 <!-- workflow-controller: work_item=<id> -->
 ```
@@ -369,7 +369,9 @@ milestone in flight. GitHub's own "Allow auto-merge" setting is not used.
 **The operator's switch.** The settings file's `merge.auto` (default
 `true`, see [the runtime guide](runtime.md#what-it-holds)) turns the
 merge off for every repository on the machine: readiness then ends at
-`merge_pull_request` as without the key, and a person merges. The
+`merge_pull_request` as without the key (its text names the setting:
+"Auto-merge is switched off by `merge.auto` in the settings file"), and a
+person merges. The
 release wait and the stop after close-out still follow the binding's
 policy, because they only read. `merge.auto` is read at every step, so
 turning it off mid-milestone takes effect at the next one; nothing is
@@ -504,7 +506,10 @@ always (switch to `main`, fast-forward, `CLOSED`), and the step ends
 there: exit `0`, no worker, no job record, and the run's `no_action`
 event names the release (reason `closed_out_released`). The next `run`
 or `step` starts from `main` and plans the next milestone with
-`/milestone-plan <main tip>` as usual. That pause leaves room for a
+`/milestone-plan <main tip>` as usual. (When the close-out ran from the
+trunk side, with the checkout already on `main`, it does not fast-forward
+`main`: the next step stops at `fast_forward_trunk` with `git merge
+--ff-only <remote>/main`, then plans.) That pause leaves room for a
 release-notes pull request before the next milestone takes `main`'s tip
 as its base.
 

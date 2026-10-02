@@ -120,7 +120,12 @@ from the binding's last state).
 **"An auto-merged milestone closed out, but `run` did not plan the next
 one."** That is intended: after an auto-merged milestone's release
 settles and it closes out, the step ends with exit `0` (reason
-`closed_out_released`). `run` again to plan the next milestone.
+`closed_out_released`). `run` again to plan the next milestone. One
+exception: when the checkout is already on the trunk (the squash was
+read from `main` itself), close-out does not fast-forward `main`, and the
+next step stops at the `fast_forward_trunk` gate with the exact command
+(`git merge --ff-only origin/main`, with your remote's name); run it, then
+`run` again.
 
 **"The pull request was closed, or merged too early."** The milestone is in a
 refusal state until you choose an exit. See

@@ -451,7 +451,8 @@ asset, runs a policy command, tags, publishes or re-runs anything):
   squash commit (`main.yml` cancels a pending run when a newer one
   queues, and any later run tags its own commit or resumes an
   unpublished tag). A published covering release settles the wait
-  (`SUPERSEDED`, with that release's tag, URL and commit); a later trunk
+  (`SUPERSEDED`, with that release's tag, URL and commit), even when no
+  run for the squash commit itself was ever reported; a later trunk
   run still working keeps it `release_pending` rather than
   `release_failed`;
 - any other classification: `release_failed` with its detail.

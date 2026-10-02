@@ -1390,6 +1390,11 @@ def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.R
     if found.publishes:
         runs = forge.commit_runs(m, trunk, workflow)
         if not _finished(runs):
+            # A run of m may never be reported: a later trunk run can have
+            # published the covering release already.
+            settled = _superseded(rctx, release_txn.covering_tag(rctx, m))
+            if settled is not None:
+                return settled
             return _ReleaseOutcome("pending", detail=(f"{found.tag} is not published yet ({found.state}), and the "
                                                       f"{workflow} run(s) for {m} are "
                                                       + (_runs_text(runs) if runs else "not reported yet")))

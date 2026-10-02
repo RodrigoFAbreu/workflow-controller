@@ -2863,6 +2863,22 @@ class SupersededReleaseTest(_ReleaseWait):
                                       f"completed successfully for {d2} and published nothing",
                                       f"run {second} (completed, success)")
 
+    def test_no_run_of_m_reported_and_a_later_run_publishes_at_the_descendant(self) -> None:
+        for version in (None, "1.1.0"):
+            with self.subTest(version=version):
+                self.fresh()
+                a, m, outcome = self.merge()
+                self.assertPending(outcome, "not reported yet")
+                d = self.push_trunk("later.txt", version=version)
+                self.add_run(d, "completed", "success")
+                tag = f"v{version or '1.0.0'}"
+                self.tag(tag, d)
+                url = self.publish(tag)
+                # No run of m is ever reported.
+                self.assertEqual([run for run in self.gh()["runs"] if run["headSha"] == m], [])
+                self.assertStopped(self.preflight(), {"state": mb.RELEASE_SUPERSEDED, "version": version or "1.0.0",
+                                                      "tag": tag, "url": url, "commit": d})
+
     def test_no_later_trunk_commit_fails_at_once(self) -> None:
         for conclusion in ("failure", "cancelled"):
             with self.subTest(conclusion=conclusion):

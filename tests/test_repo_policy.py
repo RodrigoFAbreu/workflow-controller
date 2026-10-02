@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import repo_policy  # noqa: E402
+from controller import milestone_branch, repo_policy  # noqa: E402
 from controller.errors import ControllerError, InvalidRepositoryPolicyError  # noqa: E402
 from tests import fixtures  # noqa: E402
 
@@ -706,6 +706,92 @@ class ReleaseNotesPolicyTest(_RefusalCase):
                 data = _conventional()
                 edit(data)
                 self.assertRefuses(data, field, "does not admit")
+
+
+class AutoMergePolicyTest(_RefusalCase):
+    """auto-merge-release-wait A.1/A.3: the optional
+    ``milestone_branches.pull_request.auto_merge`` and ``release_workflow``,
+    and the predicates over a binding's policy snapshot."""
+
+    FIELD = "milestone_branches.pull_request"
+
+    def with_keys(self, base: dict | None = None, **keys: object) -> dict:
+        data = _conventional() if base is None else base
+        data["milestone_branches"]["pull_request"].update(keys)
+        return data
+
+    def parse(self, data: dict) -> repo_policy.MilestoneBranches:
+        return repo_policy.parse_policy(_encode(data)).milestone_branches
+
+    def test_absent_means_off_and_main_yml(self) -> None:
+        for data in (_conventional(), _legacy()):
+            with self.subTest(trigger=data["release"]["trigger"]):
+                branches = self.parse(data)
+                self.assertIs(branches.auto_merge, False)
+                self.assertEqual(branches.release_workflow, "main.yml")
+        reference = repo_policy.parse_policy(REFERENCE.read_bytes()).milestone_branches
+        self.assertEqual((reference.auto_merge, reference.release_workflow), (False, "main.yml"))
+
+    def test_true_with_squash_and_green_checks_is_admitted(self) -> None:
+        self.assertIs(self.parse(self.with_keys(auto_merge=True)).auto_merge, True)
+        self.assertIs(self.parse(self.with_keys(auto_merge=False)).auto_merge, False)
+        # With releases off there is nothing to wait for, and it is admitted.
+        data = self.with_keys(auto_merge=True)
+        data["release"]["enabled"] = False
+        self.assertIs(self.parse(data).auto_merge, True)
+
+    def test_true_needs_squash(self) -> None:
+        for method in (None, "merge"):
+            with self.subTest(method=method):
+                data = self.with_keys(_legacy(), auto_merge=True)
+                if method is not None:
+                    data["milestone_branches"]["pull_request"]["merge_method"] = method
+                self.assertRefuses(data, f"{self.FIELD}.merge_method", "when auto_merge is true.*squash-mode")
+                # The same policy without the key is admitted.
+                del data["milestone_branches"]["pull_request"]["auto_merge"]
+                self.assertIs(self.parse(data).auto_merge, False)
+
+    def test_true_needs_green_checks(self) -> None:
+        data = self.with_keys(auto_merge=True, ready_requires_green_checks=False)
+        self.assertRefuses(data, f"{self.FIELD}.ready_requires_green_checks",
+                           "must be true when auto_merge is true.*green checks")
+        data["milestone_branches"]["pull_request"]["auto_merge"] = False
+        self.assertIs(self.parse(data).ready_requires_green_checks, False)
+
+    def test_a_non_boolean_is_refused(self) -> None:
+        for value in (1, 0, "true", None, []):
+            with self.subTest(value=value):
+                self.assertRefuses(self.with_keys(auto_merge=value), f"{self.FIELD}.auto_merge",
+                                   "must be true or false")
+
+    def test_release_workflow(self) -> None:
+        for name in ("main.yml", "release.yaml", "x"):
+            with self.subTest(name=name):
+                self.assertEqual(self.parse(self.with_keys(release_workflow=name)).release_workflow, name)
+        for value, pattern in (("", "non-empty string"), (".github/workflows/main.yml", "without a '/'"),
+                               ("a/b", "without a '/'"), ("..", "without a '/'"), (1, "non-empty string"),
+                               (None, "non-empty string")):
+            with self.subTest(value=value):
+                self.assertRefuses(self.with_keys(release_workflow=value), f"{self.FIELD}.release_workflow",
+                                   pattern)
+
+    def test_the_predicates_read_the_binding_snapshot(self) -> None:
+        def record(data: dict) -> dict:
+            policy = repo_policy.parse_policy(_encode(data))
+            return {"work_item_id": "w", "policy": milestone_branch._policy_snapshot(policy)}
+
+        ctx_on = milestone_branch.Context(repo_root=Path("/"), runtime_root=Path("/"))
+        ctx_off = milestone_branch.Context(repo_root=Path("/"), runtime_root=Path("/"), auto_merge=False)
+        self.assertIs(ctx_on.auto_merge, True)
+        opted_in, without_key, opted_out = (record(self.with_keys(auto_merge=True)), record(_conventional()),
+                                            record(self.with_keys(auto_merge=False)))
+        self.assertTrue(milestone_branch.auto_merge_applies(opted_in, ctx_on))
+        self.assertFalse(milestone_branch.auto_merge_applies(opted_in, ctx_off))
+        self.assertTrue(milestone_branch.release_wait_applies(opted_in))
+        for bound in (without_key, opted_out):
+            for ctx in (ctx_on, ctx_off):
+                self.assertFalse(milestone_branch.auto_merge_applies(bound, ctx))
+            self.assertFalse(milestone_branch.release_wait_applies(bound))
 
 
 class ReadVersionUnderConventionalCommitTest(unittest.TestCase):

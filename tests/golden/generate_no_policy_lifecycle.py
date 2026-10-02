@@ -47,6 +47,11 @@ their problems; a job with no result has ``no_result``), and each ``after``
 ``job_seconds``/``worker_seconds`` are volatile keys and
 ``controller_version`` normalises like ``version``. Nothing else moved.
 
+And once by ``workflow-controller-auto-merge-release-wait`` CP1, whose three
+``merge.*`` settings rows (table generation 2) appear in each launched job's
+``controller_settings`` ``values`` and ``sources``. Nothing else moved
+(``tests/test_trunk_preflight.py`` pins that against the 1.5.0 golden).
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

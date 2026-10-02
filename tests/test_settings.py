@@ -50,11 +50,22 @@ V1_TABLE = (
     ("routing", "routing", {"default": {}, "roles": {}}, None, None, 1),
 )
 
+#: The rows generation 2 added (auto-merge-release-wait A.2), before
+#: ``routing``.
+V2_ROWS = (
+    ("merge.auto", "bool", True, None, None, 2),
+    ("merge.wait_seconds", "int", 3600, 0, 86400, 2),
+    ("merge.poll_seconds", "int", 30, 10, 600, 2),
+)
+
+#: This release's table, pinned.
+TABLE_ROWS = V1_TABLE[:-1] + V2_ROWS + V1_TABLE[-1:]
+
 #: Every generation's type and bounds of each key, oldest first. A release
 #: that changes a default appends nothing here (the rule forbids changing
 #: type or range); a release that adds a key adds a row.
 KEY_HISTORY = {
-    key: [(kind, minimum, maximum)] for key, kind, _default, minimum, maximum, _gen in V1_TABLE
+    key: [(kind, minimum, maximum)] for key, kind, _default, minimum, maximum, _gen in TABLE_ROWS
 }
 
 #: The routing names the table pins with it (A.5).
@@ -65,10 +76,11 @@ V1_ROLES = frozenset({
 })
 
 
-def _defaults_file() -> dict:
-    """The file the v1 fill writes over a missing one."""
-    data: dict = {"schema_version": 1, "_table_generation": 1, "_defaults_written": {}}
-    for key, _kind, default, _minimum, _maximum, generation in V1_TABLE:
+def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 2) -> dict:
+    """The file this release's fill writes over a missing one (``rows``
+    and ``table_generation``: another release's)."""
+    data: dict = {"schema_version": 1, "_table_generation": table_generation, "_defaults_written": {}}
+    for key, _kind, default, _minimum, _maximum, generation in rows:
         section, _, name = key.partition(".")
         if name:
             data.setdefault(section, {})[name] = copy.deepcopy(default)
@@ -113,11 +125,13 @@ def _release(table: tuple, generation: int, roles: frozenset | None = None):
 
 
 #: Release N+1 for the two-release tests: ``run.max_steps``' default moves
-#: to 25 (generation 2, inside v1's bounds), a new key and a new role.
+#: to 25 (generation N+1, inside v1's bounds), a new key and a new role.
+_NEXT_GENERATION = settings.TABLE_GENERATION + 1
 _NEXT_TABLE = tuple(
-    S("run.max_steps", "int", 25, 1, 1000, "run --max-steps", 2) if row.key == "run.max_steps" else row
+    S("run.max_steps", "int", 25, 1, 1000, "run --max-steps", _NEXT_GENERATION) if row.key == "run.max_steps"
+    else row
     for row in settings.TABLE
-) + (S("worker.new_knob", "int", 5, 1, 10, None, 2),)
+) + (S("worker.new_knob", "int", 5, 1, 10, None, _NEXT_GENERATION),)
 _NEXT_ROLES = routing.ROLES | {"new-role"}
 
 
@@ -140,8 +154,8 @@ class _TempSettings(unittest.TestCase):
 class TableTest(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
         rows = tuple((s.key, s.type, s.default, s.minimum, s.maximum, s.generation) for s in settings.TABLE)
-        self.assertEqual(rows, V1_TABLE)
-        self.assertEqual(settings.TABLE_GENERATION, 1)
+        self.assertEqual(rows, TABLE_ROWS)
+        self.assertEqual(settings.TABLE_GENERATION, 2)
         self.assertEqual(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
         self.assertEqual(routing.ROLES, V1_ROLES)
         self.assertEqual(routing.FIELDS, ("model", "effort"))
@@ -162,6 +176,9 @@ class TableTest(unittest.TestCase):
                         routing.validate_routing_mapping(
                             setting.default, path="<table>", where="routing.", require_schema_version=False,
                             unknown="refuse")
+                    elif kind == "bool":
+                        self.assertIs(type(setting.default), bool)
+                        self.assertEqual((minimum, maximum), (None, None))
                     elif setting.default is not None:
                         self.assertIs(type(setting.default), int)
                         self.assertTrue(minimum <= setting.default <= maximum)
@@ -232,6 +249,14 @@ class ValidationTest(_TempSettings):
         "above the maximum": ({"forge": {"pr_list_limit": 1001}}, "forge.pr_list_limit"),
         "float": ({"follow": {"heartbeat_seconds": 1.5}}, "follow.heartbeat_seconds"),
         "optional int out of bounds": ({"worker": {"timeout_seconds": 59}}, "worker.timeout_seconds"),
+        "integer for a boolean": ({"merge": {"auto": 1}}, "merge.auto"),
+        "string for a boolean": ({"merge": {"auto": "true"}}, "merge.auto"),
+        "null for a boolean": ({"merge": {"auto": None}}, "merge.auto"),
+        "boolean for the wait": ({"merge": {"wait_seconds": False}}, "merge.wait_seconds"),
+        "wait above the maximum": ({"merge": {"wait_seconds": 86401}}, "merge.wait_seconds"),
+        "wait negative": ({"merge": {"wait_seconds": -1}}, "merge.wait_seconds"),
+        "poll below the minimum": ({"merge": {"poll_seconds": 9}}, "merge.poll_seconds"),
+        "poll above the maximum": ({"merge": {"poll_seconds": 601}}, "merge.poll_seconds"),
         "_table_generation zero": ({"_table_generation": 0}, "_table_generation"),
         "_table_generation boolean": ({"_table_generation": True}, "_table_generation"),
         "_table_generation string": ({"_table_generation": "1"}, "_table_generation"),
@@ -299,6 +324,78 @@ class ValidationTest(_TempSettings):
         self.assertEqual(dict(loaded.values), {})
         self.assertFalse(self.path.exists())
         self.assertFalse(self.path.parent.exists())
+
+
+class MergeRowsTest(_TempSettings):
+    """auto-merge-release-wait A.2: the ``bool`` type and the three
+    ``merge.*`` rows of table generation 2."""
+
+    def test_the_bool_type_takes_only_true_and_false(self) -> None:
+        for value in (True, False):
+            with self.subTest(value=value):
+                _write(self.path, {"merge": {"auto": value}})
+                loaded = settings.load(self.path)
+                self.assertIs(loaded.values["merge.auto"], value)
+                effective = settings.resolve(loaded)
+                self.assertIs(effective["merge.auto"], value)
+                self.assertEqual(effective.sources["merge.auto"], "file")
+        _write(self.path, {"merge": {"auto": 0}})
+        with self.assertRaises(SettingsError) as ctx:
+            settings.load(self.path)
+        self.assertIn("merge.auto must be true or false, got 0", ctx.exception.message)
+
+    def test_the_defaults_are_on_an_hour_and_thirty_seconds(self) -> None:
+        effective = settings.resolve(settings.load(self.path))
+        self.assertEqual((effective["merge.auto"], effective["merge.wait_seconds"], effective["merge.poll_seconds"]),
+                         (True, 3600, 30))
+        self.assertEqual({effective.sources[key] for key in ("merge.auto", "merge.wait_seconds",
+                                                            "merge.poll_seconds")}, {"default"})
+        # A wait of 0 is admitted: `run` then never waits.
+        _write(self.path, {"merge": {"wait_seconds": 0}})
+        self.assertEqual(settings.resolve(settings.load(self.path))["merge.wait_seconds"], 0)
+
+    def test_the_fill_of_a_generation_1_file_adds_the_three_rows_and_moves_nothing(self) -> None:
+        old = _defaults_file(V1_TABLE, 1)
+        old["run"]["max_steps"] = 7
+        del old["_defaults_written"]["run.max_steps"]
+        _write(self.path, old)
+        settings.fill(self.path)
+        data = _read(self.path)
+        self.assertEqual(data["merge"], {"auto": True, "wait_seconds": 3600, "poll_seconds": 30})
+        for key, value in (("merge.auto", True), ("merge.wait_seconds", 3600), ("merge.poll_seconds", 30)):
+            self.assertEqual(data["_defaults_written"][key], {"value": value, "generation": 2})
+        self.assertEqual(data["_table_generation"], 2)
+        for key in [key for key in data if key not in ("merge", "_defaults_written", "_table_generation")]:
+            self.assertEqual(data[key], old[key], key)
+        self.assertEqual({key: value for key, value in data["_defaults_written"].items()
+                          if not key.startswith("merge.")}, old["_defaults_written"])
+
+    def test_clean_of_a_generation_1_file_fills_the_rows_and_removes_nothing_known(self) -> None:
+        _write(self.path, _defaults_file(V1_TABLE, 1))
+        _loaded, removed = settings.clean(self.path)
+        self.assertEqual(removed, [])
+        self.assertEqual(_read(self.path), _defaults_file())
+
+    def test_a_generation_1_release_ignores_the_rows_and_its_clean_refuses(self) -> None:
+        settings.fill(self.path)
+        before = self.path.read_bytes()
+        v1 = tuple(row for row in settings.TABLE if not row.key.startswith("merge."))
+        with _release(v1, 1):
+            loaded, err = self.stderr_of(settings.fill, self.path)
+            self.assertEqual(self.path.read_bytes(), before)
+            self.assertIn("unknown key(s) merge;", err)
+            self.assertNotIn("merge.auto", settings.resolve(loaded).values)
+            with self.assertRaises(SettingsError):
+                settings.clean(self.path)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_show_lists_the_rows(self) -> None:
+        _write(self.path, {"merge": {"auto": False}})
+        code, out, _err = _main(["--settings", str(self.path), "settings", "show"])
+        self.assertEqual(code, 0)
+        self.assertIn("merge.auto = false (file)\n", out)
+        self.assertIn("merge.wait_seconds = 3600 (default)\n", out)
+        self.assertIn("merge.poll_seconds = 30 (default)\n", out)
 
 
 class FillTest(_TempSettings):
@@ -472,13 +569,13 @@ class CleanTest(_TempSettings):
 
     def test_clean_refuses_a_file_filled_by_a_newer_release(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 2
+        data["_table_generation"] = 3
         data["run"]["speed"] = "fast"
         _write(self.path, data)
         before = self.path.read_bytes()
         with self.assertRaises(SettingsError) as ctx:
             settings.clean(self.path)
-        self.assertIn("table generation 2", ctx.exception.message)
+        self.assertIn("table generation 3", ctx.exception.message)
         self.assertIn("newest installed release", ctx.exception.message)
         self.assertEqual(ctx.exception.evidence["key"], "_table_generation")
         self.assertEqual(self.path.read_bytes(), before)
@@ -492,18 +589,18 @@ class TwoReleasesTest(_TempSettings):
     file in alternation (A.4, A.5)."""
 
     def test_n_plus_1_moves_the_untouched_value_and_n_never_moves_it_back(self) -> None:
-        with _release(settings.TABLE, 1):
+        with _release(settings.TABLE, settings.TABLE_GENERATION):
             settings.fill(self.path)
         self.assertEqual(_read(self.path)["run"]["max_steps"], 20)
-        with _release(_NEXT_TABLE, 2):
+        with _release(_NEXT_TABLE, _NEXT_GENERATION):
             settings.fill(self.path)
         data = _read(self.path)
         self.assertEqual(data["run"]["max_steps"], 25)
-        self.assertEqual(data["_defaults_written"]["run.max_steps"], {"value": 25, "generation": 2})
+        self.assertEqual(data["_defaults_written"]["run.max_steps"], {"value": 25, "generation": _NEXT_GENERATION})
         self.assertEqual(data["worker"]["new_knob"], 5)
-        self.assertEqual(data["_table_generation"], 2)
+        self.assertEqual(data["_table_generation"], _NEXT_GENERATION)
         after_next = self.path.read_bytes()
-        with _release(settings.TABLE, 1):
+        with _release(settings.TABLE, settings.TABLE_GENERATION):
             loaded, err = self.stderr_of(settings.fill, self.path)
             self.assertEqual(self.path.read_bytes(), after_next)
             self.assertEqual(settings.resolve(loaded)["run.max_steps"], 25)
@@ -512,18 +609,18 @@ class TwoReleasesTest(_TempSettings):
             with self.assertRaises(SettingsError):
                 settings.clean(self.path)
         self.assertEqual(self.path.read_bytes(), after_next)
-        with _release(_NEXT_TABLE, 2):
+        with _release(_NEXT_TABLE, _NEXT_GENERATION):
             loaded, err = self.stderr_of(settings.fill, self.path)
             self.assertEqual(err, "")
             self.assertEqual(settings.resolve(loaded)["worker.new_knob"], 5)
 
     def test_a_value_the_operator_set_is_never_moved(self) -> None:
-        with _release(settings.TABLE, 1):
+        with _release(settings.TABLE, settings.TABLE_GENERATION):
             settings.fill(self.path)
         data = _read(self.path)
         data["run"]["max_steps"] = 50
         _write(self.path, data)
-        with _release(_NEXT_TABLE, 2):
+        with _release(_NEXT_TABLE, _NEXT_GENERATION):
             settings.fill(self.path)
         self.assertEqual(_read(self.path)["run"]["max_steps"], 50)
 
@@ -531,12 +628,12 @@ class TwoReleasesTest(_TempSettings):
         """An operator who sets the value back to the recorded default is
         indistinguishable from one who never touched it: the record decides
         (A.4's first condition)."""
-        with _release(settings.TABLE, 1):
+        with _release(settings.TABLE, settings.TABLE_GENERATION):
             settings.fill(self.path)
         data = _read(self.path)
         del data["_defaults_written"]["run.max_steps"]
         _write(self.path, data)
-        with _release(_NEXT_TABLE, 2):
+        with _release(_NEXT_TABLE, _NEXT_GENERATION):
             settings.fill(self.path)
         self.assertEqual(_read(self.path)["run"]["max_steps"], 20)
 
@@ -547,7 +644,7 @@ class SharedRoutingTest(_TempSettings):
     (R4-003, MPR6-O1)."""
 
     def _shared_file(self) -> None:
-        with _release(_NEXT_TABLE, 2, _NEXT_ROLES):
+        with _release(_NEXT_TABLE, _NEXT_GENERATION, _NEXT_ROLES):
             settings.fill(self.path)
         data = _read(self.path)
         data["routing"] = {
@@ -560,7 +657,7 @@ class SharedRoutingTest(_TempSettings):
     def test_release_n_ignores_what_it_does_not_know_and_routes_the_rest(self) -> None:
         self._shared_file()
         before = self.path.read_bytes()
-        with _release(settings.TABLE, 1):
+        with _release(settings.TABLE, settings.TABLE_GENERATION):
             code, out, err = _main(["--settings", str(self.path), "settings", "show"])
             self.assertEqual(code, 0)
             self.assertEqual(err.count("warning:"), 1)
@@ -579,7 +676,7 @@ class SharedRoutingTest(_TempSettings):
             with self.assertRaises(SettingsError):
                 settings.clean(self.path)
             self.assertEqual(self.path.read_bytes(), before)
-        with _release(_NEXT_TABLE, 2, _NEXT_ROLES):
+        with _release(_NEXT_TABLE, _NEXT_GENERATION, _NEXT_ROLES):
             loaded, _err = self.stderr_of(settings.load, self.path)
             route = routing.resolve_route("new-role", config=loaded.routing_config)
             self.assertEqual((route.model, route.model_source), ("m-new", "config-role"))

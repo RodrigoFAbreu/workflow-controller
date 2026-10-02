@@ -1034,6 +1034,7 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
 def _run_one_step(
     args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
     target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions = routing.NO_OVERRIDES,
+    *, wait: bool = False,
 ) -> tuple[int, dict | Decision | None]:
     """One orchestration boundary: a generation-handoff check, then (at
     most) one job execution. Shared by ``step`` (one call) and ``run``'s
@@ -1047,7 +1048,11 @@ def _run_one_step(
     class, or a ``JobRecord`` otherwise.
 
     With a run open (CP5), a detected handoff and a no-action decision are
-    recorded in its log, and the job it launches carries its ``run_id``."""
+    recorded in its log, and the job it launches carries its ``run_id``.
+
+    ``wait`` (auto-merge-release-wait I6): ``run`` passes ``True``, so the
+    step may wait up to ``merge.wait_seconds`` on a pending merge gate;
+    ``step`` never waits."""
     run = _open_run
     origin_source_root = ident.origin_source_root or ident.source_root
     pending = handoff.detect(ident, origin_source_root)
@@ -1076,6 +1081,9 @@ def _run_one_step(
         run_id=None if run is None else run.run_id,
         drain_detach_seconds=effective["worker.drain_detach_seconds"],
         controller_settings=_controller_settings_block(effective),
+        auto_merge=effective["merge.auto"],
+        wait_seconds=effective["merge.wait_seconds"] if wait else 0,
+        poll_seconds=effective["merge.poll_seconds"],
     )
 
     if isinstance(result, Decision):
@@ -1214,7 +1222,7 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         _await_pause_file(args.pause_file)
 
         run.event("step_started", n=steps_run + 1)
-        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options, wait=True)
         steps_run += 1
         worker.reap_adopted_children()
 

@@ -2,104 +2,96 @@
 
 ## Status
 
-**Complete.** `workflow-controller-settings-and-telemetry` (`docs/ROADMAP.md` step C3, sections 1.4,
-8 and 11.1.2) reached `MILESTONE_COMPLETE` on 2026-10-01. It adds four things, each opt-in or
-behaviour-preserving by default:
-- **a settings file v1** (1.4): one user-level JSON file holds every operational tunable and the
-  routing defaults. The Controller fills in missing settings, moves an untouched value only forward,
-  warns about unknown keys, and `settings show|path|clean` inspects and tidies it
-  (`docs/adr/0008-controller-settings-file.md`);
-- **telemetry v0** (8): each job records its session's totals, and the read-only `telemetry`
-  command summarises them, deriving older jobs from `worker.stdout`;
-- **release notes that follow the milestone** (11.1.2): when a repository opts in, readiness puts the
-  milestone's notes section into the pull request body under a digest-bound marker, and the release
-  publishes the verified blocks of its range or refuses and names the fix;
-- **the four open 1.4 patches**: every printed resume and explain hint parses, the manual-external
-  gate tells the truth about an incoherent ledger, relaunch-bound tests, and a useful `status` with
-  `--json`.
+**Implementing.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4,
+section 11.3). The plan is `docs/ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md`, revision
+7, approved at `a06aeb3` (`EXTERNAL_APPROVE`, review content id `fcdfd33b`). The base commit is
+`854d25c`. Governing workflow version `2.2`, lifecycle authority Workflow 2.6.0. Pull request title
+`feat: auto-merge an accepted milestone and wait for its release` (1.6.0).
 
-The user accepted it in functional review round 2 (implementation revision 4), against checklist
-evidence commit `44f7a113a770f748592d3677e221fb600ed713e4` (checklist blob
-`7f18937d4b3e1df885409ae84aa24df61ab66bb8`).
-- Plan revision 14 was approved at `b0e2f9a` (`EXTERNAL_APPROVE`). During planning, the user
-  narrowed the release-notes design (Decision 11): notes come only from commit-message blocks in
-  the release range, and narrative scanning was dropped.
-- Implementation revisions 1-3: the manual external review returned `REVISE` on revision 1
-  (`4d87e48`, `c5b00e7`), and the local review returned `REVISE` on revision 2 (`e38d0d5`). Both
-  review stages approved revision 3 (technical approval `2683558`).
-- Functional review round 1 (checklist `f04faed`) passed flows A-P and found five wording findings,
-  F1-F5. They were fixed as a bounded functional fix (`4afffae`, `86f78af`, `778338b`, `862cd21`,
-  `fa89897`). Both implementation-review stages approved revision 4 (technical approval `9f7a2b0`,
-  `EXTERNAL_APPROVE`, `CURRENT`). Functional review round 2 re-ran the affected flows and the
-  regressions, and it was clean.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for phase and checkpoint status. The
+previous milestone's narrative is archived at
+`docs/milestones/completed/workflow-controller-settings-and-telemetry.md`.
 
-All seven registry checkpoints (`CP1`-`CP7`) are `COMPLETE`, and the registry declares no completion
-obligations. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of this transition,
-and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks sections 1.4 and 11.1.2, the
-telemetry part of section 8, and step C3 of "At a glance" complete. The full milestone narrative is
-archived verbatim at `docs/milestones/completed/workflow-controller-settings-and-telemetry.md`. It
-covers the goal, checkpoint progress, the review-round fixes, functional review round 2's checklist
-and the 1.5.0 release notes.
+## Goal
 
-This milestone's own deliverables remain live in the tree, unmoved (the archive file's own preface
-says why):
-- `docs/ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md` and its registry/mapping files, still
-  at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry declares;
-- the new modules `controller/settings.py`, `controller/telemetry.py`, `controller/worker_stream.py`
-  and `controller/release_notes.py`, and the changes to `controller/cli.py`, `job.py`, `observe.py`,
-  `routing.py`, `runtime.py`, `evidence.py`, `decision.py`, `milestone_branch.py`, `release_txn.py`,
-  `repo_policy.py`, `gitrepo.py`, `forge.py`, `worker.py`, `workflow_contract.py` and `errors.py`,
-  and `tools/release.py notes-block`;
-- the new test modules `tests/test_settings.py`, `test_telemetry.py`, `test_worker_stream.py`,
-  `test_release_notes.py` and `test_hints_parse.py`, the settings isolation in `tests/__init__.py`,
-  the regenerated `tests/golden/no_policy_lifecycle.json` and `plan_stage_decisions.2.6.0.json`, and
-  the additions to the existing test modules;
-- `docs/adr/0008-controller-settings-file.md`; `docs/guide/runtime.md` ("The settings file"),
-  `docs/guide/commands.md`, `docs/guide/workers.md` ("Telemetry"),
-  `docs/guide/milestone-branches.md` ("Release notes in the pull request body"),
-  `docs/guide/ci-and-releases.md` ("Release notes from the milestones"),
-  `docs/guide/troubleshooting.md` and `docs/README.md`.
+After `/accept-milestone`, nothing is left to decide, yet today a person still merges the pull
+request, watches the release and runs the Controller again to close out. When a repository opts in
+(`milestone_branches.pull_request.auto_merge`) and the operator's settings have not turned it off
+(`merge.auto`), the Controller:
+- squash-merges the ready pull request itself, only at the acceptance commit, through one
+  head-bound `gh pr merge --squash --match-head-commit <A>` per attempt (never GitHub's own
+  auto-merge request);
+- stops and names the exit when something goes wrong after acceptance (a red check, a draft, a
+  conflict, a moved head);
+- waits for the publishing workflow's release of the squash commit, and records it or stops at
+  `release_failed`;
+- closes out and stops, instead of launching the next `/milestone-plan` in the same run;
+- inside `run`, polls the pending states for up to `merge.wait_seconds` without a model token.
 
-`.workflow-controller/policy.json`, `pyproject.toml`, `setup.py` and `.github/workflows/` are
-unchanged from the base `a47e695`.
+A policy without the key behaves exactly as 1.5.0 (I1).
 
-Deferred follow-ups, not conditions of acceptance:
-- **Release 1.5.0.** The milestone branch is on Draft PR #16, titled
-  `feat: a settings file, telemetry v0, release notes from the milestone and the 1.4 cleanup patches`.
-  The pushed head is `44f7a11`; this acceptance commit is local only. The next Controller step
-  pushes it and runs readiness. Once every check passes, the PR is marked ready and merged with
-  "Squash and merge", without editing the commit message. `main.yml` then classifies
-  `RELEASE_DUE` 1.5.0 from `v1.4.2` and publishes it, and the next Controller step closes the
-  milestone out (`MERGED_SQUASHED` → `CLOSED`).
-- **Release notes, one last time by hand.** This repository has not opted in to release notes yet,
-  so 1.5.0's GitHub release carries the fixed text. After the release, a docs pull request adds
-  `docs/releases/1.5.0.md` from the archived narrative's `## Release notes` section. A later small
-  `chore:` pull request turns release notes on in `.workflow-controller/policy.json` (the cutover
-  `docs/guide/ci-and-releases.md` describes).
-- **Install timing.** 1.5.0 goes into the shared install only between Workflow Manager milestones
-  (shared lane plan), since the Manager lane's Controller runs from it.
-- **A roadmap item for the next docs pull request**, reported by the Manager lane on 2026-10-01: in
-  `AMENDING_PLAN`, `explain` and step selection exit with an error on a
-  `workflow_fingerprint.UnclassifiedPathError` from the plan-review publication-status probe, so
-  the Controller cannot select `/milestone-plan`, which is the step that repairs the problem. It
-  should fail closed with a named reason and that resume command.
-- Left as the plan scoped them, or found after acceptance and optional:
-  - LIR1-O1, where an end-marker line with a trailing space or CR is refused as unattributable. The
-    plan's grammar says "exactly".
-  - `status` prints a Python `None` for `pinned identity:`. This predates C3.
-  - The `explain` evidence line repeats both content ids; the gate line itself is fine.
-  - The `telemetry` section of `docs/guide/commands.md` does not explain the `model=inherit` and
-    `none` labels.
-- `tests/golden/generate_plan_stage_decisions.py --check` (without `--release`) reports that its
-  `AMENDING_PLAN` cases differ in this environment. It does the same at the base, so this milestone
-  did not change it, and `tests.test_golden_plan_stage_decisions` passes.
-- Carried over, unchanged: the vendored Workflow conformance suites' Git-maintenance hygiene (a
-  Workflow repository item), and the deferred items of the earlier milestones, listed in their
-  acceptance commits.
+## Checkpoint progress
 
-**Next action:** release 1.5.0 as above, then merge the 1.5.0 release-notes docs pull request. After
-close-out, run `/milestone-plan` for step C4 of "At a glance": auto-merge after acceptance (enable
-GitHub auto-merge, wait for the release, close out, stop; section 11.3). It is the next incomplete
-roadmap step, and its dependencies C1, C1b and C2 are complete. Plan it from `main`'s tip, with that
-base passed explicitly (`/milestone-plan <main tip>`). `/milestone-plan` creates a fresh
-`work_items` entry and claims `active_work_item_id`, ready for `PLANNING`.
+| Checkpoint | Status | Notes |
+|---|---|---|
+| CP1 The two switches | Complete | See below |
+| CP2 The forge surface | Not started | |
+| CP3 The merge at readiness | Not started | |
+| CP4 The release wait, close out and stop | Not started | |
+| CP5 The bounded wait in `run`, and `status` | Not started | |
+| CP6 Documentation and full verification | Not started | |
+
+### CP1 -- the two switches
+
+- `controller/repo_policy.py`: `milestone_branches.pull_request` admits two optional keys (A.1).
+  - `auto_merge` (`MilestoneBranches.auto_merge`, default `false`) must be a boolean. `true`
+    requires `merge_method: "squash"` and `ready_requires_green_checks: true`. Otherwise the policy
+    is refused, naming that field and the reason. `true` with `release.enabled: false` is admitted.
+  - `release_workflow` (`MilestoneBranches.release_workflow`, default `"main.yml"`,
+    `DEFAULT_RELEASE_WORKFLOW`) is a non-empty file name without a `/` (and not `.` or `..`).
+- `controller/settings.py`: the new type `bool` (only JSON `true`/`false`; an integer, string or
+  `null` is refused) and three rows at generation 2 (A.2). `TABLE_GENERATION` is now 2.
+  - `merge.auto`: boolean, default `true`.
+  - `merge.wait_seconds`: 0-86400, default 3600.
+  - `merge.poll_seconds`: 10-600, default 30.
+  A generation-1 file gains the three rows through the existing additive fill, and nothing else
+  moves. A 1.5.0 Controller sharing the file warns about the unknown `merge` section, and its
+  `clean` refuses.
+- `controller/milestone_branch.py`:
+  - `Context` gains `auto_merge` (default `True`), `wait_seconds` (`0`) and `poll_seconds` (`30`).
+  - `release_wait_applies(record)` is the binding's policy snapshot's `auto_merge`, so a policy
+    edit never changes an in-flight milestone (I8).
+  - `auto_merge_applies(record, ctx)` additionally requires `ctx.auto_merge`.
+  Nothing calls them yet; CP3 and CP4 do.
+- `controller/job.py`: `execute_step` (and `_execute_step_locked`) take `auto_merge`,
+  `wait_seconds` and `poll_seconds` and put them on the preflight's `Context`.
+- `controller/cli.py`: `_run_one_step` passes `merge.auto` and `merge.poll_seconds` from the
+  effective settings. It passes `merge.wait_seconds` only when called with `wait=True`, which only
+  `run` does. `step` always passes `0` (I6).
+- Tests:
+  - `tests/test_repo_policy.py` `AutoMergePolicyTest`: an absent key is off and `main.yml`, and the
+    reference policy is unchanged; `true` is admitted with squash and green checks, and with
+    releases off; it is refused without squash, without green checks, and as a non-boolean;
+    `release_workflow` accepted and refused values; and the predicates over a snapshot with
+    `true`, `false` and no key, under `merge.auto` on and off.
+  - `tests/test_settings.py`: the pinned table now holds the generation-2 rows. `MergeRowsTest`
+    covers the bool type both ways, the defaults, the fill of a generation-1 file (adds the three
+    rows, moves nothing), `clean` of one, a generation-1 release sharing the file, and `show`.
+    There are new refusal cases for the bool and the bounds. The two-release tests now stand in
+    generation 3 for release N+1.
+  - `tests/test_cli.py` `SettingsWiringTest`: the three rows reach `execute_step`, and only
+    `run` gets the wait; `execute_step` puts them on the preflight's `Context`.
+  - `tests/test_evidence.py`: the pinned `execute_step` parameter list gains the three keywords.
+- The no-policy golden `tests/golden/no_policy_lifecycle.json` was regenerated (I1, revision 6).
+  Its diff from the base is exactly the three `merge.*` keys in each of the 8 job records'
+  `controller_settings` `values` and `sources`. `tests/test_trunk_preflight.py`
+  `NoPolicyGoldenMergeRowsTest` pins this: with those keys removed, the golden's SHA-256 equals
+  the base golden's (`41c17699…`). The generator's docstring records the rewrite.
+- Verification:
+  - Narrow: `tests.test_settings`, `test_repo_policy`, `test_cli`, `test_milestone_branch` and
+    `test_trunk_preflight` (343 tests) pass, and
+    `tests/golden/generate_no_policy_lifecycle.py --check` passes.
+  - Full suite (`tools/run_tests.py` under a reaping subreaper, without `FORCE_COLOR`): the first
+    run had one failure, the `execute_step` parameter pin in
+    `tests.test_evidence.WorkflowQueryFeedbackPathTest`. After updating the pin, the failed shard
+    (5) passed on replay; shards 0-4 had already passed. That makes 2713 tests green.

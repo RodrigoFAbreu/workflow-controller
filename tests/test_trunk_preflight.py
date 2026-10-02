@@ -16,6 +16,7 @@ identity pin and the Workflow Manager stubbed exactly as in
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -81,6 +82,42 @@ class NoPolicyGoldenTest(unittest.TestCase):
         for key in ("repository_policy", "milestone_branch", "repository_preflight", "branch_binding"):
             self.assertNotIn(f'"{key}"', derived, f"a no-policy document carries {key}")
         self.assertIn("Agent,Workflow,Skill", derived)
+
+
+class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
+    """auto-merge-release-wait I1 (revision 6): CP1 regenerated the golden,
+    and its only difference from the base's (``854d25c``) is the three
+    ``merge.*`` keys added to each job record's ``controller_settings``
+    ``values`` and ``sources``."""
+
+    #: The SHA-256 of ``tests/golden/no_policy_lifecycle.json`` at
+    #: ``854d25c`` (1.5.0).
+    BASE_SHA256 = "41c176990518852a07819071f114e24f4c76411cf66c3ef90b9438c4114817f1"
+    MERGE_KEYS = ("merge.auto", "merge.poll_seconds", "merge.wait_seconds")
+
+    def test_the_golden_differs_from_the_base_only_by_the_merge_rows(self) -> None:
+        data = json.loads(golden.GOLDEN_PATH.read_text())
+        blocks = []
+
+        def collect(node: object) -> None:
+            if isinstance(node, dict):
+                if isinstance(node.get("controller_settings"), dict):
+                    blocks.append(node["controller_settings"])
+                for value in node.values():
+                    collect(value)
+            elif isinstance(node, list):
+                for value in node:
+                    collect(value)
+
+        collect(data)
+        self.assertEqual(len(blocks), 8)
+        expected = {"values": {"merge.auto": True, "merge.poll_seconds": 30, "merge.wait_seconds": 3600},
+                    "sources": dict.fromkeys(self.MERGE_KEYS, "file")}
+        for block in blocks:
+            for part in ("values", "sources"):
+                self.assertEqual({key: block[part].pop(key) for key in self.MERGE_KEYS}, expected[part])
+                self.assertFalse([key for key in block[part] if key.startswith("merge.")])
+        self.assertEqual(hashlib.sha256(golden.render(data).encode("utf-8")).hexdigest(), self.BASE_SHA256)
 
 
 class ProbeTest(unittest.TestCase):

@@ -67,6 +67,8 @@ RELATIVE_PATH = Path("workflow-controller") / "settings.json"
 TYPE_INT = "int"
 #: An integer, or ``null``.
 TYPE_OPTIONAL_INT = "optional-int"
+#: Only JSON ``true``/``false`` (auto-merge-release-wait A.2).
+TYPE_BOOL = "bool"
 #: The routing section (:func:`controller.routing.validate_routing_mapping`).
 TYPE_ROUTING = "routing"
 
@@ -117,13 +119,18 @@ TABLE: tuple[Setting, ...] = (
     Setting("timeouts.release_command_seconds", TYPE_INT, 1800, 60, 21600, None, 1),
     Setting("timeouts.workflow_query_seconds", TYPE_INT, 120, 10, 3600, None, 1),
     Setting("forge.pr_list_limit", TYPE_INT, 200, 50, 1000, None, 1),
+    # auto-merge-release-wait A.2: the operator's switch over a policy's
+    # auto_merge, and run's bounded wait for checks, merge and release.
+    Setting("merge.auto", TYPE_BOOL, True, None, None, None, 2),
+    Setting("merge.wait_seconds", TYPE_INT, 3600, 0, 86400, None, 2),
+    Setting("merge.poll_seconds", TYPE_INT, 30, 10, 600, None, 2),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
 
 #: The highest ``generation`` in :data:`TABLE`, raised as well by a release
 #: that adds or retires a key. Only ever increases.
-TABLE_GENERATION = 1
+TABLE_GENERATION = 2
 
 
 def _table() -> dict[str, Setting]:
@@ -272,6 +279,11 @@ def _is_int(value: Any) -> bool:
 
 def _check_setting(path: Path, setting: Setting, value: Any) -> None:
     if setting.type == TYPE_OPTIONAL_INT and value is None:
+        return
+    if setting.type == TYPE_BOOL:
+        if type(value) is not bool:
+            raise _refuse(path, setting.key, f"{setting.key} must be true or false, got {json.dumps(value)}",
+                          value=value)
         return
     bounds = f"from {setting.minimum} to {setting.maximum}"
     expected = f"an integer {bounds}" + (", or null" if setting.type == TYPE_OPTIONAL_INT else "")

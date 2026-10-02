@@ -194,6 +194,10 @@ RELEASE_TRIGGERS = frozenset({TRIGGER_VERSION_CHANGE, TRIGGER_CONVENTIONAL_COMMI
 MERGE_METHOD_MERGE = "merge"
 MERGE_METHOD_SQUASH = "squash"
 MERGE_METHODS = frozenset({MERGE_METHOD_MERGE, MERGE_METHOD_SQUASH})
+#: ``milestone_branches.pull_request.release_workflow``'s default: the
+#: workflow file whose trunk push run publishes the release
+#: (auto-merge-release-wait A.1).
+DEFAULT_RELEASE_WORKFLOW = "main.yml"
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 
 _FIELD_PLACEHOLDERS = {
@@ -262,6 +266,13 @@ class MilestoneBranches:
     merge_method: str = MERGE_METHOD_MERGE
     #: ``None``: no notes, and the pull request body is 1.4's.
     release_notes: ReleaseNotes | None = None
+    #: auto-merge-release-wait A.1: the Controller squash-merges the
+    #: accepted pull request itself, then waits for the release. ``True``
+    #: requires ``merge_method`` squash and ``ready_requires_green_checks``.
+    auto_merge: bool = False
+    #: The file under ``.github/workflows/`` whose trunk push run publishes
+    #: the release; only the release wait reads it.
+    release_workflow: str = DEFAULT_RELEASE_WORKFLOW
 
     def branch_name(self, work_item_id: str) -> str:
         return render(self.branch_format, {"work_item_id": work_item_id})
@@ -521,7 +532,7 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
                        required={"enabled", "branch_format", "pull_request"})
     pull_request = _object(branches["pull_request"], "milestone_branches.pull_request",
                            required={"draft", "ready_requires_green_checks"},
-                           optional={"merge_method", "release_notes"})
+                           optional={"merge_method", "release_notes", "auto_merge", "release_workflow"})
     if _boolean(pull_request["draft"], "milestone_branches.pull_request.draft") is not True:
         raise _refuse("must be true: the Controller only opens Draft pull requests",
                       field="milestone_branches.pull_request.draft")
@@ -537,7 +548,20 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
                            "milestone_branches.pull_request.merge_method", MERGE_METHODS),
         release_notes=(_release_notes(pull_request["release_notes"]) if "release_notes" in pull_request
                        else None),
+        auto_merge=_boolean(pull_request.get("auto_merge", False), "milestone_branches.pull_request.auto_merge"),
+        release_workflow=_release_workflow(pull_request.get("release_workflow", DEFAULT_RELEASE_WORKFLOW)),
     )
+    if milestone_branches.auto_merge:
+        # The squash verification and the release wait are squash-mode
+        # only, and the Controller must have seen green checks to merge.
+        if milestone_branches.merge_method != MERGE_METHOD_SQUASH:
+            raise _refuse(f"must be {MERGE_METHOD_SQUASH!r} when auto_merge is true: the squash "
+                          f"verification and the release wait are squash-mode only",
+                          field="milestone_branches.pull_request.merge_method")
+        if not milestone_branches.ready_requires_green_checks:
+            raise _refuse("must be true when auto_merge is true: the Controller merges only after it "
+                          "has seen green checks",
+                          field="milestone_branches.pull_request.ready_requires_green_checks")
 
     release = _parse_release(top["release"])
     # Only a squash commit carries the pull request title to the trunk.
@@ -554,6 +578,17 @@ def parse_policy(raw: bytes) -> RepositoryPolicy:
         forge_kind=forge_kind, forge_repository=forge_repository,
         milestone_branches=milestone_branches, release=release,
     )
+
+
+def _release_workflow(value: object) -> str:
+    """``milestone_branches.pull_request.release_workflow`` (A.1): a
+    non-empty file name under ``.github/workflows/``, without a ``/``."""
+    field = "milestone_branches.pull_request.release_workflow"
+    name = _string(value, field)
+    if "/" in name or name in (".", ".."):
+        raise _refuse(f"{name!r} must be a workflow file name under .github/workflows/, without a '/'",
+                      field=field)
+    return name
 
 
 def _release_notes(value: object) -> ReleaseNotes:

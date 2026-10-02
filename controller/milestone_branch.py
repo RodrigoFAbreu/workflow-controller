@@ -200,7 +200,13 @@ class Context:
     event :func:`_event` writes through this context, in order (a plain
     append, never a file write). ``controller.job`` passes a fresh one per
     step, so a refusal after the preflight can say what it did
-    (workflow-2-6-integration CP3)."""
+    (workflow-2-6-integration CP3).
+
+    ``auto_merge``, ``wait_seconds`` and ``poll_seconds`` are the
+    operator's ``merge.*`` settings (auto-merge-release-wait A.2), set by
+    ``controller.job.execute_step``: whether the Controller may merge a
+    binding whose policy opted in, and ``run``'s bounded wait (``0``: no
+    wait, as ``step``)."""
 
     repo_root: Path
     runtime_root: Path
@@ -208,6 +214,9 @@ class Context:
     forge_factory: Callable[[str], forge_mod.Forge] | None = None
     clock: Callable[[], str] = _utc_now
     events: list[str] | None = None
+    auto_merge: bool = True
+    wait_seconds: int = 0
+    poll_seconds: int = 30
 
     def forge(self, repository: str) -> forge_mod.Forge:
         return (self.forge_factory or forge_mod.GhForge)(repository)
@@ -401,6 +410,19 @@ def binding_policy(record: Mapping[str, Any]) -> repo_policy.RepositoryPolicy:
         raise _refuse(f"the policy snapshot of the {record['work_item_id']} binding is damaged",
                       work_item_id=record["work_item_id"])
     return repo_policy.parse_policy(raw.encode("utf-8"))
+
+
+def release_wait_applies(record: Mapping[str, Any]) -> bool:
+    """Whether the binding's policy snapshot opted in to auto-merge (A.3):
+    the release wait and the stop after close-out follow the policy the
+    binding was bound with (I8), whatever the ``merge.auto`` setting."""
+    return binding_policy(record).milestone_branches.auto_merge
+
+
+def auto_merge_applies(record: Mapping[str, Any], ctx: Context) -> bool:
+    """Whether the Controller merges this binding's pull request itself
+    (A.3): its policy snapshot opted in and ``merge.auto`` is on."""
+    return ctx.auto_merge and release_wait_applies(record)
 
 
 def _policy_snapshot(policy: repo_policy.RepositoryPolicy) -> dict:

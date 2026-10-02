@@ -341,24 +341,25 @@ class InheritedDescriptorTest(unittest.TestCase):
             lambda: _try_acquire_in_another_process(root) == "acquired", timeout=10))
 
 
-    def test_exit_45_names_a_waiting_run_not_a_worker(self) -> None:
-        # Functional review F3: the holder is the user's own `run`, waiting at
-        # a gate; the message says so instead of describing worker process groups.
-        root = process_fixtures.scratch_git_repo(self)
-        held = lock.acquire_lifecycle_lock(root)
-        self.addCleanup(held.release)
-        runtime = Path(tempfile.mkdtemp(prefix="f3-lock-runtime-"))
-        self.addCleanup(shutil.rmtree, runtime, True)
-        holder = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"])
-        self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(holder.pid) is not None))
+    def _waiting_run_record(self, runtime: Path, root: Path, pid: int) -> Path:
         (runtime / "runs" / "run-w").mkdir(parents=True)
         (runtime / "runs" / "run-w.json").write_text(json.dumps({
             "run_id": "run-w", "command": "run", "target_repo": str(root), "state": "running",
-            "controller_process": process_fixtures.worker_process_dict(holder.pid)}))
+            "controller_process": process_fixtures.worker_process_dict(pid)}))
         events = runtime / "runs" / "run-w" / "events.jsonl"
         events.write_text(json.dumps({"event": "run_started"}) + "\n"
                           + json.dumps({"event": "waiting", "gate": "release_pending",
                                         "deadline": "2026-10-02T12:00:00Z"}) + "\n")
+        return events
+
+    def test_exit_45_names_a_waiting_run_not_a_worker(self) -> None:
+        # Functional review F3: the holder is the user's own `run`, waiting at
+        # a gate; the message says so instead of describing worker process groups.
+        root = process_fixtures.scratch_git_repo(self)
+        runtime = Path(tempfile.mkdtemp(prefix="f3-lock-runtime-"))
+        self.addCleanup(shutil.rmtree, runtime, True)
+        holder, holder_pid = _start_holder(self, root)
+        events = self._waiting_run_record(runtime, root, holder_pid)
         managed_repo = fixtures.build_target_managed_repository(root)
 
         with self.assertRaises(LifecycleWorkerActiveError) as ctx:
@@ -375,6 +376,28 @@ class InheritedDescriptorTest(unittest.TestCase):
         events.write_text(events.read_text() + json.dumps({"event": "job_started"}) + "\n")
         with self.assertRaises(LifecycleWorkerActiveError) as ctx:
             job._acquire_lifecycle_lock(runtime, managed_repo)
+        self.assertIn("No recorded worker process group", ctx.exception.message)
+        self.assertNotIn("waiting_run", ctx.exception.evidence)
+
+    def test_exit_45_does_not_name_a_live_waiting_run_that_is_not_the_lock_holder(self) -> None:
+        # Implementation review round 8, F3: a worker (or anything else) holds
+        # the lock while an unrelated live process has a waiting-looking run
+        # record. The run is not named and the worker guidance is kept.
+        root = process_fixtures.scratch_git_repo(self)
+        held = lock.acquire_lifecycle_lock(root)
+        self.addCleanup(held.release)
+        runtime = Path(tempfile.mkdtemp(prefix="f3-lock-runtime-"))
+        self.addCleanup(shutil.rmtree, runtime, True)
+        (runtime / "jobs").mkdir()
+        bystander = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"])
+        self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(bystander.pid) is not None))
+        self._waiting_run_record(runtime, root, bystander.pid)
+        managed_repo = fixtures.build_target_managed_repository(root)
+
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            job._acquire_lifecycle_lock(runtime, managed_repo)
+        self.assertNotIn("run-w", ctx.exception.message)
+        self.assertNotIn("no worker is running", ctx.exception.message)
         self.assertIn("No recorded worker process group", ctx.exception.message)
         self.assertNotIn("waiting_run", ctx.exception.evidence)
 

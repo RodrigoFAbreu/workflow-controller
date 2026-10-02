@@ -314,6 +314,17 @@ def probe_lifecycle_lock(target_root: str | os.PathLike) -> str:
     return _probe_open_path(path, directory=True)[0]
 
 
+def lifecycle_lock_holders(target_root: str | os.PathLike) -> tuple[int, ...]:
+    """The pids ``/proc/locks`` names as lock takers of ``target_root``'s
+    lifecycle lock, read-only; empty when none is shown or the probe could
+    not read them (so a caller cannot establish who holds it)."""
+    try:
+        path = resolve_git_dir(target_root)
+    except GitDirectoryUnresolvableError:
+        return ()
+    return _probe_open_path(path, directory=True)[1]
+
+
 def probe_file_lock(path: str | os.PathLike) -> tuple[str, tuple[int, ...]]:
     """The same non-acquiring probe for the ``flock`` on a regular file
     (``workflow-controller-worker-lifecycle-ownership`` CP5: a job's

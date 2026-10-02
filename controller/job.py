@@ -3398,12 +3398,14 @@ def _waiting_run(runtime_root: Path, root: Path) -> tuple[str, dict] | None:
     at a gate (checks, merge or release), as ``(run_id, its last "waiting"
     event)``, or ``None``. Read tolerantly, for the exit-45 message only: a
     run counts when its record is ``running`` for this target, its recorded
-    Controller process is alive and is not this one, and the last event of
-    its log is the ``waiting`` event."""
+    Controller process is alive, is not this one and is a taker of the
+    lifecycle lock (``/proc/locks``), and the last event of its log is the
+    ``waiting`` event."""
     try:
         paths = sorted((Path(runtime_root) / "runs").glob("*.json"))
     except OSError:
         return None
+    holders = lock.lifecycle_lock_holders(root)
     for path in paths:
         try:
             record = json.loads(path.read_text())
@@ -3414,7 +3416,7 @@ def _waiting_run(runtime_root: Path, root: Path) -> tuple[str, dict] | None:
             continue
         process = record.get("controller_process")
         pid = process.get("pid") if isinstance(process, Mapping) else None
-        if pid == os.getpid() or not (isinstance(process, Mapping)
+        if pid == os.getpid() or pid not in holders or not (isinstance(process, Mapping)
                                       and worker.identity_alive(pid, process.get("start_ticks")) is True):
             continue
         try:

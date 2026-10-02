@@ -2599,6 +2599,35 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(self.preflight().action, "closed_out")
         self.assert_closed(a, m)
 
+    def test_an_unrelated_trunk_commit_with_the_suffix_is_not_adopted(self) -> None:
+        # A trunk commit whose subject ends with ``(#<number>)`` but whose
+        # content is not the acceptance commit's squash is not this pull
+        # request's merge: a real refusal is counted, and at the budget the
+        # terminal manual-merge refusal stands.
+        number, a = self.to_held_ready()
+        self.gh_edit(number, mergeStateStatus="CLEAN")
+        human = self.human()
+        (human / "unrelated.txt").write_text("elsewhere\n")
+        unrelated = commit_all(human, f"fix unrelated issue (#{number})")
+        run(["git", "push", "-q", "origin", "main"], cwd=human)
+        refusal = ForgeUndecidableError("gh pr merge failed (exit 1)",
+                                        evidence={"stderr": "Resource not accessible by integration.\n"})
+        with mock.patch.object(forge_mod.GhForge, "merge_squash", side_effect=refusal) as merge:
+            gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            self.assertIn("Resource not accessible by integration.", gate.message)
+            self.assertEqual((self.record()["merge"]["state"], self.record()["merge"]["refusals"]), ("sending", 1))
+            self.assertNotIn("squash_commit", self.record()["merge"])
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            with self.assertRaises(BranchBindingError) as caught:
+                self.preflight()
+            self.assertIn("Resource not accessible by integration.", str(caught.exception))
+            self.assertEqual(merge.call_count, 3)
+        self.assertEqual(self.events_named("merge_accepted"), [])
+        self.assertEqual(self.origin_ref("refs/heads/main"), unrelated)
+        merge = self.record()["merge"]
+        self.assertEqual((merge["attempts"], merge["refusals"]), (3, 3))
+        self.assertNotIn("squash_commit", merge)
+
     def test_new_pr_starts_a_new_merge_record(self) -> None:
         # The accepted gate's own recovery exit, and a pull request closed
         # after refused sends: the replacement is a new merge record (C.3's

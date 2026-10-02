@@ -427,7 +427,9 @@ GitHub's pull-request reads can lag its write. So before counting a
 failure as a refusal, and before sending again, the Controller fetches
 `main` and looks for the pull request's squash commit (a first-parent
 commit since the acceptance commit's merge base whose subject ends in
-`(#<n>)`). When it is there, the merge is recorded as accepted
+`(#<n>)` and whose tree is the acceptance commit squashed onto its
+parent, so an unrelated commit that only carries the suffix is not
+taken for it). When it is there, the merge is recorded as accepted
 (`merge.squash_commit`), nothing more is sent, and the step waits for
 GitHub to show it. Nothing depends on the wording of GitHub's refusal.
 Otherwise a refused merge is `merge_pending` with GitHub's message, sent

@@ -1117,18 +1117,22 @@ def _squash_on_trunk(ctx: Context, record: Mapping[str, Any], number: int) -> st
     """The squash commit of pull request ``number`` on the fetched
     ``<remote>/<trunk>``, if there is one: a commit on the trunk's
     first-parent chain since its merge base with the acceptance commit
-    whose subject ends with GitHub's squash suffix `` (#<number>)``. Git's
-    refs, unlike GitHub's pull-request reads, show a merge as soon as GitHub
-    wrote it, so this decides a send whose outcome is unknown, whatever text
-    GitHub refused a duplicate with (plan C.3 keys no code on that text).
-    The title is not matched: it may have been edited since the send."""
+    whose subject ends with GitHub's squash suffix `` (#<number>)`` and
+    whose content is the acceptance commit squashed onto its parent
+    (:func:`_squash_content`), so an unrelated commit that only carries the
+    suffix is never adopted. Git's refs, unlike GitHub's pull-request reads,
+    show a merge as soon as GitHub wrote it, so this decides a send whose
+    outcome is unknown, whatever text GitHub refused a duplicate with (plan
+    C.3 keys no code on that text). The title is not matched: it may have
+    been edited since the send."""
     remote_trunk = _remote_trunk(ctx, record["repository"]["remote"], record["trunk"])
-    base = gitrepo.merge_base(ctx.repo_root, record["accepted_head"], remote_trunk, runner=ctx.runner)
+    a = record["accepted_head"]
+    base = gitrepo.merge_base(ctx.repo_root, a, remote_trunk, runner=ctx.runner)
     if base is None:
         return None
     suffix = f" (#{number})"
     for commit, subject in gitrepo.first_parent_subjects(ctx.repo_root, base, remote_trunk, runner=ctx.runner):
-        if subject.endswith(suffix):
+        if subject.endswith(suffix) and _squash_content(ctx, record, number, commit, a):
             return commit
     return None
 
@@ -1265,10 +1269,8 @@ def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullR
     if not m or gitrepo.ref_commit(ctx.repo_root, m, runner=ctx.runner) != m or not _ancestor(ctx, m, remote_trunk):
         return False
     # 2. one parent.
-    parents = gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)
-    if len(parents) != 1:
+    if len(gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)) != 1:
         return False
-    p = parents[0]
     # 3. GitHub's squash subject: the title and the number.
     if gitrepo.commit_subject(ctx.repo_root, m, runner=ctx.runner) != f"{pr.title} (#{pr.number})":
         return False
@@ -1277,6 +1279,18 @@ def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullR
             == gitrepo.commit_identity(ctx.repo_root, h, runner=ctx.runner):
         return False
     # 4. the reviewed content.
+    return _squash_content(ctx, record, pr.number, m, h)
+
+
+def _squash_content(ctx: Context, record: Mapping[str, Any], number: int, m: str, h: str) -> bool:
+    """Whether ``m`` has one parent ``p`` and the tree of ``h`` squashed
+    onto ``p``: ``h``'s own tree when ``p`` is an ancestor of ``h``,
+    otherwise ``git merge-tree --write-tree p h``. Never runs a configured
+    merge driver (``False``); refuses on a Git too old to decide (I3)."""
+    parents = gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)
+    if len(parents) != 1:
+        return False
+    p = parents[0]
     tree = gitrepo.tree_of(ctx.repo_root, m, runner=ctx.runner)
     if _ancestor(ctx, p, h):
         return tree == gitrepo.tree_of(ctx.repo_root, h, runner=ctx.runner)
@@ -1284,10 +1298,10 @@ def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullR
         return False  # never run a configured merge driver's program
     version = gitrepo.git_version(ctx.repo_root, runner=ctx.runner)
     if version < MERGE_TREE_MIN_GIT:
-        raise _refuse(f"pull request #{pr.number}'s merge commit {m} is verified against `git merge-tree "
+        raise _refuse(f"pull request #{number}'s merge commit {m} is verified against `git merge-tree "
                       f"--write-tree`, which needs Git {'.'.join(map(str, MERGE_TREE_MIN_GIT))} or later; this Git "
                       f"is {'.'.join(map(str, version))}", work_item_id=record["work_item_id"],
-                      branch=record["branch"], pr=pr.number, merge_commit=m,
+                      branch=record["branch"], pr=number, merge_commit=m,
                       exits=[f"upgrade Git to {'.'.join(map(str, MERGE_TREE_MIN_GIT))} or later"])
     merged = gitrepo.merge_tree(ctx.repo_root, p, h, runner=ctx.runner)
     return merged is not None and merged == tree

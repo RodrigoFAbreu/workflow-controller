@@ -2,7 +2,7 @@
 
 ## Status
 
-**Awaiting functional review (round 2).** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md`
+**In implementation review (revision 11).** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md`
 step C4, section 11.3). The plan is `docs/ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md`,
 revision 7, approved at `a06aeb3` (`EXTERNAL_APPROVE`, review content id `fcdfd33b`). The base
 commit is `854d25c`. Governing workflow version `2.2`, lifecycle authority Workflow 2.6.0. Pull
@@ -16,8 +16,11 @@ All six checkpoints are complete. Implementation revision 6 had technical approv
 and the functional review's round 1 (F1-F6) was applied in revisions 7 and 8. Revision 9 names a
 waiting run in exit 45 only when it holds the lifecycle lock, and revision 10 adds that case's
 test. Implementation revision 10 has technical approval (`08dd5c1`, `EXTERNAL_APPROVE` of bundle
-`b652463f`, review content id `a5b48e0f`, reviewed head `9efa17c`). The phase is
-`AWAITING_FUNCTIONAL_REVIEW`; the round-2 functional review checklist is below.
+`b652463f`, review content id `a5b48e0f`, reviewed head `9efa17c`). The functional review's
+round 2 found R2-F1 (the F6 body rewording reached bindings without `auto_merge`, against I1),
+fixed in `7f24c3a`, which made that approval stale. Both implementation-review stages run again
+(local, then manual external) before technical approval is reachable; the functional review
+checklist below is then re-run for round 3.
 
 ## Goal
 
@@ -514,7 +517,7 @@ revisions 7-10 fix them. Where each fix shows:
 
 Flow M adds the exit-45 and Ctrl-C unit tests. Every other flow is round 1's, re-measured.
 
-**Candidate finding, found while measuring (confirm or dismiss).** The F6 squash-body change
+**R2-F1, found while measuring round 2, fixed in `7f24c3a` (implementation revision 11).** The F6 squash-body change
 (`68c237c`, `squash_body` in `controller/milestone_branch.py`) applies to every binding, not only
 to auto-merge ones, so a binding without `auto_merge` no longer writes 1.5.0's pull request body
 (plan I1). Flow D's transcripts stay identical only because they leave the body out. After flow D:
@@ -523,6 +526,10 @@ to auto-merge ones, so a binding without `auto_merge` no longer writes 1.5.0's p
 ```
 Measured: ``d-old: Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".`` and
 ``d-new: Accepted at <A> on `milestone/wi-1`; squash-merged into the trunk as one commit.``
+Since `7f24c3a` the opted-in wording follows the binding's policy (never `merge.auto`), and a
+binding without the key writes 1.5.0's line again; flow D's transcript now includes the merged
+body, so its "identical" line covers it (measured at `7f24c3a`: identical, 1.5.0's body). Round 3
+re-tests D (the body) and E (the opted-in wording, unchanged).
 
 The automated state is current: the last full run, at revision 10 (`9efa17c`,
 `python3 -m unittest discover -s tests`), ran 2806 tests with one failure, the known
@@ -1035,7 +1042,7 @@ one() {  # one NAME: a no-key target to READY, a hand squash, and the close-out 
     python3 -c "import glob,json,sys; print(sorted(json.load(open(glob.glob(sys.argv[1]+'/repositories/*/milestones/wi-1.json')[0]))))" "$RT"
     wcx explain "$R" | sed -n 2p | norm
     act hand-squash; act next-plan >/dev/null; wcx step "$R"; echo "exit $?"; gate | sed 's/[0-9a-f]\{40\}/<sha>/'; rec; ev
-    git -C "$R" branch --show-current; } > "$S/$1.txt" 2>&1
+    git -C "$R" branch --show-current; git --git-dir="$O" log -1 --format=%b main | norm; } > "$S/$1.txt" 2>&1
 }
 one d-new
 W=$(command -v workflow-controller) one d-old
@@ -1056,7 +1063,10 @@ Expected: `the 1.5.0 and local transcripts are identical`, then the transcript:
   close-out step goes on to plan the next milestone, as in 1.5.0 (no stop);
 - `CLOSED merge: null release: null`; the events
   `bind_planned bound push_intent pushed pr_planned pr_created push_intent pushed push_intent pushed push_intent pushed push_intent pushed pr_edited ready merged_squashed closed`;
-  `main`.
+  `main`; and the squash commit's body (the pull request body), 1.5.0's:
+  `` Milestone `wi-1`, planned in `docs/plans/wi-1.md`, driven by workflow-controller. ``,
+  ``Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".``, a blank line and
+  `<!-- workflow-controller: work_item=wi-1 -->` (R2-F1; measured with a local build of `7f24c3a`).
 
 The last two lines prove which build ran: `v1.5.0` (the installed release), then
 `local 08dd5c1031e2`.

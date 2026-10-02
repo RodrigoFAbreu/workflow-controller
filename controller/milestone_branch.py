@@ -1108,7 +1108,7 @@ def _merge_refusal(record: Mapping[str, Any], number: int, merge: Mapping[str, A
     for this record; a person merges."""
     by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
     return _refuse(f"GitHub refused the Controller's merge of pull request #{number} {merge.get('attempts')} times "
-                   f"(last: {merge.get('refusal')}); it sends no more. {by_hand[0].upper()}{by_hand[1:]}: the next "
+                   f"(last: {merge.get('refusal')}); it sends no more; after a person merges it, the next "
                    f"step closes out as for any merge", work_item_id=record["work_item_id"], branch=record["branch"],
                    exits=[by_hand], pr=number, merge=dict(merge))
 

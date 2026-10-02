@@ -2589,6 +2589,9 @@ class AutoMergeTest(_AutoMerge):
             self.assertIn("refused the Controller's merge of pull request", str(caught.exception))
             self.assertIn("Squash merges are not allowed", str(caught.exception))
             self.assertIn("Squash and merge", " ".join(caught.exception.evidence["exits"]))
+            # The way out is stated once, as the Exit: line, not also in the message.
+            self.assertEqual(str(caught.exception).count('merge pull request #'), 1)
+            self.assertNotIn("Merge pull request", str(caught.exception))
             # Never sent again.
             with self.assertRaises(BranchBindingError):
                 self.preflight()

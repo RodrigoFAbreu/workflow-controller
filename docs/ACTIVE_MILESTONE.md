@@ -1180,7 +1180,7 @@ Expected, I1:
   `READY merge: {"attempts": 1, "head": "<A>", "last_attempt_at": "<t>", "refusal": "HTTP 500: Internal Server Error (https://api.github.com/graphql)", "refusals": 1, "state": "sending"} release: null`
   (then `2`/`2`): never `accepted`;
 - `step 3: exit 20` and `step 4: exit 20`, each
-  `error: GitHub refused the Controller's merge of pull request #1 3 times (last: HTTP 500: Internal Server Error (https://api.github.com/graphql)); it sends no more. Merge pull request #1 on GitHub with "Squash and merge": the next step closes out as for any merge Exit: merge pull request #1 on GitHub with "Squash and merge".`,
+  `error: GitHub refused the Controller's merge of pull request #1 3 times (last: HTTP 500: Internal Server Error (https://api.github.com/graphql)); it sends no more; after a person merges it, the next step closes out as for any merge Exit: merge pull request #1 on GitHub with "Squash and merge".`,
   with `"attempts": 3, ... "refusals": 3, "state": "sending"` both times;
 - `PR #1 OPEN ...; pr merge calls: 3; origin main <...> 'fix unrelated issue (#1)'` (no fourth
   send), and `1` (one `merge_refused` event for the one distinct message);

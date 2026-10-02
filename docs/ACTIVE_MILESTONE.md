@@ -2,7 +2,7 @@
 
 ## Status
 
-**In implementation review (revision 9).** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md`
+**Awaiting functional review (round 2).** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md`
 step C4, section 11.3). The plan is `docs/ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md`,
 revision 7, approved at `a06aeb3` (`EXTERNAL_APPROVE`, review content id `fcdfd33b`). The base
 commit is `854d25c`. Governing workflow version `2.2`, lifecycle authority Workflow 2.6.0. Pull
@@ -12,15 +12,12 @@ request title `feat: auto-merge an accepted milestone and wait for its release` 
 previous milestone's narrative is archived at
 `docs/milestones/completed/workflow-controller-settings-and-telemetry.md`.
 
-All six checkpoints are complete. Implementation revision 6 had technical approval (`3d875a7`,
-`EXTERNAL_APPROVE` of bundle `c6153442`, review content id `42a96a79`). The functional review's
-round 1 (F1-F6) was applied in revision 7, which made that approval stale, and the local review
-of revision 7 (`REVISE`: bundle narrative and evidence, plus two optional fixes) is applied in
-revision 8. The manual external review's round 8 (exit 45 names a waiting run only when it holds
-the lifecycle lock) is applied in revision 9, and the local review's round 9 (the bundle's
-evidence and status text) is applied in the same revision, with no code change. Both implementation-review stages run again (local, then manual external) before
-technical approval is reachable. The functional review checklist is below, and is regenerated
-after that approval.
+All six checkpoints are complete. Implementation revision 6 had technical approval (`3d875a7`),
+and the functional review's round 1 (F1-F6) was applied in revisions 7 and 8. Revision 9 names a
+waiting run in exit 45 only when it holds the lifecycle lock, and revision 10 adds that case's
+test. Implementation revision 10 has technical approval (`08dd5c1`, `EXTERNAL_APPROVE` of bundle
+`b652463f`, review content id `a5b48e0f`, reviewed head `9efa17c`). The phase is
+`AWAITING_FUNCTIONAL_REVIEW`; the round-2 functional review checklist is below.
 
 ## Goal
 
@@ -490,18 +487,49 @@ Codex `REVISE` on bundle `ed2169dd` (review content id `707a0ad1`), no Blocking 
 
 ## Functional review checklist
 
-Round 1, implementation revision 6: technical approval `3d875a7`, reviewed implementation head
-`e67ba68`, implementation bundle `c6153442`, PR #18 (draft) at `3d875a7`. Every expected result
-below was measured on 2026-10-02 against `3d875a7` in a scratch directory (`/tmp/c4-fr`), by
+Round 2, implementation revision 10: technical approval `08dd5c1`, reviewed implementation head
+`9efa17c`, implementation bundle `b652463f`, PR #18 (draft) at `08dd5c1`. Every expected result
+below was measured on 2026-10-03 against `08dd5c1` in a scratch directory (`/tmp/c4-fr`), by
 running the blocks exactly as written. Values that cannot repeat are shown as `<...>`, and the
 helpers print the loaded target's own paths and commits as `<R>` (its clone), `<RT>` (its runtime
 root), `<A>` (the acceptance commit), `<B0>` (the branch point), `<m>` (the squash commit), `<d>`
 (a later trunk commit) and `<L>` (a later branch commit); times print as `<t>`.
 
-The automated state is current: the last full run (`TEST_RESULTS.md`, `e67ba68`: 2803 tests, 6
-shards, every shard PASS on attempt 1) covers the same code, since only
-`docs/ai-workflow/WORKFLOW_STATE.json` changed after it (`6e51568`, `3d875a7`). Flow M reruns this
-milestone's own test modules.
+**Round 2 focus.** Round 1 (revision 6) passed every flow and found F1-F6
+(`.ai-review/workflow-controller-auto-merge-release-wait/feedback/FUNCTIONAL_REVIEW.md`);
+revisions 7-10 fix them. Where each fix shows:
+- F1, the refusal-budget error states the manual-merge way out once: I1, steps 3 and 4;
+- F2, the `release_failed` title covers a failed run and a run that succeeded and published
+  nothing: K2 and K3;
+- F3 and revision 9, exit 45 names the waiting `run` when that run holds the lifecycle lock (L3),
+  and keeps the worker text when another process holds it, even while a live run's record looks
+  like a waiting run (L5, new);
+- F4, Ctrl-C in a waiting `run` prints one line and exits `130`, with no traceback: L4;
+- F5, the fake `gh` answers a merge of an already-merged pull request with exit 0 and
+  `! Pull request ... was already merged`, as real `gh` does, and the Controller accepts that
+  send without counting a refusal: J3 (new; `act hand-squash` takes an optional read lag);
+- F6, the `merge.auto: false` gate names the setting (F); the squash body no longer tells a person
+  to merge (E); the guides' trunk-side close-out exception (K6, P), the release notes'
+  compatibility line (N, P), the `release_failed` wording and real `gh`'s merge texts (P).
+
+Flow M adds the exit-45 and Ctrl-C unit tests. Every other flow is round 1's, re-measured.
+
+**Candidate finding, found while measuring (confirm or dismiss).** The F6 squash-body change
+(`68c237c`, `squash_body` in `controller/milestone_branch.py`) applies to every binding, not only
+to auto-merge ones, so a binding without `auto_merge` no longer writes 1.5.0's pull request body
+(plan I1). Flow D's transcripts stay identical only because they leave the body out. After flow D:
+```bash
+. /tmp/c4-fr/fr.sh; for t in d-old d-new; do use $t; echo "$t: $(git --git-dir="$O" log -1 --format=%b main | sed -n 2p | norm)"; done
+```
+Measured: ``d-old: Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".`` and
+``d-new: Accepted at <A> on `milestone/wi-1`; squash-merged into the trunk as one commit.``
+
+The automated state is current: the last full run, at revision 10 (`9efa17c`,
+`python3 -m unittest discover -s tests`), ran 2806 tests with one failure, the known
+`test_evidence` stderr match that `FORCE_COLOR=3` breaks; it passes with `FORCE_COLOR` unset. The
+last sharded run, at revision 9 (`tools/run_tests.py`, `TEST_RESULTS.md`), ran 2812 tests, every
+shard PASS on attempt 1. Only `docs/ai-workflow/WORKFLOW_STATE.json` changed after `9efa17c`
+(`e852ad3`, `08dd5c1`). Flow M reruns this milestone's own test modules.
 
 Nothing in flows A-P writes to this repository, its remote, GitHub, the user's settings file
 (`~/.config/workflow-controller/`) or the shared runtime root
@@ -522,7 +550,8 @@ Conventional Commits, `v1.0.0` tagged and published at the trunk tip). GitHub is
 `gh` (`tests/fake_gh.py`): it merges only `pr merge <n> --squash --match-head-commit <sha>` at a
 matching head and a `CLEAN`/`HAS_HOOKS` merge state, refuses `--auto`, and serves the workflow
 runs and the releases. `act <what>` plays GitHub's and other people's side (checks, merge states,
-drafts, read lag, a lost reply, pushes, hand merges, workflow runs, publications).
+drafts, read lag, a lost reply, pushes, hand merges (a hand squash optionally with a lagging read),
+workflow runs, publications).
 
 ### Setup
 
@@ -577,7 +606,7 @@ drive stop smoke auto; use smoke; act show
 ```
 Expected: `"""Functional-review driver for workflow-controller-auto-merge-release-wait:`, `47`
 (the helper file's non-empty lines), `workflow-controller 1.5.0` and
-`runtime: package (local build from 3d875a7106b5)`: the version stays tag-derived until the
+`runtime: package (local build from 08dd5c1031e2)`: the version stays tag-derived until the
 `v1.6.0` tag exists. Then eight `-- driver: workflow-controller step -> exit <n>` lines (`0`, `0`,
 `10`, `0`, `0`, `0`, `0`, `10`: the plan, the bind and `/review-plan`, the manual plan-review
 gate, the plan approval and CP1 with the Draft PR, CP2, the bundle, the local review, the manual
@@ -593,7 +622,7 @@ The helpers (`fr.sh`) and the driver (`drive.py`), extracted by the setup block:
 unset FORCE_COLOR PYTHONPATH WORKFLOW_CONTROLLER_SETTINGS GH_TOKEN GITHUB_OUTPUT FAKE_GH_FAIL
 export S=/tmp/c4-fr R0=/home/rodrigo/Workspace/workflow-controller
 export W=$S/venv/bin/workflow-controller XDG_CONFIG_HOME=$S/xdg
-export H=3d875a7106b5c3e1be0413dd12a50253dfa311a7 BASE=854d25cf4c53ec63a7272a34be31c618f04c8993
+export H=08dd5c1031e22272d15935abf5ee973ac57fef03 BASE=854d25cf4c53ec63a7272a34be31c618f04c8993
 # drive stop NAME KIND: a fresh target (KIND none, auto or release) driven by $W to the acceptance commit
 drive() { (cd /tmp && python3 "$S/drive.py" "$@"); }
 # use NAME: load a target: $R its clone, $O its bare origin, $RT its runtime root, $T its directory,
@@ -795,7 +824,8 @@ def act(name: str, what: str, *args: str) -> None:
                   mergeCommit={"oid": git("rev-parse", "HEAD", cwd=h)})
         pr.pop("mergeStateStatus", None)
         print(f"-- driver: PR #{pr['number']} merged by hand with a merge commit")
-    elif what == "hand-squash":  # a person presses "Squash and merge" on GitHub (title (#1), then the body)
+    elif what == "hand-squash":  # hand-squash [N]: a person presses "Squash and merge" on GitHub (title (#1),
+        before = fake_gh._pr_view(pr)  # then the body); the next N reads of the PR still show it as it was
         head = commit(f"refs/heads/{BRANCH}")
         h = human()
         git("merge", "-q", "--squash", f"origin/{BRANCH}", cwd=h)
@@ -804,6 +834,8 @@ def act(name: str, what: str, *args: str) -> None:
         pr.update(state="MERGED", isDraft=False, headRefOid=head, mergedAt="2026-10-02T12:00:00Z",
                   mergeCommit={"oid": git("rev-parse", "HEAD", cwd=h)})
         pr.pop("mergeStateStatus", None)
+        if args:
+            pr.update(lagged_reads=int(args[0]), lagged_view=before)
         print(f"-- driver: PR #{pr['number']} squash-merged by hand")
     elif what == "run":  # run COMMIT STATUS [CONCLUSION] [WORKFLOW FILE]
         sha = commit(args[0])
@@ -874,7 +906,7 @@ git diff --stat "$BASE" "$H" -- .workflow-controller/ pyproject.toml setup.py .g
 (cd "$S/src" && python3 tools/ci_workflows.py --check; echo "ci_workflows --check exit $?")
 ```
 Expected:
-- `workflow-controller 1.5.0` and `runtime: package (local build from 3d875a7106b5)`;
+- `workflow-controller 1.5.0` and `runtime: package (local build from 08dd5c1031e2)`;
 - `inspect: 1.5.0 exit 0, local exit 0`, `inspect: byte-identical`, and the same two lines for
   `explain`: this repository's policy has no `auto_merge` key, so both builds read it alike
   (each with an empty scratch runtime root);
@@ -1027,7 +1059,7 @@ Expected: `the 1.5.0 and local transcripts are identical`, then the transcript:
   `main`.
 
 The last two lines prove which build ran: `v1.5.0` (the installed release), then
-`local 3d875a7106b5`.
+`local 08dd5c1031e2`.
 
 **E. Opt-in: the head-bound merge, close-out, the stop, and the next step from the trunk (C.3,
 D.4).** An `auto` target (releases off).
@@ -1076,7 +1108,9 @@ wcx settings show | grep '^merge.auto'; wcx explain "$R" | sed -n 2p | norm
 sed -i 's/"auto": false/"auto": true/' "$T/settings.json"; wcx explain "$R" | sed -n 2p | norm
 wcx step "$R"; echo "merge.auto back on: exit $?"; rec | cut -d' ' -f1; act show
 ```
-Expected: `exit 10` and the exact `merge_pull_request` gate text of flow D (a person merges);
+Expected: `exit 10` and the `merge_pull_request` gate text of flow D (a person merges), except
+that its last sentence names the setting (F6) instead of `The Controller never merges`:
+`` ... The squash commit's subject is the pull request's title and its body the pull request's body. Auto-merge is switched off by `merge.auto` in the settings file, so the Controller does not merge it ``;
 `READY merge: null release: null`;
 `PR #1 OPEN draft=False head=<A> mergeStateStatus=CLEAN; pr merge calls: 0; origin main <B0> 'Policy: auto'`;
 `merge.auto = false (file)`; `explain` predicts
@@ -1187,7 +1221,8 @@ Expected, I1:
   (then `2`/`2`): never `accepted`;
 - `step 3: exit 20` and `step 4: exit 20`, each
   `error: GitHub refused the Controller's merge of pull request #1 3 times (last: HTTP 500: Internal Server Error (https://api.github.com/graphql)); it sends no more; after a person merges it, the next step closes out as for any merge Exit: merge pull request #1 on GitHub with "Squash and merge".`,
-  with `"attempts": 3, ... "refusals": 3, "state": "sending"` both times;
+  with `"attempts": 3, ... "refusals": 3, "state": "sending"` both times: the way out (merge
+  on GitHub) is stated once, as the `Exit:` (F1);
 - `PR #1 OPEN ...; pr merge calls: 3; origin main <...> 'fix unrelated issue (#1)'` (no fourth
   send), and `1` (one `merge_refused` event for the one distinct message);
 - the hand squash then closes out: `after the hand squash: exit 0`, `CLOSED`, `main`.
@@ -1202,7 +1237,9 @@ I2: `READY merge: {"attempts": 3, ...`, `closed: exit 10` with the
 
 **J. A lost reply and stale reads (C.3 step 4).** J1: GitHub merges, but `gh` exits 1 with a
 network error, and the next three reads of the pull request still show it open. J2: the merge
-succeeds and the next two reads lag.
+succeeds and the next two reads lag. J3 (F5): a person presses "Squash and merge" while the
+Controller's next read still shows the pull request open and mergeable, so the Controller sends;
+`gh`, which reads the state itself, sends nothing and exits 0 with its "already merged" warning.
 
 ```bash
 . /tmp/c4-fr/fr.sh
@@ -1212,6 +1249,10 @@ act show; ev | tr ' ' '\n' | grep -E '^merge_' | tr '\n' ' '; echo
 echo "== J2 GitHub merges, reads lag"; held j2; act lag 2; act mstate CLEAN
 wcx step "$R"; echo "step 1: exit $?"; rec; wcx explain "$R" | sed -n 2p | norm
 wcx step "$R"; echo "step 2: exit $?"; wcx step "$R"; echo "step 3: exit $?"; rec | cut -d' ' -f1; act show
+echo "== J3 a person squash-merges while the Controller's read still shows it open"; held j3; act mstate CLEAN; act hand-squash 1
+M=$(git --git-dir="$O" rev-parse main); wcx step "$R"; echo "exit $?"; rec; act show
+ev | tr ' ' '\n' | grep -E '^merge' | tr '\n' ' '; echo; git -C "$R" branch --show-current
+gh pr merge 1 --squash --match-head-commit "$A" --subject s --body b --repo example-owner/example-repo; echo "gh exit $?"
 ```
 Expected:
 - J1 `step 1: exit 10`:
@@ -1223,7 +1264,15 @@ Expected:
   `merge_refused`);
 - J2 `step 1: exit 10`, `READY merge: {"attempts": 1, "head": "<A>", "last_attempt_at": "<t>", "state": "accepted"} release: null`;
   `explain`: `repository preflight: wait_merge (merge_pending) -- GitHub accepted the merge at <A>; the step waits for it to be visible (as of <t>)`;
-  `step 2: exit 10`, `step 3: exit 0`, `CLOSED`, `pr merge calls: 1`.
+  `step 2: exit 10`, `step 3: exit 0`, `CLOSED`, `pr merge calls: 1`;
+- J3 `-- driver: PR #1 squash-merged by hand`, then one step closes out: `exit 0`,
+  `CLOSED merge: {"attempts": 1, "head": "<A>", "last_attempt_at": "<t>", "state": "accepted"} release: {"state": "NONE"}`
+  (no `refusal`, no `refusals`),
+  `PR #1 MERGED draft=False head=<A> mergeStateStatus=UNKNOWN; pr merge calls: 1; origin main <m> 'feat: the auto-merge lifecycle (#1)'`
+  (the person's squash, adopted), the merge events `merge_sent merge_accepted merged_squashed`
+  (no `merge_refused`), `main`; and what that send got from `gh`, repeated by hand:
+  `! Pull request example-owner/example-repo#1 was already merged`, `gh exit 0` (real `gh`'s
+  text and exit, recorded in round 1's flow Q).
 
 **K. The release wait, close out and stop (D).** `merged` drives a fresh `release` target to the
 Controller's merge: `v1.0.0` is published at the base, so the `feat:` squash commit `<m>`
@@ -1261,7 +1310,7 @@ echo "== K6 from the trunk, after a manual switch"; merged k6; git -C "$R" switc
 wcx step "$R"; echo "exit $?"; gate | cut -c1-140; git -C "$R" rev-parse HEAD | norm
 act run m in_progress; act publish v1.1.0 m; act finish 100 success; wcx step "$R"; echo "exit $?"; rec | cut -d' ' -f1
 python3 -c "import glob,json,sys; print([e.get('side') for e in map(json.loads, open(glob.glob(sys.argv[1]+'/repositories/*/milestones/wi-1/events.jsonl')[0])) if e['event'] == 'closed'])" "$RT"
-git -C "$R" rev-parse HEAD | norm; wcx step "$R"; echo "the next step: exit $?"; gate | cut -c1-150
+git -C "$R" rev-parse HEAD | norm; wcx step "$R"; echo "the next step: exit $?"; gate
 echo "== K7 a person merges with a merge commit"; drive stop k7 release >/dev/null; use k7; wcx step "$R"; act checks pass; act mstate BLOCKED; wcx step "$R"
 act hand-merge; act next-plan >/dev/null; wcx step "$R"; echo "exit $?"; gate | sed 's/[0-9a-f]\{40\}/<sha>/'; rec; ev | tr ' ' '\n' | tail -4 | tr '\n' ' '; echo
 grep -c '"run", "list"' "$FAKE_GH_LOG"
@@ -1286,11 +1335,11 @@ Expected, K1:
 - the next step plans from the trunk: `the next step: exit 0`, `FINISHED -- /milestone-plan <m>`.
 
 K2: `exit 10` and
-`GATE_BLOCKED -- the merged milestone's release did not publish (a publishing run failed, or one succeeded without publishing); re-run the failed run on GitHub, or publish it by hand (release_failed): pull request #1 was squash-merged as <m>, but its release did not publish: the main.yml run(s) for <m> did not succeed: run 100 (completed, failure) https://github.com/example-owner/example-repo/actions/runs/100. The Controller builds, tags and publishes nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand publication or a later trunk run that publishes the release settles this gate`;
+`GATE_BLOCKED -- the merged milestone's release did not publish (a publishing run failed, or one succeeded without publishing); re-run a failed run on GitHub if there is one, or publish it by hand (release_failed): pull request #1 was squash-merged as <m>, but its release did not publish: the main.yml run(s) for <m> did not succeed: run 100 (completed, failure) https://github.com/example-owner/example-repo/actions/runs/100. The Controller builds, tags and publishes nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand publication or a later trunk run that publishes the release settles this gate`;
 `again: exit 10`, `1` (one `release_failed` event for one detail), still `milestone/wi-1`; once
 the release exists, `after the re-run published: exit 0`, `CLOSED`.
 
-K3: `exit 10` and the same title with `... but its release did not publish: the publishing workflow main.yml completed successfully for <m> and published nothing covering <m>, which it does only when its own classification differed (for example, the policy at <m> is not the one the Controller read). The Controller builds, ...`.
+K3: `exit 10` and the same title (F2: it no longer says a run failed) with `... but its release did not publish: the publishing workflow main.yml completed successfully for <m> and published nothing covering <m>, which it does only when its own classification differed (for example, the policy at <m> is not the one the Controller read). The Controller builds, ...`.
 
 K4: after the cancel, `exit 10` and
 `... (release_pending): pull request #1 was squash-merged as <m>; its release is not settled yet: the main.yml run(s) for <m> ended without publishing (run 100 (completed, cancelled) https://github.com/example-owner/example-repo/actions/runs/100); the run(s) for <d> on the trunk can still publish the release covering <m>: not reported yet. ...`;
@@ -1306,7 +1355,8 @@ K5: `exit 10` with `... the main.yml run(s) for <m> ended without publishing (ru
 K6: `exit 10` with the `release_pending` gate from the trunk, the clone still at `<B0>`; once
 published, `exit 0`, `CLOSED`, `['trunk']` (closed out from the trunk side), still `<B0>`; the
 next step is 1.5.0's trunk-side behaviour:
-`GATE_BLOCKED -- fast-forward the trunk to its remote before a milestone starts (fast_forward_trunk): main is 1 commit(s) behind origin/main; ...`.
+`` GATE_BLOCKED -- fast-forward the trunk to its remote before a milestone starts (fast_forward_trunk): main is 1 commit(s) behind origin/main; fast-forward it (`git merge --ff-only origin/main`) before a milestone starts ``
+(the exception the guides now state, F6).
 
 K7, a person's "Create a merge commit": `exit 0`, `FINISHED -- /milestone-plan <sha>` (closed out
 and planned in the same step, as in 1.5.0),
@@ -1314,7 +1364,10 @@ and planned in the same step, as in 1.5.0),
 the events ending `ready merged release_wait_skipped closed`, and `0` (no run was read).
 
 **L. `run` waits, `step` does not (E).** About two and a half minutes. `runlog` prints the newest
-run's state, exit code, job count and events.
+run's state, exit code, job count and events. L5 (revision 9) gives the lock to a plain process
+while a live process's run record looks like a waiting run: a copy of L3's run, marked `running`,
+whose recorded Controller pid is a `sleep` that holds no lock (the case
+`tests.test_lock` covers with a worker).
 
 ```bash
 . /tmp/c4-fr/fr.sh
@@ -1339,7 +1392,7 @@ sed "s/^[0-9:]* //; s/ until [0-9TZ:-]*\$/ until <deadline>/; s/[0-9]\{8\}T[0-9]
 echo "== L3 a second step while a run waits"; drive stop l3 auto >/dev/null; use l3
 printf '{"merge": {"wait_seconds": 20, "poll_seconds": 10}}\n' > "$T/settings.json"; wcx step "$R"
 wcx run "$R" & pid=$!; sleep 4
-wcx step "$R" 2>&1 | norm | cut -c1-100; echo "second step: exit ${PIPESTATUS[0]}"
+wcx step "$R" 2>&1 | sed 's/[0-9]\{8\}T[0-9]\{6\}Z-[0-9a-f]\{8\}/<run>/g' | norm; echo "second step: exit ${PIPESTATUS[0]}"
 wcx status | sed -n '/^active:/,/^[a-z]/p' | head -2 | sed 's/[0-9]\{8\}T[0-9]\{6\}Z-[0-9a-f]\{8\}/<run>/; s/pid [0-9]*/pid <pid>/; s/started [0-9TZ:-]*/started <t>/' | norm
 RUN=$(python3 -c "import glob,json,sys; print(*[json.load(open(f))['run_id'] for f in glob.glob(sys.argv[1]+'/runs/*.json') if json.load(open(f))['state'] == 'running'])" "$RT")
 wcx follow --run "$RUN" "$R" 2>&1 | sed 's/^[0-9:]* //; s/[0-9]\{8\}T[0-9]\{6\}Z-[0-9a-f]\{8\}/<id>/g; s/ until [0-9TZ:-]*$/ until <deadline>/'; echo "follow: exit ${PIPESTATUS[0]}"
@@ -1348,9 +1401,37 @@ echo "== L4 Ctrl-C while a run waits"; drive stop l4 auto >/dev/null; use l4
 printf '{"merge": {"wait_seconds": 300, "poll_seconds": 10}}\n' > "$T/settings.json"; wcx step "$R"; n=$(njobs); s=$(date +%s)
 (cd /tmp && timeout -s INT --preserve-status 15 "$W" --runtime-dir "$RT" --settings "$T/settings.json" --workflow-manager "$SM" \
   --claude-binary "$S/src/tests/fake_claude.py" --timeout 60 run "$R") 2> "$T/err"
-echo "run: exit $? after $(( $(date +%s) - s )) s, job records +$(( $(njobs) - n ))"; tail -3 "$T/err"; runlog
+echo "run: exit $? after $(( $(date +%s) - s )) s, job records +$(( $(njobs) - n ))"; norm < "$T/err"; echo "stderr lines: $(wc -l < "$T/err"), tracebacks: $(grep -c Traceback "$T/err")"; runlog
 wcx status | grep -E '^(active|milestone):' | norm; rec
 act checks pass; wcx step "$R"; echo "the next step: exit $?"; rec | cut -d' ' -f1
+echo "== L5 exit 45 when the holder is not the waiting run"; use l3; rm -f "$T/l5.ready" "$T/l5.done"
+python3 - "$RT" "$R" "$T" <<'EOF' & hp=$!
+import fcntl, glob, json, os, shutil, subprocess, sys, time
+rt, root, t = sys.argv[1:]
+# a live run record that looks like a waiting run, copied from L3's run, but its pid is a bystander
+src = next(r for r in map(lambda f: json.load(open(f)), glob.glob(rt + "/runs/*.json"))
+           if '"waiting"' in open(f"{rt}/runs/{r['run_id']}/events.jsonl").read())
+by = subprocess.Popen(["sleep", "120"])
+ticks = int(open(f"/proc/{by.pid}/stat").read().rsplit(")", 1)[1].split()[19])
+rid = src["run_id"][:-8] + "b0b0b0b0"
+lines = open(f"{rt}/runs/{src['run_id']}/events.jsonl").read().splitlines()
+lines = lines[:next(i for i, l in enumerate(lines) if json.loads(l)["event"] == "waiting") + 1]
+os.makedirs(f"{rt}/runs/{rid}", exist_ok=True)
+open(f"{rt}/runs/{rid}/events.jsonl", "w").write("\n".join(lines) + "\n")
+json.dump(dict(src, run_id=rid, state="running", exit_code=None,
+               controller_process=dict(src["controller_process"], pid=by.pid, start_ticks=ticks)),
+          open(f"{rt}/runs/{rid}.json", "w"))
+fd = os.open(root + "/.git", os.O_RDONLY | os.O_DIRECTORY)  # another process takes the lifecycle lock
+fcntl.flock(fd, fcntl.LOCK_EX)
+open(t + "/l5.ready", "w").close()
+while not os.path.exists(t + "/l5.done"):
+    time.sleep(0.2)
+by.kill(); by.wait(); os.remove(f"{rt}/runs/{rid}.json"); shutil.rmtree(f"{rt}/runs/{rid}")
+EOF
+until [ -e "$T/l5.ready" ] || ! kill -0 $hp 2>/dev/null; do sleep 1; done
+wcx status | sed -n '/^active:/,/^[a-z]/p' | head -2 | sed 's/[0-9]\{8\}T[0-9]\{6\}Z-[0-9a-f]\{8\}/<run>/; s/pid [0-9]*/pid <pid>/; s/started [0-9TZ:-]*/started <t>/' | norm
+wcx step "$R" 2>&1 | norm; echo "step: exit ${PIPESTATUS[0]}"
+touch "$T/l5.done"; wait $hp
 ```
 Expected:
 - L1: `step: exit 10 after 0 s, job records +1` (or `1 s`); `run: exit 10 after 25 s, job records +1` (or `26 s`)
@@ -1369,19 +1450,26 @@ Expected:
   `run    run <id> started`, `run    step 1`, `run    waiting at checks_pending until <deadline>`,
   `run    waiting at release_pending until <deadline>`,
   `run    no action at MILESTONE_COMPLETE: closed_out_released`, `run    run ended: exit 0`;
-- L3: `error: another Controller or a previous worker holds the lifecycle lock on <R>/.git -- `...
+- L3 (F3): the message names the waiting run, without the worker text:
+  `` error: another Controller or a previous worker holds the lifecycle lock on <R>/.git -- `fuser -v <R>/.git` or `lsof +d <R>/.git` names every process holding it. Run <run> holds it: it is waiting at checks_pending until <t> (for checks, the merge or the release), and no worker is running. Wait for it, or press Ctrl-C in that run (the next step continues from the binding's last state). Follow it: `workflow-controller --runtime-dir <RT> follow <R>` ``
   and `second step: exit 45`; `active:` and
   `  run <run> (run, target <R>, started <t>): controller pid <pid> active`; `follow --run`
   replays and follows the waiting run to its end: `run    run <id> started`, `run    step 1`,
   `run    waiting at checks_pending until <deadline>`, `run    job <id> started`,
   `job    gate: job <id> GATE_BLOCKED -- pull request #1 has no checks reported yet; required: wait for the pull request's checks to finish (checks_pending): pull request #1 has no checks reported yet`,
   `run    job <id> ended: GATE_BLOCKED`, `run    run ended: exit 10`, `follow: exit 0`; `run: exit 10`;
-- L4: `run: exit 130 after 15 s, job records +0`; stderr ends with Python's `KeyboardInterrupt`
-  traceback through `sleep(min(ctx.poll_seconds, remaining))` (Ctrl-C anywhere in a step ends
-  this way, as in 1.5.0); `interrupted None 0 [('run_started', ''), ('step_started', ''), ('waiting', 'checks_pending'), ('run_interrupted', '')]`;
+- L4 (F4): `run: exit 130 after 15 s, job records +0`; stderr is one line,
+  `error: interrupted while waiting at checks_pending (the wait would have ended at <t>); the next step continues from the binding's last state`,
+  and `stderr lines: 1, tracebacks: 0`;
+  `interrupted None 0 [('run_started', ''), ('step_started', ''), ('waiting', 'checks_pending'), ('run_interrupted', '')]`;
   `active: none`, `milestone: wi-1 PR_OPEN on milestone/wi-1, pull request #1 (worktree <R>)`,
   `PR_OPEN merge: null release: null`; then `the next step: exit 0` and `CLOSED`: the next step
-  continues from the last written binding state.
+  continues from the last written binding state;
+- L5 (revision 9): `status` shows the copied run as active
+  (`  run <run> (run, target <R>, started <t>): controller pid <pid> active`), yet, since its
+  process does not hold the lock, the step's message keeps the worker text and names no run:
+  `` error: another Controller or a previous worker holds the lifecycle lock on <R>/.git -- `fuser -v <R>/.git` or `lsof +d <R>/.git` names every process holding it. No recorded worker process group is named: no LAUNCHED job record for this target carries a worker process. Any holder those commands name that is not a recorded worker is that job's recorded stdin anchor (worker_anchor), which holds the lock for the job's whole owned lifetime -- while the worker waits on background work and while owned processes drain -- or a member of the worker's own process group; a tool process the worker started never receives the descriptor. The lock is released only when the job's owned work has ended. Follow it: `workflow-controller --runtime-dir <RT> follow <R>` ``
+  and `step: exit 45`.
 
 **M. The automated evidence**, in `$S/src` under the reaping wrapper (about three and a half
 minutes):
@@ -1392,19 +1480,24 @@ python3 "$S/reap.py" python3 -m unittest tests.test_settings tests.test_repo_pol
 python3 "$S/reap.py" python3 -m unittest tests.test_forge tests.test_no_rewrite_invariants 2>&1 | tail -3
 python3 "$S/reap.py" python3 -m unittest tests.test_pull_request_lifecycle tests.test_release_txn tests.test_trunk_preflight 2>&1 | tail -3
 python3 "$S/reap.py" python3 -m unittest tests.test_observe tests.test_hints_parse tests.test_observation_equivalence tests.test_trunk_orchestration_e2e 2>&1 | tail -3
+python3 "$S/reap.py" python3 -m unittest tests.test_lock tests.test_cli.ExitCodeTableTest 2>&1 | tail -3
 python3 tests/golden/generate_no_policy_lifecycle.py --check >/dev/null; echo "no-policy golden --check: exit $?"
 python3 tests/golden/generate_external_implementation_review_decisions.py --check >/dev/null; echo "external review golden --check: exit $?"
 python3 tests/golden/generate_plan_stage_decisions.py --release 2.6.0 --check >/dev/null; echo "plan-stage golden --release 2.6.0 --check: exit $?"
 git status --short | wc -l
 ```
 Expected: `Ran 133 tests` OK (the settings rows and the bool type, the policy keys, the wiring of
-the three rows into `execute_step`, only `run` waiting); `Ran 52 tests` OK (`merge_squash` and
-`commit_runs` argv and parsing, and I3' narrowed to the one argv shape in `controller/forge.py`,
-with the synthetic-source cases both ways); `Ran 325 tests` OK (every C.2 row, the send, the
-crash rows, the refusals and adoption from the trunk, the release wait's D.2/D.3 rows,
-`verify_assets=False`, `covering_tag`, the waiting preflight); `Ran 112 tests` OK (status,
-observation and hint parsing, and the end-to-end lifecycles including the no-policy golden
-equivalence). The three golden checks each `exit 0`, and `0` (nothing in `$S/src` changed). The
+the three rows into `execute_step`, only `run` waiting); `Ran 54 tests` OK (`merge_squash` and
+`commit_runs` argv and parsing, the fake `gh`'s draft and already-merged texts (F5), and I3'
+narrowed to the one argv shape in `controller/forge.py`, with the synthetic-source cases both
+ways); `Ran 329 tests` OK (every C.2 row, the send, the crash rows, the refusals and adoption from
+the trunk, a send `gh` reports already merged (F5), the release wait's D.2/D.3 rows,
+`verify_assets=False`, `covering_tag`, the waiting preflight and its real-SIGINT one-line test
+(F4)); `Ran 112 tests` OK (status, observation and hint parsing, and the end-to-end lifecycles
+including the no-policy golden equivalence); `Ran 43 tests` OK (the lifecycle lock, including
+exit 45 naming a waiting run only when it holds the lock (F3, revision 9), and the exit-code
+table's Ctrl-C-in-a-wait case). The three golden checks each `exit 0`, and `0` (nothing in
+`$S/src` changed). The
 full suite is PR #18's CI (flow O).
 
 **N. It releases 1.6.0, and its notes pass** (the classification over a scratch origin with the
@@ -1440,15 +1533,16 @@ EOF
 Expected: `ok: feat → minor`; `1.5.0` (the highest reachable tag); then
 `ok: RELEASE_DUE: 1.6.0 has no tag and no release` (on stderr), `state=RELEASE_DUE`,
 `version=1.6.0`, `tag=v1.6.0`, `commit=<Q>`, `exit 0`; and
-`lines 33 | first: ### Auto-merge and the wait for the release (1.6.0) | problem: None` (the
-narrative's `## Release notes` section at `3d875a7`). This repository's policy does not opt in to
-release notes, so the 1.6.0 release itself publishes the fixed text `workflow-controller v1.6.0`.
+`lines 35 | first: ### Auto-merge and the wait for the release (1.6.0) | problem: None` (the
+narrative's `## Release notes` section at `08dd5c1`, two lines longer than round 1's: F2 and F6).
+This repository's policy does not opt in to release notes, so the 1.6.0 release itself publishes
+the fixed text `workflow-controller v1.6.0`.
 
 **O. PR #18.** `gh pr checks 18` and `gh pr view 18 --json title,isDraft,headRefOid`
 (read-only). Expected: eleven checks, every one `pass`: `PR title`, `validate / package`,
 `validate / plan`, `validate / tests (0)` to `(5)`, `validate / tests-result` and
-`workflow-conformance` (measured at `3d875a7`). The pull request is a draft at `3d875a7`
-(`"isDraft":true`, `"headRefOid":"3d875a7106b5c3e1be0413dd12a50253dfa311a7"`), titled with the
+`workflow-conformance` (measured at `08dd5c1`). The pull request is a draft at `08dd5c1`
+(`"isDraft":true`, `"headRefOid":"08dd5c1031e22272d15935abf5ee973ac57fef03"`), titled with the
 plan's declared `feat: auto-merge an accepted milestone and wait for its release`.
 
 **P. The documentation agrees with A-N.** Read each and check it against the flows:
@@ -1458,20 +1552,34 @@ plan's declared `feat: auto-merge an accepted milestone and wait for its release
   lagging reads keep waiting), the one `gh pr merge` argv and the intent record (E, I, J), the
   three attempts and `--new-pr` (I), branch-side only (H5), the release wait's bullets (K), close
   out then stop (E, K1, L2), a hand merge (K7, I1), `run` waits and `step` does not (L), what you
-  see (E, J2, K1), merge queues unsupported;
+  see (E, J2, K1), merge queues unsupported. Round 2 (F5, F6): the table of what `gh` itself
+  reports for a draft, a wrong head, the right head and an already-merged pull request (exit 0),
+  and that such a send is accepted with no refusal counted (J3); the operator's switch quoting
+  the gate's "Auto-merge is switched off by `merge.auto` in the settings file" (F); the pull
+  request body's `squash-merged into the trunk as one commit` (E); "Close out, then stop" naming
+  the trunk-side exception, `fast_forward_trunk` with `git merge --ff-only <remote>/main` (K6);
+  Ctrl-C during the wait printing one line and exiting `130` (L4); the `release_failed` row
+  (K2, K3);
 - `docs/guide/ci-and-releases.md`, "Repository settings" (squash merging, no auto-merge request,
-  `release_workflow`, merge queues) and how `release_failed` is resolved (K2, K3);
+  `release_workflow`, merge queues) and how `release_failed` is resolved: a failed run is named,
+  or the gate says the workflow succeeded and published nothing, with nothing to re-run (K2,
+  K3; F2);
 - `docs/guide/automation.md`: the bullet "Merges only the accepted head, never rewrites" (1.5.0's
   "Never merges, never rewrites", restated as I3'; E: one argv shape, only at the acceptance
   commit);
 - `docs/guide/runtime.md`: the three `merge.*` rows, their bounds and the boolean type (B);
 - `docs/guide/commands.md` (`run` waits, `step` never does; `status` lines) and
-  `docs/guide/troubleshooting.md` (`merge_pending`, `merge_held`, `release_pending`/`release_failed`,
-  "`step` exits 45 while a `run` waits", the stop after close-out) (G-L);
+  `docs/guide/troubleshooting.md` (`merge_pending`, `merge_held`, `release_pending`/`release_failed`
+  with the "did not publish" title (K2, K3), "`step` exits 45 while a `run` waits": the message
+  names the waiting run, and the worker text appears only when the holder is a worker (L3, L5),
+  Ctrl-C's one line (L4), the stop after close-out and its trunk-side exception (K6)) (G-L);
 - `docs/guide/concepts.md` and `README.md` where they mention the merge;
 - `docs/adr/0009-auto-merge-and-release-wait.md` (the decision, I3', the two switches, the stop,
   what stays human); `docs/README.md` lists ADR 0009;
-- the `## Release notes` section below (the 1.6.0 notes, flow N): each claim matches a flow.
+- the `## Release notes` section below (the 1.6.0 notes, flow N): each claim matches a flow,
+  including `release_failed` "naming each run that failed, or saying the workflow succeeded and
+  published nothing" (K2, K3) and the compatibility line that a 1.5.0 sharing the settings file
+  warns and its `settings clean` refuses the generation-2 file, exit 20 (B).
 
 **Q. OPTIONAL LIVE: GitHub's own merge-refusal texts. Run only with the user's explicit
 authorization.** Plan C.3 and the Verification section leave one observation to functional
@@ -1511,33 +1619,46 @@ git ls-remote origin refs/heads/main | cmp - "$S/live-main.txt" && echo "main un
 git ls-remote --tags origin | sha256sum | cmp - "$S/live-tags.txt" && echo "tags unchanged"
 git push -q origin --delete "$HB" "$B"; git ls-remote origin "refs/heads/fr-c4-live-*" | wc -l
 ```
-Expected (not measured: this flow was not run when the checklist was written): `PR #<P> <url>`;
-Q1 (a draft) and Q2 (a head that is not the pull request's) each a non-zero exit with `gh`'s or
-GitHub's refusal text, and `fr-c4-live-base` unchanged (the same 12 characters as before); the
-`gh pr view` JSON (`OPEN`, `isDraft: false`, the merge state GitHub computed); Q3 `exit 0` and
-`fr-c4-live-base` moved; Q4 (the same merge again) a non-zero exit with GitHub's "already merged"
-text; `"state":"MERGED"` with `"baseRefName":"fr-c4-live-base"`; `main unchanged`, `tags
-unchanged`, and `0` (both throwaway branches deleted). **Record each probe's exact output and
-exit code in `FUNCTIONAL_REVIEW.md`**; the texts are for `docs/guide/milestone-branches.md`, and a
-difference from the fake `gh`'s wording is not a defect (the Controller keys on no refusal text).
+Expected (not re-run for round 2; round 1 ran it with your authorization, PR #19, and its
+observations are now in `docs/guide/milestone-branches.md` and the fake `gh`): `PR #<P> <url>`;
+Q1 (a draft) `GraphQL: Pull Request is still a draft (mergePullRequest)`, `exit 1`, and Q2 (a head
+that is not the pull request's)
+`GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)`, `exit 1`,
+each with `fr-c4-live-base` unchanged (the same 12 characters as before); the `gh pr view` JSON
+(`OPEN`, `isDraft: false`, the merge state GitHub computed); Q3 `exit 0`, no output, and
+`fr-c4-live-base` moved; Q4 (the same merge again) `! Pull request RodrigoFAbreu/workflow-controller#<P> was already merged`
+and `exit 0` (`gh` reads the state and sends nothing); `"state":"MERGED"` with
+`"baseRefName":"fr-c4-live-base"`; `main unchanged`, `tags unchanged`, and `0` (both throwaway
+branches deleted; the repository deletes a merged pull request's head branch itself, so that
+`git push --delete` may report `remote ref does not exist` for `fr-c4-live-head`). If you run it,
+**record each probe's exact output and exit code in `FUNCTIONAL_REVIEW.md`**; a difference from
+these texts is not a defect (the Controller keys on no refusal text), but the guide's table would
+need updating.
 
 ### Known limitations and out of scope
 
 - GitHub is the suite's fake `gh` in A-P: it models the merge, the merge states, read lag, a lost
-  reply, the runs and the releases the way the plan's investigation measured them, but its
-  refusal texts are its own. GitHub's real texts are flow Q's observation.
+  reply, the runs and the releases the way the plan's investigation measured them. Its draft,
+  wrong-head and already-merged texts and exits are real `gh`'s, as round 1's flow Q observed
+  them (F5); its other refusal texts (a conflict, a merge state that is not mergeable, a closed
+  pull request) are its own.
 - The installed Controller stays 1.5.0 and this repository's policy is unchanged (I9): the
   opt-in here is a later `chore:` pull request, after 1.6.0 is released and installed into the
   shared install (the plan's migration order). Until the `v1.6.0` tag exists the local build
   reports `workflow-controller 1.5.0`.
-- Ctrl-C in a waiting `run` (L4) ends with Python's `KeyboardInterrupt` traceback and exit `130`,
-  like any Ctrl-C inside a step in 1.5.0 (`cli.main` re-raises it after closing the run).
+- Ctrl-C in a waiting `run` (L4) prints one line and exits `130`, with no traceback (F4). Ctrl-C
+  anywhere else in a step (for example while a worker runs) still ends with Python's
+  `KeyboardInterrupt` traceback and exit `130`, as in 1.5.0 (`cli.main` re-raises it after
+  closing the run).
+- L5 fabricates its waiting-looking run (a copied record over a `sleep`); a real `run` that waits
+  always holds the lock itself, so outside such a copy the case arises only with a stale or
+  foreign record, which `tests.test_lock` covers with a recorded worker holding the lock.
 - Not in this milestone: the fix loop for a red pull request after acceptance and automatic
   acceptance (C10), integrating `main` into a milestone branch (`integration_required` stays
   manual), merge mode, merge queues (unsupported, fail closed at `MERGED_REWRITTEN`), publishing or
   retrying a release, and notifications (C5).
 - A close-out from the trunk does not fast-forward `main` (K6); the next step's
-  `fast_forward_trunk` gate is 1.5.0's behaviour.
+  `fast_forward_trunk` gate is 1.5.0's behaviour, now stated in the guides (F6).
 - `tests/golden/generate_plan_stage_decisions.py --check` without `--release` reports its
   `AMENDING_PLAN` cases differ in this environment, as at the base; the `--release 2.6.0` form
   (flow M) and `tests.test_golden_plan_stage_decisions` pass.

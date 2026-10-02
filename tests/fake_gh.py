@@ -27,10 +27,16 @@ decisions depend on:
   draft and ``CLEAN`` for an open one;
 - ``pr merge <n> --squash --match-head-commit <sha> --subject <s> --body <b>``
   (the only merge modelled) refuses, as GitHub does, unless the PR is open,
-  its head in the origin is ``<sha>`` and its merge state is ``CLEAN`` or
-  ``HAS_HOOKS``; otherwise it squashes the head onto the base in the origin
+  not a draft (``GraphQL: Pull Request is still a draft
+  (mergePullRequest)``), its head in the origin is ``<sha>`` (``GraphQL:
+  Head branch was modified. Review and try the merge again.
+  (mergePullRequest)``) and its merge state is ``CLEAN`` or ``HAS_HOOKS``;
+  otherwise it squashes the head onto the base in the origin
   (``git merge-tree``, a conflict refuses), with ``<s>``/``<b>`` as the
-  message, and stores the PR as merged. ``--auto`` and ``--disable-auto``
+  message, and stores the PR as merged. For a PR already merged it sends
+  nothing and exits 0 with ``! Pull request <owner/name>#<n> was already
+  merged``, as the real gh does (it reads the state itself, never through
+  a scripted read lag). ``--auto`` and ``--disable-auto``
   are refused outright, so a test fails if either is ever sent. A PR's
   ``merge_read_lag`` (``N``) keeps the next ``N`` reads of it showing the
   pre-merge PR; its ``merge_reply_lost`` makes the merge happen but exit 1
@@ -232,9 +238,16 @@ def _merge(state: dict, positional: list[str], opts: dict) -> None:
         raise _Exit(1, "fake gh: only pr merge <n> --squash --match-head-commit <sha> --subject <s> "
                        "--body <b> is modelled\n")
     pr = _find_pr(state, positional[0])
+    if pr["state"] == "MERGED":
+        # Real gh reads the state itself (not through the read lag a test may
+        # script) and sends nothing: exit 0 with a warning (recorded against
+        # GitHub in the auto-merge-release-wait functional review, Flow Q4).
+        raise _Exit(0, f"! Pull request {state['repository']}#{pr['number']} was already merged\n")
     if pr["state"] != "OPEN":
         raise _Exit(1, f"X Pull request #{pr['number']} was already {pr['state'].lower()}\n")
     before = _pr_view(pr)
+    if before["isDraft"]:
+        raise _Exit(1, "GraphQL: Pull Request is still a draft (mergePullRequest)\n")
     if before["headRefOid"] != opts["match_head_commit"]:
         raise _Exit(1, "GraphQL: Head branch was modified. Review and try the merge again. "
                        "(mergePullRequest)\n")

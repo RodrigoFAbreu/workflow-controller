@@ -18,6 +18,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests import fake_gh  # noqa: E402
 from controller import decision, forge as forge_mod, gitrepo, milestone_branch as mb, release_txn, runtime  # noqa: E402
 from controller.errors import (  # noqa: E402
     BranchBindingError, ForgeUndecidableError, GitOperationError, ReleaseTransactionError,
@@ -2379,6 +2380,39 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(self.preflight().action, "closed_out")
         self.assertEqual(len(self.merges()), 1)
         self.assertEqual(self.events_named("merge_refused"), [])
+
+    def test_a_send_that_gh_reports_already_merged_is_accepted(self) -> None:
+        # Real gh (Flow Q4 of the functional review) exits 0 with "! ... was
+        # already merged" for a pull request that merged while the Controller's
+        # read still showed it open and clean: the send is accepted, no
+        # refusal is counted, and the step closes out as for any merge.
+        number, a = self.to_held_ready()
+        self.gh_edit(number, mergeStateStatus="CLEAN")
+        stored = self.gh_pr_view(number)  # what a lagging read shows: open, clean, at A
+        stale_open = {**{key: stored[key] for key in fake_gh.PR_JSON_FIELDS}, "headRefOid": a,
+                      "mergeStateStatus": "CLEAN"}
+        m = self.squash_merge(number)
+        self.gh_edit(number, lagged_reads=1, lagged_view=stale_open)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assertEqual(len(self.merges()), 1)  # one send, and gh sent nothing
+        self.assertEqual(self.origin_ref("refs/heads/main"), m)
+        self.assertEqual(self.events_named("merge_refused"), [])
+        merge = self.record()["merge"]
+        self.assertEqual((merge["state"], merge["attempts"]), ("accepted", 1))
+        self.assertNotIn("refusals", merge)
+        self.assert_closed(a, m)
+
+    def test_a_lagging_read_after_an_exit_1_refusal_is_still_counted(self) -> None:
+        # The other path, kept covered: a send whose reply is an ordinary
+        # refusal while the pull request is not yet merged counts against
+        # the budget, whatever the read shows later.
+        number, a = self.to_pending()
+        self.set_checks(number, ("ci", "pass"))
+        refusal = ForgeUndecidableError("gh pr merge failed (exit 1)", evidence={"stderr": "Refused.\n"})
+        with mock.patch.object(forge_mod.GhForge, "merge_squash", side_effect=refusal):
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+        merge = self.record()["merge"]
+        self.assertEqual((merge["state"], merge["attempts"], merge["refusals"]), ("sending", 1, 1))
 
     def test_a_lost_reply_with_a_lagging_read_is_adopted_from_the_trunk(self) -> None:
         # C.3: the reply is lost and the re-read lags OPEN, but the trunk

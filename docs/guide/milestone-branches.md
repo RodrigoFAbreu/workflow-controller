@@ -432,6 +432,21 @@ parent, so an unrelated commit that only carries the suffix is not
 taken for it). When it is there, the merge is recorded as accepted
 (`merge.squash_commit`), nothing more is sent, and the step waits for
 GitHub to show it. Nothing depends on the wording of GitHub's refusal.
+What `gh` itself reports, observed against GitHub (these are the
+fake `gh`'s texts too; nothing depends on any of them):
+
+| send | exit | output |
+| --- | --- | --- |
+| a draft pull request | `1` | `GraphQL: Pull Request is still a draft (mergePullRequest)` |
+| a head other than `--match-head-commit` | `1` | `GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)` |
+| the right head, ready | `0` | no output; the base moves |
+| a pull request that is already merged | `0` | `! Pull request <owner>/<name>#<n> was already merged`; `gh` reads the state first and sends nothing |
+
+So a send that finds the pull request merged (a reply lost earlier, a
+hand merge, a lagging read) is a success, not a refusal: it is recorded
+as accepted, no refusal is counted, and the step waits for GitHub to
+show the merge and closes out as for any merge. (A repository that
+deletes merged branches removes the pull request's head branch itself.)
 Otherwise a refused merge is `merge_pending` with GitHub's message, sent
 again only on a later re-read that shows the pull request mergeable.
 After three refused attempts the Controller refuses (exit `20`) and

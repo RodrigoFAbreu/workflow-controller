@@ -452,11 +452,37 @@ class MergeTest(_Case):
                     self.assertIn("not mergeable", caught.exception.evidence["stderr"])
                 self.assertEqual(self.forge.view_pr(pr.number).state, "MERGED" if merges else "OPEN")
 
-    def test_a_merged_or_closed_pr_is_refused(self) -> None:
+    def test_a_merged_pr_is_a_successful_no_op_as_real_gh_does(self) -> None:
+        # Recorded against GitHub (functional review of auto-merge-release-wait,
+        # Flow Q4): gh reads the state itself, sends nothing and exits 0 with
+        # a "!" warning, where the fake used to exit 1.
         pr, tip = self.ready_pr()
         self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        squash = self.git_origin("rev-parse", "refs/heads/main")
+        argv = ["gh", "pr", "merge", str(pr.number), "--squash", "--match-head-commit", tip, "--subject", "s",
+                "--body", "b", "--repo", FAKE_GH_REPOSITORY]
+        _DIRECT.append(argv[1:])
+        result = subprocess.run(argv, env=self.env, capture_output=True, text=True, check=False)
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        self.assertEqual(result.stderr, f"! Pull request {FAKE_GH_REPOSITORY}#{pr.number} was already merged\n")
+        self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")  # no error through the forge
+        self.assertEqual(self.git_origin("rev-parse", "refs/heads/main"), squash)  # nothing sent twice
+        self.assertEqual(self.forge.view_pr(pr.number).state, "MERGED")
+
+    def test_a_closed_pr_is_refused(self) -> None:
+        pr, tip = self.ready_pr(state="CLOSED")
         with self.assertRaises(ForgeUndecidableError):
             self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        self.assertEqual(self.forge.view_pr(pr.number).state, "CLOSED")
+
+    def test_a_draft_pr_is_refused_with_gh_s_text(self) -> None:
+        tip = self.push_branch_with_commit()
+        pr = self.forge.create_draft_pr("milestone/wi-1", "main", "feat: a title", "the body\n")
+        with self.assertRaises(ForgeUndecidableError) as caught:
+            self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        self.assertEqual(caught.exception.evidence["stderr"],
+                         "GraphQL: Pull Request is still a draft (mergePullRequest)")
+        self.assertEqual(self.forge.view_pr(pr.number).state, "OPEN")
 
     def test_the_next_read_can_lag_the_merge(self) -> None:
         pr, tip = self.ready_pr(merge_read_lag=2)

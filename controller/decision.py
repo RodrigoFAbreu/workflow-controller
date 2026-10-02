@@ -602,6 +602,10 @@ BRANCH_GATE_TEXTS = {
                      "with \"Squash and merge\"",
     "merge_held": "the ready pull request was converted back to a draft; mark it ready for review, or merge it "
                   "on GitHub with \"Squash and merge\"",
+    "release_pending": "the merged milestone's release is not published yet; wait for the publishing workflow, "
+                       "or publish it by hand",
+    "release_failed": "the merged milestone's release failed; re-run the failed publishing run on GitHub, or "
+                      "publish it by hand",
 }
 
 #: The texts a squash-mode gate (``merge_method: "squash"`` in the binding's

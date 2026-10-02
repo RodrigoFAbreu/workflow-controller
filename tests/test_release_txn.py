@@ -434,6 +434,33 @@ class ClassificationTest(_ReleaseCase):
         self.assertState(self.base, ALREADY_RELEASED)
         self.assertEqual(self.verify_commits()[-1], self.base)
 
+    def test_without_asset_verification_nothing_is_downloaded_or_run(self) -> None:
+        # auto-merge-release-wait D.2: the Controller's release wait.
+        self.tag("v1.0.0", self.base)
+        self.seed_release("v1.0.0", {"extra.txt": b"x"})
+        result = release_txn.classify(self.ctx(self.base), self.base, verify_assets=False)
+        self.assertEqual((result.state, result.tag), (ALREADY_RELEASED, "v1.0.0"))
+        self.assertIn("assets not verified by the Controller", result.detail)
+        self.assertFalse(any(argv[1:3] == ["release", "download"] for argv in self.gh.calls))
+        self.assertEqual(self.verify_commits(), [])
+        self.assertState(self.base, RELEASE_MISMATCH)  # the default still verifies
+
+    def test_the_covering_tag_is_the_lowest_at_a_strict_trunk_descendant(self) -> None:
+        self.assertIsNone(release_txn.covering_tag(self.ctx(self.base), self.base))
+        self.tag("v1.0.0", self.base)  # at the commit itself: not covering
+        later = self.bump("1.1.0")
+        latest = self.bump("1.2.0")
+        self.tag("v1.2.0", latest)
+        self.tag("v1.1.0", later)
+        run(["git", "switch", "-q", "-c", "side", self.base], cwd=self.clone)
+        side = self.bump("1.0.5", push=False)
+        run(["git", "push", "-q", "origin", "side"], cwd=self.clone)
+        self.tag("v1.0.5", side)  # a descendant, but not on the trunk
+        run(["git", "switch", "-q", "main"], cwd=self.clone)
+        self.assertEqual(release_txn.covering_tag(self.ctx(self.base), self.base), ("v1.1.0", "1.1.0", later))
+        self.assertEqual(release_txn.covering_tag(self.ctx(later), later), ("v1.2.0", "1.2.0", latest))
+        self.assertIsNone(release_txn.covering_tag(self.ctx(latest), latest))
+
     def test_a_commit_off_the_trunk_or_a_disabled_policy_refuses(self) -> None:
         run(["git", "switch", "-q", "-c", "side"], cwd=self.clone)
         side = self.bump("1.1.0", push=False)

@@ -52,10 +52,10 @@ from pathlib import Path
 from typing import Any
 
 from . import forge as forge_mod
-from . import conventional_commit, gitrepo, release_notes, repo_policy, runtime
+from . import conventional_commit, gitrepo, release_notes, release_txn, repo_policy, runtime
 from .errors import (
     BranchBindingError, BranchInvariantViolatedError, ForgeError, GitOperationError, InvalidRepositoryPolicyError,
-    InvalidTitleError,
+    InvalidTitleError, ReleaseTransactionError,
 )
 
 SCHEMA_VERSION = 1
@@ -152,6 +152,8 @@ GATE_PR_TITLE_INVALID = "pr_title_invalid"
 GATE_RELEASE_NOTES_INVALID = "release_notes_invalid"
 GATE_MERGE_PENDING = "merge_pending"
 GATE_MERGE_HELD = "merge_held"
+GATE_RELEASE_PENDING = "release_pending"
+GATE_RELEASE_FAILED = "release_failed"
 
 #: Every gate a preflight can return.
 GATE_CODES = frozenset({
@@ -159,7 +161,7 @@ GATE_CODES = frozenset({
     GATE_FAST_FORWARD_TRUNK, GATE_POST_ACCEPTANCE_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_CHECKS_PENDING,
     GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_PR_HEAD_NOT_ACCEPTED, GATE_MERGE_PULL_REQUEST,
     GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE, GATE_PR_TITLE_INVALID,
-    GATE_RELEASE_NOTES_INVALID, GATE_MERGE_PENDING, GATE_MERGE_HELD,
+    GATE_RELEASE_NOTES_INVALID, GATE_MERGE_PENDING, GATE_MERGE_HELD, GATE_RELEASE_PENDING, GATE_RELEASE_FAILED,
 })
 
 #: The Controller's own merge attempts per ``READY`` record (C.3 step 4):
@@ -167,6 +169,17 @@ GATE_CODES = frozenset({
 MERGE_ATTEMPTS = 3
 #: The merge states GitHub merges at once (gh's ``isImmediatelyMergeable``).
 MERGEABLE_STATES = ("CLEAN", "HAS_HOOKS")
+
+#: A binding record's ``release.state`` values the release wait writes
+#: besides a classification's own state (auto-merge-release-wait D.1-D.3):
+#: the merge was not a verified squash, the policy at the squash commit
+#: releases nothing, or a later run's release covers the squash commit.
+RELEASE_SKIPPED = "SKIPPED"
+RELEASE_NONE = "NONE"
+RELEASE_SUPERSEDED = "SUPERSEDED"
+#: The hand publication every release gate names (D.3).
+HAND_RELEASE = ("publish by hand with `tools/release.py` (`docs/guide/ci-and-releases.md`, \"Checking a release "
+                "by hand\"); the next step classifies the commit again and settles")
 
 #: The marker line of every Draft PR body the Controller creates.
 PR_MARKER = "<!-- workflow-controller: work_item={work_item_id} -->"
@@ -240,12 +253,15 @@ class Proceed:
     ``adopted``, ``completed``, ``observed``, ``trunk_start``, ``pr_created``,
     ``closed_out``). ``base`` is the trunk tip a passed trunk start proved
     equal to ``<remote>/<trunk>`` (full ``HEAD``), which the bootstrap names
-    as the next milestone's base; ``None`` otherwise."""
+    as the next milestone's base; ``None`` otherwise. ``stop`` ends the step
+    after a close-out whose release wait ran (auto-merge-release-wait D.4):
+    ``binding`` is then the ``CLOSED`` record, and no trunk start ran."""
 
     work_item_override: str | None = None
     binding: Mapping[str, Any] | None = None
     action: str = "none"
     base: str | None = None
+    stop: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -262,7 +278,8 @@ class Gate:
     #: words a squash-mode gate for "Squash and merge".
     merge_method: str = repo_policy.MERGE_METHOD_MERGE
     #: Whether ``run``'s bounded wait may poll this gate again
-    #: (auto-merge-release-wait E.1); set by :func:`_merge_step` only.
+    #: (auto-merge-release-wait E.1); set by :func:`_merge_step` and
+    #: :func:`_release_wait` only.
     waitable: bool = False
 
 
@@ -1216,7 +1233,13 @@ def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.Hea
     ``merged_head``, then switch to the trunk, fast-forward it to
     ``<remote>/<trunk>``, write ``CLOSED``, and continue to the trunk start
     (step 4). From ``MERGED_SQUASHED`` the squash commit stands in for
-    ``merged_head`` in the trunk-membership check."""
+    ``merged_head`` in the trunk-membership check. In an auto-merge binding
+    the release wait runs first, and a close-out after it stops the step
+    instead of the trunk start (auto-merge-release-wait D.1, D.4)."""
+    outcome = _release_wait(ctx, key, record)
+    if isinstance(outcome, Gate):
+        return outcome
+    record = outcome
     work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
     remote, h = record["repository"]["remote"], record["merged_head"]
     changes = gitrepo.tracked_changes(ctx.repo_root, runner=ctx.runner)
@@ -1246,7 +1269,9 @@ def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.Hea
     gitrepo.switch(ctx.repo_root, trunk, runner=ctx.runner)
     gitrepo.fast_forward(ctx.repo_root, trunk, f"refs/remotes/{remote}/{trunk}", runner=ctx.runner)
     _verify_on(ctx, trunk, remote_trunk)
-    _write(ctx, key, dict(record, state=CLOSED), "closed", side="branch")
+    closed = _write(ctx, key, dict(record, state=CLOSED), "closed", side="branch")
+    if stops_after_close(closed):
+        return Proceed(binding=closed, action="closed_out", stop=True)
     return _after_close(ctx, key)
 
 
@@ -1259,6 +1284,225 @@ def _after_close(ctx: Context, key: str) -> Proceed | Gate:
     if isinstance(outcome, Proceed) and outcome.action in ("none", "trunk_start"):
         return Proceed(action="closed_out", base=outcome.base)
     return outcome
+
+
+# -- the release wait (auto-merge-release-wait D) --------------------------------------
+
+
+def stops_after_close(record: Mapping[str, Any]) -> bool:
+    """D.4: whether the close-out of ``record`` ends the step: its release
+    wait ran and settled (a ``release`` field other than ``SKIPPED``)."""
+    release = record.get("release")
+    return isinstance(release, Mapping) and release.get("state") != RELEASE_SKIPPED
+
+
+def release_text(release: Mapping[str, Any]) -> str:
+    """A settled ``release`` field in words: the tag and URL when there is
+    one, else the state."""
+    state = release.get("state")
+    if state == RELEASE_SUPERSEDED:
+        return f"{release.get('tag')} {release.get('url')} (a later release covering the squash commit)"
+    if release.get("tag") and release.get("url"):
+        return f"{release['tag']} {release['url']}"
+    if state == RELEASE_NONE:
+        return "NONE (the policy at the squash commit does not enable releases)"
+    if state == RELEASE_SKIPPED:
+        return f"SKIPPED ({release.get('reason')})"
+    return f"{state} {release.get('version')}: {release.get('detail')}"
+
+
+@dataclasses.dataclass(frozen=True)
+class _ReleaseOutcome:
+    """What the release wait decided: ``settled`` (``release`` is the
+    record's field, ``event`` its event), ``pending`` or ``failed``
+    (``detail`` says why; ``reruns`` names the runs a re-run can resume)."""
+
+    kind: str
+    release: dict | None = None
+    event: str | None = None
+    detail: str = ""
+    reruns: tuple[forge_mod.Run, ...] = ()
+
+
+def _runs_text(runs: tuple[forge_mod.Run, ...]) -> str:
+    return ", ".join(f"run {run.id} ({run.status}" + (f", {run.conclusion}" if run.conclusion else "")
+                     + f") {run.url}" for run in runs)
+
+
+def _finished(runs: tuple[forge_mod.Run, ...]) -> bool:
+    return bool(runs) and all(run.status == "completed" for run in runs)
+
+
+def _settled(found: release_txn.Classification) -> _ReleaseOutcome | None:
+    """D.2's settled rows for a classification, else ``None``."""
+    if found.state == release_txn.ALREADY_RELEASED:
+        return _ReleaseOutcome("settled", {"state": found.state, "version": found.version, "tag": found.tag,
+                                           "url": found.release.url}, "released")
+    if found.state in (release_txn.NO_CHANGE, release_txn.ABANDONED_VERSION):
+        return _ReleaseOutcome("settled", {"state": found.state, "version": found.version,
+                                           "detail": found.detail}, "release_settled")
+    return None
+
+
+def _superseded(rctx: release_txn.ReleaseContext, covering: tuple[str, str, str] | None) -> _ReleaseOutcome | None:
+    """D.3's first superseded row: the covering tag's release is published."""
+    if covering is None:
+        return None
+    tag, version, t = covering
+    published = rctx.forge.view_release(tag)
+    if published is None or published.is_draft:
+        return None
+    return _ReleaseOutcome("settled", {"state": RELEASE_SUPERSEDED, "version": version, "tag": tag,
+                                       "url": published.url, "commit": t}, "release_settled")
+
+
+def _published_nothing(workflow: str, c: str, m: str) -> str:
+    return (f"the publishing workflow {workflow} completed successfully for {c} and published nothing covering "
+            f"{m}, which it does only when its own classification differed (for example, the policy at {m} is "
+            f"not the one the Controller read)")
+
+
+def _runs_failure(workflow: str, c: str, m: str, runs: tuple[forge_mod.Run, ...]) -> _ReleaseOutcome:
+    """D.3's completed-runs bullets for commit ``c``: the runs that did not
+    succeed, or the published-nothing text."""
+    failed = tuple(run for run in runs if run.conclusion != "success")
+    if failed:
+        return _ReleaseOutcome("failed", detail=f"the {workflow} run(s) for {c} did not succeed: {_runs_text(failed)}",
+                               reruns=failed)
+    return _ReleaseOutcome("failed", detail=_published_nothing(workflow, c, m))
+
+
+def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.ReleaseContext,
+                    workflow: str) -> _ReleaseOutcome:
+    """D.2 and D.3 for the squash commit ``m``: classify it (assets not
+    verified), read only the publishing workflow's runs, and check every
+    failure against a covering tag and the trunk tip's run first."""
+    m, trunk, remote = record["merge_commit"], record["trunk"], record["repository"]["remote"]
+    forge = rctx.forge
+    found = release_txn.classify(rctx, m, verify_assets=False)
+    settled = _settled(found)
+    if settled is not None:
+        return settled
+    finished: tuple[str, tuple[forge_mod.Run, ...]] | None = None  # (c, c's completed runs)
+    if found.publishes:
+        runs = forge.commit_runs(m, trunk, workflow)
+        if not _finished(runs):
+            return _ReleaseOutcome("pending", detail=(f"{found.tag} is not published yet ({found.state}), and the "
+                                                      f"{workflow} run(s) for {m} are "
+                                                      + (_runs_text(runs) if runs else "not reported yet")))
+        found = release_txn.classify(rctx, m, verify_assets=False)  # it may have published since
+        settled = _settled(found)
+        if settled is not None:
+            return settled
+        if found.publishes:
+            failure, finished = _runs_failure(workflow, m, m, runs), (m, runs)
+        else:
+            failure = _ReleaseOutcome("failed", detail=f"{found.state}: {found.detail}")
+    else:
+        failure = _ReleaseOutcome("failed", detail=f"{found.state}: {found.detail}"
+                                  + (f" ({'; '.join(found.problems)})" if found.problems else ""))
+    # The superseded rows, before any failure.
+    covering = release_txn.covering_tag(rctx, m)
+    settled = _superseded(rctx, covering)
+    if settled is not None:
+        return settled
+    if covering is not None:
+        tag, _, t = covering
+        runs = forge.commit_runs(t, trunk, workflow)
+        if not _finished(runs):
+            return _ReleaseOutcome("pending", detail=(f"{tag} at {t}, a later trunk commit, covers {m} and is not "
+                                                      f"published yet; the {workflow} run(s) for {t} are "
+                                                      + (_runs_text(runs) if runs else "not reported yet")))
+        failure, finished = _runs_failure(workflow, t, m, runs), (t, runs)
+    if finished is None:
+        return failure
+    # The recovery by a later trunk run.
+    c, c_runs = finished
+    d = _remote_trunk(ctx, remote, trunk)
+    if d == c or not _ancestor(ctx, c, d):
+        return failure
+    runs = forge.commit_runs(d, trunk, workflow)
+    ended = f"the {workflow} run(s) for {c} ended without publishing ({_runs_text(c_runs)})"
+    if not _finished(runs):
+        return _ReleaseOutcome("pending", detail=(f"{ended}; the run(s) for {d} on the trunk can still publish the "
+                                                  f"release covering {m}: "
+                                                  + (_runs_text(runs) if runs else "not reported yet")),
+                               reruns=failure.reruns)
+    found = release_txn.classify(rctx, m, verify_assets=False)
+    settled = _settled(found) or _superseded(rctx, release_txn.covering_tag(rctx, m))
+    if settled is not None:
+        return settled
+    failed = tuple(run for run in runs if run.conclusion != "success")
+    if failed:
+        return _ReleaseOutcome("failed", detail=f"{ended}; the run(s) for {d} did not succeed: {_runs_text(failed)}",
+                               reruns=failure.reruns + failed)
+    return _ReleaseOutcome("failed", detail=f"{ended}; {_published_nothing(workflow, d, m)} ({_runs_text(runs)})",
+                           reruns=failure.reruns)
+
+
+def _release_failed_shown(ctx: Context, key: str, record: Mapping[str, Any], detail: str) -> bool:
+    """Whether this binding's last ``release_failed`` event has ``detail``
+    (D.5: once per distinct detail, not per poll)."""
+    path = Path(ctx.runtime_root) / events_rel(key, record["work_item_id"])
+    last = None
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            event = json.loads(line) if line.strip() else {}
+            if event.get("event") == "release_failed" \
+                    and event.get("binding_generation") == record["binding_generation"]:
+                last = event.get("detail")
+    return last == detail
+
+
+def _release_wait(ctx: Context, key: str, record: dict) -> dict | Gate:
+    """D.1-D.3, before close-out step 3 on both sides: the record (settled,
+    or no wait applies), or the ``release_pending``/``release_failed``
+    gate. A record with a ``release`` field is settled. Reads only (I4):
+    the policy committed at the squash commit, its classification with the
+    assets not verified, the publishing workflow's runs, the releases and
+    the tags; its only writes are the record, its events and the fetches
+    ``classify`` makes."""
+    if record.get("release") is not None or not release_wait_applies(record):
+        return record
+    if record["state"] != MERGED_SQUASHED:
+        # D.1: not a verified squash merge; close-out continues as 1.5.0.
+        return _write(ctx, key, dict(record, release={"state": RELEASE_SKIPPED,
+                                                      "reason": "not a verified squash merge"}),
+                      "release_wait_skipped", merged_state=record["state"])
+    work_item_id, branch, m = record["work_item_id"], record["branch"], record["merge_commit"]
+    number = (record.get("pr") or {}).get("number")
+    workflow = binding_policy(record).milestone_branches.release_workflow
+    policy = repo_policy.read_committed_policy(ctx.repo_root, m)
+    if policy is None or not policy.release.enabled:
+        outcome = _ReleaseOutcome("settled", {"state": RELEASE_NONE}, "release_settled")
+    else:
+        rctx = release_txn.ReleaseContext(ctx.repo_root, policy, ctx.forge(record["repository"]["forge_repository"]),
+                                          git_runner=ctx.runner)
+        try:
+            outcome = _decide_release(ctx, record, rctx, workflow)
+        except ReleaseTransactionError as exc:
+            outcome = _ReleaseOutcome("failed", detail=f"classifying {m} refused: {exc.message}")
+    if outcome.kind == "settled":
+        return _write(ctx, key, dict(record, release=outcome.release), outcome.event, merge_commit=m,
+                      release=outcome.release)
+    reruns = tuple(f"re-run the failed jobs of {run.url} on GitHub (the release transaction resumes safely)"
+                   for run in outcome.reruns)
+    merged = f"pull request #{number} was squash-merged as {m}"
+    squash = repo_policy.MERGE_METHOD_SQUASH
+    if outcome.kind == "pending":
+        return Gate(GATE_RELEASE_PENDING, work_item_id, branch,
+                    f"{merged}; its release is not settled yet: {outcome.detail}. The Controller builds, tags and "
+                    f"publishes nothing, and closes out once the release is published. If no run of `{workflow}` "
+                    f"appears, {HAND_RELEASE}",
+                    ("re-run the step once the publishing workflow has finished", *reruns, HAND_RELEASE), squash,
+                    waitable=True)
+    if not _release_failed_shown(ctx, key, record, outcome.detail):
+        _event(ctx, key, record, "release_failed", merge_commit=m, detail=outcome.detail)
+    return Gate(GATE_RELEASE_FAILED, work_item_id, branch,
+                f"{merged}, but its release failed: {outcome.detail}. The Controller builds, tags and publishes "
+                f"nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand "
+                f"publication or a later trunk run that publishes the release settles this gate",
+                (*reruns, HAND_RELEASE), squash)
 
 
 # -- PR discovery ---------------------------------------------------------------------
@@ -1850,6 +2094,9 @@ def _on_trunk(ctx: Context, key: str, records: dict[str, dict], head: gitrepo.He
             gate = _reconcile_from_trunk(ctx, key, record, head)
             if gate is not None:
                 return gate
+            closed = read_record(ctx.runtime_root, key, record["work_item_id"])
+            if closed is not None and closed["state"] == CLOSED and stops_after_close(closed):
+                return Proceed(binding=closed, action="closed_out", stop=True)  # D.4, the trunk side
     records = live_records(ctx.runtime_root, key)
     blocking = [r for r in records.values() if r["state"] not in TERMINAL_STATES]
     for record in blocking:
@@ -1945,7 +2192,12 @@ def _close_trunk_step3(ctx: Context, key: str, record: dict) -> Gate | None:
     ``MERGED_SQUASHED``, the squash commit) is on ``<remote>/<trunk>``; then
     ``CLOSED``. Local trunk is not
     fast-forwarded here: the trunk start that follows gates a behind
-    trunk."""
+    trunk. In an auto-merge binding the release wait runs first
+    (auto-merge-release-wait D.1)."""
+    outcome = _release_wait(ctx, key, record)
+    if isinstance(outcome, Gate):
+        return outcome
+    record = outcome
     work_item_id, branch, h = record["work_item_id"], record["branch"], record["merged_head"]
     remote, trunk = record["repository"]["remote"], record["trunk"]
     local = _local_branch(ctx, branch)
@@ -2547,8 +2799,11 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
         return _prediction("close_out", f"the merged binding closes out and HEAD switches to {record['trunk']}",
                            record=record)
     if state == MERGED_SQUASHED:
+        waiting = _predict_release(record)
+        if waiting is not None:
+            return waiting
         return _prediction("close_out", f"the squash-merged binding closes out and HEAD switches to "
-                                        f"{record['trunk']}", record=record)
+                                        f"{record['trunk']}{_stop_text(record)}", record=record)
     if state == READY:
         if auto_merge_applies(record, ctx):
             merge = record.get("merge") or {}
@@ -2583,6 +2838,22 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
     return _prediction("proceed", f"{branch} has no commit beyond the trunk yet", record=record, network=True)
 
 
+def _predict_release(record: Mapping[str, Any]) -> dict | None:
+    """``wait_release`` (auto-merge-release-wait F): a ``MERGED_SQUASHED``
+    record whose release wait applies and has not settled."""
+    if record.get("release") is not None or not release_wait_applies(record):
+        return None
+    return _prediction("wait_release", f"the step classifies the squash commit {record.get('merge_commit')} and "
+                                       f"waits for its release, then closes out and stops", record=record,
+                       network=True)
+
+
+def _stop_text(record: Mapping[str, Any]) -> str:
+    if not stops_after_close(record):
+        return ""
+    return f"; the step then stops (release: {release_text(record['release'])})"
+
+
 def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.HeadState,
                       policy: repo_policy.RepositoryPolicy | None) -> dict:
     for record in records.values():
@@ -2596,7 +2867,11 @@ def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.H
         if state == MERGED:
             return _prediction("close_out", "the merged binding closes out from the trunk", record=record)
         if state == MERGED_SQUASHED:
-            return _prediction("close_out", "the squash-merged binding closes out from the trunk", record=record)
+            waiting = _predict_release(record)
+            if waiting is not None:
+                return waiting
+            return _prediction("close_out", f"the squash-merged binding closes out from the trunk"
+                                            f"{_stop_text(record)}", record=record)
         if state not in TERMINAL_STATES:
             return _prediction("refuse", f"{record['work_item_id']} is bound to {record['branch']} (binding "
                                          f"state {state}), so the trunk cannot start a milestone, unless its "

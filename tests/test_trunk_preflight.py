@@ -434,6 +434,28 @@ class PolicyStepTest(_PolicyCase):
         self.assertEqual(evidence["code"], job.BRANCH_INVARIANT_VIOLATED_CODE)
         self.assertIn("does not descend from the pre-step tip", evidence["message"])
 
+    def test_a_close_out_after_the_release_wait_stops_the_step(self) -> None:
+        # auto-merge-release-wait D.4: no worker, no job record, exit 0, and
+        # the run's no_action event names the release; the next step plans.
+        release = {"state": "ALREADY_RELEASED", "version": "1.6.0", "tag": "v1.6.0",
+                   "url": "https://github.com/example-owner/example-repo/releases/tag/v1.6.0"}
+        closed = {"work_item_id": WI, "state": mb.CLOSED, "release": release}
+        stop = mb.Proceed(binding=closed, action="closed_out", stop=True)
+        before = self.worker_count()
+        with unittest.mock.patch.object(mb, "repository_preflight", return_value=stop):
+            result = self.cli("step")
+        self.assertEqual(result.code, cli.EXIT_OK, result.stderr)
+        self.assert_no_launch(result, before)
+        self.assertEqual(result.records, [])
+        self.assertFalse((self.lc.runtime / "jobs").is_dir() and any((self.lc.runtime / "jobs").glob("*.json")))
+        [events] = (self.lc.runtime / "runs").glob("*/events.jsonl")
+        [no_action] = [json.loads(line) for line in events.read_text().splitlines()
+                       if json.loads(line)["event"] == "no_action"]
+        self.assertEqual((no_action["observed_phase"], no_action["reason"], no_action["release"]),
+                         ("MILESTONE_COMPLETE", job.REASON_CLOSED_OUT_RELEASED, f"v1.6.0 {release['url']}"))
+        result = self.cli("step")
+        self.assertEqual(result.records[-1]["selected_action"]["command"], f"/milestone-plan {self.trunk_tip}")
+
     def test_resume_applies_the_post_step_verification_too(self) -> None:
         finished = self.open_pr_step(lambda: self.lc.implement("CP1")).records[-1]
         self.assertEqual(finished["status"], job.STATUS_FINISHED)

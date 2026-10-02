@@ -442,12 +442,19 @@ def _highest_tag(release: repo_policy.Release, tags: Mapping[str, tuple[str, str
     return max(candidates, key=lambda name: release.version_key(tags[name][0]), default=None)
 
 
-def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Classification:
+def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True,
+             verify_assets: bool = True) -> Classification:
     """Classify trunk commit ``commit`` (first matching row of the plan's
     table). Fetches the trunk and, unless ``fetch_tags`` is false, every
     tag; reads the remote's tags with ``ls-remote``, and each release with
     the forge. Refuses when the release switch is off or ``commit`` is not
-    on the trunk."""
+    on the trunk.
+
+    ``verify_assets`` false (the Controller's release wait, auto-merge-
+    release-wait D.2) skips :func:`release_problems` for a tag at
+    ``commit`` with a published release: nothing is downloaded and no
+    policy command runs, and the state is ``ALREADY_RELEASED`` with the
+    assets not verified. CI keeps the default."""
     release = ctx.release
     if not release.enabled:
         raise _refuse(f"{repo_policy.POLICY_PATH} does not enable release", commit=commit)
@@ -517,6 +524,9 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
                       f"{tag} is in abandoned_tags, but "
                       + ("a release exists for it" if found is not None else "the tag does not exist"))
     if tag_commit == commit and published:
+        if not verify_assets:
+            return result(ALREADY_RELEASED, f"{tag} is published at {commit} (assets not verified by the "
+                                             f"Controller)")
         problems = release_problems(ctx, tag, found, version, commit)
         if problems:
             return result(RELEASE_MISMATCH, f"the published release for {tag} is inconsistent: "
@@ -555,6 +565,24 @@ def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True) -> Cl
     range_base = (base_commit if conventional
                   else None if highest is None else ancestors[highest][1])
     return result(RELEASE_DUE, f"{version} has no tag and no release", release_range=(range_base, commit))
+
+
+def covering_tag(ctx: ReleaseContext, commit: str) -> tuple[str, str, str] | None:
+    """The covering tag of trunk commit ``commit`` (auto-merge-release-wait
+    D.3): among the remote's tags that ``tag_format`` renders canonically
+    from a version -- :func:`classify`'s own ``ls-remote`` read and
+    matching -- the lowest-versioned one whose commit is a strict
+    descendant of ``commit`` on the fetched trunk. A later run that
+    published it released ``commit`` with it. ``(tag, version,
+    tag_commit)``, or ``None``. Its only writes are the trunk and tag
+    fetches :func:`classify` makes."""
+    tip = gitrepo.fetch_branch(ctx.repo_root, ctx.remote, ctx.policy.trunk_branch, runner=ctx.git_runner)
+    gitrepo.fetch(ctx.repo_root, ctx.remote, [TAGS_REFSPEC], runner=ctx.git_runner)
+    matching = _matching_tags(ctx, gitrepo.ls_remote_tags(ctx.repo_root, ctx.remote, runner=ctx.git_runner))
+    found = [(name, version, oid) for name, (version, oid) in matching.items()
+             if oid != commit and gitrepo.is_ancestor(ctx.repo_root, commit, oid, runner=ctx.git_runner)
+             and gitrepo.is_ancestor(ctx.repo_root, oid, tip, runner=ctx.git_runner)]
+    return min(found, key=lambda entry: ctx.release.version_key(entry[1]), default=None)
 
 
 # ---------------------------------------------------------------------------

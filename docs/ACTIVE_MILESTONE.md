@@ -37,7 +37,7 @@ A policy without the key behaves exactly as 1.5.0 (I1).
 | CP1 The two switches | Complete | See below |
 | CP2 The forge surface | Complete | See below |
 | CP3 The merge at readiness | Complete | See below |
-| CP4 The release wait, close out and stop | Not started | |
+| CP4 The release wait, close out and stop | Complete | See below |
 | CP5 The bounded wait in `run`, and `status` | Not started | |
 | CP6 Documentation and full verification | Not started | |
 
@@ -224,4 +224,103 @@ A policy without the key behaves exactly as 1.5.0 (I1).
     `test_write_containment`, `test_no_rewrite_invariants`, `test_decision`, `test_cli`,
     `test_trunk_preflight` and `test_hints_parse`, 483 tests. `test_job` and
     `test_job_validation` (274) also pass.
+  - `generate_no_policy_lifecycle.py --check` passes.
+
+### CP4 -- the release wait, close out and stop
+
+- `controller/release_txn.py` (D.2, D.3):
+  - `classify` gains `verify_assets` (default `True`). With `False`, a tag at the commit with a
+    published release is `ALREADY_RELEASED` "(assets not verified by the Controller)", and
+    `release_problems` is never called: nothing is downloaded and no policy command runs. Every
+    existing caller keeps the default.
+  - `covering_tag(ctx, commit)` is the lowest-versioned matching remote tag whose commit is a strict
+    descendant of `commit` on the fetched trunk, or `None`.
+- `controller/milestone_branch.py`:
+  - `_release_wait(ctx, key, record)` runs at the top of `_close_out_on_branch` and
+    `_close_trunk_step3` (D.1). It returns the record, or a `release_pending` (waitable) or
+    `release_failed` gate. A record with a `release` field is settled and skips it, as does a
+    binding whose snapshot has no `auto_merge: true`.
+  - D.1's table: a `MERGED` record of an auto-merge binding gets `release = {state: SKIPPED,
+    reason}` and `release_wait_skipped`, and closes out as 1.5.0. `MERGED_REWRITTEN` never reaches
+    close-out.
+  - D.2: the policy committed at `m` decides. No policy, or releases off, settles `NONE`. Otherwise
+    `classify(ReleaseContext(..., git_runner=ctx.runner), m, verify_assets=False)`.
+    - `ALREADY_RELEASED` records state, version, tag and URL (`released`).
+    - `NO_CHANGE`/`ABANDONED_VERSION` record state, version and detail (`release_settled`).
+    - Any other state, or a `ReleaseTransactionError`, is a failure.
+  - D.3 (`_decide_release`): `RELEASE_DUE`/`RESUME` read only
+    `commit_runs(m, trunk, <snapshot release_workflow>)`.
+    - None reported, or any not completed: `release_pending`.
+    - All completed: classify again (the race); then the failed runs, or the published-nothing
+      text.
+    - Every failure is first checked against the covering tag. Published: settled `SUPERSEDED`
+      (`version`, `tag`, `url`, `commit`). Unpublished: the covering commit's runs decide the same
+      way.
+    - A runs-based failure at `c` (`m` or the covering commit) is then checked against the trunk
+      tip `d`. If `d` strictly descends from `c`, `d`'s runs pending is `release_pending`, naming
+      `c`'s runs and `d`'s. Once they complete, `m` is classified again and the covering tag
+      re-checked, else `release_failed` names both.
+  - `release_failed` is written as an event once per distinct detail (the binding's last
+    `release_failed` event). The record gains no field until the release settles.
+  - The gates name the runs, a "re-run the failed jobs of <url>" exit per failed run, and the hand
+    publication with `tools/release.py`.
+  - D.4: `Proceed.stop`. After a close-out whose release settled (`stops_after_close`), the branch
+    side returns `Proceed(binding=<CLOSED record>, action="closed_out", stop=True)` instead of the
+    trunk start. `_on_trunk` returns the same when its reconciliation closed out such a binding.
+  - `predict`: `wait_release` for a `MERGED_SQUASHED` record whose wait applies and has not
+    settled. After it, `close_out` names the stop and the release.
+  - `release_text(release)` words a settled release.
+- `controller/decision.py`: gate texts for `release_pending` and `release_failed`. `GATE_CODES`
+  gains both.
+- `controller/job.py`:
+  - `_execute_step_locked` returns `closed_out_decision(binding)` for `Proceed.stop`, after the
+    release re-check and before `decide`. That is a no-action `Decision` with reason
+    `closed_out_released` (`REASON_CLOSED_OUT_RELEASED`), phase `MILESTONE_COMPLETE`, the release
+    as its evidence. No worker, no job record.
+  - `controller/cli.py`'s `no_action` run event adds `release` for it.
+- CP3's `test_the_merge_is_sent_at_readiness_and_closes_out` now expects the stop. Its policy
+  releases nothing, so the wait settles `NONE`.
+- Tests:
+  - `tests/test_pull_request_lifecycle.py` `ReleaseWaitTest`, over a real `version_change`
+    classification, tags in the bare origin and the fake forge's releases and runs:
+    - released with tag, version and URL, with `release_problems`/`_run_policy_command` patched to
+      fail and no `release download` call;
+    - `NO_CHANGE` settling in the merge step;
+    - releases turned off at `m` (`NONE`);
+    - a failed `Workflow conformance` run, then no `Main` run, then a queued one, then success:
+      pending throughout, never failed;
+    - the snapshot's `release_workflow` (`release.yml`) as the only workflow read;
+    - a failed publishing run (one event over two polls, then settled by a publication);
+    - success with nothing published;
+    - the re-classify race;
+    - `INVALID_TRANSITION` and a `ReleaseTransactionError`;
+    - a tag off the trunk (`COLLISION_TAG_ELSEWHERE`, not a descendant);
+    - `classify` called with the preflight's `git_runner` and `verify_assets=False`;
+    - the trunk side after a manual `git switch main`;
+    - `predict`;
+    - the next step's `trunk_start` with the explicit base.
+  - `SupersededReleaseTest`:
+    - `m`'s queued run cancelled by a later push whose run publishes at the descendant (pending,
+      including before the run is listed, then `SUPERSEDED`);
+    - the same with the descendant raising the version;
+    - a failed run of `m` recovered by a later run;
+    - a later run resuming `m`'s own tag (`ALREADY_RELEASED`);
+    - a covering tag left unpublished by its failed run, then a newer run that publishes it, or
+      completes without publishing (failed, naming both);
+    - a failed or cancelled run with the trunk tip still `m` (failed at once).
+  - `ReleaseWaitSkippedTest`: a hand merge commit (`SKIPPED`, `release_wait_skipped`, today's
+    close-out and trunk start), and a rebase (`MERGED_REWRITTEN`, no wait).
+  - `ReleaseWaitUnchangedTest`: a binding without the key closes out and starts the trunk.
+  - `tests/test_release_txn.py`: `verify_assets=False` downloads and verifies nothing, and the
+    default still reports the mismatch; `covering_tag`.
+  - `tests/test_trunk_preflight.py`: the stop through `step` exits 0, launches no worker and writes
+    no job record. The run's `no_action` event names the release. The next `step` launches
+    `/milestone-plan <trunk tip>`.
+
+- Verification (under a reaping subreaper, without `FORCE_COLOR`):
+  - New and related: `test_pull_request_lifecycle`, `test_milestone_branch`, `test_release_txn`,
+    `test_decision`, `test_trunk_preflight`, `test_cli`, `test_evidence`,
+    `test_write_containment`, `test_no_rewrite_invariants`, `test_hints_parse`, `test_forge` and
+    `test_trunk_orchestration_e2e`. 902 tests pass.
+  - `test_job` and `test_job_validation` (274) pass.
   - `generate_no_policy_lifecycle.py --check` passes.

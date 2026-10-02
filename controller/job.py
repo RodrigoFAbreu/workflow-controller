@@ -159,6 +159,12 @@ STATUS_GATE_BLOCKED = "GATE_BLOCKED"
 STATUS_DECLINED = "DECLINED"
 STATUS_HANDOFF_PENDING = "HANDOFF_PENDING"
 
+#: The no-action reason of a step whose repository preflight closed out a
+#: milestone after its release wait and stopped (auto-merge-release-wait
+#: D.4): no `/milestone-plan` is launched in the same step, and no job
+#: record is written.
+REASON_CLOSED_OUT_RELEASED = "closed_out_released"
+
 #: `PRE_STATE_FIELDS` -- the single declaration both `_capture_pre_state`
 #: and (in CP6B) the record-completeness property read, so the two cannot
 #: drift (the plan's own stated defect history: a field declared in the
@@ -4611,6 +4617,19 @@ def execute_step(
         )
 
 
+def closed_out_decision(binding: Mapping[str, Any]) -> Decision:
+    """The no-action outcome of a step that closed out ``binding`` (the
+    ``CLOSED`` record) after its release wait (auto-merge-release-wait
+    D.4): reason :data:`REASON_CLOSED_OUT_RELEASED`, whose only evidence
+    line names the release. The next step starts from the trunk and plans
+    the next milestone."""
+    return Decision(
+        observed_phase=milestone_branch.MILESTONE_COMPLETE,
+        evidence=(milestone_branch.release_text(binding["release"]),),
+        action=None, automatic=False, gate=None, declined=False, reason=REASON_CLOSED_OUT_RELEASED,
+    )
+
+
 def acknowledge_milestone_binding(managed_repo: Any, *, runtime: Path, work_item_id: str,
                                   disposition: str) -> dict:
     """``milestone-binding --new-pr``/``--abandon`` (trunk-branch-pr-release-
@@ -4681,9 +4700,10 @@ def _execute_step_locked(
     re-derived here.
 
     Returns a :class:`~controller.decision.Decision` for the no-action
-    class (``LEGACY_READY``, ``MILESTONE_COMPLETE``) -- nothing ran, no
-    gate is open, nothing was declined, so no job record is written at
-    all and the jobs directory is left unchanged. Every other reachable
+    class (``LEGACY_READY``, ``MILESTONE_COMPLETE``, and a close-out after
+    a release wait, :func:`closed_out_decision`) -- nothing ran, no gate
+    is open, nothing was declined, so no job record is written at all and
+    the jobs directory is left unchanged. Every other reachable
     outcome returns a :data:`JobRecord` (a plain, JSON-serialisable
     ``dict`` -- exactly what was persisted): ``GATE_BLOCKED``,
     ``DECLINED`` or ``HANDOFF_PENDING`` for the no-launch class, or --
@@ -4729,6 +4749,8 @@ def _execute_step_locked(
     if isinstance(preflight, milestone_branch.Gate):
         return _branch_gate_record(runtime, managed_repo, identity, target_state.read(managed_repo), preflight,
                                    run_id=run_id)
+    if preflight.stop:
+        return closed_out_decision(preflight.binding)
     binding = preflight.binding
     if binding is not None or preflight.action != "none":
         snapshot = target_state.read(managed_repo)

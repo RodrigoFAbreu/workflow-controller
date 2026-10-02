@@ -18,8 +18,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import decision, forge as forge_mod, gitrepo, milestone_branch as mb, runtime  # noqa: E402
-from controller.errors import BranchBindingError, ForgeUndecidableError, GitOperationError  # noqa: E402
+from controller import decision, forge as forge_mod, gitrepo, milestone_branch as mb, release_txn, runtime  # noqa: E402
+from controller.errors import (  # noqa: E402
+    BranchBindingError, ForgeUndecidableError, GitOperationError, ReleaseTransactionError,
+)
 from tests.fixtures import (  # noqa: E402
     FAKE_GH_REPOSITORY, commit_all, current_head, git_clone, git_init, run, trailer_message,
 )
@@ -2199,7 +2201,9 @@ class AutoMergeTest(_AutoMerge):
         self.set_checks(number, ("ci", "pass"))
         outcome = self.preflight()
         m = self.origin_ref("refs/heads/main")
-        self.assertEqual(outcome, mb.Proceed(action="closed_out", base=m))
+        # The release wait ran (the policy releases nothing), so the step stops (D.4).
+        self.assertEqual(outcome, mb.Proceed(binding=self.record(), action="closed_out", stop=True))
+        self.assertEqual(self.record()["release"], {"state": mb.RELEASE_NONE})
         self.assert_closed(a, m)
         self.assertEqual(self.merges(), [["pr", "merge", str(number), "--squash", "--match-head-commit", a,
                                           "--subject", f"{TITLE} (#{number})", "--body",
@@ -2455,6 +2459,418 @@ class AutoMergeTest(_AutoMerge):
 
     def predict(self) -> dict:
         return mb.predict(self.ctx)
+
+
+def release_wait_policy(**pull_request) -> dict:
+    """Auto-merge with releases on, versioned by ``pyproject.toml``."""
+    data = squash_policy(trigger="version_change")
+    data["milestone_branches"]["pull_request"].update(auto_merge=True, **pull_request)
+    data["release"]["enabled"] = True
+    return data
+
+
+RUNS_URL = f"https://github.com/{FAKE_GH_REPOSITORY}/actions/runs"
+
+
+class _ReleaseWait(_AutoMerge):
+    """The release wait (``workflow-controller-auto-merge-release-wait``
+    CP4, Design D) over a real classification: ``pyproject.toml`` carries
+    1.0.0, tags live in the bare origin, and the fake forge holds the
+    releases and the workflow runs."""
+
+    policy_data = staticmethod(release_wait_policy)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.set_version(self.clone, "1.0.0")
+        self.t = commit_all(self.clone, "Version 1.0.0")
+        self.push("main")
+
+    @staticmethod
+    def set_version(root: Path, version: str) -> None:
+        (root / "pyproject.toml").write_text(f'[project]\nname = "pkg"\nversion = "{version}"\n')
+
+    # -- GitHub's side ---------------------------------------------------------------
+
+    def add_run(self, commit: str, status: str = "in_progress", conclusion: str = "", *,
+                workflow: str = "Main", file: str = "main.yml") -> int:
+        data = self.gh()
+        run_id = 100 + len(data["runs"])
+        data["runs"].append({"databaseId": run_id, "workflowName": workflow, "workflowFile": file,
+                             "headSha": commit, "headBranch": "main", "event": "push", "status": status,
+                             "conclusion": conclusion, "attempt": 1, "url": f"{RUNS_URL}/{run_id}"})
+        from tests import fake_gh
+
+        fake_gh.write_state(self.gh_state, data)
+        return run_id
+
+    def finish_run(self, run_id: int, conclusion: str) -> None:
+        from tests import fake_gh
+
+        data = self.gh()
+        for record in data["runs"]:
+            if record["databaseId"] == run_id:
+                record.update(status="completed", conclusion=conclusion)
+        fake_gh.write_state(self.gh_state, data)
+
+    def tag(self, tag: str, commit: str) -> None:
+        run(["git", "--git-dir", str(self.origin), "tag", tag, commit])
+
+    def publish(self, tag: str, *, draft: bool = False) -> str:
+        """The release for ``tag``, as the publishing run creates it; returns its URL."""
+        from tests import fake_gh
+
+        data = self.gh()
+        url = f"{data['url']}/releases/tag/{tag}"
+        data["releases"].append({"tagName": tag, "isDraft": draft, "url": url, "assets": []})
+        fake_gh.write_state(self.gh_state, data)
+        return url
+
+    def push_trunk(self, name: str, *, version: str | None = None) -> str:
+        """Someone lands a later commit on the trunk (bumping the version)."""
+        human = self.human()
+        (human / name).write_text("later\n")
+        if version is not None:
+            self.set_version(human, version)
+        commit = commit_all(human, f"land {name}")
+        run(["git", "push", "-q", "origin", "main"], cwd=human)
+        return commit
+
+    # -- the Controller's side ------------------------------------------------------
+
+    def merge(self) -> tuple[str, str, object]:
+        """The Controller's merge at readiness: ``(A, m, the step's outcome)``."""
+        number, a = self.to_pending()
+        self.set_checks(number, ("ci", "pass"))
+        outcome = self.preflight()
+        self.assertEqual(len(self.merges()), 1)
+        return a, self.origin_ref("refs/heads/main"), outcome
+
+    def assertPending(self, outcome, *fragments: str) -> mb.Gate:
+        gate = self.assertGate(outcome, mb.GATE_RELEASE_PENDING)
+        self.assertTrue(gate.waitable)
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.assertNotIn("release", self.record())
+        for fragment in fragments:
+            self.assertIn(fragment, gate.message)
+        return gate
+
+    def assertFailed(self, outcome, *fragments: str) -> mb.Gate:
+        gate = self.assertGate(outcome, mb.GATE_RELEASE_FAILED)
+        self.assertFalse(gate.waitable)
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.assertNotIn("release", self.record())
+        for fragment in fragments:
+            self.assertIn(fragment, gate.message)
+        self.assertIn(mb.HAND_RELEASE, gate.exits)
+        return gate
+
+    def assertStopped(self, outcome, release: dict) -> dict:
+        record = self.record()
+        self.assertEqual(outcome, mb.Proceed(binding=record, action="closed_out", stop=True))
+        self.assertEqual((record["state"], record["release"]), (mb.CLOSED, release))
+        self.assertEqual(self.events_named("release_failed"), [])
+        return record
+
+    def workflows_read(self) -> list[str]:
+        return [argv[argv.index("--workflow") + 1] for argv in self.calls("run", "list")]
+
+
+class ReleaseWaitTest(_ReleaseWait):
+    def test_released_records_the_tag_and_url_without_downloading_or_running_anything(self) -> None:
+        a, m, outcome = self.merge()
+        self.assertPending(outcome, "v1.0.0 is not published yet (RELEASE_DUE)", "not reported yet",
+                           "publish by hand with `tools/release.py`")
+        self.assertEqual(self.head().branch, BRANCH)
+        run_id = self.add_run(m, "queued")
+        self.assertPending(self.preflight(), f"run {run_id} (queued) {RUNS_URL}/{run_id}")
+        self.tag("v1.0.0", m)
+        url = self.publish("v1.0.0")
+        self.finish_run(run_id, "success")
+        with mock.patch.object(release_txn, "release_problems", side_effect=AssertionError("downloaded")), \
+                mock.patch.object(release_txn, "_run_policy_command", side_effect=AssertionError("ran")):
+            outcome = self.preflight()
+        self.assertStopped(outcome, {"state": "ALREADY_RELEASED", "version": "1.0.0", "tag": "v1.0.0", "url": url})
+        self.assertEqual(self.head(), gitrepo.HeadState("main", m))
+        self.assertEqual([e["release"] for e in self.events_named("released")], [self.record()["release"]])
+        self.assertFalse(any(argv[:2] == ["release", "download"] for argv in self.gh_calls()))
+        self.assertEqual(set(self.workflows_read()), {"main.yml"})
+        # The next step starts from the trunk with the explicit base.
+        self.assertEqual(self.preflight(), mb.Proceed(action="trunk_start", base=m))
+
+    def test_no_change_settles_in_the_merge_step(self) -> None:
+        self.tag("v1.0.0", self.t)
+        self.publish("v1.0.0")
+        a, m, outcome = self.merge()
+        record = self.assertStopped(outcome, {"state": "NO_CHANGE", "version": "1.0.0",
+                                              "detail": f"v1.0.0 is published at {self.t}, an ancestor"})
+        self.assertEqual(self.workflows_read(), [])
+        self.assertEqual(self.events_named("release_settled")[0]["release"], record["release"])
+
+    def test_a_policy_at_m_without_releases_settles_none(self) -> None:
+        # The milestone itself turns releases off: the policy at m decides.
+        number = self.open_pr()
+        data = release_wait_policy()
+        data["release"]["enabled"] = False
+        self.write_policy(data)
+        commit_all(self.clone, "Releases off")
+        self.accept()
+        self.preflight()
+        self.set_checks(number, ("ci", "pass"))
+        self.assertStopped(self.preflight(), {"state": mb.RELEASE_NONE})
+        self.assertEqual(self.calls("run", "list"), [])
+
+    def test_a_failed_other_workflow_never_fails_the_wait(self) -> None:
+        a, m, outcome = self.merge()
+        self.add_run(m, "completed", "failure", workflow="Workflow conformance", file="conformance.yml")
+        self.assertPending(outcome)
+        self.assertPending(self.preflight(), "not reported yet")
+        run_id = self.add_run(m, "queued")
+        self.assertPending(self.preflight(), f"run {run_id} (queued)")
+        self.finish_run(run_id, "success")
+        self.tag("v1.0.0", m)
+        url = self.publish("v1.0.0")
+        self.assertStopped(self.preflight(), {"state": "ALREADY_RELEASED", "version": "1.0.0", "tag": "v1.0.0",
+                                              "url": url})
+        self.assertEqual(set(self.workflows_read()), {"main.yml"})
+        self.assertNotIn("conformance", " ".join(" ".join(argv) for argv in self.gh_calls()))
+
+    def test_the_snapshot_names_the_publishing_workflow(self) -> None:
+        self.policy_data = lambda: release_wait_policy(release_workflow="release.yml")
+        self.fresh()
+        a, m, outcome = self.merge()
+        self.add_run(m, "completed", "failure")  # main.yml: not the publishing workflow here
+        self.assertPending(self.preflight(), "the release.yml run(s)", "not reported yet")
+        run_id = self.add_run(m, "completed", "failure", workflow="Release", file="release.yml")
+        self.assertFailed(self.preflight(), f"{RUNS_URL}/{run_id}")
+        self.assertEqual(set(self.workflows_read()), {"release.yml"})
+
+    def test_a_failed_publishing_run_fails_once_per_detail(self) -> None:
+        a, m, outcome = self.merge()
+        run_id = self.add_run(m, "completed", "failure")
+        gate = self.assertFailed(self.preflight(), f"the main.yml run(s) for {m} did not succeed",
+                                 f"run {run_id} (completed, failure) {RUNS_URL}/{run_id}")
+        self.assertEqual(gate.exits[0], f"re-run the failed jobs of {RUNS_URL}/{run_id} on GitHub (the release "
+                                        f"transaction resumes safely)")
+        self.assertEqual(self.preflight(), gate)
+        self.assertEqual(len(self.events_named("release_failed")), 1)
+        self.assertEqual(self.head().branch, BRANCH)  # not closed out
+        # A re-run that publishes settles it.
+        self.tag("v1.0.0", m)
+        self.publish("v1.0.0")
+        self.assertEqual(self.preflight().action, "closed_out")
+
+    def test_a_successful_run_that_published_nothing_fails(self) -> None:
+        a, m, outcome = self.merge()
+        self.add_run(m, "completed", "success")
+        self.assertFailed(self.preflight(), f"the publishing workflow main.yml completed successfully for {m} and "
+                                            f"published nothing")
+
+    def test_the_re_classify_race_settles(self) -> None:
+        a, m, outcome = self.merge()
+        run_id = self.add_run(m, "completed", "success")
+        real = release_txn.classify
+        calls = []
+
+        def classify(*args, **kwargs):
+            calls.append(args[1])
+            if len(calls) == 2:  # the publish finished between the two reads
+                self.tag("v1.0.0", m)
+                self.publish("v1.0.0")
+            return real(*args, **kwargs)
+
+        with mock.patch.object(release_txn, "classify", side_effect=classify):
+            outcome = self.preflight()
+        self.assertEqual(calls, [m, m])
+        self.assertEqual(outcome.action, "closed_out")
+        self.assertEqual(self.record()["release"]["state"], "ALREADY_RELEASED")
+        del run_id
+
+    def test_a_failing_classification_and_a_refusal_fail(self) -> None:
+        self.tag("v2.0.0", self.t)
+        a, m, outcome = self.merge()
+        self.assertFailed(outcome, "INVALID_TRANSITION: 1.0.0 is not above v2.0.0")
+        self.assertEqual(self.calls("run", "list"), [])
+        with mock.patch.object(release_txn, "classify", side_effect=ReleaseTransactionError("no trunk")):
+            self.assertFailed(self.preflight(), f"classifying {m} refused: no trunk")
+        self.assertEqual(len(self.events_named("release_failed")), 2)
+
+    def test_a_tag_off_the_trunk_is_a_failed_release(self) -> None:
+        human = self.human()
+        run(["git", "switch", "-q", "-c", "side"], cwd=human)
+        (human / "side.txt").write_text("side\n")
+        side = commit_all(human, "side")
+        run(["git", "push", "-q", "origin", "side"], cwd=human)
+        self.tag("v1.0.0", side)
+        self.publish("v1.0.0")
+        a, m, outcome = self.merge()
+        self.assertFailed(outcome, f"COLLISION_TAG_ELSEWHERE: v1.0.0 exists at {side}")
+
+    def test_classify_runs_with_the_preflights_git_runner(self) -> None:
+        self.ctx = dataclasses.replace(self.ctx, runner=gitrepo.subprocess_runner(None))
+        with mock.patch.object(release_txn, "classify", wraps=release_txn.classify) as spy:
+            self.merge()
+        self.assertTrue(spy.call_args_list)
+        for call in spy.call_args_list:
+            self.assertIs(call.args[0].git_runner, self.ctx.runner)
+            self.assertEqual(call.kwargs, {"verify_assets": False})
+
+    def test_the_trunk_side_after_a_manual_switch(self) -> None:
+        a, m, outcome = self.merge()
+        self.assertPending(outcome)
+        self.git("switch", "-q", "main")
+        run_id = self.add_run(m)
+        self.assertPending(self.preflight(), f"run {run_id} (in_progress)")
+        self.finish_run(run_id, "success")
+        self.tag("v1.0.0", m)
+        url = self.publish("v1.0.0")
+        self.assertStopped(self.preflight(), {"state": "ALREADY_RELEASED", "version": "1.0.0", "tag": "v1.0.0",
+                                              "url": url})
+        self.assertEqual(self.events_named("closed")[-1]["side"], "trunk")
+        self.assertEqual(self.head().branch, "main")
+
+    def test_predict(self) -> None:
+        a, m, outcome = self.merge()
+        prediction = mb.predict(self.ctx)
+        self.assertEqual((prediction["action"], prediction["binding_state"]), ("wait_release", mb.MERGED_SQUASHED))
+        self.assertIn(f"classifies the squash commit {m}", prediction["detail"])
+        self.git("switch", "-q", "main")
+        self.assertEqual(mb.predict(self.ctx)["action"], "wait_release")
+        self.seed(mb.MERGED_SQUASHED, release={"state": mb.RELEASE_NONE})
+        prediction = mb.predict(self.ctx)
+        self.assertEqual(prediction["action"], "close_out")
+        self.assertIn("the step then stops (release: NONE", prediction["detail"])
+
+
+class SupersededReleaseTest(_ReleaseWait):
+    """A later trunk run publishes, or can still publish, the release that
+    covers ``m`` (D.3's superseded and recovery rows)."""
+
+    def test_m_s_pending_run_cancelled_by_a_later_push_that_publishes_at_the_descendant(self) -> None:
+        a, m, outcome = self.merge()
+        mine = self.add_run(m, "queued")
+        self.assertPending(self.preflight())
+        d = self.push_trunk("later.txt")
+        self.finish_run(mine, "cancelled")
+        self.assertPending(self.preflight(), f"the main.yml run(s) for {m} ended without publishing",
+                           f"the run(s) for {d} on the trunk can still publish", "not reported yet")
+        later = self.add_run(d)
+        self.assertPending(self.preflight(), f"run {later} (in_progress)")
+        self.tag("v1.0.0", d)
+        url = self.publish("v1.0.0")
+        self.finish_run(later, "success")
+        self.assertStopped(self.preflight(), {"state": mb.RELEASE_SUPERSEDED, "version": "1.0.0", "tag": "v1.0.0",
+                                              "url": url, "commit": d})
+        self.assertEqual(self.head(), gitrepo.HeadState("main", d))
+
+    def test_the_same_with_the_descendant_raising_the_version(self) -> None:
+        a, m, outcome = self.merge()
+        mine = self.add_run(m, "queued")
+        d = self.push_trunk("later.txt", version="1.1.0")
+        self.finish_run(mine, "cancelled")
+        later = self.add_run(d)
+        self.assertPending(self.preflight(), f"run {mine} (completed, cancelled)", f"run {later} (in_progress)")
+        self.tag("v1.1.0", d)
+        url = self.publish("v1.1.0")
+        self.finish_run(later, "success")
+        self.assertStopped(self.preflight(), {"state": mb.RELEASE_SUPERSEDED, "version": "1.1.0", "tag": "v1.1.0",
+                                              "url": url, "commit": d})
+
+    def test_a_failed_run_of_m_recovered_by_a_later_run_at_the_descendant(self) -> None:
+        a, m, outcome = self.merge()
+        mine = self.add_run(m, "completed", "failure")
+        d = self.push_trunk("later.txt")
+        later = self.add_run(d)
+        gate = self.assertPending(self.preflight(), f"run {mine} (completed, failure)", f"run {later} (in_progress)")
+        self.assertIn(f"re-run the failed jobs of {RUNS_URL}/{mine} on GitHub (the release transaction resumes "
+                      f"safely)", gate.exits)
+        self.assertEqual(self.events_named("release_failed"), [])
+        self.tag("v1.0.0", d)
+        url = self.publish("v1.0.0")
+        self.finish_run(later, "success")
+        self.assertStopped(self.preflight(), {"state": mb.RELEASE_SUPERSEDED, "version": "1.0.0", "tag": "v1.0.0",
+                                              "url": url, "commit": d})
+
+    def test_a_later_run_resumes_m_s_own_tag(self) -> None:
+        a, m, outcome = self.merge()
+        self.tag("v1.0.0", m)  # m's run tagged, then failed
+        mine = self.add_run(m, "completed", "failure")
+        d = self.push_trunk("later.txt")
+        later = self.add_run(d)
+        self.assertPending(self.preflight(), f"run {mine} (completed, failure)", f"run {later} (in_progress)")
+        url = self.publish("v1.0.0")
+        self.finish_run(later, "success")
+        self.assertStopped(self.preflight(), {"state": "ALREADY_RELEASED", "version": "1.0.0", "tag": "v1.0.0",
+                                              "url": url})
+
+    def test_a_covering_tag_left_unpublished_then_a_newer_run(self) -> None:
+        for publishes in (True, False):
+            with self.subTest(publishes=publishes):
+                self.fresh()
+                a, m, outcome = self.merge()
+                mine = self.add_run(m, "queued")
+                d1 = self.push_trunk("first.txt")
+                self.finish_run(mine, "cancelled")
+                self.tag("v1.0.0", d1)
+                first = self.add_run(d1, "completed", "failure")
+                self.assertFailed(self.preflight(), f"run {first} (completed, failure)")
+                d2 = self.push_trunk("second.txt")
+                second = self.add_run(d2)
+                self.assertPending(self.preflight(), f"run {first} (completed, failure)",
+                                   f"the run(s) for {d2} on the trunk can still publish", f"run {second} (in_progress)")
+                self.finish_run(second, "success")
+                if publishes:
+                    url = self.publish("v1.0.0")
+                    self.assertEqual(self.preflight().action, "closed_out")
+                    self.assertEqual(self.record()["release"], {"state": mb.RELEASE_SUPERSEDED, "version": "1.0.0",
+                                                                "tag": "v1.0.0", "url": url, "commit": d1})
+                    self.assertEqual(len(self.events_named("release_failed")), 1)  # the gate at d1, before d2
+                else:
+                    self.assertFailed(self.preflight(), f"run {first} (completed, failure)",
+                                      f"completed successfully for {d2} and published nothing",
+                                      f"run {second} (completed, success)")
+
+    def test_no_later_trunk_commit_fails_at_once(self) -> None:
+        for conclusion in ("failure", "cancelled"):
+            with self.subTest(conclusion=conclusion):
+                self.fresh()
+                a, m, outcome = self.merge()
+                mine = self.add_run(m, "completed", conclusion)
+                self.assertEqual(self.origin_ref("refs/heads/main"), m)
+                self.assertFailed(self.preflight(), f"run {mine} (completed, {conclusion})")
+
+
+class ReleaseWaitSkippedTest(_ReleaseWait):
+    def test_a_hand_merge_commit_skips_the_wait_and_closes_out_as_1_5_0(self) -> None:
+        number, a = self.to_pending()
+        h = self.human_merge(number, how="merge")
+        outcome = self.preflight()
+        m = self.origin_ref("refs/heads/main")
+        self.assertEqual(outcome, mb.Proceed(action="closed_out", base=m))
+        record = self.record()
+        self.assertEqual((record["state"], record["merged_head"]), (mb.CLOSED, h))
+        self.assertEqual(record["release"], {"state": mb.RELEASE_SKIPPED, "reason": "not a verified squash merge"})
+        self.assertEqual([e["merged_state"] for e in self.events_named("release_wait_skipped")], [mb.MERGED])
+        self.assertEqual(self.calls("run", "list"), [])
+
+    def test_a_rebase_merge_is_merged_rewritten_without_a_wait(self) -> None:
+        number, a = self.to_pending()
+        self.human_merge(number, how="rebase")
+        self.assertGate(self.preflight(), mb.GATE_MERGE_METHOD_REWROTE_HISTORY)
+        self.assertEqual(self.record()["state"], mb.MERGED_REWRITTEN)
+        self.assertNotIn("release", self.record())
+        self.assertEqual(self.calls("run", "list"), [])
+        self.assertGate(self.preflight(), mb.GATE_SWITCH_TO_TRUNK)
+
+
+class ReleaseWaitUnchangedTest(_SquashClose):
+    def test_a_binding_without_the_key_closes_out_and_starts_the_trunk(self) -> None:
+        a = self.to_ready()
+        m = self.squash_merge(self.pr_number())
+        self.assertEqual(self.preflight(), mb.Proceed(action="closed_out", base=m))
+        self.assertNotIn("release", self.record())
+        self.assertEqual(self.calls("run", "list"), [])
+        self.assertFalse(mb.stops_after_close(self.record()))
 
 
 def fake_gh_fields() -> tuple[str, ...]:

@@ -1091,10 +1091,13 @@ def _run_one_step(
     )
 
     if isinstance(result, Decision):
-        # LEGACY_READY / MILESTONE_COMPLETE: nothing ran, nothing is
-        # pending.
+        # LEGACY_READY / MILESTONE_COMPLETE, or a close-out after a release
+        # wait: nothing ran, nothing is pending.
         if run is not None:
-            run.event("no_action", observed_phase=phase_to_wire(result.observed_phase), reason=result.reason)
+            released = ({"release": result.evidence[0]} if result.reason == job.REASON_CLOSED_OUT_RELEASED
+                        else {})
+            run.event("no_action", observed_phase=phase_to_wire(result.observed_phase), reason=result.reason,
+                      **released)
         return EXIT_OK, result
 
     # `execute_step`'s own `status` field, mapped to the exit-code table

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-auto-merge-release-wait",
+  "requirements": {
+    "R1": {
+      "description": "A repository opts in to auto-merge through milestone_branches.pull_request.auto_merge, admitted only with squash merges and green-check readiness, and names its publishing workflow (release_workflow); without it, 1.5.0's behaviour is unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The settings file can turn auto-merge off (merge.auto) and bounds the wait (merge.wait_seconds, merge.poll_seconds)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP5"
+      ]
+    },
+    "R3": {
+      "description": "The forge can squash-merge a pull request bound to a head commit and read one workflow's trunk runs of a commit; the never-merge guard is narrowed to exactly that shape",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "A ready, accepted pull request is merged by a head-bound squash merge at the acceptance commit once GitHub reports it mergeable, crash-safely, and nothing left on GitHub can merge another head",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "After acceptance, a red check, a draft hold, a conflict or a moved head stops and reports, without the Controller merging or overriding a person",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "After the verified squash, the Controller waits for the publishing workflow's run, records the published release (its own, or a later run's release that covers it), or stops at release_failed naming the run",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "Once the release is settled the milestone closes out and the run stops instead of planning the next milestone",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R8": {
+      "description": "run waits through the pending states, boundedly and interruptibly, without a worker; step never waits",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R9": {
+      "description": "explain, status and inspect show the merge and release states",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R10": {
+      "description": "The guides, an ADR and the 1.6.0 notes describe the new behaviour; the full suite and goldens pass",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    }
+  }
+}

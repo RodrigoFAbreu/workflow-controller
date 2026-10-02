@@ -79,9 +79,17 @@ merge was refused, or GitHub reports a conflict (`merge_pending`); or a
 person converted it back to a draft (`merge_held`). The gate's message
 names GitHub's state and the exits. A `run` waits at `merge_pending`
 (except on a conflict) for up to `merge.wait_seconds`; merging on GitHub
-with "Squash and merge" always works too. After three refused merges the
-step refuses (exit `20`) and the Controller sends no more: merge on
-GitHub. See
+with "Squash and merge" always works too. Two `merge_pending` gates
+say the Controller has already merged, or may have, and it sends nothing
+more: "GitHub accepted the merge ... it is not visible yet" (the send
+succeeded, or the squash commit is on `main` while GitHub's reads still
+show the pull request open), and "GitHub may already have merged" (the
+three attempts are spent, one was interrupted before its outcome was
+recorded, and `main` does not show the squash commit yet). Both clear
+once GitHub shows the merge; if it never does, merge by hand or close
+the pull request and run `milestone-binding --new-pr`. After three
+refused merges the step refuses (exit `20`) and the Controller sends no
+more: merge on GitHub. See
 [Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait).
 
 **"The milestone stopped at `release_pending` or `release_failed`."** The

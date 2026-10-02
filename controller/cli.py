@@ -63,7 +63,7 @@ EXIT_WORKER_ACTIVE = 45
 EXIT_HANDOFF_PENDING = 50
 #: Ctrl-C in a waiting `run`: what an uncaught SIGINT's ``KeyboardInterrupt``
 #: exits with, now without the traceback.
-EXIT_SIGINT = 130
+SIGINT_EXIT_STATUS = 130
 
 #: Test-support surface (CP8): `--pause-file` is inert unless this
 #: environment variable is also set to exactly `"1"`, so an ordinary
@@ -1612,7 +1612,7 @@ def main(argv: list[str] | None = None) -> int:
         # traceback (the exit status is the shell's 128 + SIGINT).
         interrupted = True
         print(f"error: {exc.message()}", file=sys.stderr)
-        return EXIT_SIGINT
+        return SIGINT_EXIT_STATUS
     except KeyboardInterrupt:
         interrupted = True
         raise

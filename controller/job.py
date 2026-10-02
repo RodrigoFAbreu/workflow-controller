@@ -3393,6 +3393,40 @@ def _recorded_anchor_sentence(record: Mapping, assessment: worker.LivenessAssess
             f"{int(anchor_orphan_seconds())} s of its last owned process, or `{_resume_command(root)}` ends it now.")
 
 
+def _waiting_run(runtime_root: Path, root: Path) -> tuple[str, dict] | None:
+    """The live ``run`` that holds ``root``'s lifecycle lock while it waits
+    at a gate (checks, merge or release), as ``(run_id, its last "waiting"
+    event)``, or ``None``. Read tolerantly, for the exit-45 message only: a
+    run counts when its record is ``running`` for this target, its recorded
+    Controller process is alive and is not this one, and the last event of
+    its log is the ``waiting`` event."""
+    try:
+        paths = sorted((Path(runtime_root) / "runs").glob("*.json"))
+    except OSError:
+        return None
+    for path in paths:
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        if not (isinstance(record, dict) and isinstance(record.get("run_id"), str)
+                and record.get("state") == RUN_STATE_RUNNING and record.get("target_repo") == str(root)):
+            continue
+        process = record.get("controller_process")
+        pid = process.get("pid") if isinstance(process, Mapping) else None
+        if pid == os.getpid() or not (isinstance(process, Mapping)
+                                      and worker.identity_alive(pid, process.get("start_ticks")) is True):
+            continue
+        try:
+            lines = (Path(runtime_root) / "runs" / record["run_id"] / "events.jsonl").read_text().splitlines()
+            last = json.loads(lines[-1])
+        except (OSError, UnicodeDecodeError, ValueError, IndexError, RecursionError):
+            continue
+        if isinstance(last, dict) and last.get("event") == "waiting":
+            return record["run_id"], last
+    return None
+
+
 def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.LifecycleLock:
     """``lock.acquire_lifecycle_lock`` for ``managed_repo``, with the exit-45
     refusal's message completed from this Controller's own job records:
@@ -3402,6 +3436,17 @@ def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.Lifec
     try:
         return lock.acquire_lifecycle_lock(managed_repo.root)
     except LifecycleWorkerActiveError as exc:
+        waiting = _waiting_run(runtime_root, managed_repo.root)
+        if waiting is not None:
+            run_id, event = waiting
+            # The holder is the user's own waiting `run`, not a worker.
+            raise LifecycleWorkerActiveError(
+                f"{exc.message}. Run {run_id} holds it: it is waiting at {event.get('gate')} until "
+                f"{event.get('deadline')} (for checks, the merge or the release), and no worker is running. "
+                f"Wait for it, or press Ctrl-C in that run (the next step continues from the binding's last "
+                f"state). Follow it: `{follow_command(runtime_root, managed_repo.root)}`",
+                evidence={**exc.evidence, "recorded_workers": [], "waiting_run": run_id},
+            ) from exc
         detail, recorded = _recorded_worker_detail(runtime_root, managed_repo.root)
         raise LifecycleWorkerActiveError(
             f"{exc.message}. {detail} Follow it: `{follow_command(runtime_root, managed_repo.root)}`",

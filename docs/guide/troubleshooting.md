@@ -107,10 +107,12 @@ release exists. See
 
 **"`step` exits 45 while a `run` waits."** A `run` waiting at a pending
 gate holds the target's lifecycle lock for the whole wait, so a second
-`step` or `run` on that target exits `45`, with a message about a
-lifecycle worker. No worker is running: `status` lists the open run, and
-`follow --run <id>` shows its `waiting at <gate> until <deadline>`
-line. Wait for it, or press Ctrl-C in the waiting `run` (it ends
+`step` or `run` on that target exits `45`. The message names the
+waiting run ("Run <id> holds it: it is waiting at <gate> until
+<deadline> ... no worker is running"); the longer text about recorded
+worker process groups and `worker_anchor` appears only when the holder is
+a worker. `status` lists the open run, and `follow --run <id>` shows its
+`waiting at <gate> until <deadline>` line. Wait for it, or press Ctrl-C in the waiting `run` (it ends
 `interrupted`, and the next step continues from the binding's last
 state).
 

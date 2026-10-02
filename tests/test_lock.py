@@ -341,6 +341,44 @@ class InheritedDescriptorTest(unittest.TestCase):
             lambda: _try_acquire_in_another_process(root) == "acquired", timeout=10))
 
 
+    def test_exit_45_names_a_waiting_run_not_a_worker(self) -> None:
+        # Functional review F3: the holder is the user's own `run`, waiting at
+        # a gate; the message says so instead of describing worker process groups.
+        root = process_fixtures.scratch_git_repo(self)
+        held = lock.acquire_lifecycle_lock(root)
+        self.addCleanup(held.release)
+        runtime = Path(tempfile.mkdtemp(prefix="f3-lock-runtime-"))
+        self.addCleanup(shutil.rmtree, runtime, True)
+        holder = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"])
+        self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(holder.pid) is not None))
+        (runtime / "runs" / "run-w").mkdir(parents=True)
+        (runtime / "runs" / "run-w.json").write_text(json.dumps({
+            "run_id": "run-w", "command": "run", "target_repo": str(root), "state": "running",
+            "controller_process": process_fixtures.worker_process_dict(holder.pid)}))
+        events = runtime / "runs" / "run-w" / "events.jsonl"
+        events.write_text(json.dumps({"event": "run_started"}) + "\n"
+                          + json.dumps({"event": "waiting", "gate": "release_pending",
+                                        "deadline": "2026-10-02T12:00:00Z"}) + "\n")
+        managed_repo = fixtures.build_target_managed_repository(root)
+
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            job._acquire_lifecycle_lock(runtime, managed_repo)
+        message = ctx.exception.message
+        self.assertIn("Run run-w holds it: it is waiting at release_pending until 2026-10-02T12:00:00Z", message)
+        self.assertIn("no worker is running", message)
+        self.assertIn("Ctrl-C", message)
+        self.assertNotIn("No recorded worker process group", message)
+        self.assertNotIn("worker_anchor", message)
+        self.assertEqual(ctx.exception.evidence["waiting_run"], "run-w")
+
+        # Not waiting any more (the log's last event moved on): the worker text.
+        events.write_text(events.read_text() + json.dumps({"event": "job_started"}) + "\n")
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            job._acquire_lifecycle_lock(runtime, managed_repo)
+        self.assertIn("No recorded worker process group", ctx.exception.message)
+        self.assertNotIn("waiting_run", ctx.exception.evidence)
+
+
 # ---------------------------------------------------------------------------
 # Every other lock failure.
 # ---------------------------------------------------------------------------

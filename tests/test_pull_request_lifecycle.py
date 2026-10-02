@@ -2380,47 +2380,84 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(len(self.merges()), 1)
         self.assertEqual(self.events_named("merge_refused"), [])
 
-    def test_a_lost_reply_with_a_lagging_read_is_sent_once_more_and_merges_once(self) -> None:
-        # C.3: the outcome is unknown, so the record stays "sending"; the
-        # one re-send is a merge bound to A, which GitHub refuses as already
-        # merged, and the re-read adopts MERGED. One squash commit lands.
+    def test_a_lost_reply_with_a_lagging_read_is_adopted_from_the_trunk(self) -> None:
+        # C.3: the reply is lost and the re-read lags OPEN, but the trunk
+        # shows the squash commit, so the merge is accepted and never sent
+        # again. One squash commit lands.
         number, a = self.to_pending()
         self.gh_edit(number, merge_reply_lost=True, merge_read_lag=2)
         self.set_checks(number, ("ci", "pass"))
         before = self.origin_ref("refs/heads/main")
         gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
         self.assertTrue(gate.waitable)
-        self.assertEqual((self.record()["merge"]["state"], self.record()["merge"]["attempts"]), ("sending", 1))
-        self.assertEqual(self.preflight().action, "closed_out")
-        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a, a])
+        self.assertIn("is not visible yet", gate.message)
         m = self.origin_ref("refs/heads/main")
+        merge = self.record()["merge"]
+        self.assertEqual((merge["state"], merge["attempts"], merge["squash_commit"]), ("accepted", 1, m))
+        self.assertNotIn("refusals", merge)
+        self.assertEqual(self.events_named("merge_refused"), [])
+        self.assertEqual(self.until_closed_out()[0].code, mb.GATE_MERGE_PENDING)
+        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a])
         self.assertEqual(gitrepo.first_parent_log(self.clone, before, m), [m])
         self.assert_closed(a, m)
 
     def test_a_lost_reply_with_reads_lagging_past_the_budget_waits_for_the_merge(self) -> None:
         # The first send merged but its reply was lost, and the reads stay
-        # OPEN for longer than the attempt budget. GitHub refuses the one
-        # duplicate as already merged, which records the merge as accepted:
-        # nothing more is sent and the step waits, never the terminal
-        # manual-merge refusal, until the read shows the merge.
+        # OPEN for longer than the attempt budget. The trunk decides, not
+        # any refusal text: nothing more is sent and the step waits, never
+        # the terminal manual-merge refusal, until the read shows the merge.
         number, a = self.to_pending()
         self.gh_edit(number, merge_reply_lost=True, merge_read_lag=8)
         self.set_checks(number, ("ci", "pass"))
         before = self.origin_ref("refs/heads/main")
-        gates = self.until_closed_out()
+        gates = [self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING), *self.until_closed_out()]
+        self.assertGreater(len(gates), 3)
         self.assertTrue(all(gate.code == mb.GATE_MERGE_PENDING and gate.waitable for gate in gates))
-        self.assertIn("is not visible yet", gates[-1].message)
-        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a, a])
-        self.assertEqual(self.events_named("merge_accepted")[-1]["message"], f"X Pull request #{number} was "
-                                                                             f"already merged")
+        self.assertTrue(all("is not visible yet" in gate.message for gate in gates))
+        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a])
         m = self.origin_ref("refs/heads/main")
+        self.assertEqual(self.events_named("merge_accepted")[-1]["squash_commit"], m)
+        self.assertFalse(any("already merged" in str(e) for e in self.events()))
         self.assertEqual(gitrepo.first_parent_log(self.clone, before, m), [m])
         self.assert_closed(a, m)
 
-    def test_a_crash_after_the_last_attempt_merged_waits_for_the_merge(self) -> None:
+    def test_a_merge_whose_reply_is_lost_at_the_budget_is_adopted_whatever_the_text(self) -> None:
+        # Two refusals, then the third send merges but fails with a text
+        # that says nothing about a merge (GitHub's mutation-path wording is
+        # unverified), and the reads lag OPEN: the trunk shows the squash
+        # commit, so the step waits instead of the terminal refusal.
+        real = forge_mod.GhForge.merge_squash
+        refusal = ForgeUndecidableError("gh pr merge failed (exit 1)", evidence={"stderr": "Refused.\n"})
+        lost = ForgeUndecidableError("gh pr merge failed (exit 1)",
+                                     evidence={"stderr": "GraphQL: Something went wrong while executing your query."})
+        sends = []
+
+        def refuse_twice_then_merge_and_fail(forge, *args, **kwargs):
+            sends.append(kwargs["head"])
+            if len(sends) <= 2:
+                raise refusal
+            real(forge, *args, **kwargs)
+            raise lost
+
+        number, a = self.to_held_ready()
+        self.gh_edit(number, mergeStateStatus="CLEAN", merge_read_lag=6)
+        with mock.patch.object(forge_mod.GhForge, "merge_squash", refuse_twice_then_merge_and_fail):
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            self.assertIn("is not visible yet", gate.message)
+            merge = self.record()["merge"]
+            self.assertEqual((merge["state"], merge["attempts"], merge["refusals"]), ("accepted", 3, 2))
+            self.assertEqual(mb.predict(self.ctx)["action"], "wait_merge")
+            gates = self.until_closed_out()
+        self.assertTrue(all(gate.code == mb.GATE_MERGE_PENDING and gate.waitable for gate in gates))
+        self.assertEqual(sends, [a, a, a])
+        self.assert_closed(a, self.origin_ref("refs/heads/main"))
+
+    def test_a_crash_after_the_last_attempt_merged_is_adopted_from_the_trunk(self) -> None:
         # Two refused attempts, then the third merges and crashes before
-        # its outcome is recorded, with the reads lagging: the budget is
-        # spent, but not every attempt was refused, so the step waits.
+        # its outcome is recorded, with the reads lagging: the next step
+        # finds the squash commit on the trunk and waits; nothing more is sent.
         real = forge_mod.GhForge.merge_squash
         refusal = ForgeUndecidableError("gh pr merge failed (exit 1)", evidence={"stderr": "Refused.\n"})
         sends = []
@@ -2445,10 +2482,43 @@ class AutoMergeTest(_AutoMerge):
             gates = self.until_closed_out()
         self.assertTrue(gates)
         self.assertTrue(all(gate.code == mb.GATE_MERGE_PENDING and gate.waitable for gate in gates))
-        self.assertIn("may already have merged", gates[0].message)
-        self.assertIn("the outcome of 1 of the Controller's 3 merges is unknown", gates[0].message)
+        self.assertTrue(all("is not visible yet" in gate.message for gate in gates))
         self.assertEqual(sends, [a, a, a])
         self.assert_closed(a, self.origin_ref("refs/heads/main"))
+
+    def test_a_crash_before_the_last_send_waits_and_sends_no_more(self) -> None:
+        # Two refusals, then a crash between the third intent and its call:
+        # the budget is spent, one outcome is unrecorded and the trunk shows
+        # no squash commit. The step waits, sends nothing more, and a hand
+        # merge closes out.
+        refusal = ForgeUndecidableError("gh pr merge failed (exit 1)", evidence={"stderr": "Refused.\n"})
+        sends = []
+
+        def refuse_twice_then_crash(forge, *args, **kwargs):
+            sends.append(kwargs["head"])
+            if len(sends) <= 2:
+                raise refusal
+            raise KeyboardInterrupt
+
+        number, a = self.to_held_ready()
+        self.gh_edit(number, mergeStateStatus="CLEAN")
+        with mock.patch.object(forge_mod.GhForge, "merge_squash", refuse_twice_then_crash):
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            with self.assertRaises(KeyboardInterrupt):
+                self.preflight()
+            for _ in range(2):
+                gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+                self.assertTrue(gate.waitable)
+                self.assertIn("may already have merged", gate.message)
+                self.assertIn("the outcome of 1 of the Controller's 3 merges is unknown (the step stopped",
+                              gate.message)
+                self.assertIn("origin/main does not show the squash commit yet", gate.message)
+            self.assertEqual(sends, [a, a, a])
+        self.assertEqual(self.record()["merge"]["state"], "sending")
+        m = self.squash_merge(number)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assert_closed(a, m)
 
     def until_closed_out(self) -> list:
         gates = []
@@ -2487,10 +2557,14 @@ class AutoMergeTest(_AutoMerge):
                     with self.assertRaises(KeyboardInterrupt):
                         self.preflight()
                 self.assertEqual(self.record()["merge"]["state"], "sending")
-                # Lag 0: the re-read shows MERGED. Lag 1: a re-send, GitHub's
-                # "already merged" refusal, and the re-read adopts MERGED.
+                # Lag 0: the re-read shows MERGED. Lag 1: the read lags OPEN,
+                # the trunk shows the squash commit, and nothing is re-sent.
+                if lag:
+                    self.assertIn("is not visible yet", self.assertGate(self.preflight(),
+                                                                        mb.GATE_MERGE_PENDING).message)
+                    self.assertEqual(self.record()["merge"]["state"], "accepted")
                 self.assertEqual(self.preflight().action, "closed_out")
-                self.assertEqual(len(self.merges()), 1 + lag)
+                self.assertEqual(len(self.merges()), 1)
                 self.assert_closed(a, self.origin_ref("refs/heads/main"))
 
     def test_refused_merges_and_the_attempt_budget(self) -> None:

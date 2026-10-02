@@ -1000,6 +1000,13 @@ def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
     merge = dict(record.get("merge") or {})
     if merge.get("state") == "accepted":
         return _merge_accepted_gate(ctx, record, number)
+    # A send whose outcome was not recorded as accepted (a crash, a lost
+    # reply, a refusal) may have merged: the trunk, not a read of the pull
+    # request that can lag, decides before anything is sent again.
+    if merge.get("state") == "sending":
+        squash_commit = _squash_on_trunk(ctx, record, number)
+        if squash_commit is not None:
+            return _adopt_squash(ctx, key, record, number, merge, squash_commit)
     if _merge_unconfirmed(merge):
         return _merge_unconfirmed_gate(ctx, record, number, merge)
     remote_branch = (record.get("last_observation") or {}).get("remote_branch")
@@ -1071,8 +1078,8 @@ def _merge_accepted_gate(ctx: Context, record: Mapping[str, Any], number: int) -
 
 def _merge_unconfirmed(merge: Mapping[str, Any]) -> bool:
     """The attempt budget is spent, but not every attempt was refused: a
-    crash or a lost reply left an outcome unknown, and GitHub may have
-    merged. Nothing more is sent, and the record is not refused."""
+    crash left an outcome unrecorded, and GitHub may have merged. Nothing
+    more is sent, and the record is not refused."""
     attempts = int(merge.get("attempts") or 0)
     return attempts >= MERGE_ATTEMPTS and int(merge.get("refusals") or 0) < attempts
 
@@ -1086,11 +1093,12 @@ def _merge_unconfirmed_gate(ctx: Context, record: Mapping[str, Any], number: int
     attempts = int(merge.get("attempts") or 0)
     unknown = attempts - int(merge.get("refusals") or 0)
     refused = f" (last refusal: {merge.get('refusal')})" if merge.get("refusal") else ""
+    trunk = f"{record['repository']['remote']}/{record['trunk']}"
     return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
                 f"GitHub may already have merged pull request #{number} at {record['accepted_head']}: the "
-                f"outcome of {unknown} of the Controller's {attempts} merges is unknown (a crash or a lost reply), "
-                f"GitHub refused the others{refused}, and a read can lag GitHub's write. The Controller sends no "
-                f"more. If the merge never appears: {by_hand}, or {recover}",
+                f"outcome of {unknown} of the Controller's {attempts} merges is unknown (the step stopped before "
+                f"it recorded it), and GitHub refused the others{refused}. {trunk} does not show the squash "
+                f"commit yet. The Controller sends no more. If the merge never appears: {by_hand}, or {recover}",
                 ("re-run the step once GitHub shows the merge", by_hand, recover),
                 repo_policy.MERGE_METHOD_SQUASH, waitable=True)
 
@@ -1105,8 +1113,33 @@ def _merge_refusal(record: Mapping[str, Any], number: int, merge: Mapping[str, A
                    exits=[by_hand], pr=number, merge=dict(merge))
 
 
-#: GitHub's refusal of a merge because the pull request is merged already.
-_ALREADY_MERGED = re.compile(r"\balready merged\b", re.IGNORECASE)
+def _squash_on_trunk(ctx: Context, record: Mapping[str, Any], number: int) -> str | None:
+    """The squash commit of pull request ``number`` on the fetched
+    ``<remote>/<trunk>``, if there is one: a commit on the trunk's
+    first-parent chain since its merge base with the acceptance commit
+    whose subject ends with GitHub's squash suffix `` (#<number>)``. Git's
+    refs, unlike GitHub's pull-request reads, show a merge as soon as GitHub
+    wrote it, so this decides a send whose outcome is unknown, whatever text
+    GitHub refused a duplicate with (plan C.3 keys no code on that text).
+    The title is not matched: it may have been edited since the send."""
+    remote_trunk = _remote_trunk(ctx, record["repository"]["remote"], record["trunk"])
+    base = gitrepo.merge_base(ctx.repo_root, record["accepted_head"], remote_trunk, runner=ctx.runner)
+    if base is None:
+        return None
+    suffix = f" (#{number})"
+    for commit, subject in gitrepo.first_parent_subjects(ctx.repo_root, base, remote_trunk, runner=ctx.runner):
+        if subject.endswith(suffix):
+            return commit
+    return None
+
+
+def _adopt_squash(ctx: Context, key: str, record: dict, number: int, merge: Mapping[str, Any],
+                  squash_commit: str) -> Gate:
+    """A merge the trunk shows: ``accepted``, never sent again, waiting for
+    GitHub's reads to show it."""
+    record = _write(ctx, key, dict(record, merge=dict(merge, state="accepted", squash_commit=squash_commit)),
+                    "merge_accepted", pr=number, head=record["accepted_head"], squash_commit=squash_commit)
+    return _merge_accepted_gate(ctx, record, number)
 
 
 def _forge_message(exc: ForgeError) -> str:
@@ -1132,14 +1165,11 @@ def _send_merge(ctx: Context, key: str, record: dict, pr: forge_mod.PullRequest,
         reread = _verified_pr(ctx, record, number)
         if reread.state != "OPEN":
             return _pr_left_open(ctx, key, record, reread)
+        # A lost reply exits like a refusal: the trunk tells them apart.
+        squash_commit = _squash_on_trunk(ctx, record, number)
+        if squash_commit is not None:
+            return _adopt_squash(ctx, key, record, number, merge, squash_commit)
         message = _forge_message(exc)
-        if _ALREADY_MERGED.search(message):
-            # GitHub's own write path reports the merge (C.3: a duplicate of
-            # a merge that happened is refused as already merged), which a
-            # lagging read cannot contradict: never sent again.
-            record = _write(ctx, key, dict(record, merge=dict(merge, state="accepted", refusal=message)),
-                            "merge_accepted", pr=number, head=a, message=message)
-            return _merge_accepted_gate(ctx, record, number)
         distinct = message != merge.get("refusal")
         merge = dict(merge, refusal=message, refusals=int(merge.get("refusals") or 0) + 1)
         if distinct:

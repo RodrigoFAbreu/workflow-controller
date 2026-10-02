@@ -61,9 +61,13 @@ contrast, leaves nothing behind that can merge later. The cost is that the
 merge happens only while a Controller step runs.
 
 The send is crash-safe: the intent (`merge.state: "sending"`, the head, the
-attempt count) is written first, every step decides again from a fresh
-re-read, and a duplicate of a merge that already happened is refused by
-GitHub and adopted once the merge is visible. After three refused attempts
+attempt count) is written first, and every step decides again from a fresh
+re-read. A send whose outcome is not known (a crash, a lost reply, a
+refusal) is decided by the trunk before anything is sent again: Git's refs
+show GitHub's merge at once, while its pull-request reads can lag, so when
+the fetched trunk carries the pull request's squash commit the merge is
+accepted and never sent again. No code keys on the wording of GitHub's
+refusals. After three refused attempts with no squash commit on the trunk
 the Controller sends nothing more and refuses, naming GitHub's message; a
 person merges.
 

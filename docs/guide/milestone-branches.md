@@ -386,11 +386,11 @@ and its checks, and the first of these that holds decides:
 3. the local tip is not the acceptance commit (a commit after it, pushed
    or not): `post_acceptance_commits`. The Controller merges only the
    accepted head; merge anyway on GitHub if you want the later commits;
-4. GitHub accepted an earlier merge that is not visible yet, or the
-   three attempts are spent and one's outcome is unknown (below):
-   `merge_pending`, without sending again. A read that still shows the
-   pull request open, with whatever checks and merge state, does not
-   change this;
+4. GitHub accepted an earlier merge that is not visible yet, an earlier
+   send's squash commit is on the trunk, or the three attempts are spent
+   and one's outcome is unknown (below): `merge_pending`, without sending
+   again. A read that still shows the pull request open, with whatever
+   checks and merge state, does not change this;
 5. the pull request's head is not the acceptance commit (GitHub's read
    lags, or the remote branch is gone): `pr_head_not_accepted`;
 6. the pull request is a draft again: `merge_held`. Converting it back to
@@ -420,19 +420,25 @@ it, and treats the merge it makes like any hand merge.
 
 Before each send the binding records the intent (`merge.state:
 "sending"`, the head and the attempt count), so a crash anywhere is
-safe: the next step re-reads and decides again, and a duplicate send of
-a merge that already happened is refused by GitHub. That "already
-merged" refusal comes from GitHub's write, not from a read that can lag
-it, so the Controller records the merge as accepted, sends nothing more
-and waits for it to be visible. Any other refused merge is
-`merge_pending` with GitHub's message, sent again only on a later re-read
-that shows the pull request mergeable. After three refused attempts the
-Controller refuses (exit `20`) and sends nothing more for this pull
-request: merge on GitHub with "Squash and merge" (the message names
-the cause, for example squash merging turned off), and the next step
-closes out. When the three attempts are spent but one of them ended in
-a crash, whose outcome is unknown, GitHub may have merged: the step
-waits instead (`merge_pending`) and sends nothing more. `milestone-binding --new-pr` (after you close the pull
+safe: the next step re-reads and decides again. A failed send (a
+refusal, or a lost reply, which `gh` reports the same way) and a send
+interrupted before its outcome was recorded may still have merged, and
+GitHub's pull-request reads can lag its write. So before counting a
+failure as a refusal, and before sending again, the Controller fetches
+`main` and looks for the pull request's squash commit (a first-parent
+commit since the acceptance commit's merge base whose subject ends in
+`(#<n>)`). When it is there, the merge is recorded as accepted
+(`merge.squash_commit`), nothing more is sent, and the step waits for
+GitHub to show it. Nothing depends on the wording of GitHub's refusal.
+Otherwise a refused merge is `merge_pending` with GitHub's message, sent
+again only on a later re-read that shows the pull request mergeable.
+After three refused attempts the Controller refuses (exit `20`) and
+sends nothing more for this pull request: merge on GitHub with "Squash
+and merge" (the message names the cause, for example squash merging
+turned off), and the next step closes out. When the three attempts are
+spent but one of them was interrupted before its outcome was recorded,
+the step waits instead (`merge_pending`, "may already have merged") and
+sends nothing more. `milestone-binding --new-pr` (after you close the pull
 request) starts a new merge record: the replacement pull request gets
 its own three attempts, and an `accepted` merge of the closed one does
 not carry over.

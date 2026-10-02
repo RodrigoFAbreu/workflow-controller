@@ -423,10 +423,13 @@ safe: the next step re-reads and decides again, and a duplicate send of
 a merge that already happened is refused by GitHub. A refused merge is
 `merge_pending` with GitHub's message, sent again only on a later re-read
 that shows the pull request mergeable. After three refused attempts the
-Controller refuses (exit `20`) and sends nothing more for this
-milestone; merge on GitHub with "Squash and merge" (the message names
+Controller refuses (exit `20`) and sends nothing more for this pull
+request; merge on GitHub with "Squash and merge" (the message names
 the cause, for example squash merging turned off), and the next step
-closes out.
+closes out. `milestone-binding --new-pr` (after you close the pull
+request) starts a new merge record: the replacement pull request gets
+its own three attempts, and an `accepted` merge of the closed one does
+not carry over.
 
 The merge happens only from the milestone branch. With `HEAD` on `main`,
 a `READY` record's open pull request is refused with "switch to it", so
@@ -463,7 +466,9 @@ Runs of other workflows (such as `Workflow conformance`) are never read.
 `tools/release.py` (see
 [Checking a release by hand](ci-and-releases.md#checking-a-release-by-hand)).
 Every step classifies again first, so a release that appears later
-settles the gate. The binding records the settled `release` field.
+settles the gate. While the squash commit's run is unfinished, each
+poll also fetches the trunk and the tags to look for a covering
+release. The binding records the settled `release` field.
 
 **Close out, then stop.** Once the release is settled, close-out runs as
 always (switch to `main`, fast-forward, `CLOSED`), and the step ends

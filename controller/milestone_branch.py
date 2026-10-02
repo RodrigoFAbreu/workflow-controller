@@ -2580,7 +2580,10 @@ def acknowledge(ctx: Context, work_item_id: str, disposition: str) -> dict:
         superseded = list(record.get("superseded_prs") or [])
         if pr is not None:
             superseded.append(int(pr["number"]))
+        # A new pull request is a new merge record: C.3's attempt budget and
+        # an accepted merge bind the superseded one.
         updated = dict(record, state=BRANCH_BOUND, pr=None, superseded_prs=superseded)
+        updated.pop("merge", None)
     _event(ctx, key, record, "acknowledged", disposition=disposition, previous_state=state,
            pr=None if pr is None else pr.get("number"),
            reason=f"milestone-binding --{disposition} on a {state} binding")

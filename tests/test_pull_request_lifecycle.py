@@ -2463,6 +2463,43 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(self.preflight().action, "closed_out")
         self.assert_closed(a, m)
 
+    def test_new_pr_starts_a_new_merge_record(self) -> None:
+        # The accepted gate's own recovery exit, and a pull request closed
+        # after refused sends: the replacement is a new merge record (C.3's
+        # attempt budget binds one pull request), sent once at A.
+        refusal = ForgeUndecidableError("gh pr merge failed (exit 1)", evidence={"stderr": "Refused.\n"})
+        for case, side_effect in (("accepted", None), ("refused", refusal)):
+            with self.subTest(case):
+                self.fresh()
+                old, a = self.to_held_ready()
+                self.gh_edit(old, mergeStateStatus="CLEAN")
+                with mock.patch.object(forge_mod.GhForge, "merge_squash", side_effect=side_effect):
+                    if case == "accepted":
+                        self.assertIn("is not visible yet", self.assertGate(self.preflight(),
+                                                                            mb.GATE_MERGE_PENDING).message)
+                    else:
+                        self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+                        self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+                        with self.assertRaises(BranchBindingError):
+                            self.preflight()
+                merge = self.record()["merge"]
+                self.assertEqual((merge["state"], merge["attempts"], merge.get("refusal")),
+                                 ("accepted", 1, None) if case == "accepted" else ("sending", 3, "Refused."))
+                self.gh_edit(old, state="CLOSED")
+                self.assertGate(self.preflight(), mb.GATE_PR_CLOSED_UNMERGED)
+                self.assertNotIn("merge", mb.acknowledge(self.ctx, WID, mb.NEW_PR))
+                self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+                number = self.record()["pr"]["number"]
+                self.assertNotEqual(number, old)
+                self.assertNotIn("merge", self.record())
+                self.set_checks(number, ("ci", "pass"))
+                self.gh_edit(number, mergeStateStatus="CLEAN")
+                self.assertEqual(self.preflight().action, "closed_out")
+                self.assertEqual([(argv[2], argv[argv.index("--match-head-commit") + 1]) for argv in self.merges()],
+                                 [(str(number), a)])
+                self.assertEqual(self.record()["merge"]["attempts"], 1)
+                self.assert_closed(a, self.origin_ref("refs/heads/main"))
+
     def test_a_persons_own_auto_merge_request_is_neither_read_nor_withdrawn(self) -> None:
         number, a = self.to_held_ready()
         self.gh_edit(number, mergeStateStatus="CLEAN", autoMergeRequest={"mergeMethod": "SQUASH"})

@@ -97,9 +97,11 @@ pull request was squash-merged and the Controller is waiting for the
 release of the squash commit before it closes out. `release_pending`: the
 publishing workflow's run (`release_workflow`, `main.yml` by default)
 has not appeared or is still running; a `run` waits for it. If no run
-appears, publish by hand. `release_failed`: the run failed, or finished
-without publishing. "Re-run failed jobs" on the run the gate names, or
-publish by hand; the next step classifies again and closes out once the
+appears, publish by hand. `release_failed` (the title says the release "did not publish"): a run
+failed, or a run succeeded without publishing a release. For a failed run,
+"Re-run failed jobs" on the run the gate names; when the workflow
+succeeded and published nothing there is no failed run to re-run. Publish
+by hand; the next step classifies again and closes out once the
 release exists. See
 [Checking a release by hand](ci-and-releases.md#checking-a-release-by-hand).
 

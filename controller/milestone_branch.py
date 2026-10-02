@@ -1600,7 +1600,7 @@ def _release_wait(ctx: Context, key: str, record: dict) -> dict | Gate:
     if not _release_failed_shown(ctx, key, record, outcome.detail):
         _event(ctx, key, record, "release_failed", merge_commit=m, detail=outcome.detail)
     return Gate(GATE_RELEASE_FAILED, work_item_id, branch,
-                f"{merged}, but its release failed: {outcome.detail}. The Controller builds, tags and publishes "
+                f"{merged}, but its release did not publish: {outcome.detail}. The Controller builds, tags and publishes "
                 f"nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand "
                 f"publication or a later trunk run that publishes the release settles this gate",
                 (*reruns, HAND_RELEASE), squash)

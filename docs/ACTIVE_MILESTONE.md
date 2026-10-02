@@ -1280,11 +1280,11 @@ Expected, K1:
 - the next step plans from the trunk: `the next step: exit 0`, `FINISHED -- /milestone-plan <m>`.
 
 K2: `exit 10` and
-`GATE_BLOCKED -- the merged milestone's release failed; re-run the failed publishing run on GitHub, or publish it by hand (release_failed): pull request #1 was squash-merged as <m>, but its release failed: the main.yml run(s) for <m> did not succeed: run 100 (completed, failure) https://github.com/example-owner/example-repo/actions/runs/100. The Controller builds, tags and publishes nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand publication or a later trunk run that publishes the release settles this gate`;
+`GATE_BLOCKED -- the merged milestone's release did not publish (a publishing run failed, or one succeeded without publishing); re-run the failed run on GitHub, or publish it by hand (release_failed): pull request #1 was squash-merged as <m>, but its release did not publish: the main.yml run(s) for <m> did not succeed: run 100 (completed, failure) https://github.com/example-owner/example-repo/actions/runs/100. The Controller builds, tags and publishes nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand publication or a later trunk run that publishes the release settles this gate`;
 `again: exit 10`, `1` (one `release_failed` event for one detail), still `milestone/wi-1`; once
 the release exists, `after the re-run published: exit 0`, `CLOSED`.
 
-K3: `exit 10` and the same title with `... but its release failed: the publishing workflow main.yml completed successfully for <m> and published nothing covering <m>, which it does only when its own classification differed (for example, the policy at <m> is not the one the Controller read). The Controller builds, ...`.
+K3: `exit 10` and the same title with `... but its release did not publish: the publishing workflow main.yml completed successfully for <m> and published nothing covering <m>, which it does only when its own classification differed (for example, the policy at <m> is not the one the Controller read). The Controller builds, ...`.
 
 K4: after the cancel, `exit 10` and
 `... (release_pending): pull request #1 was squash-merged as <m>; its release is not settled yet: the main.yml run(s) for <m> ended without publishing (run 100 (completed, cancelled) https://github.com/example-owner/example-repo/actions/runs/100); the run(s) for <d> on the trunk can still publish the release covering <m>: not reported yet. ...`;
@@ -1564,7 +1564,8 @@ file's `merge.auto` turns the merge off on the machine.
 the Controller classifies the squash commit read-only, waits while the
 publishing workflow (`release_workflow`, `main.yml` by default) runs,
 records the published release in the binding, or stops at
-`release_failed` naming the run. A later trunk run that publishes the
+`release_failed` (naming each run that failed, or saying the workflow
+succeeded and published nothing). A later trunk run that publishes the
 release covering the commit settles the wait. It downloads no asset and
 runs no repository command. After close-out the step ends, exit 0,
 instead of planning the next milestone. New gates: `release_pending`

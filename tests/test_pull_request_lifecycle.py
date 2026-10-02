@@ -2918,8 +2918,14 @@ class ReleaseWaitTest(_ReleaseWait):
     def test_a_successful_run_that_published_nothing_fails(self) -> None:
         a, m, outcome = self.merge()
         self.add_run(m, "completed", "success")
-        self.assertFailed(self.preflight(), f"the publishing workflow main.yml completed successfully for {m} and "
-                                            f"published nothing")
+        gate = self.assertFailed(self.preflight(), f"the publishing workflow main.yml completed successfully "
+                                                   f"for {m} and published nothing")
+        # No run failed, so no gate text may say one did (functional review F2).
+        text = decision.branch_human_gate("repo", gate).what_is_required
+        self.assertIn("did not publish", text)
+        self.assertIn("succeeded without publishing", text)
+        self.assertNotIn("release failed", text)
+        self.assertNotIn("its release failed", gate.message)
 
     def test_the_re_classify_race_settles(self) -> None:
         a, m, outcome = self.merge()

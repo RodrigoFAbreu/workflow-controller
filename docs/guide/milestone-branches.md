@@ -99,7 +99,7 @@ close-out are 1.3.0's.
   | `merge_pending` | auto-merge: the Controller has not merged the ready PR yet (GitHub has not computed it mergeable, something other than the checks blocks it, a merge was refused, or GitHub accepted the merge and does not show it yet), or it cannot (`DIRTY`: a conflict) | wait (`run` waits for you, except on a conflict); or merge it on GitHub with "Squash and merge" |
   | `merge_held` | auto-merge: the ready PR was converted back to a draft | mark it ready for review (the next step merges it), or merge it on GitHub with "Squash and merge" |
   | `release_pending` | auto-merge: the squash commit's release is not published yet | wait (`run` waits for you); if no run of the publishing workflow appears, publish by hand |
-  | `release_failed` | auto-merge: the publishing run failed, or completed without publishing | "Re-run failed jobs" on the named run, or publish by hand; the next step classifies again |
+  | `release_failed` | auto-merge: the release did not publish (a publishing run failed, or one succeeded without publishing) | "Re-run failed jobs" on the named run if there is one, or publish by hand; the next step classifies again |
 
   The four auto-merge gates are described in
   [Auto-merge and the release wait](#auto-merge-and-the-release-wait).

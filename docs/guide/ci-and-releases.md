@@ -499,7 +499,9 @@ With auto-merge on, a milestone whose release did not publish stops at
 `release_failed` before close-out (see
 [Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait)).
 The gate names each run of the publishing workflow that did not succeed,
-with its URL. Resolve it the same way: "Re-run failed jobs" on the named
+with its URL, or says that the workflow succeeded and published nothing
+(nothing to re-run then: publish by hand, or let a later push to `main`
+publish a covering release). Resolve it the same way: "Re-run failed jobs" on the named
 run (the transaction resumes, `RESUME`), or publish by hand with
 `tools/release.py`. The next Controller step classifies the squash
 commit again; once the release is published, or a later trunk run has

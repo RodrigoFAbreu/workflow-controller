@@ -2760,8 +2760,8 @@ def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None
     is called once per gate code before its first sleep (``deadline`` is
     the wall-clock end of the budget, from ``ctx.clock``). Returns the last
     outcome; ``ctx.wait_seconds`` 0 returns the first, never sleeping (I6).
-    The sleep is plain, so Ctrl-C ends it like any other point of a step
-    (E.3), as :class:`WaitInterrupted`, which the CLI reports in one line."""
+    The sleep and each re-read are plain, so Ctrl-C ends them like any other
+    point of a step (E.3), as :class:`WaitInterrupted`, which the CLI reports in one line."""
     sleep = sleep or _sleep
     monotonic = monotonic or _monotonic
     outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
@@ -2783,9 +2783,9 @@ def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None
                 on_wait(outcome.code, deadline)
         try:
             sleep(min(ctx.poll_seconds, remaining))
+            outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
         except KeyboardInterrupt as exc:
             raise WaitInterrupted(outcome.code, deadline) from exc
-        outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
     return outcome
 
 

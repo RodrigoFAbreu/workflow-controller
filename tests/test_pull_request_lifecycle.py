@@ -3279,6 +3279,24 @@ class WaitingPreflightTest(_ReleaseWait):
         self.assertIn(mb.GATE_CHECKS_PENDING, caught.exception.message())
         self.assertEqual(self.merges(), [])
 
+    def test_ctrl_c_during_the_re_read_between_sleeps_is_a_wait_interrupted(self) -> None:
+        self.to_pending()
+        clock = _Clock()
+        real = mb.repository_preflight
+        calls: list[int] = []
+
+        def preflight(*args, **kwargs):
+            calls.append(1)
+            if len(calls) == 2:
+                raise KeyboardInterrupt
+            return real(*args, **kwargs)
+
+        with mock.patch.object(mb, "repository_preflight", preflight):
+            with self.assertRaises(mb.WaitInterrupted) as caught:
+                self.wait(clock)
+        self.assertEqual(clock.sleeps, [30])
+        self.assertEqual(caught.exception.code, mb.GATE_CHECKS_PENDING)
+
     def test_zero_seconds_never_sleeps(self) -> None:
         self.to_pending()
         clock = _Clock()

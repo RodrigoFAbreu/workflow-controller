@@ -13,7 +13,7 @@ Where to find what, and who maintains it. Start with the
 | [What the Controller automates, and how it stays safe](guide/automation.md) | the safety model, the rule that decides what is launched, the phase table, implementation-review apply rounds |
 | [Workers: lifecycle, recovery and observation](guide/workers.md) | how workers run and end, background work, the lifecycle lock, `resume`, job records and their recovery, `follow` |
 | [Runtime state and runtime identity](guide/runtime.md) | where the Controller keeps its state, and how it knows and records what code it is running |
-| [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, the release notes in the pull request body, merge and close-out, stuck milestones |
+| [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, the release notes in the pull request body, merge and close-out, auto-merge and the release wait, stuck milestones |
 | [Continuous integration and releases](guide/ci-and-releases.md) | the CI workflows, how a release is made, release notes from the milestones, and this repository's GitHub settings |
 | [Development and the test runner](guide/development.md) | working from a checkout, running tests, the sharded test runner |
 | [Troubleshooting](guide/troubleshooting.md) | exit codes and the usual situations |
@@ -61,6 +61,7 @@ stay stable; the code and the guides must agree with them.
 | [0006](adr/0006-workflow-release-admission-and-per-release-contracts.md) | which Workflow releases are admitted, what the Controller consumes from each, and why trunk integration stays manual |
 | [0007](adr/0007-tag-derived-versions-and-squash-merges.md) | Conventional Commit pull request titles, tag-derived versions, squash close-out and the cutover |
 | [0008](adr/0008-controller-settings-file.md) | the user-level settings file: location, precedence, fill and forward-only migration, and which values are settings |
+| [0009](adr/0009-auto-merge-and-release-wait.md) | when and how the Controller merges an accepted milestone pull request (one head-bound squash merge, never GitHub's auto-merge request), the release wait, the stop after close-out, and what stays human |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

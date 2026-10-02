@@ -28,6 +28,14 @@ main -- /milestone-plan <main tip> -- bind milestone/<id> -- plan reviews -- pla
      -- close-out: switch to main, fast-forward -- next /milestone-plan <main tip>
 ```
 
+With auto-merge on (squash mode only, [below](#auto-merge-and-the-release-wait)),
+the last line reads instead:
+
+```text
+     -- readiness: PR marked ready -- the Controller squash-merges the acceptance commit
+     -- release wait: the release of the squash commit is published -- close-out -- stop
+```
+
 In merge mode the flow is the same, but the PR is titled with the
 work-item id, readiness edits nothing, the human merges with "Create a
 merge commit", and every text below that names "Squash and merge" names
@@ -88,8 +96,17 @@ close-out are 1.3.0's.
   | `pr_title_invalid` | squash mode: the plan declares no valid title, and the PR's title is not a valid Conventional Commit | set a valid title on the PR on GitHub, then `run` again |
   | `release_notes_invalid` | squash mode with release notes: the milestone's notes section cannot be carried by the squash commit (see [below](#release-notes-in-the-pull-request-body)); the PR is not edited | mark the PR ready and merge it on GitHub ("Squash and merge"), then supply the notes at release |
   | `merge_pull_request` | the PR is ready | merge it on GitHub with "Squash and merge", without editing the commit message |
+  | `merge_pending` | auto-merge: the Controller has not merged the ready PR yet (GitHub has not computed it mergeable, something other than the checks blocks it, a merge was refused, or GitHub accepted the merge and does not show it yet), or it cannot (`DIRTY`: a conflict) | wait (`run` waits for you, except on a conflict); or merge it on GitHub with "Squash and merge" |
+  | `merge_held` | auto-merge: the ready PR was converted back to a draft | mark it ready for review (the next step merges it), or merge it on GitHub with "Squash and merge" |
+  | `release_pending` | auto-merge: the squash commit's release is not published yet | wait (`run` waits for you); if no run of the publishing workflow appears, publish by hand |
+  | `release_failed` | auto-merge: the publishing run failed, or completed without publishing | "Re-run failed jobs" on the named run, or publish by hand; the next step classifies again |
 
-- **Merge and close-out.** You merge; the Controller never does. The
+  The four auto-merge gates are described in
+  [Auto-merge and the release wait](#auto-merge-and-the-release-wait).
+
+- **Merge and close-out.** You merge, unless the repository opted in to
+  [auto-merge](#auto-merge-and-the-release-wait); then the Controller
+  merges the acceptance commit itself. Either way, the
   next step checks that the merged head contains the acceptance commit
   and is itself on `origin/main`, then (with a clean tree, and the
   branch tip equal to the merged head) switches to `main`, fast-forwards
@@ -320,6 +337,179 @@ the notes at release with `python3 tools/release.py notes-block
 --work-item <id> <file>` (see
 [the fix](ci-and-releases.md#release-notes-from-the-milestones)). To
 avoid it, wrap the section at 72 columns while you write it.
+
+## Auto-merge and the release wait
+
+From 1.6.0 a repository can let the Controller merge an accepted
+milestone, wait for its release and close it out, so that nothing is
+left to a person after `/accept-milestone`. It opts in with two optional
+policy keys:
+
+```json
+"pull_request": {"draft": true, "ready_requires_green_checks": true, "merge_method": "squash",
+                 "auto_merge": true, "release_workflow": "main.yml"}
+```
+
+- `auto_merge` is a boolean, default `false`. `true` requires
+  `merge_method: "squash"` and `ready_requires_green_checks: true`;
+  otherwise the policy is refused, naming the field. `true` with
+  `release.enabled: false` is admitted: the milestone then closes out
+  without a release.
+- `release_workflow` names the workflow file under `.github/workflows/`
+  whose run on a push to the trunk publishes the release. It defaults to
+  `main.yml`, and must be a file name without a `/`. Only the release
+  wait reads it.
+
+Controller 1.5.x refuses a policy that has either key. Like the merge
+mode and the release notes location, both come from the policy snapshot
+taken when the branch was bound, so a milestone bound before the
+repository opted in never auto-merges, and a policy edit never changes a
+milestone in flight. GitHub's own "Allow auto-merge" setting is not used.
+
+**The operator's switch.** The settings file's `merge.auto` (default
+`true`, see [the runtime guide](runtime.md#what-it-holds)) turns the
+merge off for every repository on the machine: readiness then ends at
+`merge_pull_request` as without the key, and a person merges. The
+release wait and the stop after close-out still follow the binding's
+policy, because they only read. `merge.auto` is read at every step, so
+turning it off mid-milestone takes effect at the next one; nothing is
+pending on GitHub to withdraw.
+
+**The merge.** For a `READY` record, each step re-reads the pull request
+and its checks, and the first of these that holds decides:
+
+1. the pull request is merged: close-out continues as for any merge;
+   closed unmerged: `pr_closed_unmerged`, as always;
+2. the remote branch is not an ancestor of the local tip (someone
+   pushed on GitHub, or pressed "Update branch"): the usual "Update
+   branch" refusal;
+3. the local tip is not the acceptance commit (a commit after it, pushed
+   or not): `post_acceptance_commits`. The Controller merges only the
+   accepted head; merge anyway on GitHub if you want the later commits;
+4. the pull request's head is not the acceptance commit (GitHub's read
+   lags, or the remote branch is gone): `pr_head_not_accepted`;
+5. the pull request is a draft again: `merge_held`. Converting it back to
+   a draft is how a person holds the merge, and the Controller respects
+   it;
+6. a check failed, is pending, or was cancelled: `checks_failing`,
+   `checks_pending` or `checks_cancelled`, exactly as at readiness. After
+   a green "Re-run failed jobs" the next step merges;
+7. GitHub reports a conflict (`DIRTY`): `merge_pending` at once, naming
+   it; or that the branch must be up to date with the trunk (`BEHIND`):
+   `integration_required` (the manual procedure above);
+8. GitHub accepted an earlier merge that is not visible yet:
+   `merge_pending`, without sending again;
+9. GitHub reports the pull request mergeable (`CLEAN` or `HAS_HOOKS`):
+   the Controller sends the merge;
+10. anything else (`UNKNOWN` just after `gh pr ready`, `BLOCKED` by a
+    requirement other than the checks such as a required review,
+    `UNSTABLE`): `merge_pending`, naming GitHub's state.
+
+The merge is one call, `gh pr merge <n> --squash --match-head-commit
+<acceptance commit> --subject "<title> (#<n>)" --body <body>`: GitHub
+merges exactly the acceptance commit, or refuses. The subject and body
+are the ones `MERGED_SQUASHED` verifies, so the repository's default
+squash message does not matter. The Controller never sends `--auto`:
+GitHub's auto-merge request would stay enabled after a later push by
+someone with write access and merge a head nobody accepted. A request
+you enable yourself is yours; the Controller neither reads nor withdraws
+it, and treats the merge it makes like any hand merge.
+
+Before each send the binding records the intent (`merge.state:
+"sending"`, the head and the attempt count), so a crash anywhere is
+safe: the next step re-reads and decides again, and a duplicate send of
+a merge that already happened is refused by GitHub. A refused merge is
+`merge_pending` with GitHub's message, sent again only on a later re-read
+that shows the pull request mergeable. After three refused attempts the
+Controller refuses (exit `20`) and sends nothing more for this
+milestone; merge on GitHub with "Squash and merge" (the message names
+the cause, for example squash merging turned off), and the next step
+closes out.
+
+The merge happens only from the milestone branch. With `HEAD` on `main`,
+a `READY` record's open pull request is refused with "switch to it", so
+an unattended `run` started from `main` merges nothing.
+
+**The release wait.** After a verified squash (`MERGED_SQUASHED`), before
+close-out switches to `main`, the Controller classifies the squash commit
+with the same release transaction `main.yml` runs, using the policy
+committed at that commit, and reads only (it never downloads a release
+asset, runs a policy command, tags, publishes or re-runs anything):
+
+- releases off at that commit: settled (`NONE`);
+- `ALREADY_RELEASED`: settled, recording the tag, version and URL
+  (event `released`); `NO_CHANGE` or `ABANDONED_VERSION`: settled
+  (event `release_settled`);
+- a release due: the runs of `release_workflow` for that commit on the
+  trunk decide. None reported yet, or one still running:
+  `release_pending`. All completed without publishing: `release_failed`,
+  naming each run that did not succeed, or saying the workflow
+  succeeded and published nothing;
+- a later push to the trunk can publish the release that covers the
+  squash commit (`main.yml` cancels a pending run when a newer one
+  queues, and any later run tags its own commit or resumes an
+  unpublished tag). A published covering release settles the wait
+  (`SUPERSEDED`, with that release's tag, URL and commit); a later trunk
+  run still working keeps it `release_pending` rather than
+  `release_failed`;
+- any other classification: `release_failed` with its detail.
+
+Runs of other workflows (such as `Workflow conformance`) are never read.
+`release_failed` names the exits: "Re-run failed jobs" on the named run
+(the release transaction resumes safely), or publish by hand with
+`tools/release.py` (see
+[Checking a release by hand](ci-and-releases.md#checking-a-release-by-hand)).
+Every step classifies again first, so a release that appears later
+settles the gate. The binding records the settled `release` field.
+
+**Close out, then stop.** Once the release is settled, close-out runs as
+always (switch to `main`, fast-forward, `CLOSED`), and the step ends
+there: exit `0`, no worker, no job record, and the run's `no_action`
+event names the release (reason `closed_out_released`). The next `run`
+or `step` starts from `main` and plans the next milestone with
+`/milestone-plan <main tip>` as usual. That pause leaves room for a
+release-notes pull request before the next milestone takes `main`'s tip
+as its base.
+
+**A hand merge in an auto-merge binding.** A person can still merge
+first. A verified squash goes through the release wait and the stop as
+above. A merge commit ("Create a merge commit", if the repository allows
+it) records `release` as `SKIPPED` (event `release_wait_skipped`) and
+closes out exactly as without the key, launching `/milestone-plan`. A
+rebase or an edited squash message is `MERGED_REWRITTEN` and never
+closes out, as always.
+
+**`run` waits, `step` does not.** The pending gates -- `checks_pending`,
+`pr_head_not_accepted`, `merge_pending` (except a conflict) and
+`release_pending` -- are waitable in an auto-merge binding: inside a
+`run`, the step polls them every `merge.poll_seconds` (default 30) for
+up to `merge.wait_seconds` (default 3600) in total, across gate changes,
+launching no worker. So one unattended `run` goes from the readied pull
+request to the closed-out, released milestone. The run log gets one
+`waiting` event per gate (the gate and the deadline), and `follow` shows
+`waiting at <gate> until <deadline>`. When the budget runs out, the step
+ends at its last gate and writes its job record, as any gate does. Every
+other gate ends the step at once. `step` never waits, and neither does
+`merge.wait_seconds: 0`. Ctrl-C during the wait ends the run
+`interrupted` with no job record for the waiting step; the binding keeps
+its last written state and the next step continues from it. A waiting
+`run` holds the target's lifecycle lock, so a second `step` or `run`
+meanwhile exits `45` (see
+[Troubleshooting](troubleshooting.md#common-situations)).
+
+**What you see.** `explain` predicts `merge` or `wait_merge` for a
+`READY` record, and `wait_release` after the squash. `status` adds
+`merge: <state> at <head> (attempt <n>)` and `release: <tag> <url>` (or
+the settled state) to the binding's line when present, and `status
+--json` and `inspect` add the binding's `merge` and `release` fields.
+The binding's events add `merge_sent`, `merge_accepted`,
+`merge_refused` (once per message), `released`, `release_settled`,
+`release_wait_skipped` and `release_failed` (once per detail).
+
+**Merge queues are unsupported.** In a repository that requires a merge
+queue, `gh pr merge` adds the pull request to the queue, and the queue
+writes its own commit message. The squash then fails verification and
+the binding ends at `MERGED_REWRITTEN`, which never closes out.
 
 ## When a milestone gets stuck: the refusal-state exits
 

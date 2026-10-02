@@ -54,12 +54,14 @@ Controller, for a repository with a `.workflow-controller/policy.json`:
 | Functional review | **human**, from a checklist the Workflow prepares |
 | Acceptance (`/accept-milestone`) | **human** |
 | Pull request title and body set, pull request marked ready once checks pass | Controller |
-| Merge | **human**, on GitHub, with "Squash and merge" (or a merge commit, as the policy says) |
+| Merge | **human**, on GitHub, with "Squash and merge" (or a merge commit, as the policy says); the Controller, when the policy opts in to [auto-merge](milestone-branches.md#auto-merge-and-the-release-wait) |
+| Wait for the release (auto-merge only) | Controller |
 | Switch back to `main` (close-out) | Controller |
 
 The human steps are the Workflow's six hard gates
 ([`MILESTONE_WORKFLOW.md`](../ai-workflow/MILESTONE_WORKFLOW.md), "Hard gates
-summary"), plus the merge. The Controller never crosses one: the commands a
+summary"), plus the merge unless the repository opts in to auto-merge.
+The Controller never crosses one: the commands a
 human must run are user-only, and the Controller refuses to launch them even
 if asked. Reducing these gates where automated evidence is enough is on the
 [roadmap](../ROADMAP.md).

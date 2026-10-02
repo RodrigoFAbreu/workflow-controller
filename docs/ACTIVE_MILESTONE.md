@@ -39,7 +39,7 @@ A policy without the key behaves exactly as 1.5.0 (I1).
 | CP3 The merge at readiness | Complete | See below |
 | CP4 The release wait, close out and stop | Complete | See below |
 | CP5 The bounded wait in `run`, and `status` | Complete | See below |
-| CP6 Documentation and full verification | Not started | |
+| CP6 Documentation and full verification | Complete | See below |
 
 ### CP1 -- the two switches
 
@@ -388,3 +388,80 @@ A policy without the key behaves exactly as 1.5.0 (I1).
   - The `ObservationTest`/status pins were then tightened, and `test_trunk_preflight` plus the two
     new `test_pull_request_lifecycle` classes were re-run: 45 tests pass.
   - `generate_no_policy_lifecycle.py --check` passes unchanged.
+
+### CP6 -- documentation and full verification
+
+- `docs/adr/0009-auto-merge-and-release-wait.md` (new): the two switches, the one head-bound
+  merge and why GitHub's auto-merge request is never used, the narrowed invariant I3', a
+  person's hold, the read-only release wait, close out then stop, the bounded wait in `run`,
+  what stays human, and the rejected alternatives. `docs/README.md` gains its row and names the
+  new guide section.
+- `docs/guide/milestone-branches.md`: the auto-merge flow lines, the four new gates in the
+  readiness table, "Merge and close-out" naming the opt-in, and a new section "Auto-merge and
+  the release wait": the policy keys, `merge.auto`, the first-match merge table, the one `gh pr
+  merge` call and its crash safety and three-attempt refusal, the branch-side-only merge (a
+  `run` from `main` merges nothing), the release wait's rows, close out then stop, hand merges,
+  the wait in `run`, what `explain`/`status`/`inspect` show, the events, and merge queues being
+  unsupported.
+- `docs/guide/ci-and-releases.md`: "Repository settings" (the Controller's own merge, never
+  GitHub's request, squash merging required, `release_workflow`, merge queues unsupported, this
+  repository not opted in yet), and resolving `release_failed` under "Checking a release by
+  hand".
+- `docs/guide/automation.md`: "Never merges, never rewrites" restated as I3'.
+- `docs/guide/runtime.md`: the three `merge` rows, the boolean type, what each row does, the
+  example file at generation 2, and the generation-2 fill.
+- `docs/guide/commands.md`: `run`'s bounded wait and the stop; `status`'s `merge:`/`release:`
+  suffixes and the `bindings` entries' fields. `docs/guide/troubleshooting.md`: the merge
+  gates, the release gates, exit 45 while a `run` waits, and the stop after close-out.
+- `docs/guide/concepts.md` and `README.md`: the merge is the Controller's when the policy opts
+  in.
+- The 1.6.0 notes are this narrative's `## Release notes` section. `release_notes.notes_problem`,
+  `paragraph_problem` and `block_problem` all return `None`; the longest line is 71 bytes.
+- The hints scan (`tests/test_hints_parse.py`) finds no new interpolation, so `SAMPLES` is
+  unchanged: no new printed `workflow-controller ...` hint came with this milestone.
+- Verification (under a reaping subreaper, without `FORCE_COLOR` or `PYTHONPATH`):
+  - The full suite: `python3 tools/run_tests.py`, 2793 tests in 6 shards, all pass.
+  - Goldens: `generate_no_policy_lifecycle.py --check`,
+    `generate_external_implementation_review_decisions.py --check` and `--release 2.6.0
+    --check`, and `generate_plan_stage_decisions.py --release 2.6.0 --check` are current.
+    `generate_plan_stage_decisions.py --check` (2.5.1) reports its documented `AMENDING_PLAN`
+    difference, the same as at the base; `tests.test_golden_plan_stage_decisions`, the check for
+    that file, passes in the suite.
+  - The protected-path diff from `854d25c` over `.workflow-controller/policy.json`,
+    `pyproject.toml`, `setup.py` and `.github/workflows/` is empty (I9).
+
+## Release notes
+
+### Auto-merge and the wait for the release (1.6.0)
+
+**The Controller can merge an accepted milestone.** A repository opts
+in through its policy (`milestone_branches.pull_request.auto_merge`,
+squash mode with green-check readiness only). The Controller then
+squash-merges the ready pull request itself once GitHub reports it
+mergeable, through one `gh pr merge --squash --match-head-commit` at
+the acceptance commit per attempt, so GitHub merges exactly that commit
+or refuses. It never enables GitHub's auto-merge request. A draft, a
+commit after the acceptance commit, a red or cancelled check, a
+conflict or a branch that must be updated stops it at a gate that names
+the exit. New gates: `merge_pending` and `merge_held`. The settings
+file's `merge.auto` turns the merge off on the machine.
+
+**It waits for the release, then stops.** After the verified squash,
+the Controller classifies the squash commit read-only, waits while the
+publishing workflow (`release_workflow`, `main.yml` by default) runs,
+records the published release in the binding, or stops at
+`release_failed` naming the run. A later trunk run that publishes the
+release covering the commit settles the wait. It downloads no asset and
+runs no repository command. After close-out the step ends, exit 0,
+instead of planning the next milestone. New gates: `release_pending`
+and `release_failed`.
+
+**`run` waits, `step` does not.** Inside `run`, the pending checks,
+merge and release gates are polled every `merge.poll_seconds` (30) for
+up to `merge.wait_seconds` (3600) per step, without a worker. `status`,
+`status --json` and `inspect` show the merge and the release.
+
+**Compatibility.** A policy without the key behaves exactly as 1.5.0.
+Controller 1.5.x refuses a policy with the new keys, so install 1.6.0
+before opting in. The settings file gains three `merge` rows (table
+generation 2); a 1.5.0 Controller sharing it warns about them.

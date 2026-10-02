@@ -39,12 +39,24 @@
   mutates or reloads it; a newer approved generation triggers an
   intentional stop (a durable handoff record, exit 50), never an
   in-process update.
-- **Never merges, never rewrites.** No Controller code path merges a pull
-  request or pushes to the trunk ref, and the GitHub boundary
-  (`controller/forge.py`) has no merge operation. The Controller never
-  force-pushes, resets, rebases, amends, deletes a ref or moves a tag:
-  every branch push is a fast-forward and every tag push creates a new
-  ref. A human merges every pull request.
+- **Merges only the accepted head, never rewrites.** The Controller
+  merges a pull request only when the repository opts in
+  ([Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait)),
+  and then only one way: GitHub's own squash merge of exactly the
+  acceptance commit, after `/accept-milestone`, after the Controller has
+  seen that commit everywhere and every check green, bound to that commit
+  by `--match-head-commit`, so GitHub performs it or refuses it. The
+  only `gh pr merge` call is in the GitHub boundary
+  (`controller/forge.py`), and it carries `--squash` and
+  `--match-head-commit` and none of `--auto`, `--disable-auto`,
+  `--admin` or `--delete-branch`; a test scans `controller/` for any
+  other shape. The Controller never enables GitHub's auto-merge request,
+  so nothing it leaves on GitHub can merge a later head. No code path
+  pushes to the trunk ref, closes a pull request or deletes a branch.
+  The Controller never force-pushes, resets, rebases, amends, deletes a
+  ref or moves a tag: every branch push is a fast-forward and every tag
+  push creates a new ref. Without the opt-in, a human merges every pull
+  request.
 
 ## Automatic dispatch
 

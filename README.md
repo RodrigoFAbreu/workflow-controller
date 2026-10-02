@@ -13,8 +13,8 @@ Workflow  ->  Workflow Manager  ->  Workflow Controller  ->  your repository
 ```
 
 It never writes Workflow state itself, never runs a command reserved for a
-human, never trusts a worker's own account of what it did, and never merges
-a pull request.
+human, never trusts a worker's own account of what it did, and merges a pull
+request only when the repository opts in, and then only the accepted commit.
 
 **Contents:** [Install](#install) · [First run](#first-run) ·
 [Commands](#commands) · [What runs automatically](#what-runs-automatically) ·
@@ -119,7 +119,9 @@ also gets:
 - one short-lived `milestone/<id>` branch and one Draft pull request per
   milestone, titled with the Conventional Commit title its plan declares
   and marked ready once the milestone is accepted and its checks pass. A
-  human merges it with "Squash and merge";
+  human merges it with "Squash and merge", or, when the policy opts in to
+  auto-merge, the Controller merges the accepted commit itself, waits for
+  the release and closes the milestone out;
 - a release published from `main` when the squash commit's title asks for
   one: `feat` gives a minor release, `fix` a patch, and `!` a major. The
   version is computed from the latest release tag; no file holds it. The

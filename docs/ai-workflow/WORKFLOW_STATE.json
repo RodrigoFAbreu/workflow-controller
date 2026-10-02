@@ -5569,7 +5569,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-auto-merge-release-wait-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-auto-merge-release-wait-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 7,
       "implementation_revision": 8,
       "functional_review_round": null,
@@ -5864,8 +5864,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 59,
-      "last_transition": "2026-10-02T18:03:25Z",
+      "state_revision": 61,
+      "last_transition": "2026-10-02T18:21:20Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5886,19 +5886,14 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "42a96a792d3607abc100f444a84f0dc6190f7cc50fbbcd04b93d2433a59d823b",
+        "review_content_id": "b5a84a7366cb3485552f103284c46a8ebe3fddd4d161ef0308abf1de8763cd91",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "c6153442bec13a73685abf6568e09ee1db191db5637af16e068474919f7c162f",
+          "bundle_id": "1df74324cf69af1a4f9eebbaf94f2483c6fad49c8704ccc2057f97dfcd990bcf",
           "verdict": "APPROVE",
-          "round": 6,
-          "completed_at": "2026-10-02T14:13:45Z"
+          "round": 8,
+          "completed_at": "2026-10-02T18:09:05Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "c6153442bec13a73685abf6568e09ee1db191db5637af16e068474919f7c162f",
-          "verdict": "APPROVE",
-          "round": 6,
-          "completed_at": "2026-10-02T14:25:49Z"
-        }
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

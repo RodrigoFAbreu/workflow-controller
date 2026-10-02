@@ -5569,7 +5569,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-auto-merge-release-wait-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-auto-merge-release-wait-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 10,
       "functional_review_round": null,
@@ -5636,10 +5636,10 @@
         "recorded_at": "2026-10-02T07:27:22Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "c6153442bec13a73685abf6568e09ee1db191db5637af16e068474919f7c162f",
-        "approved_review_content_id": "42a96a792d3607abc100f444a84f0dc6190f7cc50fbbcd04b93d2433a59d823b",
+        "reviewed_bundle_id": "b652463f28ab3f6fa483a74549407012b27e720d4934d48de508713b37305100",
+        "approved_review_content_id": "a5b48e0f7f44ce1587e9588625fa8acdaf4f685a82068f18705d9b89d47d4bb3",
         "review_content_manifest": [
           {
             "path": "README.md",
@@ -5651,13 +5651,13 @@
             "path": "controller/cli.py",
             "exists": true,
             "mode": "100644",
-            "blob": "1bb785c1cb0bfc8f9edc2f3a1ae013ffdefac189"
+            "blob": "00cad1c4cbcc9652bfc79d5eb131ead9e79ced66"
           },
           {
             "path": "controller/decision.py",
             "exists": true,
             "mode": "100644",
-            "blob": "9af184c6e744972fc7dc5fab3dc4e77aff3cd167"
+            "blob": "6249a0281c347c51e44482c7aa9a36904d40339e"
           },
           {
             "path": "controller/forge.py",
@@ -5669,13 +5669,19 @@
             "path": "controller/job.py",
             "exists": true,
             "mode": "100644",
-            "blob": "4e32557e1138c2a1892298565e55c1790b9f18e3"
+            "blob": "2923fac5fc602ddf04734445c21713c0f1861f30"
+          },
+          {
+            "path": "controller/lock.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b771d120baedec75f07cfac6f7c99b37d1f0508f"
           },
           {
             "path": "controller/milestone_branch.py",
             "exists": true,
             "mode": "100644",
-            "blob": "fdecd386639b5fb321950187f5db5987966b8f30"
+            "blob": "299edab2bf737335ae5a8d85b5974d37129ddb50"
           },
           {
             "path": "controller/observe.py",
@@ -5729,7 +5735,7 @@
             "path": "docs/guide/ci-and-releases.md",
             "exists": true,
             "mode": "100644",
-            "blob": "74d26f96443cc4476d0092694fec9fc3ed5839e9"
+            "blob": "c78264b536901224eaac9e4c9919e2976ccb7bf2"
           },
           {
             "path": "docs/guide/commands.md",
@@ -5747,7 +5753,7 @@
             "path": "docs/guide/milestone-branches.md",
             "exists": true,
             "mode": "100644",
-            "blob": "99b21f45a11c8c177d8716d7db7d7a7fc570be2f"
+            "blob": "119ec4cbcec6e75f52e2f1221c40aedbb8008abf"
           },
           {
             "path": "docs/guide/runtime.md",
@@ -5759,13 +5765,13 @@
             "path": "docs/guide/troubleshooting.md",
             "exists": true,
             "mode": "100644",
-            "blob": "2d251b5d48d599d92eb836d5eb906b8b4be0e098"
+            "blob": "c739fd495d2ecf67468792d72cc18213459f5d90"
           },
           {
             "path": "tests/fake_gh.py",
             "exists": true,
             "mode": "100755",
-            "blob": "efb3c5f131c538412dd83c7be5a9ec985fe8bac1"
+            "blob": "86aa2387e10b8f29dfb16bf30ad146fc4a4d6206"
           },
           {
             "path": "tests/golden/generate_no_policy_lifecycle.py",
@@ -5783,7 +5789,7 @@
             "path": "tests/test_cli.py",
             "exists": true,
             "mode": "100644",
-            "blob": "e6684895886667dc98808777b7042f8f85e218f0"
+            "blob": "dd812eb5a558ed720f1b4fcaf6717bc03179221e"
           },
           {
             "path": "tests/test_evidence.py",
@@ -5795,7 +5801,13 @@
             "path": "tests/test_forge.py",
             "exists": true,
             "mode": "100644",
-            "blob": "e37dd47fd888d515914a2184627a26d1327c93d6"
+            "blob": "7a81504dbdb10c6f301e5cc4000510d842a252fd"
+          },
+          {
+            "path": "tests/test_lock.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7caa3f7fb654d3756b79d184272c6818f62ff88f"
           },
           {
             "path": "tests/test_no_rewrite_invariants.py",
@@ -5813,7 +5825,7 @@
             "path": "tests/test_pull_request_lifecycle.py",
             "exists": true,
             "mode": "100644",
-            "blob": "5a1c2f8019baf8c625a1f4c7ff2b1ae2994fc05e"
+            "blob": "f6490ef7737f8448f74c2eb479668bf18bab9d63"
           },
           {
             "path": "tests/test_release_txn.py",
@@ -5837,14 +5849,14 @@
             "path": "tests/test_trunk_preflight.py",
             "exists": true,
             "mode": "100644",
-            "blob": "d97497d9323c809b61f6103489d7a3ba14aa85b2"
+            "blob": "84ff5198030d0ae373ad64716c3c5f4810486b4e"
           }
         ],
-        "reviewed_content_commit": "e67ba6816837e1e77c3efdafb8b04d9261e07a8f",
+        "reviewed_content_commit": "9efa17c1b968ba025adf9310f5ec4b6511d4c01d",
         "legacy_evidence": null,
-        "user_confirmation": "implementation workflow-controller-auto-merge-release-wait",
+        "user_confirmation": "/approve-review implementation workflow-controller-auto-merge-release-wait",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-02T16:31:21Z"
+        "recorded_at": "2026-10-02T23:14:49Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -5864,8 +5876,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 67,
-      "last_transition": "2026-10-02T22:32:16Z",
+      "state_revision": 70,
+      "last_transition": "2026-10-02T23:14:49Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5886,14 +5898,19 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "77d30c97f280509ff50ad5c43dee0d78c1c6d031d34575eeaa904cbc28aa24e0",
+        "review_content_id": "a5b48e0f7f44ce1587e9588625fa8acdaf4f685a82068f18705d9b89d47d4bb3",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "587d43441386b32ed7d5bf13ead5ed8ca93cb6149a2434894571cd089f00cd52",
+          "bundle_id": "b652463f28ab3f6fa483a74549407012b27e720d4934d48de508713b37305100",
           "verdict": "APPROVE",
-          "round": 10,
-          "completed_at": "2026-10-02T21:51:40Z"
+          "round": 11,
+          "completed_at": "2026-10-02T22:51:41Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "b652463f28ab3f6fa483a74549407012b27e720d4934d48de508713b37305100",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-02T22:59:43Z"
+        }
       }
     }
   }

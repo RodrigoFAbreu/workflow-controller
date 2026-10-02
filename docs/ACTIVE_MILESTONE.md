@@ -2,7 +2,7 @@
 
 ## Status
 
-**In implementation review (revision 8).** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md`
+**In implementation review (revision 10).** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md`
 step C4, section 11.3). The plan is `docs/ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md`,
 revision 7, approved at `a06aeb3` (`EXTERNAL_APPROVE`, review content id `fcdfd33b`). The base
 commit is `854d25c`. Governing workflow version `2.2`, lifecycle authority Workflow 2.6.0. Pull
@@ -16,7 +16,9 @@ All six checkpoints are complete. Implementation revision 6 had technical approv
 `EXTERNAL_APPROVE` of bundle `c6153442`, review content id `42a96a79`). The functional review's
 round 1 (F1-F6) was applied in revision 7, which made that approval stale, and the local review
 of revision 7 (`REVISE`: bundle narrative and evidence, plus two optional fixes) is applied in
-revision 8. Both implementation-review stages run again (local, then manual external) before
+revision 8. The manual external review's round 8 (exit 45 names a waiting run only when it holds
+the lifecycle lock) is applied in revision 9, and the local review's round 9 (the bundle's
+evidence and status text) in revision 10, which changes no code. Both implementation-review stages run again (local, then manual external) before
 technical approval is reachable. The functional review checklist is below, and is regenerated
 after that approval.
 

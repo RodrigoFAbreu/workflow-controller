@@ -35,7 +35,7 @@ A policy without the key behaves exactly as 1.5.0 (I1).
 | Checkpoint | Status | Notes |
 |---|---|---|
 | CP1 The two switches | Complete | See below |
-| CP2 The forge surface | Not started | |
+| CP2 The forge surface | Complete | See below |
 | CP3 The merge at readiness | Not started | |
 | CP4 The release wait, close out and stop | Not started | |
 | CP5 The bounded wait in `run`, and `status` | Not started | |
@@ -95,3 +95,60 @@ A policy without the key behaves exactly as 1.5.0 (I1).
     run had one failure, the `execute_step` parameter pin in
     `tests.test_evidence.WorkflowQueryFeedbackPathTest`. After updating the pin, the failed shard
     (5) passed on replay; shards 0-4 had already passed. That makes 2713 tests green.
+
+### CP2 -- the forge surface
+
+- `controller/forge.py` (B.1, B.2):
+  - `PullRequest.merge_state` reads `mergeStateStatus`, which `PR_FIELDS` now requests. Any
+    string passes through unvalidated; a missing or non-string value is undecidable, like every
+    other field.
+  - `Run` is `{id, workflow, status, conclusion, attempt, url}`. `conclusion` is `None` until the
+    run completes (`gh` reports `""`).
+  - `commit_runs(commit, branch, workflow)` runs `gh run list --commit --branch --event push
+    --workflow --json databaseId,workflowName,status,conclusion,attempt,url --limit
+    <forge.pr_list_limit>`. A full page is undecidable, like `list_prs`.
+  - `merge_squash(number, *, head, subject, body)` runs `gh pr merge <n> --squash
+    --match-head-commit <head> --subject <s> --body <b>`. It never re-reads and never sends
+    `--auto`. A head that is not a full commit id is a `ValueError`, and nothing is sent.
+  - Both are on the `Forge` protocol. The module docstring states the one merge.
+- `tests/fake_gh.py` (B.4):
+  - `mergeStateStatus` is a PR's stored value. Without one it is `UNKNOWN` for a closed or merged
+    PR, `DRAFT` for a draft and `CLEAN` otherwise.
+  - `pr merge` is modelled only in the admitted shape. It refuses unless the PR is open, its
+    origin head is `--match-head-commit` and its state is `CLEAN`/`HAS_HOOKS`. A merge squashes
+    the head onto the base in the bare origin (`git merge-tree`; a conflict refuses), with the
+    subject and body as the message, and stores the PR as merged at that commit.
+  - `--auto`, `--disable-auto`, `--admin` and `--delete-branch` are refused outright.
+  - A PR's `merge_read_lag: N` makes the next N reads show the pre-merge PR.
+    `merge_reply_lost` makes the merge happen and then exit 1 with a network error.
+  - `run list --commit --branch --event --workflow` filters the state's `runs`, newest first.
+- `tests/test_no_rewrite_invariants.py` (B.3): the `"pr", "merge"` pair is admitted only in
+  `controller/forge.py`, and there only in a list literal that holds `--squash` and
+  `--match-head-commit` and none of `--auto`, `--disable-auto`, `--admin` or `--delete-branch`.
+  - In `forge.py`, the scan also fails on any `"merge"` constant outside such a list, and on a
+    string built from constants (`+`, `%`, `str.format`, `str.join` of a literal, f-string) that
+    contains the word.
+  - `--auto`/`--disable-auto` in any argv literal anywhere in `controller/` fail.
+  - `MergeShapeTest` pins both directions over synthetic sources. `ControllerScanTest` pins that
+    `forge.py` holds exactly one admitted list and no other file holds one.
+- Tests (`tests/test_forge.py`):
+  - `MergeTest`: the exact argv through a runner spy (one record per call), with no re-read. The
+    squash commit's parent, tree and message. A moved head is refused. Only `CLEAN`/`HAS_HOOKS`
+    merge. An already-merged PR is refused. Read lag, a lost reply and a short head. The fake
+    refuses the forbidden flags and the other merge shapes.
+  - `RunsTest`: the exact argv, filtering by workflow, commit, branch and event, newest first.
+    Also the full-page refusal and malformed records.
+  - The merge state is read and passed through, including an unknown value. Malformed values
+    are undecidable. `UndecidableTest` covers `run list` and `pr merge`.
+  - `NoMergeOperationTest` now pins `merge_squash` as the forge's only merge operation. The
+    module's teardown check refuses any other `gh pr merge` shape.
+- Verification:
+  - Narrow: `tests.test_forge` (39) and `tests.test_no_rewrite_invariants` (13) pass.
+  - The dependent modules pass: `test_pull_request_lifecycle`, `test_milestone_branch`,
+    `test_trunk_preflight`, `test_trunk_orchestration_e2e`, `test_release_txn` and the scan, 342
+    tests.
+  - `generate_no_policy_lifecycle.py --check` and
+    `generate_external_implementation_review_decisions.py --check` pass.
+  - `generate_plan_stage_decisions.py --check` reports a difference. It reports the same at the
+    base, with this checkpoint's changes stashed, so this checkpoint did not cause it. It is left
+    for CP6's full generator pass.

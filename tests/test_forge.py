@@ -19,13 +19,21 @@ from tests import fake_gh  # noqa: E402
 from tests.fixtures import FAKE_GH_REPOSITORY, build_origin_pair, commit_all, fake_gh_env, run  # noqa: E402
 
 #: Every fake ``gh`` invocation log this module produced, for the
-#: module-level "nothing ever ran ``gh pr merge``" check.
+#: module-level "nothing ever ran another ``gh pr merge``" check.
 _LOGS: list[list[str]] = []
+#: Invocations a test sends straight to the fake, to pin its refusals.
+_DIRECT: list[list[str]] = []
+
+
+def _admitted_merge(argv: list[str]) -> bool:
+    return (argv[:2] == ["pr", "merge"] and "--squash" in argv and "--match-head-commit" in argv
+            and not {"--auto", "--disable-auto", "--admin", "--delete-branch"} & set(argv))
 
 
 def tearDownModule() -> None:  # noqa: N802 -- unittest's hook name
-    merges = [argv for argv in _LOGS if argv[:2] in (["pr", "merge"], ["pr", "close"])]
-    assert not merges, f"the forge invoked a forbidden gh operation: {merges}"
+    forbidden = [argv for argv in _LOGS if argv not in _DIRECT and (argv[:2] == ["pr", "close"] or (
+        argv[:2] == ["pr", "merge"] and not _admitted_merge(argv)))]
+    assert not forbidden, f"the forge invoked a forbidden gh operation: {forbidden}"
 
 
 class _Case(unittest.TestCase):
@@ -159,9 +167,23 @@ class PullRequestTest(_Case):
         self.assertEqual(prs[0].merge_commit, "b" * 40)
         self.assertEqual(prs[0].merged_at, "2026-09-01T00:00:00Z")
 
+    def test_the_merge_state_is_read_and_passed_through(self) -> None:
+        self.push_branch_with_commit()
+        pr = self.forge.create_draft_pr("milestone/wi-1", "main", "t", "b")
+        self.assertIn("mergeStateStatus", forge.PR_FIELDS.split(","))
+        self.assertEqual(pr.merge_state, "DRAFT")
+        self.forge.mark_ready(pr.number)
+        self.assertEqual(self.forge.view_pr(pr.number).merge_state, "CLEAN")
+        for status in ("BLOCKED", "BEHIND", "DIRTY", "UNSTABLE", "HAS_HOOKS", "UNKNOWN", "SOMETHING_NEW"):
+            with self.subTest(status=status):
+                self.edit_state(lambda s: s["prs"][0].update(mergeStateStatus=status))
+                self.assertEqual(self.forge.view_pr(pr.number).merge_state, status)
+                self.assertEqual(self.forge.list_prs("milestone/wi-1")[0].merge_state, status)
+
     def test_a_malformed_pull_request_record_is_undecidable(self) -> None:
         for bad in ({"state": "WEIRD"}, {"headRefOid": "not-an-oid"}, {"isDraft": "yes"},
-                    {"isCrossRepository": None}, {"mergeCommit": {"oid": 5}}):
+                    {"isCrossRepository": None}, {"mergeCommit": {"oid": 5}},
+                    {"mergeStateStatus": None}, {"mergeStateStatus": 3}):
             with self.subTest(bad=bad):
                 self._tmp.cleanup()
                 self.setUp()
@@ -281,13 +303,15 @@ class UndecidableTest(_Case):
         "release view": lambda f: f.view_release("v1.0.0"),
         "pr ready": lambda f: f.mark_ready(1),
         "release edit": lambda f: f.publish_draft("v1.0.0"),
+        "run list": lambda f: f.commit_runs("a" * 40, "main", "main.yml"),
+        "pr merge": lambda f: f.merge_squash(1, head="a" * 40, subject="s", body="b"),
     }
 
     def test_every_gh_failure_class_is_undecidable(self) -> None:
         self.seed_pr(1, checks=[])
         for kind in ("auth", "network", "server_error", "malformed"):
             for command, call in self.READS.items():
-                if kind == "malformed" and command in ("pr ready", "release edit"):
+                if kind == "malformed" and command in ("pr ready", "release edit", "pr merge"):
                     continue  # no output is parsed; exit 0 is success
                 with self.subTest(kind=kind, command=command):
                     self.set_failures({command: kind})
@@ -370,11 +394,166 @@ class EditTest(_Case):
             self.forge.edit_pr(4, title="fix: x")
 
 
+class MergeTest(_Case):
+    """``merge_squash`` (auto-merge-release-wait CP2, B.2) and the fake's
+    model of GitHub's ``mergePullRequest`` (B.4)."""
+
+    def ready_pr(self, **fields) -> tuple[forge.PullRequest, str]:
+        tip = self.push_branch_with_commit()
+        pr = self.forge.create_draft_pr("milestone/wi-1", "main", "feat: a title", "the body\n")
+        self.forge.mark_ready(pr.number)
+        if fields:
+            self.edit_state(lambda s: s["prs"][0].update(fields))
+        self.calls.clear()
+        return pr, tip
+
+    def git_origin(self, *args: str) -> str:
+        return run(["git", "--git-dir", str(self.origin), *args]).stdout.strip()
+
+    def test_the_exact_argv_and_no_re_read(self) -> None:
+        pr, tip = self.ready_pr()
+        base = self.git_origin("rev-parse", "refs/heads/main")
+        self.forge.merge_squash(pr.number, head=tip, subject="feat: a title (#1)", body="the body\n")
+        self.assertEqual(self.calls, [["gh", "pr", "merge", str(pr.number), "--squash", "--match-head-commit",
+                                       tip, "--subject", "feat: a title (#1)", "--body", "the body\n",
+                                       "--repo", FAKE_GH_REPOSITORY]])
+        merged = self.forge.view_pr(pr.number)
+        self.assertEqual((merged.state, merged.head_oid, merged.merge_state), ("MERGED", tip, "UNKNOWN"))
+        squash = self.git_origin("rev-parse", "refs/heads/main")
+        self.assertEqual(merged.merge_commit, squash)
+        self.assertEqual(self.git_origin("rev-parse", f"{squash}^"), base)
+        self.assertEqual(self.git_origin("rev-parse", f"{squash}^{{tree}}"), self.git_origin("rev-parse", f"{tip}^{{tree}}"))
+        self.assertEqual(self.git_origin("log", "-1", "--format=%B", squash), "feat: a title (#1)\n\nthe body")
+
+    def test_a_moved_head_is_refused(self) -> None:
+        pr, tip = self.ready_pr()
+        (self.clone / "late.txt").write_text("late\n")
+        commit_all(self.clone, "late")
+        run(["git", "push", "-q", "origin", "milestone/wi-1"], cwd=self.clone)
+        main = self.git_origin("rev-parse", "refs/heads/main")
+        with self.assertRaises(ForgeUndecidableError) as caught:
+            self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        self.assertIn("Head branch was modified", caught.exception.evidence["stderr"])
+        self.assertEqual(self.forge.view_pr(pr.number).state, "OPEN")
+        self.assertEqual(self.git_origin("rev-parse", "refs/heads/main"), main)
+
+    def test_only_a_clean_or_has_hooks_state_merges(self) -> None:
+        for status, merges in (("CLEAN", True), ("HAS_HOOKS", True), ("UNSTABLE", False), ("BLOCKED", False),
+                               ("BEHIND", False), ("DIRTY", False), ("DRAFT", False), ("UNKNOWN", False)):
+            with self.subTest(status=status):
+                self._tmp.cleanup()
+                self.setUp()
+                pr, tip = self.ready_pr(mergeStateStatus=status)
+                if merges:
+                    self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+                else:
+                    with self.assertRaises(ForgeUndecidableError) as caught:
+                        self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+                    self.assertIn("not mergeable", caught.exception.evidence["stderr"])
+                self.assertEqual(self.forge.view_pr(pr.number).state, "MERGED" if merges else "OPEN")
+
+    def test_a_merged_or_closed_pr_is_refused(self) -> None:
+        pr, tip = self.ready_pr()
+        self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        with self.assertRaises(ForgeUndecidableError):
+            self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+
+    def test_the_next_read_can_lag_the_merge(self) -> None:
+        pr, tip = self.ready_pr(merge_read_lag=2)
+        self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        self.assertEqual(self.forge.view_pr(pr.number).state, "OPEN")
+        self.assertEqual(self.forge.list_prs("milestone/wi-1")[0].state, "OPEN")
+        self.assertEqual(self.forge.view_pr(pr.number).state, "MERGED")
+
+    def test_a_lost_reply_is_undecidable_but_the_merge_happened(self) -> None:
+        pr, tip = self.ready_pr(merge_reply_lost=True)
+        with self.assertRaises(ForgeUndecidableError):
+            self.forge.merge_squash(pr.number, head=tip, subject="s", body="b")
+        self.assertEqual(self.forge.view_pr(pr.number).state, "MERGED")
+
+    def test_a_short_head_is_a_caller_error_and_sends_nothing(self) -> None:
+        pr, tip = self.ready_pr()
+        with self.assertRaises(ValueError):
+            self.forge.merge_squash(pr.number, head=tip[:12], subject="s", body="b")
+        self.assertEqual(self.calls, [])
+
+    def test_the_fake_refuses_auto_and_every_other_merge_shape(self) -> None:
+        pr, tip = self.ready_pr()
+        admitted = ["pr", "merge", str(pr.number), "--squash", "--match-head-commit", tip, "--subject", "s",
+                    "--body", "b", "--repo", FAKE_GH_REPOSITORY]
+        refused = [admitted + [flag] for flag in ("--auto", "--disable-auto", "--admin", "--delete-branch")]
+        refused += [["pr", "merge", str(pr.number), "--disable-auto", "--repo", FAKE_GH_REPOSITORY],
+                    [a for a in admitted if a != "--squash"],
+                    admitted[:4] + admitted[6:]]
+        for argv in refused:
+            with self.subTest(argv=argv):
+                _DIRECT.append(argv)
+                result = subprocess.run(["gh", *argv], env=self.env, capture_output=True, text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.forge.view_pr(pr.number).state, "OPEN")
+
+
+class RunsTest(_Case):
+    """``commit_runs`` (auto-merge-release-wait CP2, B.1)."""
+
+    COMMIT = "c" * 40
+
+    def seed_run(self, run_id: int, **fields) -> None:
+        record = {"databaseId": run_id, "workflowName": "Main", "workflowFile": "main.yml",
+                  "headSha": self.COMMIT, "headBranch": "main", "event": "push", "status": "completed",
+                  "conclusion": "success", "attempt": 1, "url": f"https://github.com/x/y/actions/runs/{run_id}"}
+        record.update(fields)
+        self.edit_state(lambda s: s.setdefault("runs", []).append(record))
+
+    def test_the_exact_argv(self) -> None:
+        self.forge.commit_runs(self.COMMIT, "main", "main.yml")
+        self.assertEqual(self.calls, [["gh", "run", "list", "--commit", self.COMMIT, "--branch", "main",
+                                       "--event", "push", "--workflow", "main.yml", "--json",
+                                       "databaseId,workflowName,status,conclusion,attempt,url",
+                                       "--limit", str(forge.PR_LIST_LIMIT), "--repo", FAKE_GH_REPOSITORY]])
+
+    def test_only_the_workflows_push_runs_of_the_commit_newest_first(self) -> None:
+        self.seed_run(10)
+        self.seed_run(12, status="in_progress", conclusion="", attempt=2)
+        self.seed_run(11, workflowName="Workflow conformance", workflowFile="conformance.yml",
+                      conclusion="failure")
+        self.seed_run(13, headSha="d" * 40)
+        self.seed_run(14, headBranch="milestone/wi-1")
+        self.seed_run(15, event="pull_request")
+        runs = self.forge.commit_runs(self.COMMIT, "main", "main.yml")
+        self.assertEqual(runs, (
+            forge.Run(12, "Main", "in_progress", None, 2, "https://github.com/x/y/actions/runs/12"),
+            forge.Run(10, "Main", "completed", "success", 1, "https://github.com/x/y/actions/runs/10")))
+        self.assertEqual([r.id for r in self.forge.commit_runs(self.COMMIT, "main", "conformance.yml")], [11])
+        self.assertEqual(self.forge.commit_runs("e" * 40, "main", "main.yml"), ())
+
+    def test_a_full_page_of_runs_is_undecidable(self) -> None:
+        records = [{"databaseId": n, "workflowName": "Main", "status": "completed", "conclusion": "success",
+                    "attempt": 1, "url": "u"} for n in range(forge.PR_LIST_LIMIT)]
+
+        def full(argv):
+            return subprocess.CompletedProcess(argv, 0, json.dumps(records).encode(), b"")
+
+        with self.assertRaises(ForgeUndecidableError):
+            forge.GhForge(FAKE_GH_REPOSITORY, full).commit_runs(self.COMMIT, "main", "main.yml")
+
+    def test_a_malformed_run_record_is_undecidable(self) -> None:
+        for bad in ({"attempt": "1"}, {"databaseId": True}, {"status": None}, {"conclusion": 0}):
+            with self.subTest(bad=bad):
+                self._tmp.cleanup()
+                self.setUp()
+                self.seed_run(10, **bad)
+                with self.assertRaises(ForgeUndecidableError):
+                    self.forge.commit_runs(self.COMMIT, "main", "main.yml")
+
+
 class NoMergeOperationTest(unittest.TestCase):
-    def test_the_forge_has_no_merge_close_delete_or_comment_operation(self) -> None:
+    def test_the_forge_has_one_merge_and_no_close_delete_or_comment_operation(self) -> None:
         names = {name.lower() for name in dir(forge.GhForge) if not name.startswith("_")}
-        for forbidden in ("merge", "close", "delete", "comment", "api"):
+        for forbidden in ("close", "delete", "comment", "api"):
             self.assertFalse([n for n in names if forbidden in n], forbidden)
+        # The one merge: a squash bound to a head commit (auto-merge-release-wait CP2).
+        self.assertEqual([n for n in names if "merge" in n], ["merge_squash"])
         # The one edit: a pull request's title and body (squash-merge-tag-versioning CP5).
         self.assertEqual([n for n in names if "edit" in n], ["edit_pr"])
 

@@ -828,8 +828,9 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     return EXIT_OK
 
 
-def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path) -> milestone_branch.Context:
-    return milestone_branch.Context(repo_root=target.root, runtime_root=runtime_root)
+def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path, *,
+                    auto_merge: bool = True) -> milestone_branch.Context:
+    return milestone_branch.Context(repo_root=target.root, runtime_root=runtime_root, auto_merge=auto_merge)
 
 
 def _print_branch_blocks(blocks: dict) -> None:
@@ -882,7 +883,10 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # no `gh`); `None`, and the key omitted, when no policy or binding
     # applies (I1, I10). Its predicted trunk-start base is the bootstrap's
     # base, as `step` passes the passed trunk start's (squash-merge Design F).
-    preflight = milestone_branch.predict(_branch_context(target, runtime_root), requested_work_item_id=args.work_item)
+    # `merge.auto` decides whether a READY auto-merge binding predicts the
+    # merge (auto-merge-release-wait A.2, F).
+    branch_ctx = _branch_context(target, runtime_root, auto_merge=_effective(args)["merge.auto"])
+    preflight = milestone_branch.predict(branch_ctx, requested_work_item_id=args.work_item)
     preflight_block = {} if preflight is None else {"repository_preflight": preflight}
     # The same job-history read `job.execute_step` makes (automatic-
     # lifecycle-orchestration CP4B), so `explain` and `step` see the same

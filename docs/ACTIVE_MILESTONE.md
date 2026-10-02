@@ -36,7 +36,7 @@ A policy without the key behaves exactly as 1.5.0 (I1).
 |---|---|---|
 | CP1 The two switches | Complete | See below |
 | CP2 The forge surface | Complete | See below |
-| CP3 The merge at readiness | Not started | |
+| CP3 The merge at readiness | Complete | See below |
 | CP4 The release wait, close out and stop | Not started | |
 | CP5 The bounded wait in `run`, and `status` | Not started | |
 | CP6 Documentation and full verification | Not started | |
@@ -152,3 +152,76 @@ A policy without the key behaves exactly as 1.5.0 (I1).
   - `generate_plan_stage_decisions.py --check` reports a difference. It reports the same at the
     base, with this checkpoint's changes stashed, so this checkpoint did not cause it. It is left
     for CP6's full generator pass.
+
+### CP3 -- the merge at readiness
+
+- `controller/milestone_branch.py` (C.1-C.6):
+  - `_merge_step(ctx, key, record, head, pr)` replaces both `_merge_gate` returns: the end of
+    `_readiness` and the `READY` cell. Without `auto_merge_applies` it returns `_merge_gate`
+    unchanged (I1, C.6), whatever the record's `merge` field says.
+  - Otherwise it applies C.2's rows, first match deciding, after the cell's own `MERGED`,
+    `CLOSED` and `_observe_branch` handling. In order:
+    1. A local tip past `A` gates `post_acceptance_commits` with the `READY` text (C.4 b and c).
+    2. A remote branch or pull request head that is not `A` gates `pr_head_not_accepted`.
+    3. A draft gates `merge_held`.
+    4. Readiness's own `_checks_gate`. `checks_failing` and `checks_cancelled` gain "the
+       Controller merges once a re-run turns the checks green".
+    5. `DIRTY` gates `merge_pending` at once. `BEHIND` gates `integration_required`.
+    6. A `merge.state` of `accepted` gates `merge_pending`. The gate names the hand merge and
+       `milestone-binding --new-pr` after closing.
+    7. Any state other than `CLEAN`/`HAS_HOOKS` gates `merge_pending`, naming the state.
+       `BLOCKED` names a requirement other than the checks.
+    8. At three attempts, the refusal.
+    9. Otherwise one send.
+  - `_send_merge` (C.3):
+    - It writes the intent first: `merge = {state: "sending", head: A, attempts: k+1,
+      last_attempt_at}`, with `merge_sent` on the first attempt.
+    - Then it sends `merge_squash(n, head=A, subject="<title> (#n)", body=<body>)`.
+    - Success writes `accepted` (`merge_accepted`) and re-reads. `MERGED` goes into the
+      existing merged-PR handling through `_pr_left_open`; still `OPEN` is the accepted
+      `merge_pending`.
+    - A `ForgeError` re-reads: merged is adopted. Otherwise `merge_refused` is written once
+      per distinct message (stderr when present), and the outcome is the waitable
+      `merge_pending` below three attempts, or a `BranchBindingError` at three. `attempts` is
+      never reset.
+  - A crash leaves `state: "sending"`. The next step's table decides as for any record.
+  - `_readiness` and `_merge_step` return a record when the Controller merged. `_branch_cells`
+    then continues into close-out.
+  - `Gate.waitable` (default `False`) is set on the waitable outcomes listed in E.1. These are
+    `pr_head_not_accepted`, `checks_pending` and `merge_pending` (except `DIRTY`). CP5's
+    `waiting_preflight` reads it. Readiness's own gates are not marked here.
+  - `GATE_CODES` gains `merge_pending` and `merge_held`. `decision.BRANCH_GATE_TEXTS` has a text
+    for each.
+  - `predict` handles a `READY` record when auto-merge applies: `merge` with no `merge` field or
+    `sending`, and `wait_merge` (gate `merge_pending`, "as of") when `accepted`.
+    `cli.cmd_explain` passes `merge.auto` into the context.
+- Tests (`tests/test_pull_request_lifecycle.py`, `AutoMergeTest`, 20 cases;
+  `AutoMergeUnchangedTest`):
+  - The merge at readiness: the exact argv, no `--auto`, the events, closed out.
+  - A held `READY` record merging at the next step, and `HAS_HOOKS`.
+  - First match: a local commit past `A` with a failing check is `post_acceptance_commits`.
+  - Moved heads:
+    - a pushed local commit and an unpushed one are both `post_acceptance_commits`;
+    - a push on GitHub only, while checks are pending, then green, is refused by
+      `_observe_branch` with no merge call;
+    - a lagging PR head and a deleted remote branch are `pr_head_not_accepted`.
+  - A draft is `merge_held`, then merges once marked ready.
+  - Checks after acceptance: pending, failing, and cancelled with `CLEAN`.
+  - `UNKNOWN`, a stale `DRAFT`, `BLOCKED`, `UNSTABLE` and an unknown value are `merge_pending`
+    (waitable). `DIRTY` is `merge_pending` (not waitable). `BEHIND` is `integration_required`.
+  - A moved trunk without `BEHIND` merges and is verified.
+  - Read lag: `accepted`, never re-sent, then adopted. A lost reply is adopted in the same step.
+  - Crashes between the intent and the call, and between the call and the outcome (with and
+    without lag; the re-send's "already merged" refusal is adopted).
+  - The attempt budget: one `merge_refused` per distinct message, the refusal at three, never
+    sent again, then a hand merge closes out.
+  - A person's own auto-merge request is neither read nor withdrawn.
+  - `merge.auto: false` gives 1.5.0's `merge_pull_request` exactly, also with a `merge` field.
+  - `predict`, and a binding without the key unchanged.
+- Verification:
+  - New: `AutoMergeTest` and `AutoMergeUnchangedTest`, 21 tests, pass.
+  - Related modules pass: `test_pull_request_lifecycle`, `test_milestone_branch`,
+    `test_write_containment`, `test_no_rewrite_invariants`, `test_decision`, `test_cli`,
+    `test_trunk_preflight` and `test_hints_parse`, 483 tests. `test_job` and
+    `test_job_validation` (274) also pass.
+  - `generate_no_policy_lifecycle.py --check` passes.

@@ -54,7 +54,8 @@ from typing import Any
 from . import forge as forge_mod
 from . import conventional_commit, gitrepo, release_notes, repo_policy, runtime
 from .errors import (
-    BranchBindingError, BranchInvariantViolatedError, GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError,
+    BranchBindingError, BranchInvariantViolatedError, ForgeError, GitOperationError, InvalidRepositoryPolicyError,
+    InvalidTitleError,
 )
 
 SCHEMA_VERSION = 1
@@ -149,6 +150,8 @@ GATE_UNMERGED_COMMITS = "unmerged_commits"
 GATE_DIRTY_TREE = "dirty_tree"
 GATE_PR_TITLE_INVALID = "pr_title_invalid"
 GATE_RELEASE_NOTES_INVALID = "release_notes_invalid"
+GATE_MERGE_PENDING = "merge_pending"
+GATE_MERGE_HELD = "merge_held"
 
 #: Every gate a preflight can return.
 GATE_CODES = frozenset({
@@ -156,8 +159,14 @@ GATE_CODES = frozenset({
     GATE_FAST_FORWARD_TRUNK, GATE_POST_ACCEPTANCE_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_CHECKS_PENDING,
     GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_PR_HEAD_NOT_ACCEPTED, GATE_MERGE_PULL_REQUEST,
     GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE, GATE_PR_TITLE_INVALID,
-    GATE_RELEASE_NOTES_INVALID,
+    GATE_RELEASE_NOTES_INVALID, GATE_MERGE_PENDING, GATE_MERGE_HELD,
 })
+
+#: The Controller's own merge attempts per ``READY`` record (C.3 step 4):
+#: after the third refused send it sends nothing more for the record.
+MERGE_ATTEMPTS = 3
+#: The merge states GitHub merges at once (gh's ``isImmediatelyMergeable``).
+MERGEABLE_STATES = ("CLEAN", "HAS_HOOKS")
 
 #: The marker line of every Draft PR body the Controller creates.
 PR_MARKER = "<!-- workflow-controller: work_item={work_item_id} -->"
@@ -252,6 +261,9 @@ class Gate:
     #: The binding policy's merge method; ``decision.branch_human_gate``
     #: words a squash-mode gate for "Squash and merge".
     merge_method: str = repo_policy.MERGE_METHOD_MERGE
+    #: Whether ``run``'s bounded wait may poll this gate again
+    #: (auto-merge-release-wait E.1); set by :func:`_merge_step` only.
+    waitable: bool = False
 
 
 def _refuse(message: str, *, work_item_id: str | None = None, branch: str | None = None,
@@ -703,12 +715,17 @@ def _branch_cells(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
                 record, observed = _observe_branch(ctx, key, record, head, sync=state != READY), True
             record = _write(ctx, key, dict(record, pr=_pr_ref(pr)))
             if state == READY:
-                return _merge_gate(record, tip=head.commit)
-            if _phase(committed_state(ctx, "HEAD"), record["work_item_id"]) != MILESTONE_COMPLETE:
+                outcome = _merge_step(ctx, key, record, head, pr)
+            elif _phase(committed_state(ctx, "HEAD"), record["work_item_id"]) != MILESTONE_COMPLETE:
                 if _squash(record):
                     _sync_title(ctx, key, record, pr)
                 return Proceed(work_item_override=override, binding=record, action=action)
-            return _readiness(ctx, key, record, head)
+            else:
+                outcome = _readiness(ctx, key, record, head)
+            if isinstance(outcome, Gate):
+                return outcome
+            record = outcome  # merged by the Controller: the merged-PR handling has run
+            continue
         if not observed:
             record, observed = _observe_branch(ctx, key, record, head), True
         if state == BRANCH_BOUND:
@@ -934,6 +951,155 @@ def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
                 f"\"Create a merge commit\". Squash and rebase merges take the reviewed commits off "
                 f"{record['trunk']}. The Controller never merges{later}",
                 (f"merge pull request #{pr['number']} on GitHub with \"Create a merge commit\"",))
+
+
+def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
+                pr: forge_mod.PullRequest) -> Gate | dict:
+    """The end of readiness and the ``READY`` cell (auto-merge-release-wait
+    C.1-C.4). Without auto-merge, :func:`_merge_gate` unchanged (I1, C.6).
+    Otherwise C.2's rows, first match deciding, over ``pr`` (this step's
+    fresh read of the open pull request) and the branch the cell has
+    already observed: a gate, nothing sent; or one merge of the acceptance
+    commit ``A`` bound to ``A`` (C.3). Returns the merged record when the
+    pull request is merged, after the merged-PR handling."""
+    if not auto_merge_applies(record, ctx):
+        return _merge_gate(record, tip=head.commit)
+    work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
+    remote, number, a = record["repository"]["remote"], pr.number, record["accepted_head"]
+    squash = repo_policy.MERGE_METHOD_SQUASH
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    # C.4 (b) and (c): the local tip moved past A.
+    if head.commit != a:
+        after = gitrepo.first_parent_log(ctx.repo_root, a, head.commit, runner=ctx.runner)
+        return Gate(GATE_POST_ACCEPTANCE_COMMITS, work_item_id, branch,
+                    f"{branch} has commits after the acceptance commit {a}: {', '.join(after)}. The pull request "
+                    f"was marked ready at {a}, and the Controller merges only {a}, so it sends no merge while the "
+                    f"branch carries later commits. A human decides: merge anyway on GitHub with "
+                    f"\"{SQUASH_BUTTON}\", after which the merged-PR handling converges; otherwise this gate persists",
+                    (f"merge pull request #{number} on GitHub anyway with \"{SQUASH_BUTTON}\"",), squash)
+    remote_branch = (record.get("last_observation") or {}).get("remote_branch")
+    if remote_branch != a or pr.head_oid != a:
+        return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
+                    f"pull request #{number} does not show the acceptance commit {a} ({remote}/{branch} is "
+                    f"{remote_branch}; the pull request is at {pr.head_oid}); the Controller sends no merge until "
+                    f"it does", ("re-run the step once GitHub shows the pushed head",), squash, waitable=True)
+    if pr.is_draft:
+        return Gate(GATE_MERGE_HELD, work_item_id, branch,
+                    f"pull request #{number} was converted back to a draft after it was marked ready, which holds "
+                    f"the merge; the Controller does not merge it. Exits: mark it ready for review on GitHub, "
+                    f"after which the next step merges it; or {by_hand}",
+                    (f"mark pull request #{number} ready for review on GitHub", by_hand), squash)
+    gate = _checks_gate(ctx, record, number)
+    if gate is not None:
+        pending = gate.code == GATE_CHECKS_PENDING
+        message = gate.message if pending else (f"{gate.message}. The Controller merges the pull request once a "
+                                                f"re-run turns the checks green (the next step)")
+        return Gate(gate.code, work_item_id, branch, message, gate.exits, gate.merge_method, waitable=pending)
+    merge = dict(record.get("merge") or {})
+    state = pr.merge_state
+    if state == "DIRTY":
+        return Gate(GATE_MERGE_PENDING, work_item_id, branch,
+                    f"pull request #{number} cannot be merged: GitHub reports a conflict with {trunk} (DIRTY). "
+                    f"The Controller does not integrate and sent no merge",
+                    (f"resolve the conflict and {by_hand}",), squash)
+    if state == "BEHIND":
+        return Gate(GATE_INTEGRATION_REQUIRED, work_item_id, branch,
+                    f"GitHub reports pull request #{number} BEHIND {remote}/{trunk}: branch protection requires the "
+                    f"branch to be up to date before a merge, and the Controller does not integrate (Workflow 2.5.1 "
+                    f"and 2.6.0 have no transition that moves a work item's base), so it sent no merge. The manual "
+                    f"procedure: bring the pull request up to date on GitHub and merge it with \"{SQUASH_BUTTON}\"",
+                    (f"bring pull request #{number} up to date and merge it on GitHub with \"{SQUASH_BUTTON}\"",),
+                    squash)
+    if merge.get("state") == "accepted":
+        return _merge_accepted_gate(ctx, record, number)
+    if state not in MERGEABLE_STATES:
+        if state == "BLOCKED":
+            why = ("GitHub reports it BLOCKED with every check green: a branch-protection requirement other "
+                   "than the checks is outstanding (a required approving review, conversation resolution, "
+                   "signed commits or a deployment)")
+        elif state == "UNSTABLE":
+            why = ("GitHub reports it UNSTABLE: a status that is not required is not green, and the Controller "
+                   "merges only a pull request with nothing outstanding")
+        elif state in ("UNKNOWN", "DRAFT", ""):
+            why = f"GitHub has not computed its mergeability yet ({state or 'no state'})"
+        else:
+            why = f"GitHub reports its merge state as {state}"
+        return Gate(GATE_MERGE_PENDING, work_item_id, branch,
+                    f"pull request #{number} is not mergeable yet: {why}. The Controller sent no merge; the next "
+                    f"step merges it once GitHub reports it mergeable",
+                    ("re-run the step once GitHub reports the pull request mergeable", by_hand), squash,
+                    waitable=True)
+    attempts = int(merge.get("attempts") or 0)
+    if attempts >= MERGE_ATTEMPTS:
+        raise _merge_refusal(record, number, merge)
+    return _send_merge(ctx, key, record, pr, attempts)
+
+
+def _merge_accepted_gate(ctx: Context, record: Mapping[str, Any], number: int) -> Gate:
+    """C.2's ``accepted`` row: GitHub took the merge, its reads do not show
+    it yet; never sent again."""
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    recover = f"close it on GitHub and recover the binding with {_cli(record['work_item_id'], NEW_PR, ctx.repo_root)}"
+    return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
+                f"GitHub accepted the merge of pull request #{number} at {record['accepted_head']}; it is not "
+                f"visible yet. The Controller does not send it again. If it never appears: {by_hand}, or "
+                f"{recover}", ("re-run the step once GitHub shows the merge", by_hand, recover),
+                repo_policy.MERGE_METHOD_SQUASH, waitable=True)
+
+
+def _merge_refusal(record: Mapping[str, Any], number: int, merge: Mapping[str, Any]) -> BranchBindingError:
+    """C.3 step 4 at the attempt budget: the Controller sends nothing more
+    for this record; a person merges."""
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    return _refuse(f"GitHub refused the Controller's merge of pull request #{number} {merge.get('attempts')} times "
+                   f"(last: {merge.get('refusal')}); it sends no more. {by_hand[0].upper()}{by_hand[1:]}: the next "
+                   f"step closes out as for any merge", work_item_id=record["work_item_id"], branch=record["branch"],
+                   exits=[by_hand], pr=number, merge=dict(merge))
+
+
+def _forge_message(exc: ForgeError) -> str:
+    stderr = (getattr(exc, "evidence", None) or {}).get("stderr")
+    return stderr.strip() if isinstance(stderr, str) and stderr.strip() else str(exc)
+
+
+def _send_merge(ctx: Context, key: str, record: dict, pr: forge_mod.PullRequest, attempts: int) -> Gate | dict:
+    """C.3: the intent, one merge bound to ``A``, and the re-read. A crash
+    anywhere leaves ``state: "sending"``, which the next step's C.2 decides
+    like any other record."""
+    number, a = pr.number, record["accepted_head"]
+    merge = dict(record.get("merge") or {}, state="sending", head=a, attempts=attempts + 1,
+                 last_attempt_at=ctx.clock())
+    if attempts == 0:
+        record = _write(ctx, key, dict(record, merge=merge), "merge_sent", pr=number, head=a)
+    else:
+        record = _write(ctx, key, dict(record, merge=merge))
+    forge = ctx.forge(record["repository"]["forge_repository"])
+    try:
+        forge.merge_squash(number, head=a, subject=f"{pr.title} (#{number})", body=pr.body)
+    except ForgeError as exc:
+        reread = _verified_pr(ctx, record, number)
+        if reread.state != "OPEN":
+            return _pr_left_open(ctx, key, record, reread)
+        message = _forge_message(exc)
+        if message != merge.get("refusal"):
+            merge = dict(merge, refusal=message)
+            record = _write(ctx, key, dict(record, merge=merge), "merge_refused", pr=number,
+                            attempts=merge["attempts"], message=message)
+        if merge["attempts"] >= MERGE_ATTEMPTS:
+            raise _merge_refusal(record, number, merge) from None
+        return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
+                    f"GitHub refused the Controller's merge of pull request #{number} (attempt {merge['attempts']} "
+                    f"of {MERGE_ATTEMPTS}): {message}. The next step decides again, and sends again only when "
+                    f"GitHub reports it mergeable at {a} with green checks",
+                    ("re-run the step once GitHub reports the pull request mergeable",
+                     f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""),
+                    repo_policy.MERGE_METHOD_SQUASH, waitable=True)
+    record = _write(ctx, key, dict(record, merge=dict(merge, state="accepted")), "merge_accepted", pr=number,
+                    head=a)
+    reread = _verified_pr(ctx, record, number)
+    if reread.state != "OPEN":
+        return _pr_left_open(ctx, key, record, reread)
+    return _merge_accepted_gate(ctx, record, number)
 
 
 def _report_rewrite(ctx: Context, key: str, record: dict) -> Gate:
@@ -1443,12 +1609,12 @@ def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: f
 # -- readiness --------------------------------------------------------------------------
 
 
-def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate:
+def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | dict:
     """Readiness of a ``PR_OPEN`` record whose work item is
     ``MILESTONE_COMPLETE`` in the branch's own committed state: every
     condition, then ``gh pr ready`` (skipped when already ready), a re-read,
-    ``READY`` with ``accepted_head``, and the merge gate. A failed condition
-    is a gate."""
+    ``READY`` with ``accepted_head``, and the merge step. A failed condition
+    is a gate; a record is returned only when the merge step merged."""
     work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
     remote, number = record["repository"]["remote"], record["pr"]["number"]
     tip = head.commit
@@ -1520,7 +1686,7 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     extra = {} if notes_status is None else {"release_notes": notes_status}
     record = _write(ctx, key, dict(record, state=READY, pr=_pr_ref(pr), accepted_head=a), "ready", pr=number,
                     accepted_head=a, **extra)
-    return _merge_gate(record, tip=tip)
+    return _merge_step(ctx, key, record, head, pr)
 
 
 def _checks_gate(ctx: Context, record: Mapping[str, Any], number: int) -> Gate | None:
@@ -2321,7 +2487,9 @@ def predict(ctx: Context, *, requested_work_item_id: str | None = None) -> dict 
     ``create_pr``, ``ready``, ``close_out``, ``gate``, ``refuse`` or
     ``proceed`` -- computed from local Git and the records only, with no
     fetch and no ``gh`` (I10). Anything that depends on the network is
-    labelled "as of" the binding's last observation. ``None`` when the probe
+    labelled "as of" the binding's last observation. ``merge`` and
+    ``wait_merge`` are a ``READY`` record's when the Controller merges it
+    (auto-merge-release-wait F). ``None`` when the probe
     finds nothing (I1). The step itself decides; this only predicts."""
     found = probe(ctx)
     if found.inactive:
@@ -2382,6 +2550,14 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
         return _prediction("close_out", f"the squash-merged binding closes out and HEAD switches to "
                                         f"{record['trunk']}", record=record)
     if state == READY:
+        if auto_merge_applies(record, ctx):
+            merge = record.get("merge") or {}
+            if merge.get("state") == "accepted":
+                return _prediction("wait_merge", f"GitHub accepted the merge at {record['accepted_head']}; the step "
+                                                 f"waits for it to be visible", record=record, gate=GATE_MERGE_PENDING,
+                                   network=True)
+            return _prediction("merge", f"the Controller merges the pull request at {record['accepted_head']} if "
+                                        f"GitHub reports it mergeable with green checks", record=record, network=True)
         return _prediction("gate", "the pull request is ready; a human merges it", record=record,
                            gate=GATE_MERGE_PULL_REQUEST, network=True)
     tip = head.commit

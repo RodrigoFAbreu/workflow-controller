@@ -598,6 +598,10 @@ BRANCH_GATE_TEXTS = {
                         "on GitHub",
     "release_notes_invalid": "the milestone's release notes cannot be carried by the squash commit; fix "
                              "the notes section",
+    "merge_pending": "the Controller has not merged the ready pull request yet; wait, or merge it on GitHub "
+                     "with \"Squash and merge\"",
+    "merge_held": "the ready pull request was converted back to a draft; mark it ready for review, or merge it "
+                  "on GitHub with \"Squash and merge\"",
 }
 
 #: The texts a squash-mode gate (``merge_method: "squash"`` in the binding's

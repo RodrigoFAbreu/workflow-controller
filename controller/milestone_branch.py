@@ -47,6 +47,7 @@ import datetime
 import hashlib
 import json
 import re
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -1892,10 +1893,11 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     observation = record["last_observation"]
     pr = _verified_pr(ctx, record, number)
     if observation.get("remote_branch") != a or pr.state != "OPEN" or pr.head_oid != a:
-        return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
-                    f"pull request #{number} does not show the acceptance commit {a} yet ({remote}/{branch} is "
-                    f"{observation.get('remote_branch')}; the pull request is {pr.state} at {pr.head_oid})",
-                    ("re-run the step once GitHub shows the pushed head",))
+        return _readiness_wait(ctx, record, Gate(
+            GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
+            f"pull request #{number} does not show the acceptance commit {a} yet ({remote}/{branch} is "
+            f"{observation.get('remote_branch')}; the pull request is {pr.state} at {pr.head_oid})",
+            ("re-run the step once GitHub shows the pushed head",)))
     # 6. fresh: <remote>/<trunk> is an ancestor of A (I7).
     remote_trunk = observation["remote_trunk"]
     if not _ancestor(ctx, remote_trunk, a):
@@ -1912,12 +1914,12 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     if squash:
         gate, notes_status = _sync_for_readiness(ctx, key, record, pr, a)
         if gate is not None:
-            return gate
+            return _readiness_wait(ctx, record, gate)
     # 7. green checks, when the binding's policy requires them.
     if binding_policy(record).milestone_branches.ready_requires_green_checks:
         gate = _checks_gate(ctx, record, number)
         if gate is not None:
-            return gate
+            return _readiness_wait(ctx, record, gate)
     forge = ctx.forge(record["repository"]["forge_repository"])
     if pr.is_draft:
         # The one forge mutation with no persisted intent (I5): it is idempotent, and a
@@ -1931,6 +1933,17 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     record = _write(ctx, key, dict(record, state=READY, pr=_pr_ref(pr), accepted_head=a), "ready", pr=number,
                     accepted_head=a, **extra)
     return _merge_step(ctx, key, record, head, pr)
+
+
+def _readiness_wait(ctx: Context, record: Mapping[str, Any], gate: Gate) -> Gate:
+    """``gate`` as readiness returns it: ``checks_pending`` and
+    ``pr_head_not_accepted`` are waitable when auto-merge applies
+    (auto-merge-release-wait E.1), since the next step merges once they
+    clear; every other gate, and every gate without auto-merge, unchanged."""
+    if gate.code not in (GATE_CHECKS_PENDING, GATE_PR_HEAD_NOT_ACCEPTED) or not auto_merge_applies(record, ctx):
+        return gate
+    return Gate(gate.code, gate.work_item_id, gate.branch, gate.message, gate.exits, gate.merge_method,
+                waitable=True)
 
 
 def _checks_gate(ctx: Context, record: Mapping[str, Any], number: int) -> Gate | None:
@@ -2609,6 +2622,49 @@ def repository_preflight(ctx: Context, *, requested_work_item_id: str | None = N
                      head_policy=_UNSET if found.policy_committed else None)
 
 
+def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None,
+                      on_wait: Callable[[str, str], None] | None = None,
+                      sleep: Callable[[float], None] | None = None,
+                      monotonic: Callable[[], float] | None = None) -> Proceed | Gate:
+    """:func:`repository_preflight`, polled while it returns a waitable gate
+    (auto-merge-release-wait E.2): at most ``ctx.wait_seconds`` from the
+    first waitable gate of this step, one budget across gate changes, a
+    fresh preflight every ``ctx.poll_seconds``. ``on_wait(code, deadline)``
+    is called once per gate code before its first sleep (``deadline`` is
+    the wall-clock end of the budget, from ``ctx.clock``). Returns the last
+    outcome; ``ctx.wait_seconds`` 0 returns the first, never sleeping (I6).
+    The sleep is plain, so Ctrl-C ends it like any other point of a step
+    (E.3)."""
+    sleep = sleep or _sleep
+    monotonic = monotonic or _monotonic
+    outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
+    started: float | None = None
+    deadline = ""
+    announced: set[str] = set()
+    while isinstance(outcome, Gate) and outcome.waitable and ctx.wait_seconds > 0:
+        now = monotonic()
+        if started is None:
+            started = now
+            begun = datetime.datetime.strptime(ctx.clock(), "%Y-%m-%dT%H:%M:%SZ")
+            deadline = (begun + datetime.timedelta(seconds=ctx.wait_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        remaining = ctx.wait_seconds - (now - started)
+        if remaining <= 0:
+            break
+        if outcome.code not in announced:
+            announced.add(outcome.code)
+            if on_wait is not None:
+                on_wait(outcome.code, deadline)
+        sleep(min(ctx.poll_seconds, remaining))
+        outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
+    return outcome
+
+
+#: :func:`waiting_preflight`'s default sleep and clock, module attributes so
+#: a test can replace them for a whole ``run``.
+_sleep: Callable[[float], None] = time.sleep
+_monotonic: Callable[[], float] = time.monotonic
+
+
 def verify_post_step(ctx: Context, binding: Mapping[str, Any], pre_step_tip: str) -> None:
     """The post-step verification of a worker job run under ``binding``:
     ``HEAD`` is still attached to the bound branch, and its tip descends
@@ -2655,7 +2711,29 @@ def _binding_view(record: Mapping[str, Any]) -> dict:
         "last_observation": None if observation is None else {
             key: observation.get(key)
             for key in ("observed_at", "tip", "remote_branch", "remote_trunk", "fresh", "behind")},
+        **_merge_release_view(record),
     }
+
+
+def _merge_release_view(record: Mapping[str, Any]) -> dict:
+    """The record's ``merge`` and ``release`` fields (auto-merge-release-wait
+    F), ``None`` when absent: ``inspect``'s and ``status --json``'s
+    additions."""
+    merge, release = record.get("merge"), record.get("release")
+    return {"merge": None if merge is None else dict(merge), "release": None if release is None else dict(release)}
+
+
+def merge_release_text(view: Mapping[str, Any]) -> str:
+    """``, merge: ...`` and ``, release: ...`` for a binding line, from
+    :func:`_merge_release_view`'s keys; empty when neither is present."""
+    text = ""
+    merge = view.get("merge")
+    if merge is not None:
+        text += f", merge: {merge.get('state')} at {merge.get('head')} (attempt {merge.get('attempts')})"
+    release = view.get("release")
+    if release is not None:
+        text += f", release: {release_text(release)}"
+    return text
 
 
 def _governing(records: Mapping[str, dict], head: gitrepo.HeadState) -> dict | None:
@@ -2696,7 +2774,8 @@ def binding_entries(runtime_root: Path) -> list[dict]:
             pr = record.get("pr")
             entries.append({"work_item_id": work_item_id, "state": record["state"], "branch": record["branch"],
                             "pull_request": None if pr is None else pr.get("number"),
-                            "worktree_root": record["repository"].get("worktree_root")})
+                            "worktree_root": record["repository"].get("worktree_root"),
+                            **_merge_release_view(record)})
     return entries
 
 
@@ -2707,7 +2786,7 @@ def binding_lines(runtime_root: Path) -> list[str]:
     for entry in binding_entries(runtime_root):
         pr_text = "" if entry["pull_request"] is None else f", pull request #{entry['pull_request']}"
         lines.append(f"milestone: {entry['work_item_id']} {entry['state']} on {entry['branch']}{pr_text} "
-                     f"(worktree {entry['worktree_root']})")
+                     f"(worktree {entry['worktree_root']}){merge_release_text(entry)}")
     return lines
 
 

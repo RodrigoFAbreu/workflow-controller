@@ -2873,6 +2873,135 @@ class ReleaseWaitUnchangedTest(_SquashClose):
         self.assertFalse(mb.stops_after_close(self.record()))
 
 
+class _Clock:
+    """A fake monotonic clock and sleep for :func:`mb.waiting_preflight`:
+    each sleep advances the clock by its length and then runs the next
+    scripted change on GitHub's side, if any."""
+
+    def __init__(self, *changes: Callable[[], None]) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+        self.changes = list(changes)
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+        if self.changes:
+            self.changes.pop(0)()
+
+
+class WaitingPreflightTest(_ReleaseWait):
+    """``run``'s bounded wait (``workflow-controller-auto-merge-release-wait``
+    CP5, Design E): the preflight polled while it returns a waitable gate."""
+
+    def wait(self, clock: _Clock, *, wait_seconds: int = 3600, poll_seconds: int = 30):
+        self.waits: list[tuple[str, str]] = []
+        ctx = mb.Context(repo_root=self.ctx.repo_root, runtime_root=self.ctx.runtime_root,
+                         forge_factory=self.ctx.forge_factory, clock=self.ctx.clock,
+                         wait_seconds=wait_seconds, poll_seconds=poll_seconds)
+        return mb.waiting_preflight(ctx, on_wait=lambda code, deadline: self.waits.append((code, deadline)),
+                                    sleep=clock.sleep, monotonic=clock.monotonic)
+
+    def test_one_step_waits_from_pending_checks_to_the_release_and_stops(self) -> None:
+        number = self.open_pr()
+        a = self.accept()
+        published: dict[str, str] = {}
+
+        def release() -> None:
+            m = self.origin_ref("refs/heads/main")
+            self.add_run(m, "completed", "success")
+            self.tag("v1.0.0", m)
+            published["url"] = self.publish("v1.0.0")
+
+        clock = _Clock(lambda: (self.set_checks(number, ("ci", "pass")),
+                                self.gh_edit(number, mergeStateStatus="UNKNOWN")),
+                       lambda: self.gh_edit(number, mergeStateStatus="CLEAN"),
+                       release)
+        outcome = self.wait(clock)
+        record = self.assertStopped(outcome, {"state": "ALREADY_RELEASED", "version": "1.0.0", "tag": "v1.0.0",
+                                              "url": published["url"]})
+        self.assert_closed(a, self.origin_ref("refs/heads/main"))
+        self.assertEqual(clock.sleeps, [30, 30, 30])
+        deadline = "2026-09-25T01:00:00Z"  # the clock's time plus merge.wait_seconds
+        self.assertEqual(self.waits, [(mb.GATE_CHECKS_PENDING, deadline), (mb.GATE_MERGE_PENDING, deadline),
+                                      (mb.GATE_RELEASE_PENDING, deadline)])
+        self.assertEqual(len(self.merges()), 1)
+        self.assertEqual(record["merge"]["state"], "accepted")
+
+    def test_the_budget_is_one_per_step_and_returns_the_last_gate(self) -> None:
+        number, a = self.to_pending()
+        clock = _Clock(*[lambda: None] * 2, lambda: self.gh_edit(number, mergeStateStatus="UNKNOWN"),
+                       lambda: self.set_checks(number, ("ci", "pass")))
+        gate = self.assertGate(self.wait(clock, wait_seconds=100), mb.GATE_MERGE_PENDING)
+        self.assertTrue(gate.waitable)
+        # Each sleep is at most the poll, and together they never pass the budget.
+        self.assertEqual(clock.sleeps, [30, 30, 30, 10])
+        # merge_pending appeared at the deadline: returned, never waited on, so never announced.
+        self.assertEqual([code for code, _ in self.waits], [mb.GATE_CHECKS_PENDING])
+        self.assertEqual(self.merges(), [])
+
+    def test_a_gate_seen_again_is_announced_once(self) -> None:
+        number, a = self.to_pending()
+        clock = _Clock()
+        self.assertGate(self.wait(clock, wait_seconds=90), mb.GATE_CHECKS_PENDING)
+        self.assertEqual(clock.sleeps, [30, 30, 30])
+        self.assertEqual([code for code, _ in self.waits], [mb.GATE_CHECKS_PENDING])
+
+    def test_zero_seconds_never_sleeps(self) -> None:
+        self.to_pending()
+        clock = _Clock()
+        gate = self.assertGate(self.wait(clock, wait_seconds=0), mb.GATE_CHECKS_PENDING)
+        self.assertTrue(gate.waitable)
+        self.assertEqual((clock.sleeps, self.waits), ([], []))
+
+    def test_a_gate_that_is_not_waitable_returns_at_once(self) -> None:
+        number, a = self.to_pending()
+        for checks, code in ((("ci", "fail"), mb.GATE_CHECKS_FAILING), (("ci", "cancel"), mb.GATE_CHECKS_CANCELLED)):
+            with self.subTest(code=code):
+                self.set_checks(number, checks)
+                clock = _Clock()
+                gate = self.assertGate(self.wait(clock), code)
+                self.assertFalse(gate.waitable)
+                self.assertEqual((clock.sleeps, self.waits), ([], []))
+        self.set_checks(number, ("ci", "pass"))
+        self.gh_edit(number, mergeStateStatus="BEHIND")
+        clock = _Clock()
+        self.assertFalse(self.assertGate(self.wait(clock), mb.GATE_INTEGRATION_REQUIRED).waitable)
+        self.assertEqual(clock.sleeps, [])
+
+    def test_readiness_waits_on_a_lagging_pull_request_head(self) -> None:
+        number = self.open_pr()
+        a = self.accept()
+        view = dict(self.gh_pr_view(number), headRefOid=self.record()["branch_point"], mergeStateStatus="CLEAN")
+        view = {k: view[k] for k in (*fake_gh_fields(), "mergeStateStatus")}
+        # The cell's own read, then readiness's: both still show the old head.
+        self.gh_edit(number, lagged_reads=2, lagged_view=view)
+        gate = self.assertGate(self.preflight(), mb.GATE_PR_HEAD_NOT_ACCEPTED)
+        self.assertTrue(gate.waitable)
+        self.assertEqual(self.record()["state"], mb.PR_OPEN)
+
+
+class ReadinessNotWaitableTest(_SquashClose):
+    def test_without_auto_merge_readiness_gates_are_not_waitable(self) -> None:
+        number = self.open_pr()
+        self.accept()
+        gate = self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING)
+        self.assertFalse(gate.waitable)
+
+    def test_with_merge_auto_off_readiness_gates_are_not_waitable(self) -> None:
+        self.write_policy(auto_merge_policy())
+        commit_all(self.clone, "Opt in")
+        self.push("main")
+        self.ctx = mb.Context(repo_root=self.ctx.repo_root, runtime_root=self.ctx.runtime_root,
+                              forge_factory=self.ctx.forge_factory, clock=self.ctx.clock, auto_merge=False)
+        self.open_pr()
+        self.accept()
+        self.assertFalse(self.assertGate(self.preflight(), mb.GATE_CHECKS_PENDING).waitable)
+
+
 def fake_gh_fields() -> tuple[str, ...]:
     from tests import fake_gh
 

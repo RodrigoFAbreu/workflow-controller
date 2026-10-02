@@ -3634,7 +3634,7 @@ class WorkflowQueryFeedbackPathTest(unittest.TestCase):
         self.assertEqual(list(inspect.signature(job.execute_step).parameters),
                          ["managed_repo", "work_item_id", "identity", "runtime", "permission_mode", "timeout",
                           "claude_bin", "routing", "run_id", "drain_detach_seconds", "controller_settings",
-                          "auto_merge", "wait_seconds", "poll_seconds"])
+                          "auto_merge", "wait_seconds", "poll_seconds", "on_wait"])
         self.assertEqual(list(inspect.signature(workflow_contract.bind).parameters), ["contract"])
         self.assertIsNone(workflow_contract._answers_factory)
         self.assertIsInstance(self.bound().answers, workflow_contract.QueryAnswers)

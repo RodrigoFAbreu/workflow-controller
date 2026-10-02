@@ -2993,6 +2993,12 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         cli.cmd_run(args, self.runtime_root, self.ident)
         self.assertEqual((calls[-1]["auto_merge"], calls[-1]["wait_seconds"], calls[-1]["poll_seconds"]),
                          (False, 600, 15))
+        # The wait is reported in the open run's log, once per gate code (E.2).
+        calls[-1]["on_wait"]("checks_pending", "2026-10-02T13:00:00Z")
+        [waiting] = [json.loads(line) for line in
+                     (self.runtime_root / "runs" / cli._open_run.run_id / "events.jsonl").read_text().splitlines()
+                     if json.loads(line)["event"] == "waiting"]
+        self.assertEqual((waiting["gate"], waiting["deadline"]), ("checks_pending", "2026-10-02T13:00:00Z"))
 
     def test_execute_step_hands_the_merge_rows_to_the_preflight_context(self) -> None:
         received = []

@@ -851,7 +851,8 @@ def _print_branch_blocks(blocks: dict) -> None:
             f"{'fresh' if observed['fresh'] else 'behind'} ({observed['behind']} behind the trunk), "
             f"observed {observed['observed_at']}")
         print(f"milestone branch: {binding['branch']} for {binding['work_item_id']} ({binding['state']}), "
-              f"branch point {binding['branch_point']}, {pr_text}, {drift}")
+              f"branch point {binding['branch_point']}, {pr_text}, {drift}"
+              f"{milestone_branch.merge_release_text(binding)}")
 
 
 def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
@@ -1088,6 +1089,7 @@ def _run_one_step(
         auto_merge=effective["merge.auto"],
         wait_seconds=effective["merge.wait_seconds"] if wait else 0,
         poll_seconds=effective["merge.poll_seconds"],
+        on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
     )
 
     if isinstance(result, Decision):

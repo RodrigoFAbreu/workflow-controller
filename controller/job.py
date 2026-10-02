@@ -4567,6 +4567,7 @@ def execute_step(
     auto_merge: bool = True,
     wait_seconds: int = 0,
     poll_seconds: int = 30,
+    on_wait: Callable[[str, str], None] | None = None,
 ) -> JobRecord | Decision:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -4605,7 +4606,11 @@ def execute_step(
 
     ``auto_merge``, ``wait_seconds`` and ``poll_seconds`` (auto-merge-
     release-wait A.2) are the ``merge.*`` settings the repository preflight
-    reads through its :class:`~controller.milestone_branch.Context`."""
+    reads through its :class:`~controller.milestone_branch.Context`.
+    ``wait_seconds`` above 0 (``run`` only, E.2) lets the preflight poll a
+    waitable gate (:func:`~controller.milestone_branch.waiting_preflight`)
+    under the lock this call holds; ``on_wait(code, deadline)`` is called
+    once per gate code it waits on. Only the final outcome is recorded."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
@@ -4613,7 +4618,7 @@ def execute_step(
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
             lifecycle_lock=lifecycle_lock, routing=routing, run_id=run_id,
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
-            auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds,
+            auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
         )
 
 
@@ -4689,6 +4694,7 @@ def _execute_step_locked(
     auto_merge: bool = True,
     wait_seconds: int = 0,
     poll_seconds: int = 30,
+    on_wait: Callable[[str, str], None] | None = None,
 ) -> JobRecord | Decision:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -4737,7 +4743,8 @@ def _execute_step_locked(
     branch_ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime,
                                           events=preflight_events, auto_merge=auto_merge,
                                           wait_seconds=wait_seconds, poll_seconds=poll_seconds)
-    preflight = milestone_branch.repository_preflight(branch_ctx, requested_work_item_id=work_item_id)
+    preflight = milestone_branch.waiting_preflight(branch_ctx, requested_work_item_id=work_item_id,
+                                                   on_wait=on_wait)
     # Step 1c (workflow-controller-workflow-2-6-integration CP3, I3): the
     # installed Workflow release must still be the admitted one -- checked
     # here, after the preflight (close-out switches to the trunk, which may

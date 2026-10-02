@@ -38,7 +38,7 @@ A policy without the key behaves exactly as 1.5.0 (I1).
 | CP2 The forge surface | Complete | See below |
 | CP3 The merge at readiness | Complete | See below |
 | CP4 The release wait, close out and stop | Complete | See below |
-| CP5 The bounded wait in `run`, and `status` | Not started | |
+| CP5 The bounded wait in `run`, and `status` | Complete | See below |
 | CP6 Documentation and full verification | Not started | |
 
 ### CP1 -- the two switches
@@ -324,3 +324,67 @@ A policy without the key behaves exactly as 1.5.0 (I1).
     `test_trunk_orchestration_e2e`. 902 tests pass.
   - `test_job` and `test_job_validation` (274) pass.
   - `generate_no_policy_lifecycle.py --check` passes.
+
+### CP5 -- the bounded wait in `run`, and `status`
+
+- `controller/milestone_branch.py`:
+  - `waiting_preflight(ctx, *, requested_work_item_id, on_wait, sleep, monotonic)` (E.2) wraps
+    `repository_preflight`. While the outcome is a waitable gate and less than
+    `ctx.wait_seconds` has passed since the step's first waitable gate, it calls
+    `on_wait(code, deadline)` once per gate code, sleeps `min(ctx.poll_seconds, remaining)` and
+    runs the full preflight again. One budget per step, across gate changes. A gate reached at the
+    deadline is returned, not announced. `wait_seconds` 0 returns the first outcome without
+    sleeping. The deadline is `ctx.clock()` plus the budget. The default sleep and clock are the
+    module attributes `_sleep`/`_monotonic`, so a test can replace them for a whole `run`.
+  - E.1 at readiness: `_readiness_wait` marks `checks_pending` (from the checks and from a title or
+    body edit) and `pr_head_not_accepted` waitable when `auto_merge_applies`. CP3 and CP4 already
+    mark the `READY`-cell and release-wait gates. Without auto-merge, or with `merge.auto: false`,
+    readiness gates stay unwaitable.
+  - F: `inspect`'s `milestone_branch` block and `status --json`'s `bindings` entries gain
+    `merge` and `release` (the record's fields, `None` when absent). `merge_release_text` appends
+    `, merge: <state> at <head> (attempt <n>)` and `, release: <release_text>` to the `status`
+    `milestone:` line and `inspect`'s `milestone branch:` line, only when present.
+- `controller/job.py`: `execute_step` and `_execute_step_locked` gain `on_wait`. The preflight
+  runs through `waiting_preflight` under the lock the step already holds (E.4). Only the final
+  outcome is recorded: a gate's job record, or none for the D.4 stop.
+- `controller/cli.py`: `_run_one_step` passes `on_wait`, which writes the run event `waiting`
+  (`gate`, `deadline`). `wait_seconds` is still `0` for `step` (CP1).
+- `controller/observe.py`: `follow` renders `waiting at <gate> until <deadline>`.
+- Ctrl-C (E.3) needs no new code. `KeyboardInterrupt` leaves the sleep, the lock's context
+  manager releases the lock, and `cli.main`'s `finally` writes `run_interrupted`. No job record
+  is written for the waiting step.
+- No job-record field is added, so the no-policy golden is unchanged.
+- Tests:
+  - `tests/test_pull_request_lifecycle.py` `WaitingPreflightTest`, with a fake clock whose sleeps
+    run scripted GitHub changes:
+    - one call waits through `checks_pending` → `READY` → `merge_pending` (`UNKNOWN`) → merged →
+      `release_pending` → released → closed out and stopped, announcing each gate once with the
+      deadline;
+    - the budget expiring at 100 s with a 30 s poll sleeps 30, 30, 30, 10 and returns the last
+      gate;
+    - a repeated gate is announced once;
+    - `wait_seconds` 0 never sleeps;
+    - `checks_failing`, `checks_cancelled` and `integration_required` return at once;
+    - readiness's lagging pull request head is waitable.
+  - `ReadinessNotWaitableTest`: a binding without the key, and `merge.auto: false`.
+  - `tests/test_trunk_preflight.py` `RunWaitTest`, through `cli.main` with a release-wait policy:
+    - one `run` step waits from `checks_pending` through `merge_pending` and `release_pending` to
+      the stop. It exits 0, launches no worker and writes no job record. The run log reads
+      `run_started`, `step_started`, three `waiting`, `no_action`, `run_ended`. `status` and
+      `status --json` show the merge and the release;
+    - the budget (`merge.wait_seconds: 50`) expiring writes the `GATE_BLOCKED` job record;
+    - `step`, and `run` with `merge.wait_seconds: 0`, never sleep and log no `waiting`;
+    - `inspect` (JSON and text) shows the merge;
+    - Ctrl-C: a child `run` is sent `SIGINT` once its log shows `waiting`. The run ends
+      `interrupted` with `run_interrupted` last, no job record is written and the binding is
+      unchanged. The next `step` merges from the last written state.
+  - `ObservationTest`: the `inspect` binding key set is the old one plus `merge` and `release`,
+    both `None`. `status --json` entries carry them as `None`.
+  - `tests/test_cli.py`: `on_wait` writes the `waiting` run event. `tests/test_evidence.py`: the
+    `execute_step` parameter pin gains `on_wait`. `tests/test_observe.py`: the `waiting` text.
+
+- Verification (under a reaping subreaper, without `FORCE_COLOR`):
+  - The full suite: `python3 tools/run_tests.py`, 2793 tests in 6 shards, all pass.
+  - The `ObservationTest`/status pins were then tightened, and `test_trunk_preflight` plus the two
+    new `test_pull_request_lifecycle` classes were re-run: 45 tests pass.
+  - `generate_no_policy_lifecycle.py --check` passes unchanged.

@@ -5569,7 +5569,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-auto-merge-release-wait-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-auto-merge-release-wait-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 7,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -5654,8 +5654,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 39,
-      "last_transition": "2026-10-02T08:51:33Z",
+      "state_revision": 41,
+      "last_transition": "2026-10-02T09:14:38Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5674,6 +5674,16 @@
           "bundle_id": "0a4b1119782b938cec67a1c404c90236ea75349090b16157ababf9ed816b885f",
           "plan_revision": 7
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "39d840744c0037f973c2b07cd703e2c7dbbb7e165c05a3f2f8ce26bbaeebe41c",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "b147ee319d40834d71b6e22a57a60d88e6ac2c6a52486b66673e23b7b5fa50f1",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-02T08:57:35Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

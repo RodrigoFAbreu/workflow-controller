@@ -5569,7 +5569,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-auto-merge-release-wait-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-auto-merge-release-wait-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -5635,7 +5635,217 @@
         "waived_guarantees": [],
         "recorded_at": "2026-10-02T07:27:22Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "c6153442bec13a73685abf6568e09ee1db191db5637af16e068474919f7c162f",
+        "approved_review_content_id": "42a96a792d3607abc100f444a84f0dc6190f7cc50fbbcd04b93d2433a59d823b",
+        "review_content_manifest": [
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9b10495c57ef30a81a56a9841b45d9571c7dc1ed"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1bb785c1cb0bfc8f9edc2f3a1ae013ffdefac189"
+          },
+          {
+            "path": "controller/decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9af184c6e744972fc7dc5fab3dc4e77aff3cd167"
+          },
+          {
+            "path": "controller/forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ec2b43f458729b1b5fc3b2e3c3e4e63da926a49c"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e32557e1138c2a1892298565e55c1790b9f18e3"
+          },
+          {
+            "path": "controller/milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fdecd386639b5fb321950187f5db5987966b8f30"
+          },
+          {
+            "path": "controller/observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bb89304eb338e309e8daeead31636bce36dc9979"
+          },
+          {
+            "path": "controller/release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d572719432498120af55e0250d27f92227cd7e3e"
+          },
+          {
+            "path": "controller/repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ae53565163a80024bfa941830d30b6dd196363c"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7d355336c2859a2b6d75d509c02846cd4e67ee4c"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "833eebd03358b4b6c189e25de41944a3befd20a0"
+          },
+          {
+            "path": "docs/adr/0009-auto-merge-and-release-wait.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0cc89f23710b9c0c635a2558153259f481ba774d"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-auto-merge-release-wait-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d0f736db7fb7ed923ff9bd51a1e64c15fb217726"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7dab724fbff4061f8f82483706df4365242cb14c"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "74d26f96443cc4476d0092694fec9fc3ed5839e9"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4f06ca19d6b4d4dd8944e78937be9cf4454bc901"
+          },
+          {
+            "path": "docs/guide/concepts.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0a5bfadc57d8b61167687a04a766618a770e7616"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "99b21f45a11c8c177d8716d7db7d7a7fc570be2f"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3a2e2ce8ec62170f79636cf9e737b04937f94ec8"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2d251b5d48d599d92eb836d5eb906b8b4be0e098"
+          },
+          {
+            "path": "tests/fake_gh.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "efb3c5f131c538412dd83c7be5a9ec985fe8bac1"
+          },
+          {
+            "path": "tests/golden/generate_no_policy_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3546843aa9354c624d172becab36460803dcd59b"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "38b63bf42411ed6a58b60e1553992797482ec940"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e6684895886667dc98808777b7042f8f85e218f0"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f6cb61c8a419a16bc3e03de0331e8896d7e8960b"
+          },
+          {
+            "path": "tests/test_forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e37dd47fd888d515914a2184627a26d1327c93d6"
+          },
+          {
+            "path": "tests/test_no_rewrite_invariants.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f9087b1af3f516520613d8f83e2945859dbbf7e3"
+          },
+          {
+            "path": "tests/test_observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "eae9a12313bcb56ce83ee03af2d91202fb2826d7"
+          },
+          {
+            "path": "tests/test_pull_request_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5a1c2f8019baf8c625a1f4c7ff2b1ae2994fc05e"
+          },
+          {
+            "path": "tests/test_release_txn.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "100ed6d77132f53360441606a94fd102ab02ad72"
+          },
+          {
+            "path": "tests/test_repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "05dd26af3b5bbc8e8c077711a7ce095c47f80ec8"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4ecdce49d731b052e4be97b8761f5cc65fce3abb"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d97497d9323c809b61f6103489d7a3ba14aa85b2"
+          }
+        ],
+        "reviewed_content_commit": "e67ba6816837e1e77c3efdafb8b04d9261e07a8f",
+        "legacy_evidence": null,
+        "user_confirmation": "implementation workflow-controller-auto-merge-release-wait",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-02T16:31:21Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "fcdfd33b28045e9a06f1e610a7d80b57dc43161ff62e6844b4fb37969cbea1cc",
@@ -5654,8 +5864,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 52,
-      "last_transition": "2026-10-02T14:08:39Z",
+      "state_revision": 55,
+      "last_transition": "2026-10-02T16:31:21Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5676,14 +5886,19 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "707a0ad1a60634172ca870540c170a05c297b746b8dd1d944b38d5dbf92fcac7",
+        "review_content_id": "42a96a792d3607abc100f444a84f0dc6190f7cc50fbbcd04b93d2433a59d823b",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "ed2169ddb3878f8c59eeecd76f8d8097e912ee149d8c012397d363be14f61ac2",
+          "bundle_id": "c6153442bec13a73685abf6568e09ee1db191db5637af16e068474919f7c162f",
           "verdict": "APPROVE",
-          "round": 5,
-          "completed_at": "2026-10-02T13:48:06Z"
+          "round": 6,
+          "completed_at": "2026-10-02T14:13:45Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "c6153442bec13a73685abf6568e09ee1db191db5637af16e068474919f7c162f",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-10-02T14:25:49Z"
+        }
       }
     }
   }

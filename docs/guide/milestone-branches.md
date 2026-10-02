@@ -386,7 +386,8 @@ and its checks, and the first of these that holds decides:
 3. the local tip is not the acceptance commit (a commit after it, pushed
    or not): `post_acceptance_commits`. The Controller merges only the
    accepted head; merge anyway on GitHub if you want the later commits;
-4. GitHub accepted an earlier merge that is not visible yet:
+4. GitHub accepted an earlier merge that is not visible yet, or the
+   three attempts are spent and one's outcome is unknown (below):
    `merge_pending`, without sending again. A read that still shows the
    pull request open, with whatever checks and merge state, does not
    change this;
@@ -420,13 +421,18 @@ it, and treats the merge it makes like any hand merge.
 Before each send the binding records the intent (`merge.state:
 "sending"`, the head and the attempt count), so a crash anywhere is
 safe: the next step re-reads and decides again, and a duplicate send of
-a merge that already happened is refused by GitHub. A refused merge is
+a merge that already happened is refused by GitHub. That "already
+merged" refusal comes from GitHub's write, not from a read that can lag
+it, so the Controller records the merge as accepted, sends nothing more
+and waits for it to be visible. Any other refused merge is
 `merge_pending` with GitHub's message, sent again only on a later re-read
 that shows the pull request mergeable. After three refused attempts the
 Controller refuses (exit `20`) and sends nothing more for this pull
-request; merge on GitHub with "Squash and merge" (the message names
+request: merge on GitHub with "Squash and merge" (the message names
 the cause, for example squash merging turned off), and the next step
-closes out. `milestone-binding --new-pr` (after you close the pull
+closes out. When the three attempts are spent but one of them ended in
+a crash, whose outcome is unknown, GitHub may have merged: the step
+waits instead (`merge_pending`) and sends nothing more. `milestone-binding --new-pr` (after you close the pull
 request) starts a new merge record: the replacement pull request gets
 its own three attempts, and an `accepted` merge of the closed one does
 not carry over.

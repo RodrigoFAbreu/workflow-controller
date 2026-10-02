@@ -1000,6 +1000,8 @@ def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
     merge = dict(record.get("merge") or {})
     if merge.get("state") == "accepted":
         return _merge_accepted_gate(ctx, record, number)
+    if _merge_unconfirmed(merge):
+        return _merge_unconfirmed_gate(ctx, record, number, merge)
     remote_branch = (record.get("last_observation") or {}).get("remote_branch")
     if remote_branch != a or pr.head_oid != a:
         return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
@@ -1067,6 +1069,32 @@ def _merge_accepted_gate(ctx: Context, record: Mapping[str, Any], number: int) -
                 repo_policy.MERGE_METHOD_SQUASH, waitable=True)
 
 
+def _merge_unconfirmed(merge: Mapping[str, Any]) -> bool:
+    """The attempt budget is spent, but not every attempt was refused: a
+    crash or a lost reply left an outcome unknown, and GitHub may have
+    merged. Nothing more is sent, and the record is not refused."""
+    attempts = int(merge.get("attempts") or 0)
+    return attempts >= MERGE_ATTEMPTS and int(merge.get("refusals") or 0) < attempts
+
+
+def _merge_unconfirmed_gate(ctx: Context, record: Mapping[str, Any], number: int,
+                            merge: Mapping[str, Any]) -> Gate:
+    """The spent budget with an unknown outcome: like ``accepted``, it
+    waits for the merge to be visible and is never sent again."""
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    recover = f"close it on GitHub and recover the binding with {_cli(record['work_item_id'], NEW_PR, ctx.repo_root)}"
+    attempts = int(merge.get("attempts") or 0)
+    unknown = attempts - int(merge.get("refusals") or 0)
+    refused = f" (last refusal: {merge.get('refusal')})" if merge.get("refusal") else ""
+    return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
+                f"GitHub may already have merged pull request #{number} at {record['accepted_head']}: the "
+                f"outcome of {unknown} of the Controller's {attempts} merges is unknown (a crash or a lost reply), "
+                f"GitHub refused the others{refused}, and a read can lag GitHub's write. The Controller sends no "
+                f"more. If the merge never appears: {by_hand}, or {recover}",
+                ("re-run the step once GitHub shows the merge", by_hand, recover),
+                repo_policy.MERGE_METHOD_SQUASH, waitable=True)
+
+
 def _merge_refusal(record: Mapping[str, Any], number: int, merge: Mapping[str, Any]) -> BranchBindingError:
     """C.3 step 4 at the attempt budget: the Controller sends nothing more
     for this record; a person merges."""
@@ -1075,6 +1103,10 @@ def _merge_refusal(record: Mapping[str, Any], number: int, merge: Mapping[str, A
                    f"(last: {merge.get('refusal')}); it sends no more. {by_hand[0].upper()}{by_hand[1:]}: the next "
                    f"step closes out as for any merge", work_item_id=record["work_item_id"], branch=record["branch"],
                    exits=[by_hand], pr=number, merge=dict(merge))
+
+
+#: GitHub's refusal of a merge because the pull request is merged already.
+_ALREADY_MERGED = re.compile(r"\balready merged\b", re.IGNORECASE)
 
 
 def _forge_message(exc: ForgeError) -> str:
@@ -1101,10 +1133,22 @@ def _send_merge(ctx: Context, key: str, record: dict, pr: forge_mod.PullRequest,
         if reread.state != "OPEN":
             return _pr_left_open(ctx, key, record, reread)
         message = _forge_message(exc)
-        if message != merge.get("refusal"):
-            merge = dict(merge, refusal=message)
+        if _ALREADY_MERGED.search(message):
+            # GitHub's own write path reports the merge (C.3: a duplicate of
+            # a merge that happened is refused as already merged), which a
+            # lagging read cannot contradict: never sent again.
+            record = _write(ctx, key, dict(record, merge=dict(merge, state="accepted", refusal=message)),
+                            "merge_accepted", pr=number, head=a, message=message)
+            return _merge_accepted_gate(ctx, record, number)
+        distinct = message != merge.get("refusal")
+        merge = dict(merge, refusal=message, refusals=int(merge.get("refusals") or 0) + 1)
+        if distinct:
             record = _write(ctx, key, dict(record, merge=merge), "merge_refused", pr=number,
                             attempts=merge["attempts"], message=message)
+        else:
+            record = _write(ctx, key, dict(record, merge=merge))
+        if _merge_unconfirmed(merge):
+            return _merge_unconfirmed_gate(ctx, record, number, merge)
         if merge["attempts"] >= MERGE_ATTEMPTS:
             raise _merge_refusal(record, number, merge) from None
         return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
@@ -2905,6 +2949,10 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
                 return _prediction("wait_merge", f"GitHub accepted the merge at {record['accepted_head']}; the step "
                                                  f"waits for it to be visible", record=record, gate=GATE_MERGE_PENDING,
                                    network=True)
+            if _merge_unconfirmed(merge):
+                return _prediction("wait_merge", f"GitHub may already have merged at {record['accepted_head']}; the "
+                                                 f"step waits for it to be visible and sends no more", record=record,
+                                   gate=GATE_MERGE_PENDING, network=True)
             return _prediction("merge", f"the Controller merges the pull request at {record['accepted_head']} if "
                                         f"GitHub reports it mergeable with green checks", record=record, network=True)
         return _prediction("gate", "the pull request is ready; a human merges it", record=record,

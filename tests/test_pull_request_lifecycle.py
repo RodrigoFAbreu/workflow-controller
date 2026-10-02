@@ -2397,6 +2397,68 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(gitrepo.first_parent_log(self.clone, before, m), [m])
         self.assert_closed(a, m)
 
+    def test_a_lost_reply_with_reads_lagging_past_the_budget_waits_for_the_merge(self) -> None:
+        # The first send merged but its reply was lost, and the reads stay
+        # OPEN for longer than the attempt budget. GitHub refuses the one
+        # duplicate as already merged, which records the merge as accepted:
+        # nothing more is sent and the step waits, never the terminal
+        # manual-merge refusal, until the read shows the merge.
+        number, a = self.to_pending()
+        self.gh_edit(number, merge_reply_lost=True, merge_read_lag=8)
+        self.set_checks(number, ("ci", "pass"))
+        before = self.origin_ref("refs/heads/main")
+        gates = self.until_closed_out()
+        self.assertTrue(all(gate.code == mb.GATE_MERGE_PENDING and gate.waitable for gate in gates))
+        self.assertIn("is not visible yet", gates[-1].message)
+        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a, a])
+        self.assertEqual(self.events_named("merge_accepted")[-1]["message"], f"X Pull request #{number} was "
+                                                                             f"already merged")
+        m = self.origin_ref("refs/heads/main")
+        self.assertEqual(gitrepo.first_parent_log(self.clone, before, m), [m])
+        self.assert_closed(a, m)
+
+    def test_a_crash_after_the_last_attempt_merged_waits_for_the_merge(self) -> None:
+        # Two refused attempts, then the third merges and crashes before
+        # its outcome is recorded, with the reads lagging: the budget is
+        # spent, but not every attempt was refused, so the step waits.
+        real = forge_mod.GhForge.merge_squash
+        refusal = ForgeUndecidableError("gh pr merge failed (exit 1)", evidence={"stderr": "Refused.\n"})
+        sends = []
+
+        def refuse_twice_then_merge_and_crash(forge, *args, **kwargs):
+            sends.append(kwargs["head"])
+            if len(sends) <= 2:
+                raise refusal
+            real(forge, *args, **kwargs)
+            raise KeyboardInterrupt
+
+        number, a = self.to_held_ready()
+        self.gh_edit(number, mergeStateStatus="CLEAN", merge_read_lag=6)
+        with mock.patch.object(forge_mod.GhForge, "merge_squash", refuse_twice_then_merge_and_crash):
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+            with self.assertRaises(KeyboardInterrupt):
+                self.preflight()
+            merge = self.record()["merge"]
+            self.assertEqual((merge["state"], merge["attempts"], merge["refusals"]), ("sending", 3, 2))
+            self.assertEqual(mb.predict(self.ctx)["action"], "wait_merge")
+            gates = self.until_closed_out()
+        self.assertTrue(gates)
+        self.assertTrue(all(gate.code == mb.GATE_MERGE_PENDING and gate.waitable for gate in gates))
+        self.assertIn("may already have merged", gates[0].message)
+        self.assertIn("the outcome of 1 of the Controller's 3 merges is unknown", gates[0].message)
+        self.assertEqual(sends, [a, a, a])
+        self.assert_closed(a, self.origin_ref("refs/heads/main"))
+
+    def until_closed_out(self) -> list:
+        gates = []
+        for _ in range(12):
+            result = self.preflight()
+            if getattr(result, "action", None) == "closed_out":
+                return gates
+            gates.append(self.assertGate(result, mb.GATE_MERGE_PENDING))
+        self.fail("the merged pull request never closed out")
+
     def test_a_crash_between_the_intent_and_the_call(self) -> None:
         number, a = self.to_held_ready()
         self.gh_edit(number, mergeStateStatus="CLEAN")

@@ -401,6 +401,52 @@ class InheritedDescriptorTest(unittest.TestCase):
         self.assertIn("No recorded worker process group", ctx.exception.message)
         self.assertNotIn("waiting_run", ctx.exception.evidence)
 
+    def test_exit_45_keeps_recorded_worker_guidance_when_a_worker_holds_the_lock_and_a_bystander_run_waits(self) -> None:
+        # Implementation review round 9, missing test: a recorded worker holds
+        # the lock while an unrelated live run has a waiting-looking record.
+        root = process_fixtures.scratch_git_repo(self)
+        held = lock.acquire_lifecycle_lock(root)
+        self.addCleanup(held.release)
+        member_box: list[int] = []
+
+        def _await_member_gone() -> None:
+            for member in member_box:
+                process_fixtures.wait_until(lambda: process_fixtures.read_stat(member) is None, timeout=10)
+
+        self.addCleanup(_await_member_gone)
+        leader = _spawn(self, [sys.executable, "-c", _LEADER_WITH_BACKGROUND_MEMBER, str(held.fd)],
+                        pass_fds=(held.fd,), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        member = int(leader.stdout.readline())
+        member_box.append(member)
+        leader_ticks = process_fixtures.read_stat(leader.pid)[2]
+        leader.stdin.write("\n")
+        leader.stdin.flush()
+        leader.wait(timeout=10)
+        held.release()
+        self.assertIsNotNone(process_fixtures.read_stat(member))
+
+        runtime = Path(tempfile.mkdtemp(prefix="f3-lock-runtime-"))
+        self.addCleanup(shutil.rmtree, runtime, True)
+        (runtime / "jobs").mkdir()
+        (runtime / "jobs" / "job-orphan.json").write_text(json.dumps({
+            "schema_version": 1, "job_id": "job-orphan", "target_repo": str(root), "status": "LAUNCHED",
+            "worker_process": process_fixtures.worker_process_dict(leader.pid, start_ticks=leader_ticks)}))
+        bystander = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"])
+        self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(bystander.pid) is not None))
+        self._waiting_run_record(runtime, root, bystander.pid)
+        managed_repo = fixtures.build_target_managed_repository(root)
+
+        with self.assertRaises(LifecycleWorkerActiveError) as ctx:
+            job._acquire_lifecycle_lock(runtime, managed_repo)
+        message = ctx.exception.message
+        self.assertIn("job-orphan", message)
+        self.assertIn(f"kill -TERM -- -{leader.pid}", message)
+        self.assertNotIn("run-w", message)
+        self.assertNotIn("no worker is running", message)
+        self.assertNotIn("waiting_run", ctx.exception.evidence)
+        self.assertEqual(ctx.exception.evidence["recorded_workers"],
+                         [{"job_id": "job-orphan", "verdict": "active"}])
+
 
 # ---------------------------------------------------------------------------
 # Every other lock failure.

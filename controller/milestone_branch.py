@@ -1443,13 +1443,18 @@ def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.R
 
 def _release_failed_shown(ctx: Context, key: str, record: Mapping[str, Any], detail: str) -> bool:
     """Whether this binding's last ``release_failed`` event has ``detail``
-    (D.5: once per distinct detail, not per poll)."""
+    (D.5: once per distinct detail, not per poll). The log is presentation
+    (:func:`runtime.append_jsonl`), so a torn or unreadable line is
+    skipped: at worst the event is written once more."""
     path = Path(ctx.runtime_root) / events_rel(key, record["work_item_id"])
     last = None
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            event = json.loads(line) if line.strip() else {}
-            if event.get("event") == "release_failed" \
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("event") == "release_failed" \
                     and event.get("binding_generation") == record["binding_generation"]:
                 last = event.get("detail")
     return last == detail

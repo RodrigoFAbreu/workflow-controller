@@ -430,6 +430,18 @@ A policy without the key behaves exactly as 1.5.0 (I1).
   - The protected-path diff from `854d25c` over `.workflow-controller/policy.json`,
     `pyproject.toml`, `setup.py` and `.github/workflows/` is empty (I9).
 
+### Self-review (`SELF_REVIEWING_IMPLEMENTATION`)
+
+The whole diff from `854d25c` was reviewed before implementation revision 1's bundle. No
+Blocking findings. One Important finding is fixed:
+- I1: the release wait's `release_failed` once-per-detail check (`_release_failed_shown`) parsed
+  the binding's events file with a strict `json.loads`. That log is presentation only
+  (`runtime.append_jsonl`: one `write()` per line, no `fsync`), so a torn line made every later
+  step of the binding fail with a `JSONDecodeError`. It now skips a line that does not parse or
+  is not an object; at worst the event is written once more. The new
+  `ReleaseWaitTest.test_a_torn_event_line_does_not_stop_the_release_wait` errors without the fix
+  and passes with it.
+
 ## Release notes
 
 ### Auto-merge and the wait for the release (1.6.0)

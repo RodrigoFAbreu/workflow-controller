@@ -2660,6 +2660,19 @@ class ReleaseWaitTest(_ReleaseWait):
         self.publish("v1.0.0")
         self.assertEqual(self.preflight().action, "closed_out")
 
+    def test_a_torn_event_line_does_not_stop_the_release_wait(self) -> None:
+        a, m, outcome = self.merge()
+        self.add_run(m, "completed", "failure")
+        gate = self.preflight()
+        self.assertEqual(len(self.events_named("release_failed")), 1)
+        path = self.rt / mb.events_rel(self.key, WID)
+        with path.open("ab") as log:
+            log.write(b'{"at": "2026-10-02T00:00:00Z", "event": "rel\n[]\n')  # a torn line, then a non-object
+        self.assertEqual(self.preflight(), gate)
+        # The log is presentation: the event may be written once more, never a crash.
+        self.assertLessEqual(len([line for line in path.read_text().splitlines()
+                                  if '"release_failed"' in line]), 2)
+
     def test_a_successful_run_that_published_nothing_fails(self) -> None:
         a, m, outcome = self.merge()
         self.add_run(m, "completed", "success")

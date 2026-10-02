@@ -2380,6 +2380,23 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(len(self.merges()), 1)
         self.assertEqual(self.events_named("merge_refused"), [])
 
+    def test_a_lost_reply_with_a_lagging_read_is_sent_once_more_and_merges_once(self) -> None:
+        # C.3: the outcome is unknown, so the record stays "sending"; the
+        # one re-send is a merge bound to A, which GitHub refuses as already
+        # merged, and the re-read adopts MERGED. One squash commit lands.
+        number, a = self.to_pending()
+        self.gh_edit(number, merge_reply_lost=True, merge_read_lag=2)
+        self.set_checks(number, ("ci", "pass"))
+        before = self.origin_ref("refs/heads/main")
+        gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+        self.assertTrue(gate.waitable)
+        self.assertEqual((self.record()["merge"]["state"], self.record()["merge"]["attempts"]), ("sending", 1))
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a, a])
+        m = self.origin_ref("refs/heads/main")
+        self.assertEqual(gitrepo.first_parent_log(self.clone, before, m), [m])
+        self.assert_closed(a, m)
+
     def test_a_crash_between_the_intent_and_the_call(self) -> None:
         number, a = self.to_held_ready()
         self.gh_edit(number, mergeStateStatus="CLEAN")

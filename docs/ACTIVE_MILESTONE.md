@@ -464,6 +464,20 @@ Blocking findings. One Important finding is fixed:
   plan-stage generator's documented `AMENDING_PLAN` difference only). The protected-path diff
   from `854d25c` is empty.
 
+### Manual external implementation review, round 3 (implementation revision 6)
+
+Codex `REVISE` on bundle `ed2169dd` (review content id `707a0ad1`), no Blocking findings:
+- Important 1 (fixed, `a595551`): `_squash_on_trunk` took any first-parent trunk commit whose
+  subject ended in ` (#<n>)` for the pull request's squash, so an unrelated commit carrying the
+  suffix, followed by a real refusal, was recorded as `accepted` and stalled at `merge_pending`.
+  A candidate is now adopted only when it has one parent and its tree is the acceptance commit
+  squashed onto that parent (`_squash_content`, the content check `verified_squash` already
+  made, factored out). New test:
+  `AutoMergeTest.test_an_unrelated_trunk_commit_with_the_suffix_is_not_adopted` (fails at
+  revision 5 with the `accepted` gate, passes with the fix); the guide names the content check.
+- Verification, colour off, under a reaping subreaper: `tools/run_tests.py` exit 0, 2803 tests,
+  6 shards, every shard PASS on attempt 1, coverage exact.
+
 ## Release notes
 
 ### Auto-merge and the wait for the release (1.6.0)

@@ -194,10 +194,17 @@ title.
 
   ```text
   Milestone `<id>`, planned in `<plan path>`, driven by workflow-controller.
-  Accepted at <acceptance commit> on `milestone/<id>`; squash-merged into the trunk as one commit.
+  Accepted at <acceptance commit> on `milestone/<id>`; merge with "Squash and merge".
 
   <!-- workflow-controller: work_item=<id> -->
   ```
+
+  When the binding's policy opts in to auto-merge (see
+  [below](#auto-merge-and-the-release-wait)), the middle line ends
+  `squash-merged into the trunk as one commit.` instead, whoever merges.
+  The wording follows the policy the binding was bound with, not the
+  `merge.auto` setting, so turning the setting off does not edit the
+  pull request.
 
 - An edit at readiness ends the step at `checks_pending`: the title
   check re-runs, and the PR is marked ready only on a later step that
@@ -280,10 +287,13 @@ end of the file, with outer blank lines trimmed. The body becomes:
 <!-- workflow-controller: release-notes end -->
 
 Milestone `<id>`, planned in `<plan path>`, driven by workflow-controller.
-Accepted at <acceptance commit> on `milestone/<id>`; squash-merged into the trunk as one commit.
+Accepted at <acceptance commit> on `milestone/<id>`; merge with "Squash and merge".
 
 <!-- workflow-controller: work_item=<id> -->
 ```
+
+(with the auto-merge wording of the middle line when the policy opts in,
+as above)
 
 `<digest>` is the SHA-256 of the notes' UTF-8 bytes. Only readiness
 writes this start marker, and only for notes that passed the checks

@@ -1827,15 +1827,17 @@ def declared_title(ctx: Context, work_item_id: str) -> DeclaredTitle:
 
 
 def squash_body(work_item_id: str, plan_path: str | None, *, accepted: str | None = None,
-                branch: str | None = None, notes_block: str | None = None) -> str:
+                branch: str | None = None, notes_block: str | None = None, auto_merge: bool = False) -> str:
     """The squash-mode pull request body, which becomes the squash commit's
     body. No line parses as a Git trailer (I8). The "Accepted at" line is
     added at readiness, and with it the milestone's release-notes block,
     when there is one, above the Controller's lines (settings-and-telemetry
-    D.2)."""
+    D.2). ``auto_merge``: the binding's policy opted in, so the line does
+    not tell a person to merge; without the key it is 1.5.0's (I1)."""
     lines = [f"Milestone `{work_item_id}`, planned in `{plan_path or 'unrecorded'}`, driven by workflow-controller."]
     if accepted is not None:
-        lines.append(f"Accepted at {accepted} on `{branch}`; squash-merged into the trunk as one commit.")
+        how = "squash-merged into the trunk as one commit" if auto_merge else f"merge with \"{SQUASH_BUTTON}\""
+        lines.append(f"Accepted at {accepted} on `{branch}`; {how}.")
     head = "" if notes_block is None else notes_block + "\n\n"
     return head + "\n".join(lines) + "\n\n" + PR_MARKER.format(work_item_id=work_item_id) + "\n"
 
@@ -1933,7 +1935,7 @@ def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: f
     notes = _milestone_notes(ctx, record, a)
     status = None if notes is None else notes.status
     body = squash_body(work_item_id, declared.plan_path, accepted=a, branch=branch,
-                       notes_block=None if notes is None else notes.block)
+                       notes_block=None if notes is None else notes.block, auto_merge=release_wait_applies(record))
     problem = None if notes is None else notes.problem
     if problem is None and notes is not None and notes.block is not None:
         found = release_notes.paragraph_problem(body)

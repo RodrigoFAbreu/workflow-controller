@@ -1391,7 +1391,7 @@ class SquashTitleTest(_Squash):
         a = self.to_ready_squash()
         pr = self.gh_pr_view(self.pr_number())
         self.assertEqual(pr["body"], f"Milestone `{WID}`, planned in `{PLAN_PATH}`, driven by workflow-controller.\n"
-                                     f"Accepted at {a} on `{BRANCH}`; squash-merged into the trunk as one commit.\n\n"
+                                     f"Accepted at {a} on `{BRANCH}`; merge with \"Squash and merge\".\n\n"
                                      f"<!-- workflow-controller: work_item={WID} -->\n")
         self.assertEqual(trailers(self.clone, pr["body"]), "")
         self.assertEqual(pr["title"], TITLE)
@@ -2216,6 +2216,24 @@ class AutoMergeTest(_AutoMerge):
                           if e["event"] in ("ready", "merge_sent", "merge_accepted", "merged_squashed", "closed")],
                          ["ready", "merge_sent", "merge_accepted", "merged_squashed", "closed"])
         self.assertFalse(any("--auto" in argv or "--disable-auto" in argv for argv in self.gh_calls()))
+
+    def test_the_body_does_not_tell_a_person_to_merge_whatever_merge_auto(self) -> None:
+        # Functional review round 2 (R2-F1): the opted-in wording follows the
+        # binding's policy, never the merge.auto setting, so turning the
+        # setting off does not edit the pull request (and re-run its checks).
+        self.ctx = dataclasses.replace(self.ctx, auto_merge=False)
+        number, a = self.to_pending()
+        expected = (f"Milestone `{WID}`, planned in `{PLAN_PATH}`, driven by workflow-controller.\n"
+                    f"Accepted at {a} on `{BRANCH}`; squash-merged into the trunk as one commit.\n\n"
+                    f"<!-- workflow-controller: work_item={WID} -->\n")
+        self.assertEqual(self.gh_pr_view(number)["body"], expected)
+        self.assertEqual(expected, mb.squash_body(WID, PLAN_PATH, accepted=a, branch=BRANCH, auto_merge=True))
+        self.set_checks(number, ("ci", "pass"))
+        edits = len(self.calls("pr", "edit"))
+        self.assertGate(self.preflight(), mb.GATE_MERGE_PULL_REQUEST)
+        self.ctx = dataclasses.replace(self.ctx, auto_merge=True)
+        self.assertEqual(self.preflight().action, "closed_out")
+        self.assertEqual(len(self.calls("pr", "edit")), edits)
 
     def test_a_ready_record_merges_at_the_next_step(self) -> None:
         number, a = self.to_held_ready("UNKNOWN")

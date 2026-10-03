@@ -71,6 +71,62 @@ release notes, the milestone's notes section cannot be carried by the squash
 commit. See
 [Release notes in the pull request body](milestone-branches.md#release-notes-in-the-pull-request-body).
 
+**"The milestone stopped at `merge_pending` or `merge_held`."** The
+repository opted in to auto-merge, and the Controller has not merged the
+ready pull request: GitHub has not computed it mergeable yet, something
+other than the checks blocks it (a required review, for example), a
+merge was refused, or GitHub reports a conflict (`merge_pending`); or a
+person converted it back to a draft (`merge_held`). The gate's message
+names GitHub's state and the exits. A `run` waits at `merge_pending`
+(except on a conflict) for up to `merge.wait_seconds`; merging on GitHub
+with "Squash and merge" always works too. Two `merge_pending` gates
+say the Controller has already merged, or may have, and it sends nothing
+more: "GitHub accepted the merge ... it is not visible yet" (the send
+succeeded, or the squash commit is on `main` while GitHub's reads still
+show the pull request open), and "GitHub may already have merged" (the
+three attempts are spent, one was interrupted before its outcome was
+recorded, and `main` does not show the squash commit yet). Both clear
+once GitHub shows the merge; if it never does, merge by hand or close
+the pull request and run `milestone-binding --new-pr`. After three
+refused merges the step refuses (exit `20`) and the Controller sends no
+more: merge on GitHub. See
+[Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait).
+
+**"The milestone stopped at `release_pending` or `release_failed`."** The
+pull request was squash-merged and the Controller is waiting for the
+release of the squash commit before it closes out. `release_pending`: the
+publishing workflow's run (`release_workflow`, `main.yml` by default)
+has not appeared or is still running; a `run` waits for it. If no run
+appears, publish by hand. `release_failed` (the title says the release "did not publish"): a run
+failed, or a run succeeded without publishing a release. For a failed run,
+"Re-run failed jobs" on the run the gate names; when the workflow
+succeeded and published nothing there is no failed run to re-run. Publish
+by hand; the next step classifies again and closes out once the
+release exists. See
+[Checking a release by hand](ci-and-releases.md#checking-a-release-by-hand).
+
+**"`step` exits 45 while a `run` waits."** A `run` waiting at a pending
+gate holds the target's lifecycle lock for the whole wait, so a second
+`step` or `run` on that target exits `45`. The message names the
+waiting run ("Run <id> holds it: it is waiting at <gate> until
+<deadline> ... no worker is running"); the longer text about recorded
+worker process groups and `worker_anchor` appears only when the holder is
+a worker. `status` lists the open run, and `follow --run <id>` shows its
+`waiting at <gate> until <deadline>` line. Wait for it, or press Ctrl-C
+in the waiting `run` (it prints one line, "interrupted while waiting at
+<gate> ...", exits `130`, and ends `interrupted`; the next step continues
+from the binding's last state).
+
+**"An auto-merged milestone closed out, but `run` did not plan the next
+one."** That is intended: after an auto-merged milestone's release
+settles and it closes out, the step ends with exit `0` (reason
+`closed_out_released`). `run` again to plan the next milestone. One
+exception: when the checkout is already on the trunk (the squash was
+read from `main` itself), close-out does not fast-forward `main`, and the
+next step stops at the `fast_forward_trunk` gate with the exact command
+(`git merge --ff-only origin/main`, with your remote's name); run it, then
+`run` again.
+
 **"The pull request was closed, or merged too early."** The milestone is in a
 refusal state until you choose an exit. See
 [When a milestone gets stuck](milestone-branches.md#when-a-milestone-gets-stuck-the-refusal-state-exits).

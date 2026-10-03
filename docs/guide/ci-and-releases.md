@@ -495,6 +495,19 @@ If a release job fails, fix the cause and re-run `main.yml` from the
 Actions tab, or let the next push to `main` do it. Never re-push or move
 a tag.
 
+With auto-merge on, a milestone whose release did not publish stops at
+`release_failed` before close-out (see
+[Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait)).
+The gate names each run of the publishing workflow that did not succeed,
+with its URL, or says that the workflow succeeded and published nothing
+(nothing to re-run then: publish by hand, or let a later push to `main`
+publish a covering release). Resolve it the same way: "Re-run failed jobs" on the named
+run (the transaction resumes, `RESUME`), or publish by hand with
+`tools/release.py`. The next Controller step classifies the squash
+commit again; once the release is published, or a later trunk run has
+published a release that covers it, the milestone closes out. The
+Controller itself never re-runs, tags or publishes anything.
+
 A release commit that lands on `main` while a milestone is in flight
 moves `main` under that milestone: the milestone then ends at
 `integration_required` (see
@@ -539,7 +552,22 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
   the repository opts in (see
   [Release notes from the milestones](#release-notes-from-the-milestones)).
 - **Auto-merge** is allowed, and **head branches are deleted** after a
-  merge. The Controller itself never merges.
+  merge. The Controller never uses GitHub's auto-merge request. When a
+  repository's policy opts in with
+  `milestone_branches.pull_request.auto_merge` (from 1.6.0; see
+  [Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait)),
+  the Controller itself squash-merges an accepted milestone pull request,
+  through one `gh pr merge --squash --match-head-commit <acceptance
+  commit>` per attempt, under the ruleset and its required checks, and
+  only after it has seen every check green. That needs squash merging
+  allowed, which it is here; the merge runs as the account `gh` is
+  authenticated as. The policy's `release_workflow` (default `main.yml`)
+  names the workflow whose trunk run publishes the release the Controller
+  then waits for. A repository that requires a **merge queue** is not
+  supported: the queue writes its own squash message, and the merge then
+  fails verification (`MERGED_REWRITTEN`). This repository's policy does
+  not opt in yet; the opt-in is a `chore:` pull request after 1.6.0 is
+  installed.
 - **Do not press "Update branch"** on a milestone pull request. It
   pushes a merge commit the next Controller step refuses (see
   [Milestone branches and pull requests](milestone-branches.md)).

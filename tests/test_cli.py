@@ -43,7 +43,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, decision, evidence, identity, job, lock, managed_repo, observe, routing, runtime, settings, worker,
+    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, settings,
+    worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
 from controller.errors import (  # noqa: E402
@@ -1390,6 +1391,31 @@ class ExitCodeTableTest(unittest.TestCase):
                 with unittest.mock.patch.object(cli, "_dispatch", raise_it), contextlib.redirect_stderr(stderr):
                     self.assertEqual(cli.main(["step", "/target"]), expected)
                 self.assertIn(f"error: {error.message}", stderr.getvalue())
+
+    def test_ctrl_c_in_a_wait_is_one_line_and_exit_130(self) -> None:
+        # Functional review F4: no traceback; the run still reads `interrupted`.
+        closed: list[bool] = []
+
+        def raise_it(args, argv):
+            raise milestone_branch.WaitInterrupted("release_pending", "2026-10-02T12:00:00Z")
+
+        stderr = io.StringIO()
+        with unittest.mock.patch.object(cli, "_dispatch", raise_it), \
+                unittest.mock.patch.object(cli, "_close_open_run",
+                                           lambda code, *, interrupted: closed.append(interrupted)), \
+                contextlib.redirect_stderr(stderr):
+            self.assertEqual(cli.main(["step", "/target"]), 130)
+        text = stderr.getvalue()
+        self.assertEqual(closed, [True])
+        self.assertEqual(len(text.strip().splitlines()), 1, text)
+        self.assertNotIn("Traceback", text)
+        self.assertIn("interrupted while waiting at release_pending", text)
+        self.assertIn("the next step continues from the binding's last state", text)
+        # An interrupt anywhere else keeps its ordinary path.
+        with unittest.mock.patch.object(cli, "_dispatch", lambda a, b: (_ for _ in ()).throw(KeyboardInterrupt())), \
+                contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(KeyboardInterrupt):
+                cli.main(["step", "/target"])
 
     def test_lifecycle_lock_error_is_a_sibling_never_a_subclass(self) -> None:
         self.assertFalse(issubclass(LifecycleLockError, LifecycleWorkerActiveError))
@@ -2975,6 +3001,43 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 self.assertEqual(cli.cmd_run(args, self.runtime_root, self.ident), cli.EXIT_MAX_STEPS)
                 self.assertEqual(len(calls), expected)
                 self.assertEqual(cli._open_run.record["max_steps"], expected)
+
+    def test_the_merge_rows_reach_execute_step_and_only_run_waits(self) -> None:
+        """auto-merge-release-wait A.2/I6: ``merge.auto`` and
+        ``merge.poll_seconds`` reach every step; ``merge.wait_seconds`` only
+        ``run``'s, and ``step`` always passes ``0``."""
+        calls = self._spy()
+        args = self._args()
+        cli.cmd_step(args, self.runtime_root, self.ident)
+        self.assertEqual((calls[-1]["auto_merge"], calls[-1]["wait_seconds"], calls[-1]["poll_seconds"]),
+                         (True, 0, 30))
+        args = self._args({"merge": {"auto": False, "wait_seconds": 600, "poll_seconds": 15}}, max_steps=1)
+        cli.cmd_step(args, self.runtime_root, self.ident)
+        self.assertEqual((calls[-1]["auto_merge"], calls[-1]["wait_seconds"], calls[-1]["poll_seconds"]),
+                         (False, 0, 15))
+        cli.cmd_run(args, self.runtime_root, self.ident)
+        self.assertEqual((calls[-1]["auto_merge"], calls[-1]["wait_seconds"], calls[-1]["poll_seconds"]),
+                         (False, 600, 15))
+        # The wait is reported in the open run's log, once per gate code (E.2).
+        calls[-1]["on_wait"]("checks_pending", "2026-10-02T13:00:00Z")
+        [waiting] = [json.loads(line) for line in
+                     (self.runtime_root / "runs" / cli._open_run.run_id / "events.jsonl").read_text().splitlines()
+                     if json.loads(line)["event"] == "waiting"]
+        self.assertEqual((waiting["gate"], waiting["deadline"]), ("checks_pending", "2026-10-02T13:00:00Z"))
+
+    def test_execute_step_hands_the_merge_rows_to_the_preflight_context(self) -> None:
+        received = []
+
+        def preflight(ctx, **_k):
+            received.append((ctx.auto_merge, ctx.wait_seconds, ctx.poll_seconds))
+            raise RuntimeError("stop after the preflight")
+
+        self.enterContext(unittest.mock.patch.object(milestone_branch, "repository_preflight", preflight))
+        with self.assertRaises(RuntimeError):
+            job.execute_step(managed_repo.inspect(self.repo, manager_bin=str(self.stub_manager)),
+                             identity=self.ident, runtime=self.runtime_root, auto_merge=False, wait_seconds=60,
+                             poll_seconds=12)
+        self.assertEqual(received, [(False, 60, 12)])
 
     def test_follow_heartbeat_and_replay_reach_the_follower(self) -> None:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)

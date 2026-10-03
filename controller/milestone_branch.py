@@ -47,14 +47,16 @@ import datetime
 import hashlib
 import json
 import re
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from . import forge as forge_mod
-from . import conventional_commit, gitrepo, release_notes, repo_policy, runtime
+from . import conventional_commit, gitrepo, release_notes, release_txn, repo_policy, runtime
 from .errors import (
-    BranchBindingError, BranchInvariantViolatedError, GitOperationError, InvalidRepositoryPolicyError, InvalidTitleError,
+    BranchBindingError, BranchInvariantViolatedError, ForgeError, GitOperationError, InvalidRepositoryPolicyError,
+    InvalidTitleError, ReleaseTransactionError,
 )
 
 SCHEMA_VERSION = 1
@@ -149,6 +151,10 @@ GATE_UNMERGED_COMMITS = "unmerged_commits"
 GATE_DIRTY_TREE = "dirty_tree"
 GATE_PR_TITLE_INVALID = "pr_title_invalid"
 GATE_RELEASE_NOTES_INVALID = "release_notes_invalid"
+GATE_MERGE_PENDING = "merge_pending"
+GATE_MERGE_HELD = "merge_held"
+GATE_RELEASE_PENDING = "release_pending"
+GATE_RELEASE_FAILED = "release_failed"
 
 #: Every gate a preflight can return.
 GATE_CODES = frozenset({
@@ -156,8 +162,25 @@ GATE_CODES = frozenset({
     GATE_FAST_FORWARD_TRUNK, GATE_POST_ACCEPTANCE_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_CHECKS_PENDING,
     GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_PR_HEAD_NOT_ACCEPTED, GATE_MERGE_PULL_REQUEST,
     GATE_MERGE_METHOD_REWROTE_HISTORY, GATE_UNMERGED_COMMITS, GATE_DIRTY_TREE, GATE_PR_TITLE_INVALID,
-    GATE_RELEASE_NOTES_INVALID,
+    GATE_RELEASE_NOTES_INVALID, GATE_MERGE_PENDING, GATE_MERGE_HELD, GATE_RELEASE_PENDING, GATE_RELEASE_FAILED,
 })
+
+#: The Controller's own merge attempts per ``READY`` record (C.3 step 4):
+#: after the third refused send it sends nothing more for the record.
+MERGE_ATTEMPTS = 3
+#: The merge states GitHub merges at once (gh's ``isImmediatelyMergeable``).
+MERGEABLE_STATES = ("CLEAN", "HAS_HOOKS")
+
+#: A binding record's ``release.state`` values the release wait writes
+#: besides a classification's own state (auto-merge-release-wait D.1-D.3):
+#: the merge was not a verified squash, the policy at the squash commit
+#: releases nothing, or a later run's release covers the squash commit.
+RELEASE_SKIPPED = "SKIPPED"
+RELEASE_NONE = "NONE"
+RELEASE_SUPERSEDED = "SUPERSEDED"
+#: The hand publication every release gate names (D.3).
+HAND_RELEASE = ("publish by hand with `tools/release.py` (`docs/guide/ci-and-releases.md`, \"Checking a release "
+                "by hand\"); the next step classifies the commit again and settles")
 
 #: The marker line of every Draft PR body the Controller creates.
 PR_MARKER = "<!-- workflow-controller: work_item={work_item_id} -->"
@@ -200,7 +223,13 @@ class Context:
     event :func:`_event` writes through this context, in order (a plain
     append, never a file write). ``controller.job`` passes a fresh one per
     step, so a refusal after the preflight can say what it did
-    (workflow-2-6-integration CP3)."""
+    (workflow-2-6-integration CP3).
+
+    ``auto_merge``, ``wait_seconds`` and ``poll_seconds`` are the
+    operator's ``merge.*`` settings (auto-merge-release-wait A.2), set by
+    ``controller.job.execute_step``: whether the Controller may merge a
+    binding whose policy opted in, and ``run``'s bounded wait (``0``: no
+    wait, as ``step``)."""
 
     repo_root: Path
     runtime_root: Path
@@ -208,6 +237,9 @@ class Context:
     forge_factory: Callable[[str], forge_mod.Forge] | None = None
     clock: Callable[[], str] = _utc_now
     events: list[str] | None = None
+    auto_merge: bool = True
+    wait_seconds: int = 0
+    poll_seconds: int = 30
 
     def forge(self, repository: str) -> forge_mod.Forge:
         return (self.forge_factory or forge_mod.GhForge)(repository)
@@ -222,12 +254,15 @@ class Proceed:
     ``adopted``, ``completed``, ``observed``, ``trunk_start``, ``pr_created``,
     ``closed_out``). ``base`` is the trunk tip a passed trunk start proved
     equal to ``<remote>/<trunk>`` (full ``HEAD``), which the bootstrap names
-    as the next milestone's base; ``None`` otherwise."""
+    as the next milestone's base; ``None`` otherwise. ``stop`` ends the step
+    after a close-out whose release wait ran (auto-merge-release-wait D.4):
+    ``binding`` is then the ``CLOSED`` record, and no trunk start ran."""
 
     work_item_override: str | None = None
     binding: Mapping[str, Any] | None = None
     action: str = "none"
     base: str | None = None
+    stop: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -243,6 +278,10 @@ class Gate:
     #: The binding policy's merge method; ``decision.branch_human_gate``
     #: words a squash-mode gate for "Squash and merge".
     merge_method: str = repo_policy.MERGE_METHOD_MERGE
+    #: Whether ``run``'s bounded wait may poll this gate again
+    #: (auto-merge-release-wait E.1); set by :func:`_merge_step` and
+    #: :func:`_release_wait` only.
+    waitable: bool = False
 
 
 def _refuse(message: str, *, work_item_id: str | None = None, branch: str | None = None,
@@ -401,6 +440,19 @@ def binding_policy(record: Mapping[str, Any]) -> repo_policy.RepositoryPolicy:
         raise _refuse(f"the policy snapshot of the {record['work_item_id']} binding is damaged",
                       work_item_id=record["work_item_id"])
     return repo_policy.parse_policy(raw.encode("utf-8"))
+
+
+def release_wait_applies(record: Mapping[str, Any]) -> bool:
+    """Whether the binding's policy snapshot opted in to auto-merge (A.3):
+    the release wait and the stop after close-out follow the policy the
+    binding was bound with (I8), whatever the ``merge.auto`` setting."""
+    return binding_policy(record).milestone_branches.auto_merge
+
+
+def auto_merge_applies(record: Mapping[str, Any], ctx: Context) -> bool:
+    """Whether the Controller merges this binding's pull request itself
+    (A.3): its policy snapshot opted in and ``merge.auto`` is on."""
+    return ctx.auto_merge and release_wait_applies(record)
 
 
 def _policy_snapshot(policy: repo_policy.RepositoryPolicy) -> dict:
@@ -681,12 +733,17 @@ def _branch_cells(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
                 record, observed = _observe_branch(ctx, key, record, head, sync=state != READY), True
             record = _write(ctx, key, dict(record, pr=_pr_ref(pr)))
             if state == READY:
-                return _merge_gate(record, tip=head.commit)
-            if _phase(committed_state(ctx, "HEAD"), record["work_item_id"]) != MILESTONE_COMPLETE:
+                outcome = _merge_step(ctx, key, record, head, pr)
+            elif _phase(committed_state(ctx, "HEAD"), record["work_item_id"]) != MILESTONE_COMPLETE:
                 if _squash(record):
                     _sync_title(ctx, key, record, pr)
                 return Proceed(work_item_override=override, binding=record, action=action)
-            return _readiness(ctx, key, record, head)
+            else:
+                outcome = _readiness(ctx, key, record, head)
+            if isinstance(outcome, Gate):
+                return outcome
+            record = outcome  # merged by the Controller: the merged-PR handling has run
+            continue
         if not observed:
             record, observed = _observe_branch(ctx, key, record, head), True
         if state == BRANCH_BOUND:
@@ -896,7 +953,15 @@ def _pr_left_open(ctx: Context, key: str, record: dict, pr: forge_mod.PullReques
                   pr=pr.number)
 
 
-def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
+def _never_merges(switched_off: bool) -> str:
+    return ("Auto-merge is switched off by `merge.auto` in the settings file, so the Controller does not "
+            "merge it" if switched_off else "The Controller never merges")
+
+
+def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None, switched_off: bool = False) -> Gate:
+    """The ``merge_pull_request`` gate. ``switched_off``: the binding's policy
+    opted in to auto-merge and ``merge.auto`` is off on this machine, so the
+    text names the setting instead of saying the Controller never merges."""
     pr, accepted = record["pr"], record.get("accepted_head")
     later = (f". Local commits after the acceptance commit {accepted} (the tip is {tip}) are not pushed to a "
              f"ready pull request" if tip is not None and accepted is not None and tip != accepted else "")
@@ -904,7 +969,7 @@ def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
         return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
                     f"pull request #{pr['number']} ({pr['url']}) is ready; a human merges it on GitHub with "
                     f"\"{SQUASH_BUTTON}\". The squash commit's subject is the pull request's title and its body "
-                    f"the pull request's body. The Controller never merges{later}",
+                    f"the pull request's body. {_never_merges(switched_off)}{later}",
                     (f"merge pull request #{pr['number']} on GitHub with \"{SQUASH_BUTTON}\"",),
                     repo_policy.MERGE_METHOD_SQUASH)
     return Gate(GATE_MERGE_PULL_REQUEST, record["work_item_id"], record["branch"],
@@ -912,6 +977,235 @@ def _merge_gate(record: Mapping[str, Any], *, tip: str | None = None) -> Gate:
                 f"\"Create a merge commit\". Squash and rebase merges take the reviewed commits off "
                 f"{record['trunk']}. The Controller never merges{later}",
                 (f"merge pull request #{pr['number']} on GitHub with \"Create a merge commit\"",))
+
+
+def _merge_step(ctx: Context, key: str, record: dict, head: gitrepo.HeadState,
+                pr: forge_mod.PullRequest) -> Gate | dict:
+    """The end of readiness and the ``READY`` cell (auto-merge-release-wait
+    C.1-C.4). Without auto-merge, :func:`_merge_gate` unchanged (I1, C.6).
+    Otherwise C.2's rows, first match deciding, over ``pr`` (this step's
+    fresh read of the open pull request) and the branch the cell has
+    already observed: a gate, nothing sent; or one merge of the acceptance
+    commit ``A`` bound to ``A`` (C.3). Returns the merged record when the
+    pull request is merged, after the merged-PR handling."""
+    if not auto_merge_applies(record, ctx):
+        return _merge_gate(record, tip=head.commit, switched_off=release_wait_applies(record))
+    work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
+    remote, number, a = record["repository"]["remote"], pr.number, record["accepted_head"]
+    squash = repo_policy.MERGE_METHOD_SQUASH
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    # C.4 (b) and (c): the local tip moved past A.
+    if head.commit != a:
+        after = gitrepo.first_parent_log(ctx.repo_root, a, head.commit, runner=ctx.runner)
+        return Gate(GATE_POST_ACCEPTANCE_COMMITS, work_item_id, branch,
+                    f"{branch} has commits after the acceptance commit {a}: {', '.join(after)}. The pull request "
+                    f"was marked ready at {a}, and the Controller merges only {a}, so it sends no merge while the "
+                    f"branch carries later commits. A human decides: merge anyway on GitHub with "
+                    f"\"{SQUASH_BUTTON}\", after which the merged-PR handling converges; otherwise this gate persists",
+                    (f"merge pull request #{number} on GitHub anyway with \"{SQUASH_BUTTON}\"",), squash)
+    # An accepted merge is never sent again, and no later read of the pull
+    # request, which can lag GitHub's write, gates it otherwise.
+    merge = dict(record.get("merge") or {})
+    if merge.get("state") == "accepted":
+        return _merge_accepted_gate(ctx, record, number)
+    # A send whose outcome was not recorded as accepted (a crash, a lost
+    # reply, a refusal) may have merged: the trunk, not a read of the pull
+    # request that can lag, decides before anything is sent again.
+    if merge.get("state") == "sending":
+        squash_commit = _squash_on_trunk(ctx, record, number)
+        if squash_commit is not None:
+            return _adopt_squash(ctx, key, record, number, merge, squash_commit)
+    if _merge_unconfirmed(merge):
+        return _merge_unconfirmed_gate(ctx, record, number, merge)
+    remote_branch = (record.get("last_observation") or {}).get("remote_branch")
+    if remote_branch != a or pr.head_oid != a:
+        return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
+                    f"pull request #{number} does not show the acceptance commit {a} ({remote}/{branch} is "
+                    f"{remote_branch}; the pull request is at {pr.head_oid}); the Controller sends no merge until "
+                    f"it does", ("re-run the step once GitHub shows the pushed head",), squash, waitable=True)
+    if pr.is_draft:
+        return Gate(GATE_MERGE_HELD, work_item_id, branch,
+                    f"pull request #{number} was converted back to a draft after it was marked ready, which holds "
+                    f"the merge; the Controller does not merge it. Exits: mark it ready for review on GitHub, "
+                    f"after which the next step merges it; or {by_hand}",
+                    (f"mark pull request #{number} ready for review on GitHub", by_hand), squash)
+    gate = _checks_gate(ctx, record, number)
+    if gate is not None:
+        pending = gate.code == GATE_CHECKS_PENDING
+        message = gate.message if pending else (f"{gate.message}. The Controller merges the pull request once a "
+                                                f"re-run turns the checks green (the next step)")
+        return Gate(gate.code, work_item_id, branch, message, gate.exits, gate.merge_method, waitable=pending)
+    state = pr.merge_state
+    if state == "DIRTY":
+        return Gate(GATE_MERGE_PENDING, work_item_id, branch,
+                    f"pull request #{number} cannot be merged: GitHub reports a conflict with {trunk} (DIRTY). "
+                    f"The Controller does not integrate and sent no merge",
+                    (f"resolve the conflict and {by_hand}",), squash)
+    if state == "BEHIND":
+        return Gate(GATE_INTEGRATION_REQUIRED, work_item_id, branch,
+                    f"GitHub reports pull request #{number} BEHIND {remote}/{trunk}: branch protection requires the "
+                    f"branch to be up to date before a merge, and the Controller does not integrate (Workflow 2.5.1 "
+                    f"and 2.6.0 have no transition that moves a work item's base), so it sent no merge. The manual "
+                    f"procedure: bring the pull request up to date on GitHub and merge it with \"{SQUASH_BUTTON}\"",
+                    (f"bring pull request #{number} up to date and merge it on GitHub with \"{SQUASH_BUTTON}\"",),
+                    squash)
+    if state not in MERGEABLE_STATES:
+        if state == "BLOCKED":
+            why = ("GitHub reports it BLOCKED with every check green: a branch-protection requirement other "
+                   "than the checks is outstanding (a required approving review, conversation resolution, "
+                   "signed commits or a deployment)")
+        elif state == "UNSTABLE":
+            why = ("GitHub reports it UNSTABLE: a status that is not required is not green, and the Controller "
+                   "merges only a pull request with nothing outstanding")
+        elif state in ("UNKNOWN", "DRAFT", ""):
+            why = f"GitHub has not computed its mergeability yet ({state or 'no state'})"
+        else:
+            why = f"GitHub reports its merge state as {state}"
+        return Gate(GATE_MERGE_PENDING, work_item_id, branch,
+                    f"pull request #{number} is not mergeable yet: {why}. The Controller sent no merge; the next "
+                    f"step merges it once GitHub reports it mergeable",
+                    ("re-run the step once GitHub reports the pull request mergeable", by_hand), squash,
+                    waitable=True)
+    attempts = int(merge.get("attempts") or 0)
+    if attempts >= MERGE_ATTEMPTS:
+        raise _merge_refusal(record, number, merge)
+    return _send_merge(ctx, key, record, pr, attempts)
+
+
+def _merge_accepted_gate(ctx: Context, record: Mapping[str, Any], number: int) -> Gate:
+    """C.2's ``accepted`` row: GitHub took the merge, its reads do not show
+    it yet; never sent again."""
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    recover = f"close it on GitHub and recover the binding with {_cli(record['work_item_id'], NEW_PR, ctx.repo_root)}"
+    return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
+                f"GitHub accepted the merge of pull request #{number} at {record['accepted_head']}; it is not "
+                f"visible yet. The Controller does not send it again. If it never appears: {by_hand}, or "
+                f"{recover}", ("re-run the step once GitHub shows the merge", by_hand, recover),
+                repo_policy.MERGE_METHOD_SQUASH, waitable=True)
+
+
+def _merge_unconfirmed(merge: Mapping[str, Any]) -> bool:
+    """The attempt budget is spent, but not every attempt was refused: a
+    crash left an outcome unrecorded, and GitHub may have merged. Nothing
+    more is sent, and the record is not refused."""
+    attempts = int(merge.get("attempts") or 0)
+    return attempts >= MERGE_ATTEMPTS and int(merge.get("refusals") or 0) < attempts
+
+
+def _merge_unconfirmed_gate(ctx: Context, record: Mapping[str, Any], number: int,
+                            merge: Mapping[str, Any]) -> Gate:
+    """The spent budget with an unknown outcome: like ``accepted``, it
+    waits for the merge to be visible and is never sent again."""
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    recover = f"close it on GitHub and recover the binding with {_cli(record['work_item_id'], NEW_PR, ctx.repo_root)}"
+    attempts = int(merge.get("attempts") or 0)
+    unknown = attempts - int(merge.get("refusals") or 0)
+    refused = f" (last refusal: {merge.get('refusal')})" if merge.get("refusal") else ""
+    trunk = f"{record['repository']['remote']}/{record['trunk']}"
+    return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
+                f"GitHub may already have merged pull request #{number} at {record['accepted_head']}: the "
+                f"outcome of {unknown} of the Controller's {attempts} merges is unknown (the step stopped before "
+                f"it recorded it), and GitHub refused the others{refused}. {trunk} does not show the squash "
+                f"commit yet. The Controller sends no more. If the merge never appears: {by_hand}, or {recover}",
+                ("re-run the step once GitHub shows the merge", by_hand, recover),
+                repo_policy.MERGE_METHOD_SQUASH, waitable=True)
+
+
+def _merge_refusal(record: Mapping[str, Any], number: int, merge: Mapping[str, Any]) -> BranchBindingError:
+    """C.3 step 4 at the attempt budget: the Controller sends nothing more
+    for this record; a person merges."""
+    by_hand = f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""
+    return _refuse(f"GitHub refused the Controller's merge of pull request #{number} {merge.get('attempts')} times "
+                   f"(last: {merge.get('refusal')}); it sends no more; after a person merges it, the next "
+                   f"step closes out as for any merge", work_item_id=record["work_item_id"], branch=record["branch"],
+                   exits=[by_hand], pr=number, merge=dict(merge))
+
+
+def _squash_on_trunk(ctx: Context, record: Mapping[str, Any], number: int) -> str | None:
+    """The squash commit of pull request ``number`` on the fetched
+    ``<remote>/<trunk>``, if there is one: a commit on the trunk's
+    first-parent chain since its merge base with the acceptance commit
+    whose subject ends with GitHub's squash suffix `` (#<number>)`` and
+    whose content is the acceptance commit squashed onto its parent
+    (:func:`_squash_content`), so an unrelated commit that only carries the
+    suffix is never adopted. Git's refs, unlike GitHub's pull-request reads,
+    show a merge as soon as GitHub wrote it, so this decides a send whose
+    outcome is unknown, whatever text GitHub refused a duplicate with (plan
+    C.3 keys no code on that text). The title is not matched: it may have
+    been edited since the send."""
+    remote_trunk = _remote_trunk(ctx, record["repository"]["remote"], record["trunk"])
+    a = record["accepted_head"]
+    base = gitrepo.merge_base(ctx.repo_root, a, remote_trunk, runner=ctx.runner)
+    if base is None:
+        return None
+    suffix = f" (#{number})"
+    for commit, subject in gitrepo.first_parent_subjects(ctx.repo_root, base, remote_trunk, runner=ctx.runner):
+        if subject.endswith(suffix) and _squash_content(ctx, record, number, commit, a):
+            return commit
+    return None
+
+
+def _adopt_squash(ctx: Context, key: str, record: dict, number: int, merge: Mapping[str, Any],
+                  squash_commit: str) -> Gate:
+    """A merge the trunk shows: ``accepted``, never sent again, waiting for
+    GitHub's reads to show it."""
+    record = _write(ctx, key, dict(record, merge=dict(merge, state="accepted", squash_commit=squash_commit)),
+                    "merge_accepted", pr=number, head=record["accepted_head"], squash_commit=squash_commit)
+    return _merge_accepted_gate(ctx, record, number)
+
+
+def _forge_message(exc: ForgeError) -> str:
+    stderr = (getattr(exc, "evidence", None) or {}).get("stderr")
+    return stderr.strip() if isinstance(stderr, str) and stderr.strip() else str(exc)
+
+
+def _send_merge(ctx: Context, key: str, record: dict, pr: forge_mod.PullRequest, attempts: int) -> Gate | dict:
+    """C.3: the intent, one merge bound to ``A``, and the re-read. A crash
+    anywhere leaves ``state: "sending"``, which the next step's C.2 decides
+    like any other record."""
+    number, a = pr.number, record["accepted_head"]
+    merge = dict(record.get("merge") or {}, state="sending", head=a, attempts=attempts + 1,
+                 last_attempt_at=ctx.clock())
+    if attempts == 0:
+        record = _write(ctx, key, dict(record, merge=merge), "merge_sent", pr=number, head=a)
+    else:
+        record = _write(ctx, key, dict(record, merge=merge))
+    forge = ctx.forge(record["repository"]["forge_repository"])
+    try:
+        forge.merge_squash(number, head=a, subject=f"{pr.title} (#{number})", body=pr.body)
+    except ForgeError as exc:
+        reread = _verified_pr(ctx, record, number)
+        if reread.state != "OPEN":
+            return _pr_left_open(ctx, key, record, reread)
+        # A lost reply exits like a refusal: the trunk tells them apart.
+        squash_commit = _squash_on_trunk(ctx, record, number)
+        if squash_commit is not None:
+            return _adopt_squash(ctx, key, record, number, merge, squash_commit)
+        message = _forge_message(exc)
+        distinct = message != merge.get("refusal")
+        merge = dict(merge, refusal=message, refusals=int(merge.get("refusals") or 0) + 1)
+        if distinct:
+            record = _write(ctx, key, dict(record, merge=merge), "merge_refused", pr=number,
+                            attempts=merge["attempts"], message=message)
+        else:
+            record = _write(ctx, key, dict(record, merge=merge))
+        if _merge_unconfirmed(merge):
+            return _merge_unconfirmed_gate(ctx, record, number, merge)
+        if merge["attempts"] >= MERGE_ATTEMPTS:
+            raise _merge_refusal(record, number, merge) from None
+        return Gate(GATE_MERGE_PENDING, record["work_item_id"], record["branch"],
+                    f"GitHub refused the Controller's merge of pull request #{number} (attempt {merge['attempts']} "
+                    f"of {MERGE_ATTEMPTS}): {message}. The next step decides again, and sends again only when "
+                    f"GitHub reports it mergeable at {a} with green checks",
+                    ("re-run the step once GitHub reports the pull request mergeable",
+                     f"merge pull request #{number} on GitHub with \"{SQUASH_BUTTON}\""),
+                    repo_policy.MERGE_METHOD_SQUASH, waitable=True)
+    record = _write(ctx, key, dict(record, merge=dict(merge, state="accepted")), "merge_accepted", pr=number,
+                    head=a)
+    reread = _verified_pr(ctx, record, number)
+    if reread.state != "OPEN":
+        return _pr_left_open(ctx, key, record, reread)
+    return _merge_accepted_gate(ctx, record, number)
 
 
 def _report_rewrite(ctx: Context, key: str, record: dict) -> Gate:
@@ -983,10 +1277,8 @@ def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullR
     if not m or gitrepo.ref_commit(ctx.repo_root, m, runner=ctx.runner) != m or not _ancestor(ctx, m, remote_trunk):
         return False
     # 2. one parent.
-    parents = gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)
-    if len(parents) != 1:
+    if len(gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)) != 1:
         return False
-    p = parents[0]
     # 3. GitHub's squash subject: the title and the number.
     if gitrepo.commit_subject(ctx.repo_root, m, runner=ctx.runner) != f"{pr.title} (#{pr.number})":
         return False
@@ -995,6 +1287,18 @@ def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullR
             == gitrepo.commit_identity(ctx.repo_root, h, runner=ctx.runner):
         return False
     # 4. the reviewed content.
+    return _squash_content(ctx, record, pr.number, m, h)
+
+
+def _squash_content(ctx: Context, record: Mapping[str, Any], number: int, m: str, h: str) -> bool:
+    """Whether ``m`` has one parent ``p`` and the tree of ``h`` squashed
+    onto ``p``: ``h``'s own tree when ``p`` is an ancestor of ``h``,
+    otherwise ``git merge-tree --write-tree p h``. Never runs a configured
+    merge driver (``False``); refuses on a Git too old to decide (I3)."""
+    parents = gitrepo.commit_parents(ctx.repo_root, m, runner=ctx.runner)
+    if len(parents) != 1:
+        return False
+    p = parents[0]
     tree = gitrepo.tree_of(ctx.repo_root, m, runner=ctx.runner)
     if _ancestor(ctx, p, h):
         return tree == gitrepo.tree_of(ctx.repo_root, h, runner=ctx.runner)
@@ -1002,10 +1306,10 @@ def verified_squash(ctx: Context, record: Mapping[str, Any], pr: forge_mod.PullR
         return False  # never run a configured merge driver's program
     version = gitrepo.git_version(ctx.repo_root, runner=ctx.runner)
     if version < MERGE_TREE_MIN_GIT:
-        raise _refuse(f"pull request #{pr.number}'s merge commit {m} is verified against `git merge-tree "
+        raise _refuse(f"pull request #{number}'s merge commit {m} is verified against `git merge-tree "
                       f"--write-tree`, which needs Git {'.'.join(map(str, MERGE_TREE_MIN_GIT))} or later; this Git "
                       f"is {'.'.join(map(str, version))}", work_item_id=record["work_item_id"],
-                      branch=record["branch"], pr=pr.number, merge_commit=m,
+                      branch=record["branch"], pr=number, merge_commit=m,
                       exits=[f"upgrade Git to {'.'.join(map(str, MERGE_TREE_MIN_GIT))} or later"])
     merged = gitrepo.merge_tree(ctx.repo_root, p, h, runner=ctx.runner)
     return merged is not None and merged == tree
@@ -1028,7 +1332,13 @@ def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.Hea
     ``merged_head``, then switch to the trunk, fast-forward it to
     ``<remote>/<trunk>``, write ``CLOSED``, and continue to the trunk start
     (step 4). From ``MERGED_SQUASHED`` the squash commit stands in for
-    ``merged_head`` in the trunk-membership check."""
+    ``merged_head`` in the trunk-membership check. In an auto-merge binding
+    the release wait runs first, and a close-out after it stops the step
+    instead of the trunk start (auto-merge-release-wait D.1, D.4)."""
+    outcome = _release_wait(ctx, key, record)
+    if isinstance(outcome, Gate):
+        return outcome
+    record = outcome
     work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
     remote, h = record["repository"]["remote"], record["merged_head"]
     changes = gitrepo.tracked_changes(ctx.repo_root, runner=ctx.runner)
@@ -1058,7 +1368,9 @@ def _close_out_on_branch(ctx: Context, key: str, record: dict, head: gitrepo.Hea
     gitrepo.switch(ctx.repo_root, trunk, runner=ctx.runner)
     gitrepo.fast_forward(ctx.repo_root, trunk, f"refs/remotes/{remote}/{trunk}", runner=ctx.runner)
     _verify_on(ctx, trunk, remote_trunk)
-    _write(ctx, key, dict(record, state=CLOSED), "closed", side="branch")
+    closed = _write(ctx, key, dict(record, state=CLOSED), "closed", side="branch")
+    if stops_after_close(closed):
+        return Proceed(binding=closed, action="closed_out", stop=True)
     return _after_close(ctx, key)
 
 
@@ -1071,6 +1383,235 @@ def _after_close(ctx: Context, key: str) -> Proceed | Gate:
     if isinstance(outcome, Proceed) and outcome.action in ("none", "trunk_start"):
         return Proceed(action="closed_out", base=outcome.base)
     return outcome
+
+
+# -- the release wait (auto-merge-release-wait D) --------------------------------------
+
+
+def stops_after_close(record: Mapping[str, Any]) -> bool:
+    """D.4: whether the close-out of ``record`` ends the step: its release
+    wait ran and settled (a ``release`` field other than ``SKIPPED``)."""
+    release = record.get("release")
+    return isinstance(release, Mapping) and release.get("state") != RELEASE_SKIPPED
+
+
+def release_text(release: Mapping[str, Any]) -> str:
+    """A settled ``release`` field in words: the tag and URL when there is
+    one, else the state."""
+    state = release.get("state")
+    if state == RELEASE_SUPERSEDED:
+        return f"{release.get('tag')} {release.get('url')} (a later release covering the squash commit)"
+    if release.get("tag") and release.get("url"):
+        return f"{release['tag']} {release['url']}"
+    if state == RELEASE_NONE:
+        return "NONE (the policy at the squash commit does not enable releases)"
+    if state == RELEASE_SKIPPED:
+        return f"SKIPPED ({release.get('reason')})"
+    return f"{state} {release.get('version')}: {release.get('detail')}"
+
+
+@dataclasses.dataclass(frozen=True)
+class _ReleaseOutcome:
+    """What the release wait decided: ``settled`` (``release`` is the
+    record's field, ``event`` its event), ``pending`` or ``failed``
+    (``detail`` says why; ``reruns`` names the runs a re-run can resume)."""
+
+    kind: str
+    release: dict | None = None
+    event: str | None = None
+    detail: str = ""
+    reruns: tuple[forge_mod.Run, ...] = ()
+
+
+def _runs_text(runs: tuple[forge_mod.Run, ...]) -> str:
+    return ", ".join(f"run {run.id} ({run.status}" + (f", {run.conclusion}" if run.conclusion else "")
+                     + f") {run.url}" for run in runs)
+
+
+def _finished(runs: tuple[forge_mod.Run, ...]) -> bool:
+    return bool(runs) and all(run.status == "completed" for run in runs)
+
+
+def _settled(found: release_txn.Classification) -> _ReleaseOutcome | None:
+    """D.2's settled rows for a classification, else ``None``."""
+    if found.state == release_txn.ALREADY_RELEASED:
+        return _ReleaseOutcome("settled", {"state": found.state, "version": found.version, "tag": found.tag,
+                                           "url": found.release.url}, "released")
+    if found.state in (release_txn.NO_CHANGE, release_txn.ABANDONED_VERSION):
+        return _ReleaseOutcome("settled", {"state": found.state, "version": found.version,
+                                           "detail": found.detail}, "release_settled")
+    return None
+
+
+def _superseded(rctx: release_txn.ReleaseContext, covering: tuple[str, str, str] | None) -> _ReleaseOutcome | None:
+    """D.3's first superseded row: the covering tag's release is published."""
+    if covering is None:
+        return None
+    tag, version, t = covering
+    published = rctx.forge.view_release(tag)
+    if published is None or published.is_draft:
+        return None
+    return _ReleaseOutcome("settled", {"state": RELEASE_SUPERSEDED, "version": version, "tag": tag,
+                                       "url": published.url, "commit": t}, "release_settled")
+
+
+def _published_nothing(workflow: str, c: str, m: str) -> str:
+    return (f"the publishing workflow {workflow} completed successfully for {c} and published nothing covering "
+            f"{m}, which it does only when its own classification differed (for example, the policy at {m} is "
+            f"not the one the Controller read)")
+
+
+def _runs_failure(workflow: str, c: str, m: str, runs: tuple[forge_mod.Run, ...]) -> _ReleaseOutcome:
+    """D.3's completed-runs bullets for commit ``c``: the runs that did not
+    succeed, or the published-nothing text."""
+    failed = tuple(run for run in runs if run.conclusion != "success")
+    if failed:
+        return _ReleaseOutcome("failed", detail=f"the {workflow} run(s) for {c} did not succeed: {_runs_text(failed)}",
+                               reruns=failed)
+    return _ReleaseOutcome("failed", detail=_published_nothing(workflow, c, m))
+
+
+def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.ReleaseContext,
+                    workflow: str) -> _ReleaseOutcome:
+    """D.2 and D.3 for the squash commit ``m``: classify it (assets not
+    verified), read only the publishing workflow's runs, and check every
+    failure against a covering tag and the trunk tip's run first."""
+    m, trunk, remote = record["merge_commit"], record["trunk"], record["repository"]["remote"]
+    forge = rctx.forge
+    found = release_txn.classify(rctx, m, verify_assets=False)
+    settled = _settled(found)
+    if settled is not None:
+        return settled
+    finished: tuple[str, tuple[forge_mod.Run, ...]] | None = None  # (c, c's completed runs)
+    if found.publishes:
+        runs = forge.commit_runs(m, trunk, workflow)
+        if not _finished(runs):
+            # A run of m may never be reported: a later trunk run can have
+            # published the covering release already.
+            settled = _superseded(rctx, release_txn.covering_tag(rctx, m))
+            if settled is not None:
+                return settled
+            return _ReleaseOutcome("pending", detail=(f"{found.tag} is not published yet ({found.state}), and the "
+                                                      f"{workflow} run(s) for {m} are "
+                                                      + (_runs_text(runs) if runs else "not reported yet")))
+        found = release_txn.classify(rctx, m, verify_assets=False)  # it may have published since
+        settled = _settled(found)
+        if settled is not None:
+            return settled
+        if found.publishes:
+            failure, finished = _runs_failure(workflow, m, m, runs), (m, runs)
+        else:
+            failure = _ReleaseOutcome("failed", detail=f"{found.state}: {found.detail}")
+    else:
+        failure = _ReleaseOutcome("failed", detail=f"{found.state}: {found.detail}"
+                                  + (f" ({'; '.join(found.problems)})" if found.problems else ""))
+    # The superseded rows, before any failure.
+    covering = release_txn.covering_tag(rctx, m)
+    settled = _superseded(rctx, covering)
+    if settled is not None:
+        return settled
+    if covering is not None:
+        tag, _, t = covering
+        runs = forge.commit_runs(t, trunk, workflow)
+        if not _finished(runs):
+            return _ReleaseOutcome("pending", detail=(f"{tag} at {t}, a later trunk commit, covers {m} and is not "
+                                                      f"published yet; the {workflow} run(s) for {t} are "
+                                                      + (_runs_text(runs) if runs else "not reported yet")))
+        failure, finished = _runs_failure(workflow, t, m, runs), (t, runs)
+    if finished is None:
+        return failure
+    # The recovery by a later trunk run.
+    c, c_runs = finished
+    d = _remote_trunk(ctx, remote, trunk)
+    if d == c or not _ancestor(ctx, c, d):
+        return failure
+    runs = forge.commit_runs(d, trunk, workflow)
+    ended = f"the {workflow} run(s) for {c} ended without publishing ({_runs_text(c_runs)})"
+    if not _finished(runs):
+        return _ReleaseOutcome("pending", detail=(f"{ended}; the run(s) for {d} on the trunk can still publish the "
+                                                  f"release covering {m}: "
+                                                  + (_runs_text(runs) if runs else "not reported yet")),
+                               reruns=failure.reruns)
+    found = release_txn.classify(rctx, m, verify_assets=False)
+    settled = _settled(found) or _superseded(rctx, release_txn.covering_tag(rctx, m))
+    if settled is not None:
+        return settled
+    failed = tuple(run for run in runs if run.conclusion != "success")
+    if failed:
+        return _ReleaseOutcome("failed", detail=f"{ended}; the run(s) for {d} did not succeed: {_runs_text(failed)}",
+                               reruns=failure.reruns + failed)
+    return _ReleaseOutcome("failed", detail=f"{ended}; {_published_nothing(workflow, d, m)} ({_runs_text(runs)})",
+                           reruns=failure.reruns)
+
+
+def _release_failed_shown(ctx: Context, key: str, record: Mapping[str, Any], detail: str) -> bool:
+    """Whether this binding's last ``release_failed`` event has ``detail``
+    (D.5: once per distinct detail, not per poll). The log is presentation
+    (:func:`runtime.append_jsonl`), so a torn or unreadable line is
+    skipped: at worst the event is written once more."""
+    path = Path(ctx.runtime_root) / events_rel(key, record["work_item_id"])
+    last = None
+    if path.exists():
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("event") == "release_failed" \
+                    and event.get("binding_generation") == record["binding_generation"]:
+                last = event.get("detail")
+    return last == detail
+
+
+def _release_wait(ctx: Context, key: str, record: dict) -> dict | Gate:
+    """D.1-D.3, before close-out step 3 on both sides: the record (settled,
+    or no wait applies), or the ``release_pending``/``release_failed``
+    gate. A record with a ``release`` field is settled. Reads only (I4):
+    the policy committed at the squash commit, its classification with the
+    assets not verified, the publishing workflow's runs, the releases and
+    the tags; its only writes are the record, its events and the fetches
+    ``classify`` makes."""
+    if record.get("release") is not None or not release_wait_applies(record):
+        return record
+    if record["state"] != MERGED_SQUASHED:
+        # D.1: not a verified squash merge; close-out continues as 1.5.0.
+        return _write(ctx, key, dict(record, release={"state": RELEASE_SKIPPED,
+                                                      "reason": "not a verified squash merge"}),
+                      "release_wait_skipped", merged_state=record["state"])
+    work_item_id, branch, m = record["work_item_id"], record["branch"], record["merge_commit"]
+    number = (record.get("pr") or {}).get("number")
+    workflow = binding_policy(record).milestone_branches.release_workflow
+    policy = repo_policy.read_committed_policy(ctx.repo_root, m)
+    if policy is None or not policy.release.enabled:
+        outcome = _ReleaseOutcome("settled", {"state": RELEASE_NONE}, "release_settled")
+    else:
+        rctx = release_txn.ReleaseContext(ctx.repo_root, policy, ctx.forge(record["repository"]["forge_repository"]),
+                                          git_runner=ctx.runner)
+        try:
+            outcome = _decide_release(ctx, record, rctx, workflow)
+        except ReleaseTransactionError as exc:
+            outcome = _ReleaseOutcome("failed", detail=f"classifying {m} refused: {exc.message}")
+    if outcome.kind == "settled":
+        return _write(ctx, key, dict(record, release=outcome.release), outcome.event, merge_commit=m,
+                      release=outcome.release)
+    reruns = tuple(f"re-run the failed jobs of {run.url} on GitHub (the release transaction resumes safely)"
+                   for run in outcome.reruns)
+    merged = f"pull request #{number} was squash-merged as {m}"
+    squash = repo_policy.MERGE_METHOD_SQUASH
+    if outcome.kind == "pending":
+        return Gate(GATE_RELEASE_PENDING, work_item_id, branch,
+                    f"{merged}; its release is not settled yet: {outcome.detail}. The Controller builds, tags and "
+                    f"publishes nothing, and closes out once the release is published. If no run of `{workflow}` "
+                    f"appears, {HAND_RELEASE}",
+                    ("re-run the step once the publishing workflow has finished", *reruns, HAND_RELEASE), squash,
+                    waitable=True)
+    if not _release_failed_shown(ctx, key, record, outcome.detail):
+        _event(ctx, key, record, "release_failed", merge_commit=m, detail=outcome.detail)
+    return Gate(GATE_RELEASE_FAILED, work_item_id, branch,
+                f"{merged}, but its release did not publish: {outcome.detail}. The Controller builds, tags and publishes "
+                f"nothing, and does not close out; the next step classifies the commit again, so a re-run, a hand "
+                f"publication or a later trunk run that publishes the release settles this gate",
+                (*reruns, HAND_RELEASE), squash)
 
 
 # -- PR discovery ---------------------------------------------------------------------
@@ -1286,15 +1827,17 @@ def declared_title(ctx: Context, work_item_id: str) -> DeclaredTitle:
 
 
 def squash_body(work_item_id: str, plan_path: str | None, *, accepted: str | None = None,
-                branch: str | None = None, notes_block: str | None = None) -> str:
+                branch: str | None = None, notes_block: str | None = None, auto_merge: bool = False) -> str:
     """The squash-mode pull request body, which becomes the squash commit's
     body. No line parses as a Git trailer (I8). The "Accepted at" line is
     added at readiness, and with it the milestone's release-notes block,
     when there is one, above the Controller's lines (settings-and-telemetry
-    D.2)."""
+    D.2). ``auto_merge``: the binding's policy opted in, so the line does
+    not tell a person to merge; without the key it is 1.5.0's (I1)."""
     lines = [f"Milestone `{work_item_id}`, planned in `{plan_path or 'unrecorded'}`, driven by workflow-controller."]
     if accepted is not None:
-        lines.append(f"Accepted at {accepted} on `{branch}`; merge with \"{SQUASH_BUTTON}\".")
+        how = "squash-merged into the trunk as one commit" if auto_merge else f"merge with \"{SQUASH_BUTTON}\""
+        lines.append(f"Accepted at {accepted} on `{branch}`; {how}.")
     head = "" if notes_block is None else notes_block + "\n\n"
     return head + "\n".join(lines) + "\n\n" + PR_MARKER.format(work_item_id=work_item_id) + "\n"
 
@@ -1392,7 +1935,7 @@ def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: f
     notes = _milestone_notes(ctx, record, a)
     status = None if notes is None else notes.status
     body = squash_body(work_item_id, declared.plan_path, accepted=a, branch=branch,
-                       notes_block=None if notes is None else notes.block)
+                       notes_block=None if notes is None else notes.block, auto_merge=release_wait_applies(record))
     problem = None if notes is None else notes.problem
     if problem is None and notes is not None and notes.block is not None:
         found = release_notes.paragraph_problem(body)
@@ -1421,12 +1964,12 @@ def _sync_for_readiness(ctx: Context, key: str, record: Mapping[str, Any], pr: f
 # -- readiness --------------------------------------------------------------------------
 
 
-def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate:
+def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) -> Gate | dict:
     """Readiness of a ``PR_OPEN`` record whose work item is
     ``MILESTONE_COMPLETE`` in the branch's own committed state: every
     condition, then ``gh pr ready`` (skipped when already ready), a re-read,
-    ``READY`` with ``accepted_head``, and the merge gate. A failed condition
-    is a gate."""
+    ``READY`` with ``accepted_head``, and the merge step. A failed condition
+    is a gate; a record is returned only when the merge step merged."""
     work_item_id, branch, trunk = record["work_item_id"], record["branch"], record["trunk"]
     remote, number = record["repository"]["remote"], record["pr"]["number"]
     tip = head.commit
@@ -1460,10 +2003,11 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     observation = record["last_observation"]
     pr = _verified_pr(ctx, record, number)
     if observation.get("remote_branch") != a or pr.state != "OPEN" or pr.head_oid != a:
-        return Gate(GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
-                    f"pull request #{number} does not show the acceptance commit {a} yet ({remote}/{branch} is "
-                    f"{observation.get('remote_branch')}; the pull request is {pr.state} at {pr.head_oid})",
-                    ("re-run the step once GitHub shows the pushed head",))
+        return _readiness_wait(ctx, record, Gate(
+            GATE_PR_HEAD_NOT_ACCEPTED, work_item_id, branch,
+            f"pull request #{number} does not show the acceptance commit {a} yet ({remote}/{branch} is "
+            f"{observation.get('remote_branch')}; the pull request is {pr.state} at {pr.head_oid})",
+            ("re-run the step once GitHub shows the pushed head",)))
     # 6. fresh: <remote>/<trunk> is an ancestor of A (I7).
     remote_trunk = observation["remote_trunk"]
     if not _ancestor(ctx, remote_trunk, a):
@@ -1480,12 +2024,12 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     if squash:
         gate, notes_status = _sync_for_readiness(ctx, key, record, pr, a)
         if gate is not None:
-            return gate
+            return _readiness_wait(ctx, record, gate)
     # 7. green checks, when the binding's policy requires them.
     if binding_policy(record).milestone_branches.ready_requires_green_checks:
         gate = _checks_gate(ctx, record, number)
         if gate is not None:
-            return gate
+            return _readiness_wait(ctx, record, gate)
     forge = ctx.forge(record["repository"]["forge_repository"])
     if pr.is_draft:
         # The one forge mutation with no persisted intent (I5): it is idempotent, and a
@@ -1498,7 +2042,18 @@ def _readiness(ctx: Context, key: str, record: dict, head: gitrepo.HeadState) ->
     extra = {} if notes_status is None else {"release_notes": notes_status}
     record = _write(ctx, key, dict(record, state=READY, pr=_pr_ref(pr), accepted_head=a), "ready", pr=number,
                     accepted_head=a, **extra)
-    return _merge_gate(record, tip=tip)
+    return _merge_step(ctx, key, record, head, pr)
+
+
+def _readiness_wait(ctx: Context, record: Mapping[str, Any], gate: Gate) -> Gate:
+    """``gate`` as readiness returns it: ``checks_pending`` and
+    ``pr_head_not_accepted`` are waitable when auto-merge applies
+    (auto-merge-release-wait E.1), since the next step merges once they
+    clear; every other gate, and every gate without auto-merge, unchanged."""
+    if gate.code not in (GATE_CHECKS_PENDING, GATE_PR_HEAD_NOT_ACCEPTED) or not auto_merge_applies(record, ctx):
+        return gate
+    return Gate(gate.code, gate.work_item_id, gate.branch, gate.message, gate.exits, gate.merge_method,
+                waitable=True)
 
 
 def _checks_gate(ctx: Context, record: Mapping[str, Any], number: int) -> Gate | None:
@@ -1662,6 +2217,9 @@ def _on_trunk(ctx: Context, key: str, records: dict[str, dict], head: gitrepo.He
             gate = _reconcile_from_trunk(ctx, key, record, head)
             if gate is not None:
                 return gate
+            closed = read_record(ctx.runtime_root, key, record["work_item_id"])
+            if closed is not None and closed["state"] == CLOSED and stops_after_close(closed):
+                return Proceed(binding=closed, action="closed_out", stop=True)  # D.4, the trunk side
     records = live_records(ctx.runtime_root, key)
     blocking = [r for r in records.values() if r["state"] not in TERMINAL_STATES]
     for record in blocking:
@@ -1757,7 +2315,12 @@ def _close_trunk_step3(ctx: Context, key: str, record: dict) -> Gate | None:
     ``MERGED_SQUASHED``, the squash commit) is on ``<remote>/<trunk>``; then
     ``CLOSED``. Local trunk is not
     fast-forwarded here: the trunk start that follows gates a behind
-    trunk."""
+    trunk. In an auto-merge binding the release wait runs first
+    (auto-merge-release-wait D.1)."""
+    outcome = _release_wait(ctx, key, record)
+    if isinstance(outcome, Gate):
+        return outcome
+    record = outcome
     work_item_id, branch, h = record["work_item_id"], record["branch"], record["merged_head"]
     remote, trunk = record["repository"]["remote"], record["trunk"]
     local = _local_branch(ctx, branch)
@@ -2115,7 +2678,10 @@ def acknowledge(ctx: Context, work_item_id: str, disposition: str) -> dict:
         superseded = list(record.get("superseded_prs") or [])
         if pr is not None:
             superseded.append(int(pr["number"]))
+        # A new pull request is a new merge record: C.3's attempt budget and
+        # an accepted merge bind the superseded one.
         updated = dict(record, state=BRANCH_BOUND, pr=None, superseded_prs=superseded)
+        updated.pop("merge", None)
     _event(ctx, key, record, "acknowledged", disposition=disposition, previous_state=state,
            pr=None if pr is None else pr.get("number"),
            reason=f"milestone-binding --{disposition} on a {state} binding")
@@ -2169,6 +2735,68 @@ def repository_preflight(ctx: Context, *, requested_work_item_id: str | None = N
                      head_policy=_UNSET if found.policy_committed else None)
 
 
+class WaitInterrupted(KeyboardInterrupt):
+    """Ctrl-C while :func:`waiting_preflight` sleeps. It *is* a
+    ``KeyboardInterrupt``, so every handler that ends a step on one still
+    does (the run record reads ``interrupted``, nothing else is written);
+    the CLI alone recognises it to print one line, not a traceback."""
+
+    def __init__(self, code: str, deadline: str) -> None:
+        super().__init__(code, deadline)
+        self.code = code
+        self.deadline = deadline
+
+    def message(self) -> str:
+        return (f"interrupted while waiting at {self.code} (the wait would have ended at {self.deadline}); "
+                f"the next step continues from the binding's last state")
+
+
+def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None,
+                      on_wait: Callable[[str, str], None] | None = None,
+                      sleep: Callable[[float], None] | None = None,
+                      monotonic: Callable[[], float] | None = None) -> Proceed | Gate:
+    """:func:`repository_preflight`, polled while it returns a waitable gate
+    (auto-merge-release-wait E.2): at most ``ctx.wait_seconds`` from the
+    first waitable gate of this step, one budget across gate changes, a
+    fresh preflight every ``ctx.poll_seconds``. ``on_wait(code, deadline)``
+    is called once per gate code before its first sleep (``deadline`` is
+    the wall-clock end of the budget, from ``ctx.clock``). Returns the last
+    outcome; ``ctx.wait_seconds`` 0 returns the first, never sleeping (I6).
+    The sleep and each re-read are plain, so Ctrl-C ends them like any other
+    point of a step (E.3), as :class:`WaitInterrupted`, which the CLI reports in one line."""
+    sleep = sleep or _sleep
+    monotonic = monotonic or _monotonic
+    outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
+    started: float | None = None
+    deadline = ""
+    announced: set[str] = set()
+    while isinstance(outcome, Gate) and outcome.waitable and ctx.wait_seconds > 0:
+        now = monotonic()
+        if started is None:
+            started = now
+            begun = datetime.datetime.strptime(ctx.clock(), "%Y-%m-%dT%H:%M:%SZ")
+            deadline = (begun + datetime.timedelta(seconds=ctx.wait_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        remaining = ctx.wait_seconds - (now - started)
+        if remaining <= 0:
+            break
+        if outcome.code not in announced:
+            announced.add(outcome.code)
+            if on_wait is not None:
+                on_wait(outcome.code, deadline)
+        try:
+            sleep(min(ctx.poll_seconds, remaining))
+            outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
+        except KeyboardInterrupt as exc:
+            raise WaitInterrupted(outcome.code, deadline) from exc
+    return outcome
+
+
+#: :func:`waiting_preflight`'s default sleep and clock, module attributes so
+#: a test can replace them for a whole ``run``.
+_sleep: Callable[[float], None] = time.sleep
+_monotonic: Callable[[], float] = time.monotonic
+
+
 def verify_post_step(ctx: Context, binding: Mapping[str, Any], pre_step_tip: str) -> None:
     """The post-step verification of a worker job run under ``binding``:
     ``HEAD`` is still attached to the bound branch, and its tip descends
@@ -2215,7 +2843,29 @@ def _binding_view(record: Mapping[str, Any]) -> dict:
         "last_observation": None if observation is None else {
             key: observation.get(key)
             for key in ("observed_at", "tip", "remote_branch", "remote_trunk", "fresh", "behind")},
+        **_merge_release_view(record),
     }
+
+
+def _merge_release_view(record: Mapping[str, Any]) -> dict:
+    """The record's ``merge`` and ``release`` fields (auto-merge-release-wait
+    F), ``None`` when absent: ``inspect``'s and ``status --json``'s
+    additions."""
+    merge, release = record.get("merge"), record.get("release")
+    return {"merge": None if merge is None else dict(merge), "release": None if release is None else dict(release)}
+
+
+def merge_release_text(view: Mapping[str, Any]) -> str:
+    """``, merge: ...`` and ``, release: ...`` for a binding line, from
+    :func:`_merge_release_view`'s keys; empty when neither is present."""
+    text = ""
+    merge = view.get("merge")
+    if merge is not None:
+        text += f", merge: {merge.get('state')} at {merge.get('head')} (attempt {merge.get('attempts')})"
+    release = view.get("release")
+    if release is not None:
+        text += f", release: {release_text(release)}"
+    return text
 
 
 def _governing(records: Mapping[str, dict], head: gitrepo.HeadState) -> dict | None:
@@ -2256,7 +2906,8 @@ def binding_entries(runtime_root: Path) -> list[dict]:
             pr = record.get("pr")
             entries.append({"work_item_id": work_item_id, "state": record["state"], "branch": record["branch"],
                             "pull_request": None if pr is None else pr.get("number"),
-                            "worktree_root": record["repository"].get("worktree_root")})
+                            "worktree_root": record["repository"].get("worktree_root"),
+                            **_merge_release_view(record)})
     return entries
 
 
@@ -2267,7 +2918,7 @@ def binding_lines(runtime_root: Path) -> list[str]:
     for entry in binding_entries(runtime_root):
         pr_text = "" if entry["pull_request"] is None else f", pull request #{entry['pull_request']}"
         lines.append(f"milestone: {entry['work_item_id']} {entry['state']} on {entry['branch']}{pr_text} "
-                     f"(worktree {entry['worktree_root']})")
+                     f"(worktree {entry['worktree_root']}){merge_release_text(entry)}")
     return lines
 
 
@@ -2299,7 +2950,9 @@ def predict(ctx: Context, *, requested_work_item_id: str | None = None) -> dict 
     ``create_pr``, ``ready``, ``close_out``, ``gate``, ``refuse`` or
     ``proceed`` -- computed from local Git and the records only, with no
     fetch and no ``gh`` (I10). Anything that depends on the network is
-    labelled "as of" the binding's last observation. ``None`` when the probe
+    labelled "as of" the binding's last observation. ``merge`` and
+    ``wait_merge`` are a ``READY`` record's when the Controller merges it
+    (auto-merge-release-wait F). ``None`` when the probe
     finds nothing (I1). The step itself decides; this only predicts."""
     found = probe(ctx)
     if found.inactive:
@@ -2357,9 +3010,24 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
         return _prediction("close_out", f"the merged binding closes out and HEAD switches to {record['trunk']}",
                            record=record)
     if state == MERGED_SQUASHED:
+        waiting = _predict_release(record)
+        if waiting is not None:
+            return waiting
         return _prediction("close_out", f"the squash-merged binding closes out and HEAD switches to "
-                                        f"{record['trunk']}", record=record)
+                                        f"{record['trunk']}{_stop_text(record)}", record=record)
     if state == READY:
+        if auto_merge_applies(record, ctx):
+            merge = record.get("merge") or {}
+            if merge.get("state") == "accepted":
+                return _prediction("wait_merge", f"GitHub accepted the merge at {record['accepted_head']}; the step "
+                                                 f"waits for it to be visible", record=record, gate=GATE_MERGE_PENDING,
+                                   network=True)
+            if _merge_unconfirmed(merge):
+                return _prediction("wait_merge", f"GitHub may already have merged at {record['accepted_head']}; the "
+                                                 f"step waits for it to be visible and sends no more", record=record,
+                                   gate=GATE_MERGE_PENDING, network=True)
+            return _prediction("merge", f"the Controller merges the pull request at {record['accepted_head']} if "
+                                        f"GitHub reports it mergeable with green checks", record=record, network=True)
         return _prediction("gate", "the pull request is ready; a human merges it", record=record,
                            gate=GATE_MERGE_PULL_REQUEST, network=True)
     tip = head.commit
@@ -2385,6 +3053,22 @@ def _predict_on_branch(ctx: Context, record: Mapping[str, Any], head: gitrepo.He
     return _prediction("proceed", f"{branch} has no commit beyond the trunk yet", record=record, network=True)
 
 
+def _predict_release(record: Mapping[str, Any]) -> dict | None:
+    """``wait_release`` (auto-merge-release-wait F): a ``MERGED_SQUASHED``
+    record whose release wait applies and has not settled."""
+    if record.get("release") is not None or not release_wait_applies(record):
+        return None
+    return _prediction("wait_release", f"the step classifies the squash commit {record.get('merge_commit')} and "
+                                       f"waits for its release, then closes out and stops", record=record,
+                       network=True)
+
+
+def _stop_text(record: Mapping[str, Any]) -> str:
+    if not stops_after_close(record):
+        return ""
+    return f"; the step then stops (release: {release_text(record['release'])})"
+
+
 def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.HeadState,
                       policy: repo_policy.RepositoryPolicy | None) -> dict:
     for record in records.values():
@@ -2398,7 +3082,11 @@ def _predict_on_trunk(ctx: Context, records: Mapping[str, dict], head: gitrepo.H
         if state == MERGED:
             return _prediction("close_out", "the merged binding closes out from the trunk", record=record)
         if state == MERGED_SQUASHED:
-            return _prediction("close_out", "the squash-merged binding closes out from the trunk", record=record)
+            waiting = _predict_release(record)
+            if waiting is not None:
+                return waiting
+            return _prediction("close_out", f"the squash-merged binding closes out from the trunk"
+                                            f"{_stop_text(record)}", record=record)
         if state not in TERMINAL_STATES:
             return _prediction("refuse", f"{record['work_item_id']} is bound to {record['branch']} (binding "
                                          f"state {state}), so the trunk cannot start a milestone, unless its "

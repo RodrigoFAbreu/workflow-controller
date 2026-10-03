@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-auto-merge-release-wait",
+  "plan_revision": 7,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The two switches: repo_policy MilestoneBranches.auto_merge (default false; true requires merge_method squash and ready_requires_green_checks) and release_workflow (default main.yml), settings bool type and merge.auto/merge.wait_seconds/merge.poll_seconds rows with TABLE_GENERATION 2, Context fields wired from cli._effective through job.execute_step, auto_merge_applies/release_wait_applies over the binding snapshot; test_repo_policy and test_settings cases, the no-policy golden regenerated with only the three merge.* keys added to each job record's controller_settings",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The forge surface: PullRequest.merge_state, Run and commit_runs (gh run list --commit --branch --event push --workflow, full-page refusal), merge_squash (gh pr merge --squash --match-head-commit --subject --body, never --auto); tests/fake_gh.py models it with read lag and refuses --auto/--disable-auto; the never-merge static guard narrowed to exactly that argv shape in controller/forge.py with synthetic-source tests both ways; exact-argv tests with a run-only spy",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The merge at readiness: milestone_branch._merge_step replacing both _merge_gate returns when auto-merge applies, the first-match re-read table after the READY cell's own order (merged continues, closed, a remote-only push refused by _observe_branch, a local tip past A gates post_acceptance_commits with a READY text, a lagging PR head gates pr_head_not_accepted, draft gates merge_held, readiness's _checks_gate reused for failing/pending/cancelled checks, DIRTY/unknown or blocked states gate merge_pending, BEHIND gates integration_required; nothing sent on any of them), the head-bound merge_squash send with its sending/accepted intent record, crash rows and three-attempt refusal, merge.auto false byte-identical to 1.5.0, gate texts and GATE_CODES, predict merge/wait_merge rows; test_pull_request_lifecycle cases including each way the head can move after acceptance and a cancelled check",
+      "depends_on": [
+        "CP1",
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The release wait, close out and stop: _release_wait before close-out step 3 on the branch and trunk sides, classify of the squash commit with the policy committed at it and verify_assets=False (no asset download, no policy command), settled/pending/failed rows over the publishing workflow's runs only (commit_runs with release_workflow) the re-classify race and the superseded rows (a covering release at a trunk descendant settles SUPERSEDED) and the later-run recovery (any release_failed from m's or a covering tag's finished runs stays release_pending while the trunk tip's own publishing run can still publish), release_pending and release_failed gates, the release and merge record fields and binding events, Proceed.stop and the no-action outcome in job.execute_step (no /milestone-plan launched after an auto-merged close-out, no job record), predict wait_release; tests including a failed unrelated run before a delayed publishing run, m's pending run cancelled by a later push, a failed run of m or an unpublished covering tag recovered by a later trunk run, and the unchanged close-out for bindings without the key",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "The bounded wait in run, and status: waiting_preflight over the waitable gates, execute_step's wait_seconds/on_wait keywords set by cli from the subcommand with one budget per step, injected sleep and clock, waiting run events, step and merge.wait_seconds 0 never sleeping, Ctrl-C during the sleep via the existing SIGINT harness; status binding lines, inspect and status --json merge/release additions with the pinned key sets additions-only and the no-policy golden as CP1 regenerated it; an end-to-end run from checks_pending to closed out and stopped in one step with no job record",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Documentation and full verification (terminal): ADR 0009, docs/guide/milestone-branches.md, ci-and-releases.md, automation.md (I3 narrowed), runtime.md settings rows, commands.md and troubleshooting.md, docs/README.md, the 1.6.0 notes section checked by release_notes.notes_problem, the hints SAMPLES, every golden generator with --check, the full suite, and the protected-path diff from the base",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

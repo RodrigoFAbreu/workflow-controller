@@ -7,11 +7,16 @@ call names the policy's repository explicitly (``--repo OWNER/NAME``; ``gh
 repo view``, which has no ``--repo`` flag, takes it positionally), so a
 checkout with several remotes can never resolve to an upstream or a fork.
 
-There is deliberately **no** merge, close, delete or comment operation, and
-no ``gh api`` (I3; ``tests/test_no_rewrite_invariants`` scans for the
-spellings). A human merges every pull request. The one pull request edit,
-:meth:`GhForge.edit_pr`, sets the title and body a squash merge carries to
-the trunk (``workflow-controller-squash-merge-tag-versioning`` CP5).
+There is deliberately **no** close, delete or comment operation, and no
+``gh api`` (I3; ``tests/test_no_rewrite_invariants`` scans for the
+spellings). The one merge, :meth:`GhForge.merge_squash`, is GitHub's squash
+merge bound to a head commit (``--match-head-commit``), sent at once or
+refused; it never asks GitHub to merge later (no ``--auto``) and nothing
+else in the Controller spells ``gh pr merge``
+(``workflow-controller-auto-merge-release-wait`` CP2, I3'). The one pull
+request edit, :meth:`GhForge.edit_pr`, sets the title and body a squash
+merge carries to the trunk (``workflow-controller-squash-merge-tag-versioning``
+CP5).
 
 Every read whose result cannot be classified -- a non-zero exit that is not
 one of ``gh``'s documented outcomes, authentication or network failure, a
@@ -35,9 +40,10 @@ from .errors import ForgeError, ForgeUndecidableError
 from .gitrepo import Runner, subprocess_runner
 
 PR_FIELDS = ("number,state,isDraft,headRefName,headRefOid,baseRefName,isCrossRepository,url,"
-             "mergedAt,mergeCommit,title,body")
+             "mergedAt,mergeCommit,title,body,mergeStateStatus")
 RELEASE_FIELDS = "tagName,isDraft,assets,url"
 CHECK_FIELDS = "name,state,bucket"
+RUN_FIELDS = "databaseId,workflowName,status,conclusion,attempt,url"
 
 #: ``gh pr list`` truncates at ``--limit``; a full page is undecidable.
 #: The built-in default of the ``forge.pr_list_limit`` setting.
@@ -86,6 +92,11 @@ class PullRequest:
     merge_commit: str | None
     title: str = ""
     body: str = ""
+    #: ``mergeStateStatus`` as GitHub reports it (``CLEAN``, ``BLOCKED``,
+    #: ``BEHIND``, ``DIRTY``, ``UNSTABLE``, ``HAS_HOOKS``, ``DRAFT``,
+    #: ``UNKNOWN``, ...). Passed through unvalidated: a value the caller
+    #: does not know is "not mergeable yet", never an error.
+    merge_state: str = ""
 
 
 def same_text(a: str, b: str) -> bool:
@@ -124,6 +135,20 @@ class Release:
     assets: tuple[ReleaseAsset, ...]
 
 
+@dataclasses.dataclass(frozen=True)
+class Run:
+    """One GitHub Actions workflow run, as ``gh run list --json`` reports
+    it. ``conclusion`` is ``None`` until the run has completed (``gh``
+    reports an empty string)."""
+
+    id: int
+    workflow: str
+    status: str
+    conclusion: str | None
+    attempt: int
+    url: str
+
+
 class Forge(Protocol):
     repository: str
 
@@ -133,7 +158,9 @@ class Forge(Protocol):
     def create_draft_pr(self, head: str, base: str, title: str, body: str) -> PullRequest: ...
     def mark_ready(self, number: int) -> None: ...
     def edit_pr(self, number: int, *, title: str | None = None, body: str | None = None) -> PullRequest: ...
+    def merge_squash(self, number: int, *, head: str, subject: str, body: str) -> None: ...
     def pr_checks(self, number: int) -> Checks: ...
+    def commit_runs(self, commit: str, branch: str, workflow: str) -> tuple[Run, ...]: ...
     def view_release(self, tag: str) -> Release | None: ...
     def create_release(self, tag: str, files: Sequence[Path], title: str, notes: str) -> None: ...
     def upload_assets(self, tag: str, files: Sequence[Path]) -> None: ...
@@ -226,6 +253,7 @@ class GhForge:
             merge_commit=merge_oid,
             title=_field(obj, "title", str, argv),
             body=_field(obj, "body", str, argv),
+            merge_state=_field(obj, "mergeStateStatus", str, argv),
         )
 
     # -- repository --------------------------------------------------------
@@ -307,6 +335,19 @@ class GhForge:
                                        "expected_title": title, "expected_body": body})
         return pr
 
+    def merge_squash(self, number: int, *, head: str, subject: str, body: str) -> None:
+        """Squash-merge pull request ``number`` now, bound to ``head``
+        (``gh pr merge --squash --match-head-commit``): GitHub merges
+        exactly that head commit at once, with ``subject`` and ``body`` as
+        the squash commit's message, or refuses. Never ``--auto``: nothing
+        is left on GitHub to merge later. Does not re-read; a failure is
+        undecidable, and the caller re-reads with :meth:`view_pr` before
+        deciding anything (the merge may have happened)."""
+        if not _OID_RE.match(head):
+            raise ValueError(f"merge_squash needs a full commit id, not {head!r}")
+        self._ok(["pr", "merge", str(number), "--squash", "--match-head-commit", head,
+                  "--subject", subject, "--body", body])
+
     def pr_checks(self, number: int) -> Checks:
         """The PR's checks. ``gh`` reports normal outcomes through its exit
         code: 0 (all done), 8 (some pending) or 1 (some failed) with a JSON
@@ -333,6 +374,28 @@ class GhForge:
         if result.returncode == 1 and not out.strip() and _NO_CHECKS_MESSAGE in err:
             return Checks("no_checks")
         raise _undecidable(f"gh pr checks {number} is undecidable (exit {result.returncode})", argv, result)
+
+    # -- workflow runs -----------------------------------------------------
+
+    def commit_runs(self, commit: str, branch: str, workflow: str) -> tuple[Run, ...]:
+        """Every run of ``workflow`` (a workflow file name, such as
+        ``main.yml``) for a ``push`` of ``commit`` to ``branch``, newest
+        first as ``gh`` lists them. A full page is undecidable, like
+        :meth:`list_prs`."""
+        limit = pr_list_limit()
+        argv, out = self._ok(["run", "list", "--commit", commit, "--branch", branch, "--event", "push",
+                              "--workflow", workflow, "--json", RUN_FIELDS, "--limit", str(limit)])
+        records = self._json(argv, out, list)
+        if len(records) >= limit:
+            raise _undecidable(f"gh run list returned a full page of {limit}; the list may "
+                               f"be truncated", argv)
+        return tuple(Run(id=_field(record, "databaseId", int, argv),
+                         workflow=_field(record, "workflowName", str, argv),
+                         status=_field(record, "status", str, argv),
+                         conclusion=_field(record, "conclusion", str, argv, nullable=True) or None,
+                         attempt=_field(record, "attempt", int, argv),
+                         url=_field(record, "url", str, argv))
+                     for record in records)
 
     # -- releases ----------------------------------------------------------
 

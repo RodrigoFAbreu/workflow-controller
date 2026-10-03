@@ -389,6 +389,8 @@ def _run_text(event: Mapping) -> str:
         return "generation handoff detected"
     if name == "no_action":
         return f"no action at {event.get('observed_phase')}: {event.get('reason')}"
+    if name == "waiting":
+        return f"waiting at {event.get('gate')} until {event.get('deadline')}"
     if name == "run_ended":
         return f"run ended: exit {event.get('exit_code')}"
     if name == "run_interrupted":

@@ -159,6 +159,12 @@ STATUS_GATE_BLOCKED = "GATE_BLOCKED"
 STATUS_DECLINED = "DECLINED"
 STATUS_HANDOFF_PENDING = "HANDOFF_PENDING"
 
+#: The no-action reason of a step whose repository preflight closed out a
+#: milestone after its release wait and stopped (auto-merge-release-wait
+#: D.4): no `/milestone-plan` is launched in the same step, and no job
+#: record is written.
+REASON_CLOSED_OUT_RELEASED = "closed_out_released"
+
 #: `PRE_STATE_FIELDS` -- the single declaration both `_capture_pre_state`
 #: and (in CP6B) the record-completeness property read, so the two cannot
 #: drift (the plan's own stated defect history: a field declared in the
@@ -3387,6 +3393,42 @@ def _recorded_anchor_sentence(record: Mapping, assessment: worker.LivenessAssess
             f"{int(anchor_orphan_seconds())} s of its last owned process, or `{_resume_command(root)}` ends it now.")
 
 
+def _waiting_run(runtime_root: Path, root: Path) -> tuple[str, dict] | None:
+    """The live ``run`` that holds ``root``'s lifecycle lock while it waits
+    at a gate (checks, merge or release), as ``(run_id, its last "waiting"
+    event)``, or ``None``. Read tolerantly, for the exit-45 message only: a
+    run counts when its record is ``running`` for this target, its recorded
+    Controller process is alive, is not this one and is a taker of the
+    lifecycle lock (``/proc/locks``), and the last event of its log is the
+    ``waiting`` event."""
+    try:
+        paths = sorted((Path(runtime_root) / "runs").glob("*.json"))
+    except OSError:
+        return None
+    holders = lock.lifecycle_lock_holders(root)
+    for path in paths:
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        if not (isinstance(record, dict) and isinstance(record.get("run_id"), str)
+                and record.get("state") == RUN_STATE_RUNNING and record.get("target_repo") == str(root)):
+            continue
+        process = record.get("controller_process")
+        pid = process.get("pid") if isinstance(process, Mapping) else None
+        if pid == os.getpid() or pid not in holders or not (isinstance(process, Mapping)
+                                      and worker.identity_alive(pid, process.get("start_ticks")) is True):
+            continue
+        try:
+            lines = (Path(runtime_root) / "runs" / record["run_id"] / "events.jsonl").read_text().splitlines()
+            last = json.loads(lines[-1])
+        except (OSError, UnicodeDecodeError, ValueError, IndexError, RecursionError):
+            continue
+        if isinstance(last, dict) and last.get("event") == "waiting":
+            return record["run_id"], last
+    return None
+
+
 def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.LifecycleLock:
     """``lock.acquire_lifecycle_lock`` for ``managed_repo``, with the exit-45
     refusal's message completed from this Controller's own job records:
@@ -3396,6 +3438,17 @@ def _acquire_lifecycle_lock(runtime_root: Path, managed_repo: Any) -> lock.Lifec
     try:
         return lock.acquire_lifecycle_lock(managed_repo.root)
     except LifecycleWorkerActiveError as exc:
+        waiting = _waiting_run(runtime_root, managed_repo.root)
+        if waiting is not None:
+            run_id, event = waiting
+            # The holder is the user's own waiting `run`, not a worker.
+            raise LifecycleWorkerActiveError(
+                f"{exc.message}. Run {run_id} holds it: it is waiting at {event.get('gate')} until "
+                f"{event.get('deadline')} (for checks, the merge or the release), and no worker is running. "
+                f"Wait for it, or press Ctrl-C in that run (the next step continues from the binding's last "
+                f"state). Follow it: `{follow_command(runtime_root, managed_repo.root)}`",
+                evidence={**exc.evidence, "recorded_workers": [], "waiting_run": run_id},
+            ) from exc
         detail, recorded = _recorded_worker_detail(runtime_root, managed_repo.root)
         raise LifecycleWorkerActiveError(
             f"{exc.message}. {detail} Follow it: `{follow_command(runtime_root, managed_repo.root)}`",
@@ -4558,6 +4611,10 @@ def execute_step(
     run_id: str | None = None,
     drain_detach_seconds: float | None = None,
     controller_settings: Mapping | None = None,
+    auto_merge: bool = True,
+    wait_seconds: int = 0,
+    poll_seconds: int = 30,
+    on_wait: Callable[[str, str], None] | None = None,
 ) -> JobRecord | Decision:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -4592,7 +4649,15 @@ def execute_step(
     :data:`worker.DRAIN_DETACH_SECONDS`). ``controller_settings``, when
     given, is recorded as the launched job's optional
     ``controller_settings`` block (the settings file's path and digest, and
-    each effective value with its source)."""
+    each effective value with its source).
+
+    ``auto_merge``, ``wait_seconds`` and ``poll_seconds`` (auto-merge-
+    release-wait A.2) are the ``merge.*`` settings the repository preflight
+    reads through its :class:`~controller.milestone_branch.Context`.
+    ``wait_seconds`` above 0 (``run`` only, E.2) lets the preflight poll a
+    waitable gate (:func:`~controller.milestone_branch.waiting_preflight`)
+    under the lock this call holds; ``on_wait(code, deadline)`` is called
+    once per gate code it waits on. Only the final outcome is recorded."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
@@ -4600,7 +4665,21 @@ def execute_step(
             permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
             lifecycle_lock=lifecycle_lock, routing=routing, run_id=run_id,
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
+            auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
         )
+
+
+def closed_out_decision(binding: Mapping[str, Any]) -> Decision:
+    """The no-action outcome of a step that closed out ``binding`` (the
+    ``CLOSED`` record) after its release wait (auto-merge-release-wait
+    D.4): reason :data:`REASON_CLOSED_OUT_RELEASED`, whose only evidence
+    line names the release. The next step starts from the trunk and plans
+    the next milestone."""
+    return Decision(
+        observed_phase=milestone_branch.MILESTONE_COMPLETE,
+        evidence=(milestone_branch.release_text(binding["release"]),),
+        action=None, automatic=False, gate=None, declined=False, reason=REASON_CLOSED_OUT_RELEASED,
+    )
 
 
 def acknowledge_milestone_binding(managed_repo: Any, *, runtime: Path, work_item_id: str,
@@ -4659,6 +4738,10 @@ def _execute_step_locked(
     run_id: str | None = None,
     drain_detach_seconds: float | None = None,
     controller_settings: Mapping | None = None,
+    auto_merge: bool = True,
+    wait_seconds: int = 0,
+    poll_seconds: int = 30,
+    on_wait: Callable[[str, str], None] | None = None,
 ) -> JobRecord | Decision:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -4670,9 +4753,10 @@ def _execute_step_locked(
     re-derived here.
 
     Returns a :class:`~controller.decision.Decision` for the no-action
-    class (``LEGACY_READY``, ``MILESTONE_COMPLETE``) -- nothing ran, no
-    gate is open, nothing was declined, so no job record is written at
-    all and the jobs directory is left unchanged. Every other reachable
+    class (``LEGACY_READY``, ``MILESTONE_COMPLETE``, and a close-out after
+    a release wait, :func:`closed_out_decision`) -- nothing ran, no gate
+    is open, nothing was declined, so no job record is written at all and
+    the jobs directory is left unchanged. Every other reachable
     outcome returns a :data:`JobRecord` (a plain, JSON-serialisable
     ``dict`` -- exactly what was persisted): ``GATE_BLOCKED``,
     ``DECLINED`` or ``HANDOFF_PENDING`` for the no-launch class, or --
@@ -4704,8 +4788,10 @@ def _execute_step_locked(
     # (exit 10), and a refusal raises (exit 20).
     preflight_events: list[str] = []
     branch_ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime,
-                                          events=preflight_events)
-    preflight = milestone_branch.repository_preflight(branch_ctx, requested_work_item_id=work_item_id)
+                                          events=preflight_events, auto_merge=auto_merge,
+                                          wait_seconds=wait_seconds, poll_seconds=poll_seconds)
+    preflight = milestone_branch.waiting_preflight(branch_ctx, requested_work_item_id=work_item_id,
+                                                   on_wait=on_wait)
     # Step 1c (workflow-controller-workflow-2-6-integration CP3, I3): the
     # installed Workflow release must still be the admitted one -- checked
     # here, after the preflight (close-out switches to the trunk, which may
@@ -4717,6 +4803,8 @@ def _execute_step_locked(
     if isinstance(preflight, milestone_branch.Gate):
         return _branch_gate_record(runtime, managed_repo, identity, target_state.read(managed_repo), preflight,
                                    run_id=run_id)
+    if preflight.stop:
+        return closed_out_decision(preflight.binding)
     binding = preflight.binding
     if binding is not None or preflight.action != "none":
         snapshot = target_state.read(managed_repo)

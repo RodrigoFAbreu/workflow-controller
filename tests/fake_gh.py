@@ -22,17 +22,38 @@ decisions depend on:
   message and no JSON when the PR has none (``"checks": null``);
 - ``pr edit`` sets the stored ``title``/``body``; a closed or merged PR
   cannot be edited;
-- ``release create --verify-tag`` fails when the origin lacks the tag, and
-  ``release upload``/``release download`` never overwrite.
+- ``mergeStateStatus`` is a PR's stored ``mergeStateStatus`` when it has
+  one, otherwise ``UNKNOWN`` for a closed or merged PR, ``DRAFT`` for a
+  draft and ``CLEAN`` for an open one;
+- ``pr merge <n> --squash --match-head-commit <sha> --subject <s> --body <b>``
+  (the only merge modelled) refuses, as GitHub does, unless the PR is open,
+  not a draft (``GraphQL: Pull Request is still a draft
+  (mergePullRequest)``), its head in the origin is ``<sha>`` (``GraphQL:
+  Head branch was modified. Review and try the merge again.
+  (mergePullRequest)``) and its merge state is ``CLEAN`` or ``HAS_HOOKS``;
+  otherwise it squashes the head onto the base in the origin
+  (``git merge-tree``, a conflict refuses), with ``<s>``/``<b>`` as the
+  message, and stores the PR as merged. For a PR already merged it sends
+  nothing and exits 0 with ``! Pull request <owner/name>#<n> was already
+  merged``, as the real gh does (it reads the state itself, never through
+  a scripted read lag). ``--auto`` and ``--disable-auto``
+  are refused outright, so a test fails if either is ever sent. A PR's
+  ``merge_read_lag`` (``N``) keeps the next ``N`` reads of it showing the
+  pre-merge PR; its ``merge_reply_lost`` makes the merge happen but exit 1
+  with a network error, as a lost reply does;
+- ``run list --commit --branch --event --workflow`` filters the stored
+  ``runs`` (``headSha``, ``headBranch``, ``event``, and ``workflowFile`` or
+  ``workflowName``), newest first.
 
-There is no ``pr merge``: any command outside the modelled surface exits 1.
-A human merge is simulated by editing the state file directly.
+Any command outside the modelled surface exits 1. A human merge is
+simulated by editing the state file directly.
 
 Environment variables:
 
 ``FAKE_GH_STATE`` (required)
     The JSON state file: ``repository`` (``OWNER/NAME``), ``url``,
-    ``next_number``, ``prs`` and ``releases`` (see :func:`initial_state`).
+    ``next_number``, ``prs``, ``releases`` and ``runs`` (see
+    :func:`initial_state`).
     Release assets are stored beside it, under ``assets/<tag>/``.
 ``FAKE_GH_ORIGIN``
     The bare origin repository branches and tags are read from.
@@ -57,6 +78,10 @@ from pathlib import Path
 
 PR_JSON_FIELDS = ("number", "state", "isDraft", "headRefName", "headRefOid", "baseRefName",
                   "isCrossRepository", "url", "mergedAt", "mergeCommit", "title", "body")
+RUN_JSON_FIELDS = ("databaseId", "workflowName", "status", "conclusion", "attempt", "url")
+#: The merge states GitHub merges at once (gh's ``isImmediatelyMergeable``).
+MERGEABLE_STATES = ("CLEAN", "HAS_HOOKS")
+MERGED_AT = "2026-10-01T12:00:00Z"
 #: ``gh pr checks``'s exit code for "some checks are still pending".
 GH_EXIT_PENDING = 8
 
@@ -64,13 +89,17 @@ _VALUE_FLAGS = {"--repo": "repo", "-R": "repo", "--json": "json", "--head": "hea
                 "--base": "base", "-B": "base", "--state": "state", "-s": "state",
                 "--limit": "limit", "-L": "limit", "--title": "title", "-t": "title",
                 "--body": "body", "-b": "body", "--notes": "notes", "-n": "notes",
-                "--dir": "dir", "-D": "dir"}
-_BOOL_FLAGS = {"--draft": "draft", "-d": "draft", "--verify-tag": "verify_tag", "--clobber": "clobber"}
+                "--dir": "dir", "-D": "dir", "--match-head-commit": "match_head_commit",
+                "--subject": "subject", "--commit": "commit", "--branch": "branch",
+                "--event": "event", "--workflow": "workflow"}
+_BOOL_FLAGS = {"--draft": "draft", "-d": "draft", "--verify-tag": "verify_tag", "--clobber": "clobber",
+               "--squash": "squash", "--auto": "auto", "--disable-auto": "disable_auto",
+               "--admin": "admin", "--delete-branch": "delete_branch"}
 
 
 def initial_state(repository: str) -> dict:
     return {"repository": repository, "url": f"https://github.com/{repository}",
-            "next_number": 1, "prs": [], "releases": []}
+            "next_number": 1, "prs": [], "releases": [], "runs": []}
 
 
 def read_state(path: Path) -> dict:
@@ -94,6 +123,10 @@ class _Exit(Exception):
     def __init__(self, code: int, stderr: str = "", stdout: str = "") -> None:
         super().__init__(code)
         self.code, self.stderr, self.stdout = code, stderr, stdout
+
+
+class _ReplyLost(_Exit):
+    """A failure reported after the state changed: the change is kept."""
 
 
 def _parse(args: list[str]) -> tuple[list[str], dict]:
@@ -151,13 +184,86 @@ def _require_repo(state: dict, opts: dict) -> None:
         raise _Exit(1, f"GraphQL: Could not resolve to a Repository with the name '{repo}'. (repository)\n")
 
 
+def _merge_state(pr: dict) -> str:
+    if "mergeStateStatus" in pr:
+        return pr["mergeStateStatus"]
+    if pr["state"] != "OPEN":
+        return "UNKNOWN"
+    return "DRAFT" if pr["isDraft"] else "CLEAN"
+
+
 def _pr_view(pr: dict) -> dict:
     view = {key: pr[key] for key in PR_JSON_FIELDS}
+    view["mergeStateStatus"] = _merge_state(pr)
     if pr["state"] == "OPEN":
         head = _origin_commit(f"refs/heads/{pr['headRefName']}")
         if head is not None:
             view["headRefOid"] = head
     return view
+
+
+def _read_pr(pr: dict) -> tuple[dict, bool]:
+    """``pr``'s view, or the pre-merge view while its read lag lasts;
+    ``True`` when the lag was consumed (the state changed)."""
+    if pr.get("lagged_reads", 0) > 0:
+        pr["lagged_reads"] -= 1
+        return pr["lagged_view"], True
+    return _pr_view(pr), False
+
+
+def _squash(pr: dict, head: str, subject: str, body: str) -> str:
+    """Squash ``head`` onto ``pr``'s base in the origin with message
+    ``subject``/``body``, as GitHub's squash merge does; returns the new
+    base commit. A conflict refuses."""
+    origin = os.environ["FAKE_GH_ORIGIN"]
+    base_ref = f"refs/heads/{pr['baseRefName']}"
+    base = _origin_commit(base_ref)
+    tree = _git(origin, "merge-tree", "--write-tree", base, head)
+    if base is None or tree.returncode != 0:
+        raise _Exit(1, f"Pull request #{pr['number']} is not mergeable: the merge commit cannot be cleanly "
+                       f"created.\n")
+    commit = _git(origin, "-c", "user.name=GitHub", "-c", "user.email=noreply@github.com", "commit-tree",
+                  tree.stdout.split()[0], "-p", base, "-m", subject, "-m", body)
+    if commit.returncode != 0 or _git(origin, "update-ref", base_ref, commit.stdout.strip(), base).returncode:
+        raise _Exit(1, "HTTP 500: Internal Server Error (https://api.github.com/graphql)\n")
+    return commit.stdout.strip()
+
+
+def _merge(state: dict, positional: list[str], opts: dict) -> None:
+    for flag in ("auto", "disable_auto", "admin", "delete_branch"):
+        if opts.get(flag):
+            raise _Exit(2, f"fake gh: pr merge --{flag.replace('_', '-')} is never sent by the Controller\n")
+    if not opts.get("squash") or "match_head_commit" not in opts or "subject" not in opts \
+            or "body" not in opts or len(positional) != 1:
+        raise _Exit(1, "fake gh: only pr merge <n> --squash --match-head-commit <sha> --subject <s> "
+                       "--body <b> is modelled\n")
+    pr = _find_pr(state, positional[0])
+    if pr["state"] == "MERGED":
+        # Real gh reads the state itself (not through the read lag a test may
+        # script) and sends nothing: exit 0 with a warning (recorded against
+        # GitHub in the auto-merge-release-wait functional review, Flow Q4).
+        raise _Exit(0, f"! Pull request {state['repository']}#{pr['number']} was already merged\n")
+    if pr["state"] != "OPEN":
+        raise _Exit(1, f"X Pull request #{pr['number']} was already {pr['state'].lower()}\n")
+    before = _pr_view(pr)
+    if before["isDraft"]:
+        raise _Exit(1, "GraphQL: Pull Request is still a draft (mergePullRequest)\n")
+    if before["headRefOid"] != opts["match_head_commit"]:
+        raise _Exit(1, "GraphQL: Head branch was modified. Review and try the merge again. "
+                       "(mergePullRequest)\n")
+    if before["mergeStateStatus"] not in MERGEABLE_STATES:
+        raise _Exit(1, f"X Pull request #{pr['number']} is not mergeable: the base branch policy "
+                       f"prohibits the merge ({before['mergeStateStatus']}).\n")
+    commit = _squash(pr, before["headRefOid"], opts["subject"], opts["body"])
+    pr.pop("mergeStateStatus", None)
+    pr.update(state="MERGED", headRefOid=before["headRefOid"], mergedAt=MERGED_AT,
+              mergeCommit={"oid": commit}, merge_subject=opts["subject"], merge_body=opts["body"])
+    if pr.get("merge_read_lag"):
+        pr.update(lagged_reads=pr["merge_read_lag"], lagged_view=before)
+
+
+def _run_view(run: dict) -> dict:
+    return {key: run[key] for key in RUN_JSON_FIELDS}
 
 
 def _find_pr(state: dict, number: str) -> dict:
@@ -205,7 +311,7 @@ def _run(argv: list[str], state: dict) -> tuple[str, bool]:
         record = {"nameWithOwner": state["repository"], "url": state["url"]}
         return json.dumps(_select(record, opts.get("json"))) + "\n", False
 
-    if group not in ("pr", "release") or not sub:
+    if group not in ("pr", "release", "run") or not sub:
         raise _Exit(1, f"fake gh: unsupported command: {' '.join(argv[:2])}\n")
     _require_repo(state, opts)
 
@@ -213,12 +319,30 @@ def _run(argv: list[str], state: dict) -> tuple[str, bool]:
         if opts.get("state") != "all" or "head" not in opts:
             raise _Exit(1, "fake gh: only pr list --head <branch> --state all is modelled\n")
         limit = int(opts.get("limit", 30))
-        prs = [_pr_view(pr) for pr in state["prs"] if pr["headRefName"] == opts["head"]]
-        prs.sort(key=lambda pr: -pr["number"])
-        return json.dumps([_select(pr, opts.get("json")) for pr in prs[:limit]]) + "\n", False
+        reads = [_read_pr(pr) for pr in state["prs"] if pr["headRefName"] == opts["head"]]
+        prs = sorted((view for view, _ in reads), key=lambda pr: -pr["number"])
+        return (json.dumps([_select(pr, opts.get("json")) for pr in prs[:limit]]) + "\n",
+                any(lagged for _, lagged in reads))
 
     if (group, sub) == ("pr", "view"):
-        return json.dumps(_select(_pr_view(_find_pr(state, positional[0])), opts.get("json"))) + "\n", False
+        view, lagged = _read_pr(_find_pr(state, positional[0]))
+        return json.dumps(_select(view, opts.get("json"))) + "\n", lagged
+
+    if (group, sub) == ("pr", "merge"):
+        _merge(state, positional, opts)
+        if _find_pr(state, positional[0]).get("merge_reply_lost"):
+            raise _ReplyLost(*_FAILURES["network"])
+        return "", True
+
+    if (group, sub) == ("run", "list"):
+        if not all(opts.get(key) for key in ("commit", "branch", "event", "workflow")):
+            raise _Exit(1, "fake gh: only run list --commit --branch --event --workflow is modelled\n")
+        limit = int(opts.get("limit", 20))
+        runs = [run for run in state.get("runs", [])
+                if (run["headSha"], run["headBranch"], run["event"]) == (opts["commit"], opts["branch"], opts["event"])
+                and opts["workflow"] in (run.get("workflowFile"), run["workflowName"])]
+        runs.sort(key=lambda run: -run["databaseId"])
+        return json.dumps([_select(_run_view(run), opts.get("json")) for run in runs[:limit]]) + "\n", False
 
     if (group, sub) == ("pr", "create"):
         head, base = opts.get("head"), opts.get("base")
@@ -357,6 +481,8 @@ def main(argv: list[str]) -> int:
         if changed:
             write_state(state_path, state)
     except _Exit as exc:
+        if isinstance(exc, _ReplyLost):
+            write_state(state_path, state)
         sys.stdout.write(exc.stdout)
         sys.stderr.write(exc.stderr)
         return exc.code

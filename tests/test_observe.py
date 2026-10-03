@@ -244,6 +244,9 @@ class NormaliseRenderTest(unittest.TestCase):
                          ["run ended: exit 10"])
         self.assertEqual(_texts("run", {"run_id": "r1", "event": "job_started", "job_id": "j1"}),
                          ["job j1 started"])
+        self.assertEqual(_texts("run", {"run_id": "r1", "event": "waiting", "gate": "checks_pending",
+                                        "deadline": "2026-10-02T13:00:00Z"}),
+                         ["waiting at checks_pending until 2026-10-02T13:00:00Z"])
 
     def test_an_unknown_event_type(self) -> None:
         [event] = observe.normalise("worker", json.dumps({"type": "rate_limit_event", "x": 1}))

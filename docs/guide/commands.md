@@ -46,10 +46,18 @@ after the subcommand is shorthand: run it with the global option first
 and the repository last, as in
 `workflow-controller --work-item <id> explain <repo>`.
 
-`run` is a bounded loop, not a daemon: it terminates, it does not poll,
-it holds no socket and it schedules nothing. Its convergence is bounded by
+`run` is a bounded loop, not a daemon: it terminates, it holds no socket
+and it schedules nothing. Its convergence is bounded by
 `--max-steps` (default: the `run.max_steps` setting, 20): a local `REVISE` -> remediation -> review cycle
 is two jobs, so the default allows about ten rounds before exit 16.
+Its one poll is bounded too: in a repository that opts in to auto-merge,
+a `run` step at a pending checks, merge or release gate re-reads GitHub
+every `merge.poll_seconds` for up to `merge.wait_seconds`, launching no
+worker, and the run log records a `waiting` event per gate (see
+[Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait)).
+`step` never waits. After an auto-merged milestone closes out, the step
+ends with exit `0` and `run` stops, instead of planning the next
+milestone in the same run.
 
 Exit codes are part of the CLI's contract and are normative in
 [`docs/adr/0001-controller-generation-1-architecture.md`](../adr/0001-controller-generation-1-architecture.md)
@@ -86,7 +94,10 @@ in order:
 - `last job telemetry:` the newest job that carries a telemetry block,
   with its cost and wall times (see
   [Telemetry](workers.md#telemetry)), only when one exists;
-- one `milestone:` line per milestone binding, only when one exists;
+- one `milestone:` line per milestone binding, only when one exists.
+  An auto-merge binding's line ends with `, merge: <state> at <head>
+  (attempt <n>)` once the Controller has sent a merge, and `, release:
+  <tag> <url>` (or the settled state) once its release wait settled;
 - `runtime root:` the root and its ladder row.
 
 The jobs counted and listed are those recorded when `status` started.
@@ -95,7 +106,8 @@ With the global `--json`, `status` prints one object with the same
 fields: `controller`, `runtime_root`, `ladder_row` and `runtime_state`,
 and, when there is runtime state, `pinned_identity`, `jobs` (`count` and
 `recent`), `handoff`, `active` (`runs` and `jobs`), `last_job_telemetry`
-(or `null`) and `bindings`.
+(or `null`) and `bindings`. Each `bindings` entry carries the binding's
+`merge` and `release` fields (`null` when absent).
 
 ## `settings`
 

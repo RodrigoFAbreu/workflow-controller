@@ -143,6 +143,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -155,6 +158,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -565,6 +571,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -577,6 +586,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -823,6 +835,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -835,6 +850,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -1086,6 +1104,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -1098,6 +1119,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -1351,6 +1375,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -1363,6 +1390,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -1618,6 +1648,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -1630,6 +1663,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -1886,6 +1922,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -1898,6 +1937,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}
@@ -2466,6 +2508,9 @@
               "follow.heartbeat_seconds": "file",
               "follow.replay_events": "file",
               "forge.pr_list_limit": "file",
+              "merge.auto": "file",
+              "merge.poll_seconds": "file",
+              "merge.wait_seconds": "file",
               "routing": "file",
               "run.max_steps": "file",
               "timeouts.git_seconds": "file",
@@ -2478,6 +2523,9 @@
               "follow.heartbeat_seconds": 30,
               "follow.replay_events": 20,
               "forge.pr_list_limit": 200,
+              "merge.auto": true,
+              "merge.poll_seconds": 30,
+              "merge.wait_seconds": 3600,
               "routing": {
                 "default": {},
                 "roles": {}

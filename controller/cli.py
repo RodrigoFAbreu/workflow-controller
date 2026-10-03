@@ -61,6 +61,9 @@ EXIT_INTERRUPTED = 40
 #: worker may still run. Nothing was launched or reconciled.
 EXIT_WORKER_ACTIVE = 45
 EXIT_HANDOFF_PENDING = 50
+#: Ctrl-C in a waiting `run`: what an uncaught SIGINT's ``KeyboardInterrupt``
+#: exits with, now without the traceback.
+SIGINT_EXIT_STATUS = 130
 
 #: Test-support surface (CP8): `--pause-file` is inert unless this
 #: environment variable is also set to exactly `"1"`, so an ordinary
@@ -828,8 +831,9 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     return EXIT_OK
 
 
-def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path) -> milestone_branch.Context:
-    return milestone_branch.Context(repo_root=target.root, runtime_root=runtime_root)
+def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path, *,
+                    auto_merge: bool = True) -> milestone_branch.Context:
+    return milestone_branch.Context(repo_root=target.root, runtime_root=runtime_root, auto_merge=auto_merge)
 
 
 def _print_branch_blocks(blocks: dict) -> None:
@@ -850,7 +854,8 @@ def _print_branch_blocks(blocks: dict) -> None:
             f"{'fresh' if observed['fresh'] else 'behind'} ({observed['behind']} behind the trunk), "
             f"observed {observed['observed_at']}")
         print(f"milestone branch: {binding['branch']} for {binding['work_item_id']} ({binding['state']}), "
-              f"branch point {binding['branch_point']}, {pr_text}, {drift}")
+              f"branch point {binding['branch_point']}, {pr_text}, {drift}"
+              f"{milestone_branch.merge_release_text(binding)}")
 
 
 def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
@@ -882,7 +887,10 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # no `gh`); `None`, and the key omitted, when no policy or binding
     # applies (I1, I10). Its predicted trunk-start base is the bootstrap's
     # base, as `step` passes the passed trunk start's (squash-merge Design F).
-    preflight = milestone_branch.predict(_branch_context(target, runtime_root), requested_work_item_id=args.work_item)
+    # `merge.auto` decides whether a READY auto-merge binding predicts the
+    # merge (auto-merge-release-wait A.2, F).
+    branch_ctx = _branch_context(target, runtime_root, auto_merge=_effective(args)["merge.auto"])
+    preflight = milestone_branch.predict(branch_ctx, requested_work_item_id=args.work_item)
     preflight_block = {} if preflight is None else {"repository_preflight": preflight}
     # The same job-history read `job.execute_step` makes (automatic-
     # lifecycle-orchestration CP4B), so `explain` and `step` see the same
@@ -1034,6 +1042,7 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
 def _run_one_step(
     args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
     target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions = routing.NO_OVERRIDES,
+    *, wait: bool = False,
 ) -> tuple[int, dict | Decision | None]:
     """One orchestration boundary: a generation-handoff check, then (at
     most) one job execution. Shared by ``step`` (one call) and ``run``'s
@@ -1047,7 +1056,11 @@ def _run_one_step(
     class, or a ``JobRecord`` otherwise.
 
     With a run open (CP5), a detected handoff and a no-action decision are
-    recorded in its log, and the job it launches carries its ``run_id``."""
+    recorded in its log, and the job it launches carries its ``run_id``.
+
+    ``wait`` (auto-merge-release-wait I6): ``run`` passes ``True``, so the
+    step may wait up to ``merge.wait_seconds`` on a pending merge gate;
+    ``step`` never waits."""
     run = _open_run
     origin_source_root = ident.origin_source_root or ident.source_root
     pending = handoff.detect(ident, origin_source_root)
@@ -1076,13 +1089,20 @@ def _run_one_step(
         run_id=None if run is None else run.run_id,
         drain_detach_seconds=effective["worker.drain_detach_seconds"],
         controller_settings=_controller_settings_block(effective),
+        auto_merge=effective["merge.auto"],
+        wait_seconds=effective["merge.wait_seconds"] if wait else 0,
+        poll_seconds=effective["merge.poll_seconds"],
+        on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
     )
 
     if isinstance(result, Decision):
-        # LEGACY_READY / MILESTONE_COMPLETE: nothing ran, nothing is
-        # pending.
+        # LEGACY_READY / MILESTONE_COMPLETE, or a close-out after a release
+        # wait: nothing ran, nothing is pending.
         if run is not None:
-            run.event("no_action", observed_phase=phase_to_wire(result.observed_phase), reason=result.reason)
+            released = ({"release": result.evidence[0]} if result.reason == job.REASON_CLOSED_OUT_RELEASED
+                        else {})
+            run.event("no_action", observed_phase=phase_to_wire(result.observed_phase), reason=result.reason,
+                      **released)
         return EXIT_OK, result
 
     # `execute_step`'s own `status` field, mapped to the exit-code table
@@ -1214,7 +1234,7 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         _await_pause_file(args.pause_file)
 
         run.event("step_started", n=steps_run + 1)
-        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options, wait=True)
         steps_run += 1
         worker.reap_adopted_children()
 
@@ -1586,6 +1606,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc.message}", file=sys.stderr)
             exit_code = EXIT_FAIL_CLOSED
         return exit_code
+    except milestone_branch.WaitInterrupted as exc:
+        # Ctrl-C in a `run`'s wait for checks, the merge or the release: the
+        # run record reads `interrupted` as for any Ctrl-C; one line, not a
+        # traceback (the exit status is the shell's 128 + SIGINT).
+        interrupted = True
+        print(f"error: {exc.message()}", file=sys.stderr)
+        return SIGINT_EXIT_STATUS
     except KeyboardInterrupt:
         interrupted = True
         raise

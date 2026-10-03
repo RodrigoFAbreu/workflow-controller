@@ -158,21 +158,42 @@ file is never an error: every setting then takes its built-in default.
 | `timeouts.release_command_seconds` | integer | `1800` | 60 to 21600 | none |
 | `timeouts.workflow_query_seconds` | integer | `120` | 10 to 3600 | none |
 | `forge.pr_list_limit` | integer | `200` | 50 to 1000 | none |
+| `merge.auto` | boolean | `true` | -- | none |
+| `merge.wait_seconds` | integer | `3600` | 0 to 86400 | none |
+| `merge.poll_seconds` | integer | `30` | 10 to 600 | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
 
 Each default is the value the Controller used before the file existed,
 so a file holding only defaults behaves as no file. A boolean is not an
-integer: `true` is refused where an integer is expected.
+integer: `true` is refused where an integer is expected. A boolean
+setting takes only JSON `true` or `false`: an integer, a string or
+`null` is refused.
+
+The three `merge` rows (1.6.0) matter only for a repository whose policy
+opts in to auto-merge (see
+[Auto-merge and the release wait](milestone-branches.md#auto-merge-and-the-release-wait)):
+
+- `merge.auto: false` stops the Controller from merging, in every
+  repository on the machine: readiness then ends at `merge_pull_request`
+  and a person merges. The release wait and the stop after close-out
+  still follow the repository's policy, because they only read;
+- `merge.wait_seconds` bounds how long one `run` step waits at a pending
+  gate (checks, merge or release pending) before it ends at that gate;
+  `0` means `run` does not wait. `step` never waits, whatever the value;
+- `merge.poll_seconds` is how often that wait re-reads GitHub. Each poll
+  makes a few `gh` calls, so the 10-second lower bound keeps a waiting
+  `run` to at most 360 polls an hour, inside GitHub's API limits.
 
 A file filled by this release looks like this (the `_defaults_written`
 entries are shortened):
 
 ```json
 {
-  "_defaults_written": {"run.max_steps": {"generation": 1, "value": 20}, "...": "..."},
-  "_table_generation": 1,
+  "_defaults_written": {"merge.auto": {"generation": 2, "value": true}, "...": "..."},
+  "_table_generation": 2,
   "follow": {"heartbeat_seconds": 30, "replay_events": 20},
   "forge": {"pr_list_limit": 200},
+  "merge": {"auto": true, "poll_seconds": 30, "wait_seconds": 3600},
   "routing": {"default": {}, "roles": {}},
   "run": {"max_steps": 20},
   "schema_version": 1,
@@ -217,6 +238,11 @@ when all three hold:
 - the new default differs from it;
 - the new release's generation for the key is greater than the recorded
   one.
+
+1.6.0 is table generation 2: it adds the three `merge` rows to a file
+filled by 1.5.0, and moves nothing else. A 1.5.0 Controller sharing the
+file afterwards warns about the unknown `merge` section, ignores it,
+and its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

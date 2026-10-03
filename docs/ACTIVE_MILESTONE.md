@@ -111,6 +111,25 @@ below describes the previous milestone (C4) and is kept until this one is accept
   reconciled `FINISHED` job. Full suite: 2993 tests pass (one `test_evidence` stderr match fails only under
   `FORCE_COLOR=3`).
 
+- **CP6, both modes end to end** -- `tests/test_protocol_lifecycle.py` drives a disposable repository
+  through the real `job.execute_step` from a bound plan bundle to `MILESTONE_COMPLETE` and the next
+  milestone's `/milestone-plan` launch. The fake worker is a `worker.launch` double whose effects are the
+  target's own installed writers and generator (checkpoint commit, bundle generation, local and manual
+  review records with their `REVIEW_FEEDBACK.md`, the functional-review checklist evidence commit); the
+  user-only steps (the manual external verdicts, plan approval, technical approval, acceptance) are the test's.
+  On the vendored 2.7.0 (protocol mode) every launch carries the `protocol` block and a `reconcile` class
+  (`gate_reached`, `progress`, `progress`, `gate_reached`, `gate_reached`), the user gates launch nothing, and
+  the Workflow's own `next-action` ends at `complete`. On 2.6.0 (legacy mode) the lifecycle ends the same way
+  with no `protocol` block and the same launches except `prepare-functional-review`, which 1.6.0 gates and
+  the test performs as the user (difference D6). A repository updated 2.6.0 -> 2.7.0 between steps: the step
+  admitted under 2.6.0 raises `WorkflowReleaseChangedError` (`admitted` 2.6.0, `installed` 2.7.0) with no
+  worker and no record, and the next run completes in protocol mode. The three golden generators other than
+  the plan-stage one and the 2.6.0 plan-stage golden pass `--check` byte for byte.
+  **For CP7:** `generate_plan_stage_decisions.py --check` (default 2.5.1 file) fails on the unmodified base
+  `f2ca24d` and at every C9 checkpoint, because the `AMENDING_PLAN` cases carry a permitted difference
+  that `tests/test_golden_plan_stage_decisions.py` names and asserts; that test, not the bare `--check`, is
+  its check, and the golden is not rewritten.
+
 ## Status
 
 **Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section

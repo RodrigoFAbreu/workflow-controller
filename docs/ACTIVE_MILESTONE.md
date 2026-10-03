@@ -490,53 +490,51 @@ Codex `REVISE` on bundle `ed2169dd` (review content id `707a0ad1`), no Blocking 
 
 ## Functional review checklist
 
-Round 2, implementation revision 10: technical approval `08dd5c1`, reviewed implementation head
-`9efa17c`, implementation bundle `b652463f`, PR #18 (draft) at `08dd5c1`. Every expected result
-below was measured on 2026-10-03 against `08dd5c1` in a scratch directory (`/tmp/c4-fr`), by
-running the blocks exactly as written. Values that cannot repeat are shown as `<...>`, and the
-helpers print the loaded target's own paths and commits as `<R>` (its clone), `<RT>` (its runtime
+Round 3, implementation revision 11: technical approval `6e4e991`, reviewed implementation head
+`af5ffe6`, implementation bundle `0b2b25f3`, PR #18 (draft) at `6e4e991`. Every expected result
+below was measured on 2026-10-03 against `6e4e991` in a scratch directory laid out like
+`/tmp/c4-fr`, by running the blocks as written. Values that cannot repeat are shown as `<...>`, and
+the helpers print the loaded target's own paths and commits as `<R>` (its clone), `<RT>` (its runtime
 root), `<A>` (the acceptance commit), `<B0>` (the branch point), `<m>` (the squash commit), `<d>`
 (a later trunk commit) and `<L>` (a later branch commit); times print as `<t>`.
 
-**Round 2 focus.** Round 1 (revision 6) passed every flow and found F1-F6
+**Round 3 focus.** Round 2 (revision 10) passed every flow except one finding, R2-F1
 (`.ai-review/workflow-controller-auto-merge-release-wait/feedback/FUNCTIONAL_REVIEW.md`);
-revisions 7-10 fix them. Where each fix shows:
-- F1, the refusal-budget error states the manual-merge way out once: I1, steps 3 and 4;
-- F2, the `release_failed` title covers a failed run and a run that succeeded and published
-  nothing: K2 and K3;
-- F3 and revision 9, exit 45 names the waiting `run` when that run holds the lifecycle lock (L3),
-  and keeps the worker text when another process holds it, even while a live run's record looks
-  like a waiting run (L5, new);
-- F4, Ctrl-C in a waiting `run` prints one line and exits `130`, with no traceback: L4;
-- F5, the fake `gh` answers a merge of an already-merged pull request with exit 0 and
-  `! Pull request ... was already merged`, as real `gh` does, and the Controller accepts that
-  send without counting a refusal: J3 (new; `act hand-squash` takes an optional read lag);
-- F6, the `merge.auto: false` gate names the setting (F); the squash body no longer tells a person
-  to merge (E); the guides' trunk-side close-out exception (K6, P), the release notes'
-  compatibility line (N, P), the `release_failed` wording and real `gh`'s merge texts (P).
+revision 11 fixes it (`7f24c3a`, `adc67ac`). Where the fix shows:
+- R2-F1, a binding without `auto_merge` writes 1.5.0's pull request body again, and the new
+  wording appears only for an auto-merge binding: flow D (the squash commit's body is identical
+  between 1.5.0 and the local build);
+- the auto-merge binding's body keeps the new wording `squash-merged into the trunk as one
+  commit`: E (the `gh pr merge` argv) and K (its release targets);
+- regressions: M (the automated evidence, one test more than round 2: 330 in the lifecycle
+  group) and O (PR #18's checks at the new head).
 
-Flow M adds the exit-45 and Ctrl-C unit tests. Every other flow is round 1's, re-measured.
+Flow Q stays as recorded from round 1 and is not re-run. Every other flow is round 2's,
+unchanged.
 
-**R2-F1, found while measuring round 2, fixed in `7f24c3a` (implementation revision 11).** The F6 squash-body change
-(`68c237c`, `squash_body` in `controller/milestone_branch.py`) applies to every binding, not only
-to auto-merge ones, so a binding without `auto_merge` no longer writes 1.5.0's pull request body
-(plan I1). Flow D's transcripts stay identical only because they leave the body out. After flow D:
+**R2-F1 (round 2), fixed in `7f24c3a` (implementation revision 11).** The F6 squash-body change
+(`68c237c`, `squash_body` in `controller/milestone_branch.py`) had reached every binding, so a
+binding without `auto_merge` no longer wrote 1.5.0's pull request body (plan I1). Since `7f24c3a`
+the new wording follows the binding's policy (never `merge.auto`), and a binding without the key
+writes 1.5.0's line again. Flow D's transcript includes the merged body, so its "identical" line
+covers it (measured at `6e4e991`: identical, 1.5.0's body). After flow D, this shows the one body
+line side by side:
 ```bash
 . /tmp/c4-fr/fr.sh; for t in d-old d-new; do use $t; echo "$t: $(git --git-dir="$O" log -1 --format=%b main | sed -n 2p | norm)"; done
 ```
-Measured: ``d-old: Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".`` and
-``d-new: Accepted at <A> on `milestone/wi-1`; squash-merged into the trunk as one commit.``
-Since `7f24c3a` the opted-in wording follows the binding's policy (never `merge.auto`), and a
-binding without the key writes 1.5.0's line again; flow D's transcript now includes the merged
-body, so its "identical" line covers it (measured at `7f24c3a`: identical, 1.5.0's body). Round 3
-re-tests D (the body) and E (the opted-in wording, unchanged).
+Expected: ``d-old: Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".`` and
+``d-new: Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".``: the same line.
+The opted-in wording (``Accepted at <A> on `milestone/wi-1`; squash-merged into the trunk as one
+commit.``) appears only for an `auto` or `release` target (E, K).
 
-The automated state is current: the last full run, at revision 10 (`9efa17c`,
+The automated state: the last full run, at revision 10 (`9efa17c`,
 `python3 -m unittest discover -s tests`), ran 2806 tests with one failure, the known
 `test_evidence` stderr match that `FORCE_COLOR=3` breaks; it passes with `FORCE_COLOR` unset. The
 last sharded run, at revision 9 (`tools/run_tests.py`, `TEST_RESULTS.md`), ran 2812 tests, every
-shard PASS on attempt 1. Only `docs/ai-workflow/WORKFLOW_STATE.json` changed after `9efa17c`
-(`e852ad3`, `08dd5c1`). Flow M reruns this milestone's own test modules.
+shard PASS on attempt 1. Revision 11 changed `controller/milestone_branch.py`,
+`tests/test_pull_request_lifecycle.py` and the guide (`7f24c3a`); only
+`docs/ai-workflow/WORKFLOW_STATE.json` and this narrative changed after it. PR #18's CI at
+`6e4e991` is the full suite (flow O); flow M reruns this milestone's own test modules.
 
 Nothing in flows A-P writes to this repository, its remote, GitHub, the user's settings file
 (`~/.config/workflow-controller/`) or the shared runtime root
@@ -613,7 +611,7 @@ drive stop smoke auto; use smoke; act show
 ```
 Expected: `"""Functional-review driver for workflow-controller-auto-merge-release-wait:`, `47`
 (the helper file's non-empty lines), `workflow-controller 1.5.0` and
-`runtime: package (local build from 08dd5c1031e2)`: the version stays tag-derived until the
+`runtime: package (local build from 6e4e9912ca9a)`: the version stays tag-derived until the
 `v1.6.0` tag exists. Then eight `-- driver: workflow-controller step -> exit <n>` lines (`0`, `0`,
 `10`, `0`, `0`, `0`, `0`, `10`: the plan, the bind and `/review-plan`, the manual plan-review
 gate, the plan approval and CP1 with the Draft PR, CP2, the bundle, the local review, the manual
@@ -629,7 +627,7 @@ The helpers (`fr.sh`) and the driver (`drive.py`), extracted by the setup block:
 unset FORCE_COLOR PYTHONPATH WORKFLOW_CONTROLLER_SETTINGS GH_TOKEN GITHUB_OUTPUT FAKE_GH_FAIL
 export S=/tmp/c4-fr R0=/home/rodrigo/Workspace/workflow-controller
 export W=$S/venv/bin/workflow-controller XDG_CONFIG_HOME=$S/xdg
-export H=08dd5c1031e22272d15935abf5ee973ac57fef03 BASE=854d25cf4c53ec63a7272a34be31c618f04c8993
+export H=6e4e9912ca9a46f3f6f39e1b6789f11eef2b610a BASE=854d25cf4c53ec63a7272a34be31c618f04c8993
 # drive stop NAME KIND: a fresh target (KIND none, auto or release) driven by $W to the acceptance commit
 drive() { (cd /tmp && python3 "$S/drive.py" "$@"); }
 # use NAME: load a target: $R its clone, $O its bare origin, $RT its runtime root, $T its directory,
@@ -913,7 +911,7 @@ git diff --stat "$BASE" "$H" -- .workflow-controller/ pyproject.toml setup.py .g
 (cd "$S/src" && python3 tools/ci_workflows.py --check; echo "ci_workflows --check exit $?")
 ```
 Expected:
-- `workflow-controller 1.5.0` and `runtime: package (local build from 08dd5c1031e2)`;
+- `workflow-controller 1.5.0` and `runtime: package (local build from 6e4e9912ca9a)`;
 - `inspect: 1.5.0 exit 0, local exit 0`, `inspect: byte-identical`, and the same two lines for
   `explain`: this repository's policy has no `auto_merge` key, so both builds read it alike
   (each with an empty scratch runtime root);
@@ -1066,10 +1064,10 @@ Expected: `the 1.5.0 and local transcripts are identical`, then the transcript:
   `main`; and the squash commit's body (the pull request body), 1.5.0's:
   `` Milestone `wi-1`, planned in `docs/plans/wi-1.md`, driven by workflow-controller. ``,
   ``Accepted at <A> on `milestone/wi-1`; merge with "Squash and merge".``, a blank line and
-  `<!-- workflow-controller: work_item=wi-1 -->` (R2-F1; measured with a local build of `7f24c3a`).
+  `<!-- workflow-controller: work_item=wi-1 -->` (R2-F1; measured with a local build of `6e4e991`).
 
 The last two lines prove which build ran: `v1.5.0` (the installed release), then
-`local 08dd5c1031e2`.
+`local 6e4e9912ca9a`.
 
 **E. Opt-in: the head-bound merge, close-out, the stop, and the next step from the trunk (C.3,
 D.4).** An `auto` target (releases off).
@@ -1500,7 +1498,7 @@ Expected: `Ran 133 tests` OK (the settings rows and the bool type, the policy ke
 the three rows into `execute_step`, only `run` waiting); `Ran 54 tests` OK (`merge_squash` and
 `commit_runs` argv and parsing, the fake `gh`'s draft and already-merged texts (F5), and I3'
 narrowed to the one argv shape in `controller/forge.py`, with the synthetic-source cases both
-ways); `Ran 329 tests` OK (every C.2 row, the send, the crash rows, the refusals and adoption from
+ways); `Ran 330 tests` OK (every C.2 row, the send, the crash rows, the refusals and adoption from
 the trunk, a send `gh` reports already merged (F5), the release wait's D.2/D.3 rows,
 `verify_assets=False`, `covering_tag`, the waiting preflight and its real-SIGINT one-line test
 (F4)); `Ran 112 tests` OK (status, observation and hint parsing, and the end-to-end lifecycles
@@ -1544,15 +1542,15 @@ Expected: `ok: feat → minor`; `1.5.0` (the highest reachable tag); then
 `ok: RELEASE_DUE: 1.6.0 has no tag and no release` (on stderr), `state=RELEASE_DUE`,
 `version=1.6.0`, `tag=v1.6.0`, `commit=<Q>`, `exit 0`; and
 `lines 35 | first: ### Auto-merge and the wait for the release (1.6.0) | problem: None` (the
-narrative's `## Release notes` section at `08dd5c1`, two lines longer than round 1's: F2 and F6).
+narrative's `## Release notes` section at `6e4e991`, two lines longer than round 1's: F2 and F6).
 This repository's policy does not opt in to release notes, so the 1.6.0 release itself publishes
 the fixed text `workflow-controller v1.6.0`.
 
 **O. PR #18.** `gh pr checks 18` and `gh pr view 18 --json title,isDraft,headRefOid`
 (read-only). Expected: eleven checks, every one `pass`: `PR title`, `validate / package`,
 `validate / plan`, `validate / tests (0)` to `(5)`, `validate / tests-result` and
-`workflow-conformance` (measured at `08dd5c1`). The pull request is a draft at `08dd5c1`
-(`"isDraft":true`, `"headRefOid":"08dd5c1031e22272d15935abf5ee973ac57fef03"`), titled with the
+`workflow-conformance` (measured at `6e4e991`). The pull request is a draft at `6e4e991`
+(`"isDraft":true`, `"headRefOid":"6e4e9912ca9a46f3f6f39e1b6789f11eef2b610a"`), titled with the
 plan's declared `feat: auto-merge an accepted milestone and wait for its release`.
 
 **P. The documentation agrees with A-N.** Read each and check it against the flows:
@@ -1629,7 +1627,7 @@ git ls-remote origin refs/heads/main | cmp - "$S/live-main.txt" && echo "main un
 git ls-remote --tags origin | sha256sum | cmp - "$S/live-tags.txt" && echo "tags unchanged"
 git push -q origin --delete "$HB" "$B"; git ls-remote origin "refs/heads/fr-c4-live-*" | wc -l
 ```
-Expected (not re-run for round 2; round 1 ran it with your authorization, PR #19, and its
+Expected (not re-run for rounds 2 and 3; round 1 ran it with your authorization, PR #19, and its
 observations are now in `docs/guide/milestone-branches.md` and the fake `gh`): `PR #<P> <url>`;
 Q1 (a draft) `GraphQL: Pull Request is still a draft (mergePullRequest)`, `exit 1`, and Q2 (a head
 that is not the pull request's)

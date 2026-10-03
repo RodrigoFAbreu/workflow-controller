@@ -2,7 +2,7 @@
 
 ## In progress: `workflow-controller-orchestration-protocol-v1` (ROADMAP step C9, release 1.7.0)
 
-Plan revision 10 is approved (`de2bedf`). Implementation runs one checkpoint per session;
+Plan revision 11 is approved (`8b29d66`, amendment 0: the artifacts declaration and the checkpoint anchors only; the design is unchanged, so each checkpoint is revalidated against its anchored section). Implementation runs one checkpoint per session;
 `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for which are `COMPLETE`. The section
 below describes the previous milestone (C4) and is kept until this one is accepted.
 
@@ -20,6 +20,8 @@ below describes the previous milestone (C4) and is kept until this one is accept
   protocol script, its sibling `workflow_test_harness.py` and the schema.
   Tests: `tests/test_protocol.py` (including a round trip against the real 2.7.0 scripts),
   `tests/test_protocol_schema.py`.
+  Revalidated against plan revision 11 (the CP1 section is unchanged by the amendment): the 69
+  protocol, schema and package-structure tests pass.
 
 ## Status
 

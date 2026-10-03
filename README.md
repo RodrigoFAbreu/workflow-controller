@@ -16,8 +16,7 @@ is the development process and its commands, installed into a repository.
 [Workflow Manager](https://github.com/RodrigoFAbreu/workflow-manager#readme)
 installs, updates and verifies the Workflow from published, digest-pinned
 releases. [Workflow Controller](https://github.com/RodrigoFAbreu/workflow-controller#readme)
-runs the Workflow's lifecycle steps automatically and stops at every
-approval gate.
+runs the Workflow's lifecycle steps automatically and stops wherever an approval gate needs a person.
 
 ```text
 Workflow  ->  Workflow Manager  ->  Workflow Controller  ->  your repository

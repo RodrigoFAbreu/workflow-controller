@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-orchestration-protocol-v1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -5910,6 +5910,97 @@
           "verdict": "APPROVE",
           "round": 12,
           "completed_at": "2026-10-03T00:56:46Z"
+        }
+      }
+    },
+    "workflow-controller-orchestration-protocol-v1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-orchestration-protocol-v1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestration-protocol-v1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 10,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "97b85f04cb62e8f483f7e76bf68a280bdc8c9d4b",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
+        "approved_review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "16df4cbf0601d2d2cfc5a92e4dd8f4c3cf4c5764"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f6aee1c4500d1cab5242c6711ab8c586c849b749"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-orchestration-protocol-v1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fd1b9ca67d3132ee75c46cfe540e32c6c9111a2f"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "/approve-review plan workflow-controller-orchestration-protocol-v1",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-03T09:36:25Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
+          "verdict": "APPROVE",
+          "round": 10,
+          "completed_at": "2026-10-03T05:11:12Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
+          "verdict": "APPROVE",
+          "round": 10,
+          "completed_at": "2026-10-03T05:14:07Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 35,
+      "last_transition": "2026-10-03T09:36:25Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-03T05:09:33Z",
+        "consumed": {
+          "review_content_id": "77ea14c43375d224061c04e9cfc344b035f520de0032b099d7c1461a1f7d9370",
+          "plan_revision": 9,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
+          "plan_revision": 10
+        },
+        "bound": {
+          "review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
+          "bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
+          "plan_revision": 10
         }
       }
     }

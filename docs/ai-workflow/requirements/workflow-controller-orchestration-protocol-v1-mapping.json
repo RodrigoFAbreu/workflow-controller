@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-orchestration-protocol-v1",
+  "requirements": {
+    "R1": {
+      "description": "The Controller runs the protocol's operations from a private, isolated copy of the Workflow's own scripts (the installation record's managed list), validates every envelope against the vendored schema, and fails closed on an unknown major, action id, disposition, error code or an invalid envelope",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A target whose Workflow reports protocol major 1 is admitted whatever its release; 2.5.1 and 2.6.0 keep their contracts; the release and the managed-script digests are recorded and re-checked per decision and per job",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R3": {
+      "description": "For a protocol target the Controller's next action, gate and reason come from `next-action`, with no lifecycle file read and the seven observable differences D1-D7 from 1.6.0 (three of them new automatic launches) documented and tested",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "A protocol job launches only a current decision: the identity is checked immediately before the spawn, a stale decision is re-decided, and a repeated no-progress pair is gated",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "For a protocol target the outcome of a worker comes from reconcile, on launch and resume, and an invalid result fails the job with the protocol's reasons",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R6": {
+      "description": "Legacy targets behave exactly as 1.6.0; both modes complete a lifecycle end to end",
+      "checkpoint_ids": [
+        "CP2",
+        "CP6"
+      ]
+    },
+    "R7": {
+      "description": "inspect, explain and status show the mode, the protocol decision and the reconcile class",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP5"
+      ]
+    },
+    "R8": {
+      "description": "An ADR, the guides and the 1.7.0 notes describe the new admission and behaviour; the full suite and goldens pass",
+      "checkpoint_ids": [
+        "CP7"
+      ]
+    }
+  }
+}

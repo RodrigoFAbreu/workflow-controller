@@ -152,6 +152,11 @@ class ManagedRepository:
     #: (``None`` for a legacy release); with ``target_protocol["release"]`` it
     #: is the identity :func:`protocol.identity` derives afresh.
     script_digests: Mapping[str, str] | None = None
+    #: Set only by :func:`inspect_for_resume`: the ``DriftedInstallationError``
+    #: the Manager's verify/status raised. Such a repository may only end a
+    #: pending protocol job whose managed-file digest map differs from its
+    #: record's; nothing else reads it.
+    drift: DriftedInstallationError | None = None
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
@@ -431,3 +436,21 @@ def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> Manag
         },
         script_digests=None if identity is None else dict(identity.digests),
     )
+
+
+def inspect_for_resume(path: str | os.PathLike, *, manager_bin: str | None = None) -> ManagedRepository:
+    """:func:`inspect`, but a drifted installation (``DriftedInstallationError``
+    alone -- every other refusal propagates) yields a repository carrying that
+    error in ``drift``, so ``resume`` can mark a pending protocol job whose
+    managed scripts changed ``FAILED`` ``workflow_release_changed`` instead of
+    refusing outright. No Workflow script is run on that path; the caller
+    re-raises ``drift`` for anything it may not end."""
+    try:
+        return inspect(path, manager_bin=manager_bin)
+    except DriftedInstallationError as exc:
+        root = Path(exc.evidence["root"])
+        manifest = _read_manifest(root)
+        return ManagedRepository(
+            root=root, manifest=manifest, workflow_version=manifest["workflow_version"],
+            profile=manifest["profile"], verify=exc.evidence["verify"], status=exc.evidence["status"], drift=exc,
+        )

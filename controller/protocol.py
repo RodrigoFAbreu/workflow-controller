@@ -156,6 +156,18 @@ def script_set(root: Path, managed: Any) -> ScriptSet:
     return ScriptSet(sources, digests)
 
 
+def managed_digests(root: Path) -> dict[str, str] | None:
+    """The managed-script digest map of ``root`` read from the installation
+    record and the files' bytes alone -- no Workflow script is run, which is
+    what makes it usable under a drifted installation. ``None`` when the
+    record or a managed file cannot be read (nothing then equals a recorded
+    map)."""
+    try:
+        return dict(script_set(root, read_managed(root)).digests)
+    except WorkflowProtocolFailedError:
+        return None
+
+
 def _modified(key: str, problem: str) -> WorkflowProtocolFailedError:
     return _failed(f"the Workflow script {key} {problem}; nothing was run",
                    reason="protocol_script_modified", path=key)

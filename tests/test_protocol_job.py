@@ -4,9 +4,8 @@
 ``PLANNED`` write and again immediately before the spawn, the
 ``no_progress_repeated`` guard and the per-step identity re-check.
 
-A protocol launch is off until CP5 (``job.PROTOCOL_LAUNCH_ENABLED``), so these
-tests switch it on and replace ``worker.launch`` with a double that records the
-call and stops: nothing here reads an outcome.
+These tests replace ``worker.launch`` with a double that records the call and
+stops: nothing here reads an outcome (that is ``tests/test_protocol_outcome.py``).
 """
 
 from __future__ import annotations
@@ -111,7 +110,6 @@ class _Target:
             return next_action(real, len(calls), *args, **kwargs)
 
         with contextlib.ExitStack() as stack:
-            stack.enter_context(mock.patch.object(job, "PROTOCOL_LAUNCH_ENABLED", True))
             stack.enter_context(mock.patch.object(worker, "launch", launch or launch_double))
             stack.enter_context(mock.patch.object(protocol, "next_action", wrapped))
             try:
@@ -269,8 +267,7 @@ class CurrencyCheckTest(unittest.TestCase):
 
     def test_a_stale_abort_after_the_planned_write_is_resumed_without_error(self) -> None:
         target = _Target(self)
-        with mock.patch.object(job, "_launch_job", side_effect=RuntimeError("aborted")), \
-                mock.patch.object(job, "PROTOCOL_LAUNCH_ENABLED", True):
+        with mock.patch.object(job, "_launch_job", side_effect=RuntimeError("aborted")):
             with self.assertRaises(RuntimeError):
                 job.execute_step(target.inspect(), identity=IDENTITY, runtime=target.runtime)
         (planned,) = target.records()

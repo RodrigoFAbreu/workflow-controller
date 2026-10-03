@@ -1323,8 +1323,12 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     attached to a job (its supervisor lock is held), or a re-attached drain
     detached again (``OwnedWorkDetachedError``)."""
     require_pinned_execution()
-    target = _inspect_target(args)
     abandon_job_id = getattr(args, "abandon", None)
+    # Orchestration-protocol-v1 E.2: only a plain `resume` tolerates a drifted
+    # installation (and then only to end a protocol job whose managed scripts
+    # changed); `--abandon` keeps the strict check.
+    target = (_inspect_target(args) if abandon_job_id is not None
+              else managed_repo.inspect_for_resume(args.repo, manager_bin=args.workflow_manager))
     if abandon_job_id is not None:
         abandoned = job.abandon(
             target, identity=ident, runtime=runtime_root, job_id=abandon_job_id,

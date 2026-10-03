@@ -84,6 +84,33 @@ below describes the previous milestone (C4) and is kept until this one is accept
   is on, which the tests set); CP5 deletes the switch with `_protocol_launch_unavailable`.
   Tests: `tests/test_protocol_job.py`.
 
+- **CP5, outcomes from `reconcile`** -- a protocol job's outcome is the Workflow's own `reconcile`, on launch
+  and on `resume` (`job._protocol_resolution`, shared by `_launch_job`, `_reconcile_launched` and
+  `_reconcile_completed`; a record with no `protocol` block still takes the legacy branch, so 1.6.0 records
+  resume unchanged). Order: the release identity is re-derived first (`_protocol_release_change`: the release
+  and the managed-script digest map against the record's) and a difference is a terminal `FAILED`
+  `workflow_release_changed` with `reconcile` never called, whatever the worker did; then a failed or timed-out
+  worker is `FAILED` `worker_outcome` (reconcile not called); then `reconcile --decision` runs on the stored
+  decision (written to `jobs/<job_id>/decision.json`). `progress` and `gate_reached` verify and store the
+  answer in `protocol.reconcile`; a successful `no_progress` is terminal `FINISHED` with `protocol.progress:
+  "none"` (no `resume` is needed; the loop guard counts it); an interrupted or unrecorded worker with
+  `no_progress` is `INTERRUPTED`; `invalid` is `FAILED` `reconcile_invalid` with the reasons verbatim; a
+  failing `reconcile` or an unknown class is `FAILED` `workflow_protocol_failed`. After a `progress` for
+  `implementation.checkpoint` the Controller keeps one committed-state fact
+  (`evidence.uncommitted_implementation_state`): a non-empty result is `FAILED`
+  `completion_not_committed_at_head` with the facts. The interim `job.PROTOCOL_LAUNCH_ENABLED` switch and
+  `_protocol_launch_unavailable` are deleted: a protocol decision now launches.
+  `managed_repo.inspect_for_resume` is the drift-tolerant `resume` path: on `DriftedInstallationError` alone it
+  yields a repository carrying the error in `drift`, and `job.resume` then ends a pending protocol job whose
+  managed-file digest map (`protocol.managed_digests`, from the manifest and the files' bytes, no script run)
+  differs from its record's as `FAILED` `workflow_release_changed`; an equal map, a legacy record or nothing
+  pending re-raises the drift before any write. `resume --abandon` keeps the strict check.
+  Tests: `tests/test_protocol_outcome.py` (each class and invalid reason, the release-identity cases, the
+  checkpoint-completion cases on a 2.7.0 fixture, resume at each crash point, the drifted resume through
+  `job.resume` and `cli.cmd_resume`); `tests/test_protocol_decision.py`'s two job-wiring tests now expect a
+  reconciled `FINISHED` job. Full suite: 2993 tests pass (one `test_evidence` stderr match fails only under
+  `FORCE_COLOR=3`).
+
 ## Status
 
 **Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section

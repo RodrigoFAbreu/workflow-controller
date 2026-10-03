@@ -440,8 +440,8 @@ class StaticTest(unittest.TestCase):
 
 class JobWiringTest(unittest.TestCase):
     """A protocol target reaches ``protocol_decision``, never
-    ``evidence.decide``. Launching a protocol action is declined until CP5's
-    verification exists (``job._protocol_launch_unavailable``)."""
+    ``evidence.decide``; a launched protocol job's outcome is read from the
+    Workflow's ``reconcile`` (CP5)."""
 
     def _target(self, td: str, *, with_item: bool) -> tuple[Path, Path]:
         root = Path(td) / "repo"
@@ -476,14 +476,15 @@ class JobWiringTest(unittest.TestCase):
             record = job.execute_step(target, identity=IDENTITY, runtime=runtime, claude_bin=str(FAKE_CLAUDE))
         return record, diag, runtime
 
-    def test_a_protocol_step_decides_through_the_workflow_and_launches_nothing_yet(self) -> None:
+    def test_a_protocol_step_decides_through_the_workflow_and_reconciles_its_worker(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root, stub = self._target(td, with_item=True)
             received = protocol.next_action(root, "demo")
             record, diag, _runtime = self._step(td, root, stub)
-            self.assertEqual(record["status"], job.STATUS_DECLINED)
+            self.assertEqual(record["status"], job.STATUS_FINISHED)
+            self.assertEqual(record["protocol"]["progress"], "none")
             self.assertEqual(record["selected_action"]["command"], "/milestone-plan demo")
-            self.assertFalse(diag.exists())
+            self.assertTrue(diag.exists())
             # No lifecycle file was read for the pre-state (I8).
             self.assertFalse(record["pre_state"]["bundle_manifest_readable"])
             self.assertEqual(record["pre_state"]["phase"], "PLANNING")
@@ -498,9 +499,9 @@ class JobWiringTest(unittest.TestCase):
             received = protocol.next_action(root, None)
             record, diag, _runtime = self._step(td, root, stub)
             self.assertEqual(received.action.id, "plan.start")
-            self.assertEqual(record["status"], job.STATUS_DECLINED)
+            self.assertEqual(record["status"], job.STATUS_FINISHED)
             self.assertEqual(record["selected_action"]["command"], "/milestone-plan")
-            self.assertFalse(diag.exists())
+            self.assertTrue(diag.exists())
             document = Path(td) / "decision.json"
             document.write_text(json.dumps(received.raw))
             self.assertEqual(protocol.reconcile(root, document).outcome, "no_progress")

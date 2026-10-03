@@ -4970,13 +4970,15 @@ def _decide_protocol_current(
 
 
 def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None, action_id: str) -> tuple | None:
-    """For the loop guard: ``((created_at, job_id), counted, end_identity)``
+    """For the loop guard: ``((created_at, job_id), counted, end_identity,
+    start_identity)``
     of a record that is a protocol job of this repository for this ``(work
     item, action id)`` pair, else ``None``. ``counted`` is ``None`` for a job
     that is neither a ``no_progress`` nor a reset (a ``FAILED`` job, an
     interrupted one, one with no reconcile class yet), else the reconcile
     class; ``end_identity`` is the state identity the job's reconcile found
-    the work item at when it ended, or ``None`` when the record keeps none."""
+    the work item at when it ended, ``start_identity`` the one it was decided
+    at; either is ``None`` when the record keeps none."""
     if not isinstance(record, dict) or record.get("target_repo") != target_repo:
         return None
     block = record.get("protocol")
@@ -4989,8 +4991,8 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
     reconcile_to = reconcile.get("to") if isinstance(reconcile, dict) else None
     end_identity = reconcile_to.get("state_identity") if isinstance(reconcile_to, dict) else None
     if record.get("status") == STATUS_FINISHED and isinstance(reconcile_class, str):
-        return key, reconcile_class, end_identity
-    return key, None, None
+        return key, reconcile_class, end_identity, block.get("state_identity")
+    return key, None, None, None
 
 
 def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> Decision | None:
@@ -5000,10 +5002,11 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
     made progress or reached a gate resets the count; a ``FAILED`` or
     interrupted job, or one not yet reconciled, is skipped -- neither counted
     nor a reset. Keyed on the pair, never on the state identity; but a streak
-    ends once the work item has moved since the most recent counted job
-    ended (the current decision's state identity differs from the identity
-    that job's reconcile left), because that change did not come from the
-    counted jobs themselves."""
+    ends once the work item has moved since a counted job ended (the next
+    job was decided at, or the current decision has, a state identity that
+    differs from the one that job's reconcile left), because that change did
+    not come from the counted jobs themselves; the two jobs counted must
+    form one contiguous streak."""
     info = decision.protocol
     if info.action_id is None:
         return None
@@ -5025,14 +5028,18 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
             continue
         classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, info.action_id)
         if classified is not None and classified[1] is not None:
-            found.append((classified[0], classified[1], classified[2]))
+            found.append((classified[0], classified[1], classified[2], classified[3]))
     recent = sorted(found, reverse=True)[:2]
-    if len(recent) < 2 or any(reconcile_class != "no_progress" for _key, reconcile_class, _end in recent):
+    if len(recent) < 2 or any(reconcile_class != "no_progress" for _key, reconcile_class, _end, _start in recent):
         return None
     last_end = recent[0][2]
     if info.state_identity is not None and last_end is not None and last_end != info.state_identity:
         return None
-    jobs = " and ".join(key[1] for key, _class, _end in recent)
+    # The two must be one contiguous streak: the newer job was decided where the older one ended.
+    older_end, newer_start = recent[1][2], recent[0][3]
+    if older_end is not None and newer_start is not None and older_end != newer_start:
+        return None
+    jobs = " and ".join(key[1] for key, _class, _end, _start in recent)
     return protocol_decision.gate_for(
         managed_repo, work_item, decision, protocol_decision.NO_PROGRESS_REPEATED,
         f"the last two jobs for {info.action_id}"

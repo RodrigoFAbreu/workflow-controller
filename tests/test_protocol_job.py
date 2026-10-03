@@ -368,6 +368,10 @@ class LoopGuardTest(unittest.TestCase):
         return [_write_job(target.runtime, target.root, n, status=status, reconcile=cls, **kw)
                 for n, (status, cls, kw) in enumerate(shapes, 1)]
 
+    def _jobs_more(self, target: _Target, start: int, *shapes) -> None:
+        for n, (status, cls, kw) in enumerate(shapes, start):
+            _write_job(target.runtime, target.root, n, status=status, reconcile=cls, **kw)
+
     def test_two_no_progress_jobs_trip_the_guard_naming_both(self) -> None:
         target = _Target(self)
         ids = self._jobs(target, (job.STATUS_FINISHED, "no_progress", {}), (job.STATUS_FINISHED, "no_progress", {}))
@@ -412,11 +416,20 @@ class LoopGuardTest(unittest.TestCase):
 
     def test_a_streak_ends_once_the_work_item_moved_since_the_last_counted_job(self) -> None:
         target = _Target(self)
-        self._jobs(target, (job.STATUS_FINISHED, "no_progress", {"end_identity": "s1"}),
-                   (job.STATUS_FINISHED, "no_progress", {"end_identity": "s1"}))
+        self._jobs(target, (job.STATUS_FINISHED, "no_progress", {"identity": "s1", "end_identity": "s1"}),
+                   (job.STATUS_FINISHED, "no_progress", {"identity": "s1", "end_identity": "s1"}))
         self.assertIsNotNone(self._gate(target, state_identity="s1"))
         # A checkpoint completed by hand: the next implementation.checkpoint is at another identity.
         self.assertIsNone(self._gate(target, state_identity="s2"))
+
+    def test_a_no_progress_job_after_an_out_of_band_move_starts_a_new_count(self) -> None:
+        target = _Target(self)
+        self._jobs(target, (job.STATUS_FINISHED, "no_progress", {"identity": "s1", "end_identity": "s1"}),
+                   (job.STATUS_FINISHED, "no_progress", {"identity": "s1", "end_identity": "s1"}),
+                   (job.STATUS_FINISHED, "no_progress", {"identity": "s2", "end_identity": "s2"}))
+        self.assertIsNone(self._gate(target, state_identity="s2"))
+        self._jobs_more(target, 4, (job.STATUS_FINISHED, "no_progress", {"identity": "s2", "end_identity": "s2"}))
+        self.assertIsNotNone(self._gate(target, state_identity="s2"))
 
     def test_plan_start_is_keyed_on_no_work_item(self) -> None:
         target = _Target(self, with_item=False)

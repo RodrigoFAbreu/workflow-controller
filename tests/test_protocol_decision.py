@@ -69,7 +69,7 @@ def _result(*, row: str = "7", disposition: str = "automatic", action: dict | No
 
 
 def _stub(root: Path) -> SimpleNamespace:
-    return SimpleNamespace(root=root, target_protocol=TARGET_PROTOCOL, script_digests={"scripts/workflow_state.py": "d"})
+    return SimpleNamespace(root=root, target_protocol=TARGET_PROTOCOL, script_digests=fixtures.admitted_script_digests(root))
 
 
 def _item(work_item_id: str = "wi-1", phase: str = "PLANNING") -> SimpleNamespace:

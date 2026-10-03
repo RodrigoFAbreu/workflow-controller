@@ -48,6 +48,7 @@ from controller.errors import (
     WorkflowProtocolRefusedError,
     WorkflowProtocolUnsupportedError,
     WorkflowQueryError,
+    WorkflowReleaseChangedError,
 )
 
 PROTOCOL_MAJOR = 1
@@ -336,13 +337,18 @@ def parse_decision(result: dict) -> Decision:
 
 
 def run(root: Path, operation: str, args: list[str] | tuple[str, ...] = (), *,
-        timeout: float | None = None) -> Envelope:
+        timeout: float | None = None, expected_digests: Mapping[str, str] | None = None) -> Envelope:
     """Run one protocol ``operation`` against the repository at ``root`` and
     return its :class:`Envelope`, ``ok: false`` ones included (a refusal is
     an answer). Raises :class:`WorkflowProtocolFailedError` when nothing the
     Controller may act on came back and
     :class:`WorkflowProtocolUnsupportedError` for an unsupported protocol.
-    ``timeout`` ``None`` is the Workflow query timeout in force."""
+    ``timeout`` ``None`` is the Workflow query timeout in force.
+    ``expected_digests``, when given, is the managed-script map the caller was
+    admitted (or decided) under: it is compared with the digests of the very
+    bytes copied for execution, before anything runs, and a difference raises
+    :class:`WorkflowReleaseChangedError` (a separate identity probe cannot say
+    which bytes a later operation executes)."""
     if timeout is None:
         timeout = workflow_contract.query_timeout_seconds()
     managed = read_managed(root)
@@ -350,6 +356,8 @@ def run(root: Path, operation: str, args: list[str] | tuple[str, ...] = (), *,
         raise _failed(f"{root}'s installation record does not list {SCRIPT_KEY}: the Workflow does not "
                       f"ship the orchestration protocol", reason="no_protocol", operation=operation)
     scripts = script_set(root, managed)
+    if expected_digests is not None:
+        _require_digests(root, operation, dict(expected_digests), scripts.digests)
     argv_args = ["--protocol-major", str(PROTOCOL_MAJOR), "--repo-root", str(root), operation, *args]
     context = {
         "release": None, "query": f"protocol {operation}", "work_item_id": "", "operation": operation,
@@ -364,6 +372,15 @@ def run(root: Path, operation: str, args: list[str] | tuple[str, ...] = (), *,
         evidence["reason"] = "protocol_" + reason.removeprefix("query_")
         raise WorkflowProtocolFailedError(exc.message, evidence=evidence) from exc
     return _envelope(operation, completed, context, scripts)
+
+
+def _require_digests(root: Path, operation: str, expected: dict[str, str], actual: Mapping[str, str]) -> None:
+    changed = sorted(key for key in {*expected, *actual} if expected.get(key) != actual.get(key))
+    if changed:
+        raise WorkflowReleaseChangedError(
+            f"{root}'s managed Workflow scripts are not the ones this operation is bound to ({', '.join(changed)}); "
+            f"protocol {operation} was not run",
+            evidence={"reason": "protocol_script_changed", "operation": operation, "changed_scripts": changed})
 
 
 def _envelope(operation: str, completed, context: dict, scripts: ScriptSet) -> Envelope:
@@ -455,8 +472,9 @@ def _failed(message: str, *, reason: str, **evidence) -> WorkflowProtocolFailedE
 # ---------------------------------------------------------------------------
 
 
-def _answer(root: Path, operation: str, args: list[str], timeout: float | None) -> Envelope:
-    envelope = run(root, operation, args, timeout=timeout)
+def _answer(root: Path, operation: str, args: list[str], timeout: float | None,
+            expected_digests: Mapping[str, str] | None = None) -> Envelope:
+    envelope = run(root, operation, args, timeout=timeout, expected_digests=expected_digests)
     if not envelope.ok:
         error = envelope.error
         refusal = {"code": error.code, "message": error.message, "retryable": error.retryable,
@@ -502,27 +520,28 @@ def identity(root: Path, *, timeout: float | None = None) -> Identity:
     return Identity(described.workflow_release, dict(envelope.digests), described)
 
 
-def verify(root: Path, *, timeout: float | None = None) -> Verify:
-    result = _answer(root, "verify", [], timeout).result
+def verify(root: Path, *, timeout: float | None = None,
+           expected_digests: Mapping[str, str] | None = None) -> Verify:
+    result = _answer(root, "verify", [], timeout, expected_digests).result
     return Verify(result["healthy"], tuple(Check(c["id"], c["status"], c["detail"]) for c in result["checks"]))
 
 
 def next_action(root: Path, work_item: str | None = None, *, expect_state_identity: str | None = None,
-                timeout: float | None = None) -> Decision:
+                timeout: float | None = None, expected_digests: Mapping[str, str] | None = None) -> Decision:
     args: list[str] = []
     if work_item is not None:
         args += ["--work-item", work_item]
     if expect_state_identity is not None:
         args += ["--expect-state-identity", expect_state_identity]
-    return parse_decision(_answer(root, "next-action", args, timeout).result)
+    return parse_decision(_answer(root, "next-action", args, timeout, expected_digests).result)
 
 
 def reconcile(root: Path, decision_file: Path, work_item: str | None = None, *,
-              timeout: float | None = None) -> Reconciliation:
+              timeout: float | None = None, expected_digests: Mapping[str, str] | None = None) -> Reconciliation:
     args = ["--decision", str(decision_file)]
     if work_item is not None:
         args += ["--work-item", work_item]
-    result = _answer(root, "reconcile", args, timeout).result
+    result = _answer(root, "reconcile", args, timeout, expected_digests).result
     return Reconciliation(
         outcome=result["class"], from_=_phase_identity(result["from"]), to=_phase_identity(result["to"]),
         evidence=dict(result["evidence"]),

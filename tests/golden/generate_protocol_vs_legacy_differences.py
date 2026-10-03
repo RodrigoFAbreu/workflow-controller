@@ -390,7 +390,8 @@ def measure(scenario: Scenario, user_only: frozenset[str]) -> dict[str, Any]:
         work_item = target_state.select_work_item(snapshot, work_item_id=WID)
         legacy = evidence.decide(managed, snapshot, work_item)
         fixtures.install_workflow_release(root, "2.7.0")
-        stub = SimpleNamespace(root=root, target_protocol=TARGET_PROTOCOL, script_digests={}, workflow_version="2.7.0")
+        stub = SimpleNamespace(root=root, target_protocol=TARGET_PROTOCOL, script_digests=fixtures.admitted_script_digests(root),
+                              workflow_version="2.7.0")
         answer = protocol_decision.decide(stub, work_item)
     return {
         "phase": scenario.phase, "version": scenario.version, "family": scenario.family,

@@ -446,6 +446,26 @@ class DriftedResumeTest(unittest.TestCase):
             job.resume(target, identity=IDENTITY, runtime=env.runtime)
         self.assertEqual(env.records(), before)
 
+    def test_unreadable_unchanged_scripts_leave_the_record_untouched(self) -> None:
+        env = _Env(self)
+        self._pending(env)
+        script = env.root / "scripts" / "workflow_state.py"
+        original = script.read_bytes()
+        copy = env.td / "copy.py"
+        copy.write_bytes(original)
+        script.unlink()
+        script.symlink_to(copy)  # not a regular file: the bytes cannot be read as the managed script
+        before = env.records()
+        target = self._resume_cli(env)
+        with self.assertRaises(DriftedInstallationError):
+            job.resume(target, identity=IDENTITY, runtime=env.runtime)
+        self.assertEqual(env.records(), before)
+        script.unlink()
+        script.write_bytes(original)
+        with self.assertRaises(DriftedInstallationError):
+            job.resume(self._resume_cli(env), identity=IDENTITY, runtime=env.runtime)
+        self.assertEqual(env.records(), before, "readable and identical bytes establish no difference either")
+
     def test_nothing_pending_re_raises(self) -> None:
         env = _Env(self)
         target = self._resume_cli(env)

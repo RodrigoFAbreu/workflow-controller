@@ -2877,7 +2877,11 @@ def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Pa
     decision_rel = f"jobs/{record['job_id']}/decision.json"
     decision_path = runtime.write_json(runtime_root, decision_rel, dict(block["decision"]))
     try:
-        answer = protocol.reconcile(root, decision_path, work_item_id)
+        answer = protocol.reconcile(root, decision_path, work_item_id,
+                                    expected_digests=dict(block.get("script_sha256") or {}))
+    except WorkflowReleaseChangedError as exc:
+        return failed(WORKFLOW_RELEASE_CHANGED_REASON, _protocol_observed_phase(managed_repo, record),
+                      workflow_error={"code": exc.code, "message": exc.message, "evidence": exc.evidence})
     except (WorkflowProtocolFailedError, WorkflowProtocolUnsupportedError) as exc:
         return failed(WORKFLOW_PROTOCOL_FAILED_REASON, _protocol_observed_phase(managed_repo, record),
                       workflow_error={"code": exc.code, "message": exc.message, "evidence": exc.evidence})
@@ -2940,6 +2944,10 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     worker_outcome = record.get("worker_outcome") if record.get("status") == STATUS_COMPLETED else None
     now = _now()
     block = dict(record["protocol"])
+    current = protocol.managed_digests(managed_repo.root)
+    if current is None:
+        # The bytes became unreadable between the decision and here: no difference is established.
+        raise managed_repo.drift
     failed = {
         **record, "status": STATUS_FAILED, "transition_verified": False, "observed_phase_after": observed,
         "protocol": {**block, "reconcile": None},
@@ -2949,27 +2957,28 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
                 "code": WorkflowReleaseChangedError.code,
                 "message": (f"{managed_repo.root}'s Workflow installation has drifted and its managed scripts "
                             "are not the ones the job was decided under; it is not reconciled"),
-                "evidence": {"changed_scripts": _changed_scripts(
-                    block.get("script_sha256"), protocol.managed_digests(managed_repo.root))}}),
+                "evidence": {"changed_scripts": _changed_scripts(block.get("script_sha256"), current)}}),
         "reconciled_at": now, "updated_at": now,
     }
     return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
 
 
-def _changed_scripts(recorded: Any, current: Mapping[str, str] | None) -> list[str]:
+def _changed_scripts(recorded: Any, current: Mapping[str, str]) -> list[str]:
     recorded_map = dict(recorded or {})
-    current_map = dict(current or {})
+    current_map = dict(current)
     return sorted(key for key in {*recorded_map, *current_map} if recorded_map.get(key) != current_map.get(key))
 
 
 def _drift_decides(record: Mapping, managed_repo: Any) -> bool:
     """Whether a pending record is one a drifted installation may still end:
     a protocol job whose recorded managed-script digest map differs from the
-    one the manifest and the files' bytes give now (no script executed)."""
+    one the manifest and the files' bytes give now (no script executed). An
+    unreadable map is unknown, not a difference: the record is left alone."""
     block = record.get("protocol")
     if not isinstance(block, dict):
         return False
-    return bool(_changed_scripts(block.get("script_sha256"), protocol.managed_digests(managed_repo.root)))
+    current = protocol.managed_digests(managed_repo.root)
+    return current is not None and bool(_changed_scripts(block.get("script_sha256"), current))
 
 
 def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
@@ -4914,6 +4923,7 @@ def _protocol_block(decision: Decision) -> dict:
         "workflow_release": info.release,
         "protocol_version": info.protocol_version,
         "script_sha256": dict(info.script_digests or {}),
+        "decided_ns": time.time_ns(),
         "reconcile": None,
     }
 
@@ -4970,7 +4980,7 @@ def _decide_protocol_current(
 
 
 def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None, action_id: str) -> tuple | None:
-    """For the loop guard: ``((created_at, job_id), counted, end_identity,
+    """For the loop guard: ``((created_at, decided_ns, job_id), counted, end_identity,
     start_identity)``
     of a record that is a protocol job of this repository for this ``(work
     item, action id)`` pair, else ``None``. ``counted`` is ``None`` for a job
@@ -4985,7 +4995,9 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
     if not isinstance(block, dict) or block.get("action_id") != action_id \
             or record.get("work_item_id") != work_item_id:
         return None
-    key = (str(record.get("created_at")), str(record.get("job_id")))
+    decided_ns = block.get("decided_ns")
+    key = (str(record.get("created_at")), decided_ns if isinstance(decided_ns, int) else 0,
+           str(record.get("job_id")))
     reconcile = block.get("reconcile")
     reconcile_class = reconcile.get("class") if isinstance(reconcile, dict) else None
     reconcile_to = reconcile.get("to") if isinstance(reconcile, dict) else None
@@ -5039,7 +5051,7 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
     older_end, newer_start = recent[1][2], recent[0][3]
     if older_end is not None and newer_start is not None and older_end != newer_start:
         return None
-    jobs = " and ".join(key[1] for key, _class, _end, _start in recent)
+    jobs = " and ".join(key[2] for key, _class, _end, _start in recent)
     return protocol_decision.gate_for(
         managed_repo, work_item, decision, protocol_decision.NO_PROGRESS_REPEATED,
         f"the last two jobs for {info.action_id}"

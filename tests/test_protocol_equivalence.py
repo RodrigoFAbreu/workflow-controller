@@ -165,7 +165,7 @@ class NonObservableNotesTest(unittest.TestCase):
             fixtures.install_workflow_release(root, "2.7.0")
             managed = fixtures.build_target_managed_repository(root)
             item = target_state.select_work_item(target_state.read(managed), work_item_id=generator.WID)
-            stub = SimpleNamespace(root=root, target_protocol=generator.TARGET_PROTOCOL, script_digests={},
+            stub = SimpleNamespace(root=root, target_protocol=generator.TARGET_PROTOCOL, script_digests=fixtures.admitted_script_digests(root),
                                    workflow_version="2.7.0")
             cls.gates[name] = (protocol_decision.decide(stub, item), protocol.next_action(root, generator.WID))
 

@@ -134,6 +134,13 @@ def rendered_command(action_id: str, work_item_id: str | None, *, base: str | No
     return f"{command} {base}" if action_id == PLAN_START and base is not None else command
 
 
+def _admitted_digests(managed_repo: Any) -> dict[str, str] | None:
+    """The managed-script map ``inspect`` admitted the target under: what every
+    operation's own copied bytes are compared with before it runs."""
+    digests = getattr(managed_repo, "script_digests", None)
+    return None if digests is None else dict(digests)
+
+
 def decide(managed_repo: Any, work_item: Any, *, base: str | None = None, timeout: float | None = None) -> Decision:
     """The :class:`Decision` for ``work_item`` (or, for
     :data:`target_state.NoWorkItemYet`, for the repository that has none)
@@ -141,7 +148,8 @@ def decide(managed_repo: Any, work_item: Any, *, base: str | None = None, timeou
     ``/milestone-plan <base>`` (plan C.4)."""
     no_item = work_item is target_state.NoWorkItemYet
     work_item_id = None if no_item else work_item.work_item_id
-    answer = protocol.next_action(managed_repo.root, work_item_id, timeout=timeout)
+    answer = protocol.next_action(managed_repo.root, work_item_id, timeout=timeout,
+                                 expected_digests=_admitted_digests(managed_repo))
     return from_answer(managed_repo, work_item, answer, base=base)
 
 
@@ -152,7 +160,7 @@ def health_gate(managed_repo: Any, work_item: Any, *, timeout: float | None = No
     verbatim. A gate, not a refusal of the repository: a failing
     ``state_valid`` can be transient (a planning worker interrupted after
     routing the item and before writing its registry)."""
-    health = protocol.verify(managed_repo.root, timeout=timeout)
+    health = protocol.verify(managed_repo.root, timeout=timeout, expected_digests=_admitted_digests(managed_repo))
     if health.healthy:
         return None
     root = managed_repo.root
@@ -439,7 +447,8 @@ def check_currency(managed_repo: Any, decision: Decision, *, timeout: float | No
         raise ValueError("check_currency needs a protocol decision")
     basis = info.document.get("basis")
     if info.state_identity is None or not isinstance(basis, Mapping):
-        answer = protocol.next_action(managed_repo.root, None, timeout=timeout)
+        answer = protocol.next_action(managed_repo.root, None, timeout=timeout,
+                                     expected_digests=_admitted_digests(managed_repo))
         if _snapshot_ids(answer.snapshot) != _snapshot_ids(info.document.get("snapshot") or {}):
             return Currency(False, "work_items_changed", answer)
         if _differs(info, answer):
@@ -447,7 +456,8 @@ def check_currency(managed_repo: Any, decision: Decision, *, timeout: float | No
         return Currency(True, None, answer)
     try:
         answer = protocol.next_action(managed_repo.root, basis["work_item_id"],
-                                      expect_state_identity=info.state_identity, timeout=timeout)
+                                      expect_state_identity=info.state_identity, timeout=timeout,
+                                      expected_digests=_admitted_digests(managed_repo))
     except WorkflowProtocolRefusedError as exc:
         if exc.refusal["code"] == "stale_decision":
             return Currency(False, "stale_decision", None)

@@ -136,6 +136,7 @@ class RecordBlockTest(unittest.TestCase):
         self.assertEqual(block["script_sha256"], dict(target.inspect().script_digests))
         self.assertEqual(block["action_id"], decision.action.id)
         self.assertIsNone(block["reconcile"])
+        self.assertIsInstance(block["decided_ns"], int)
         self.assertEqual(len(block["envelope_digest"]), 64)
         self.assertEqual(record["status"], job.STATUS_LAUNCHED)
 
@@ -277,6 +278,37 @@ class CurrencyCheckTest(unittest.TestCase):
         self.assertEqual(resumed[0]["status"], job.STATUS_INTERRUPTED)
 
 
+class ExecutedBytesBindingTest(unittest.TestCase):
+    def test_a_script_replaced_after_the_identity_check_is_not_decided_under(self) -> None:
+        target = _Target(self)
+        admitted = target.inspect()
+        script = target.root / "scripts" / "workflow_state.py"
+        script.write_text(script.read_text() + "\n# replaced after the identity check\n")
+        item = type("W", (), {"work_item_id": "demo"})()
+        for call in (lambda: protocol_decision.decide(admitted, item),
+                     lambda: protocol_decision.health_gate(admitted, item)):
+            with self.subTest(call=call), self.assertRaises(WorkflowReleaseChangedError) as raised:
+                call()
+            self.assertEqual(raised.exception.evidence["changed_scripts"], ["scripts/workflow_state.py"])
+
+    def test_a_script_replaced_between_the_identity_check_and_reconcile_fails_the_job(self) -> None:
+        target = _Target(self)
+        target.step()
+        (record,) = target.records()
+        repo = target.inspect()
+        script = target.root / "scripts" / "workflow_state.py"
+        script.write_text(script.read_text() + "\n# replaced after the identity check\n")
+        with mock.patch.object(job, "_protocol_release_change", return_value=None), \
+                mock.patch.object(protocol, "_envelope", side_effect=AssertionError("a script ran")):
+            fields = job._protocol_resolution(record, managed_repo=repo, runtime_root=target.runtime,
+                                              worker_outcome="SUCCESS")
+        self.assertEqual(fields["status"], job.STATUS_FAILED)
+        self.assertFalse(fields["transition_verified"])
+        self.assertEqual(fields["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual(fields["reconciliation_evidence"]["workflow_error"]["evidence"]["changed_scripts"],
+                         ["scripts/workflow_state.py"])
+
+
 class IdentityRecheckTest(unittest.TestCase):
     def _refused(self, target: _Target, admitted) -> WorkflowReleaseChangedError:
         with self.assertRaises(WorkflowReleaseChangedError) as caught:
@@ -340,17 +372,20 @@ class IdentityRecheckTest(unittest.TestCase):
 
 def _write_job(runtime: Path, root: Path, n: int, *, action: str = "implementation.checkpoint", status: str,
                reconcile: str | None, work_item: str | None = "demo", identity: str = "i",
-               end_identity: str | None = None) -> str:
+               end_identity: str | None = None, second: int | None = None, suffix: str | None = None,
+               decided_ns: int | None = None) -> str:
     jobs = runtime / "jobs"
     jobs.mkdir(exist_ok=True)
-    job_id = f"20260101T0000{n:02d}-job{n:02d}"
+    job_id = f"20260101T0000{n if second is None else second:02d}-{suffix or f'job{n:02d}'}"
     record = {
         "job_id": job_id, "target_repo": str(root), "work_item_id": work_item, "status": status,
-        "created_at": f"2026-01-01T00:00:{n:02d}Z",
+        "created_at": f"2026-01-01T00:00:{n if second is None else second:02d}Z",
         "protocol": {"action_id": action, "state_identity": identity,
                      "reconcile": None if reconcile is None else {
                          "class": reconcile, "to": None if end_identity is None else {"state_identity": end_identity}}},
     }
+    if decided_ns is not None:
+        record["protocol"]["decided_ns"] = decided_ns
     (jobs / f"{job_id}.json").write_text(json.dumps(record))
     return job_id
 
@@ -413,6 +448,15 @@ class LoopGuardTest(unittest.TestCase):
         self.assertIsNotNone(self._gate(target))
         self.assertIsNone(self._gate(target, action="implementation.self_review"))
         self.assertIsNone(self._gate(target, work_item="other"))
+
+    def test_same_second_jobs_are_ordered_by_their_decision_time_not_their_random_suffix(self) -> None:
+        target = _Target(self)
+        kw = {"second": 5, "end_identity": None}
+        _write_job(target.runtime, target.root, 1, status=job.STATUS_FINISHED, reconcile="no_progress",
+                   identity="s1", suffix="ffffffff", decided_ns=1, **{**kw, "end_identity": "s2"})
+        _write_job(target.runtime, target.root, 2, status=job.STATUS_FINISHED, reconcile="no_progress",
+                   identity="s2", suffix="00000000", decided_ns=2, **{**kw, "end_identity": "s3"})
+        self.assertIsNotNone(self._gate(target, state_identity="s3"))
 
     def test_a_streak_ends_once_the_work_item_moved_since_the_last_counted_job(self) -> None:
         target = _Target(self)

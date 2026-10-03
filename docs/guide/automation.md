@@ -17,7 +17,10 @@
   The worker layer refuses to execute any of the four user-only commands
   (`controller.worker.USER_ONLY_COMMANDS`) even if handed one directly,
   including inside a task's text -- two independent mechanisms fed by two
-  different sources.
+  different sources. In protocol mode the Workflow's own `next-action`
+  takes the decision engine's place: only an `automatic` answer naming an
+  action the Controller knows, and a worker that is not `user_only`, is
+  launched ([Protocol mode](#protocol-mode-workflow-27-and-later)).
 - **Never trusts a worker's word.** Every launched job is verified
   against durable Workflow and Git state, including the artifacts its
   command promises; the worker's own report is never read to decide.
@@ -34,6 +37,8 @@
   a 2.6.0 target, what Workflow itself answers (the feedback path, whether a
   plan-review bundle is current) is asked of Workflow, running only the
   admitted release's script bytes ([below](#workflows-queries-260-and-later)).
+  For a protocol-mode target the release `describe` reports and the
+  digests of the Workflow's managed scripts must also be the ones admitted.
 - **Never hot-reloads.** A running Controller generation executes from an
   immutable, content-addressed snapshot of its own source and never
   mutates or reloads it; a newer approved generation triggers an
@@ -70,8 +75,11 @@ reported as declined (exit 15), with a reason that names the phase, the
 command and the missing triple. Unknown or ambiguous states still fail
 closed (exit 20).
 
-For both admitted Workflow releases, 2.5.1 and 2.6.0, that makes the same
-launches automatic:
+This rule is legacy mode's. A protocol-mode target (2.7.0 and later) is
+decided by the Workflow instead; see
+[Protocol mode](#protocol-mode-workflow-27-and-later). For both legacy-mode
+Workflow releases, 2.5.1 and 2.6.0, the rule makes the same launches
+automatic:
 
 | Phase | Version | Command |
 |---|---|---|
@@ -221,6 +229,111 @@ remedy, detail and advisory, never Workflow's binding record itself:
 None of these gates launches anything, and no `safe_resume_command` is
 Workflow's withdrawal (`/milestone-plan` at a ready phase), which the gates
 quote only as the alternative that discards both review stages.
+
+## Protocol mode (Workflow 2.7 and later)
+
+From 1.7.0 a Workflow release with no per-release contract is admitted by
+capability: its installation record lists `scripts/workflow_protocol.py`
+and `describe` answers protocol major 1 (2.7.0 does;
+[Supported Workflow releases](installation.md#supported-workflow-releases)).
+For such a target the Controller keeps no lifecycle rule of its own. The
+Workflow's `next-action` says what to do next, and its `reconcile` says
+whether a job made progress. 2.5.1 and 2.6.0 stay in legacy mode, exactly
+as described above. The design record is
+[ADR 0010](../adr/0010-orchestration-protocol-admission-by-capability.md).
+
+**How an operation runs.** `describe`, `next-action` and `reconcile` run
+the way the queries above do: from a private copy of the Workflow's
+script set, with the Controller's own interpreter, under the same Git
+isolation and its refusals, and within `timeouts.workflow_query_seconds`.
+The script set is every `scripts/<name>.py` the installation record's
+`managed` map lists (a `*_test.py` excepted), and its digests are derived
+afresh for every call; a file in `scripts/` that the map does not list is
+never copied. Every answer is validated against the protocol schema the
+Controller vendors (`controller/protocol_schema.json`). An operation that
+fails, or an answer that does not validate, is `WORKFLOW_PROTOCOL_FAILED`;
+an answer for a protocol major the Controller does not speak is
+`WORKFLOW_PROTOCOL_UNSUPPORTED`. Both exit `20` at a decision, and nothing
+is launched.
+
+**Decisions.** `next-action`'s disposition becomes the Controller's
+decision:
+
+| Disposition | Decision |
+|---|---|
+| `automatic` | a launch, when the action id is one the Controller knows (twelve, from `plan.start` to `functional.apply_findings`), its worker is not `user_only` and its worker role is known; otherwise a blocked gate (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
+| `human_gate`, `external_gate` | a gate carrying the Workflow's reason, remedy and alternatives |
+| `blocked` | a gate carrying the Workflow's reason code, text and remedy |
+| `complete` | nothing to do |
+| `validation`, or any other | a blocked gate (`workflow_unknown_disposition`) |
+
+The worker's command is rendered by the Controller from the action id and
+the work item (`/<command> <work_item_id>`; `plan.start` adds the trunk
+base, as for a target with no work item). The Workflow's own
+`invocation` text is only compared: when it differs, nothing is launched
+and the gate is `workflow_invocation_mismatch`, a Workflow release defect
+to report. At `IMPLEMENTING` and `SELF_REVIEWING_IMPLEMENTATION` the
+committed-state gate of legacy mode still applies before a launch.
+`explain` shows the Workflow's row, disposition and action, and with
+`--json` a `protocol` block; a legacy target's output is unchanged.
+
+**Before a launch.** A decision is checked again against the Workflow
+before the job is recorded and once more immediately before the worker
+starts (`next-action --expect-state-identity`; for `plan.start`, the same
+answer and the same work items). A stale answer is discarded and the step
+decides again, at most three times; then it stops at the
+`decision_unstable` gate. A decision found stale immediately before the
+spawn leaves a `FAILED` job with `reconciliation_evidence.code`
+`decision_stale_at_launch`: no worker started, nothing is pending, and the
+next step decides again. When the last two jobs for the same work item and
+action both ended with no progress, a third is not launched: the step
+stops at the `no_progress_repeated` gate.
+
+**Outcomes.** A protocol job is judged by the Workflow's `reconcile` on the
+decision it was launched for (kept as `jobs/<job_id>/decision.json`), both
+when its worker ends and on `resume`. The job record's `protocol` block
+keeps the decision, its digest, the release and script digests it was
+decided under, and `reconcile`'s answer. In order:
+
+| What is found | Job |
+|---|---|
+| the release, or a managed script's digest, differs from the one the job was decided under | `FAILED`, `workflow_release_changed`; `reconcile` is not run |
+| the worker failed or timed out | `FAILED`, `worker_outcome`; `reconcile` is not run |
+| `reconcile` fails, or answers a class the Controller does not know | `FAILED`, `workflow_protocol_failed` |
+| `invalid` | `FAILED`, `reconcile_invalid`, with the Workflow's reasons verbatim |
+| `progress` for `implementation.checkpoint`, with a completion the working tree records but `HEAD` does not | `FAILED`, `completion_not_committed_at_head` |
+| `progress`, `gate_reached` | `FINISHED` |
+| `no_progress` from a worker that succeeded | `FINISHED`, with `progress: "none"`; no `resume` is needed |
+| `no_progress` from an interrupted worker, or one whose end was not recorded | `INTERRUPTED` |
+
+**What changes from 1.6.0.** Measured on the same states
+(`tests/golden/protocol_vs_legacy_differences.json`), the Workflow's
+decisions differ from legacy mode's in exactly seven ways. Three are
+launches 1.6.0 never made:
+
+- **D5.** At `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, a `"1"` or `"2.1"`
+  item with a current `REVISE` or `BLOCK` external verdict: the Controller
+  launches `/apply-implementation-review` on its own (1.6.0 only reported).
+- **D6.** At `AWAITING_FUNCTIONAL_REVIEW` with no current checklist: the
+  Controller launches `/prepare-functional-review`, which writes and commits
+  the functional-review checklist without a prompt (1.6.0 stopped at a
+  gate).
+- **D7.** At `AWAITING_FUNCTIONAL_REVIEW` with an unconsumed
+  `FUNCTIONAL_REVIEW.md`: the Controller launches `/apply-functional-review`,
+  which applies the operator's findings without a prompt (1.6.0 declined
+  it).
+
+The other four: D1, at `REVISING_PLAN` (`"2.1"`/`"2.2"`) with no
+applicable `REVISE`, the launch is `/milestone-plan`, not
+`/apply-plan-review`; D2, a `"1"` item at a phase where 1.6.0 launched is
+blocked; D3, `/milestone-plan` at `AMENDING_PLAN` (`"2.1"`/`"2.2"`) is
+launched, where `run` declined it with exit `15`; D4,
+`/apply-implementation-review` at `APPLYING_REVIEW_FEEDBACK` is launched for
+`"1"` and `"2.1"` items too. D6 and D7 run under two new routing roles,
+`prepare-functional-review` and `apply-functional-review`
+([Worker routing](commands.md#worker-routing)). The human gates are
+unchanged: the functional review itself, the approvals and acceptance stay
+the human's.
 
 ## Implementation-review apply rounds
 

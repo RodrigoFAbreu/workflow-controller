@@ -51,7 +51,7 @@ Controller, for a repository with a `.workflow-controller/policy.json`:
 | Local implementation review and remediation | Controller-launched workers, repeated until the review approves |
 | External implementation review | **human**, as for the plan |
 | Technical approval (`/approve-review`) | **human** |
-| Functional review | **human**, from a checklist the Workflow prepares |
+| Functional review | **human**, from a checklist the Workflow prepares (in protocol mode a Controller-launched worker prepares and commits the checklist, and applies the human's findings) |
 | Acceptance (`/accept-milestone`) | **human** |
 | Pull request title and body set, pull request marked ready once checks pass | Controller |
 | Merge | **human**, on GitHub, with "Squash and merge" (or a merge commit, as the policy says); the Controller, when the policy opts in to [auto-merge](milestone-branches.md#auto-merge-and-the-release-wait) |
@@ -70,7 +70,9 @@ if asked. Reducing these gates where automated evidence is enough is on the
 
 - **Target**: the repository the Controller operates on (`<repo>` in
   commands). It must have a Workflow installation that Workflow Manager
-  verifies, at a Workflow release the Controller admits: 2.5.1 or 2.6.0
+  verifies, at a Workflow release the Controller admits: 2.5.1 or 2.6.0,
+  or (from 1.7.0) a release that ships the Workflow Orchestration Protocol,
+  such as 2.7.0
   (see [Supported Workflow releases](installation.md#supported-workflow-releases)).
 - **Work item / milestone**: one unit of planned work in the Workflow state,
   identified by its id, for example `workflow-controller-adaptive-test-sharding`.
@@ -83,6 +85,12 @@ if asked. Reducing these gates where automated evidence is enough is on the
   example `2.6.0`, as recorded in `.workflow-manager/installation.json`. The
   Controller admits a target by it, and chooses by it what it reads from
   Workflow and what it asks Workflow's own queries.
+- **Workflow mode**: how the Controller drives an admitted target. In
+  **legacy mode** (2.5.1, 2.6.0) it decides from the Workflow state by its
+  own rules. In **protocol mode** (a release admitted by capability, such
+  as 2.7.0) the Workflow's own `next-action` decides the next action and
+  its `reconcile` judges each job's outcome (see
+  [Protocol mode](automation.md#protocol-mode-workflow-27-and-later)).
 - **Gate**: a point where the Controller stops and says what a human must do.
   `run` exits `10` there; that is the normal, expected end of a run.
 - **Worker**: one fresh `claude` session running one Workflow command. It

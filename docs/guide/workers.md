@@ -422,6 +422,16 @@ is added as soon as it is spawned, and `resume` never launches a worker.
   definitively ended, so `resume` persists it `FAILED`
   (`UnreconcilableJobError`) and exits 20 once. The next `resume` passes
   it, and the next `step` decides from evidence.
+- **A protocol-mode job** (1.7.0 and later; its record has a `protocol`
+  block) is reconciled by the Workflow's own `reconcile` on the decision
+  it was launched for, the same on launch and on `resume`
+  ([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). A
+  record without the block, including one written by 1.6.0, takes the
+  legacy path unchanged. A plain `resume` also accepts a drifted
+  installation, only to end a pending protocol job whose managed Workflow
+  scripts changed as `FAILED` `workflow_release_changed`, running no
+  Workflow script; anything else still refuses on the drift
+  ([Troubleshooting](troubleshooting.md#workflow_release_changed-and-workflow_release_changed)).
 - **`workflow-controller resume --abandon JOB_ID <repo>`** is the operator
   disposition for every pending job file `resume` cannot reconcile: a
   record written before this version, one failing validation, an unknown

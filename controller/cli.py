@@ -777,11 +777,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         # payload from -- report the bootstrap state directly instead.
         if args.json:
             print(json.dumps({
-                "repository": {
-                    "root": str(target.root),
-                    "workflow_version": target.workflow_version,
-                    "profile": target.profile,
-                },
+                "repository": _repository_block(target),
                 "work_item": None,
                 "lifecycle_lock": lock_state,
                 **jobs_block,
@@ -789,7 +785,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
                 **branch_blocks,
             }))
             return EXIT_OK
-        print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+        _print_repository_line(target)
         print(f"lifecycle lock: {lock_state}")
         _print_target_jobs(jobs)
         _print_last_telemetry(last)
@@ -799,11 +795,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
 
     if args.json:
         print(json.dumps({
-            "repository": {
-                "root": str(target.root),
-                "workflow_version": target.workflow_version,
-                "profile": target.profile,
-            },
+            "repository": _repository_block(target),
             "work_item": _work_item_payload(work_item),
             "lifecycle_lock": lock_state,
             **jobs_block,
@@ -812,7 +804,7 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         }))
         return EXIT_OK
 
-    print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+    _print_repository_line(target)
     print(f"lifecycle lock: {lock_state}")
     _print_target_jobs(jobs)
     _print_last_telemetry(last)
@@ -830,6 +822,25 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         print(f"incomplete children: {', '.join(work_item.incomplete_children)}")
     _print_branch_blocks(branch_blocks)
     return EXIT_OK
+
+
+def _repository_block(target: managed_repo.ManagedRepository) -> dict:
+    """``inspect``'s ``repository`` object. A protocol target (orchestration-
+    protocol-v1 F) adds ``workflow_mode``, ``target_protocol`` and the
+    managed-script digest map; a legacy target's object gains no key."""
+    block = {"root": str(target.root), "workflow_version": target.workflow_version, "profile": target.profile}
+    if target.target_protocol is not None:
+        block["workflow_mode"] = "protocol"
+        block["target_protocol"] = dict(target.target_protocol)
+        block["script_digests"] = dict(target.script_digests or {})
+    return block
+
+
+def _print_repository_line(target: managed_repo.ManagedRepository) -> None:
+    print(f"repository: {target.root} (Workflow {target.workflow_version}, profile {target.profile})")
+    if target.target_protocol is not None:
+        print(f"workflow mode: protocol (protocol {target.target_protocol['version']}, "
+              f"{len(target.script_digests or {})} managed scripts)")
 
 
 def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path, *,

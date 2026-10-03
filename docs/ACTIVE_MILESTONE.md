@@ -130,6 +130,61 @@ below describes the previous milestone (C4) and is kept until this one is accept
   that `tests/test_golden_plan_stage_decisions.py` names and asserts; that test, not the bare `--check`, is
   its check, and the golden is not rewritten.
 
+- **CP7, documentation and full verification (terminal)** -- ADR 0010
+  (`docs/adr/0010-orchestration-protocol-admission-by-capability.md`, amends ADR 0006), the guides
+  (`concepts`, `automation`, `installation`, `commands`, `troubleshooting`, `development`, and the
+  routing, settings and telemetry mentions of the two new roles), `README.md`, `docs/README.md`, and
+  the `## Release notes` section below, checked by `release_notes.notes_problem` and
+  `paragraph_problem`. `inspect`'s `repository` object now carries `workflow_mode`, `target_protocol`
+  and `script_digests` for a protocol target only (plan F; CP2 had not built it, a legacy target's
+  output is unchanged; `tests.test_protocol_lifecycle.InspectRepositoryBlockTest`). Verified: the
+  full suite passes (2999 tests, `tools/run_tests.py` under the reaping wrapper); the
+  golden generators pass `--check` except the default-file `generate_plan_stage_decisions.py`, whose
+  permitted `AMENDING_PLAN` difference `tests.test_golden_plan_stage_decisions` asserts (it fails
+  identically at the base).
+
+## Release notes
+
+### The Controller drives Workflow through its protocol (1.7.0)
+
+**A Workflow release is admitted by what it can do.** A target whose
+installation record lists `scripts/workflow_protocol.py` and whose
+`describe` answers Orchestration Protocol major 1 is admitted whatever
+its release number: Workflow 2.7.0 now works, and a later release that
+speaks the protocol needs no Controller change. 2.5.1 and 2.6.0 behave
+exactly as under 1.6.0. A release with no protocol script, or a protocol
+that is not major 1, is refused (`no_protocol`,
+`unsupported_protocol_major`).
+
+**Decisions and outcomes come from the Workflow.** For a protocol
+target, the next action, the gates and their reasons come from the
+Workflow's own `next-action`, bound to a state identity that is checked
+again just before a worker is launched. Whether a finished worker made
+progress comes from its `reconcile`, on the launch and on `resume`.
+The protocol runs from a private copy of the Workflow's managed
+scripts under the existing Git isolation, every answer is validated
+against the vendored schema, and anything unknown is blocked, not run.
+New errors: `WORKFLOW_PROTOCOL_FAILED` and
+`WORKFLOW_PROTOCOL_UNSUPPORTED` (exit 20).
+
+**Three launches that 1.6.0 never made.** On a protocol target the
+Controller applies a `"1"`/`"2.1"` external implementation review that
+asks for changes, prepares and commits the functional-review checklist,
+and applies the operator's functional-review findings, each without a
+prompt. They add two routing roles, `prepare-functional-review` and
+`apply-functional-review` (settings table generation 3). Other
+differences: `AMENDING_PLAN` now launches `/milestone-plan` instead of
+exiting 15, and a `REVISING_PLAN` item with no review to apply launches
+`/milestone-plan`.
+
+**What to know when upgrading.** A job records the Workflow release and
+the managed-script digests it ran under; a worker that edits a managed
+`scripts/workflow_*.py` ends that job `FAILED` with
+`workflow_release_changed`, as the legacy pin did. A repeated
+no-progress job stops at `no_progress_repeated`. A 1.6.0 Controller
+sharing the settings file ignores the new roles, and its
+`settings clean` refuses the generation-3 file.
+
 ## Status
 
 **Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section

@@ -21,7 +21,7 @@ What each code usually means in practice:
 | `10` | stopped at a human gate | the normal end of a run. `explain` says what to do; do it, then `run` again |
 | `15` | the next action is valid but not automated (declined) | do it yourself; `explain` names the phase and command |
 | `16` | `run` reached `--max-steps` with work left | `run` again, or raise `--max-steps` |
-| `20` | fail-closed refusal: unmanaged or drifted repository, malformed state, an unreconciled job file, a bad routing config, an unusable settings file, a changed Workflow release, a failed Workflow query | read the message; for a pending job run `workflow-controller resume <repo>`; for the settings file see [The settings file is refused](#the-settings-file-is-refused-settingserror); for the last two see [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries) |
+| `20` | fail-closed refusal: unmanaged or drifted repository, malformed state, an unreconciled job file, a bad routing config, an unusable settings file, a changed Workflow release, a failed Workflow query or protocol operation | read the message; for a pending job run `workflow-controller resume <repo>`; for the settings file see [The settings file is refused](#the-settings-file-is-refused-settingserror); for the last three see [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries) |
 | `30` | a worker ran and failed its expected outcome | `explain` shows what was checked; fix and rerun, or finish the step by hand |
 | `35` | a worker stopped without completing its action | `explain` and the job's log show why |
 | `40` | the Controller was interrupted | `workflow-controller resume <repo>` |
@@ -221,25 +221,41 @@ These are warnings on stderr, not refusals. The command goes on.
 
 What each Workflow release changes is in
 [Supported Workflow releases](installation.md#supported-workflow-releases)
-and [Workflow's queries](automation.md#workflows-queries-260-and-later).
+and [Workflow's queries](automation.md#workflows-queries-260-and-later);
+protocol mode (2.7.0 and later) is in
+[Protocol mode](automation.md#protocol-mode-workflow-27-and-later).
 
 ### The repository is refused as unmanaged or unsupported
 
 The Controller admits only a Workflow installation that Workflow Manager
 verifies, at a Workflow release it has been validated against
-(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`: 2.5.1 and 2.6.0).
+(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`: 2.5.1 and 2.6.0) or,
+from 1.7.0, one that ships the orchestration protocol (2.7.0 and later;
+[Protocol mode](automation.md#protocol-mode-workflow-27-and-later)).
 Run Workflow Manager's `verify` command against the target to see what is
 wrong with the installation.
 
-A release outside that set is refused with `UNSUPPORTED_WORKFLOW_VERSION`
+Any other release is refused with `UNSUPPORTED_WORKFLOW_VERSION`
 (exit `20`). The evidence's `reason` says which case it is:
 
 - `outside_supported_line`: the release is not in a supported line (2.5 or
-  2.6), for example 2.7.0. The message names the supported lines and the
-  validated releases;
+  2.6), for example 2.4.0, and lists no protocol script. The message names
+  the supported lines and the validated releases;
 - `unvalidated_release`: the line is supported but this exact release has
-  not been validated, for example 2.6.1 or 2.5.0. The message names the line
-  and the validated releases.
+  not been validated, for example 2.6.1 or 2.5.0, and it lists no protocol
+  script. The message names the line and the validated releases;
+- `no_protocol` (1.7.0 and later): the release is newer than every
+  supported line, but its installation record's `managed` map does not list
+  `scripts/workflow_protocol.py`, so it cannot be driven in protocol mode;
+- `unsupported_protocol_major` (1.7.0 and later): the protocol script is
+  listed, but `describe` does not answer protocol major 1. The evidence
+  says what it answered.
+
+A listed protocol script that cannot answer `describe` at all is refused
+with `WORKFLOW_PROTOCOL_FAILED` instead
+([below](#workflow_protocol_failed-and-workflow_protocol_unsupported)).
+
+A Controller before 1.7.0 refuses 2.7.0 as `outside_supported_line`.
 
 Both carry `supported_workflow_lines`, a sorted list; before 1.3.0 this key
 was `supported_workflow_line`, a string. Either install a Controller that
@@ -285,6 +301,37 @@ an interrupted job, but while the manifest is still unreadable it refuses at
 `inspect` (exit `20`) and leaves the job record untouched until the
 manifest is restored.
 
+**In protocol mode** the identity is wider than the release number: it is
+the release `describe` reports and the sha256 of every script the
+installation record's `managed` map lists under `scripts/`. Before a
+decision, a changed digest, or a protocol script that no longer answers,
+is the same `WORKFLOW_RELEASE_CHANGED` refusal, with `changed_scripts` (or
+`protocol_error`) in the evidence. At a job's outcome it is checked first,
+before the worker's outcome and before `reconcile`: a difference ends the
+job `FAILED` `workflow_release_changed`, whatever the worker did, and
+`reconcile` is not run. A file in `scripts/` that the map does not list
+never counts.
+
+**A target whose own work edits a managed script.** When the target is a
+Workflow repository, a checkpoint or worker that edits one of the
+Workflow's managed scripts (a `scripts/workflow_*.py`) ends every such job
+`FAILED` `workflow_release_changed`. This is not a defect: the job was
+decided under scripts that no longer exist, and the Workflow is never
+asked to judge it under others (a 2.6.0 target's queries refuse edited
+script bytes the same way, as `query_script_modified`). Workflow Manager's
+`verify` then reports the installation as drifted, and the target is
+refused until the installed scripts are restored (Workflow Manager's
+`update` or repair).
+
+**`resume` after such an edit.** A plain `workflow-controller resume
+<repo>` tolerates a drifted installation for exactly this case: a pending
+protocol job whose recorded script digests differ from the files' bytes
+now is ended `FAILED` `workflow_release_changed`, from the installation
+record and the bytes alone, without running any Workflow script. A legacy
+job, or a protocol job whose digests are unchanged, still refuses with the
+drift (exit `20`) and is left untouched, and `resume --abandon` keeps the
+strict check.
+
 ### `WORKFLOW_QUERY_FAILED` and `workflow_query_failed`
 
 For a 2.6.0 target the Controller asks Workflow for the feedback path and
@@ -315,6 +362,69 @@ To see Workflow's own answer, run the query in the target:
 Run this way, the query is not isolated: it runs the target's scripts in
 place, under the target's own Git configuration, hooks and filters, and Git
 may refresh the target's index.
+
+### `WORKFLOW_PROTOCOL_FAILED` and `WORKFLOW_PROTOCOL_UNSUPPORTED`
+
+For a protocol-mode target (1.7.0 and later) the Controller asks the
+Workflow's `scripts/workflow_protocol.py` for its decisions and outcomes. An
+operation that gives no answer the Controller may act on is never answered
+by a rule of the Controller's own:
+
+- **at a decision** it refuses with `WORKFLOW_PROTOCOL_FAILED` (exit `20`);
+  nothing is launched and no job is recorded;
+- **at a job's outcome** (`reconcile`) the job ends `FAILED` with reason
+  `workflow_protocol_failed`, whose `workflow_error` carries the code and
+  evidence.
+
+The evidence's `reason` names the step: `protocol_script_modified` (a
+managed script is missing or not a regular file; nothing ran),
+`protocol_private_copy_failed`, `protocol_git_not_isolated` (as
+`query_git_not_isolated` above, with the same remedies),
+`protocol_launch_failed`, `protocol_timeout`
+(`timeouts.workflow_query_seconds`), `protocol_no_document` (no single JSON
+answer; a missing module is named), `protocol_envelope_invalid` (the
+answer does not match the vendored schema) and `protocol_refused` (the
+Workflow's own refusal, with its `code`, `message` and `retryable`).
+`WORKFLOW_PROTOCOL_UNSUPPORTED` (exit `20`) means the Workflow answered for
+a protocol major other than 1. To see the Workflow's own answer, run
+`python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root .
+next-action --work-item <id>` in the target (not isolated, as above).
+
+### Protocol-mode gates and job failures
+
+Each gate below launches nothing; `explain` shows the Workflow's row,
+disposition and action beside it.
+
+- `workflow_unknown_disposition`, `workflow_unknown_action`,
+  `workflow_unknown_worker_role`: the Workflow answered a value this
+  Controller release does not know (a later protocol minor may add one).
+  Install a Controller that knows it, or take the step by hand.
+- `workflow_user_only_action`: an `automatic` answer whose worker is
+  `user_only`. The Controller never launches it.
+- `workflow_invocation_mismatch`: the Workflow's invocation text for the
+  action differs from the command the Controller renders. The Workflow's
+  `reconcile` would refuse the job, so nothing is launched. Report it as a
+  Workflow release defect; it is not a command to run.
+- `decision_unstable`: three decisions in one step were stale by the time
+  they were checked again; the gate names the last two state identities
+  (or work-item lists). Something else is changing the target: let it
+  finish, then run again.
+- `no_progress_repeated`: the last two jobs for the same work item and
+  action both ended with no progress, so a third is not launched. Read
+  their records (`workflow-controller status`, `follow`), then run again or
+  take the action by hand. A job that made progress, or a gate, resets it.
+
+A protocol job can also end `FAILED` (`step` and `run` exit `30`) with:
+
+- `decision_stale_at_launch`: the decision was no longer the Workflow's
+  answer immediately before the worker would start. No worker ran, nothing
+  is pending, and the next step decides again;
+- `reconcile_invalid`: the Workflow's `reconcile` judged the job `invalid`;
+  its reasons are in the record verbatim;
+- `completion_not_committed_at_head`: after a checkpoint the working
+  tree's `WORKFLOW_STATE.json` records a completion that `HEAD` does not.
+  A human commits it, as the checkpoint commit would have, or discards it,
+  as for the legacy-mode gate.
 
 ### The stale-plan-bundle gate under Workflow 2.6.0
 

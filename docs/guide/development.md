@@ -170,10 +170,14 @@ purpose. `tests/test_fixtures_git_hygiene.py` fails on any other
 
 The Controller's tests never read this repository's own installed
 Workflow. Every Workflow release the Controller admits
-(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`) is vendored under
+(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`, and 2.7.0 for
+protocol mode) is vendored under
 `tests/workflow_releases/<release>/`: the seventeen `.claude/commands/*.md`
 files, `scripts/workflow_state.py`, `scripts/workflow_fingerprint.py` and
-`scripts/prepare-ai-review.sh`, at their target paths and modes. Each tree's
+`scripts/prepare-ai-review.sh`, at their target paths and modes, and, for a
+release that ships the protocol, `scripts/workflow_protocol.py`, its sibling
+`scripts/workflow_test_harness.py` and
+`docs/ai-workflow/orchestration-protocol-v1.schema.json`. Each tree's
 `RELEASE.json` records the Workflow Manager commit it was taken from and each
 file's sha256 and executable flag, equal to the Manager's manifest. The
 Workflow-derived inventories (the phase set, the command partition, the
@@ -188,7 +192,12 @@ Only `tools/workflow_releases.py` (stdlib only) writes these trees:
 ```bash
 python3 tools/workflow_releases.py check     # every tree against its RELEASE.json; exit 1 names each problem
 python3 tools/workflow_releases.py sync 2.6.0 --from ../workflow-manager/distribution/workflow
+python3 tools/workflow_releases.py sync 2.7.0 --from DIR --archive-sha256 SHA256   # DIR/2.7.0: the published archive, unpacked
 ```
+
+A tree taken from a published release archive, as 2.7.0's is, records the
+archive's sha256 (`archive-sha256:<digest>`) as its provenance instead of a
+Workflow Manager commit.
 
 `check` also reports a file the record does not name and an admitted
 release with no tree. `sync` copies the subset from a Workflow Manager
@@ -209,6 +218,7 @@ compares without writing:
 python3 tests/golden/generate_plan_stage_decisions.py --release 2.6.0 --check
 python3 tests/golden/generate_external_implementation_review_decisions.py --release 2.6.0 --check
 python3 tests/golden/generate_no_policy_lifecycle.py --check                 # 2.5.1 only
+python3 tests/golden/generate_protocol_vs_legacy_differences.py --check     # 2.7.0 against 2.6.0
 ```
 
 Without `--check` a generator rewrites its golden, so only run it that way
@@ -216,10 +226,33 @@ to change the golden on purpose. The 2.5.1 plan-stage generator's `--check`
 reports one known difference (the `AMENDING_PLAN` decline reason), which
 `tests.test_golden_plan_stage_decisions` reverts as its one permitted
 difference before comparing; that test, not the bare `--check`, is the
-check for that file.
+check for that file, and a failing bare `--check` on the default file is
+expected.
 
-**Admitting a future Workflow release** is a deliberate act in a reviewed
-plan, never a version-string edit:
+`tests/golden/protocol_vs_legacy_differences.json` runs the same fixture
+repositories through the Workflow's `next-action` (2.7.0, protocol mode)
+and through 1.6.0's own decisions (2.6.0, legacy mode), and records where
+they differ: exactly the seven differences D1-D7 of
+[Protocol mode](automation.md#protocol-mode-workflow-27-and-later).
+`tests.test_protocol_equivalence` asserts each by name, so a new
+difference fails the suite until it is reviewed.
+
+**How a release is admitted** (1.7.0 and later) is two-way, in
+`managed_repo.inspect`. A release with a
+`controller.workflow_contract.RELEASE_CONTRACTS` entry (2.5.1, 2.6.0) is
+legacy mode, by exact release, as below. Any other release is admitted by
+capability, with no code change: protocol mode when its installation
+record's `managed` map lists `scripts/workflow_protocol.py` and `describe`
+answers protocol major 1 (`controller.protocol.PROTOCOL_MAJOR`), else
+refused (`no_protocol`, `unsupported_protocol_major`, or the older
+reasons). A later protocol-mode release therefore needs no entry; to test
+against one, vendor it and rerun the suite. A protocol answer is validated
+against `controller/protocol_schema.json`, a byte-for-byte copy of the
+2.7.0 schema whose sha256 a test pins. The record
+is [ADR 0010](../adr/0010-orchestration-protocol-admission-by-capability.md).
+
+**Admitting a future legacy-mode Workflow release** is a deliberate act in
+a reviewed plan, never a version-string edit:
 
 1. vendor it: `python3 tools/workflow_releases.py sync <release> --from ...`;
 2. measure what changed against the previous release: the phase set, the

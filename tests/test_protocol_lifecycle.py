@@ -408,6 +408,22 @@ class ReleaseMovedBetweenStepsTest(_LifecycleCase):
         self.assertEqual(life.tasks, EXPECTED_LAUNCHES)
 
 
+class InspectRepositoryBlockTest(unittest.TestCase):
+    """``inspect``'s ``repository`` object names the mode for a protocol
+    target only (orchestration-protocol-v1 F); a legacy target's gains no key."""
+
+    def test_only_a_protocol_target_gains_the_mode_and_the_digest_map(self) -> None:
+        from controller import cli
+        protocol_target = Lifecycle(self, "2.7.0").inspect()
+        block = cli._repository_block(protocol_target)
+        self.assertEqual(block["workflow_mode"], "protocol")
+        self.assertEqual(block["target_protocol"]["major"], 1)
+        self.assertEqual(block["script_digests"], dict(protocol_target.script_digests))
+        self.assertIn("scripts/workflow_protocol.py", block["script_digests"])
+        legacy = cli._repository_block(Lifecycle(self, "2.6.0").inspect())
+        self.assertEqual(set(legacy), {"root", "workflow_version", "profile"})
+
+
 class GoldensUnchangedTest(unittest.TestCase):
     """Every golden generator's own ``--check``, except the plan-stage one:
     its ``AMENDING_PLAN`` cases carry the permitted difference that

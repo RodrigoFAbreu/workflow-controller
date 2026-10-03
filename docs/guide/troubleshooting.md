@@ -419,8 +419,11 @@ disposition and action beside it.
   finish, then run again.
 - `no_progress_repeated`: the last two jobs for the same work item and
   action both ended with no progress, so a third is not launched. Read
-  their records (`workflow-controller status`, `follow`), then run again or
-  take the action by hand. A job that made progress, or a gate, resets it.
+  their records (`workflow-controller status`, `follow`), then change the
+  work item: take the action by hand, or fix what stops the worker. The count
+  restarts once the work item's state identity differs from the one the last
+  counted job left, so running again without a change gets the same gate. A
+  job that made progress, or a gate, also resets it.
 
 A protocol job can also end `FAILED` (`step` and `run` exit `30`) with:
 

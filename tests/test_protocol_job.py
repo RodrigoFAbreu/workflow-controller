@@ -339,7 +339,8 @@ class IdentityRecheckTest(unittest.TestCase):
 
 
 def _write_job(runtime: Path, root: Path, n: int, *, action: str = "implementation.checkpoint", status: str,
-               reconcile: str | None, work_item: str | None = "demo", identity: str = "i") -> str:
+               reconcile: str | None, work_item: str | None = "demo", identity: str = "i",
+               end_identity: str | None = None) -> str:
     jobs = runtime / "jobs"
     jobs.mkdir(exist_ok=True)
     job_id = f"20260101T0000{n:02d}-job{n:02d}"
@@ -347,17 +348,19 @@ def _write_job(runtime: Path, root: Path, n: int, *, action: str = "implementati
         "job_id": job_id, "target_repo": str(root), "work_item_id": work_item, "status": status,
         "created_at": f"2026-01-01T00:00:{n:02d}Z",
         "protocol": {"action_id": action, "state_identity": identity,
-                     "reconcile": None if reconcile is None else {"class": reconcile}},
+                     "reconcile": None if reconcile is None else {
+                         "class": reconcile, "to": None if end_identity is None else {"state_identity": end_identity}}},
     }
     (jobs / f"{job_id}.json").write_text(json.dumps(record))
     return job_id
 
 
 class LoopGuardTest(unittest.TestCase):
-    def _gate(self, target: _Target, action: str = "implementation.checkpoint", work_item: str | None = "demo"):
+    def _gate(self, target: _Target, action: str = "implementation.checkpoint", work_item: str | None = "demo",
+              state_identity: str | None = None):
         repo = target.inspect()
         item = target_state.NoWorkItemYet if work_item is None else type("W", (), {"work_item_id": work_item})()
-        decision = type("D", (), {"protocol": type("P", (), {"action_id": action})()})()
+        decision = type("D", (), {"protocol": type("P", (), {"action_id": action, "state_identity": state_identity})()})()
         with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a: a[3:]):
             return job._no_progress_gate(target.runtime, repo, item, decision)
 
@@ -406,6 +409,14 @@ class LoopGuardTest(unittest.TestCase):
         self.assertIsNotNone(self._gate(target))
         self.assertIsNone(self._gate(target, action="implementation.self_review"))
         self.assertIsNone(self._gate(target, work_item="other"))
+
+    def test_a_streak_ends_once_the_work_item_moved_since_the_last_counted_job(self) -> None:
+        target = _Target(self)
+        self._jobs(target, (job.STATUS_FINISHED, "no_progress", {"end_identity": "s1"}),
+                   (job.STATUS_FINISHED, "no_progress", {"end_identity": "s1"}))
+        self.assertIsNotNone(self._gate(target, state_identity="s1"))
+        # A checkpoint completed by hand: the next implementation.checkpoint is at another identity.
+        self.assertIsNone(self._gate(target, state_identity="s2"))
 
     def test_plan_start_is_keyed_on_no_work_item(self) -> None:
         target = _Target(self, with_item=False)

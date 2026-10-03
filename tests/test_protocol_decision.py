@@ -599,6 +599,22 @@ class JobWiringTest(unittest.TestCase):
                     self.assertIn("protocol row 7: disposition automatic, action plan.author", out.getvalue())
                     self.assertIn("next automatic action: /milestone-plan demo", out.getvalue())
 
+    def test_explain_applies_the_loop_guard_step_applies(self) -> None:
+        from tests.test_cli import _Args
+        from tests.test_protocol_job import _write_job
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = self._target(td, with_item=True)
+            runtime = Path(td) / "runtime"
+            runtime.mkdir()
+            for n in (1, 2):
+                _write_job(runtime, root, n, action="plan.author", work_item="demo",
+                           status=job.STATUS_FINISHED, reconcile="no_progress")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = cli.cmd_explain(_Args(str(root), workflow_manager=str(stub), json_out=True), runtime, IDENTITY)
+            self.assertEqual(code, cli.EXIT_OK)
+            self.assertIn(protocol_decision.NO_PROGRESS_REPEATED, out.getvalue())
+
     def test_a_legacy_explain_has_no_protocol_key(self) -> None:
         from tests.test_cli import _Args
         with tempfile.TemporaryDirectory() as td:

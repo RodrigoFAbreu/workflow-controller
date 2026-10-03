@@ -15,8 +15,8 @@ running across the whole runtime root.
 The one table of exit statuses, with what to do for each, is
 [exit codes](../exit-codes.md); the normative copy is
 [ADR 0001, "Exit codes"](../adr/0001-controller-generation-1-architecture.md#exit-codes).
-The short fixes are in [common problems](../common-problems.md). Three
-statuses have detail below: for `20` and the settings file see
+The short fixes are in [common problems](../common-problems.md). The
+detail is below: for `20` and the settings file see
 [The settings file is refused](#the-settings-file-is-refused-settingserror),
 for a changed Workflow release or a failed Workflow query see
 [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries),

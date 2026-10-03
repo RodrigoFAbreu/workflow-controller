@@ -575,7 +575,8 @@ def check_stub(root: Path, through: int) -> list[str]:
     page = root / rel
     if not page.is_file():
         return [f"{rel}: installation stub is missing"]
-    found = tuple(text for level, text in headings(page.read_text(encoding="utf-8")) if level == 2)
+    # Every heading below the title counts, so an added section of any level fails.
+    found = tuple(text for level, text in headings(page.read_text(encoding="utf-8")) if level > 1)
     if found != INSTALLATION_STUB_HEADINGS:
         return [f"{rel}: stub headings are {list(found)!r}, expected {list(INSTALLATION_STUB_HEADINGS)!r}"]
     return []

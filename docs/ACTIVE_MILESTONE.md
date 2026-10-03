@@ -67,5 +67,17 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
   touches nothing under `controller/`, `.github/`, `.workflow-controller/`, `docs/adr/`,
   `docs/releases/`, `pyproject.toml` or `setup.py`.
 
+## Self-review
+
+No Blocking findings. Fixed: the glossary regained the "Pull request title" and "Runtime kind" terms and
+the `reconcile` half of "Workflow mode" that the old guide's glossary carried; the exit-code page's row 20
+names a failed protocol operation again; the settings-file fix on the common-problems page names the four
+commands that create a fresh file; a miscount in the troubleshooting guide's exit-code section; and the
+installation-stub rule now counts headings of every level below the title, with a test for an added `###`.
+Verification after the fixes: `python3 tools/check_docs.py` clean; `python3 -m unittest tests.test_docs
+tests.test_plan_document_consistency` 82 tests OK; `python3 tools/ci_workflows.py --check` clean;
+`python3 tools/run_tests.py` 3052 tests in 7 shards PASS, coverage exact; the protected-path diff from
+`914d8f4` is empty.
+
 Earlier milestones' narratives are archived under `docs/milestones/completed/`. The last one,
 `workflow-controller-orchestration-protocol-v1` (1.7.0), is released.

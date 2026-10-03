@@ -14,7 +14,7 @@ copy, which the Controller's own tests compare with the code, is
 | 10 | stopped cleanly at an approval gate, waiting for you | the normal end of a run. Run `workflow-controller explain <repo>`, do what it says, then run again |
 | 15 | the next action is valid but not automated, so it was reported and not launched | do it yourself; `explain` names the phase and the command |
 | 16 | `run` reached `--max-steps` with work still outstanding | run again, or raise `--max-steps` |
-| 20 | a fail-closed refusal: an unmanaged or drifted repository, a malformed state file, an unreconciled job file, a bad routing file, an unusable settings file, a changed Workflow release, or a failed Workflow query | read the message; for a pending job run `workflow-controller resume <repo>` |
+| 20 | a fail-closed refusal: an unmanaged or drifted repository, a malformed state file, an unreconciled job file, a bad routing file, an unusable settings file, a changed Workflow release, or a failed Workflow query or protocol operation | read the message; for a pending job run `workflow-controller resume <repo>` |
 | 30 | a worker ran and failed its expected outcome | `explain` shows what was checked; fix it and run again, or finish the step by hand |
 | 35 | a worker ran and stopped without completing its action, leaving nothing durable to verify | `explain` and the job's log show why |
 | 40 | the Controller itself was interrupted, or `resume` marked a record as interrupted | `workflow-controller resume <repo>` |

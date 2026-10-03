@@ -375,6 +375,8 @@ class StubRuleTest(TreeTestCase):
         self.assertEqual(check_docs.check_stub(self.tree.root, 4), [])
         self.tree.write("docs/guide/installation.md", f"# Installation\n\n{body}\n## Extra\n")
         self.assertTrue(check_docs.check_stub(self.tree.root, 4))
+        self.tree.write("docs/guide/installation.md", f"# Installation\n\n{body}\n### Extra\n")
+        self.assertTrue(check_docs.check_stub(self.tree.root, 4))
 
     def test_inactive_before_its_checkpoint(self) -> None:
         self.assertEqual(check_docs.check_stub(self.tree.root, 3), [])

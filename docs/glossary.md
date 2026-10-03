@@ -127,7 +127,20 @@ merge method and the release trigger.
 How the Controller drives a target. In legacy mode (Workflow 2.5.1 and 2.6.0)
 it decides from the state file by its own rules. In protocol mode (a release
 admitted by the protocol, such as 2.7.0) the Workflow's own `next-action`
-decides.
+decides the next action and its `reconcile` judges each job's outcome.
+
+### Pull request title
+
+Under squash merges, the subject of the commit that lands on the trunk. A
+milestone plan declares it, and under the `conventional_commit` release
+trigger its Conventional Commit type (`feat`, `fix`, `docs`, ...) decides the
+release. See [Releasing](guide/ci-and-releases.md#releasing).
+
+### Runtime kind
+
+What code is running: `package` (an installed wheel), `source` (an editable
+checkout) or `unidentified`. `workflow-controller --version` prints it. See
+[Runtime identity](guide/runtime.md#runtime-identity).
 
 ### Generation
 

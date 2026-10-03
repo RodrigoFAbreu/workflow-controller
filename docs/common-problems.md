@@ -42,7 +42,7 @@ A work item whose state names a registry file that does not exist is refused bef
 
 ## The settings file is refused (exit 20)
 
-The message names the file and the key. Fix that key by hand and run again, or move the file aside and the next command creates a fresh one. `workflow-controller settings path` prints the file in use. See [troubleshooting](guide/troubleshooting.md#the-settings-file-is-refused-settingserror).
+The message names the file and the key. Fix that key by hand and run again, or move the file aside and the next `step`, `run`, `resume` or `milestone-binding` creates a fresh one. `workflow-controller settings path` prints the file in use. See [troubleshooting](guide/troubleshooting.md#the-settings-file-is-refused-settingserror).
 
 ## The milestone stopped at a pull request or release gate
 

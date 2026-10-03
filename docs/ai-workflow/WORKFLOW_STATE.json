@@ -6560,7 +6560,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -6641,8 +6641,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 33,
-      "last_transition": "2026-10-03T22:29:08Z",
+      "state_revision": 35,
+      "last_transition": "2026-10-03T22:42:03Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6661,6 +6661,16 @@
           "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
           "plan_revision": 5
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "9a3806a402154a1333141518bdd7bc5455808109851677509a4e0ba3a100a208",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "12c7a00f48aaa18f583c154c359bd7c24e9a2784590949b101aa8b579b400e21",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-03T22:34:27Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

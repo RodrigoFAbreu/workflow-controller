@@ -12,7 +12,7 @@ Goal: a verified `workflow-controller` on your `PATH`, installed from a release 
 - `workflow-manager`, from the [Workflow Manager repository](https://github.com/RodrigoFAbreu/workflow-manager#readme). The Controller asks it whether a [target](glossary.md#target)'s Workflow installation is sound before it does anything.
 - `gh`, authenticated, only for a repository that commits a `.workflow-controller/policy.json` (milestone branches, pull requests and releases).
 
-The Controller finds Workflow Manager through `--workflow-manager`, then the `WORKFLOW_CONTROLLER_WORKFLOW_MANAGER` environment variable, then `workflow-manager` on `PATH`. The first one that is set is final.
+The Controller finds Workflow Manager through `--workflow-manager`, then the `WORKFLOW_CONTROLLER_WORKFLOW_MANAGER` environment variable, then `workflow-manager` on `PATH`. The first one that is set is final: if it does not resolve to an executable, the Controller refuses instead of trying the next.
 
 ## Steps
 
@@ -48,7 +48,7 @@ The Controller finds Workflow Manager through `--workflow-manager`, then the `WO
 
 ## What you should see
 
-`sha256sum -c` prints `workflow_controller-<version>-py3-none-any.whl: OK`. `--version` prints two lines: `workflow-controller <version>`, then `runtime: package (release v<version>; built from <commit>; package <digest>)`. `status` on a new machine reports no Controller runtime state and `active: none`.
+`sha256sum -c` prints `workflow_controller-<version>-py3-none-any.whl: OK`. `--version` prints two lines: `workflow-controller <version>`, then `runtime: package (release v<version>; built from <commit>; package <digest>)`. `status` on a new machine prints `no Controller runtime state at <root> (ladder row 1)`; once state exists it shows `active: none` when nothing runs.
 
 The checksum is the proof that a wheel is the release; the word "release" in `--version` comes from the build and proves nothing about origin by itself. See [Runtime identity](guide/runtime.md#runtime-identity).
 

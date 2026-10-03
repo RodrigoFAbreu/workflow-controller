@@ -35,10 +35,11 @@ item has one or more checkpoints, done one per implementation step.
 
 ### Approval gate
 
-A point where the Workflow stops until a person decides. There are three that
-only a person can pass: plan approval, implementation approval (also called
-technical approval) and milestone acceptance. Two more gates wait for a review
-and for functional testing. A tool may run everything between gates, but never
+A point where the Workflow stops until a person decides. There are six hard
+gates. Three only a person can pass: plan approval, implementation approval
+(also called technical approval) and milestone acceptance. The other three wait
+for the external plan review, the external implementation review and the
+functional review. A tool may run everything between gates, but never
 crosses one for you.
 
 ### Bundle

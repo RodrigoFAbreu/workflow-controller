@@ -4,8 +4,9 @@
 
 [Back to the documentation map](../README.md)
 
-Start with `workflow-controller explain <repo>`. It is read-only, always exits
-`0`, and prints the pending job files (each with the command that clears it),
+Start with `workflow-controller explain <repo>`. It is read-only, exits `0`
+(but refuses with `20`, like every other command, when the repository is not
+admitted), and prints the pending job files (each with the command that clears it),
 the lifecycle lock's state, the next decision with its evidence and, at a
 gate, exactly what a human must do. `workflow-controller status` shows what is
 running across the whole runtime root.

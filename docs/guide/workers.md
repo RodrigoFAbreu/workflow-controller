@@ -192,7 +192,7 @@ the remaining owned processes for at most the drain bound: the
 then, it ends **nothing**. It *detaches*: the record stays `LAUNCHED` at
 `DRAINING` with `drain_detached_at`, and the bound it applied as
 `drain_detach_seconds`. A `worker_drain_detached` event names the
-processes, the anchor keeps the lock, and the command exits 45 naming
+processes, the anchor keeps the lock, and the command exits 45 (see [exit codes](../exit-codes.md)) naming
 each pid with its command line. Either run `workflow-controller resume
 <repo>`, which re-attaches and drains again with a fresh bound, or end
 the processes and then run `resume`. No later action can start while

@@ -466,7 +466,7 @@ show the merge and closes out as for any merge. (A repository that
 deletes merged branches removes the pull request's head branch itself.)
 Otherwise a refused merge is `merge_pending` with GitHub's message, sent
 again only on a later re-read that shows the pull request mergeable.
-After three refused attempts the Controller refuses (exit `20`) and
+After three refused attempts the Controller refuses (exit `20`, see [exit codes](../exit-codes.md)) and
 sends nothing more for this pull request: merge on GitHub with "Squash
 and merge" (the message names the cause, for example squash merging
 turned off), and the next step closes out. When the three attempts are

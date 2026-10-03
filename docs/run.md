@@ -14,7 +14,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
 
 ## Steps
 
-1. Look first. `explain` is read-only and always exits 0: it names the pending job files, the next decision with its evidence and, at a gate, what you must do. `inspect` verifies the repository and summarises its Workflow state.
+1. Look first. `explain` is read-only and exits 0, including at a gate (it refuses with exit 20, like every command, when the repository is not admitted): it names the pending job files, the next decision with its evidence and, at a gate, what you must do. `inspect` verifies the repository and summarises its Workflow state.
 
    ```bash
    workflow-controller inspect .

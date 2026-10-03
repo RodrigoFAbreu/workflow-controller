@@ -64,7 +64,7 @@ There are three runtime kinds:
   A package runtime never runs Git and never consults the checkout it was
   built from. `step`, `run` and `resume` copy the installed package into
   a snapshot and check the copy against the recorded package digest; an
-  installation edited after it was built is refused (exit `20`). A wheel
+  installation edited after it was built is refused (exit `20`, see [exit codes](../exit-codes.md)). A wheel
   built from uncommitted changes, or with no verifiable provenance (for
   example from an sdist), needs `--allow-dirty-source`, like a dirty
   checkout.

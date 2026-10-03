@@ -229,7 +229,7 @@ What it checks:
   the `> For: <reader>. Last checked with: <versions>.` line right after
   its title, and names no internal id (checkpoint or review-finding
   numbers, work item ids).
-- **Facts kept in one place.** The exit-code page lists exactly the
+- **Facts kept in one place.** The [exit-code page](../exit-codes.md) lists exactly the
   Controller's exit statuses (and the shell's 130 for Ctrl-C), matching
   ADR 0001's table; the compatibility page carries exactly the pinned
   script digests of `controller/workflow_contract.py`; the

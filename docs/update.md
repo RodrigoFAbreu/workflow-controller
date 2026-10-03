@@ -28,14 +28,14 @@ What an update does to a Controller that is already running:
 
 - A running `step` or `run` executes from its own snapshot of the installed package, so the new files never reach it.
 - A new release of the same generation is ignored by a running `run`, which finishes on the old version.
-- A new generation stops a running `run` at its next boundary with exit 50 and a handoff record. Run again with the new version.
+- A new generation stops a running `run` at its next boundary with exit 50 (all statuses are in [exit codes](exit-codes.md)) and a handoff record. Run again with the new version.
 - If `pipx install --force` lands in the middle of a boundary check, or the update changes Python's minor version, the run fails closed with exit 20. Run `run` again.
 
 ## Roll back
 
 Install an older wheel the same way: `pipx install --force <older wheel>`. Going back across a generation has two consequences:
 
-- A job record written by the newer generation is refused by the older one, and `resume --abandon` refuses it too. Run `workflow-controller resume .` before you roll back and the problem does not arise.
+- A job record written by the newer generation is refused by the older one, and `resume --abandon` refuses it too. Run `workflow-controller resume .` before you roll back and the problem does not arise. If you already rolled back and hit it (`StaleJobRecordError`), reinstall the newer version, let its own `resume` clear the record, then roll back.
 - A `run` still executing the newer generation stops at its next boundary with exit 20.
 
 Rolling back to 1.2.1 refuses a repository already on Workflow 2.6.0 (exit 20).
@@ -56,7 +56,18 @@ git status
 
 `inspect` must admit the new release, and `git status` must show only the files the Manager wrote. Commit exactly those, open a pull request and merge it. Under the `conventional_commit` release trigger, give it a title that releases nothing, such as `chore: move to a newer Workflow`.
 
-Never move a repository while a worker runs or while a plan-approval transaction is unfinished. A job that straddles the move ends in `workflow_release_changed` and the next invocation decides again. Moving a repository in the middle of a milestone is proven only at a few phases; the full account is in [Workflow release changes](guide/troubleshooting.md#workflow_release_changed-and-workflow_release_changed); the quick fix is in [common problems](common-problems.md#a-step-refuses-with-workflow_release_changed).
+Never move a repository while a worker runs or while a plan-approval transaction is unfinished. A job that straddles the move ends in `workflow_release_changed` and the next invocation decides again. The quick fix is in [common problems](common-problems.md#a-step-refuses-with-workflow_release_changed); the long account is in [Workflow release changes](guide/troubleshooting.md#workflow_release_changed-and-workflow_release_changed).
+
+### In the middle of a milestone
+
+Updating a milestone's own branch in place is proven only at these phases:
+
+- `AWAITING_LOCAL_PLAN_REVIEW`, `REVISING_PLAN` and `AWAITING_PLAN_APPROVAL`, including a bundle a 2.5.1 withdrawal left behind (the Controller stops at a gate whose steps regenerate it);
+- `IMPLEMENTING`, between checkpoints.
+
+At any other phase an in-flight update is untested. After a 2.5.1 to 2.6.0 move, `/milestone-plan` at `IMPLEMENTING` no longer re-plans: 2.6.0 routes a plan change to `/request-plan-amendment`, which only a human runs.
+
+If you update the trunk while a milestone branch stays on the old release, the branch keeps its release and readiness still ends at `integration_required`. After the manual merge the close-out completes, and the same step then refuses once with `WORKFLOW_RELEASE_CHANGED` (the close-out is recorded); the next invocation admits the trunk's release. Workflow 2.6.0's lifecycle lock reads the `installation.json` committed at `HEAD` of every registered worktree, so a linked worktree whose branch predates the update counts as lagging. The Controller itself creates no linked worktrees.
 
 ## What you should see
 

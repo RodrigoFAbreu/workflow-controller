@@ -44,7 +44,7 @@
 - **Never hot-reloads.** A running Controller generation executes from an
   immutable, content-addressed snapshot of its own source and never
   mutates or reloads it; a newer approved generation triggers an
-  intentional stop (a durable handoff record, exit 50), never an
+  intentional stop (a durable handoff record, exit 50; every status is in [exit codes](../exit-codes.md)), never an
   in-process update.
 - **Merges only the accepted head, never rewrites.** The Controller
   merges a pull request only when the repository opts in
@@ -243,6 +243,11 @@ Workflow's `next-action` says what to do next, and its `reconcile` says
 whether a job made progress. 2.5.1 and 2.6.0 stay in legacy mode, exactly
 as described above. The design record is
 [ADR 0010](../adr/0010-orchestration-protocol-admission-by-capability.md).
+
+In protocol mode the Controller itself launches `/prepare-functional-review`
+(which writes and commits the checklist) and `/apply-functional-review`
+(which applies the operator's findings) without a prompt; the functional
+testing itself stays with a person.
 
 **How an operation runs.** `describe`, `next-action` and `reconcile` run
 the way the queries above do: from a private copy of the Workflow's

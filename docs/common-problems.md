@@ -2,7 +2,7 @@
 
 > For: anyone whose run stopped and wants the quick fix. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
 
-Start with `workflow-controller explain <repo>`. It is read-only, always exits 0, and prints the pending job files with the command that clears each one, the next decision with its evidence and, at a gate, exactly what a person must do. Each entry below is the symptom, the one-line fix and where the detail is. What each exit status means is in [exit codes](exit-codes.md); the long account of every stop is the [troubleshooting guide](guide/troubleshooting.md).
+Start with `workflow-controller explain <repo>`. It is read-only, exits 0 (but refuses with exit 20 when the repository is not admitted, as on an unmanaged one), and prints the pending job files with the command that clears each one, the next decision with its evidence and, at a gate, exactly what a person must do. Each entry below is the symptom, the one-line fix and where the detail is. What each exit status means is in [exit codes](exit-codes.md); the long account of every stop is the [troubleshooting guide](guide/troubleshooting.md).
 
 ## The run stopped and exited 10
 

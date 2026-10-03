@@ -1,4 +1,4 @@
-# The Controller on Workflow Orchestration Protocol v1: decisions first, then outcomes (Revision 10)
+# The Controller on Workflow Orchestration Protocol v1: decisions first, then outcomes (Revision 11)
 
 Work item: `workflow-controller-orchestration-protocol-v1`
 Work item type: `product`
@@ -631,6 +631,7 @@ is the authority; this table is generated from it.
 | CP7 | Documentation and full verification (terminal): ADR 0010 amending ADR 0006, docs/guide concepts, automation (naming the three new automatic launches), installation, commands, troubleshooting, development and the routing-config, settings (stating the TABLE_GENERATION 3 effect on a file shared with 1.6.0) and telemetry guides for the two new roles, README.md, docs/README.md, the 1.7.0 notes section checked by release_notes.notes_problem, every golden generator with --check, the full suite, the troubleshooting note that a target whose own work edits a managed scripts/workflow_*.py ends each job FAILED workflow_release_changed (not a defect), and the protected-path diff from the base | CP1, CP2, CP3, CP4, CP5, CP6 | 2 | 1 |
 
 ### CP1 -- the protocol client
+<!-- CP1 -->
 `controller/protocol.py` (with the managed-script-set private copy of A.1a),
 `controller/protocol_schema.py` with the vendored schema, the shared
 isolation refactor of `workflow_contract`, error codes, and `tests/workflow_releases/2.7.0/`.
@@ -647,8 +648,10 @@ copied and digested; a managed symlink or missing file refused naming it; a non-
 private-copy and Git-isolation cases the contract
 tests already run, now for the protocol script, and a round trip against the real 2.7.0 scripts for
 `describe`, `verify` and `next-action`. The legacy suites pass unchanged.
+<!-- /CP1 -->
 
 ### CP2 -- admission by capability
+<!-- CP2 -->
 `managed_repo.inspect` two-way gate and `target_protocol`; `describe`-based admission; release and
 the identity function (release and managed-script digest map, derived afresh and
 comparable); `inspect` fields. The per-job pin, the per-decision re-check and
@@ -657,8 +660,10 @@ decision path). Tests: 2.5.1/2.6.0 unchanged, 2.7.0 admitted, a 2.7.1 stand-in
 (vendored copy with a bumped release string) admitted, a stand-in whose `workflow_protocol.py`
 imports an extra sibling module admitted with that module's digest in the recorded map (H1), a release without a protocol script
 refused `no_protocol`, a protocol major 2 refused, the identity function asserted on its own (a non-Workflow `scripts/extra.py` edited between two derivations leaves the map and release equal; an edited managed script changes the map), and a non-Workflow symlink in `scripts/` not blocking admission (J1). The mid-job edit and the per-decision re-check are CP4's tests of this function's wiring (L1) and the reconcile-level outcomes are CP5's (K1): CP2 depends only on CP1, and neither a job record nor a decision nor the reconcile branch exists before CP3-CP5.
+<!-- /CP2 -->
 
 ### CP3 -- decisions from `next-action`
+<!-- CP3 -->
 `controller/protocol_decision.py`, the disposition table, `PROTOCOL_ACTIONS` with a route key per
 action id and the two new routing roles `prepare-functional-review` (`_INHERIT`) and
 `apply-functional-review` (`_OPUS`) added to `routing.ROLE_ROUTES` only, with `TABLE_GENERATION` 3 (C.3),
@@ -680,8 +685,10 @@ difference table holding exactly the seven observable differences D1-D7, each as
 the three new automatic launches `implementation.apply_review`, `functional.prepare` and
 `functional.apply_findings`); N1-N4 are tested where they live, not in the table, a static test that the protocol path reads no lifecycle
 file (I8) allow-listing only the committed-state call.
+<!-- /CP3 -->
 
 ### CP4 -- the stale check, the record and the loop guard
+<!-- CP4 -->
 Job record `protocol` block, the `--expect-state-identity` check before the `PLANNED` write with
 bounded re-decide, the second check before the spawn with its terminal `decision_stale_at_launch`
 record, the `no_progress_repeated` guard, the record's release and digest-map pin (the reference for that job's own verification and `resume`) and the per-step re-check against the identity `inspect` admitted for the invocation, run right after the repository preflight (B.3, L1, M1: `WORKFLOW_RELEASE_CHANGED`, exit 20). Tests: a managed script (`workflow_protocol.py`, `workflow_state.py`) edited between `inspect` and the decision refused `WORKFLOW_RELEASE_CHANGED`, a changed `describe` release refused the same way, a non-Workflow `scripts/extra.py` edit not refused (L1); a protocol target whose last job recorded release X, moved to a stand-in release Y (2.7.1, as in CP2) between invocations: a fresh `run` is admitted and launches under Y, while a `resume` of the X job is `FAILED` `workflow_release_changed` (M1); a `plan.start` launch passes both currency checks (D.2); a work item created between the
@@ -692,8 +699,10 @@ pre-spawn check (terminal `FAILED`, no worker, `resume` has nothing to reconcile
 after the `PLANNED` write followed by `resume`, a repeated no-progress pair, a no-progress pair
 whose state identity changes between the two jobs (the guard still trips), a progressing pair that
 does not trip it, and the legacy record byte-identity.
+<!-- /CP4 -->
 
 ### CP5 -- outcomes from `reconcile`
+<!-- CP5 -->
 The protocol branch of `_verify_transition`, the release-identity re-check before `reconcile` (B.3, K1), the class-to-result table, `resume` for launched and
 completed jobs, the committed-state completion fact (E.3) with the 1.6.0 detail cases each named and
 asserted (all six `CHECKPOINT_PROGRESS_DETAILS`, E.3), including a trailer commit with `COMPLETE`
@@ -701,18 +710,23 @@ only in the worktree state. Tests (K1), on the launch path and on `resume`: a wo
 reason with a fake worker that does, partly does, or does not do the action, an interrupted
 worker, a reconcile that fails, `resume` after a Controller crash at each point, and a 1.6.0 record
 resumed.
+<!-- /CP5 -->
 
 ### CP6 -- both modes end to end
+<!-- CP6 -->
 A disposable-repository lifecycle on 2.7.0 with the fake worker through the whole lifecycle, in
 protocol mode, ending at `complete`, plus the same on 2.6.0 in legacy mode, a repository upgraded
 from 2.6.0 to 2.7.0 between steps (the release-changed refusal, then a fresh run), and the existing
 goldens and no-policy golden checked byte-identical.
+<!-- /CP6 -->
 
 ### CP7 -- documentation and full verification (terminal)
+<!-- CP7 -->
 ADR 0010, the guides (including `automation.md` naming the three new automatic launches D5-D7, and
 the routing-config, settings (the `TABLE_GENERATION` 3 effect on a settings file shared with 1.6.0) and telemetry guides for the two new roles), README and `docs/README.md`, the release notes section checked by
 `release_notes.notes_problem`, every golden generator with `--check`, the full suite under the
 reaping-subreaper wrapper, and the protected-path diff from the base. The troubleshooting guide says that a target whose own checkpoint work edits a managed `scripts/workflow_*.py` (a Workflow repository driven in protocol mode) ends every such job `FAILED` `workflow_release_changed`, which matches the legacy pin behaviour and is not a defect.
+<!-- /CP7 -->
 
 ## Requirements
 
@@ -786,6 +800,22 @@ reaping-subreaper wrapper, and the protected-path diff from the base. The troubl
   rest of the managed script set, I6), and the closed disposition table blocks an
   unknown value until C10 handles `validation`.
 
+## Revision 11 (plan amendment 0)
+
+Reason, recorded verbatim in `amendment_history`: "the artifacts declaration doesn't classify
+controller/, tests/, tools/ and the guides". Amendment base commit `425bac6` (CP1 complete).
+
+The approved declaration (revision 10) was built from an old template: it protected nothing and
+excluded nothing for `controller/`, `tests/`, `tools/`, `docs/guide/`, `docs/adr/`, `docs/releases/`,
+`.workflow-controller/`, `docs/README.md`, `pyproject.toml` or `setup.py`, so
+`workflow_state.implementing_entry_reachable` raised `UnclassifiedPathError: controller/__init__.py`
+once CP1 landed. Revision 11 rebuilds the declaration from the previous Controller milestone's
+(`workflow-controller-auto-merge-release-wait-artifacts.json`) with this item's paths, as set out in
+"Artifact declaration" below. The design, the checkpoints, the requirements and the decisions are
+unchanged; the registry and mapping differ from revision 10 only in the `plan_revision` value. This
+revision also adds the `<!-- CPn -->`/`<!-- /CPn -->` anchor pair around each of CP1-CP7's own
+sections, which `/approve-review plan` requires.
+
 ## Artifact declaration
 
 `docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-artifacts.json` follows the
@@ -793,12 +823,18 @@ previous Controller milestone's declaration, with this item's paths:
 
 - plan stage: protected are this plan, its registry and its mapping; `controller/`, `tests/`,
   `tools/`, `docs/guide/`, `docs/adr/`, `docs/releases/`, `.workflow-controller/`, `docs/README.md`,
-  `pyproject.toml` and `setup.py` are excluded as implementation content;
+  `pyproject.toml` and `setup.py` are excluded as implementation content, as are `AGENTS.md`,
+  `README.md`, `.claude/commands/`, `.github/` and the Gradle and product documentation paths of
+  the template, which this milestone leaves unchanged;
 - implementation stage: protected are `controller/`, `tests/`, `tools/`, `docs/guide/`,
   `docs/adr/`, `docs/releases/`, `.workflow-controller/`, `.github/workflows/*.yml`, `docs/README.md`,
   `README.md`, `CLAUDE.md`, `pyproject.toml`, `setup.py` and this artifacts file itself; the plan,
   registry and mapping are excluded as plan-stage content, and the workflow's own bookkeeping is
-  excluded. `pyproject.toml` is expected to change (package data for the vendored schema) and is
+  excluded (`docs/ACTIVE_MILESTONE.md`, `docs/ROADMAP.md`, `docs/TECHNICAL_DECISIONS.md`,
+  `docs/ai-workflow/`, `docs/milestones/`, `scripts/`, `.claude/commands/`, `.gitignore`, `AGENTS.md`).
+  Every path CP1-CP7 changes, including the vendored `tests/workflow_releases/2.7.0/` tree and
+  `controller/protocol_schema.json`, falls under a protected prefix or an exclusion above.
+  `pyproject.toml` is expected to change (package data for the vendored schema) and is
   protected so the change is reviewed.
 
 ## Verification

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-orchestration-protocol-v1",
-  "plan_revision": 10,
+  "plan_revision": 11,
   "checkpoints": [
     {
       "id": "CP1",

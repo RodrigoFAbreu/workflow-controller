@@ -1331,8 +1331,27 @@ to piece the steps together. Goals:
   admission by protocol capability (Orchestration Protocol v1, any Workflow whose `describe`
   answers protocol major 1), with 2.5.1 and 2.6.0 still on the legacy path. A table plus a few
   sentences.
-- **Learn from the other lane.** The Workflow Manager and Workflow repositories are reorganising
-  their documentation too; take what reads well there and share what works here.
+- **Align with the other lane** (proposals from the Workflow Manager lane, 2026-10-03; its own
+  clean-up starts after W2, so this repository goes first and the others mirror its names):
+  - `README.md` is the entry page: one paragraph on what the Controller is and does, then the same
+    three-sentence "how the pieces fit" paragraph all three repositories use (the Workflow is the
+    process and its commands, installed into a repository; the Workflow Manager installs, updates
+    and verifies the Workflow from published, digest-pinned releases; the Controller runs the
+    lifecycle steps automatically), each linking to the other two READMEs, then links to the task
+    pages.
+  - Task pages share names across repositories where they overlap: `docs/install.md`,
+    `docs/update.md`, plus `docs/run.md` here. Each one: the goal in one line, prerequisites,
+    numbered steps with copy-paste commands, "what you should see", "if it fails".
+  - Plain words, short sentences, no internal ids (checkpoint numbers, finding ids) on user pages;
+    history and design records stay in the narratives, ADRs and release notes, or move to
+    `docs/history/`.
+  - This repository's compatibility page is the single source of truth; the Workflow Manager and
+    Workflow documentation link to it instead of repeating the table.
+  - The user's steps are called "approval gates" (plan approval, implementation approval,
+    milestone acceptance); from Workflow 2.8 a gate policy can make them automatic or human.
+  - Repository-level guides only. The Workflow's shipped documents are linked, not changed.
+  - An independent reviewer checks the pages against the code, and the user reads them before the
+    merge.
 
 Done when the guides are reorganised, the three task pages and the compatibility page exist, the
 README and the documentation map point to them, every internal link resolves, and the existing

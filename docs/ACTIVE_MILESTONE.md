@@ -44,7 +44,8 @@ Deferred follow-ups, not conditions of acceptance:
   acceptance commits.
 
 **Next action:** release 1.7.0 as above, then merge the post-C9 docs pull request. After close-out,
-run `/milestone-plan` for step C8 of "At a glance" (usage budget, section 11.6), the user's order
-of 2026-10-02 (C9, C8, C5, then C6, C7, C10, C11). Plan it from `main`'s tip, with that base passed
+run `/milestone-plan` for step D1 of "At a glance" (documentation reorganisation, section 11.8),
+which the user added on 2026-10-03 to run while the lane waits for W2; C8 (usage budget, section
+11.6) follows, then the user's order of 2026-10-02 (C5, then C6, C7, C10, C11). Plan it from `main`'s tip, with that base passed
 explicitly (`/milestone-plan <main tip>`). `/milestone-plan` creates a fresh `work_items` entry and
 claims `active_work_item_id`, ready for `PLANNING`.

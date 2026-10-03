@@ -32,7 +32,8 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 
 **Controller lane, in order.** Each step is one small milestone that is released on its own. On
 2026-10-03 the user reordered the steps after C4: C9 first (Workflow 2.7.0 is published), then C8,
-then C5, then C6, C7, C10 and C11. The step numbers stay as they were.
+then C5, then C6, C7, C10 and C11. The step numbers stay as they were. On 2026-10-03, while the
+lane waits for W2 before C8, the user added D1, a documentation milestone, to run first.
 
 | # | Step | Needs | Section |
 |---|---|---|---|
@@ -42,6 +43,7 @@ then C5, then C6, C7, C10 and C11. The step numbers stay as they were.
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
+| D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -1305,6 +1307,55 @@ plan's 5-hour window, and Codex's limits.
 - Start the next item, until nothing is left.
 - It stops for a human only when policy says the evidence is insufficient for the next decision,
   or when the usage budget says to wait.
+
+## 11.8 Documentation reorganisation
+
+**Step D1** (user request, 2026-10-03). A documentation-only milestone; no behaviour changes, no
+release (`docs:` title).
+
+The documentation has grown milestone by milestone: eleven guides of 130 to 660 lines, plus the
+README and the documentation map. A reader who wants to install, run or update the Controller has
+to piece the steps together. Goals:
+
+- **Organise.** A clear entry point (`README.md` and `docs/README.md`) that sends each reader to
+  one place: install, run, update, troubleshoot, develop. Merge, split or retire guides where that
+  makes the path shorter; keep every link working.
+- **Readable and short.** Plain words, short sentences, tasks first, reference after. Cut
+  repetition and milestone history out of the guides (it lives in the narratives and the release
+  notes).
+- **How to install, how to run, how to update.** One short page each, with exact commands: the
+  shared install, verifying a release wheel, the settings file, a first run, the usage pause,
+  upgrading the Controller and moving a repository to a newer Workflow.
+- **Compatibility history, on its own page.** Which Controller release admitted which Workflow
+  releases (exact release and pinned digests through 1.6.0), and the current rule since 1.7.0:
+  admission by protocol capability (Orchestration Protocol v1, any Workflow whose `describe`
+  answers protocol major 1), with 2.5.1 and 2.6.0 still on the legacy path. A table plus a few
+  sentences.
+- **Align with the other lane** (proposals from the Workflow Manager lane, 2026-10-03; its own
+  clean-up starts after W2, so this repository goes first and the others mirror its names):
+  - `README.md` is the entry page: one paragraph on what the Controller is and does, then the same
+    three-sentence "how the pieces fit" paragraph all three repositories use (the Workflow is the
+    process and its commands, installed into a repository; the Workflow Manager installs, updates
+    and verifies the Workflow from published, digest-pinned releases; the Controller runs the
+    lifecycle steps automatically), each linking to the other two READMEs, then links to the task
+    pages.
+  - Task pages share names across repositories where they overlap: `docs/install.md`,
+    `docs/update.md`, plus `docs/run.md` here. Each one: the goal in one line, prerequisites,
+    numbered steps with copy-paste commands, "what you should see", "if it fails".
+  - Plain words, short sentences, no internal ids (checkpoint numbers, finding ids) on user pages;
+    history and design records stay in the narratives, ADRs and release notes, or move to
+    `docs/history/`.
+  - This repository's compatibility page is the single source of truth; the Workflow Manager and
+    Workflow documentation link to it instead of repeating the table.
+  - The user's steps are called "approval gates" (plan approval, implementation approval,
+    milestone acceptance); from Workflow 2.8 a gate policy can make them automatic or human.
+  - Repository-level guides only. The Workflow's shipped documents are linked, not changed.
+  - An independent reviewer checks the pages against the code, and the user reads them before the
+    merge.
+
+Done when the guides are reorganised, the three task pages and the compatibility page exist, the
+README and the documentation map point to them, every internal link resolves, and the existing
+documentation tests pass.
 
 ---
 

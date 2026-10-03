@@ -198,9 +198,16 @@ _INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.S)
 _LINK_RE = re.compile(r"\[(?:[^\]\n]|\n)*?\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
 
 
-_DEFINITION_RE = re.compile(r"^ {0,3}\[([^\]\n]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:\"[^\"]*\"|'[^']*'))?[ \t]*$", re.M)
-_REFERENCE_RE = re.compile(r"\[((?:[^\]\n]|\n)+?)\]\[([^\]\n]*)\]")
+# A reference definition may sit inside block quotes (``> [g]: target``); a
+# label starting with ``^`` is a GitHub footnote, not a link.
+_DEFINITION_RE = re.compile(
+    r"^(?:[ \t]{0,3}>)*[ \t]{0,3}\[(?!\^)([^\]\n]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:\"[^\"]*\"|'[^']*'))?[ \t]*$", re.M)
+# ``a[i][j]`` (a word character right before the ``[``) is prose, not a
+# reference link; put such text in a code span.
+_REFERENCE_RE = re.compile(r"(?<![\w\]])\[(?!\^)((?:[^\]\n]|\n)+?)\]\[([^\]\n]*)\]")
 _AUTOLINK_RE = re.compile(r"<([a-z][a-z0-9+.-]*:[^<>\s]+)>", re.I)
+# GFM extended autolinks: a bare ``http(s)://`` or ``www.`` URL in prose.
+_BARE_URL_RE = re.compile(r"(?<![\w/@.=-])((?:https?://|www\.)[^\s<]+)", re.I)
 
 
 def _body(text: str) -> str:
@@ -212,14 +219,54 @@ def _label(label: str) -> str:
     return " ".join(label.lower().split())
 
 
+def _blank(match: re.Match) -> str:
+    return " " * len(match.group(0))
+
+
+def _trim_bare_url(url: str) -> str:
+    """GFM: drop trailing punctuation and an unbalanced closing ``)``."""
+    while url:
+        last = url[-1]
+        if last in "?!.,:*_~;'\"":
+            url = url[:-1]
+        elif last == ")" and url.count(")") > url.count("("):
+            url = url[:-1]
+        else:
+            break
+    return url
+
+
+def bare_urls(text: str) -> list[str]:
+    """Bare URLs of ``text`` (already free of inline links, definitions,
+    reference links and ``<...>`` autolinks, which are blanked first)."""
+    for pattern in (_LINK_RE, _DEFINITION_RE, _REFERENCE_RE, _AUTOLINK_RE):
+        text = pattern.sub(_blank, text)
+    found = []
+    for m in _BARE_URL_RE.finditer(text):
+        url = _trim_bare_url(m.group(1))
+        found.append("https://" + url if url.lower().startswith("www.") else url)
+    return found
+
+
 def links(text: str) -> list[str]:
-    """The target of every inline link, reference-link definition and
-    autolink outside code fences and inline code."""
+    """The target of every link form outside code fences and inline code:
+    inline links, reference-link definitions, ``<...>`` autolinks and bare
+    URLs."""
     body = _body(text)
     found = [m.group(1) for m in _LINK_RE.finditer(body)]
     found += [m.group(2) for m in _DEFINITION_RE.finditer(body)]
     found += [m.group(1) for m in _AUTOLINK_RE.finditer(body)]
+    found += bare_urls(body)
     return found
+
+
+def blank_link_targets(text: str) -> str:
+    """``text`` with every link target (all forms of :func:`links`) removed,
+    so a target is never scanned as prose."""
+    text = _LINK_RE.sub(lambda m: m.group(0).replace(m.group(1), ""), text)
+    text = _DEFINITION_RE.sub(lambda m: m.group(0).replace(m.group(2), ""), text)
+    text = _AUTOLINK_RE.sub(lambda m: m.group(0).replace(m.group(1), ""), text)
+    return _BARE_URL_RE.sub(lambda m: m.group(0).replace(_trim_bare_url(m.group(1)), ""), text)
 
 
 def undefined_references(text: str) -> list[str]:
@@ -498,7 +545,7 @@ def header_problem(text: str) -> str | None:
 
 
 def internal_id_problems(text: str, ids: set[str]) -> list[str]:
-    body = _LINK_RE.sub(lambda m: m.group(0).replace(m.group(1), ""), text)
+    body = blank_link_targets(text)
     found = []
     for pattern in INTERNAL_ID_RES:
         found.extend(sorted({m.group(0) for m in pattern.finditer(body)}))

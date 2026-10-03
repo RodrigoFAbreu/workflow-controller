@@ -168,6 +168,37 @@ class LinkRuleTest(TreeTestCase):
         self.tree.write("README.md", "# R\n\n<https://example.com/x>\n")
         self.assertTrue(any("not allow-listed" in p for p in self.tree.check()))
 
+    def test_bare_urls_are_validated(self) -> None:
+        ok = "https://github.com/RodrigoFAbreu/workflow"
+        self.tree.write("README.md", f"# R\n\nSee {ok}. And ({ok}), or {ok}/.\n")
+        self.assertEqual(self.tree.check(), [])
+        self.tree.write("README.md", "# R\n\nSee https://github.com/RodrigoFAbreu/SignalHub here.\n")
+        self.assertTrue(any("unknown repository" in p for p in self.tree.check()))
+        self.tree.write("README.md", "# R\n\nSee https://example.com/x for more.\n")
+        self.assertTrue(any("not allow-listed" in p for p in self.tree.check()))
+        self.tree.write("README.md", "# R\n\nSee www.example.com/x for more.\n")
+        self.assertTrue(any("not allow-listed" in p for p in self.tree.check()))
+
+    def test_bare_urls_skip_code_and_are_not_double_counted(self) -> None:
+        self.tree.write("README.md", "# R\n\n`https://example.com/a`\n\n```\nhttps://example.com/b\n```\n")
+        self.assertEqual(self.tree.check(), [])
+        self.assertEqual(check_docs.links("[https://example.com/x](https://example.com/x)\n"),
+                         ["https://example.com/x"])
+        self.assertEqual(check_docs.links("<https://example.com/x> [a][g]\n\n[g]: https://example.com/y\n"),
+                         ["https://example.com/y", "https://example.com/x"])
+        self.assertEqual(check_docs.links("a https://example.com/x.\n"), ["https://example.com/x"])
+
+    def test_block_quoted_definitions_resolve_and_are_validated(self) -> None:
+        self.tree.write("README.md", "# R\n\n> [g][g]\n>\n> [g]: docs/g.md\n")
+        self.tree.write("docs/g.md", "# G\n")
+        self.assertEqual(self.tree.check(), [])
+        self.tree.write("README.md", "# R\n\n> [g][g]\n>\n> [g]: docs/missing.md\n")
+        self.assertTrue(any("missing file" in p for p in self.tree.check()))
+
+    def test_footnotes_and_prose_subscripts_are_not_links(self) -> None:
+        self.tree.write("README.md", "# R\n\nNote[^1] and a[i][j] and [^1][x].\n\n[^1]: Note.\n")
+        self.assertEqual(self.tree.check(), [])
+
     def test_a_blob_link_needs_a_file_path(self) -> None:
         base = "https://github.com/RodrigoFAbreu/workflow"
         self.assertIsNotNone(check_docs.external_link_problem(base + "/blob/main"))
@@ -328,6 +359,14 @@ class PageRuleTest(TreeTestCase):
     def test_link_targets_are_not_scanned(self) -> None:
         self.tree.write("docs/milestones/completed/the-real-item.md", "# x\n")
         self.page("docs/glossary.md", "[plan](milestones/completed/the-real-item.md)")
+        self.assertFalse([p for p in check_docs.check_pages(self.tree.root, 2) if "glossary" in p])
+
+    def test_definition_autolink_and_bare_targets_are_not_scanned(self) -> None:
+        self.tree.write("docs/milestones/completed/the-real-item.md", "# x\n")
+        self.page("docs/glossary.md",
+                  "[p][m] <https://github.com/RodrigoFAbreu/workflow/the-real-item> "
+                  "and https://github.com/RodrigoFAbreu/workflow/the-real-item.\n\n"
+                  "[m]: milestones/completed/the-real-item.md\n> [n]: milestones/completed/the-real-item.md\n")
         self.assertFalse([p for p in check_docs.check_pages(self.tree.root, 2) if "glossary" in p])
 
     def test_pages_are_checked_only_once_active(self) -> None:

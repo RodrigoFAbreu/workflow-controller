@@ -46,6 +46,9 @@ class Tree:
         return path
 
     def check(self, **kwargs) -> list[str]:
+        # Synthetic trees model the first checkpoint unless a test says otherwise,
+        # so raising ACTIVE_THROUGH in the repository never changes them.
+        kwargs.setdefault("through", 1)
         return check_docs.check_tree(self.root, **kwargs)
 
     def close(self) -> None:

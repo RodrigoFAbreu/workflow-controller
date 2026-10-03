@@ -24,6 +24,10 @@ A previous [job](glossary.md#job) was never reconciled. Run `workflow-controller
 
 The worktree is held: another Controller, a `run` waiting for checks or a merge, or a worker that may still be running holds its lock. Nothing is wrong. Wait, or follow the message; after a Ctrl-C or a drain timeout, `workflow-controller resume <repo>` re-attaches. See [restart](guide/workers.md#restart-resume-re-attaches) and [the drain bound](guide/workers.md#owned-processes-the-daemon-list-and-the-drain-bound).
 
+## I hit a usage limit
+
+The Controller has no usage-limit pause of its own yet. Bound the work with `run --max-steps 1`, check your usage between steps, and run again. See [pausing for usage limits](run.md#pausing-for-usage-limits).
+
 ## I pressed Ctrl-C
 
 Only the Controller stopped. The worker keeps running headless and keeps the worktree locked. Run `workflow-controller resume <repo>` to re-attach and let it finish. See [troubleshooting](guide/troubleshooting.md#common-situations).

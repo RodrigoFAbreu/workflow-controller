@@ -149,6 +149,32 @@ class LinkRuleTest(TreeTestCase):
         self.tree.write("docs/milestones/completed/a.md", "# R\n\n[x](gone.md)\n")
         self.assertEqual(self.tree.check(), [])
 
+    def test_reference_links_are_validated(self) -> None:
+        self.tree.write("README.md", "# R\n\n[g][g] [h][] [s][s]\n\n[g]: docs/guide/g.md#sub\n[h]: #r\n[s]: #r\n")
+        self.tree.write("docs/guide/g.md", "# G\n\n## Sub\n")
+        self.assertEqual(self.tree.check(), [])
+        self.tree.write("README.md", "# R\n\n[g][g]\n\n[g]: docs/missing.md\n")
+        self.assertTrue(any("missing file" in p for p in self.tree.check()))
+        self.tree.write("README.md", "# R\n\n[g][g]\n\n[g]: #missing\n")
+        self.assertTrue(any("missing heading" in p for p in self.tree.check()))
+        self.tree.write("README.md", "# R\n\n[g][nope]\n")
+        self.assertTrue(any("no definition" in p for p in self.tree.check()))
+
+    def test_autolinks_are_validated(self) -> None:
+        self.tree.write("README.md", "# R\n\n<https://github.com/RodrigoFAbreu/workflow>\n")
+        self.assertEqual(self.tree.check(), [])
+        self.tree.write("README.md", "# R\n\n<https://github.com/RodrigoFAbreu/SignalHub>\n")
+        self.assertTrue(any("unknown repository" in p for p in self.tree.check()))
+        self.tree.write("README.md", "# R\n\n<https://example.com/x>\n")
+        self.assertTrue(any("not allow-listed" in p for p in self.tree.check()))
+
+    def test_a_blob_link_needs_a_file_path(self) -> None:
+        base = "https://github.com/RodrigoFAbreu/workflow"
+        self.assertIsNotNone(check_docs.external_link_problem(base + "/blob/main"))
+        self.assertIsNotNone(check_docs.external_link_problem(base + "/blob"))
+        self.assertIsNone(check_docs.external_link_problem(base + "/blob/main/a.md"))
+        self.assertIsNone(check_docs.external_link_problem(base + "/tree/main"))
+
     def test_external_links(self) -> None:
         good = ["https://github.com/RodrigoFAbreu/workflow-manager#readme",
                 "https://github.com/RodrigoFAbreu/workflow",

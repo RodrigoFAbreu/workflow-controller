@@ -198,11 +198,40 @@ _INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.S)
 _LINK_RE = re.compile(r"\[(?:[^\]\n]|\n)*?\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
 
 
+_DEFINITION_RE = re.compile(r"^ {0,3}\[([^\]\n]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:\"[^\"]*\"|'[^']*'))?[ \t]*$", re.M)
+_REFERENCE_RE = re.compile(r"\[((?:[^\]\n]|\n)+?)\]\[([^\]\n]*)\]")
+_AUTOLINK_RE = re.compile(r"<([a-z][a-z0-9+.-]*:[^<>\s]+)>", re.I)
+
+
+def _body(text: str) -> str:
+    """Prose with inline code blanked out."""
+    return _INLINE_CODE_RE.sub(lambda m: " " * len(m.group(0)), prose(text))
+
+
+def _label(label: str) -> str:
+    return " ".join(label.lower().split())
+
+
 def links(text: str) -> list[str]:
-    """The target of every inline Markdown link outside code fences and
-    inline code."""
-    body = _INLINE_CODE_RE.sub(lambda m: " " * len(m.group(0)), prose(text))
-    return [m.group(1) for m in _LINK_RE.finditer(body)]
+    """The target of every inline link, reference-link definition and
+    autolink outside code fences and inline code."""
+    body = _body(text)
+    found = [m.group(1) for m in _LINK_RE.finditer(body)]
+    found += [m.group(2) for m in _DEFINITION_RE.finditer(body)]
+    found += [m.group(1) for m in _AUTOLINK_RE.finditer(body)]
+    return found
+
+
+def undefined_references(text: str) -> list[str]:
+    """Labels used by ``[text][label]`` / ``[label][]`` with no definition."""
+    body = _body(text)
+    defined = {_label(m.group(1)) for m in _DEFINITION_RE.finditer(body)}
+    missing = []
+    for m in _REFERENCE_RE.finditer(body):
+        label = _label(m.group(2) or m.group(1))
+        if label not in defined:
+            missing.append(label)
+    return missing
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +269,10 @@ def external_link_problem(target: str) -> str | None:
         return None
     kind = rest[0]
     if kind in ("blob", "tree"):
-        return None if len(rest) >= 2 else f"{kind} link needs a ref"
+        need = 3 if kind == "blob" else 2
+        if len(rest) >= need:
+            return None
+        return f"{kind} link needs a ref" + (" and a file path" if kind == "blob" else "")
     if kind == "releases":
         return None
     if kind in ("issues", "pull"):
@@ -259,7 +291,10 @@ def check_links(root: Path) -> list[str]:
 
     for page in link_pages(root):
         rel = page.relative_to(root).as_posix()
-        for target in links(page.read_text(encoding="utf-8")):
+        page_text = page.read_text(encoding="utf-8")
+        for label in undefined_references(page_text):
+            problems.append(f"{rel}: reference link [{label}] has no definition")
+        for target in links(page_text):
             if target.startswith("mailto:"):
                 continue
             if re.match(r"^[a-z][a-z0-9+.-]*://", target, re.I):

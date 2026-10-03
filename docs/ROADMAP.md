@@ -1310,8 +1310,8 @@ plan's 5-hour window, and Codex's limits.
 
 ## 11.8 Documentation reorganisation
 
-**Step D1** (user request, 2026-10-03). A documentation-only milestone; no behaviour changes, no
-release (`docs:` title).
+**Step D1** (user request, 2026-10-03). A documentation milestone; no Controller behaviour changes, no
+release (`docs:` title). Its only code is the two documentation checks run in CI.
 
 The documentation has grown milestone by milestone: eleven guides of 130 to 660 lines, plus the
 README and the documentation map. A reader who wants to install, run or update the Controller has
@@ -1352,10 +1352,35 @@ to piece the steps together. Goals:
   - Repository-level guides only. The Workflow's shipped documents are linked, not changed.
   - An independent reviewer checks the pages against the code, and the user reads them before the
     merge.
+- **Link the three repositories' documentation** where it makes reading easier: the READMEs, the
+  install and update pages, the compatibility page and the lifecycle diagram, instead of
+  repeating content.
+- **Readability additions** (the user chose these on 2026-10-03):
+  - a quick start at the top of the README: install, verify and a first run in about five
+    minutes, linking to the full pages;
+  - a glossary of the recurring terms (work item, phase, checkpoint, approval gate, bundle,
+    binding, protocol), linked from a term's first use on each page instead of re-explaining it;
+  - one lifecycle diagram (Mermaid) showing the steps and which are approval gates; it lives in the
+    Workflow repository's overview and the Controller pages link to it (until that page exists,
+    link to the Workflow's shipped lifecycle document);
+  - a "common problems" page: the frequent stops (usage pause, waiting for checks, exit 10, 20,
+    30 and 45, a job held draining, a refused plan), each with a one-line fix and a link to the
+    troubleshooting detail;
+  - one exit-code table in a single place, linked from everywhere that mentions an exit status;
+  - a one-line header on every user page: who it is for and the versions it was last checked
+    against (for example Controller 1.7.0, Workflow 2.6.0 and 2.7.0);
+  - a release history in plain words: one line per release saying what changed for the user,
+    linking to the full notes.
+- **Documentation checks in CI**, offline and fast (seconds, inside the existing validate job):
+  every relative link and `#anchor` resolves; every link to the other two repositories names one
+  of the three known repositories and is well formed (no network fetch on pull requests); and
+  every `workflow-controller` command and flag shown in a task page's code blocks exists in the
+  Controller's own argument parser. Generating reference pages from the code is out of scope.
 
-Done when the guides are reorganised, the three task pages and the compatibility page exist, the
-README and the documentation map point to them, every internal link resolves, and the existing
-documentation tests pass.
+Done when the guides are reorganised; the install, run and update pages, the compatibility page,
+the quick start, the glossary, the common-problems page, the exit-code table and the plain-words
+release history exist; the README and the documentation map point to them; the two documentation
+checks run in CI and pass; and the existing tests pass. Only the documentation checks add code.
 
 ---
 

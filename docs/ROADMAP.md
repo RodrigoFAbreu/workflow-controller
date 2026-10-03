@@ -8,10 +8,10 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-01).** Controller 1.5.0 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C3, the settings
-file, telemetry v0, release notes from the milestone and the 1.4 patches (1.4, 8, 11.1.2, accepted
-2026-10-01), is complete. C3 was released as 1.5.0 (PR #16, squash `f92f31b`).
+**Where things stand (2026-10-03).** Controller 1.5.0 is the latest release. It admits Workflow
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C4, auto-merge
+after acceptance and the wait for the release (11.3, accepted 2026-10-03), is complete. C4 is
+released as 1.6.0 when its pull request (#18) is squash-merged. Workflow 2.7.0 (W1) is published.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -37,7 +37,7 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 | C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance (complete) | — | [11.1.1](#1111-reaping-every-child-process) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count (complete) | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
-| C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
+| C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
@@ -1184,6 +1184,17 @@ five re-runs.
 
 ## 11.3 Auto-merge and release wait
 
+**Status:** Complete (`workflow-controller-auto-merge-release-wait`, accepted 2026-10-03 under
+Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md`, ADR
+`docs/adr/0009-auto-merge-and-release-wait.md`; the narrative is archived at
+`docs/milestones/completed/workflow-controller-auto-merge-release-wait.md`). A repository opts in
+through its policy (`milestone_branches.pull_request.auto_merge`), and the settings file's
+`merge.auto` turns it off on the machine. One deliberate change from the description below: the
+Controller does not enable GitHub's auto-merge, which could merge a later push. It sends one
+`gh pr merge --squash --match-head-commit` at the acceptance commit per attempt, so GitHub merges
+exactly that commit or refuses. Releases as 1.6.0 when PR #18 is squash-merged. The description
+below is the original problem statement.
+
 **Step C4.**
 
 - Once a milestone is accepted and its pull request is ready, the Controller enables GitHub
@@ -1280,6 +1291,7 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 11.1.1 C1b: reaping every child process                    COMPLETE (released as 1.4.1)
 11.2   C2: CI reliability                                    COMPLETE (released as 1.4.2)
 1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (released as 1.5.0)
+11.3   C4: auto-merge after acceptance and the release wait  COMPLETE (releases as 1.6.0)
 ```
 
 ---

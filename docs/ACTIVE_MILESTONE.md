@@ -22,6 +22,17 @@ below describes the previous milestone (C4) and is kept until this one is accept
   `tests/test_protocol_schema.py`.
   Revalidated against plan revision 11 (the CP1 section is unchanged by the amendment): the 69
   protocol, schema and package-structure tests pass.
+- **CP2, admission by capability** -- `managed_repo.inspect`'s version gate is two-way: a release with
+  a `RELEASE_CONTRACTS` entry (2.5.1, 2.6.0) is legacy mode exactly as before; any other release is
+  protocol mode when the installation record's `managed` map lists `scripts/workflow_protocol.py` and
+  `describe` answers protocol major 1, else refused (`no_protocol` for a release newer than the
+  supported lines, `unsupported_protocol_major`, the unchanged `outside_supported_line` /
+  `unvalidated_release`). `ManagedRepository` gains `target_protocol` and `script_digests`;
+  `protocol.identity()` is the one identity function (the release `describe` reports and the managed
+  script digest map, derived afresh; a non-Workflow `scripts/extra.py` never enters it). The job pin,
+  the per-decision re-check and `WORKFLOW_RELEASE_CHANGED` are CP4's.
+  Tests: `tests/test_managed_repo.py` (`ProtocolAdmissionTest`, `ProtocolIdentityTest`); the 2.7.0
+  case in `test_managed_repo` and `test_cli` now expects `no_protocol` on purpose.
 
 ## Status
 

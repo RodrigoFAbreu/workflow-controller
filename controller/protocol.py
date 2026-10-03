@@ -452,14 +452,39 @@ def _answer(root: Path, operation: str, args: list[str], timeout: float | None) 
     return envelope
 
 
-def describe(root: Path, *, timeout: float | None = None) -> Describe:
-    result = _answer(root, "describe", [], timeout).result
+def _describe_of(result: dict) -> Describe:
     return Describe(
         workflow_release=result["workflow_release"], protocol_version=result["protocol_version"],
         supported_protocol_majors=tuple(result["supported_protocol_majors"]),
         supported_governing_versions=tuple(result["supported_governing_versions"]),
         capabilities={name: tuple(values) for name, values in result["capabilities"].items()},
     )
+
+
+def describe(root: Path, *, timeout: float | None = None) -> Describe:
+    return _describe_of(_answer(root, "describe", [], timeout).result)
+
+
+@dataclasses.dataclass(frozen=True)
+class Identity:
+    """What a target's Workflow is, as the Controller derives it: the
+    ``release`` its protocol script reports and the ``digests`` (key to
+    sha256) of the script set it ran from. Two identities are equal when
+    both are; ``describe`` is the answer they came from and is not compared."""
+
+    release: str
+    digests: Mapping[str, str]
+    describe: Describe = dataclasses.field(compare=False)
+
+
+def identity(root: Path, *, timeout: float | None = None) -> Identity:
+    """Derive ``root``'s identity afresh: one ``describe`` run from a private
+    copy of the script set read now, so the release and the digests describe
+    the very bytes that answered. A file outside the installation record's
+    ``managed`` map never enters it."""
+    envelope = _answer(root, "describe", [], timeout)
+    described = _describe_of(envelope.result)
+    return Identity(described.workflow_release, dict(envelope.digests), described)
 
 
 def verify(root: Path, *, timeout: float | None = None) -> Verify:

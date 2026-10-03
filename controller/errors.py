@@ -175,7 +175,10 @@ class UnsupportedWorkflowVersionError(ControllerError):
     every supported line (``"outside_supported_line"``) from one inside a
     supported line that has not been individually validated
     (``"unvalidated_release"``); both carry the sorted list
-    ``supported_workflow_lines``. ``workflow_contract.contract_for`` raises it
+    ``supported_workflow_lines``. A release newer than every supported line
+    that lists no ``scripts/workflow_protocol.py`` in its installation record
+    is ``"no_protocol"``, and one whose protocol does not speak major ``1``
+    is ``"unsupported_protocol_major"``. ``workflow_contract.contract_for`` raises it
     too, with ``"no_workflow_contract"``, for a release the Controller holds
     no Workflow contract for."""
 

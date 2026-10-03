@@ -25,7 +25,13 @@ Five ordered, fail-closed checks, refusing at the first failure:
 4. ``workflow-manager verify <root>`` and ``... status <root>`` both exit
    ``0``, else :class:`~controller.errors.DriftedInstallationError`,
    carrying both commands' verbatim output as evidence.
-5. **The two-tier "Supported Workflow baseline" rule** (revision 68,
+5. **The version gate is two-way.** A release with a
+   ``workflow_contract.RELEASE_CONTRACTS`` entry is legacy mode, checked as
+   below; any other release is admitted by capability alone (a qualifying
+   ``scripts/workflow_protocol.py`` key in the installation record's
+   ``managed`` map and a ``describe`` answering protocol major ``1``: protocol
+   mode, ``target_protocol`` and ``script_digests`` set), else refused.
+   **The two-tier "Supported Workflow baseline" rule** (revision 68,
    manual external plan review round 67's ``I1``): ``workflow_version``
    must first parse as a dotted release inside one of
    :data:`SUPPORTED_WORKFLOW_LINES`
@@ -52,7 +58,9 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Mapping
 
+from controller import protocol, workflow_contract
 from controller.errors import (
     DriftedInstallationError,
     MalformedInstallationManifestError,
@@ -61,6 +69,7 @@ from controller.errors import (
     UnsupportedInstallProfileError,
     UnsupportedWorkflowVersionError,
     WorkflowManagerUnavailableError,
+    WorkflowProtocolUnsupportedError,
 )
 
 _MANIFEST_REL_PATH = ".workflow-manager/installation.json"
@@ -135,6 +144,14 @@ class ManagedRepository:
     profile: str
     verify: dict
     status: dict
+    #: ``None`` for a legacy release (one with a ``RELEASE_CONTRACTS`` entry);
+    #: for a protocol target ``{"major": 1, "version", "release"}`` as its
+    #: protocol script's ``describe`` answered.
+    target_protocol: Mapping[str, object] | None = None
+    #: The managed-script digest map the protocol answer was derived from
+    #: (``None`` for a legacy release); with ``target_protocol["release"]`` it
+    #: is the identity :func:`protocol.identity` derives afresh.
+    script_digests: Mapping[str, str] | None = None
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
@@ -314,6 +331,53 @@ def _check_workflow_version(workflow_version: str, root: Path) -> None:
         )
 
 
+def _check_protocol_admission(workflow_version: str, root: Path, manifest: dict) -> protocol.Identity:
+    """The protocol arm of the version gate: a qualifying
+    ``scripts/workflow_protocol.py`` key in the installation record's
+    ``managed`` map and a ``describe`` answering protocol major ``1``.
+    Otherwise the 1.6.0 refusal, with ``no_protocol`` for a release newer than
+    every supported line that ships no protocol script."""
+    managed = manifest.get("managed")
+    if not protocol.protocol_script_listed(managed):
+        line = _workflow_line(workflow_version)
+        if line is not None and tuple(map(int, line.split("."))) > max(
+                tuple(map(int, known.split("."))) for known in SUPPORTED_WORKFLOW_LINES):
+            raise UnsupportedWorkflowVersionError(
+                f"{root} runs Workflow {workflow_version!r}, which is newer than the Controller's "
+                f"supported lines {sorted(SUPPORTED_WORKFLOW_LINES)} and does not list "
+                f"{protocol.SCRIPT_KEY} in its installation record, so it does not ship the "
+                f"orchestration protocol",
+                evidence={
+                    "root": str(root),
+                    "observed_workflow_version": workflow_version,
+                    "supported_workflow_lines": sorted(SUPPORTED_WORKFLOW_LINES),
+                    "validated_workflow_releases": sorted(VALIDATED_WORKFLOW_RELEASES),
+                    "reference_workflow_release": REFERENCE_WORKFLOW_RELEASE,
+                    "reason": "no_protocol",
+                },
+            )
+        _check_workflow_version(workflow_version, root)
+        raise AssertionError("an unvalidated release was admitted")  # pragma: no cover
+    try:
+        identity = protocol.identity(root)
+    except WorkflowProtocolUnsupportedError as exc:
+        raise UnsupportedWorkflowVersionError(
+            f"{root} runs Workflow {workflow_version!r}, whose protocol is not one the Controller "
+            f"speaks (major {protocol.PROTOCOL_MAJOR}): {exc.message}",
+            evidence={"root": str(root), "observed_workflow_version": workflow_version,
+                      "reason": "unsupported_protocol_major", "protocol": dict(exc.evidence)},
+        ) from exc
+    if protocol.PROTOCOL_MAJOR not in identity.describe.supported_protocol_majors:
+        raise UnsupportedWorkflowVersionError(
+            f"{root} runs Workflow {workflow_version!r}, which supports protocol majors "
+            f"{list(identity.describe.supported_protocol_majors)}, not {protocol.PROTOCOL_MAJOR}",
+            evidence={"root": str(root), "observed_workflow_version": workflow_version,
+                      "reason": "unsupported_protocol_major",
+                      "supported_protocol_majors": list(identity.describe.supported_protocol_majors)},
+        )
+    return identity
+
+
 def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> ManagedRepository:
     """Run the five ordered checks against ``path`` and return a
     :class:`ManagedRepository` on success. Refuses at the first failing
@@ -335,7 +399,11 @@ def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> Manag
     workflow_version = manifest["workflow_version"]
     profile = manifest["profile"]
 
-    _check_workflow_version(workflow_version, root)
+    identity: protocol.Identity | None = None
+    if workflow_version in workflow_contract.RELEASE_CONTRACTS:
+        _check_workflow_version(workflow_version, root)
+    else:
+        identity = _check_protocol_admission(workflow_version, root, manifest)
 
     if profile not in SUPPORTED_PROFILES:
         raise UnsupportedInstallProfileError(
@@ -356,4 +424,10 @@ def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> Manag
         profile=profile,
         verify=verify,
         status=status,
+        target_protocol=None if identity is None else {
+            "major": protocol.PROTOCOL_MAJOR,
+            "version": identity.describe.protocol_version,
+            "release": identity.release,
+        },
+        script_digests=None if identity is None else dict(identity.digests),
     )

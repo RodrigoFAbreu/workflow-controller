@@ -1,5 +1,7 @@
 # Runtime state and runtime identity
 
+> For: anyone who needs to know where the Controller keeps its state or what code it is running. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## Controller-owned runtime state
@@ -123,7 +125,7 @@ The version is always a plain `MAJOR.MINOR.PATCH`. Where it comes from:
 
 The version and the generation (`controller/GENERATION.json`) are
 separate. The generation is the compatibility axis that handoff and
-job-record validation compare. Version 1.2.1 is still generation 1.
+job-record validation compare.
 
 ## The settings file
 

@@ -1,5 +1,7 @@
 # Development and the test runner
 
+> For: contributors and maintainers working from a checkout. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## Working from a checkout
@@ -31,6 +33,42 @@ then imports its decoy and fails. Some tests need package-index access,
 because `fixtures.editable_install` runs a build-isolated `pip install -e`.
 Run the suite in the foreground: a job backgrounded with a plain `&`
 ignores SIGINT, and the Ctrl-C tests then fail spuriously.
+
+## Install from a checkout
+
+Prefer a [release](../install.md). Build from a checkout only to test unreleased code, or when no release is reachable. There are two ways, and they give different runtimes.
+
+**A local wheel (a `package` runtime, like a release).** Build the wheel and install it with pipx:
+
+```bash
+git clone https://github.com/RodrigoFAbreu/workflow-controller.git
+cd workflow-controller
+python3 -m pip wheel --no-deps -w dist .
+pipx install --force ./dist/workflow_controller-*-py3-none-any.whl
+workflow-controller --version    # runtime: package (local build from <commit>)
+```
+
+The build records the checkout's commit, whether it had uncommitted
+changes, and a digest of the package. The wheel's version is the checkout's:
+the highest release tag reachable from `HEAD`, so a checkout ahead of
+`v1.4.0` builds `workflow_controller-1.4.0-py3-none-any.whl` (see
+[Building from a checkout](#building-from-a-checkout)). A clone that reaches
+no release tag, a shallow one for example, builds `0.0.0`, so build from a
+full clone. The line `package (local build from <commit>)`, not the
+version, tells such a wheel apart from a release. A wheel built from
+uncommitted changes, or with no verifiable provenance, needs
+`--allow-dirty-source` to run `step`, `run` or `resume`. A plain
+`pip install .` also gives a `package` runtime.
+
+**An editable install (a `source` runtime, for development).** `pip install -e .`
+runs the checkout itself. `step`, `run` and `resume` snapshot the checkout's
+committed `HEAD` with `git archive`, so what runs is always a commit. With
+uncommitted changes to the Controller's own files they refuse
+(`DirtyControllerSourceError`) unless you pass `--allow-dirty-source`, which
+snapshots the working tree instead. A source runtime keeps its state in
+`<checkout>/.controller/` (row 3 of the
+[runtime root ladder](runtime.md#controller-owned-runtime-state); see also
+[Runtime identity](runtime.md#runtime-identity)).
 
 ## Building from a checkout
 

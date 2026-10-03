@@ -71,12 +71,12 @@ This removes the program only. Job records, run logs and milestone binding recor
 
 ## Install from a checkout
 
-Only to test unreleased code. See [Development and the test runner](guide/development.md).
+Only to test unreleased code. See [Install from a checkout](guide/development.md#install-from-a-checkout).
 
 ## If it fails
 
 - `sha256sum` reports a mismatch: delete both files and download again. Do not install a wheel that does not match.
 - `workflow-controller` is not found after pipx finished: run `pipx ensurepath` and open a new shell.
-- The Controller refuses a repository: see [Troubleshooting](guide/troubleshooting.md#the-repository-is-refused-as-unmanaged-or-unsupported), and [compatibility](compatibility.md) for which Workflow releases a Controller admits.
+- The Controller refuses a repository: see [common problems](common-problems.md#the-repository-is-refused-as-unmanaged-or-unsupported-exit-20), and [compatibility](compatibility.md) for which Workflow releases a Controller admits.
 
 Next: [run it on a repository](run.md). To change versions later, see [update and roll back](update.md).

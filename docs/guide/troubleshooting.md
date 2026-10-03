@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> For: anyone whose run stopped and the quick fix in common problems was not enough. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 Start with `workflow-controller explain <repo>`. It is read-only, always exits
@@ -10,23 +12,15 @@ running across the whole runtime root.
 
 ## By exit code
 
-The normative table is in
+The one table of exit statuses, with what to do for each, is
+[exit codes](../exit-codes.md); the normative copy is
 [ADR 0001, "Exit codes"](../adr/0001-controller-generation-1-architecture.md#exit-codes).
-What each code usually means in practice:
-
-| Exit | Meaning | What to do |
-|---|---|---|
-| `0` | done, nothing pending | nothing |
-| `2` | the command line did not parse | global options such as `--work-item` go *before* the subcommand, and the repository last: `workflow-controller --work-item <id> explain <repo>` |
-| `10` | stopped at a human gate | the normal end of a run. `explain` says what to do; do it, then `run` again |
-| `15` | the next action is valid but not automated (declined) | do it yourself; `explain` names the phase and command |
-| `16` | `run` reached `--max-steps` with work left | `run` again, or raise `--max-steps` |
-| `20` | fail-closed refusal: unmanaged or drifted repository, malformed state, an unreconciled job file, a bad routing config, an unusable settings file, a changed Workflow release, a failed Workflow query or protocol operation | read the message; for a pending job run `workflow-controller resume <repo>`; for the settings file see [The settings file is refused](#the-settings-file-is-refused-settingserror); for the last three see [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries) |
-| `30` | a worker ran and failed its expected outcome | `explain` shows what was checked; fix and rerun, or finish the step by hand |
-| `35` | a worker stopped without completing its action | `explain` and the job's log show why |
-| `40` | the Controller was interrupted | `workflow-controller resume <repo>` |
-| `45` | the worktree is held: another Controller, or a worker that may still be running | wait, or follow the message; see [Restart](workers.md#restart-resume-re-attaches) |
-| `50` | a newer Controller generation is installed | rerun with the new version |
+The short fixes are in [common problems](../common-problems.md). Three
+statuses have detail below: for `20` and the settings file see
+[The settings file is refused](#the-settings-file-is-refused-settingserror),
+for a changed Workflow release or a failed Workflow query see
+[Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries),
+and for `45` see [Restart](workers.md#restart-resume-re-attaches).
 
 ## Common situations
 
@@ -219,19 +213,16 @@ These are warnings on stderr, not refusals. The command goes on.
 
 ## Workflow releases and Workflow's queries
 
-What each Workflow release changes is in
-[Supported Workflow releases](installation.md#supported-workflow-releases)
-and [Workflow's queries](automation.md#workflows-queries-260-and-later);
+Which Workflow releases a Controller admits is in
+[compatibility](../compatibility.md); the queries are in
+[Workflow's queries](automation.md#workflows-queries-260-and-later);
 protocol mode (2.7.0 and later) is in
 [Protocol mode](automation.md#protocol-mode-workflow-27-and-later).
 
 ### The repository is refused as unmanaged or unsupported
 
 The Controller admits only a Workflow installation that Workflow Manager
-verifies, at a Workflow release it has been validated against
-(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`: 2.5.1 and 2.6.0) or,
-from 1.7.0, one that ships the orchestration protocol (2.7.0 and later;
-[Protocol mode](automation.md#protocol-mode-workflow-27-and-later)).
+verifies, at a Workflow release it admits ([compatibility](../compatibility.md)).
 Run Workflow Manager's `verify` command against the target to see what is
 wrong with the installation.
 
@@ -260,7 +251,7 @@ A Controller before 1.7.0 refuses 2.7.0 as `outside_supported_line`.
 Both carry `supported_workflow_lines`, a sorted list; before 1.3.0 this key
 was `supported_workflow_line`, a string. Either install a Controller that
 admits the release, or move the target to an admitted one through Workflow
-Manager ([Moving a target](installation.md#moving-a-target-to-another-workflow-release)).
+Manager ([Moving a repository](../update.md#move-a-repository-to-a-newer-workflow)).
 
 ### `WORKFLOW_RELEASE_CHANGED` and `workflow_release_changed`
 

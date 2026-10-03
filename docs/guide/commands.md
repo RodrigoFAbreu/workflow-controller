@@ -1,5 +1,7 @@
 # Commands, options and worker routing
 
+> For: anyone using the command line, and anyone choosing worker models. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## CLI surface
@@ -59,13 +61,11 @@ worker, and the run log records a `waiting` event per gate (see
 ends with exit `0` and `run` stops, instead of planning the next
 milestone in the same run.
 
-Exit codes are part of the CLI's contract and are normative in
-[`docs/adr/0001-controller-generation-1-architecture.md`](../adr/0001-controller-generation-1-architecture.md)
--- read that table to write an outer supervisor's `case` statement. Exit
-45 (the target worktree is held) came with the automatic lifecycle
-orchestration work. Version 1.1 adds no exit code: `follow` uses only
-`0`, `2` and `20`
-([`docs/adr/0002-release-runtime-identity-and-observability.md`](../adr/0002-release-runtime-identity-and-observability.md)).
+Exit codes are part of the CLI's contract. The one table of them is
+[exit codes](../exit-codes.md), whose normative copy is
+[ADR 0001](../adr/0001-controller-generation-1-architecture.md#exit-codes);
+read it to write an outer supervisor's `case` statement. `follow` uses only
+`0`, `2` and `20`.
 
 ## `status`
 

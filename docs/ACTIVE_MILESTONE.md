@@ -39,7 +39,18 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
   command check and `workflow-manager --help` only, not executed. The Controller has no usage-limit pause, so
   `run.md` documents `--max-steps` as the bound. The pages' "if it fails" links go to the troubleshooting
   guide until `common-problems.md` exists (CP4 repoints them).
-- CP4 guide reorganisation, CP5 entry points and verification: not started.
+- **CP4 complete.** `docs/guide/installation.md` is the three-heading stub (the six inbound links in
+  `docs/adr/` and `docs/releases/` still resolve); its install-from-a-checkout text moved to
+  `development.md`, the rest to the task and reference pages. `concepts.md` became `how-it-works.md` with
+  its glossary left to `docs/glossary.md`. `docs/common-problems.md` is new. The task pages' "if it
+  fails" links, `exit-codes.md`, `compatibility.md`, `run.md`, the README and the documentation map now
+  point at the new pages. Troubleshooting and the commands guide link `exit-codes.md` instead of
+  repeating the table, and the compatibility text there links `compatibility.md`. Cut: the "What changes
+  from 1.6.0" section, this repository's cutover story and per-release sentences; the
+  milestone-branches preamble has a title and an intro. Every guide carries the user-page header, and
+  `ACTIVE_THROUGH` is now 4, so the guides and `common-problems.md` are header-, id- and (for
+  `common-problems.md`) command-checked. `tools/check_docs.py` and the documentation tests are clean.
+- CP5 entry points and verification: not started.
 
 Earlier milestones' narratives are archived under `docs/milestones/completed/`. The last one,
 `workflow-controller-orchestration-protocol-v1` (1.7.0), is released.

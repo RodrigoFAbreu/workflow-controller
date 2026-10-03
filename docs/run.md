@@ -61,6 +61,6 @@ Which commands the Controller runs by itself and which it leaves to you is in [W
 
 ## If it fails
 
-Run `workflow-controller explain .` first. For a pending job, `workflow-controller resume .`. For anything else see [Troubleshooting](guide/troubleshooting.md), and [exit codes](exit-codes.md) for what the status means.
+Run `workflow-controller explain .` first. For a pending job, `workflow-controller resume .`. For anything else see [common problems](common-problems.md), and [exit codes](exit-codes.md) for what the status means.
 
-Related: [every command and option](guide/commands.md), [how it works](guide/concepts.md), [update and roll back](update.md).
+Related: [every command and option](guide/commands.md), [how it works](guide/how-it-works.md), [update and roll back](update.md).

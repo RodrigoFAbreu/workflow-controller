@@ -1,5 +1,7 @@
 # Workers: lifecycle, recovery and observation
 
+> For: anyone debugging a worker, a hold on a repository or a pending job. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 How the Controller runs a worker, knows when it has really finished, recovers after
@@ -197,7 +199,7 @@ the processes and then run `resume`. No later action can start while
 they run. Every message that prints the bound (the exit-45 message, and
 the activity line in `status` and `follow`, in any later invocation)
 reads the recorded one, so it shows the bound that was really applied. A
-record from before 1.5 has no such field and shows 3 hours.
+record with no such field shows 3 hours.
 
 `--timeout` bounds only the drain of the `step` or `run` that launched
 the worker. `resume` takes no `--timeout`, and its re-attach drain has

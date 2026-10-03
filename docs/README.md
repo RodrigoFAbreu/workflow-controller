@@ -7,16 +7,17 @@ Where to find what, and who maintains it. Start with the
 
 | Guide | Read it for |
 |---|---|
-| [Concepts](guide/concepts.md) | how Workflow, Workflow Manager and the Controller fit together, a milestone end to end, and a glossary |
-| [Installing, upgrading and rolling back](guide/installation.md) | requirements, installing a release, building from a checkout, upgrades and rollbacks |
+| [How it works](guide/how-it-works.md) | how Workflow, Workflow Manager and the Controller fit together, and a milestone end to end |
+| [Install](install.md), [run](run.md), [update and roll back](update.md) | the task pages: installing a release, a first run, upgrades, rollbacks and moving a repository to a newer Workflow |
+| [Compatibility](compatibility.md), [exit codes](exit-codes.md), [glossary](glossary.md), [common problems](common-problems.md), [release history](release-history.md) | the reference pages |
 | [Commands, options and worker routing](guide/commands.md) | every command and global option, the `run` loop, which model and effort each worker gets |
 | [What the Controller automates, and how it stays safe](guide/automation.md) | the safety model, the rule that decides what is launched, the phase table, implementation-review apply rounds |
 | [Workers: lifecycle, recovery and observation](guide/workers.md) | how workers run and end, background work, the lifecycle lock, `resume`, job records and their recovery, `follow` |
 | [Runtime state and runtime identity](guide/runtime.md) | where the Controller keeps its state, and how it knows and records what code it is running |
 | [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, the release notes in the pull request body, merge and close-out, auto-merge and the release wait, stuck milestones |
 | [Continuous integration and releases](guide/ci-and-releases.md) | the CI workflows, how a release is made, release notes from the milestones, and this repository's GitHub settings |
-| [Development and the test runner](guide/development.md) | working from a checkout, running tests, the sharded test runner |
-| [Troubleshooting](guide/troubleshooting.md) | exit codes and the usual situations |
+| [Development and the test runner](guide/development.md) | working from a checkout, installing from one, running tests, the sharded test runner |
+| [Troubleshooting](guide/troubleshooting.md) | the long account of every stop and the situations behind it |
 
 These guides are maintained by hand in this repository.
 

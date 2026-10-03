@@ -59,5 +59,5 @@ A test keeps this table equal to the digests in the Controller's code.
   admission by exact release and per-release contracts.
 - [ADR 0010](adr/0010-orchestration-protocol-admission-by-capability.md):
   admission by capability.
-- [Moving a target to another Workflow release](guide/installation.md#moving-a-target-to-another-workflow-release): the steps.
+- [Moving a target to another Workflow release](update.md#move-a-repository-to-a-newer-workflow): the steps.
 - [Release history](release-history.md) and the [glossary](glossary.md).

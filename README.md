@@ -1,6 +1,6 @@
 # Workflow Controller
 
-Workflow Controller runs the [Workflow](docs/guide/concepts.md#three-pieces)
+Workflow Controller runs the [Workflow](docs/guide/how-it-works.md#three-pieces)
 development process on a repository for you. It reads the repository's
 Workflow state, starts a fresh Claude Code session to run the next Workflow
 command, checks the result against what is committed, and keeps going until
@@ -111,8 +111,8 @@ checks the result, and only one worker at a time may work on a repository.
 - [Workers: lifecycle, recovery and observation](docs/guide/workers.md):
   sessions, background work, the lifecycle lock, `resume`, job records,
   `follow`.
-- [Concepts](docs/guide/concepts.md): the three pieces, a milestone end to
-  end, and a glossary.
+- [How it works](docs/guide/how-it-works.md): the three pieces and a
+  milestone end to end; the [glossary](docs/glossary.md) defines the terms.
 
 ## Milestone branches, pull requests and releases
 
@@ -154,8 +154,9 @@ command that clears it. The exit codes you will meet most:
 | `30` | a worker ran and did not achieve its expected outcome |
 | `45` | the repository is held by another Controller or a still-running worker |
 
-[Troubleshooting](docs/guide/troubleshooting.md) covers every exit code and
-the usual situations; the normative table is in
+[Common problems](docs/common-problems.md) gives the quick fix for each stop,
+[exit codes](docs/exit-codes.md) the full table, and
+[Troubleshooting](docs/guide/troubleshooting.md) the long account; the normative table is in
 [ADR 0001](docs/adr/0001-controller-generation-1-architecture.md#exit-codes).
 
 ## Development

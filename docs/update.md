@@ -56,7 +56,7 @@ git status
 
 `inspect` must admit the new release, and `git status` must show only the files the Manager wrote. Commit exactly those, open a pull request and merge it. Under the `conventional_commit` release trigger, give it a title that releases nothing, such as `chore: move to a newer Workflow`.
 
-Never move a repository while a worker runs or while a plan-approval transaction is unfinished. A job that straddles the move ends in `workflow_release_changed` and the next invocation decides again. Moving a repository in the middle of a milestone is proven only at a few phases; the full account is in [Workflow release changes](guide/troubleshooting.md#workflow_release_changed-and-workflow_release_changed).
+Never move a repository while a worker runs or while a plan-approval transaction is unfinished. A job that straddles the move ends in `workflow_release_changed` and the next invocation decides again. Moving a repository in the middle of a milestone is proven only at a few phases; the full account is in [Workflow release changes](guide/troubleshooting.md#workflow_release_changed-and-workflow_release_changed); the quick fix is in [common problems](common-problems.md#a-step-refuses-with-workflow_release_changed).
 
 ## What you should see
 
@@ -64,7 +64,7 @@ After an update, `workflow-controller --version` prints the new version. After a
 
 ## If it fails
 
-- `inspect` refuses the repository as unsupported: the Controller does not admit that release. See [Troubleshooting](guide/troubleshooting.md#the-repository-is-refused-as-unmanaged-or-unsupported) and [compatibility](compatibility.md).
+- `inspect` refuses the repository as unsupported: the Controller does not admit that release. See [common problems](common-problems.md#the-repository-is-refused-as-unmanaged-or-unsupported-exit-20) and [compatibility](compatibility.md).
 - A step refuses with `WORKFLOW_RELEASE_CHANGED`: the repository's release changed under a running step. Nothing was launched; run again.
 
 Related: [install](install.md), [run](run.md), [release history](release-history.md).

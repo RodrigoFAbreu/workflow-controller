@@ -25,7 +25,6 @@ copy, which the Controller's own tests compare with the code, is
 Exit 10 and exit 50 are successes of the design, not errors, and exit 45 is a
 wait. An outer script should treat them differently from 0 and from 20.
 
-More on each stop, with the situations behind it, is in
-the
-[troubleshooting guide](guide/troubleshooting.md). Terms are in the
+The quick fix for each stop is in [common problems](common-problems.md); the
+situations behind them are in the [troubleshooting guide](guide/troubleshooting.md). Terms are in the
 [glossary](glossary.md).

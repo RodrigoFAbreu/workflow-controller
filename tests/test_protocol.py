@@ -26,6 +26,7 @@ from controller.errors import (  # noqa: E402
     WorkflowProtocolFailedError,
     WorkflowProtocolRefusedError,
     WorkflowProtocolUnsupportedError,
+    WorkflowReleaseChangedError,
 )
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_schema import DECISION, envelope, refusal  # noqa: E402
@@ -88,6 +89,20 @@ class _TargetCase(unittest.TestCase):
                 seen.append({"argv": argv, "cwd": cwd, "copied": sorted(p.name for p in Path(argv[4]).parent.iterdir())})
             return result
         return mock.patch.object(workflow_contract, "_execute_query", execute)
+
+
+class NoGlobalGitIdentityTest(unittest.TestCase):
+    def test_scratch_repositories_commit_without_a_global_or_system_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(
+                os.environ, {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}):
+            for name in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
+                         "EMAIL"):
+                os.environ.pop(name, None)
+            root = Path(td) / "plain"
+            fixtures.git_init(root)
+            (root / "a").write_text("a")
+            self.assertEqual(len(fixtures.commit_all(root, "plain")), 40)
+            fixtures.seed_workflow_item(Path(td) / "item", "2.7.0", "publish", work_item_id="demo")
 
 
 class ScriptSetTest(_TargetCase):
@@ -186,6 +201,20 @@ class ScriptSetTest(_TargetCase):
             second = protocol.run(self.root, "describe")
         self.assertNotEqual(first.digests["scripts/workflow_state.py"], second.digests["scripts/workflow_state.py"])
         self.assertEqual(first.digests["scripts/workflow_protocol.py"], second.digests["scripts/workflow_protocol.py"])
+
+    def test_expected_digests_are_compared_with_the_bytes_copied_for_execution(self) -> None:
+        describe = envelope("describe", DESCRIBE)
+        with self.fake(completed(describe)):
+            expected = dict(protocol.run(self.root, "describe").digests)
+        seen: list = []
+        with self.fake(completed(describe), seen):
+            protocol.run(self.root, "describe", expected_digests=expected)
+            self.assertEqual(len(seen), 1)
+            (self.root / "scripts" / "workflow_state.py").write_bytes(b"# replaced after the identity check\n")
+            with self.assertRaises(WorkflowReleaseChangedError) as raised:
+                protocol.run(self.root, "describe", expected_digests=expected)
+        self.assertEqual(len(seen), 1, "nothing ran under bytes other than the expected ones")
+        self.assertEqual(raised.exception.evidence["changed_scripts"], ["scripts/workflow_state.py"])
 
     def test_the_command_line_names_the_major_and_the_repository(self) -> None:
         seen: list = []

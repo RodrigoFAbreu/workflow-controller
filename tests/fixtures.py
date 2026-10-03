@@ -977,15 +977,26 @@ def build_target_git_repo(root: Path) -> Path:
     return root
 
 
+def admitted_script_digests(root: Path) -> dict[str, str]:
+    """The managed-script digest map ``managed_repo.inspect`` would admit ``root`` under."""
+    from controller import protocol
+    return dict(protocol.script_set(root, protocol.read_managed(root)).digests)
+
+
 def commit_all(root: Path, message: str, *, allow_empty: bool = False) -> str:
     """Stage everything under ``root`` and commit it (or, with
     ``allow_empty``, commit with nothing staged -- the round-scoped
     functional-checklist evidence fixture's own shape), returning the new
     commit's full SHA."""
     run(["git", "add", "-A"], cwd=root)
-    args = ["git", "commit", "-q", "-m", message]
+    # A scratch repository must not depend on the host's global identity: supply the
+    # tests' own one only where the repository (or the host) configures none.
+    identity: list[str] = []
+    if not run(["git", "config", "user.email"], cwd=root, check=False).stdout.strip():
+        identity = ["-c", "user.name=Controller Tests", "-c", "user.email=controller-tests@example.invalid"]
+    args = ["git", *identity, "commit", "-q", "-m", message]
     if allow_empty:
-        args = ["git", "commit", "-q", "--allow-empty", "-m", message]
+        args = ["git", *identity, "commit", "-q", "--allow-empty", "-m", message]
     run(args, cwd=root)
     return run(["git", "rev-parse", "HEAD"], cwd=root).stdout.strip()
 

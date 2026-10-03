@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-documentation-reorganisation",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -6548,6 +6548,97 @@
           "verdict": "APPROVE",
           "round": 4,
           "completed_at": "2026-10-03T16:10:13Z"
+        }
+      }
+    },
+    "workflow-controller-documentation-reorganisation": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-documentation-reorganisation",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORGANISATION_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "914d8f4e0edea9c713c4d1ff8900c5f8ae146b0e",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+        "approved_review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORGANISATION_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c8e43cdcf2593aaa99452f6c12b43876e5639db1"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "91bc36c819e82ae0cb59edf857b96220438b25d7"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7c8f2ba2aaf9231ea7f59cf1e77eee37cc2cbf4c"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the plan for workflow-controller-documentation-reorganisation at the plan stage.",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-03T20:16:12Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-03T20:11:52Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-03T20:14:36Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 20,
+      "last_transition": "2026-10-03T20:16:12Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-03T20:10:13Z",
+        "consumed": {
+          "review_content_id": "30beeb93af2469246284c1f046e66029c9fbeecbe0fc1609c186acbd9a81395c",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+          "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+          "plan_revision": 5
         }
       }
     }

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-documentation-reorganisation",
+  "plan_revision": 5,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The documentation checks: tools/check_docs.py and tests/test_docs.py (links and anchors with GitHub slugs, cross-repository link form, commands and flags in task-page code blocks via controller.cli.build_parser, page-header and internal-id assertions, exit-table consistency including SIGINT_EXIT_STATUS, digest consistency in both directions), synthetic-tree tests of every rule good and bad (including a stale link into docs/adr and docs/releases, parser agreement with test_plan_document_consistency, `--version`/`--help` validated with subprocess and runtime resolution forbidden: `workflow-controller --version`, `--help`, `step --help`, `settings --help` and `milestone-binding . --help` pass (required-presence suppressed when a terminating action was recorded), while `--version --bogus`, `--help --bogus`, `step --help --bogus`, `milestone-binding . --help --bogus`, `milestone-binding . --help --new-pr --abandon` and `stpe --help` still fail, and a line without a terminating action that omits a required argument or group member (`step`, `milestone-binding .`) still fails, and slug cases: existing underscore-bearing anchors, literal hyphens, inline-code headings, and the collision `foo-1`, `foo`, `foo`), the page lists as constants with the checkpoint that activates each",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Reference pages: docs/exit-codes.md, docs/glossary.md, docs/compatibility.md (digests from RELEASE_CONTRACTS), docs/release-history.md, each with the user-page header, plus their rows in the checks' page list",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Task pages: docs/install.md, docs/run.md, docs/update.md with the fixed structure, every command run against a scratch repository, and the README quick start",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Reorganise the guides: reduce installation.md to its three-heading stub, rename concepts.md to how-it-works.md, add docs/common-problems.md, repoint the README and documentation-map links to the renamed guide in the same checkpoint, replace repeated exit tables and Workflow-compatibility text with links, cut milestone history, title the milestone-branches preamble, add the headers",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Entry points and verification (terminal): README and docs/README.md rewritten around the pages and added to the user-page list with their headers, CLAUDE.md paths, development.md documentation-checks section, cross-repository links, the full suite, both checks clean, ci_workflows --check unchanged, the protected-path diff from the base",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

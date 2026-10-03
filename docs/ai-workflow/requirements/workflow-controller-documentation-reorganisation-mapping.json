@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-documentation-reorganisation",
+  "requirements": {
+    "R1": {
+      "description": "the documentation checks exist and run offline in the validate job",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "exit-codes, glossary, compatibility and release-history pages agree with the code and ADR 0001",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "install, run and update task pages and the README quick start with runnable commands",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "guides reorganised, repetition and history cut, common-problems page, headers",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "entry points, CLAUDE.md, cross-repository links, both checks and the existing suite pass, invariants hold",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

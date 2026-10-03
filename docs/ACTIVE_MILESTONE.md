@@ -60,6 +60,30 @@ below describes the previous milestone (C4) and is kept until this one is accept
   `tests/test_job.py`'s `worker_result_prose_feeds_only_the_report` now skips `protocol.py`, whose
   `Envelope.result` is the protocol's answer (it failed at CP1/CP2). Full suite: 2939 tests pass.
 
+- **CP4, the stale check, the job record and the loop guard** -- a protocol job's record gains the optional
+  `protocol` block (`job._protocol_block`: the decision as received, `envelope_digest` -- the sha256 of the
+  answer's result document, `action_id`, `state_identity`, `workflow_release`, `protocol_version`,
+  `script_sha256` and `reconcile`, filled by CP5); a legacy record has no such key. `protocol_decision.
+  check_currency` is the one currency check: `next-action --expect-state-identity` for an item decision
+  (a `stale_decision` refusal, or an answer that differs on row, disposition, action id or arguments, is
+  stale), and for `plan.start` a no-item re-call whose row, disposition, action id and
+  `snapshot.work_item_ids` must be equal. `job._decide_protocol_current` runs it before the `PLANNED` write
+  and re-decides from a fresh state read, at most three decisions per step, then the `decision_unstable`
+  gate naming the last two identities (or work item id lists); `_launch_job` runs it again immediately
+  before `worker.launch` and a stale answer is a terminal `FAILED` record with
+  `reconciliation_evidence.code` `decision_stale_at_launch` (no worker, nothing for `resume`).
+  `job._no_progress_gate` is the generic `no_progress_repeated` guard keyed on `(work item, action id)`
+  (a `FAILED` or interrupted job and one not yet reconciled are skipped, progress or a gate resets);
+  it reads `protocol.reconcile.class` and a `FINISHED` status, which CP5 writes.
+  `_refuse_changed_release` also re-derives a protocol target's identity (`protocol.identity`) after the
+  preflight and refuses `WORKFLOW_RELEASE_CHANGED` when the release or a managed script's digest differs
+  from the one `inspect` admitted, or when the protocol script no longer answers; a non-Workflow
+  `scripts/extra.py` never enters it. A `resume` of a job recorded under another release is the existing
+  `workflow_release_changed` verification failure. **Interim, removed by CP5:** `job.PROTOCOL_LAUNCH_ENABLED`
+  is `False`, so a protocol decision that would launch is still declined (the checks above run only when it
+  is on, which the tests set); CP5 deletes the switch with `_protocol_launch_unavailable`.
+  Tests: `tests/test_protocol_job.py`.
+
 ## Status
 
 **Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section

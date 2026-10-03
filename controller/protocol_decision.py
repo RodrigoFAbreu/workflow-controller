@@ -49,7 +49,7 @@ from controller.decision import (
     ProtocolInfo,
     explain_gate_command,
 )
-from controller.errors import WorkflowProtocolFailedError
+from controller.errors import WorkflowProtocolFailedError, WorkflowProtocolRefusedError
 
 #: The decision's dispositions this release knows. ``validation`` is one the
 #: schema lists but that never names an action to run: it is blocked like an
@@ -324,3 +324,99 @@ class _Context:
     def blocked(self, code: str, text: str) -> Decision:
         return self.gate(f"{code}: {text}", evidence_label=code,
                          resume=explain_gate_command(self.managed_repo.root, self.work_item_id or ""), route=None)
+
+
+# ---------------------------------------------------------------------------
+# The currency check and the loop guard (plan D, CP4).
+# ---------------------------------------------------------------------------
+
+#: Reason codes of the gates the stale check and the loop guard produce.
+DECISION_UNSTABLE = "decision_unstable"
+NO_PROGRESS_REPEATED = "no_progress_repeated"
+
+#: How many decisions one step may discard as stale before it stops (plan D.2.1).
+MAX_DECISIONS_PER_STEP = 3
+
+#: ``reconciliation_evidence.code`` of the terminal record a decision found
+#: stale immediately before the spawn leaves (plan D.2.2).
+DECISION_STALE_AT_LAUNCH = "decision_stale_at_launch"
+
+
+@dataclasses.dataclass(frozen=True)
+class Currency:
+    """The result of one currency check. ``current`` is ``False`` when the
+    decision is no longer the Workflow's answer: ``stale_decision`` (the
+    state's identity moved), ``answer_changed`` (the identity is unchanged but
+    the row, disposition, action id or arguments differ) or
+    ``work_items_changed`` (a ``plan.start`` decision whose
+    ``snapshot.work_item_ids`` moved). ``answer`` is the second answer when
+    one came back."""
+
+    current: bool
+    reason: str | None
+    answer: protocol.Decision | None
+
+    def evidence(self) -> dict:
+        answer = self.answer
+        return {
+            "reason": self.reason,
+            "row": None if answer is None else answer.row,
+            "action_id": None if answer is None or answer.action is None else answer.action.id,
+            "state_identity": None if answer is None or answer.basis is None else answer.basis.state_identity,
+        }
+
+
+def _differs(info: ProtocolInfo, answer: protocol.Decision) -> bool:
+    """Whether ``answer`` disagrees with the stored decision on row,
+    disposition, action id or arguments (plan D.2)."""
+    action = answer.action
+    return (answer.row != info.row or answer.disposition != info.disposition
+            or (None if action is None else action.id) != info.action_id
+            or (None if action is None else dict(action.arguments)) != (None if info.action_id is None
+                                                                        else dict(info.arguments)))
+
+
+def _snapshot_ids(snapshot: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(snapshot.get("work_item_ids") or ())
+
+
+def check_currency(managed_repo: Any, decision: Decision, *, timeout: float | None = None) -> Currency:
+    """The currency check of plan D.2, against the decision as received.
+
+    A decision with a state identity: ``next-action --work-item <id>
+    --expect-state-identity <identity>`` must not refuse ``stale_decision``
+    and must answer what the decision says. A decision without one (the
+    ``plan.start`` rows): ``next-action`` with no work item must answer the
+    same row, disposition, action id and ``snapshot.work_item_ids``."""
+    info = decision.protocol
+    if info is None:
+        raise ValueError("check_currency needs a protocol decision")
+    basis = info.document.get("basis")
+    if info.state_identity is None or not isinstance(basis, Mapping):
+        answer = protocol.next_action(managed_repo.root, None, timeout=timeout)
+        if _snapshot_ids(answer.snapshot) != _snapshot_ids(info.document.get("snapshot") or {}):
+            return Currency(False, "work_items_changed", answer)
+        if _differs(info, answer):
+            return Currency(False, "answer_changed", answer)
+        return Currency(True, None, answer)
+    try:
+        answer = protocol.next_action(managed_repo.root, basis["work_item_id"],
+                                      expect_state_identity=info.state_identity, timeout=timeout)
+    except WorkflowProtocolRefusedError as exc:
+        if exc.refusal["code"] == "stale_decision":
+            return Currency(False, "stale_decision", None)
+        raise
+    if _differs(info, answer):
+        return Currency(False, "answer_changed", answer)
+    return Currency(True, None, answer)
+
+
+def gate_for(managed_repo: Any, work_item: Any, decision: Decision, code: str, text: str) -> Decision:
+    """A blocked gate over ``decision``'s own answer: ``code`` and ``text``
+    are the Controller's, the rest (row, route-less info) the Workflow's."""
+    info = decision.protocol
+    answer = protocol.parse_decision(dict(info.document))
+    no_item = work_item is target_state.NoWorkItemYet
+    context = _Context(managed_repo, work_item, None if no_item else work_item.work_item_id,
+                       decision.observed_phase, answer)
+    return context.blocked(code, text)

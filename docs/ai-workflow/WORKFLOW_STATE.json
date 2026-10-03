@@ -5922,7 +5922,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestration-protocol-v1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 10,
       "implementation_revision": null,
       "functional_review_round": null,
@@ -5938,7 +5938,7 @@
       },
       "current_bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "EXTERNAL_APPROVE",
         "reviewed_bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
         "approved_review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
@@ -5987,27 +5987,69 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 37,
-      "last_transition": "2026-10-03T09:46:09Z",
+      "state_revision": 38,
+      "last_transition": "2026-10-03T10:01:06Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "BOUND",
-        "at": "2026-10-03T05:09:33Z",
+        "status": "CONSUMED",
+        "at": "2026-10-03T10:01:06Z",
         "consumed": {
-          "review_content_id": "77ea14c43375d224061c04e9cfc344b035f520de0032b099d7c1461a1f7d9370",
-          "plan_revision": 9,
+          "review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
+          "plan_revision": 10,
           "legacy": false
         },
-        "published": {
-          "review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
-          "plan_revision": 10
-        },
-        "bound": {
-          "review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
-          "bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
-          "plan_revision": 10
+        "published": null,
+        "bound": null
+      },
+      "amendment_history": [
+        {
+          "amendment_id": "0",
+          "requested_at": "2026-10-03T10:01:06Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "the artifacts declaration doesn't classify controller/, tests/, tools/ and the guides",
+          "superseded_plan_revision": 10,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "EXTERNAL_APPROVE",
+            "reviewed_bundle_id": "6df7aca5957e3be9e5338fd9b65f75ac1b397156d92d69a44ef2babb6dcef2da",
+            "approved_review_content_id": "e62232a77a6a56969cd6b53a70956ac5b67d361581c156de913d1c086d66751b",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "16df4cbf0601d2d2cfc5a92e4dd8f4c3cf4c5764"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "f6aee1c4500d1cab5242c6711ab8c586c849b749"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-orchestration-protocol-v1-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "fd1b9ca67d3132ee75c46cfe540e32c6c9111a2f"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "/approve-review plan workflow-controller-orchestration-protocol-v1",
+            "waived_guarantees": [],
+            "recorded_at": "2026-10-03T09:36:25Z"
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "de2bedf1a37f97712adfc0cb5dd2f616347b4ccf"
+            }
+          },
+          "pre_amendment_approval_commit": "de2bedf1a37f97712adfc0cb5dd2f616347b4ccf",
+          "resolved_at_plan_revision": null
         }
-      }
+      ],
+      "amendment_base_commit": "425bac6f53d1939291362b2b43b09fb7086357c3"
     }
   }
 }

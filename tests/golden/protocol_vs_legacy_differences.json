@@ -1,0 +1,1219 @@
+{
+  "description": "Measured differences between the Workflow's next-action (protocol mode) and controller.evidence.decide (legacy mode, Workflow 2.6.0) on the dimensions of plan C.7: decision kind, launch command token, a launch of a user-only command. tests/golden/generate_protocol_vs_legacy_differences.py.",
+  "differences": {
+    "D1": {
+      "class": "REVISING_PLAN (2.1/2.2) with no applicable REVISE: 1.6.0 launches /apply-plan-review, the protocol (row 9) launches /milestone-plan",
+      "scenarios": [
+        "revising_no_feedback_2.1",
+        "revising_no_feedback_2.2"
+      ]
+    },
+    "D2": {
+      "class": "a \"1\" item at a phase where 1.6.0 launches and the protocol is blocked (rows 4, 6a)",
+      "scenarios": [
+        "planning_v1"
+      ]
+    },
+    "D3": {
+      "class": "AMENDING_PLAN (2.1/2.2): /milestone-plan is automatic (row 7); 1.6.0 declined it",
+      "scenarios": [
+        "amending_2.1",
+        "amending_2.2"
+      ]
+    },
+    "D4": {
+      "class": "APPLYING_REVIEW_FEEDBACK at 1/2.1 is automatic (row 36); 1.6.0's static gate is more conservative",
+      "scenarios": [
+        "applying_review_feedback_2.1",
+        "applying_review_feedback_v1"
+      ]
+    },
+    "D5": {
+      "class": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW at 1/2.1 with a current REVISE or BLOCK (rows 31/32): the protocol launches /apply-implementation-review, 1.6.0 only reports",
+      "scenarios": [
+        "external_review_current_block_2.1",
+        "external_review_current_revise_2.1",
+        "external_review_current_revise_v1"
+      ]
+    },
+    "D6": {
+      "class": "AWAITING_FUNCTIONAL_REVIEW with no current checklist evidence (row 37): the protocol launches /prepare-functional-review, 1.6.0 gates",
+      "scenarios": [
+        "functional_no_checklist_2.2"
+      ]
+    },
+    "D7": {
+      "class": "AWAITING_FUNCTIONAL_REVIEW with an unconsumed FUNCTIONAL_REVIEW.md (row 38): the protocol launches /apply-functional-review, 1.6.0 declines it",
+      "scenarios": [
+        "functional_unconsumed_findings_2.2"
+      ]
+    }
+  },
+  "excluded": {
+    "golden_cases_with_a_state_2_7_0_refuses_at_1_and_2_1": "implementation_review_stages at \"1\"/\"2.1\" is `state_invalid` in 2.7.0: scoped_coherent_manual_approve_complete_ledger, scoped_coherent_manual_revise_complete_ledger, scoped_coherent_manual_block_complete_ledger, scoped_coherent_approve_pinned_bundle, scoped_incoherent_revision_approve",
+    "legacy_flat_and_legacy_scoped_layouts": "the protocol does not distinguish them from `scoped`",
+    "publication_status_refusal_and_unexpected": "replay recorded Workflow publication-status answers a real repository cannot produce; the catalogue row each reaches is asserted on the protocol side"
+  },
+  "scenarios": {
+    "amending_2.1": {
+      "differs": true,
+      "expected_difference": "D3",
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AMENDING_PLAN",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "7"
+      },
+      "version": "2.1"
+    },
+    "amending_2.2": {
+      "differs": true,
+      "expected_difference": "D3",
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AMENDING_PLAN",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "7"
+      },
+      "version": "2.2"
+    },
+    "amending_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AMENDING_PLAN",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6a"
+      },
+      "version": "1"
+    },
+    "applying_review_feedback_2.1": {
+      "differs": true,
+      "expected_difference": "D4",
+      "family": "implementation",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "protocol": {
+        "action_id": "implementation.apply_review",
+        "command": "/apply-implementation-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "36"
+      },
+      "version": "2.1"
+    },
+    "applying_review_feedback_v1": {
+      "differs": true,
+      "expected_difference": "D4",
+      "family": "implementation",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "protocol": {
+        "action_id": "implementation.apply_review",
+        "command": "/apply-implementation-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "36"
+      },
+      "version": "1"
+    },
+    "external_plan_review_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_PLAN_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "16a"
+      },
+      "version": "1"
+    },
+    "external_review_current_approve_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "33"
+      },
+      "version": "1"
+    },
+    "external_review_current_block_2.1": {
+      "differs": true,
+      "expected_difference": "D5",
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.apply_review",
+        "command": "/apply-implementation-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "31"
+      },
+      "version": "2.1"
+    },
+    "external_review_current_revise_2.1": {
+      "differs": true,
+      "expected_difference": "D5",
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.apply_review",
+        "command": "/apply-implementation-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "32"
+      },
+      "version": "2.1"
+    },
+    "external_review_current_revise_v1": {
+      "differs": true,
+      "expected_difference": "D5",
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.apply_review",
+        "command": "/apply-implementation-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "32"
+      },
+      "version": "1"
+    },
+    "external_review_no_feedback_2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "external_review_no_manifest_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "30a"
+      },
+      "version": "1"
+    },
+    "external_review_stale_generation_head_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "functional_checklist_current_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "functional",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "protocol": {
+        "action_id": "functional.review",
+        "command": null,
+        "disposition": "human_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "39"
+      },
+      "version": "2.2"
+    },
+    "functional_no_checklist_2.2": {
+      "differs": true,
+      "expected_difference": "D6",
+      "family": "functional",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "protocol": {
+        "action_id": "functional.prepare",
+        "command": "/prepare-functional-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "37"
+      },
+      "version": "2.2"
+    },
+    "functional_unconsumed_findings_2.2": {
+      "differs": true,
+      "expected_difference": "D7",
+      "family": "functional",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "protocol": {
+        "action_id": "functional.apply_findings",
+        "command": "/apply-functional-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "38"
+      },
+      "version": "2.2"
+    },
+    "golden:flat_current_approve|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_current_approve|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_current_block|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_current_block|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_current_no_feedback|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_current_no_feedback|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_current_revise|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_current_revise|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_current_status_absent|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_current_status_absent|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_current_unparseable_status|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_current_unparseable_status|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_stale_generation_head_approve|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_stale_generation_head_approve|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:flat_stale_generation_head|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:flat_stale_generation_head|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:no_manifest_approve|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "30a"
+      },
+      "version": "1"
+    },
+    "golden:no_manifest_approve|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "30a"
+      },
+      "version": "2.1"
+    },
+    "golden:nothing_on_disk|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "30a"
+      },
+      "version": "1"
+    },
+    "golden:nothing_on_disk|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "30a"
+      },
+      "version": "2.1"
+    },
+    "golden:rejected_flat|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6"
+      },
+      "version": "1"
+    },
+    "golden:rejected_flat|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6"
+      },
+      "version": "2.1"
+    },
+    "golden:rejected_scoped|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6"
+      },
+      "version": "1"
+    },
+    "golden:rejected_scoped|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6"
+      },
+      "version": "2.1"
+    },
+    "golden:scoped_coherent_manual_approve_no_ledger|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:scoped_coherent_manual_approve_no_ledger|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "golden:scoped_coherent_no_feedback|1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "1"
+    },
+    "golden:scoped_coherent_no_feedback|2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "external_implementation_review_golden",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "protocol": {
+        "action_id": "implementation.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "35"
+      },
+      "version": "2.1"
+    },
+    "implementing_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "implementation",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "IMPLEMENTING",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6a"
+      },
+      "version": "1"
+    },
+    "local_review_ready_2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": "/review-plan",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_LOCAL_PLAN_REVIEW",
+      "protocol": {
+        "action_id": "plan.review.local",
+        "command": "/review-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "12"
+      },
+      "version": "2.1"
+    },
+    "local_review_ready_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": "/review-plan",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_LOCAL_PLAN_REVIEW",
+      "protocol": {
+        "action_id": "plan.review.local",
+        "command": "/review-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "12"
+      },
+      "version": "2.2"
+    },
+    "manual_external_review_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+      "protocol": {
+        "action_id": "plan.review.external",
+        "command": null,
+        "disposition": "external_gate",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "14"
+      },
+      "version": "2.2"
+    },
+    "plan_approval_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_PLAN_APPROVAL",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "10"
+      },
+      "version": "2.2"
+    },
+    "plan_approval_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "AWAITING_PLAN_APPROVAL",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "4"
+      },
+      "version": "1"
+    },
+    "planning_bundle_generated_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": "/milestone-plan",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "PLANNING",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "7"
+      },
+      "version": "2.2"
+    },
+    "planning_published_2.1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": "/milestone-plan",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "PLANNING",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "7"
+      },
+      "version": "2.1"
+    },
+    "planning_published_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": "/milestone-plan",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "PLANNING",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "7"
+      },
+      "version": "2.2"
+    },
+    "planning_v1": {
+      "differs": true,
+      "expected_difference": "D2",
+      "family": "plan",
+      "legacy": {
+        "command": "/milestone-plan",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "PLANNING",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "6a"
+      },
+      "version": "1"
+    },
+    "revising_no_feedback_2.1": {
+      "differs": true,
+      "expected_difference": "D1",
+      "family": "plan",
+      "legacy": {
+        "command": "/apply-plan-review",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "REVISING_PLAN",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "9"
+      },
+      "version": "2.1"
+    },
+    "revising_no_feedback_2.2": {
+      "differs": true,
+      "expected_difference": "D1",
+      "family": "plan",
+      "legacy": {
+        "command": "/apply-plan-review",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "REVISING_PLAN",
+      "protocol": {
+        "action_id": "plan.author",
+        "command": "/milestone-plan",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "9"
+      },
+      "version": "2.2"
+    },
+    "revising_v1": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": null,
+        "kind": "non-launch",
+        "launches_user_only": false
+      },
+      "phase": "REVISING_PLAN",
+      "protocol": {
+        "action_id": null,
+        "command": null,
+        "disposition": "blocked",
+        "kind": "non-launch",
+        "launches_user_only": false,
+        "row": "4"
+      },
+      "version": "1"
+    },
+    "revising_with_revise_feedback_2.2": {
+      "differs": false,
+      "expected_difference": null,
+      "family": "plan",
+      "legacy": {
+        "command": "/apply-plan-review",
+        "kind": "launch",
+        "launches_user_only": false
+      },
+      "phase": "REVISING_PLAN",
+      "protocol": {
+        "action_id": "plan.apply_review",
+        "command": "/apply-plan-review",
+        "disposition": "automatic",
+        "kind": "launch",
+        "launches_user_only": false,
+        "row": "8"
+      },
+      "version": "2.2"
+    }
+  }
+}

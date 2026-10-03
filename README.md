@@ -99,6 +99,16 @@ remediation. Everything else stops for a human: the external reviews
 themselves, plan and technical approval, functional review, acceptance, and
 merging.
 
+On Workflow 2.5.1 and 2.6.0 the Controller decides by its own rules (legacy
+mode). From Controller 1.7.0, a Workflow release that ships the
+orchestration protocol, such as 2.7.0, runs in protocol mode: the Workflow
+itself says what comes next and whether each job made progress. There the
+Controller also applies a `REVISE` or `BLOCK` external implementation
+verdict on a `"1"`/`"2.1"` work item, prepares and commits the functional-review checklist, and
+applies the functional-review findings you write; the functional review
+itself stays yours. See
+[Protocol mode](docs/guide/automation.md#protocol-mode-workflow-27-and-later).
+
 Each worker is a fresh session. The Controller waits until the worker and
 everything it started in the background have really finished before it
 checks the result, and only one worker at a time may work on a repository.

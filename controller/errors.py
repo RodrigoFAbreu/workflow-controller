@@ -175,7 +175,10 @@ class UnsupportedWorkflowVersionError(ControllerError):
     every supported line (``"outside_supported_line"``) from one inside a
     supported line that has not been individually validated
     (``"unvalidated_release"``); both carry the sorted list
-    ``supported_workflow_lines``. ``workflow_contract.contract_for`` raises it
+    ``supported_workflow_lines``. A release newer than every supported line
+    that lists no ``scripts/workflow_protocol.py`` in its installation record
+    is ``"no_protocol"``, and one whose protocol does not speak major ``1``
+    is ``"unsupported_protocol_major"``. ``workflow_contract.contract_for`` raises it
     too, with ``"no_workflow_contract"``, for a release the Controller holds
     no Workflow contract for."""
 
@@ -803,6 +806,48 @@ class WorkflowReleaseChangedError(ControllerError):
     ``workflow_release_changed``, never a raise."""
 
     code = "WORKFLOW_RELEASE_CHANGED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-orchestration-protocol-v1 CP1 -- the protocol client
+# (``controller.protocol``).
+# ---------------------------------------------------------------------------
+
+
+class WorkflowProtocolFailedError(ControllerError):
+    """A Workflow Orchestration Protocol operation gave no answer the
+    Controller may act on, or gave a refusal (exit ``20``, fail closed).
+
+    ``evidence['reason']`` names the step: ``protocol_script_modified`` (a
+    managed script is missing or not a regular file; nothing ran),
+    ``protocol_private_copy_failed``, ``protocol_git_not_isolated``,
+    ``protocol_launch_failed``, ``protocol_timeout``,
+    ``protocol_no_document`` (the script printed no single JSON document,
+    including a failure to start, whose ``missing_module`` is named when the
+    last stderr line says so), ``protocol_envelope_invalid`` (the document
+    fails the schema, or exit code and ``ok`` disagree) and
+    ``protocol_refused`` (a well-formed ``ok: false`` answer; ``refusal``
+    carries its ``code``, ``message`` and ``retryable``)."""
+
+    code = "WORKFLOW_PROTOCOL_FAILED"
+
+
+class WorkflowProtocolRefusedError(WorkflowProtocolFailedError):
+    """A well-formed ``ok: false`` answer from a typed protocol call. The
+    refusal is ``evidence['refusal']`` (``code``, ``message``, ``retryable``,
+    ``native``) and :attr:`refusal`; a caller that expects a particular code
+    (``stale_decision``) reads it there."""
+
+    @property
+    def refusal(self) -> dict:
+        return self.evidence["refusal"]
+
+
+class WorkflowProtocolUnsupportedError(ControllerError):
+    """The Workflow answered ``unsupported_protocol``, or an envelope names a
+    protocol major the Controller does not speak (exit ``20``)."""
+
+    code = "WORKFLOW_PROTOCOL_UNSUPPORTED"
 
 
 # ---------------------------------------------------------------------------

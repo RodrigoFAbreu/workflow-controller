@@ -9,9 +9,9 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 ## At a glance
 
 **Where things stand (2026-10-03).** Controller 1.6.0 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C4, auto-merge
-after acceptance and the wait for the release (11.3, accepted 2026-10-03), is complete. C4 is
-released as 1.6.0 (PR #18, squash `f2ca24d`). Workflow 2.7.0 (W1) is published, so C9 is next.
+2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C9, the Controller
+on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 releases as 1.7.0 when its pull
+request (#21) is squash-merged. C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). C8 is next.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -40,7 +40,7 @@ then C5, then C6, C7, C10 and C11. The step numbers stay as they were.
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count (complete) | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
-| C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
+| C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -404,6 +404,11 @@ The scope is planned from the actually released 2.6.x implementation, not from t
 This should stay a compatibility/integration milestone, not become the full architectural decoupling project.
 
 ## 1.7 Workflow/Controller orchestration protocol decoupling
+
+**Status:** Complete (`workflow-controller-orchestration-protocol-v1`, accepted 2026-10-03 under
+Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md`; the narrative is
+archived at `docs/milestones/completed/workflow-controller-orchestration-protocol-v1.md`). Releases as
+1.7.0 when PR #21 is squash-merged. The description below is the original problem statement.
 
 **Priority:** High after the 2.6 compatibility integration.
 
@@ -1309,6 +1314,7 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 11.2   C2: CI reliability                                    COMPLETE (released as 1.4.2)
 1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (released as 1.5.0)
 11.3   C4: auto-merge after acceptance and the release wait  COMPLETE (released as 1.6.0)
+1.7    C9: the Controller on Orchestration Protocol v1       COMPLETE (releases as 1.7.0)
 ```
 
 ---

@@ -458,16 +458,17 @@ class InspectCommandTest(unittest.TestCase):
         self.assertEqual(payload["work_item"]["phase"], "PLANNING")
 
     def test_unvalidated_and_outside_line_releases_refuse_through_the_cli(self) -> None:
-        """2.6.1 (inside the 2.6 line, never measured) and 2.7.0 (outside
-        both lines) refuse at ``inspect`` with exit 20, each message naming
+        """2.6.1 (inside the 2.6 line, never measured) and 2.7.0 without a
+        protocol script (newer than both lines, so ``no_protocol``) refuse at ``inspect`` with exit 20, each message naming
         its own case (the evidence is pinned in ``test_managed_repo``)."""
         import contextlib
         import io
         cases = (
             ("2.6.1", "is in the Controller's supported line '2.6' but has not been individually validated "
                       "(validated releases: ['2.5.1', '2.6.0'])"),
-            ("2.7.0", "is outside the Controller's supported lines ['2.5', '2.6'] "
-                      "(validated releases: ['2.5.1', '2.6.0'])"),
+            ("2.7.0", "is newer than the Controller's supported lines ['2.5', '2.6'] and does not list "
+                      "scripts/workflow_protocol.py in its installation record, so it does not ship the "
+                      "orchestration protocol"),
         )
         for release, message in cases:
             with self.subTest(release=release):

@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-orchestration-protocol-v1",
+  "plan_revision": 11,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The protocol client: controller/protocol.py (run one operation with --protocol-major 1 and --repo-root, private copy of the Workflow's own script set (the exact scripts/<name>.py keys of the installation record's managed map, excluding names ending in _test; never a directory listing or a glob), with a path-to-digest map, under the shared ADR 0006 Git isolation, one-document stdout, exit-code/envelope agreement), controller/protocol_schema.py with the vendored 2.7.0 schema as package data and a stdlib validator for the schema's keyword subset that rejects a schema keyword outside it, treats additionalProperties:false and the minor-extensible enums (action ids, error codes, dispositions, satisfied_by, worker.role, check ids) as open for documents, and ignores annotation keywords, typed describe/verify/next-action/reconcile results, WORKFLOW_PROTOCOL_FAILED and WORKFLOW_PROTOCOL_UNSUPPORTED (exit 20), the isolation helpers in workflow_contract refactored to be shared, and tests/workflow_releases/2.7.0 vendored from the published archive; tests for the validator including a 1.1-shaped envelope with an extra field and a new action id validating and an external_gate with an unknown satisfied_by validating and yielding a gate, envelope handling, the isolation cases for the protocol script a managed-set copy where a non-Workflow scripts/extra.py or symlink is neither copied, digested nor refused while a managed symlink or missing managed file is refused naming it, a scripts/pkg/mod.py key and a traversal key in managed never copied or written outside the private directory, an absent or non-object managed field being no_protocol, a missing-module failure named from the last stderr line (bare failure plus stderr tail when it does not match), and a round trip against the real 2.7.0 scripts",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Admission by capability: managed_repo.inspect two-way version gate (a RELEASE_CONTRACTS release is legacy mode unchanged; otherwise a qualifying scripts/workflow_protocol.py key in the installation record's managed map plus a describe answering protocol major 1 is protocol mode; else the 1.6.0 refusal with the new reason no_protocol), target_protocol on the inspected repository, release and the managed-script digest map (the qualifying scripts/<name>.py entries of the installation record's managed map) derived afresh by one identity function (the per-job pin, the per-decision re-check and WORKFLOW_RELEASE_CHANGED are CP4's, the reconcile-level outcomes CP5's), inspect fields; tests for 2.5.1 and 2.6.0 unchanged, 2.7.0 admitted, a bumped-release stand-in admitted, a stand-in whose workflow_protocol.py imports an extra sibling module admitted with that module's digest recorded, a protocol script whose imported sibling is missing refused with a message naming the module, the identity function asserted on its own (a non-Workflow scripts/extra.py edited between two derivations leaving the map and release equal, an edited managed script changing the map), a non-Workflow symlink in scripts/ not blocking admission, a release without the script refused, protocol major 2 refused",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Decisions from next-action: controller/protocol_decision.py turning a validated decision into the existing Decision (disposition table over automatic, human_gate, external_gate, blocked, complete and fail-closed for validation and unknown values), the PROTOCOL_ACTIONS table of the twelve automatic action ids with a route key per id, two new routing roles prepare-functional-review and apply-functional-review in routing.ROLE_ROUTES/ROLES only (not ROLE_BY_COMMAND_STEM, which stays equal to SELECTED_COMMANDS) with settings.TABLE_GENERATION raised to 3 and the pins that change on purpose named, an unknown worker.role on an automatic decision blocked, plan.start with no work item, worker command text rendered from the table not from invocation and a mismatching invocation blocked before any launch, the committed-state gate in exactly 1.6.0's scope (implementation phases, launch decisions, COMPLETE/SELF_REVIEWING facts only), a protocol target bypassing evidence.decide, explain and status output, the protocol attribute on Decision; tests for every catalogue row family against 2.7.0 fixtures, unknown values blocked, fresh-session launches, a plan-stage uncommitted-state launch and an IN_PROGRESS dirty-resume launch, an invocation mismatch blocked workflow_invocation_mismatch with no job record and no worker, a matching invocation carried through a fake worker to reconcile (plan.start base excluded), every PROTOCOL_ACTIONS route key a member of routing.ROLES, test_routing/test_settings pins updated on purpose with TABLE_GENERATION 3 and a settings file filled by this release read by a 1.6.0-shaped release (the _release helper) as the compatibility rule says, the equivalence comparison with defined dimensions and a scope that covers AWAITING_FUNCTIONAL_REVIEW and the 1/2.1 AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW golden, the checked-in table holding exactly the seven observable differences D1-D7 (including the new launches of implementation.apply_review, functional.prepare and functional.apply_findings) each asserted by name, the non-observable notes N1-N4 tested where they live, and a static test that the protocol path reads no lifecycle file",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The stale check, the job record and the loop guard: the optional protocol block of the job record (decision as received, state identity, release, protocol version, script digests), the currency check (next-action --expect-state-identity for an item decision; a no-work-item re-call with equal row, disposition, action id and snapshot.work_item_ids for plan.start) before the PLANNED write (at most three re-decisions per step, the decision_unstable gate) and again immediately before the spawn with a terminal decision_stale_at_launch record when stale or when row/disposition/action id/arguments differ at an unchanged identity, the generic no_progress_repeated guard keyed on work item and action id (not identity) replacing the apply-relaunch bound for protocol targets, the record's release and managed-script digest pin (the reference for that job's own verification and resume) and the per-step re-check of the identity inspect admitted for the invocation with WORKFLOW_RELEASE_CHANGED (M1); tests for a managed script edited after launch refused at the next step, a changed describe release refused, a non-Workflow scripts/extra.py edit not refused, a plan.start launch passing both currency checks, a work item created between the decision and the launch re-deciding, a protocol-to-protocol release change between invocations (a fresh run admitted and launched under the new release, a resume of the old job FAILED workflow_release_changed), a FAILED job and an interrupted no_progress job each between two no_progress jobs skipped by the guard, a state change between decision and launch, three stale answers, same identity with a different action at the pre-spawn check, a stale abort after PLANNED then resume, a no-progress pair with a changed identity, a repeated no-progress pair, a progressing pair that does not trip it, and legacy record byte-identity",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Outcomes from reconcile: the protocol branch of job._verify_transition and the class-to-result table over progress, gate_reached, no_progress and invalid (a successful no_progress job terminal FINISHED with progress none, so no resume is needed before the next step), reconcile on resume for launched and completed jobs from the stored decision, invalid reasons recorded verbatim, the release-identity re-check before reconcile on the launch path and on resume (a worker that edits a managed script ends FAILED workflow_release_changed with reconcile never called; a non-Workflow scripts/extra.py edit still reconciling), the committed-state completion fact (a trailer commit with COMPLETE only in the worktree state fails the job) and all six 1.6.0 detail cases (including pre_state_incomplete and state_unreadable, which have no protocol counterpart) each named and asserted on a 2.7.0 fixture; managed_repo.inspect_for_resume, a drift-tolerant resume path that on DriftedInstallationError alone marks a pending protocol job FAILED workflow_release_changed when its managed-file digest map differs, compared from the manifest and file bytes with no script executed (reconcile, describe and Workflow scripts never run), re-raises when the map is equal and for a legacy record, with an end-to-end CLI resume test over a modified managed script; tests for each class and invalid reason with a fake worker that does, partly does or does not do the action, a failed worker that also changed a managed script ending FAILED with the one reason workflow_release_changed, an interrupted worker, a failing reconcile, resume after a crash at each point and a 1.6.0 record resumed",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Both modes end to end: a disposable-repository lifecycle on the vendored 2.7.0 through to complete in protocol mode with the fake worker, the same on 2.6.0 in legacy mode, a repository moved from 2.6.0 to 2.7.0 between steps, and every existing golden and the no-policy golden checked byte-identical",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP7",
+      "name": "Documentation and full verification (terminal): ADR 0010 amending ADR 0006, docs/guide concepts, automation (naming the three new automatic launches), installation, commands, troubleshooting, development and the routing-config, settings (stating the TABLE_GENERATION 3 effect on a file shared with 1.6.0) and telemetry guides for the two new roles, README.md, docs/README.md, the 1.7.0 notes section checked by release_notes.notes_problem, every golden generator with --check, the full suite, the troubleshooting note that a target whose own work edits a managed scripts/workflow_*.py ends each job FAILED workflow_release_changed (not a defect), and the protected-path diff from the base",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5",
+        "CP6"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

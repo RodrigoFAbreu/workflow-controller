@@ -1,6 +1,9 @@
 # ADR 0006: Workflow release admission and per-release contracts
 
-Status: accepted. See
+Status: accepted; amended by
+[ADR 0010](0010-orchestration-protocol-admission-by-capability.md) for a
+release with no entry in `RELEASE_CONTRACTS` (admission by capability, no
+pinned digests). See
 `docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md` for the full
 design record (work item `workflow-controller-workflow-2-6-integration`,
 `docs/ROADMAP.md` section 1.6). It shipped as Controller 1.3.0. This document

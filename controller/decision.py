@@ -88,7 +88,7 @@ import dataclasses
 import re
 import shlex
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from controller.errors import MissingCommandsDirectoryError, NoSupportedActionError, UnknownPhaseError
 
@@ -638,6 +638,30 @@ def branch_human_gate(repository: str, gate: Any, *, phase: str = BRANCH_GATE_PH
 
 
 @dataclasses.dataclass(frozen=True)
+class ProtocolInfo:
+    """The ``next-action`` answer a protocol target's :class:`Decision` was
+    made from (orchestration-protocol-v1 C.1): ``document`` is the result
+    object exactly as received -- the document ``reconcile`` is later handed
+    (I5) -- with the fields the job record and ``explain`` need pulled out of
+    it. ``route`` is the routing role of an automatic decision, ``None`` for
+    every other disposition. ``release``, ``protocol_version`` and
+    ``script_digests`` are the identity the target was admitted under."""
+
+    document: Mapping[str, Any]
+    row: str
+    disposition: str
+    action_id: str | None
+    arguments: Mapping[str, str]
+    state_identity: str | None
+    phase: str | None
+    route: str | None
+    alternatives: tuple[str, ...]
+    release: str | None
+    protocol_version: str | None
+    script_digests: Mapping[str, str] | None
+
+
+@dataclasses.dataclass(frozen=True)
 class Decision:
     """The whole, explainable output of :func:`decide`. Every field is
     populated on every path -- an explanation is not an optional extra, it
@@ -668,6 +692,11 @@ class Decision:
     gate: HumanGate | None
     declined: bool
     reason: str
+    #: ``None`` for every legacy decision. For a protocol target
+    #: (``controller.protocol_decision``) the Workflow's own answer this
+    #: decision was made from, added last so every existing construction is
+    #: unchanged.
+    protocol: "ProtocolInfo | None" = None
 
 
 def apply_dispatch_rule(selected: Decision, governing_workflow_version: str | None) -> Decision:

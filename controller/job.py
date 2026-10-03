@@ -103,8 +103,8 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, identity, lock, milestone_branch, routing, runtime, target_state, telemetry, worker,
-    workflow_contract,
+    evidence, identity, lock, milestone_branch, protocol, protocol_decision, routing, runtime, target_state,
+    telemetry, worker, workflow_contract,
 )
 from controller.decision import (
     NO_PHASE,
@@ -132,6 +132,8 @@ from controller.errors import (
     UnsupportedWorkflowVersionError,
     UserOnlyCommandError,
     WorkerLaunchError,
+    WorkflowProtocolFailedError,
+    WorkflowProtocolUnsupportedError,
     WorkflowQueryError,
     WorkflowReleaseChangedError,
 )
@@ -355,6 +357,34 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
 
     work_item_id = work_item.work_item_id
     phase = work_item.phase
+
+    if managed_repo.target_protocol is not None:
+        # A protocol target's lifecycle files (bundle, manifest, feedback,
+        # checklist evidence) are the Workflow's to read, not the
+        # Controller's (orchestration-protocol-v1 I8): only the state's own
+        # fields are captured, and the file-derived ones are empty.
+        return {
+            "phase": phase,
+            "governing_workflow_version": work_item.governing_workflow_version,
+            "target_head": target_head,
+            "state_revision": work_item.state_revision,
+            "plan_revision": work_item.plan_revision,
+            "implementation_revision": work_item.implementation_revision,
+            "last_completed_checkpoint_id": work_item.last_completed_checkpoint_id,
+            "checkpoints": work_item.checkpoints,
+            "bundle_id": work_item.current_bundle_id,
+            "bundle_manifest_readable": False,
+            "bundle_manifest_bundle_id": None,
+            "bundle_manifest_generation_head": None,
+            "bundle_generated_digest": None,
+            "rejected_marker_present": False,
+            "child_work_item_ids": sorted(
+                wid for wid, view in snapshot.work_items.items() if view.parent_work_item_id == work_item_id),
+            "functional_review_consumed_blob": None,
+            "functional_checklist_evidence": None,
+            "pre_work_item_keys": pre_work_item_keys,
+        }
+
     bound = workflow_contract.bind_release(managed_repo.workflow_version)
 
     bundle_dir = evidence.resolve_bundle_dir(root, work_item_id, phase=phase)
@@ -1939,6 +1969,39 @@ def _verification_contract(root: Path, recorded: Any) -> BoundContract:
         ) from exc
 
 
+def _protocol_identity_change(managed_repo: Any) -> tuple[str, str, dict] | None:
+    """The per-step re-check of a protocol target's identity (orchestration-
+    protocol-v1 B.3, M1): the release ``describe`` reports and the managed-
+    script digest map, derived afresh, against the identity ``inspect``
+    admitted for this invocation. ``None`` for a legacy target or when they
+    are equal; else ``(what, then, evidence)`` for
+    :func:`_refuse_changed_release`. A file outside the installation record's
+    ``managed`` map never enters the identity, so an edit to it is not a
+    change. An identity that cannot be derived is a change as well: nothing
+    is decided under a Workflow that cannot answer."""
+    if getattr(managed_repo, "target_protocol", None) is None:
+        return None
+    admitted_release = managed_repo.target_protocol["release"]
+    admitted_digests = dict(managed_repo.script_digests or {})
+    try:
+        now = protocol.identity(managed_repo.root)
+    except (WorkflowProtocolFailedError, WorkflowProtocolUnsupportedError) as exc:
+        return (f"{managed_repo.root}'s Workflow protocol script no longer answers ({exc.message}); this step was "
+                f"admitted under Workflow {admitted_release}",
+                "restore the Workflow's scripts (the Workflow Manager's update or repair), then re-run",
+                {"protocol_error": {"code": exc.code, "message": exc.message, "evidence": exc.evidence}})
+    changed = sorted(key for key in {*admitted_digests, *now.digests}
+                     if admitted_digests.get(key) != now.digests.get(key))
+    if now.release == admitted_release and not changed:
+        return None
+    return (f"{managed_repo.root}'s Workflow identity changed since this step was admitted: it reported release "
+            f"{admitted_release} and now reports {now.release}"
+            + (f"; managed scripts changed: {', '.join(changed)}" if changed else ""),
+            "re-run: a fresh inspect admits the installed Workflow, or refuses it",
+            {"admitted_protocol_release": admitted_release, "installed_protocol_release": now.release,
+             "changed_scripts": changed})
+
+
 def _refuse_changed_release(managed_repo: Any, preflight: Any, preflight_events: list[str]) -> None:
     """The installed-release re-check before every decision (I3): right
     after the repository preflight returns -- a ``Gate`` or a ``Proceed``;
@@ -1957,15 +2020,21 @@ def _refuse_changed_release(managed_repo: Any, preflight: Any, preflight_events:
     close-out is never mistaken for a failed one."""
     admitted = managed_repo.workflow_version
     installed, manifest_error = _installed_release(managed_repo.root)
+    protocol_change = None
     if manifest_error is None and installed == admitted:
-        return
+        protocol_change = _protocol_identity_change(managed_repo)
+        if protocol_change is None:
+            return
     is_gate = isinstance(preflight, milestone_branch.Gate)
     action = "gate" if is_gate else preflight.action
     evidence_dict: dict = {
         "admitted": admitted, "installed": installed, "preflight_action": action,
         "preflight_gate": preflight.code if is_gate else None, "preflight_events": list(preflight_events),
     }
-    if manifest_error is not None:
+    if protocol_change is not None:
+        what, then, extra = protocol_change
+        evidence_dict.update(extra)
+    elif manifest_error is not None:
         evidence_dict["manifest_error"] = manifest_error
         what = (f"the installed Workflow release of {managed_repo.root} cannot be established "
                 f"({manifest_error['code']}: {manifest_error['message']}); this step was admitted under "
@@ -2581,6 +2650,8 @@ def _reconcile_launched(record: JobRecord, *, managed_repo: Any, runtime_root: P
     transition cannot be judged either way, so the record is ``FAILED``
     with that evidence -- never ``INTERRUPTED`` (a fresh ``step`` would
     retry blind) and never ``UnreconcilableJobError``."""
+    if isinstance(record.get("protocol"), dict):
+        return _reconcile_protocol(record, managed_repo=managed_repo, runtime_root=runtime_root)
     root = managed_repo.root
     work_item_id = record["work_item_id"]
     pre_state = record.get("pre_state") or {}
@@ -2694,6 +2765,222 @@ def _branch_violation_failed(record: JobRecord, runtime_root: Path, observed_pha
     return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
 
 
+# ---------------------------------------------------------------------------
+# `workflow-controller-orchestration-protocol-v1` CP5 -- the outcome of a
+# protocol job comes from the Workflow's own `reconcile` (plan E), on launch
+# and on `resume`; no release contract names a protocol target's phases.
+# ---------------------------------------------------------------------------
+
+WORKFLOW_PROTOCOL_FAILED_REASON = "workflow_protocol_failed"
+RECONCILE_INVALID_REASON = "reconcile_invalid"
+COMPLETION_NOT_COMMITTED_REASON = "completion_not_committed_at_head"
+_RECONCILE_CLASSES = frozenset({"progress", "gate_reached", "no_progress", "invalid"})
+#: The one action whose `progress` answer the Controller backs with the
+#: committed-state fact (plan E.3).
+_CHECKPOINT_ACTION = "implementation.checkpoint"
+
+
+def _protocol_failure_evidence(reason: str, *, observed_phase: str, worker_outcome: str | None, **extra: Any) -> dict:
+    """The ``TransitionNotObservedError``-shaped ``reconciliation_evidence``
+    of a protocol job: there is no expected phase set, only the ``reason``."""
+    return {"code": "TransitionNotObservedError", "reason": reason, "expected_to_any_of": [],
+            "observed_phase": observed_phase, "worker_outcome": worker_outcome, **extra}
+
+
+def _protocol_release_change(root: Path, record: Mapping) -> dict | None:
+    """The job record's release identity against the target's, derived afresh
+    (plan B.3/E.1, K1): ``None`` when the release and the managed-script
+    digest map are the ones the job was decided under, else the
+    ``workflow_error`` of the change. A Workflow that cannot answer, or an
+    installation manifest that cannot be read, is a change as well: nothing
+    is judged under an identity that cannot be established. A non-Workflow
+    ``scripts/extra.py`` never enters the map."""
+    block = record["protocol"]
+    recorded_release = block.get("workflow_release")
+    recorded_digests = dict(block.get("script_sha256") or {})
+    installed, manifest_error = _installed_release(root)
+    if manifest_error is not None:
+        return {"code": WorkflowReleaseChangedError.code, "message": (
+            f"the installed Workflow release of {root} cannot be established ({manifest_error['code']}: "
+            f"{manifest_error['message']}); the job was decided under Workflow {recorded_release}"),
+            "evidence": {"recorded": recorded_release, "installed": None, "manifest_error": manifest_error}}
+    try:
+        now = protocol.identity(root)
+    except (WorkflowProtocolFailedError, WorkflowProtocolUnsupportedError) as exc:
+        return {"code": WorkflowReleaseChangedError.code, "message": (
+            f"{root}'s Workflow protocol script no longer answers ({exc.message}); the job was decided under "
+            f"Workflow {recorded_release}"),
+            "evidence": {"recorded": recorded_release, "protocol_error": {
+                "code": exc.code, "message": exc.message, "evidence": exc.evidence}}}
+    changed = sorted(key for key in {*recorded_digests, *now.digests}
+                     if recorded_digests.get(key) != now.digests.get(key))
+    if now.release == recorded_release and not changed and installed == record.get("target_workflow_version"):
+        return None
+    return {"code": WorkflowReleaseChangedError.code, "message": (
+        f"{root} now reports Workflow {now.release} (installed {installed}), not Workflow {recorded_release}, which "
+        "the job was decided under" + (f"; managed scripts changed: {', '.join(changed)}" if changed else "")
+        + "; it is not reconciled under any other"),
+        "evidence": {"recorded": recorded_release, "installed": installed, "reported": now.release,
+                     "changed_scripts": changed}}
+
+
+def _protocol_observed_phase(managed_repo: Any, record: Mapping) -> str:
+    """The phase a protocol job's work item is at now, in wire form; the
+    pre-state's own when it cannot be read."""
+    pre_state = record.get("pre_state") or {}
+    try:
+        return phase_to_wire(_observe_post_phase(managed_repo, record.get("work_item_id"), pre_state))
+    except ControllerError:
+        return str(pre_state.get("phase"))
+
+
+def _protocol_uncommitted_facts(managed_repo: Any, work_item_id: str | None) -> tuple[str, ...]:
+    """Plan E.3's committed-state fact for a checkpoint ``progress``: what the
+    working tree records ``COMPLETE`` that ``HEAD`` does not."""
+    snapshot = target_state.read(managed_repo)
+    work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
+    return evidence.uncommitted_implementation_state(managed_repo.root, work_item)
+
+
+def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
+                         worker_outcome: str | None) -> dict:
+    """What a protocol job's outcome writes, as record fields (plan E.1):
+    ``status``, ``transition_verified``, ``observed_phase_after``, the
+    ``protocol`` block with ``reconcile`` filled and, for a failure,
+    ``reconciliation_evidence``. ``worker_outcome`` is ``None`` for a record
+    whose worker's end was never recorded (a ``LAUNCHED`` job at ``resume``).
+
+    Order, as the table fixes it: the release identity first, before the
+    worker outcome is read, then a failed or timed-out worker (no state is
+    trusted, ``reconcile`` is not called), then ``reconcile`` from a private
+    copy equal to the recorded map."""
+    root = managed_repo.root
+    block = dict(record["protocol"])
+    work_item_id = record.get("work_item_id")
+    pre_phase = str((record.get("pre_state") or {}).get("phase"))
+
+    def failed(reason: str, observed: str, reconcile: Any = None, **extra: Any) -> dict:
+        return {
+            "status": STATUS_FAILED, "transition_verified": False, "observed_phase_after": observed,
+            "protocol": {**block, "reconcile": reconcile},
+            "reconciliation_evidence": _protocol_failure_evidence(
+                reason, observed_phase=observed, worker_outcome=worker_outcome, **extra),
+        }
+
+    change = _protocol_release_change(root, record)
+    if change is not None:
+        return failed(WORKFLOW_RELEASE_CHANGED_REASON, _protocol_observed_phase(managed_repo, record),
+                      workflow_error=change)
+    if worker_outcome is not None and worker_outcome not in _VERIFYING_WORKER_OUTCOMES:
+        return failed("worker_outcome", _protocol_observed_phase(managed_repo, record))
+
+    decision_rel = f"jobs/{record['job_id']}/decision.json"
+    decision_path = runtime.write_json(runtime_root, decision_rel, dict(block["decision"]))
+    try:
+        answer = protocol.reconcile(root, decision_path, work_item_id,
+                                    expected_digests=dict(block.get("script_sha256") or {}))
+    except WorkflowReleaseChangedError as exc:
+        return failed(WORKFLOW_RELEASE_CHANGED_REASON, _protocol_observed_phase(managed_repo, record),
+                      workflow_error={"code": exc.code, "message": exc.message, "evidence": exc.evidence})
+    except (WorkflowProtocolFailedError, WorkflowProtocolUnsupportedError) as exc:
+        return failed(WORKFLOW_PROTOCOL_FAILED_REASON, _protocol_observed_phase(managed_repo, record),
+                      workflow_error={"code": exc.code, "message": exc.message, "evidence": exc.evidence})
+    summary = {
+        "class": answer.outcome,
+        "invalid_reasons": [{"code": code, "text": text} for code, text in answer.invalid_reasons],
+        "evidence": dict(answer.evidence),
+        "from": None if answer.from_ is None else dataclasses.asdict(answer.from_),
+        "to": None if answer.to is None else dataclasses.asdict(answer.to),
+        "next": answer.next,
+    }
+    observed = pre_phase if answer.to is None else answer.to.phase
+    if answer.outcome not in _RECONCILE_CLASSES:
+        return failed(WORKFLOW_PROTOCOL_FAILED_REASON, observed, summary, workflow_error={
+            "code": WorkflowProtocolFailedError.code,
+            "message": f"reconcile answered the class {answer.outcome!r}, which this Controller does not know",
+            "evidence": {"reason": "protocol_unknown_reconcile_class", "class": answer.outcome}})
+    if answer.outcome == "invalid":
+        return failed(RECONCILE_INVALID_REASON, observed, summary, reconcile_class="invalid",
+                      invalid_reasons=summary["invalid_reasons"])
+    if answer.outcome == "progress" and block.get("action_id") == _CHECKPOINT_ACTION:
+        facts = _protocol_uncommitted_facts(managed_repo, work_item_id)
+        if facts:
+            return failed(COMPLETION_NOT_COMMITTED_REASON, observed, summary, facts=list(facts))
+    if answer.outcome == "no_progress" and worker_outcome != "SUCCESS":
+        # An interrupted worker, or one whose end was never recorded, that
+        # moved nothing: the existing interrupted-job handling.
+        return {"status": STATUS_INTERRUPTED, "observed_phase_after": observed,
+                "protocol": {**block, "reconcile": summary}}
+    if answer.outcome == "no_progress":
+        block["progress"] = "none"
+    return {"status": STATUS_FINISHED, "transition_verified": True, "observed_phase_after": observed,
+            "protocol": {**block, "reconcile": summary}}
+
+
+def _reconcile_protocol(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """``resume``'s protocol branch for a ``LAUNCHED`` or ``COMPLETED`` job:
+    the same resolution as the launch path, from the stored decision. A
+    post-verification branch violation fails the job, as for a legacy one."""
+    worker_outcome = record.get("worker_outcome") if record.get("status") == STATUS_COMPLETED else None
+    fields = _protocol_resolution(record, managed_repo=managed_repo, runtime_root=runtime_root,
+                                  worker_outcome=worker_outcome)
+    now = _now()
+    if fields["status"] == STATUS_FINISHED:
+        violation = _branch_invariant_violation(managed_repo.root, runtime_root, record)
+        if violation is not None:
+            fields = {**fields, "status": STATUS_FAILED, "transition_verified": False,
+                      "reconciliation_evidence": violation}
+    reconciled = {**record, **fields, "reconciled_at": now, "updated_at": now}
+    return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                    details=_reconciled_details(reconciled))
+
+
+def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """A pending protocol job under a drifted installation whose managed-file
+    digest map differs from its record's: ``FAILED``
+    ``workflow_release_changed``, from the manifest and the files' bytes
+    alone -- no Workflow script ran."""
+    observed = str((record.get("pre_state") or {}).get("phase"))
+    worker_outcome = record.get("worker_outcome") if record.get("status") == STATUS_COMPLETED else None
+    now = _now()
+    block = dict(record["protocol"])
+    current = protocol.managed_digests(managed_repo.root)
+    if current is None:
+        # The bytes became unreadable between the decision and here: no difference is established.
+        raise managed_repo.drift
+    failed = {
+        **record, "status": STATUS_FAILED, "transition_verified": False, "observed_phase_after": observed,
+        "protocol": {**block, "reconcile": None},
+        "reconciliation_evidence": _protocol_failure_evidence(
+            WORKFLOW_RELEASE_CHANGED_REASON, observed_phase=observed, worker_outcome=worker_outcome,
+            workflow_error={
+                "code": WorkflowReleaseChangedError.code,
+                "message": (f"{managed_repo.root}'s Workflow installation has drifted and its managed scripts "
+                            "are not the ones the job was decided under; it is not reconciled"),
+                "evidence": {"changed_scripts": _changed_scripts(block.get("script_sha256"), current)}}),
+        "reconciled_at": now, "updated_at": now,
+    }
+    return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
+
+
+def _changed_scripts(recorded: Any, current: Mapping[str, str]) -> list[str]:
+    recorded_map = dict(recorded or {})
+    current_map = dict(current)
+    return sorted(key for key in {*recorded_map, *current_map} if recorded_map.get(key) != current_map.get(key))
+
+
+def _drift_decides(record: Mapping, managed_repo: Any) -> bool:
+    """Whether a pending record is one a drifted installation may still end:
+    a protocol job whose recorded managed-script digest map differs from the
+    one the manifest and the files' bytes give now (no script executed). An
+    unreadable map is unknown, not a difference: the record is left alone."""
+    block = record.get("protocol")
+    if not isinstance(block, dict):
+        return False
+    current = protocol.managed_digests(managed_repo.root)
+    return current is not None and bool(_changed_scripts(block.get("script_sha256"), current))
+
+
 def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
     """Row 2 (verifying) / row 5 (failing): ``COMPLETED``. Mirrors CP6B
     step 8/9's own verification rule exactly -- "exactly as CP6B step 8
@@ -2701,6 +2988,8 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
     long-gone process's own memory. The post-state read is
     :func:`_observe_post_phase`, the same bootstrap-aware helper
     ``_reconcile_launched`` and ``execute_step``'s own step 7 (CP6B) use."""
+    if isinstance(record.get("protocol"), dict):
+        return _reconcile_protocol(record, managed_repo=managed_repo, runtime_root=runtime_root)
     root = managed_repo.root
     work_item_id = record["work_item_id"]
     pre_state = record.get("pre_state") or {}
@@ -2824,6 +3113,8 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path,
 
     ``drain_detach_seconds`` (settings-and-telemetry CP2) bounds phase 1's
     re-attached drain (``None``: :data:`worker.DRAIN_DETACH_SECONDS`)."""
+    if getattr(managed_repo, "drift", None) is not None:
+        _refuse_drift_unless_decided(managed_repo, runtime)
     if not managed_repo.root.is_dir():
         return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
     # Worker-lifecycle-ownership CP5 (plan E): phase 1, the supervision
@@ -2834,6 +3125,28 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path,
                        drain_detach_seconds=drain_detach_seconds)
     with _acquire_lifecycle_lock(runtime, managed_repo):
         return _resume_records(managed_repo, identity=identity, runtime_root=runtime)
+
+
+def _refuse_drift_unless_decided(managed_repo: Any, runtime_root: Path) -> None:
+    """Under a drifted installation (``managed_repo.drift``), ``resume`` goes
+    on only when every pending record for this target is a protocol job whose
+    managed-file digest map differs from its record's -- the one thing it may
+    end without the Workflow. Otherwise the ``DriftedInstallationError`` is
+    re-raised before any write: a legacy record, a map that is equal, or
+    nothing pending at all leaves every record untouched."""
+    pending = []
+    for path in _job_file_paths(runtime_root):
+        if not _is_regular_job_file(path):
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        if (isinstance(record, dict) and record.get("target_repo") == str(managed_repo.root)
+                and record.get("status") in NON_TERMINAL_STATUSES):
+            pending.append(record)
+    if not pending or not all(_drift_decides(record, managed_repo) for record in pending):
+        raise managed_repo.drift
 
 
 def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> list[JobRecord]:
@@ -2891,7 +3204,17 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             )
 
         status = record.get("status")
-        if status in TERMINAL_STATUSES:
+        drifted = getattr(managed_repo, "drift", None) is not None
+        if drifted and status in NON_TERMINAL_STATUSES:
+            marked = _owned_work_hold(record, root) if status != STATUS_PLANNED else None
+            if marked is not None:
+                results.append(marked)
+            elif _drift_decides(record, managed_repo):
+                results.append({**_resume_drifted_protocol(record, managed_repo=managed_repo, runtime_root=runtime),
+                                "reconciled_this_call": True})
+            else:
+                raise managed_repo.drift
+        elif status in TERMINAL_STATUSES:
             results.append(record)  # reported, never reconciled, never relaunched.
         elif status == STATUS_PLANNED:
             results.append({**_reconcile_planned(record, runtime_root=runtime), "reconciled_this_call": True})
@@ -4583,11 +4906,169 @@ def _branch_gate_record(runtime_root: Path, managed_repo: Any, ident: Any, snaps
                              status=STATUS_GATE_BLOCKED, run_id=run_id)
 
 
+def _protocol_block(decision: Decision) -> dict:
+    """The job record's optional ``protocol`` block (plan D.1), written only
+    for a protocol job: the decision as received, its state identity, the
+    release and protocol version and the managed-script digest map it was
+    made under (the reference for that job's own verification and
+    ``resume``), and ``reconcile``, filled when the outcome is."""
+    info = decision.protocol
+    document = dict(info.document)
+    return {
+        "decision": document,
+        "envelope_digest": hashlib.sha256(
+            json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        "action_id": info.action_id,
+        "state_identity": info.state_identity,
+        "workflow_release": info.release,
+        "protocol_version": info.protocol_version,
+        "script_sha256": dict(info.script_digests or {}),
+        "decided_ns": time.time_ns(),
+        "reconcile": None,
+    }
+
+
+def _unstable_gate(managed_repo: Any, work_item: Any, decision: Decision, seen: list) -> Decision:
+    """The ``decision_unstable`` gate after :data:`protocol_decision.
+    MAX_DECISIONS_PER_STEP` stale answers in one step, naming the last two
+    state identities (or, for ``plan.start``, the last two
+    ``snapshot.work_item_ids``)."""
+    last = [value for value in seen[-2:]]
+    what = "work item ids" if decision.protocol.state_identity is None else "state identities"
+    return protocol_decision.gate_for(
+        managed_repo, work_item, decision, protocol_decision.DECISION_UNSTABLE,
+        f"the Workflow's state changed under {len(seen)} consecutive decisions, so none was launched; the last "
+        f"{what} were {' and '.join(str(value) for value in last)}. Something else is writing the target "
+        "repository's state; stop it, then re-run")
+
+
+def _decide_protocol_current(
+    managed_repo: Any, *, runtime: Path, snapshot: Any, work_item: Any, work_item_id: str | None,
+    pre_state: dict, base: str | None,
+) -> tuple[Decision, Any, dict]:
+    """The protocol path's decision, current (plan D.2.1): ``(decision,
+    work_item, pre_state)``. The Workflow's ``verify`` runs first (plan A.3):
+    an unhealthy repository is the ``workflow_unhealthy`` gate and nothing is
+    decided. An ``automatic`` decision is checked against the
+    Workflow before anything is recorded and, when stale, discarded and
+    re-decided from a fresh read -- at most
+    :data:`protocol_decision.MAX_DECISIONS_PER_STEP` decisions per step,
+    after which the answer is the ``decision_unstable`` gate. The loop guard
+    (:func:`_no_progress_gate`) then applies to the decision that stands.
+    Every other disposition is a gate or a no-action answer that launches
+    nothing, so it is returned as the Workflow gave it."""
+    # Plan A.3: the Workflow's own `verify` is the step's protocol preflight;
+    # an unhealthy answer is a gate, and nothing is decided.
+    unhealthy = protocol_decision.health_gate(managed_repo, work_item)
+    if unhealthy is not None:
+        return unhealthy, work_item, pre_state
+    seen: list = []
+    for _attempt in range(protocol_decision.MAX_DECISIONS_PER_STEP):
+        decision = protocol_decision.decide(managed_repo, work_item, base=base)
+        if decision.protocol is None or not decision.automatic:
+            return decision, work_item, pre_state
+        info = decision.protocol
+        seen.append(info.state_identity if info.state_identity is not None
+                    else tuple((info.document.get("snapshot") or {}).get("work_item_ids") or ()))
+        if protocol_decision.check_currency(managed_repo, decision).current:
+            gate = _no_progress_gate(runtime, managed_repo, work_item, decision)
+            return (decision if gate is None else gate), work_item, pre_state
+        snapshot = target_state.read(managed_repo)
+        work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
+        pre_state = _capture_pre_state(managed_repo, snapshot, work_item)
+    return _unstable_gate(managed_repo, work_item, decision, seen), work_item, pre_state
+
+
+def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None, action_id: str) -> tuple | None:
+    """For the loop guard: ``((created_at, decided_ns, job_id), counted, end_identity,
+    start_identity)``
+    of a record that is a protocol job of this repository for this ``(work
+    item, action id)`` pair, else ``None``. ``counted`` is ``None`` for a job
+    that is neither a ``no_progress`` nor a reset (a ``FAILED`` job, an
+    interrupted one, one with no reconcile class yet), else the reconcile
+    class; ``end_identity`` is the state identity the job's reconcile found
+    the work item at when it ended, ``start_identity`` the one it was decided
+    at; either is ``None`` when the record keeps none."""
+    if not isinstance(record, dict) or record.get("target_repo") != target_repo:
+        return None
+    block = record.get("protocol")
+    if not isinstance(block, dict) or block.get("action_id") != action_id \
+            or record.get("work_item_id") != work_item_id:
+        return None
+    decided_ns = block.get("decided_ns")
+    key = (str(record.get("created_at")), decided_ns if isinstance(decided_ns, int) else 0,
+           str(record.get("job_id")))
+    reconcile = block.get("reconcile")
+    reconcile_class = reconcile.get("class") if isinstance(reconcile, dict) else None
+    reconcile_to = reconcile.get("to") if isinstance(reconcile, dict) else None
+    end_identity = reconcile_to.get("state_identity") if isinstance(reconcile_to, dict) else None
+    if record.get("status") == STATUS_FINISHED and isinstance(reconcile_class, str):
+        return key, reconcile_class, end_identity, block.get("state_identity")
+    return key, None, None, None
+
+
+def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> Decision | None:
+    """The loop guard of a protocol target (plan D.3): the ``no_progress_repeated``
+    gate when the two most recent protocol jobs for this ``(work item,
+    action id)`` pair both ended ``no_progress``, else ``None``. A job that
+    made progress or reached a gate resets the count; a ``FAILED`` or
+    interrupted job, or one not yet reconciled, is skipped -- neither counted
+    nor a reset. Keyed on the pair, never on the state identity; but a streak
+    ends once the work item has moved since a counted job ended (the next
+    job was decided at, or the current decision has, a state identity that
+    differs from the one that job's reconcile left), because that change did
+    not come from the counted jobs themselves; the two jobs counted must
+    form one contiguous streak."""
+    info = decision.protocol
+    if info.action_id is None:
+        return None
+    work_item_id = None if work_item is target_state.NoWorkItemYet else work_item.work_item_id
+    if info.action_id == protocol_decision.PLAN_START:
+        work_item_id = None
+    jobs_dir = Path(runtime_root) / "jobs"
+    try:
+        paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+    except OSError:
+        return None
+    found = []
+    for path in paths:
+        if not _is_regular_job_file(path):
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, info.action_id)
+        if classified is not None and classified[1] is not None:
+            found.append((classified[0], classified[1], classified[2], classified[3]))
+    recent = sorted(found, reverse=True)[:2]
+    if len(recent) < 2 or any(reconcile_class != "no_progress" for _key, reconcile_class, _end, _start in recent):
+        return None
+    last_end = recent[0][2]
+    if info.state_identity is not None and last_end is not None and last_end != info.state_identity:
+        return None
+    # The two must be one contiguous streak: the newer job was decided where the older one ended.
+    older_end, newer_start = recent[1][2], recent[0][3]
+    if older_end is not None and newer_start is not None and older_end != newer_start:
+        return None
+    jobs = " and ".join(key[2] for key, _class, _end, _start in recent)
+    return protocol_decision.gate_for(
+        managed_repo, work_item, decision, protocol_decision.NO_PROGRESS_REPEATED,
+        f"the last two jobs for {info.action_id}"
+        + ("" if work_item_id is None else f" on {work_item_id}")
+        + f" ({jobs}) both ended without progress, so a third is not launched; read their records, then "
+        "change the work item (take the action by hand, or fix what stops it) and the count restarts")
+
+
 def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOptions) -> routing.ResolvedRoute:
     """The launched worker's route (automatic-lifecycle-orchestration CP6):
     its role, from durable state only (the observed phase, the selected
     command and the work item's ``registry_complete``; a ``NoWorkItemYet``
     bootstrap has none), resolved against the operator's overrides."""
+    if decision.protocol is not None:
+        # A protocol job is routed by its action id's route key, never by a
+        # command stem (orchestration-protocol-v1 C.3).
+        return options.resolve(decision.protocol.route)
     registry_complete = None if work_item is target_state.NoWorkItemYet else work_item.registry_complete
     role = routing.role_for(decision.observed_phase, decision.action.command, registry_complete)
     return options.resolve(role)
@@ -4828,10 +5309,22 @@ def _execute_step_locked(
     # `last_apply_job` (automatic-lifecycle-orchestration CP4B) is the job
     # history the "2.2" APPLYING_REVIEW_FEEDBACK relaunch bound reads -- the
     # same read `cli`'s `explain` makes, so both reach the same decision.
-    decision = decide_no_work_item(managed_repo, base=preflight.base) if is_bootstrap else evidence.decide(
-        managed_repo, snapshot, work_item,
-        last_apply_job=last_launched_apply_job_view(runtime, managed_repo.root, resolved_work_item_id),
-    )
+    # A protocol target never enters `evidence.decide`: the Workflow's own
+    # `next-action` decides (orchestration-protocol-v1 C.1).
+    if managed_repo.target_protocol is not None:
+        decision, work_item, pre_state = _decide_protocol_current(
+            managed_repo, runtime=runtime, snapshot=snapshot, work_item=work_item, work_item_id=work_item_id,
+            pre_state=pre_state, base=preflight.base)
+        is_bootstrap = work_item is target_state.NoWorkItemYet
+        resolved_work_item_id = None if is_bootstrap else work_item.work_item_id
+        governing_workflow_version = None if is_bootstrap else work_item.governing_workflow_version
+    elif is_bootstrap:
+        decision = decide_no_work_item(managed_repo, base=preflight.base)
+    else:
+        decision = evidence.decide(
+            managed_repo, snapshot, work_item,
+            last_apply_job=last_launched_apply_job_view(runtime, managed_repo.root, resolved_work_item_id),
+        )
 
     if decision.gate is not None:
         return _no_launch_record(
@@ -4897,6 +5390,10 @@ def _execute_step_locked(
     }
     if run_id is not None:
         record["run_id"] = run_id
+    if decision.protocol is not None:
+        # Orchestration-protocol-v1 D.1: optional, additive; absent for a
+        # legacy job, whose record stays byte-identical.
+        record["protocol"] = _protocol_block(decision)
     if controller_settings is not None:
         # Settings-and-telemetry CP2: optional, additive (SCHEMA_VERSION
         # stays 1); readers tolerate its absence.
@@ -5029,7 +5526,12 @@ def _launch_job(
 ) -> JobRecord:
     """Steps 4 (from the LAUNCHED flush) to 9 of :func:`execute_step`,
     under the job's supervisor lock."""
-    expected_transition = _expected_transition(decision.observed_phase, governing_workflow_version, decision)
+    if decision.protocol is not None:
+        # No release contract names a protocol job's phases: the Workflow's
+        # own `reconcile` judges the outcome (CP5).
+        expected_transition = {"from": phase_to_wire(decision.observed_phase), "to_any_of": []}
+    else:
+        expected_transition = _expected_transition(decision.observed_phase, governing_workflow_version, decision)
     record = {
         **record,
         "expected_transition": expected_transition,
@@ -5043,22 +5545,26 @@ def _launch_job(
         "worker_state": {"state": worker.STARTING, "since": _now()},
     }
 
+    def not_started(reconciliation_evidence: dict, error: str) -> JobRecord:
+        failed = _persist(runtime, job_id, {
+            **record,
+            "status": STATUS_FAILED,
+            "transition_verified": False,
+            "reconciliation_evidence": reconciliation_evidence,
+            "updated_at": _now(),
+        }, event="worker_not_started", details={"error": error})
+        _run_job_ended(run_id, job_id, STATUS_FAILED)
+        return failed
+
     def worker_not_started(exc: ControllerError) -> None:
         # CP5: a worker that never started is terminal at once -- the
         # Controller knows for certain no worker exists, so the record is
         # FAILED (`WorkerNotStarted`, which the apply relaunch bound never
         # counts) and needs no `resume`. The exit code is today's.
-        _persist(runtime, job_id, {
-            **record,
-            "status": STATUS_FAILED,
-            "transition_verified": False,
-            "reconciliation_evidence": {
-                "code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
-                "message": exc.message, "evidence": exc.evidence,
-            },
-            "updated_at": _now(),
-        }, event="worker_not_started", details={"error": type(exc).__name__})
-        _run_job_ended(run_id, job_id, STATUS_FAILED)
+        not_started({
+            "code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
+            "message": exc.message, "evidence": exc.evidence,
+        }, type(exc).__name__)
 
     # CP4 (release-runtime-observability): the worker writes its own
     # stdout/stderr into these files, created before the LAUNCHED flush so
@@ -5132,6 +5638,24 @@ def _launch_job(
         record = _persist(runtime, job_id, record, event=_worker_state_event(state),
                           details=_worker_state_event_details(record, details, state_changed=state_changed))
 
+    if decision.protocol is not None:
+        # Orchestration-protocol-v1 D.2.2: the last step before the spawn --
+        # the same currency check as before the PLANNED write, the stored
+        # decision being the one checked (I5). A stale answer leaves a
+        # terminal FAILED record, no worker, nothing for `resume`.
+        try:
+            currency = protocol_decision.check_currency(managed_repo, decision)
+        except ControllerError as exc:
+            worker_not_started(exc)
+            raise
+        if not currency.current:
+            return not_started({
+                "code": protocol_decision.DECISION_STALE_AT_LAUNCH, "gate": protocol_decision.DECISION_UNSTABLE,
+                "message": f"the decision was no longer the Workflow's answer immediately before the spawn "
+                           f"({currency.reason}); no worker was started, and the next run re-decides",
+                "evidence": currency.evidence(),
+            }, protocol_decision.DECISION_STALE_AT_LAUNCH)
+
     try:
         result = worker.launch(
             worker_task(decision.action),
@@ -5202,6 +5726,24 @@ def _launch_job(
     record = _persist(runtime, job_id, record, event="completed",
                       details={"outcome": result.outcome, "exit_code": result.returncode,
                                "telemetry": telemetry.completed_summary(block)})
+
+    if decision.protocol is not None:
+        # Orchestration-protocol-v1 E.1: the Workflow's own `reconcile`
+        # judges the outcome, after the release identity is re-checked.
+        fields = _protocol_resolution(record, managed_repo=managed_repo, runtime_root=runtime,
+                                      worker_outcome=result.outcome)
+        if fields["status"] == STATUS_FINISHED:
+            violation = _branch_invariant_violation(managed_repo.root, runtime, record)
+            if violation is not None:
+                fields = {**fields, "status": STATUS_FAILED, "transition_verified": False,
+                          "reconciliation_evidence": violation}
+        record = {**record, **fields, "updated_at": _now()}
+        record = _persist(runtime, job_id, record, event=_final_event(record["status"]), details={
+            "observed_phase_after": record["observed_phase_after"],
+            "transition_verified": record.get("transition_verified", False),
+        })
+        _run_job_ended(run_id, job_id, record["status"])
+        return record
 
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
     # -- never the `snapshot`/`work_item` captured before the worker ran

@@ -94,8 +94,11 @@ def _direct_calls(func_node: ast.AST) -> list[ast.Call]:
 #: ``workflow_contract._copy_index`` reads the target's index with
 #: ``os.O_RDONLY | os.O_NONBLOCK``, so a planted FIFO is refused rather than
 #: waited on (`workflow-controller-workflow-2-6-integration`, implementation
-#: review round 1). None of these flags can create, truncate or write.
-_READ_ONLY_OS_OPEN_FLAGS = {"os.O_RDONLY", "os.O_DIRECTORY", "os.O_CLOEXEC", "os.O_NONBLOCK"}
+#: review round 1). ``protocol.script_set`` reads each managed script with
+#: ``os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK``, so a symlink or a FIFO
+#: planted in its place is refused (`workflow-controller-orchestration-
+#: protocol-v1` CP1). None of these flags can create, truncate or write.
+_READ_ONLY_OS_OPEN_FLAGS = {"os.O_RDONLY", "os.O_DIRECTORY", "os.O_CLOEXEC", "os.O_NONBLOCK", "os.O_NOFOLLOW"}
 
 
 def _or_operands(node: ast.AST) -> list[ast.AST]:
@@ -268,7 +271,7 @@ class SyntheticInstantiationTest(unittest.TestCase):
         ``workflow_contract``'s non-blocking index read."""
         for flags in ("os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC", "os.O_RDONLY",
                       "os.O_RDONLY | os.O_CLOEXEC", "os.O_DIRECTORY | os.O_RDONLY",
-                      "os.O_RDONLY | os.O_NONBLOCK"):
+                      "os.O_RDONLY | os.O_NONBLOCK", "os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK"):
             with self.subTest(flags=flags):
                 source = f"def f(path):\n    return os.open(path, {flags})\n"
                 self.assertEqual(scan_module(source, exempt=False), [])

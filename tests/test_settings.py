@@ -73,10 +73,12 @@ V1_ROLES = frozenset({
     "milestone-implement", "milestone-implement-self-review", "apply-plan-review",
     "apply-implementation-review", "review-plan", "review-implementation", "milestone-plan",
     "record-manual-plan-review", "record-manual-implementation-review",
+    # orchestration-protocol-v1 C.3: the two roles a protocol target adds.
+    "prepare-functional-review", "apply-functional-review",
 })
 
 
-def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 2) -> dict:
+def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 3) -> dict:
     """The file this release's fill writes over a missing one (``rows``
     and ``table_generation``: another release's)."""
     data: dict = {"schema_version": 1, "_table_generation": table_generation, "_defaults_written": {}}
@@ -155,8 +157,10 @@ class TableTest(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
         rows = tuple((s.key, s.type, s.default, s.minimum, s.maximum, s.generation) for s in settings.TABLE)
         self.assertEqual(rows, TABLE_ROWS)
-        self.assertEqual(settings.TABLE_GENERATION, 2)
-        self.assertEqual(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
+        # 3 on purpose (orchestration-protocol-v1 C.3): two routing roles were
+        # added, which raises the generation without a row's own generation.
+        self.assertEqual(settings.TABLE_GENERATION, 3)
+        self.assertGreater(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
         self.assertEqual(routing.ROLES, V1_ROLES)
         self.assertEqual(routing.FIELDS, ("model", "effort"))
         self.assertEqual(routing.SECTION_KEYS, ("default", "roles"))
@@ -364,7 +368,7 @@ class MergeRowsTest(_TempSettings):
         self.assertEqual(data["merge"], {"auto": True, "wait_seconds": 3600, "poll_seconds": 30})
         for key, value in (("merge.auto", True), ("merge.wait_seconds", 3600), ("merge.poll_seconds", 30)):
             self.assertEqual(data["_defaults_written"][key], {"value": value, "generation": 2})
-        self.assertEqual(data["_table_generation"], 2)
+        self.assertEqual(data["_table_generation"], 3)
         for key in [key for key in data if key not in ("merge", "_defaults_written", "_table_generation")]:
             self.assertEqual(data[key], old[key], key)
         self.assertEqual({key: value for key, value in data["_defaults_written"].items()
@@ -485,12 +489,12 @@ class UnknownKeyTest(_TempSettings):
 
     def test_a_newer_release_s_file_says_so(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 3
+        data["_table_generation"] = 4
         data["forge"]["new_thing"] = 1
         _write(self.path, data)
         _loaded, err = self.stderr_of(settings.load, self.path)
         self.assertIn("forge.new_thing", err)
-        self.assertIn("last filled by a newer Controller release (table generation 3", err)
+        self.assertIn("last filled by a newer Controller release (table generation 4", err)
 
 
 class CleanTest(_TempSettings):
@@ -569,13 +573,13 @@ class CleanTest(_TempSettings):
 
     def test_clean_refuses_a_file_filled_by_a_newer_release(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 3
+        data["_table_generation"] = 4
         data["run"]["speed"] = "fast"
         _write(self.path, data)
         before = self.path.read_bytes()
         with self.assertRaises(SettingsError) as ctx:
             settings.clean(self.path)
-        self.assertIn("table generation 3", ctx.exception.message)
+        self.assertIn("table generation 4", ctx.exception.message)
         self.assertIn("newest installed release", ctx.exception.message)
         self.assertEqual(ctx.exception.evidence["key"], "_table_generation")
         self.assertEqual(self.path.read_bytes(), before)
@@ -680,6 +684,32 @@ class SharedRoutingTest(_TempSettings):
             loaded, _err = self.stderr_of(settings.load, self.path)
             route = routing.resolve_route("new-role", config=loaded.routing_config)
             self.assertEqual((route.model, route.model_source), ("m-new", "config-role"))
+
+    def test_a_file_filled_by_this_release_is_readable_by_a_1_6_0_shaped_release(self) -> None:
+        """orchestration-protocol-v1 C.3: this release's table generation
+        (3) and its two protocol roles, read by a release that has neither
+        (generation 2, the nine roles of ``V1_ROLES`` before the change)."""
+        old_roles = routing.ROLES - {"prepare-functional-review", "apply-functional-review"}
+        settings.fill(self.path)
+        data = _read(self.path)
+        self.assertEqual(data["_table_generation"], 3)
+        data["routing"]["roles"] = {"apply-functional-review": {"model": "m-fix"}, "review-plan": {"model": "m-rp"}}
+        _write(self.path, data)
+        before = self.path.read_bytes()
+        with _release(settings.TABLE, 2, old_roles):
+            loaded, err = self.stderr_of(settings.load, self.path)
+            self.assertIn("routing.roles.apply-functional-review", err)
+            self.assertIn("table generation 3", err)
+            route = routing.resolve_route("review-plan", config=loaded.routing_config)
+            self.assertEqual((route.model, route.model_source), ("m-rp", "config-role"))
+            settings.fill(self.path)
+            self.assertEqual(self.path.read_bytes(), before)
+            with self.assertRaises(SettingsError):
+                settings.clean(self.path)
+            self.assertEqual(self.path.read_bytes(), before)
+        loaded, _err = self.stderr_of(settings.load, self.path)
+        route = routing.resolve_route("apply-functional-review", config=loaded.routing_config)
+        self.assertEqual((route.model, route.model_source), ("m-fix", "config-role"))
 
     def test_release_n_still_refuses_what_is_malformed(self) -> None:
         for routing_section, key in (

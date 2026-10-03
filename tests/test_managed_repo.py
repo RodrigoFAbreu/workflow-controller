@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import managed_repo  # noqa: E402
+from controller import managed_repo, protocol  # noqa: E402
 from controller.errors import (  # noqa: E402
     DriftedInstallationError,
     MalformedInstallationManifestError,
@@ -34,6 +34,7 @@ from controller.errors import (  # noqa: E402
     UnsupportedInstallProfileError,
     UnsupportedWorkflowVersionError,
     WorkflowManagerUnavailableError,
+    WorkflowProtocolFailedError,
 )
 from tests import fixtures  # noqa: E402
 
@@ -220,8 +221,9 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
             self.assertEqual(result.profile, "full")
             self.assertIn("workflow 2.6.0", result.verify["stdout"])
 
-    def test_2_7_0_refuses_outside_supported_line(self) -> None:
-        """Keeps the line predicate a set of lines rather than a floor."""
+    def test_2_7_0_without_a_protocol_script_refuses_no_protocol(self) -> None:
+        """Was ``test_2_7_0_refuses_outside_supported_line``: a release newer
+        than the supported lines is admitted only through the protocol."""
         with tempfile.TemporaryDirectory() as td:
             repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version="2.7.0")
             stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
@@ -230,7 +232,7 @@ class UnsupportedWorkflowVersionTest(unittest.TestCase):
             evidence = ctx.exception.evidence
             self.assertEqual(evidence["observed_workflow_version"], "2.7.0")
             self.assertEqual(evidence["supported_workflow_lines"], ["2.5", "2.6"])
-            self.assertEqual(evidence["reason"], "outside_supported_line")
+            self.assertEqual(evidence["reason"], "no_protocol")
             self.assertNotIn("supported_workflow_line", evidence)
 
     def test_2_6_1_refuses_unvalidated(self) -> None:
@@ -409,3 +411,145 @@ class InstalledWorkflowVersionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _protocol_target(td: str, *, release: str = "2.7.0", edit=None) -> tuple[Path, Path]:
+    """A committed target carrying the vendored 2.7.0 release, its record
+    listing the release's files; ``edit(root)`` may change it before the
+    commit (the stub manager stands in for ``verify``, which would catch it)."""
+    root = Path(td) / "repo"
+    fixtures.git_init(root)
+    fixtures.install_workflow_release(root, "2.7.0")
+    if release != "2.7.0":
+        record = root / ".workflow-manager" / "installation.json"
+        record.write_text(record.read_text().replace('"workflow_version": "2.7.0"',
+                                                     f'"workflow_version": "{release}"'))
+        script = root / "scripts" / "workflow_protocol.py"
+        script.write_text(script.read_text().replace('WORKFLOW_RELEASE = "2.7.0"',
+                                                     f'WORKFLOW_RELEASE = "{release}"'))
+    if edit is not None:
+        edit(root)
+    fixtures.commit_all(root, "install")
+    stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager", release=release)
+    return root, stub
+
+
+class ProtocolAdmissionTest(unittest.TestCase):
+    def test_2_7_0_is_admitted_in_protocol_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td)
+            result = managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertEqual(result.workflow_version, "2.7.0")
+            self.assertEqual(result.target_protocol, {"major": 1, "version": "1.0", "release": "2.7.0"})
+            self.assertIn("scripts/workflow_protocol.py", result.script_digests)
+            self.assertIn("scripts/workflow_state.py", result.script_digests)
+            self.assertNotIn("scripts/workflow_state_test.py", result.script_digests)
+
+    def test_legacy_releases_have_no_protocol_identity(self) -> None:
+        for release in ("2.5.1", "2.6.0"):
+            with self.subTest(release=release), tempfile.TemporaryDirectory() as td:
+                repo = fixtures.build_managed_repo(Path(td) / "repo", workflow_version=release)
+                stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager", release=release)
+                result = managed_repo.inspect(repo, manager_bin=str(stub))
+                self.assertIsNone(result.target_protocol)
+                self.assertIsNone(result.script_digests)
+
+    def test_a_bumped_release_stand_in_is_admitted(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td, release="2.7.1")
+            result = managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertEqual(result.workflow_version, "2.7.1")
+            self.assertEqual(result.target_protocol["release"], "2.7.1")
+
+    def test_an_extra_sibling_module_is_admitted_with_its_digest_recorded(self) -> None:
+        def edit(root: Path) -> None:
+            script = root / "scripts" / "workflow_protocol.py"
+            script.write_text(script.read_text().replace("import workflow_state  # noqa: E402",
+                                                         "import workflow_state  # noqa: E402\nimport workflow_extra  # noqa: E402"))
+            (root / "scripts" / "workflow_extra.py").write_text("VALUE = 1\n")
+            record = root / ".workflow-manager" / "installation.json"
+            data = json.loads(record.read_text())
+            data["managed"]["scripts/workflow_extra.py"] = {"sha256": "0" * 64, "executable": False}
+            record.write_text(json.dumps(data))
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td, edit=edit)
+            result = managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertIn("scripts/workflow_extra.py", result.script_digests)
+
+    def test_a_missing_sibling_module_is_refused_naming_it(self) -> None:
+        def edit(root: Path) -> None:
+            (root / "scripts" / "workflow_fingerprint.py").unlink()
+            record = root / ".workflow-manager" / "installation.json"
+            data = json.loads(record.read_text())
+            del data["managed"]["scripts/workflow_fingerprint.py"]
+            record.write_text(json.dumps(data))
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td, edit=edit)
+            with self.assertRaises(WorkflowProtocolFailedError) as ctx:
+                managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertIn("workflow_fingerprint", str(ctx.exception))
+            self.assertEqual(ctx.exception.evidence["missing_module"], "workflow_fingerprint")
+
+    def test_a_non_workflow_symlink_in_scripts_does_not_block_admission(self) -> None:
+        def edit(root: Path) -> None:
+            (root / "scripts" / "extra.py").symlink_to("/etc/hostname")
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td, edit=edit)
+            result = managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertNotIn("scripts/extra.py", result.script_digests)
+
+    def test_a_release_without_the_protocol_script_is_refused_no_protocol(self) -> None:
+        for managed in (None, "text", {"scripts/workflow_state.py": {}}):
+            with self.subTest(managed=managed), tempfile.TemporaryDirectory() as td:
+                repo = fixtures.build_bare_git_repo(Path(td) / "repo")
+                fixtures.write_installation_manifest(repo, workflow_version="2.7.0", managed=managed)
+                fixtures.commit_all(repo, "m")
+                stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager")
+                with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+                    managed_repo.inspect(repo, manager_bin=str(stub))
+                self.assertEqual(ctx.exception.evidence["reason"], "no_protocol")
+
+    def test_protocol_major_2_is_refused(self) -> None:
+        def edit(root: Path) -> None:
+            script = root / "scripts" / "workflow_protocol.py"
+            script.write_text(script.read_text().replace("PROTOCOL_MAJOR = 1", "PROTOCOL_MAJOR = 2"))
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td, edit=edit)
+            with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+                managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertEqual(ctx.exception.evidence["reason"], "unsupported_protocol_major")
+
+    def test_a_listed_protocol_script_that_is_a_symlink_is_refused_naming_it(self) -> None:
+        def edit(root: Path) -> None:
+            script = root / "scripts" / "workflow_protocol.py"
+            script.rename(root / "scripts" / "elsewhere.txt")
+            script.symlink_to("elsewhere.txt")
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = _protocol_target(td, edit=edit)
+            with self.assertRaises(WorkflowProtocolFailedError) as ctx:
+                managed_repo.inspect(root, manager_bin=str(stub))
+            self.assertEqual(ctx.exception.evidence["path"], "scripts/workflow_protocol.py")
+
+
+class ProtocolIdentityTest(unittest.TestCase):
+    def test_a_non_workflow_script_edit_leaves_the_identity_equal(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, _stub = _protocol_target(td)
+            (root / "scripts" / "extra.py").write_text("A = 1\n")
+            first = protocol.identity(root)
+            (root / "scripts" / "extra.py").write_text("A = 2\n")
+            second = protocol.identity(root)
+            self.assertEqual(first, second)
+            self.assertEqual(first.release, "2.7.0")
+
+    def test_an_edited_managed_script_changes_the_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, _stub = _protocol_target(td)
+            first = protocol.identity(root)
+            state = root / "scripts" / "workflow_state.py"
+            state.write_text(state.read_text() + "\n# edited\n")
+            second = protocol.identity(root)
+            self.assertNotEqual(first, second)
+            self.assertEqual(first.release, second.release)
+            changed = {key for key in first.digests if first.digests[key] != second.digests[key]}
+            self.assertEqual(changed, {"scripts/workflow_state.py"})

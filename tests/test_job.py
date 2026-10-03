@@ -2113,6 +2113,10 @@ class ProseOverStateTest(_LifecycleCase):
     def test_worker_result_prose_feeds_only_the_report(self) -> None:
         readers = []
         for path in sorted((REPO_ROOT / "controller").glob("*.py")):
+            if path.name == "protocol.py":
+                # The Workflow protocol client's `Envelope.result` is the
+                # protocol's own answer, never a worker's prose.
+                continue
             tree = ast.parse(path.read_text())
             for func in ast.walk(tree):
                 if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):

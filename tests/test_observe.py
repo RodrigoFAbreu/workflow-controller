@@ -1148,6 +1148,27 @@ class StatusJobSummaryTest(unittest.TestCase):
                 self.assertEqual(observe.job_summary_text(entry),
                                  "j-1 GATE_BLOCKED no command (work item none): wall 1200 s")
 
+    def test_a_protocol_job_shows_its_reconcile_class_and_invalid_reasons(self) -> None:
+        # Orchestration-protocol-v1 F: additive, for a protocol record only.
+        invalid = {"reconcile": {"class": "invalid", "invalid_reasons": [
+            {"code": "phase_regressed", "text": "the phase went back"}]}}
+        entry = observe.job_summary(self._record("j-1", job.STATUS_FAILED, protocol=invalid), now=self.NOW)
+        self.assertEqual((entry["reconcile_class"], entry["invalid_reasons"]),
+                         ("invalid", [{"code": "phase_regressed", "text": "the phase went back"}]))
+        self.assertEqual(observe.job_summary_text(entry),
+                         "j-1 FAILED /milestone-implement wi-1 (work item wi-1) [reconcile invalid: phase_regressed]: "
+                         "wall 1200 s")
+        entry = observe.job_summary(self._record("j-2", job.STATUS_FINISHED, protocol={
+            "reconcile": {"class": "progress", "invalid_reasons": []}}), now=self.NOW)
+        self.assertTrue(observe.job_summary_text(entry).startswith(
+            "j-2 FINISHED /milestone-implement wi-1 (work item wi-1) [reconcile progress]:"))
+        pending = observe.job_summary(self._record("j-3", job.STATUS_LAUNCHED, protocol={"reconcile": None}),
+                                      now=self.NOW)
+        self.assertEqual((pending["reconcile_class"], pending["invalid_reasons"]), (None, []))
+        self.assertNotIn("[reconcile", observe.job_summary_text(pending))
+        legacy = observe.job_summary(self._record("j-4", job.STATUS_FINISHED), now=self.NOW)
+        self.assertNotIn("reconcile_class", legacy)
+
     def test_unknown_times(self) -> None:
         entry = observe.job_summary(self._record("j-1", job.STATUS_LAUNCHED, created_at=None), now=self.NOW)
         self.assertTrue(observe.job_summary_text(entry).endswith(": age unknown"))

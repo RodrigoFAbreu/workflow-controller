@@ -2,110 +2,49 @@
 
 ## Status
 
-**Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section
-11.3) reached `MILESTONE_COMPLETE` on 2026-10-03. When a repository opts in
-(`milestone_branches.pull_request.auto_merge`) and the operator's settings have not turned it off
-(`merge.auto`), the Controller now finishes an accepted milestone by itself:
-- **it merges**: one head-bound `gh pr merge --squash --match-head-commit <A>` per attempt at the
-  acceptance commit, never GitHub's own auto-merge request; a draft, a later commit, a red check or
-  a conflict stops it at a gate that names the exit (`merge_pending`, `merge_held`);
-- **it waits for the release**: it classifies the squash commit read-only, waits for the
-  publishing workflow, records the published release or stops at `release_failed`
-  (`release_pending`, `release_failed`);
-- **it closes out and stops**, instead of planning the next milestone in the same run;
-- **`run` waits without a worker**: the pending gates are polled every `merge.poll_seconds` for up
-  to `merge.wait_seconds` per step; `status`, `status --json` and `inspect` show the merge and the
-  release (`docs/adr/0009-auto-merge-and-release-wait.md`).
+**Complete.** `workflow-controller-orchestration-protocol-v1` (`docs/ROADMAP.md` step C9, section 1.7)
+reached `MILESTONE_COMPLETE` on 2026-10-03. The Controller now drives a Workflow that answers
+Orchestration Protocol major 1 (Workflow 2.7.0) through the protocol: it is admitted by capability
+(the installation record lists `scripts/workflow_protocol.py` and `describe` answers major 1), the
+next action and gates come from `next-action` bound to a state identity checked again before a
+launch, and progress comes from `reconcile`. Workflow 2.5.1 and 2.6.0 behave exactly as under 1.6.0.
+It launches three things 1.6.0 never did on a protocol target (the external-review apply, the
+functional-review checklist, and applying functional findings), and `AMENDING_PLAN` launches
+`/milestone-plan` instead of exiting 15. The 1.7.0 release notes are in the archive's
+`## Release notes` section.
 
-A policy without the key behaves exactly as 1.5.0 (plan I1).
+The user accepted it in functional review round 1 (implementation revision 4), against checklist
+evidence commit `f668606f59bd0006f3667b628133f4ff4a472e04`, with no functional findings.
+- Plan revision 11 was approved at `8b29d66` (amendment 0: the artifacts declaration and the
+  checkpoint anchors only). The base commit is `97b85f0`.
+- Technical approval `25adda4` (`EXTERNAL_APPROVE` of bundle `6f6770bd`, review content id
+  `a9429a2b`, reviewed implementation head `9919f92`) is `CURRENT`. The last fixes bound protocol
+  operations to the executed bytes, kept unknown digests unknown, ordered same-second jobs and gave
+  scratch test repositories their own Git identity (I1-I4).
 
-The user accepted it in functional review round 3 (implementation revision 11), against checklist
-evidence commit `5f95a08d66d09509f789084bf6deb4149ee0521a`.
-- Plan revision 7 was approved at `a06aeb3` (`EXTERNAL_APPROVE`, review content id `fcdfd33b`).
-  Decision 9 deliberately departs from the roadmap's wording: the Controller sends its own
-  head-bound squash merge rather than enabling GitHub's auto-merge, which could merge a later
-  push. Decision 2 (stop after close-out when opted in) was raised at approval.
-- Implementation revisions 1-5 were revised after local and Codex review rounds; the fixes include
-  deciding an accepted merge before the pull request's lagging reads (`5689d82`), a fresh merge
-  record on `--new-pr` (`c8dae39`), deciding a lost merge reply from the trunk rather than refusal
-  text (`4fd9bbe`) and adopting a trunk squash only when its content is the acceptance commit's
-  (`a595551`). Both stages approved revision 6 (technical approval `3d875a7`).
-- Functional review round 1 (checklist `10a6efd`) found F1-F6 (gate texts, the guides, Ctrl-C in a
-  waiting run, the fake `gh`'s merge texts against real `gh` in the optional live flow Q). They
-  were fixed in revisions 7-8; revision 9 names a waiting run in exit 45 only when it holds the
-  lifecycle lock (`c89f2ba`) and revision 10 tests it (`9efa17c`); technical approval `08dd5c1`.
-- Functional review round 2 (checklist `15f7823`) found R2-F1: the F6 body rewording reached
-  bindings without `auto_merge`, against I1. Fixed in `7f24c3a` (implementation revision 11); both
-  stages approved it (technical approval `6e4e991`, `EXTERNAL_APPROVE` of bundle `0b2b25f3`,
-  `CURRENT`). Functional review round 3 re-ran flows D, E, K, M and O, and it was clean.
-
-All six registry checkpoints (`CP1`-`CP6`) are `COMPLETE`, and the registry declares no completion
-obligations. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of this transition,
-and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks section 11.3 and step C4 of "At a
+All registry checkpoints are `COMPLETE`, and the registry's completion obligations derive `PASS`.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of this transition, and
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks section 1.7 and step C9 of "At a
 glance" complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-auto-merge-release-wait.md`. It covers the goal,
-checkpoint progress, the review-round fixes, functional review round 3's checklist and the 1.6.0
-release notes.
-
-This milestone's own deliverables remain live in the tree, unmoved (the archive file's own preface
-says why):
-- `docs/ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md` and its registry, artifacts and
-  mapping files, still at the paths its `docs/ai-workflow/WORKFLOW_STATE.json` entry declares;
-- the changes to `controller/milestone_branch.py`, `cli.py`, `decision.py`, `forge.py`, `job.py`,
-  `lock.py`, `observe.py`, `release_txn.py`, `repo_policy.py` and `settings.py`;
-- the fake `gh`'s merge, merge-state, workflow-run and release model (`tests/fake_gh.py`), the
-  regenerated `tests/golden/no_policy_lifecycle.json`, and the additions to `tests/test_cli.py`,
-  `test_evidence.py`, `test_forge.py`, `test_lock.py`, `test_no_rewrite_invariants.py`,
-  `test_observe.py`, `test_pull_request_lifecycle.py`, `test_release_txn.py`,
-  `test_repo_policy.py`, `test_settings.py` and `test_trunk_preflight.py`;
-- `docs/adr/0009-auto-merge-and-release-wait.md`; `README.md`; `docs/guide/milestone-branches.md`,
-  `automation.md`, `ci-and-releases.md`, `commands.md`, `concepts.md`, `runtime.md` and
-  `troubleshooting.md`, and `docs/README.md`.
-
-`.workflow-controller/policy.json`, `pyproject.toml`, `setup.py` and `.github/workflows/` are
-unchanged from the base `854d25c` (plan I9: this repository does not opt in yet).
+`docs/milestones/completed/workflow-controller-orchestration-protocol-v1.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Release 1.6.0.** The milestone branch is on Draft PR #18, titled
-  `feat: auto-merge an accepted milestone and wait for its release`. The pushed head is `5f95a08`;
-  this acceptance commit is local only. This repository has not opted in to `auto_merge`, so the
-  release goes the 1.5.0 way: the next Controller step pushes it and runs readiness. Once every
-  check passes, the PR is marked ready and merged with "Squash and merge", without editing the
-  commit message. `main.yml` then classifies `RELEASE_DUE` 1.6.0 from `v1.5.0` and publishes it,
-  and the next Controller step closes the milestone out (`MERGED_SQUASHED` → `CLOSED`).
-- **Install timing.** 1.6.0 goes into the shared install only between Workflow Manager milestones
-  (shared lane plan), since the Manager lane's Controller runs from it.
-- **The post-C4 docs pull request**:
-  - `docs/releases/1.6.0.md` from the archived narrative's `## Release notes` section (release notes
-    are still not turned on in `.workflow-controller/policy.json`);
-  - the roadmap order the user set on 2026-10-02: C9, then C8, then C5, then C6, C7, C10 and C11.
-    C8 before C7 means C8 tracks Claude's limits on its own and reads Codex's without the C7 seam,
-    or defers the Codex part; C8's plan says which;
-  - in `AMENDING_PLAN`, `run` declines `/milestone-plan` (exit 15) because no `ExpectedOutcome` is
-    declared for (`AMENDING_PLAN`, `"2.2"`, `/milestone-plan`), reported by the Manager lane on
-    2026-10-02; it sits next to the `explain` item already listed under "Known follow-ups carried
-    forward";
-  - two CI timing flakes in code this milestone did not touch, both passing on a re-run:
-    `tests.test_resume.ReattachAfterControllerLossTest.test_r15` and
-    `tests.test_worker.OwnershipTest.test_a_gated_escapee_is_published_as_group_then_as_tag`;
-  - a CP3 supervise test can leak its fake worker (`tests/fake_claude.py`) under load, which left
-    a Controller job draining for three hours on 2026-10-02.
-- Opting this repository in to `auto_merge` (and to release notes) is a later small `chore:` pull
-  request, after 1.6.0 is released and installed into the shared install.
-- Left as the plan scoped them: the fix loop for a red pull request after acceptance and automatic
-  acceptance (C10), integrating `main` into a milestone branch, merge mode and merge queues,
-  publishing or retrying a release, and notifications (C5). A close-out from the trunk does not
-  fast-forward `main`, as in 1.5.0.
-- `tests/golden/generate_plan_stage_decisions.py --check` (without `--release`) reports that its
-  `AMENDING_PLAN` cases differ in this environment. It does the same at the base, so this milestone
-  did not change it, and `tests.test_golden_plan_stage_decisions` passes.
+- **Release 1.7.0.** The milestone branch is on Draft PR #21, titled
+  `feat: drive Workflow through Orchestration Protocol v1, decisions then outcomes`. This acceptance
+  commit is local only. The next Controller step pushes it and runs readiness; once every check
+  passes, the PR is marked ready and merged with "Squash and merge", without editing the commit
+  message. `main.yml` then classifies `RELEASE_DUE` 1.7.0 and publishes it, and the next Controller
+  step closes the milestone out.
+- **Install timing.** 1.7.0 goes into the shared install only between Workflow Manager milestones
+  (shared lane plan). The Manager waits for C9 before installing Workflow 2.7.0 in Controller-driven
+  repos.
+- **The post-C9 docs pull request**: `docs/releases/1.7.0.md` from the archived narrative's
+  `## Release notes` section, and the roadmap's follow-ups.
 - Carried over, unchanged: the deferred items of the earlier milestones, listed in their
   acceptance commits.
 
-**Next action:** release 1.6.0 as above, then merge the post-C4 docs pull request. After close-out,
-run `/milestone-plan` for step C9 of "At a glance": the Controller on Orchestration Protocol v1
-(section 1.7), which the user put next on 2026-10-02. Its dependency W1, Workflow 2.7.0, was
-published on 2026-10-02. (The roadmap table still lists C5 next until the docs pull request
-reorders it.) Plan it from `main`'s tip, with that base passed explicitly
-(`/milestone-plan <main tip>`). `/milestone-plan` creates a fresh `work_items` entry and claims
-`active_work_item_id`, ready for `PLANNING`.
+**Next action:** release 1.7.0 as above, then merge the post-C9 docs pull request. After close-out,
+run `/milestone-plan` for step C8 of "At a glance" (usage budget, section 11.6), the user's order
+of 2026-10-02 (C9, C8, C5, then C6, C7, C10, C11). Plan it from `main`'s tip, with that base passed
+explicitly (`/milestone-plan <main tip>`). `/milestone-plan` creates a fresh `work_items` entry and
+claims `active_work_item_id`, ready for `PLANNING`.

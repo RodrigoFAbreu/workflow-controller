@@ -453,6 +453,7 @@ def write_installation_manifest(
     include_schema_version: bool = True,
     include_workflow_version: bool = True,
     include_profile: bool = True,
+    managed: object = None,
 ) -> Path:
     """Write ``.workflow-manager/installation.json`` under ``root``. Every
     field the malformed-manifest tests need to omit or corrupt is an
@@ -467,6 +468,8 @@ def write_installation_manifest(
         manifest["workflow_version"] = workflow_version
     if include_profile:
         manifest["profile"] = profile
+    if managed is not None:
+        manifest["managed"] = managed
     (manifest_dir / "installation.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest_dir / "installation.json"
 
@@ -685,7 +688,13 @@ def install_workflow_release(root: Path, release: str, *, profile: str = "full")
         dest = root / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(tree / rel_path, dest)
-    write_installation_manifest(root, workflow_version=release, profile=profile)
+    managed = None
+    if "scripts/workflow_protocol.py" in workflow_release_files(release):
+        # A release that ships the orchestration protocol: the record lists
+        # its files, as Workflow Manager's does, and the Controller takes the
+        # protocol's script set from that list (never from a directory).
+        managed = {path: dict(entry) for path, entry in workflow_release_files(release).items()}
+    write_installation_manifest(root, workflow_version=release, profile=profile, managed=managed)
     return root
 
 
@@ -968,15 +977,26 @@ def build_target_git_repo(root: Path) -> Path:
     return root
 
 
+def admitted_script_digests(root: Path) -> dict[str, str]:
+    """The managed-script digest map ``managed_repo.inspect`` would admit ``root`` under."""
+    from controller import protocol
+    return dict(protocol.script_set(root, protocol.read_managed(root)).digests)
+
+
 def commit_all(root: Path, message: str, *, allow_empty: bool = False) -> str:
     """Stage everything under ``root`` and commit it (or, with
     ``allow_empty``, commit with nothing staged -- the round-scoped
     functional-checklist evidence fixture's own shape), returning the new
     commit's full SHA."""
     run(["git", "add", "-A"], cwd=root)
-    args = ["git", "commit", "-q", "-m", message]
+    # A scratch repository must not depend on the host's global identity: supply the
+    # tests' own one only where the repository (or the host) configures none.
+    identity: list[str] = []
+    if not run(["git", "config", "user.email"], cwd=root, check=False).stdout.strip():
+        identity = ["-c", "user.name=Controller Tests", "-c", "user.email=controller-tests@example.invalid"]
+    args = ["git", *identity, "commit", "-q", "-m", message]
     if allow_empty:
-        args = ["git", "commit", "-q", "--allow-empty", "-m", message]
+        args = ["git", *identity, "commit", "-q", "--allow-empty", "-m", message]
     run(args, cwd=root)
     return run(["git", "rev-parse", "HEAD"], cwd=root).stdout.strip()
 

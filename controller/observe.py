@@ -972,7 +972,7 @@ def job_summary(record: Mapping, *, now: str) -> dict:
     if finished and wall is None:
         wall = telemetry.seconds_between(record.get("created_at"), record.get("updated_at"))
     cost = None if block is None or telemetry.unavailable(block) else block.get("cost_usd")
-    return {
+    summary = {
         "job_id": record.get("job_id"),
         "status": record.get("status"),
         "command": job_command(record),
@@ -983,6 +983,19 @@ def job_summary(record: Mapping, *, now: str) -> dict:
         "wall_seconds": wall if finished else None,
         "cost_usd": cost if finished else None,
     }
+    protocol_block = record.get("protocol")
+    if isinstance(protocol_block, Mapping):
+        # Orchestration-protocol-v1 F: a protocol job's reconcile class and
+        # invalid reasons (``None``/empty until reconciled). Additive: a
+        # legacy record's entry gains no key.
+        reconcile = protocol_block.get("reconcile")
+        reconcile = reconcile if isinstance(reconcile, Mapping) else {}
+        reasons = reconcile.get("invalid_reasons")
+        summary["reconcile_class"] = reconcile.get("class")
+        summary["invalid_reasons"] = [
+            {"code": reason.get("code"), "text": reason.get("text")}
+            for reason in (reasons if isinstance(reasons, list) else []) if isinstance(reason, Mapping)]
+    return summary
 
 
 def recent_jobs(records: list[dict], *, now: str, limit: int = STATUS_RECENT_JOBS) -> list[dict]:
@@ -1012,6 +1025,9 @@ def job_summary_text(entry: Mapping) -> str:
     ``...: wall 1400 s, cost $11.66`` once finished."""
     head = (f"{entry['job_id']} {entry['status']} {entry['command'] or 'no command'} "
             f"(work item {entry['work_item_id'] or 'none'})")
+    if entry.get("reconcile_class") is not None:
+        codes = [str(reason["code"]) for reason in entry.get("invalid_reasons") or []]
+        head += f" [reconcile {entry['reconcile_class']}" + (f": {', '.join(codes)}" if codes else "") + "]"
     if not entry["finished"]:
         return f"{head}: age {age_text(entry['age_seconds'])}"
     cost = "" if entry["cost_usd"] is None else f", {telemetry.money_text(entry['cost_usd'])}"

@@ -6,8 +6,8 @@
 
 | Command | Behaviour |
 |---|---|
-| `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only |
-| `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; read-only, always exits 0 |
+| `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version, the managed-script digest map and, as an advisory, any action id `describe` lists that this release does not know (`unknown_action_ids`) |
+| `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; for a protocol-mode target also the Workflow's row, disposition and action (a `protocol` block with `--json`); read-only, always exits 0 |
 | `workflow-controller step [--follow] <repo>` | execute exactly one automatic action, validate the transition, stop |
 | `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
 | `workflow-controller resume [--drain-timeout SECONDS] <repo>` | re-attach to a job whose worker still runs with no Controller supervising it and supervise it to its end, then reconcile this target's non-terminal job records and report; never launches a worker. `--drain-timeout` bounds this re-attach's drain (see [the drain bound](workers.md#owned-processes-the-daemon-list-and-the-drain-bound)) |
@@ -86,6 +86,9 @@ in order:
   first, one per line: id, status, command and work item, then
   `age 12 min` while the job is active, or `wall 1400 s, cost $11.66`
   once it has ended (the cost only when the job has telemetry figures);
+  a protocol-mode job also shows `[reconcile <class>]` once reconciled,
+  with the invalid reasons' codes after the class (`reconcile_class` and
+  `invalid_reasons` with `--json`);
 - `handoff:` a pending handoff, or `none`;
 - `active:` each running run, with its start time and its Controller's
   liveness, and each non-terminal job, with its command, work item,
@@ -165,6 +168,20 @@ each role has a built-in model and effort:
 | `review-plan` | `/review-plan` | `claude-opus-5-5` | `xhigh` | yes |
 | `review-implementation` | `/review-implementation` | `claude-opus-5-5` | `xhigh` | yes |
 | `milestone-plan`, `record-manual-plan-review`, `record-manual-implementation-review` | those commands | inherit | inherit | no |
+| `apply-functional-review` | `/apply-functional-review` (protocol mode only, 1.7.0 and later) | `claude-opus-5-5` | `xhigh` | no |
+| `prepare-functional-review` | `/prepare-functional-review` (protocol mode only, 1.7.0 and later) | inherit | inherit | no |
+
+In protocol mode the role comes from the Workflow's action id rather than
+from the command: `implementation.self_review` is
+`milestone-implement-self-review`, and each other action takes its
+command's role. The two functional-review roles exist only there, since
+legacy mode never launches either command
+([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). Both
+are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
+and the settings file's `routing` section, and `telemetry --by role`
+groups their jobs under these names. A Controller before 1.7.0 rejects
+them in a `--routing-config` file and ignores them, with a warning, in the
+settings file.
 
 "Inherit" means no flag is passed, so the `claude` CLI's own
 configuration applies. Model and effort are resolved separately, and the

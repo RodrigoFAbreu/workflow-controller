@@ -129,8 +129,10 @@ TABLE: tuple[Setting, ...] = (
 )
 
 #: The highest ``generation`` in :data:`TABLE`, raised as well by a release
-#: that adds or retires a key. Only ever increases.
-TABLE_GENERATION = 2
+#: that adds or retires a key or a routing role. Only ever increases. 3:
+#: the roles ``prepare-functional-review`` and ``apply-functional-review``
+#: (orchestration-protocol-v1 C.3).
+TABLE_GENERATION = 3
 
 
 def _table() -> dict[str, Setting]:

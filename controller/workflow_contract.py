@@ -503,6 +503,21 @@ def _run_query(
             evidence={**context, "reason": "no_workflow_query"},
         )
     sources = _verified_sources(root, contract, context)
+    return run_in_private_copy(root, sources, script, args, timeout=timeout, context=context), context
+
+
+def run_in_private_copy(
+    root: Path, sources: dict[str, bytes], script: str, args: list[str], *, timeout: float,
+    context: dict,
+) -> subprocess.CompletedProcess:
+    """Write ``sources`` (target-relative path to bytes) into a fresh private
+    directory, prepare the Git the run uses (:func:`_git_isolation`), run
+    ``script`` from the copy with ``args`` and remove the directory. Shared
+    by the Workflow queries and the orchestration protocol client
+    (``controller.protocol``): the isolation is one mechanism, not two.
+    ``context`` carries ``query`` (the operation's name in messages) and the
+    evidence both runners report; it is updated with the run. Raises only
+    :class:`WorkflowQueryError`."""
     try:
         scratch = tempfile.TemporaryDirectory(prefix=_PRIVATE_DIR_PREFIX)
     except OSError as exc:
@@ -521,7 +536,7 @@ def _run_query(
         scratch.cleanup()
     except OSError as exc:
         raise _private_copy_failed(context, "remove the private directory", exc) from exc
-    return completed, context
+    return completed
 
 
 def _verified_sources(root: Path, contract: WorkflowContract, context: dict) -> dict[str, bytes]:

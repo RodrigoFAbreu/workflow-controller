@@ -17,7 +17,7 @@
 |---|---|
 | Python 3.12 or newer | `requires-python = ">=3.12"` |
 | [pipx](https://pipx.pypa.io/) | installs the Controller into its own virtual environment, so it never runs from a checkout |
-| `git`, 2.31 or newer for a Workflow 2.6.0 target | every target repository is a Git worktree; a 2.6.0 query's Git is isolated through `GIT_CONFIG_COUNT`, which older Git ignores, so an older Git refuses the query ([Workflow's queries](automation.md#workflows-queries-260-and-later)). A target whose `core.fsmonitor` is a boolean, such as `true`, needs 2.36 or newer: an older Git runs the value as a program, so the query is refused |
+| `git`, 2.31 or newer for a Workflow 2.6.0 or protocol-mode target | every target repository is a Git worktree; a 2.6.0 query's Git, and a protocol operation's, is isolated through `GIT_CONFIG_COUNT`, which older Git ignores, so an older Git refuses the query ([Workflow's queries](automation.md#workflows-queries-260-and-later)). A target whose `core.fsmonitor` is a boolean, such as `true`, needs 2.36 or newer: an older Git runs the value as a program, so the query is refused |
 | `claude` (Claude Code CLI) | every worker is a `claude` session; `--claude-binary` points at a different one |
 | `workflow-manager` | the Controller asks it whether a target's Workflow installation is sound before doing anything |
 | `gh`, authenticated | only for repositories with a `.workflow-controller/policy.json` (milestone branches, pull requests, releases) |
@@ -32,18 +32,32 @@ the next.
 
 A target is admitted only when Workflow Manager verifies its installation and
 its `.workflow-manager/installation.json` names a Workflow release the
-Controller has been validated against
-(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`):
+Controller admits. 2.5.1 and 2.6.0 are admitted by exact release
+(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`); from 1.7.0 any
+other release is admitted by capability, when it ships the Workflow
+Orchestration Protocol:
 
 | Controller | Workflow releases admitted |
 |---|---|
-| 1.3.0 and later | 2.5.1, 2.6.0 |
+| 1.7.0 and later | 2.5.1, 2.6.0 (legacy mode); 2.7.0 and any later release with the protocol (protocol mode) |
+| 1.3.0 to 1.6.x | 2.5.1, 2.6.0 |
 | 1.2.1 and earlier | 2.5.1 |
 
-Admission is by exact release, so 2.5.0 and 2.6.1 are refused as not
-validated, and 2.7.0 as outside the supported lines
+A release with a per-release contract
+(`controller.workflow_contract.RELEASE_CONTRACTS`: 2.5.1, 2.6.0) runs in
+legacy mode, exactly as under 1.6.0. Any other release runs in protocol
+mode when its installation record's `managed` map lists
+`scripts/workflow_protocol.py` and that script's `describe` answers
+protocol major 1, as 2.7.0 does
+([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)).
+Otherwise it is refused: 2.5.0 and 2.6.1 as not validated, a release in a
+line older than 2.5 as outside the supported lines, a newer release that
+lists no protocol script as `no_protocol`, and one whose protocol is not
+major 1 as `unsupported_protocol_major`
 ([Troubleshooting](troubleshooting.md#the-repository-is-refused-as-unmanaged-or-unsupported)).
-`workflow-controller inspect <repo>` prints the release it admitted.
+`workflow-controller inspect <repo>` prints the release it admitted. The
+design record of admission by capability is
+[ADR 0010](../adr/0010-orchestration-protocol-admission-by-capability.md).
 
 A 2.5.1 target behaves exactly as it did under 1.2.1. For a 2.6.0 target the
 Controller asks Workflow's own queries for the feedback path and for whether
@@ -190,6 +204,14 @@ Controller itself creates no linked worktrees.
 
 Rolling the Controller back to 1.2.1 refuses a target already on 2.6.0
 (`UNSUPPORTED_WORKFLOW_VERSION`, exit `20`); see [Roll back](#roll-back).
+
+**To 2.7.0 (protocol mode).** Install Controller 1.7.0 or later first; an
+older one refuses 2.7.0. The steps are the ones above, with `2.7.0` in
+place of `2.6.0`. A step admitted under 2.6.0 that finds 2.7.0 installed
+refuses with `WORKFLOW_RELEASE_CHANGED` and launches nothing; the next
+invocation admits 2.7.0 and continues in protocol mode. Do not update
+while a worker runs: a job decided under one release is never reconciled
+under another, and ends `FAILED` `workflow_release_changed`.
 
 ## Install from a checkout
 

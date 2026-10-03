@@ -190,7 +190,7 @@ entries are shortened):
 ```json
 {
   "_defaults_written": {"merge.auto": {"generation": 2, "value": true}, "...": "..."},
-  "_table_generation": 2,
+  "_table_generation": 3,
   "follow": {"heartbeat_seconds": 30, "replay_events": 20},
   "forge": {"pr_list_limit": 200},
   "merge": {"auto": true, "poll_seconds": 30, "wait_seconds": 3600},
@@ -242,6 +242,14 @@ when all three hold:
 1.6.0 is table generation 2: it adds the three `merge` rows to a file
 filled by 1.5.0, and moves nothing else. A 1.5.0 Controller sharing the
 file afterwards warns about the unknown `merge` section, ignores it,
+and its `settings clean` refuses.
+
+1.7.0 is table generation 3: it adds no key and moves no value, but it
+adds two routing roles (`prepare-functional-review`,
+`apply-functional-review`), so a file it fills records
+`"_table_generation": 3`. A 1.6.0 Controller sharing the file afterwards
+uses it as before; it warns only about a key it does not know, such as an
+entry for one of the two roles under `routing.roles`, which it ignores,
 and its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to

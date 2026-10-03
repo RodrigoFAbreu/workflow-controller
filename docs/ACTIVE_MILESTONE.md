@@ -34,6 +34,32 @@ below describes the previous milestone (C4) and is kept until this one is accept
   Tests: `tests/test_managed_repo.py` (`ProtocolAdmissionTest`, `ProtocolIdentityTest`); the 2.7.0
   case in `test_managed_repo` and `test_cli` now expects `no_protocol` on purpose.
 
+- **CP3, decisions from `next-action`** -- `controller/protocol_decision.py` turns the Workflow's own
+  `next-action` answer into the existing `Decision` (plus a `protocol` attribute carrying the answer as
+  received, its row, state identity and release). `automatic` with a known action id, a worker role the
+  Controller knows and a non-`user_only` worker launches; `human_gate`/`external_gate` and `blocked` are
+  gates carrying the Workflow's reason, remedy and alternatives; `complete` is the no-action outcome;
+  `validation` and any unknown disposition, action id or worker role are blocked gates
+  (`workflow_unknown_*`). `PROTOCOL_ACTIONS` names the twelve automatic ids with a command token and a
+  route key; the worker's command is rendered from it (`/<command> <work_item_id>`, plus the Controller's
+  own base for `plan.start`), and an `invocation` that differs from the rendering is blocked
+  `workflow_invocation_mismatch`. Two routing roles, `prepare-functional-review` (inherit) and
+  `apply-functional-review` (Opus), join `routing.ROLE_ROUTES`/`ROLES` only (not `ROLE_BY_COMMAND_STEM`),
+  and `settings.TABLE_GENERATION` is 3. 1.6.0's committed-state gate applies in its own scope only.
+  A protocol target never enters `evidence.decide` (`job._execute_step_locked`, `cli explain`); its
+  pre-state reads no lifecycle file. `explain` shows the row, disposition and action (additive).
+  **Interim, removed by CP5:** `job._protocol_launch_unavailable` declines every protocol launch, because
+  nothing verifies a protocol job's outcome until CP5's protocol branch of `_verify_transition`; the job
+  record's `protocol` block and the currency checks are CP4's.
+  The equivalence comparison (`tests/golden/generate_protocol_vs_legacy_differences.py`, table
+  `tests/golden/protocol_vs_legacy_differences.json`) runs 58 fixture repositories through 1.6.0 and the
+  protocol and holds exactly the seven observable differences D1-D7, each asserted by name.
+  Tests: `tests/test_protocol_decision.py`, `tests/test_protocol_equivalence.py`; the pins changed on
+  purpose are `tests/test_routing.py` (the role set) and `tests/test_settings.py` (`V1_ROLES`,
+  `TABLE_GENERATION == 3`, plus a file filled by this release read by a 1.6.0-shaped release).
+  `tests/test_job.py`'s `worker_result_prose_feeds_only_the_report` now skips `protocol.py`, whose
+  `Envelope.result` is the protocol's answer (it failed at CP1/CP2). Full suite: 2939 tests pass.
+
 ## Status
 
 **Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section

@@ -62,6 +62,11 @@ REVIEW_IMPLEMENTATION = "review-implementation"
 MILESTONE_PLAN = "milestone-plan"
 RECORD_MANUAL_PLAN_REVIEW = "record-manual-plan-review"
 RECORD_MANUAL_IMPLEMENTATION_REVIEW = "record-manual-implementation-review"
+#: The two roles only a protocol target reaches (orchestration-protocol-v1
+#: C.3): the legacy decision path never launches either command, so neither
+#: is in :data:`ROLE_BY_COMMAND_STEM`.
+PREPARE_FUNCTIONAL_REVIEW = "prepare-functional-review"
+APPLY_FUNCTIONAL_REVIEW = "apply-functional-review"
 
 #: The built-in model and effort of the named lifecycle roles.
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -95,6 +100,11 @@ ROLE_ROUTES: Mapping[str, Route] = MappingProxyType({
     MILESTONE_PLAN: _INHERIT,
     RECORD_MANUAL_PLAN_REVIEW: _INHERIT,
     RECORD_MANUAL_IMPLEMENTATION_REVIEW: _INHERIT,
+    # It writes a checklist, as `milestone-plan` and the `record-manual-*`
+    # commands write their records.
+    PREPARE_FUNCTIONAL_REVIEW: _INHERIT,
+    # It classifies and fixes findings, as `apply-plan-review` does.
+    APPLY_FUNCTIONAL_REVIEW: _OPUS,
 })
 
 #: The closed set of role names ``--role-model``/``--role-effort`` and the

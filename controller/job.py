@@ -103,8 +103,8 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, identity, lock, milestone_branch, routing, runtime, target_state, telemetry, worker,
-    workflow_contract,
+    evidence, identity, lock, milestone_branch, protocol_decision, routing, runtime, target_state, telemetry,
+    worker, workflow_contract,
 )
 from controller.decision import (
     NO_PHASE,
@@ -355,6 +355,34 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
 
     work_item_id = work_item.work_item_id
     phase = work_item.phase
+
+    if managed_repo.target_protocol is not None:
+        # A protocol target's lifecycle files (bundle, manifest, feedback,
+        # checklist evidence) are the Workflow's to read, not the
+        # Controller's (orchestration-protocol-v1 I8): only the state's own
+        # fields are captured, and the file-derived ones are empty.
+        return {
+            "phase": phase,
+            "governing_workflow_version": work_item.governing_workflow_version,
+            "target_head": target_head,
+            "state_revision": work_item.state_revision,
+            "plan_revision": work_item.plan_revision,
+            "implementation_revision": work_item.implementation_revision,
+            "last_completed_checkpoint_id": work_item.last_completed_checkpoint_id,
+            "checkpoints": work_item.checkpoints,
+            "bundle_id": work_item.current_bundle_id,
+            "bundle_manifest_readable": False,
+            "bundle_manifest_bundle_id": None,
+            "bundle_manifest_generation_head": None,
+            "bundle_generated_digest": None,
+            "rejected_marker_present": False,
+            "child_work_item_ids": sorted(
+                wid for wid, view in snapshot.work_items.items() if view.parent_work_item_id == work_item_id),
+            "functional_review_consumed_blob": None,
+            "functional_checklist_evidence": None,
+            "pre_work_item_keys": pre_work_item_keys,
+        }
+
     bound = workflow_contract.bind_release(managed_repo.workflow_version)
 
     bundle_dir = evidence.resolve_bundle_dir(root, work_item_id, phase=phase)
@@ -4583,11 +4611,30 @@ def _branch_gate_record(runtime_root: Path, managed_repo: Any, ident: Any, snaps
                              status=STATUS_GATE_BLOCKED, run_id=run_id)
 
 
+def _protocol_launch_unavailable(decision: Decision) -> Decision:
+    """Interim, until the protocol branch of ``_verify_transition`` lands
+    (orchestration-protocol-v1 CP5): nothing yet verifies a protocol job's
+    outcome (the legacy rows need a release contract a protocol target has
+    none of), so a protocol decision that would launch is declined instead.
+    Every other part of the decision, and the Workflow's answer, is kept."""
+    return Decision(
+        observed_phase=decision.observed_phase, evidence=decision.evidence, action=decision.action,
+        automatic=False, gate=None, declined=True,
+        reason=f"{decision.reason} [declined: launching a protocol action is not enabled until its outcome "
+               "is verified through the protocol's reconcile]",
+        protocol=decision.protocol,
+    )
+
+
 def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOptions) -> routing.ResolvedRoute:
     """The launched worker's route (automatic-lifecycle-orchestration CP6):
     its role, from durable state only (the observed phase, the selected
     command and the work item's ``registry_complete``; a ``NoWorkItemYet``
     bootstrap has none), resolved against the operator's overrides."""
+    if decision.protocol is not None:
+        # A protocol job is routed by its action id's route key, never by a
+        # command stem (orchestration-protocol-v1 C.3).
+        return options.resolve(decision.protocol.route)
     registry_complete = None if work_item is target_state.NoWorkItemYet else work_item.registry_complete
     role = routing.role_for(decision.observed_phase, decision.action.command, registry_complete)
     return options.resolve(role)
@@ -4828,10 +4875,17 @@ def _execute_step_locked(
     # `last_apply_job` (automatic-lifecycle-orchestration CP4B) is the job
     # history the "2.2" APPLYING_REVIEW_FEEDBACK relaunch bound reads -- the
     # same read `cli`'s `explain` makes, so both reach the same decision.
-    decision = decide_no_work_item(managed_repo, base=preflight.base) if is_bootstrap else evidence.decide(
-        managed_repo, snapshot, work_item,
-        last_apply_job=last_launched_apply_job_view(runtime, managed_repo.root, resolved_work_item_id),
-    )
+    # A protocol target never enters `evidence.decide`: the Workflow's own
+    # `next-action` decides (orchestration-protocol-v1 C.1).
+    if managed_repo.target_protocol is not None:
+        decision = protocol_decision.decide(managed_repo, work_item, base=preflight.base)
+    elif is_bootstrap:
+        decision = decide_no_work_item(managed_repo, base=preflight.base)
+    else:
+        decision = evidence.decide(
+            managed_repo, snapshot, work_item,
+            last_apply_job=last_launched_apply_job_view(runtime, managed_repo.root, resolved_work_item_id),
+        )
 
     if decision.gate is not None:
         return _no_launch_record(
@@ -4848,6 +4902,12 @@ def _execute_step_locked(
         # gate=None, declined=False. Nothing ran, nothing is pending,
         # nothing was declined -- there is nothing to record.
         return decision
+
+    if decision.protocol is not None:
+        return _no_launch_record(
+            runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
+            _protocol_launch_unavailable(decision), status=STATUS_DECLINED, run_id=run_id,
+        )
 
     # Step 3: pending generation handoff (CP8). `handoff.py` does not
     # exist yet, so this reads the runtime root's own `handoff.json`

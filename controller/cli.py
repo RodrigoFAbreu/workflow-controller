@@ -24,10 +24,11 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, settings,
-    target_state, telemetry, worker,
+    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, protocol_decision, routing,
+    runtime, settings, target_state, telemetry, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -895,14 +896,18 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     # The same job-history read `job.execute_step` makes (automatic-
     # lifecycle-orchestration CP4B), so `explain` and `step` see the same
     # apply relaunch bound. It never raises on a job file and writes nothing.
-    decision = (
-        decide_no_work_item(target, base=None if preflight is None else preflight["base"])
-        if work_item is target_state.NoWorkItemYet
-        else evidence.decide(
+    base = None if preflight is None else preflight["base"]
+    if target.target_protocol is not None:
+        # A protocol target is decided by the Workflow's own `next-action`
+        # (orchestration-protocol-v1 C.1), read-only like `evidence.decide`.
+        decision = protocol_decision.decide(target, work_item, base=base)
+    elif work_item is target_state.NoWorkItemYet:
+        decision = decide_no_work_item(target, base=base)
+    else:
+        decision = evidence.decide(
             target, snapshot, work_item,
             last_apply_job=job.last_launched_apply_job_view(runtime_root, target.root, work_item.work_item_id),
         )
-    )
 
     if args.json:
         gate = decision.gate
@@ -927,6 +932,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             "lifecycle_lock": lock_state,
             "controller": identity.runtime_record(ident),
             **preflight_block,
+            **({} if decision.protocol is None else {"protocol": _protocol_block(decision.protocol)}),
         }))
         return EXIT_OK
 
@@ -934,6 +940,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         gate_text = "" if preflight["gate"] is None else f" ({preflight['gate']})"
         print(f"repository preflight: {preflight['action']}{gate_text} -- {preflight['detail']}")
     print(f"phase: {decision.observed_phase}")
+    if decision.protocol is not None:
+        _print_protocol(decision.protocol)
     for line in decision.evidence:
         print(f"  evidence: {line}")
     print(f"reason: {decision.reason}")
@@ -953,6 +961,31 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     else:
         print("no action at this phase (e.g. LEGACY_READY or MILESTONE_COMPLETE)")
     return EXIT_OK
+
+
+def _protocol_block(info: Any) -> dict:
+    """``explain``'s ``protocol`` block for a protocol target (additive: a
+    legacy target's output has no such key): the Workflow's row, disposition
+    and action id, the identity the decision was made at, and the
+    alternatives' invocations."""
+    return {
+        "release": info.release,
+        "protocol_version": info.protocol_version,
+        "row": info.row,
+        "disposition": info.disposition,
+        "action_id": info.action_id,
+        "state_identity": info.state_identity,
+        "route": info.route,
+        "alternatives": list(info.alternatives),
+    }
+
+
+def _print_protocol(info: Any) -> None:
+    print(f"workflow mode: protocol (Workflow {info.release}, protocol {info.protocol_version})")
+    action = "none" if info.action_id is None else info.action_id
+    print(f"  protocol row {info.row}: disposition {info.disposition}, action {action}")
+    if info.alternatives:
+        print(f"  alternatives: {', '.join(info.alternatives)}")
 
 
 def _print_pending_jobs(pending: list, details: list[dict] | None = None) -> None:

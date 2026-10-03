@@ -28,7 +28,7 @@ CONTROLLER_DIR = REPO_ROOT / "controller"
 #: index *i* may import (from `controller`) only a module at an index < i.
 DEPENDENCY_ORDER = [
     "buildinfo", "version", "errors", "conventional_commit", "repo_policy", "gitrepo", "release_notes", "forge", "runtime", "release_txn", "milestone_branch", "lock", "identity",
-    "workflow_contract", "protocol_schema", "protocol", "decision", "managed_repo", "target_state", "evidence", "routing", "settings", "anchor", "worker_stream", "worker", "telemetry", "handoff",
+    "workflow_contract", "protocol_schema", "protocol", "decision", "managed_repo", "target_state", "evidence", "protocol_decision", "routing", "settings", "anchor", "worker_stream", "worker", "telemetry", "handoff",
     "job",
     "observe",
     "cli",

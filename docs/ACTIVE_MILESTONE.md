@@ -50,7 +50,22 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
   milestone-branches preamble has a title and an intro. Every guide carries the user-page header, and
   `ACTIVE_THROUGH` is now 4, so the guides and `common-problems.md` are header-, id- and (for
   `common-problems.md`) command-checked. `tools/check_docs.py` and the documentation tests are clean.
-- CP5 entry points and verification: not started.
+- **CP5 complete.** `README.md` is rewritten around the pages: the user-page header, one paragraph on
+  the Controller, the shared three-sentence "how the pieces fit" paragraph (each piece linking its
+  repository's `#readme`, the same text the other two repositories will carry), the quick start, an
+  "I want to ..." table of the task and reference pages and the lifecycle diagram (the shipped SVG
+  until the Workflow repository's overview page exists), and short automation, milestone-branch,
+  problem and development sections (the five-row exit table is replaced by links; the `validate.yml`
+  job names and the documentation checks are under Development). `docs/README.md` carries the header,
+  an "I want to ..." map, the reference and maintainer guides, and the release, ADR and history
+  indexes (the history table now lists every completed milestone). `CLAUDE.md` names the task and
+  reference pages, the installation stub and the documentation check. `development.md` gains
+  "Documentation checks". `ACTIVE_THROUGH` is now 5, so every user page is checked. Verification:
+  `python3 tools/check_docs.py` clean; `python3 -m unittest tests.test_docs
+  tests.test_plan_document_consistency` 82 tests OK; `python3 tools/ci_workflows.py --check` clean;
+  `python3 tools/run_tests.py` 3052 tests, 7 shards PASS, coverage exact; the diff from `914d8f4`
+  touches nothing under `controller/`, `.github/`, `.workflow-controller/`, `docs/adr/`,
+  `docs/releases/`, `pyproject.toml` or `setup.py`.
 
 Earlier milestones' narratives are archived under `docs/milestones/completed/`. The last one,
 `workflow-controller-orchestration-protocol-v1` (1.7.0), is released.

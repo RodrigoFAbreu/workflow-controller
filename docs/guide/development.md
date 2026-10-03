@@ -189,6 +189,58 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.
 
+## Documentation checks
+
+`tools/check_docs.py` keeps the documentation true without a network or a
+running Controller. It uses only the standard library, and
+`tests/test_docs.py` runs it on the repository and tries every rule on
+small synthetic trees, so the checks run inside the validate job's `tests`
+shards with no workflow change.
+
+```bash
+python3 tools/check_docs.py             # exit 0 when clean, 1 with one line per problem
+python3 tools/check_docs.py --root DIR  # check another tree
+python3 -m unittest tests.test_docs
+```
+
+What it checks:
+
+- **Links and anchors.** Every relative Markdown link and `#anchor` in
+  `README.md`, `docs/*.md`, `docs/guide/`, `docs/adr/` and
+  `docs/releases/` must reach an existing file and, for a Markdown file, a
+  heading, using GitHub's anchor rule (lowercase, inline-code text kept,
+  letters, digits, underscores and hyphens preserved, a repeated heading
+  numbered `-1`, `-2`, ...). `docs/ROADMAP.md` and
+  `docs/ACTIVE_MILESTONE.md` are skipped, and so are the Workflow's own
+  records under `docs/ai-workflow/` and `docs/milestones/`. A link to
+  github.com must name one of the three repositories
+  (`workflow-controller`, `workflow-manager`, `workflow`) in a known form
+  (`#readme`, `blob/<ref>/<path>`, `tree/...`, `releases`, `issues/N`,
+  `pull/N`); any other host must be on the check's short allow-list.
+- **Commands and flags.** Every `workflow-controller` line in a fenced
+  code block of `README.md`, `docs/install.md`, `docs/run.md`,
+  `docs/update.md` and `docs/common-problems.md` is parsed with the
+  Controller's own argument parser, never run: each subcommand, option and
+  choice must exist. `--help` and `--version` are accepted without running
+  anything, but the rest of the line is still checked. `<placeholders>`
+  and shell variables are replaced by fixed words first; a block marked
+  `text` is not checked.
+- **User pages.** Each page in the check's `USER_PAGES` list opens with
+  the `> For: <reader>. Last checked with: <versions>.` line right after
+  its title, and names no internal id (checkpoint or review-finding
+  numbers, work item ids).
+- **Facts kept in one place.** The exit-code page lists exactly the
+  Controller's exit statuses (and the shell's 130 for Ctrl-C), matching
+  ADR 0001's table; the compatibility page carries exactly the pinned
+  script digests of `controller/workflow_contract.py`; the
+  `docs/guide/installation.md` stub keeps its three headings, which older
+  ADRs and release notes link to.
+
+Adding a page: put a new user page in `USER_PAGES`, and in
+`COMMAND_PAGES` too if it shows commands, with the number `ACTIVE_THROUGH`
+holds. When a release changes a page, update its "Last checked with" line
+by hand; the check only asserts the line is there and has that shape.
+
 ## Throwaway Git repositories
 
 Every Git repository a test creates goes through `fixtures.git_init` or

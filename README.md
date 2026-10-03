@@ -1,26 +1,37 @@
 # Workflow Controller
 
-Workflow Controller runs the [Workflow](docs/guide/how-it-works.md#three-pieces)
-development process on a repository for you. It reads the repository's
-Workflow state, starts a fresh Claude Code session to run the next Workflow
-command, checks the result against what is committed, and keeps going until
-it reaches a step only a human may take. Then it stops and tells you exactly
-what to do.
+> For: anyone new to the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
+Workflow Controller runs the Workflow development process on a repository for
+you. It reads the repository's Workflow state, starts a fresh Claude Code
+session to run the next Workflow command, checks the result against what is
+committed, and keeps going until it reaches a step only a person may take. Then
+it stops and tells you exactly what to do. It never writes Workflow state
+itself, never runs a command reserved for a person, never trusts a worker's own
+account of what it did, and merges a pull request only when the repository opts
+in, and then only the accepted commit.
+
+**How the pieces fit.** [Workflow](https://github.com/RodrigoFAbreu/workflow#readme)
+is the development process and its commands, installed into a repository.
+[Workflow Manager](https://github.com/RodrigoFAbreu/workflow-manager#readme)
+installs, updates and verifies the Workflow from published, digest-pinned
+releases. [Workflow Controller](https://github.com/RodrigoFAbreu/workflow-controller#readme)
+runs the Workflow's lifecycle steps automatically and stops at every
+approval gate.
 
 ```text
 Workflow  ->  Workflow Manager  ->  Workflow Controller  ->  your repository
 (the rules)   (installs them)       (drives them)
 ```
 
-It never writes Workflow state itself, never runs a command reserved for a
-human, never trusts a worker's own account of what it did, and merges a pull
-request only when the repository opts in, and then only the accepted commit.
+The lifecycle itself is drawn in the
+[lifecycle diagram](docs/ai-workflow/diagrams/workflow-v2-1-lifecycle.drawio.svg);
+[How it works](docs/guide/how-it-works.md) walks a milestone end to end.
 
-**Contents:** [Quick start](#quick-start) ·
-[Commands](#commands) · [What runs automatically](#what-runs-automatically) ·
+**Contents:** [Quick start](#quick-start) · [Documentation](#documentation) ·
+[What runs automatically](#what-runs-automatically) ·
 [Milestone branches, pull requests and releases](#milestone-branches-pull-requests-and-releases) ·
-[When something goes wrong](#when-something-goes-wrong) ·
-[Development](#development) · [Documentation](#documentation)
+[When something goes wrong](#when-something-goes-wrong) · [Development](#development)
 
 ## Quick start
 
@@ -46,133 +57,91 @@ About five minutes, from nothing to a first look at a repository.
    workflow-controller explain .
    ```
 
-3. Run until the next human step. `--follow` shows the worker's activity as it happens:
+3. Run until the next person's step. `--follow` shows the worker's activity as it happens:
 
    ```bash
    workflow-controller run --follow .
    ```
 
-4. When it stops at a gate (exit `10`), do what it says, for example approve a plan or
-   paste an external review verdict, then run it again.
+4. When it stops at an [approval gate](docs/glossary.md#approval-gate) (exit `10`), do what it says, for example approve a
+   plan or paste an external review verdict, then run it again.
 
 From another terminal, `workflow-controller follow .` attaches to whatever is running
 without affecting it, and `workflow-controller status` shows every active run and job.
 If the Controller or your terminal dies while a worker runs, the worker keeps going:
 `workflow-controller resume .` re-attaches to it and finishes the job.
 
-More: [run](docs/run.md) (`step` versus `run`, approval gates, bounding a run),
-[update and roll back](docs/update.md), [install](docs/install.md).
+## Documentation
 
-## Commands
-
-| Command | What it does |
+| I want to ... | Read |
 |---|---|
-| `inspect <repo>` | verify the repository and summarise its Workflow state; read-only |
-| `explain <repo>` | the next decision, its evidence, and at a gate what a human must do; read-only |
-| `step <repo>` | perform exactly one automatic action, verify it, stop |
-| `run <repo>` | repeat `step` until a gate, a failure, or `--max-steps` (default 20) |
-| `resume <repo>` | re-attach to a worker left running, then reconcile unfinished job records |
-| `follow <repo>` | watch a run or job, live or after the fact; changes nothing |
-| `status` | the Controller's own view: its version, active runs and jobs |
-| `milestone-binding` | the exits for a milestone whose pull request was closed or merged too early |
+| install the Controller, set up the settings file, uninstall | [Install](docs/install.md) |
+| run it on a repository: `step` versus `run`, following, approval gates | [Run](docs/run.md) |
+| upgrade or roll back, or move a repository to a newer Workflow | [Update](docs/update.md) |
+| know which Workflow releases a Controller release accepts | [Compatibility](docs/compatibility.md) |
+| fix a run that stopped | [Common problems](docs/common-problems.md), then [Troubleshooting](docs/guide/troubleshooting.md) |
+| know what an exit status means | [Exit codes](docs/exit-codes.md) |
+| look up a term | [Glossary](docs/glossary.md) |
+| see what each release changed | [Release history](docs/release-history.md) |
+| understand how the pieces work together | [How it works](docs/guide/how-it-works.md) and the [lifecycle diagram](docs/ai-workflow/diagrams/workflow-v2-1-lifecycle.drawio.svg) |
+| see every command and option, and worker routing | [Commands, options and worker routing](docs/guide/commands.md) |
+
+[`docs/README.md`](docs/README.md) is the full map: the guides, the design
+decisions (ADRs), the roadmap and the Workflow process documents.
 
 Global options go **before** the subcommand and the repository goes last, for
 example `workflow-controller --work-item <id> explain <repo>` or
 `workflow-controller --role-effort review-implementation=max run <repo>`.
-Model and effort per worker role, the routing config file and every option
-are in [Commands, options and worker routing](docs/guide/commands.md).
 
 ## What runs automatically
 
 The Controller launches a Workflow command only when it can verify that
-command's outcome from committed state. Today that covers planning, local
-plan review and revision, recording an already-pasted external verdict,
-implementation checkpoint by checkpoint, and local implementation review and
-remediation. Everything else stops for a human: the external reviews
-themselves, plan and technical approval, functional review, acceptance, and
-merging.
+command's outcome from committed state: planning, local plan review and
+revision, recording an already-pasted external verdict, implementation
+checkpoint by checkpoint, and local implementation review and remediation.
+Everything else stops for a person: the external reviews themselves, plan and
+implementation approval, functional review, acceptance, and merging. From
+Workflow 2.8 a gate policy can make an approval gate automatic; Controller
+1.7.0 itself has not changed.
 
-On Workflow 2.5.1 and 2.6.0 the Controller decides by its own rules (legacy
-mode). From Controller 1.7.0, a Workflow release that ships the
-orchestration protocol, such as 2.7.0, runs in protocol mode: the Workflow
-itself says what comes next and whether each job made progress. There the
-Controller also applies a `REVISE` or `BLOCK` external implementation
-verdict on a `"1"`/`"2.1"` work item, prepares and commits the functional-review checklist, and
-applies the functional-review findings you write; the functional review
-itself stays yours. See
-[Protocol mode](docs/guide/automation.md#protocol-mode-workflow-27-and-later).
-
-Each worker is a fresh session. The Controller waits until the worker and
-everything it started in the background have really finished before it
-checks the result, and only one worker at a time may work on a repository.
-
-- [What the Controller automates, and how it stays safe](docs/guide/automation.md):
-  the dispatch rule, the phase table, the safety model.
-- [Workers: lifecycle, recovery and observation](docs/guide/workers.md):
-  sessions, background work, the lifecycle lock, `resume`, job records,
-  `follow`.
-- [How it works](docs/guide/how-it-works.md): the three pieces and a
-  milestone end to end; the [glossary](docs/glossary.md) defines the terms.
+On a Workflow release that ships the orchestration protocol, such as 2.7.0,
+the Workflow itself says what comes next and whether each job made progress
+([Protocol mode](docs/guide/automation.md#protocol-mode-workflow-27-and-later));
+on 2.5.1 and 2.6.0 the Controller decides by its own rules. Each worker is a
+fresh session, and only one worker at a time may work on a repository. The
+detail is in [What the Controller automates](docs/guide/automation.md) and
+[Workers](docs/guide/workers.md).
 
 ## Milestone branches, pull requests and releases
 
 A repository that commits `.workflow-controller/policy.json` (this one does)
-also gets:
-
-- one short-lived `milestone/<id>` branch and one Draft pull request per
-  milestone, titled with the Conventional Commit title its plan declares
-  and marked ready once the milestone is accepted and its checks pass. A
-  human merges it with "Squash and merge", or, when the policy opts in to
-  auto-merge, the Controller merges the accepted commit itself, waits for
-  the release and closes the milestone out;
-- a release published from `main` when the squash commit's title asks for
-  one: `feat` gives a minor release, `fix` a patch, and `!` a major. The
-  version is computed from the latest release tag; no file holds it. The
-  release is validated, built, tagged and published as a GitHub Release
-  with the wheel and `SHA256SUMS`. A `docs`/`chore`/`ci` title publishes
-  nothing.
-
-A policy that keeps the older `version_change` trigger instead merges with a
-merge commit and releases when `pyproject.toml`'s version changes. This
-repository switched at 1.4.0
-([release notes](docs/releases/1.4.0.md)).
-
-Details: [Milestone branches and pull requests](docs/guide/milestone-branches.md)
-and [Continuous integration and releases](docs/guide/ci-and-releases.md),
-which also describes this repository's protected `main`.
+also gets one short-lived `milestone/<id>` branch and one Draft pull request
+per milestone, marked ready once the milestone is accepted and its checks
+pass. A person merges it with "Squash and merge", or, when the policy opts in
+to auto-merge, the Controller merges the accepted commit itself. A release is
+published from `main` when the squash commit's Conventional Commit title asks
+for one (`feat` a minor release, `fix` a patch, `!` a major); a
+`docs`/`chore`/`ci` title publishes nothing. See
+[Milestone branches and pull requests](docs/guide/milestone-branches.md) and
+[Continuous integration and releases](docs/guide/ci-and-releases.md).
 
 ## When something goes wrong
 
 Run `workflow-controller explain .` first: it names the problem and the
-command that clears it. The exit codes you will meet most:
-
-| Exit | Meaning |
-|---|---|
-| `0` | done |
-| `10` | stopped at a human gate (normal) |
-| `20` | refused, fail-closed: read the message |
-| `30` | a worker ran and did not achieve its expected outcome |
-| `45` | the repository is held by another Controller or a still-running worker |
-
-[Common problems](docs/common-problems.md) gives the quick fix for each stop,
-[exit codes](docs/exit-codes.md) the full table, and
-[Troubleshooting](docs/guide/troubleshooting.md) the long account; the normative table is in
-[ADR 0001](docs/adr/0001-controller-generation-1-architecture.md#exit-codes).
+command that clears it. Exit `10` is the normal stop at an approval gate;
+[Common problems](docs/common-problems.md) gives the quick fix for every other
+stop and [Exit codes](docs/exit-codes.md) the full table.
 
 ## Development
 
 ```bash
 pip install -e .
-python3 tools/run_tests.py      # the full suite, in parallel shards (about 1.5 min)
+python3 tools/run_tests.py      # the full suite, in parallel shards
+python3 tools/check_docs.py     # links, anchors and the commands shown on the task pages
 ```
 
-Do not set `PYTHONPATH=.`, and run the suite in the foreground. Pull
-requests are validated by `.github/workflows/validate.yml`, whose jobs are
-`plan`, `tests` (one per shard), `tests-result` and `package`. See
+Do not set `PYTHONPATH=.`, and run the suite in the foreground. Pull requests
+are validated by `.github/workflows/validate.yml`, whose jobs are `plan`,
+`tests` (one per shard), `tests-result` and `package`; the documentation
+checks run inside `tests`. See
 [Development and the test runner](docs/guide/development.md).
-
-## Documentation
-
-[`docs/README.md`](docs/README.md) is the map of all documentation: the
-guides above, the design decisions (ADRs), the roadmap, and the Workflow
-process documents.

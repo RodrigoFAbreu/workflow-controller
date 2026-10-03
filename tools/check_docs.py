@@ -45,7 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 
 #: The checkpoint number the repository has reached. Raised by each checkpoint.
-ACTIVE_THROUGH = 4
+ACTIVE_THROUGH = 5
 
 #: The user pages (marked U in the plan): header and internal-id rules.
 USER_PAGES: tuple[tuple[str, int], ...] = (

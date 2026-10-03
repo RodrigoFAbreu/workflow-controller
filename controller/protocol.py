@@ -60,6 +60,9 @@ _REFUSED_EXIT = 3
 #: The error codes the vendored schema lists. Each has one exit status; a
 #: code a later minor adds may use any non-zero one.
 KNOWN_ERROR_CODES = frozenset(protocol_schema.SCHEMA.enum_at("#/$defs/error/properties/code"))
+#: The action ids the vendored schema lists: the catalogue this Controller
+#: release was built against, automatic or not.
+KNOWN_ACTION_IDS = frozenset(protocol_schema.SCHEMA.enum_at("#/$defs/action/properties/id"))
 _NON_ZERO_EXITS = (1, 2, 3)
 _MISSING_MODULE_RE = re.compile(r"No module named '([^']+)'")
 _STDERR_TAIL_CHARS = 4000

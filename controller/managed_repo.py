@@ -152,6 +152,10 @@ class ManagedRepository:
     #: (``None`` for a legacy release); with ``target_protocol["release"]`` it
     #: is the identity :func:`protocol.identity` derives afresh.
     script_digests: Mapping[str, str] | None = None
+    #: The action ids the protocol script's ``describe`` lists (``None`` for
+    #: a legacy release): ``inspect`` reports the ones this Controller
+    #: release does not know, as an advisory (orchestration-protocol-v1 C.3).
+    protocol_action_ids: tuple[str, ...] | None = None
     #: Set only by :func:`inspect_for_resume`: the ``DriftedInstallationError``
     #: the Manager's verify/status raised. Such a repository may only end a
     #: pending protocol job whose managed-file digest map differs from its
@@ -435,6 +439,7 @@ def inspect(path: str | os.PathLike, *, manager_bin: str | None = None) -> Manag
             "release": identity.release,
         },
         script_digests=None if identity is None else dict(identity.digests),
+        protocol_action_ids=None if identity is None else tuple(identity.describe.capabilities["action_ids"]),
     )
 
 

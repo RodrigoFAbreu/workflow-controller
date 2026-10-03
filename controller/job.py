@@ -4937,7 +4937,9 @@ def _decide_protocol_current(
     pre_state: dict, base: str | None,
 ) -> tuple[Decision, Any, dict]:
     """The protocol path's decision, current (plan D.2.1): ``(decision,
-    work_item, pre_state)``. An ``automatic`` decision is checked against the
+    work_item, pre_state)``. The Workflow's ``verify`` runs first (plan A.3):
+    an unhealthy repository is the ``workflow_unhealthy`` gate and nothing is
+    decided. An ``automatic`` decision is checked against the
     Workflow before anything is recorded and, when stale, discarded and
     re-decided from a fresh read -- at most
     :data:`protocol_decision.MAX_DECISIONS_PER_STEP` decisions per step,
@@ -4945,6 +4947,11 @@ def _decide_protocol_current(
     (:func:`_no_progress_gate`) then applies to the decision that stands.
     Every other disposition is a gate or a no-action answer that launches
     nothing, so it is returned as the Workflow gave it."""
+    # Plan A.3: the Workflow's own `verify` is the step's protocol preflight;
+    # an unhealthy answer is a gate, and nothing is decided.
+    unhealthy = protocol_decision.health_gate(managed_repo, work_item)
+    if unhealthy is not None:
+        return unhealthy, work_item, pre_state
     seen: list = []
     for _attempt in range(protocol_decision.MAX_DECISIONS_PER_STEP):
         decision = protocol_decision.decide(managed_repo, work_item, base=base)

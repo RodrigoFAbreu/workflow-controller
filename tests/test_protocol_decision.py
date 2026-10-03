@@ -228,6 +228,21 @@ class ActionTableTest(_Case):
                     if spec["command"] is not None and not spec["user_only"]} - set(protocol_decision.PROTOCOL_ACTIONS)
         self.assertEqual(left_out, {"plan.withdraw", "implementation.recover_provenance", "functional.review.advisory"})
 
+    def test_inspect_advises_of_listed_ids_this_release_does_not_know_and_never_refuses(self) -> None:
+        # Plan C.3: a gate id of the vendored catalogue is known (never launched
+        # by design); only an id outside both the table and the catalogue is news.
+        listed = [*protocol_decision.PROTOCOL_ACTIONS, "implementation.approve", "forge.open_pr", "gate.policy"]
+        self.assertEqual(protocol_decision.unknown_action_ids(listed), ["forge.open_pr", "gate.policy"])
+        self.assertEqual(protocol_decision.unknown_action_ids(None), [])
+        target = SimpleNamespace(root=Path("/r"), workflow_version="2.7.1", profile="full",
+                                 target_protocol=TARGET_PROTOCOL, script_digests={}, protocol_action_ids=tuple(listed))
+        self.assertEqual(cli._repository_block(target)["unknown_action_ids"], ["forge.open_pr", "gate.policy"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli._print_repository_line(target)
+        self.assertIn("advisory: the Workflow lists action ids this Controller release does not know: "
+                      "forge.open_pr, gate.policy", out.getvalue())
+
     def test_an_automatic_id_the_table_lacks_is_blocked(self) -> None:
         got = self.decide(_result(action=_action("plan.withdraw", invocation="/milestone-plan wi-1")))
         self.assertFalse(got.automatic)
@@ -519,6 +534,37 @@ class JobWiringTest(unittest.TestCase):
             # Only the one no-launch record: no PLANNED/LAUNCHED job exists.
             statuses = [json.loads(p.read_text())["status"] for p in (runtime / "jobs").glob("*.json")]
             self.assertEqual(statuses, [job.STATUS_GATE_BLOCKED])
+
+    def test_an_unhealthy_verify_is_a_gate_naming_each_failing_check_and_launches_nothing(self) -> None:
+        # Plan A.3: `verify` is the step's protocol preflight, and its answer
+        # is a gate, never a refusal of the repository.
+        from tests.test_cli import _Args
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = self._target(td, with_item=True)
+            # The installation record names a release these scripts are not.
+            record_path = root / protocol.INSTALLATION_RECORD
+            installation = json.loads(record_path.read_text())
+            installation["workflow_version"] = "2.7.9"
+            record_path.write_text(json.dumps(installation))
+            fixtures.commit_all(root, "name another release")
+            health = protocol.verify(root)
+            self.assertFalse(health.healthy)
+            failing = [check for check in health.checks if check.status == "fail"]
+            self.assertEqual([check.id for check in failing], ["installation_release_matches"])
+            with mock.patch.object(protocol, "next_action", side_effect=AssertionError("next-action ran")):
+                record, diag, runtime = self._step(td, root, stub)
+                self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+                what = record["human_gate_pending"]["what_is_required"]
+                self.assertTrue(what.startswith(protocol_decision.WORKFLOW_UNHEALTHY), what)
+                for check in failing:
+                    self.assertIn(f"{check.id}: {check.detail}", what)
+                self.assertFalse(diag.exists())
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    code = cli.cmd_explain(_Args(str(root), workflow_manager=str(stub), json_out=True), runtime,
+                                           IDENTITY)
+            self.assertEqual(code, cli.EXIT_OK)
+            self.assertIn(protocol_decision.WORKFLOW_UNHEALTHY, out.getvalue())
 
     def test_a_protocol_worker_is_routed_by_its_route_key(self) -> None:
         for action_id, entry in protocol_decision.PROTOCOL_ACTIONS.items():

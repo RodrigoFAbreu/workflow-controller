@@ -256,6 +256,10 @@ an answer for a protocol major the Controller does not speak is
 `WORKFLOW_PROTOCOL_UNSUPPORTED`. Both exit `20` at a decision, and nothing
 is launched.
 
+**The protocol preflight.** Every step, and `explain`, first runs the
+Workflow's `verify`. An unhealthy answer is the `workflow_unhealthy` gate,
+naming each failing check and its detail; nothing is decided or launched.
+
 **Decisions.** `next-action`'s disposition becomes the Controller's
 decision:
 
@@ -276,6 +280,10 @@ to report. At `IMPLEMENTING` and `SELF_REVIEWING_IMPLEMENTATION` the
 committed-state gate of legacy mode still applies before a launch.
 `explain` shows the Workflow's row, disposition and action, and with
 `--json` a `protocol` block; a legacy target's output is unchanged.
+`inspect` lists, as an advisory, any action id the Workflow's `describe`
+reports that this Controller release does not know (`unknown_action_ids`
+with `--json`). Such an id is never a refusal; it is blocked
+(`workflow_unknown_action`) only if it becomes the next action.
 
 **Before a launch.** A decision is checked again against the Workflow
 before the job is recorded and once more immediately before the worker
@@ -293,7 +301,8 @@ stops at the `no_progress_repeated` gate.
 decision it was launched for (kept as `jobs/<job_id>/decision.json`), both
 when its worker ends and on `resume`. The job record's `protocol` block
 keeps the decision, its digest, the release and script digests it was
-decided under, and `reconcile`'s answer. In order:
+decided under, and `reconcile`'s answer; `status` shows the reconcile
+class and any invalid reasons on the job's line. In order:
 
 | What is found | Job |
 |---|---|

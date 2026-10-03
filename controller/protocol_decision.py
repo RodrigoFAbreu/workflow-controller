@@ -72,6 +72,7 @@ UNKNOWN_WORKER_ROLE = "workflow_unknown_worker_role"
 USER_ONLY_ACTION = "workflow_user_only_action"
 INVOCATION_MISMATCH = "workflow_invocation_mismatch"
 UNCOMMITTED_STATE = "uncommitted_implementation_state"
+WORKFLOW_UNHEALTHY = "workflow_unhealthy"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -106,6 +107,17 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
 PLAN_START = "plan.start"
 
 
+def unknown_action_ids(listed: Any) -> list[str]:
+    """The action ids ``describe`` lists that this Controller release does
+    not know (plan C.3): neither in :data:`PROTOCOL_ACTIONS` nor in the
+    catalogue of the vendored schema (whose other ids are gates the
+    Controller never launches by design). An advisory for ``inspect``, never
+    a refusal: a minor protocol bump adds ids, and one is blocked only if it
+    actually becomes the next action."""
+    return sorted({str(action_id) for action_id in listed or ()}
+                  - set(PROTOCOL_ACTIONS) - protocol.KNOWN_ACTION_IDS)
+
+
 def bare_invocation(action_id: str, work_item_id: str | None) -> str:
     """The rendering the Controller compares the answer's ``invocation``
     with: ``/<command>`` and the work item, without the Controller's own
@@ -131,6 +143,40 @@ def decide(managed_repo: Any, work_item: Any, *, base: str | None = None, timeou
     work_item_id = None if no_item else work_item.work_item_id
     answer = protocol.next_action(managed_repo.root, work_item_id, timeout=timeout)
     return from_answer(managed_repo, work_item, answer, base=base)
+
+
+def health_gate(managed_repo: Any, work_item: Any, *, timeout: float | None = None) -> Decision | None:
+    """The ``verify`` preflight of a step (plan A.3): ``None`` when the
+    Workflow reports the repository healthy, else the
+    :data:`WORKFLOW_UNHEALTHY` gate naming each failing check and its detail
+    verbatim. A gate, not a refusal of the repository: a failing
+    ``state_valid`` can be transient (a planning worker interrupted after
+    routing the item and before writing its registry)."""
+    health = protocol.verify(managed_repo.root, timeout=timeout)
+    if health.healthy:
+        return None
+    root = managed_repo.root
+    no_item = work_item is target_state.NoWorkItemYet
+    work_item_id = None if no_item else work_item.work_item_id
+    phase = NO_PHASE if no_item else work_item.phase
+    phase_text = phase if isinstance(phase, str) else "NO_PHASE"
+    failing = [check for check in health.checks if check.status == "fail"]
+    details = "; ".join(f"{check.id}: {check.detail}" for check in failing)
+    gate = HumanGate(
+        repository=str(root), work_item_id=work_item_id or "", phase=phase_text,
+        what_is_required=(
+            f"{WORKFLOW_UNHEALTHY}: the Workflow's verify reports the repository unhealthy ({details}); "
+            "nothing is launched. A failing state_valid can be transient (a planning worker interrupted "
+            "after routing the item and before writing its registry); installation_release_matches is "
+            "expected to pass on a real target, whose scripts and installation record agree. Repair what "
+            "the checks name, then re-run"),
+        artifact_path=None, safe_resume_command=explain_gate_command(root, work_item_id or ""))
+    return Decision(
+        observed_phase=phase,
+        evidence=(f"protocol verify ({WORKFLOW_UNHEALTHY})",)
+        + tuple(f"verify {check.id}: {check.status}: {check.detail}" for check in failing),
+        action=None, automatic=False, gate=gate, declined=False,
+        reason=f"{phase_text}: {WORKFLOW_UNHEALTHY}: {details}")
 
 
 def from_answer(managed_repo: Any, work_item: Any, answer: protocol.Decision, *, base: str | None = None) -> Decision:

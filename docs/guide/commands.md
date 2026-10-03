@@ -6,7 +6,7 @@
 
 | Command | Behaviour |
 |---|---|
-| `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version and the managed-script digest map |
+| `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version, the managed-script digest map and, as an advisory, any action id `describe` lists that this release does not know (`unknown_action_ids`) |
 | `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; for a protocol-mode target also the Workflow's row, disposition and action (a `protocol` block with `--json`); read-only, always exits 0 |
 | `workflow-controller step [--follow] <repo>` | execute exactly one automatic action, validate the transition, stop |
 | `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
@@ -86,6 +86,9 @@ in order:
   first, one per line: id, status, command and work item, then
   `age 12 min` while the job is active, or `wall 1400 s, cost $11.66`
   once it has ended (the cost only when the job has telemetry figures);
+  a protocol-mode job also shows `[reconcile <class>]` once reconciled,
+  with the invalid reasons' codes after the class (`reconcile_class` and
+  `invalid_reasons` with `--json`);
 - `handoff:` a pending handoff, or `none`;
 - `active:` each running run, with its start time and its Controller's
   liveness, and each non-terminal job, with its command, work item,

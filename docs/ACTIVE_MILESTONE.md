@@ -143,6 +143,25 @@ below describes the previous milestone (C4) and is kept until this one is accept
   permitted `AMENDING_PLAN` difference `tests.test_golden_plan_stage_decisions` asserts (it fails
   identically at the base).
 
+- **Self-review (SELF_REVIEWING_IMPLEMENTATION)** -- the full milestone diff reviewed against the plan.
+  No Blocking findings; three Important gaps between the approved design and the code, each fixed with
+  tests:
+  I1 (plan A.3): a step's protocol preflight never ran the Workflow's `verify`. `protocol_decision.
+  health_gate` now runs it before every protocol decision (`job._decide_protocol_current`, `cli explain`);
+  an unhealthy answer is the `workflow_unhealthy` gate naming each failing check and its detail, and
+  nothing is decided or launched.
+  I2 (plan C.3): `describe`'s action ids were never compared with `PROTOCOL_ACTIONS` at admission.
+  `inspect` now reports `unknown_action_ids` (an advisory, never a refusal): the ids `describe` lists that
+  are neither in the table nor in the vendored schema's catalogue, whose other ids are gates the Controller
+  never launches by design (empty for 2.7.0).
+  I3 (plan F): `status` did not show a protocol job's reconcile class or invalid reasons. Its job entries
+  now carry `reconcile_class` and `invalid_reasons`, and the line shows `[reconcile <class>: <codes>]`,
+  for a protocol record only (a legacy entry gains no key).
+  Tests: `tests.test_protocol_decision` (`JobWiringTest`'s unhealthy-verify case on a real 2.7.0 fixture,
+  `ActionTableTest`'s advisory case), `tests.test_protocol_lifecycle.InspectRepositoryBlockTest`,
+  `tests.test_observe.StatusJobSummaryTest`; guides (`automation`, `commands`, `troubleshooting`), ADR 0010
+  and the release notes updated.
+
 ## Release notes
 
 ### The Controller drives Workflow through its protocol (1.7.0)
@@ -164,8 +183,12 @@ progress comes from its `reconcile`, on the launch and on `resume`.
 The protocol runs from a private copy of the Workflow's managed
 scripts under the existing Git isolation, every answer is validated
 against the vendored schema, and anything unknown is blocked, not run.
-New errors: `WORKFLOW_PROTOCOL_FAILED` and
-`WORKFLOW_PROTOCOL_UNSUPPORTED` (exit 20).
+Each step first runs the Workflow's `verify`, and an unhealthy answer
+stops at the `workflow_unhealthy` gate. `status` shows a protocol job's
+reconcile class, and `inspect` lists any action id the Workflow offers
+that this release does not know. New errors:
+`WORKFLOW_PROTOCOL_FAILED` and `WORKFLOW_PROTOCOL_UNSUPPORTED` (exit
+20).
 
 **Three launches that 1.6.0 never made.** On a protocol target the
 Controller applies a `"1"`/`"2.1"` external implementation review that

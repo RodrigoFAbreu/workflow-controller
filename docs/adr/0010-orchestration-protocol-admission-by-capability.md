@@ -46,6 +46,10 @@ a protocol that does not speak major 1, and the unchanged
 lines. A release the Controller never ran is therefore driven when it speaks
 the protocol, including a later minor release that adds a module the protocol
 imports, because the private copy below is the Workflow's own script set.
+`describe`'s action ids that the Controller does not know are an `inspect`
+advisory, never a refusal. Each step's protocol preflight is the Workflow's
+`verify`: an unhealthy answer is a `workflow_unhealthy` gate, not a refusal
+of the repository, since a failing `state_valid` can be transient.
 
 What still couples the Controller to a Workflow release is only the closed
 action-id table (`protocol_decision.PROTOCOL_ACTIONS`: an unknown id is

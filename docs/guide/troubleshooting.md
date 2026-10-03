@@ -395,6 +395,14 @@ next-action --work-item <id>` in the target (not isolated, as above).
 Each gate below launches nothing; `explain` shows the Workflow's row,
 disposition and action beside it.
 
+- `workflow_unhealthy`: the Workflow's `verify`, run before every
+  decision, reported a failing check; the gate names each one and its
+  detail. A failing `state_valid` can be transient (a planning worker
+  interrupted between routing the item and writing its registry);
+  `installation_release_matches` fails when the installation record names
+  a release other than the installed scripts', which the Workflow
+  Manager's `update` or `repair` puts right. Repair what the checks name,
+  then run again.
 - `workflow_unknown_disposition`, `workflow_unknown_action`,
   `workflow_unknown_worker_role`: the Workflow answered a value this
   Controller release does not know (a later protocol minor may add one).

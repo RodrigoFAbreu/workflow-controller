@@ -826,13 +826,15 @@ def cmd_inspect(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
 
 def _repository_block(target: managed_repo.ManagedRepository) -> dict:
     """``inspect``'s ``repository`` object. A protocol target (orchestration-
-    protocol-v1 F) adds ``workflow_mode``, ``target_protocol`` and the
-    managed-script digest map; a legacy target's object gains no key."""
+    protocol-v1 F) adds ``workflow_mode``, ``target_protocol``, the
+    managed-script digest map and the C.3 advisory ``unknown_action_ids``;
+    a legacy target's object gains no key."""
     block = {"root": str(target.root), "workflow_version": target.workflow_version, "profile": target.profile}
     if target.target_protocol is not None:
         block["workflow_mode"] = "protocol"
         block["target_protocol"] = dict(target.target_protocol)
         block["script_digests"] = dict(target.script_digests or {})
+        block["unknown_action_ids"] = protocol_decision.unknown_action_ids(target.protocol_action_ids)
     return block
 
 
@@ -841,6 +843,10 @@ def _print_repository_line(target: managed_repo.ManagedRepository) -> None:
     if target.target_protocol is not None:
         print(f"workflow mode: protocol (protocol {target.target_protocol['version']}, "
               f"{len(target.script_digests or {})} managed scripts)")
+        unknown = protocol_decision.unknown_action_ids(target.protocol_action_ids)
+        if unknown:
+            print(f"advisory: the Workflow lists action ids this Controller release does not know: "
+                  f"{', '.join(unknown)}; each is blocked if it becomes the next action")
 
 
 def _branch_context(target: managed_repo.ManagedRepository, runtime_root: Path, *,
@@ -911,7 +917,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     if target.target_protocol is not None:
         # A protocol target is decided by the Workflow's own `next-action`
         # (orchestration-protocol-v1 C.1), read-only like `evidence.decide`.
-        decision = protocol_decision.decide(target, work_item, base=base)
+        decision = (protocol_decision.health_gate(target, work_item)
+                    or protocol_decision.decide(target, work_item, base=base))
     elif work_item is target_state.NoWorkItemYet:
         decision = decide_no_work_item(target, base=base)
     else:

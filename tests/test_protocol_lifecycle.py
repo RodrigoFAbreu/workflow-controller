@@ -420,6 +420,9 @@ class InspectRepositoryBlockTest(unittest.TestCase):
         self.assertEqual(block["target_protocol"]["major"], 1)
         self.assertEqual(block["script_digests"], dict(protocol_target.script_digests))
         self.assertIn("scripts/workflow_protocol.py", block["script_digests"])
+        # Every id 2.7.0's describe lists is known: the C.3 advisory is empty.
+        self.assertIn("plan.author", protocol_target.protocol_action_ids)
+        self.assertEqual(block["unknown_action_ids"], [])
         legacy = cli._repository_block(Lifecycle(self, "2.6.0").inspect())
         self.assertEqual(set(legacy), {"root", "workflow_version", "profile"})
 

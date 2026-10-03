@@ -806,6 +806,48 @@ class WorkflowReleaseChangedError(ControllerError):
 
 
 # ---------------------------------------------------------------------------
+# workflow-controller-orchestration-protocol-v1 CP1 -- the protocol client
+# (``controller.protocol``).
+# ---------------------------------------------------------------------------
+
+
+class WorkflowProtocolFailedError(ControllerError):
+    """A Workflow Orchestration Protocol operation gave no answer the
+    Controller may act on, or gave a refusal (exit ``20``, fail closed).
+
+    ``evidence['reason']`` names the step: ``protocol_script_modified`` (a
+    managed script is missing or not a regular file; nothing ran),
+    ``protocol_private_copy_failed``, ``protocol_git_not_isolated``,
+    ``protocol_launch_failed``, ``protocol_timeout``,
+    ``protocol_no_document`` (the script printed no single JSON document,
+    including a failure to start, whose ``missing_module`` is named when the
+    last stderr line says so), ``protocol_envelope_invalid`` (the document
+    fails the schema, or exit code and ``ok`` disagree) and
+    ``protocol_refused`` (a well-formed ``ok: false`` answer; ``refusal``
+    carries its ``code``, ``message`` and ``retryable``)."""
+
+    code = "WORKFLOW_PROTOCOL_FAILED"
+
+
+class WorkflowProtocolRefusedError(WorkflowProtocolFailedError):
+    """A well-formed ``ok: false`` answer from a typed protocol call. The
+    refusal is ``evidence['refusal']`` (``code``, ``message``, ``retryable``,
+    ``native``) and :attr:`refusal`; a caller that expects a particular code
+    (``stale_decision``) reads it there."""
+
+    @property
+    def refusal(self) -> dict:
+        return self.evidence["refusal"]
+
+
+class WorkflowProtocolUnsupportedError(ControllerError):
+    """The Workflow answered ``unsupported_protocol``, or an envelope names a
+    protocol major the Controller does not speak (exit ``20``)."""
+
+    code = "WORKFLOW_PROTOCOL_UNSUPPORTED"
+
+
+# ---------------------------------------------------------------------------
 # workflow-controller-squash-merge-tag-versioning CP1 -- Conventional Commit
 # titles (``controller.conventional_commit``).
 # ---------------------------------------------------------------------------

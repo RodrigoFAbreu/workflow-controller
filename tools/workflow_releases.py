@@ -52,6 +52,13 @@ VENDORED_SCRIPTS = (
     "scripts/workflow_fingerprint.py",
     "scripts/workflow_state.py",
 )
+#: Present from the first release that ships the orchestration protocol (2.7.0):
+#: vendored when the manifest has them, never required of an older release.
+PROTOCOL_PATHS = (
+    "scripts/workflow_protocol.py",
+    "scripts/workflow_test_harness.py",
+    "docs/ai-workflow/orchestration-protocol-v1.schema.json",
+)
 _COMMAND_FILE_RE = re.compile(r"\.claude/commands/[^/]+\.md")
 _RELEASE_RE = re.compile(r"\d+\.\d+\.\d+")
 
@@ -59,7 +66,7 @@ _RELEASE_RE = re.compile(r"\d+\.\d+\.\d+")
 def is_vendored_path(target_path: str) -> bool:
     """Whether a Manager manifest ``target_path`` belongs to the vendored
     subset: a command file or one of :data:`VENDORED_SCRIPTS`."""
-    return target_path in VENDORED_SCRIPTS or _COMMAND_FILE_RE.fullmatch(target_path) is not None
+    return target_path in VENDORED_SCRIPTS or target_path in PROTOCOL_PATHS or _COMMAND_FILE_RE.fullmatch(target_path) is not None
 
 
 def release_dir(release: str, root: Path = REPO_ROOT) -> Path:
@@ -112,13 +119,18 @@ def _manager_provenance(distribution: Path, release: str, commit: str) -> tuple[
 
 
 def sync(release: str, distribution: Path, *, manager_commit: str = "HEAD",
-         root: Path = REPO_ROOT) -> Path:
+         archive_sha256: str | None = None, root: Path = REPO_ROOT) -> Path:
     """Replace ``tests/workflow_releases/<release>/`` with the vendored
     subset of the Manager's ``<distribution>/<release>`` payload."""
     if not _RELEASE_RE.fullmatch(release):
         raise ValueError(f"{release!r} is not a dotted release")
     manifest = load_manager_manifest(distribution, release)
-    commit, source = _manager_provenance(distribution, release, manager_commit)
+    if archive_sha256 is None:
+        commit, source = _manager_provenance(distribution, release, manager_commit)
+    else:
+        # A published archive unpacked under ``<distribution>/<release>``: its
+        # provenance is the archive's own digest, not a Manager commit.
+        commit, source = f"archive-sha256:{archive_sha256}", f"workflow-{release}.tar.gz"
     subset = manifest_subset(manifest)
     missing = [path for path in VENDORED_SCRIPTS if path not in subset]
     if missing or not any(_COMMAND_FILE_RE.fullmatch(path) for path in subset):
@@ -233,13 +245,16 @@ def main(argv: list[str] | None = None) -> int:
     sync_parser.add_argument("release")
     sync_parser.add_argument("--from", dest="distribution", type=Path, required=True,
                              help="the Manager checkout's distribution/workflow directory")
+    sync_parser.add_argument("--archive-sha256", help="the published archive's sha256: record it as the "
+                             "provenance of a tree unpacked from a release archive")
     sync_parser.add_argument("--manager-commit", default="HEAD",
                              help="the Manager commit to record (default: HEAD)")
     commands.add_parser("check", help="verify every vendored tree against its RELEASE.json")
     args = parser.parse_args(argv)
     if args.command == "sync":
         try:
-            dest = sync(args.release, args.distribution, manager_commit=args.manager_commit, root=args.root)
+            dest = sync(args.release, args.distribution, manager_commit=args.manager_commit,
+                        archive_sha256=args.archive_sha256, root=args.root)
         except (OSError, ValueError, KeyError) as exc:
             print(f"sync {args.release}: {exc}", file=sys.stderr)
             return 1

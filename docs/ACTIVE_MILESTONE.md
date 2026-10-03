@@ -1,5 +1,26 @@
 # Active Milestone
 
+## In progress: `workflow-controller-orchestration-protocol-v1` (ROADMAP step C9, release 1.7.0)
+
+Plan revision 10 is approved (`de2bedf`). Implementation runs one checkpoint per session;
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for which are `COMPLETE`. The section
+below describes the previous milestone (C4) and is kept until this one is accepted.
+
+- **CP1, the protocol client** -- `controller/protocol.py` runs one Workflow Orchestration Protocol
+  operation (`--protocol-major 1`, `--repo-root`) from a private copy of the Workflow's own script
+  set, taken from the installation record's `managed` map (`scripts/<name>.py`, not `_test`), with a
+  path-to-digest map derived afresh for every call and the ADR 0006 Git isolation that
+  `workflow_contract.run_in_private_copy` now shares. `controller/protocol_schema.py` validates every
+  envelope and result against the vendored 2.7.0 schema (`controller/protocol_schema.json`, sha256
+  pinned) with a stdlib validator for the schema's keyword subset: an unsupported schema keyword is
+  refused at load, and for documents `additionalProperties: false` and the minor-extensible enums are
+  open, so a protocol 1.1 answer validates. `WORKFLOW_PROTOCOL_FAILED` and
+  `WORKFLOW_PROTOCOL_UNSUPPORTED` (exit 20) are the new refusals. `tests/workflow_releases/2.7.0/`
+  vendors the published archive (`tools/workflow_releases.py sync --archive-sha256`), including the
+  protocol script, its sibling `workflow_test_harness.py` and the schema.
+  Tests: `tests/test_protocol.py` (including a round trip against the real 2.7.0 scripts),
+  `tests/test_protocol_schema.py`.
+
 ## Status
 
 **Complete.** `workflow-controller-auto-merge-release-wait` (`docs/ROADMAP.md` step C4, section

@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RodrigoFAbreu/workflow/orchestration-protocol-v1.schema.json",
+  "title": "Workflow Orchestration Protocol v1",
+  "description": "The envelope every workflow_protocol.py operation prints, and each operation's result. The document validates the envelope; an operation's result is validated against $defs.results.<operation> (the envelope's operation field). Only type, required, properties, additionalProperties, enum, items and $ref are used.",
+  "$ref": "#/$defs/envelope",
+  "$defs": {
+    "envelope": {
+      "type": "object",
+      "required": ["protocol", "workflow_release", "operation", "ok"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "type": "object",
+          "required": ["name", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {"type": "string", "enum": ["workflow-orchestration"]},
+            "version": {"type": "string"}
+          }
+        },
+        "workflow_release": {"type": "string"},
+        "operation": {"type": ["string", "null"]},
+        "ok": {"type": "boolean"},
+        "result": {"type": "object"},
+        "error": {"$ref": "#/$defs/error"}
+      }
+    },
+    "native": {
+      "type": ["object", "null"],
+      "required": ["exception", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "exception": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "retryable", "native"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "internal_error",
+            "invalid_request",
+            "no_work_item",
+            "not_applicable",
+            "refused",
+            "stale_decision",
+            "state_invalid",
+            "state_unreadable",
+            "unknown_work_item",
+            "unsupported_protocol",
+            "unsupported_result_kind"
+          ]
+        },
+        "message": {"type": "string"},
+        "retryable": {"type": "boolean"},
+        "native": {"$ref": "#/$defs/native"}
+      }
+    },
+    "basis": {
+      "type": "object",
+      "required": ["work_item_id", "state_revision", "state_identity", "phase", "head", "checkpoints"],
+      "additionalProperties": false,
+      "properties": {
+        "work_item_id": {"type": "string"},
+        "state_revision": {"type": ["integer", "null"]},
+        "state_identity": {"type": "string"},
+        "phase": {"type": "string"},
+        "head": {"type": ["string", "null"]},
+        "checkpoints": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "string_list": {"type": "array", "items": {"type": "string"}},
+    "reason": {
+      "type": "object",
+      "required": ["code", "text", "remedy"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {"type": "string"},
+        "text": {"type": "string"},
+        "remedy": {"type": ["string", "null"]},
+        "native": {"$ref": "#/$defs/native"}
+      }
+    },
+    "worker": {
+      "type": "object",
+      "required": ["role", "fresh_session", "independent_of", "user_only"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"type": "string", "enum": ["planner", "implementer", "self_reviewer", "independent_reviewer", "applier", "user", "external"]},
+        "fresh_session": {"type": "boolean"},
+        "independent_of": {"$ref": "#/$defs/string_list"},
+        "user_only": {"type": "boolean"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["id", "arguments", "invocation", "worker", "allowed_results"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "enum": ["functional.apply_findings", "functional.prepare", "functional.review", "functional.review.advisory", "implementation.apply_review", "implementation.approve", "implementation.checkpoint", "implementation.record_external", "implementation.recover_provenance", "implementation.review.external", "implementation.review.local", "implementation.self_review", "milestone.accept", "plan.apply_review", "plan.approve", "plan.author", "plan.record_external", "plan.review.external", "plan.review.local", "plan.start", "plan.withdraw", "review.resolve_block"]},
+        "arguments": {"type": "object", "additionalProperties": {"type": "string"}},
+        "invocation": {"type": ["string", "null"]},
+        "worker": {"$ref": "#/$defs/worker"},
+        "allowed_results": {"type": "array", "items": {"type": "string", "enum": ["progress", "no_progress", "gate_reached", "invalid"]}},
+        "satisfied_by": {"type": "string"}
+      }
+    },
+    "nullable_action": {
+      "type": ["object", "null"],
+      "required": ["id", "arguments", "invocation", "worker", "allowed_results"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "enum": ["functional.apply_findings", "functional.prepare", "functional.review", "functional.review.advisory", "implementation.apply_review", "implementation.approve", "implementation.checkpoint", "implementation.record_external", "implementation.recover_provenance", "implementation.review.external", "implementation.review.local", "implementation.self_review", "milestone.accept", "plan.apply_review", "plan.approve", "plan.author", "plan.record_external", "plan.review.external", "plan.review.local", "plan.start", "plan.withdraw", "review.resolve_block"]},
+        "arguments": {"type": "object", "additionalProperties": {"type": "string"}},
+        "invocation": {"type": ["string", "null"]},
+        "worker": {"$ref": "#/$defs/worker"},
+        "allowed_results": {"type": "array", "items": {"type": "string", "enum": ["progress", "no_progress", "gate_reached", "invalid"]}}
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "work_item_ids": {"$ref": "#/$defs/string_list"},
+        "phase": {"type": "string"},
+        "governing_workflow_version": {"type": ["string", "null"]},
+        "work_item_type": {"type": ["string", "null"]},
+        "plan_revision": {"type": ["integer", "null"]},
+        "implementation_revision": {"type": ["integer", "null"]},
+        "current_checkpoint_id": {"type": ["string", "null"]},
+        "next_checkpoint_id": {"type": ["string", "null"]},
+        "registry_complete": {"type": ["boolean", "null"]},
+        "plan_approval": {"type": ["string", "null"]},
+        "technical_approval": {"type": ["string", "null"]},
+        "plan_review_publication_status": {"type": ["string", "null"]}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["row", "snapshot", "disposition", "action", "satisfied_by", "alternatives", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "row": {"type": "string"},
+        "basis": {"$ref": "#/$defs/basis"},
+        "snapshot": {"$ref": "#/$defs/snapshot"},
+        "disposition": {"type": "string", "enum": ["automatic", "validation", "human_gate", "external_gate", "blocked", "complete"]},
+        "action": {"$ref": "#/$defs/nullable_action"},
+        "satisfied_by": {"type": ["string", "null"], "enum": ["implementation_review_verdict", "plan_review_verdict", null]},
+        "alternatives": {"type": "array", "items": {"$ref": "#/$defs/action"}},
+        "reason": {"$ref": "#/$defs/reason"}
+      }
+    },
+    "phase_identity": {
+      "type": ["object", "null"],
+      "required": ["phase", "state_identity"],
+      "additionalProperties": false,
+      "properties": {
+        "phase": {"type": "string"},
+        "state_identity": {"type": "string"}
+      }
+    },
+    "nullable_basis": {
+      "type": ["object", "null"],
+      "required": ["work_item_id", "state_revision", "state_identity", "phase", "head", "checkpoints"],
+      "additionalProperties": false,
+      "properties": {
+        "work_item_id": {"type": "string"},
+        "state_revision": {"type": ["integer", "null"]},
+        "state_identity": {"type": "string"},
+        "phase": {"type": "string"},
+        "head": {"type": ["string", "null"]},
+        "checkpoints": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "results": {
+      "type": "object",
+      "properties": {
+        "describe": {
+          "type": "object",
+          "required": [
+            "workflow_release",
+            "protocol_version",
+            "supported_protocol_majors",
+            "supported_governing_versions",
+            "capabilities"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "workflow_release": {"type": "string"},
+            "protocol_version": {"type": "string"},
+            "supported_protocol_majors": {"type": "array", "items": {"type": "integer"}},
+            "supported_governing_versions": {"$ref": "#/$defs/string_list"},
+            "capabilities": {
+              "type": "object",
+              "required": [
+                "operations",
+                "dispositions",
+                "action_ids",
+                "artifact_kinds",
+                "external_result_kinds",
+                "reserved_result_kinds",
+                "error_codes"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "operations": {"$ref": "#/$defs/string_list"},
+                "dispositions": {"$ref": "#/$defs/string_list"},
+                "action_ids": {"$ref": "#/$defs/string_list"},
+                "artifact_kinds": {"$ref": "#/$defs/string_list"},
+                "external_result_kinds": {"$ref": "#/$defs/string_list"},
+                "reserved_result_kinds": {"$ref": "#/$defs/string_list"},
+                "error_codes": {"$ref": "#/$defs/string_list"}
+              }
+            }
+          }
+        },
+        "verify": {
+          "type": "object",
+          "required": ["healthy", "checks"],
+          "additionalProperties": false,
+          "properties": {
+            "healthy": {"type": "boolean"},
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "status", "detail"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "state_readable",
+                      "state_valid",
+                      "config_valid",
+                      "active_item_resolvable",
+                      "checkpoint_completions_provable",
+                      "installation_release_matches",
+                      "protocol_ready"
+                    ]
+                  },
+                  "status": {"type": "string", "enum": ["pass", "fail", "skip"]},
+                  "detail": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "resolve-artifact": {
+          "type": "object",
+          "required": ["kind", "path", "exists", "basis"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "functional_checklist",
+                "functional_review",
+                "plan_document",
+                "plan_review_inputs",
+                "review_bundle",
+                "review_feedback"
+              ]
+            },
+            "path": {"type": ["string", "null"]},
+            "exists": {"type": "boolean"},
+            "basis": {"$ref": "#/$defs/basis"}
+          }
+        },
+        "next-action": {"$ref": "#/$defs/decision"},
+        "reconcile": {
+          "type": "object",
+          "required": ["class", "from", "to", "evidence", "invalid_reasons", "basis", "next"],
+          "additionalProperties": false,
+          "properties": {
+            "class": {"type": "string", "enum": ["progress", "no_progress", "gate_reached", "invalid"]},
+            "from": {"$ref": "#/$defs/phase_identity"},
+            "to": {"$ref": "#/$defs/phase_identity"},
+            "evidence": {
+              "type": "object",
+              "required": ["completed_checkpoints", "started_checkpoints", "recorded_stage"],
+              "additionalProperties": false,
+              "properties": {
+                "completed_checkpoints": {"$ref": "#/$defs/string_list"},
+                "started_checkpoints": {"$ref": "#/$defs/string_list"},
+                "recorded_stage": {"type": ["string", "null"]}
+              }
+            },
+            "invalid_reasons": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["code", "text"],
+                "additionalProperties": false,
+                "properties": {
+                  "code": {"type": "string"},
+                  "text": {"type": "string"}
+                }
+              }
+            },
+            "basis": {"$ref": "#/$defs/nullable_basis"},
+            "next": {"type": ["object", "null"]}
+          }
+        },
+        "record-external-result": {
+          "type": "object",
+          "required": ["stage", "verdict", "review_content_id", "round", "bundle_id", "advisory", "basis"],
+          "additionalProperties": false,
+          "properties": {
+            "stage": {"type": "string", "enum": ["implementation", "plan"]},
+            "verdict": {"type": "string", "enum": ["APPROVE", "BLOCK", "REVISE"]},
+            "review_content_id": {"type": ["string", "null"]},
+            "round": {"type": ["integer", "null"]},
+            "bundle_id": {"type": ["string", "null"]},
+            "advisory": {"type": ["string", "null"]},
+            "basis": {"$ref": "#/$defs/basis"}
+          }
+        }
+      }
+    }
+  }
+}

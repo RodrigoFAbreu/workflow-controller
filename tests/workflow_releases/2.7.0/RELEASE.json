@@ -1,0 +1,100 @@
+{
+  "files": {
+    ".claude/commands/accept-milestone.md": {
+      "executable": false,
+      "sha256": "236a370b2474ce2e6d223da0aeab16c4870f5876831d16c851b58826747c497a"
+    },
+    ".claude/commands/apply-functional-review.md": {
+      "executable": false,
+      "sha256": "25b42a93c05e4c2f40cc3f05041878b48ddb8459b9313e9c4f9820edbda27139"
+    },
+    ".claude/commands/apply-implementation-review.md": {
+      "executable": false,
+      "sha256": "c728eeabe25a6fae2376d773f1091d96123fcc6de470f2f49957508de74cc2c1"
+    },
+    ".claude/commands/apply-plan-review.md": {
+      "executable": false,
+      "sha256": "7e0eac1ca5a9c343364a482e3de1ade9abe89bf9d18841fbec7942ccff1e010f"
+    },
+    ".claude/commands/approve-review.md": {
+      "executable": false,
+      "sha256": "b401ca09d90c07f76ce696dcdcae526ad768c7bb5f46312396db48d631ed727e"
+    },
+    ".claude/commands/bootstrap-workflow-v2.md": {
+      "executable": false,
+      "sha256": "01d5873ba807e78f0d0618eb944246783cb3827fe3e31ad253e0158f879e5cae"
+    },
+    ".claude/commands/milestone-implement.md": {
+      "executable": false,
+      "sha256": "ee82db516103df60c3a7601be6f869167b071e34cd96517eea8e2d458ec18cf6"
+    },
+    ".claude/commands/milestone-plan.md": {
+      "executable": false,
+      "sha256": "d74189364d76e431949ddb79aed738695ad3ca22359e3f3c39e034fe657d29cb"
+    },
+    ".claude/commands/prepare-functional-review.md": {
+      "executable": false,
+      "sha256": "cddd822a7fe1b1c6a47596ab510baefd418f2dea4ed755f1445a3aa33adab65f"
+    },
+    ".claude/commands/prepare-review.md": {
+      "executable": false,
+      "sha256": "236a91d16478fa78f6afcb2033f30fdc67dbf11ae4099662a1e2228bbf679de2"
+    },
+    ".claude/commands/record-manual-implementation-review.md": {
+      "executable": false,
+      "sha256": "82ca6ee058949c6472211dae923a4ac5e19f4e0a1992f36a470a4c0969ff1dfc"
+    },
+    ".claude/commands/record-manual-plan-review.md": {
+      "executable": false,
+      "sha256": "e93576f32faf16c97e96427698c578db664b3fa8d30857904ccffc823e5ed10c"
+    },
+    ".claude/commands/recover-implementation-provenance.md": {
+      "executable": false,
+      "sha256": "5274aaeeaf340b4f2a8bf3cfc529b1baba4580f78b4e1cd416e795ce811e41fe"
+    },
+    ".claude/commands/request-plan-amendment.md": {
+      "executable": false,
+      "sha256": "03ca397484826336360d9fb1ce192a69146ede3c4e370643322b4c94779fbead"
+    },
+    ".claude/commands/review-functional.md": {
+      "executable": false,
+      "sha256": "e65e4218d1a7c7870b37ca36e5a2e3c0b7264a685a4a1f8bd7a4904b5e4a24f9"
+    },
+    ".claude/commands/review-implementation.md": {
+      "executable": false,
+      "sha256": "0be61b024f1ac501caff7044d667b842ebce4a26017619999c0d37cf7a6d2ed2"
+    },
+    ".claude/commands/review-plan.md": {
+      "executable": false,
+      "sha256": "025bef3dbb2bc5673a81a801d4800bc91d921c5695857a797e9f06c00fc01008"
+    },
+    "docs/ai-workflow/orchestration-protocol-v1.schema.json": {
+      "executable": false,
+      "sha256": "aba31a7afdfa94246f1f28db5619a6ebe4b4ff06a923e6d00cc9102c2d59fc5a"
+    },
+    "scripts/prepare-ai-review.sh": {
+      "executable": true,
+      "sha256": "02f00913744fb2a45bb13635b5dc6b9fd253729954d495910581c8c2fad6cbe0"
+    },
+    "scripts/workflow_fingerprint.py": {
+      "executable": true,
+      "sha256": "100a3ae1d1daabce00735918185095894c134af621e7316e17b4e6f2b565be9b"
+    },
+    "scripts/workflow_protocol.py": {
+      "executable": false,
+      "sha256": "241b75ba48c480b8d86f507eda7f93d59d86e23e2780e42de565d4e0d32a4215"
+    },
+    "scripts/workflow_state.py": {
+      "executable": false,
+      "sha256": "bbbf8fd7c8c5970c9f9763a905a2995743dc29f414105c605c0c1f4282dc7840"
+    },
+    "scripts/workflow_test_harness.py": {
+      "executable": false,
+      "sha256": "6ea6cb6992a866ddbddf4489b90751e42208ca7300244f41fd92fb20c66172af"
+    }
+  },
+  "manager_commit": "archive-sha256:c287323fbeb94a7ee487fe0f42743ca6856bfb9ab79dd90f22457605ba06c",
+  "manager_source": "workflow-2.7.0.tar.gz",
+  "schema_version": 1,
+  "workflow_version": "2.7.0"
+}

@@ -453,6 +453,7 @@ def write_installation_manifest(
     include_schema_version: bool = True,
     include_workflow_version: bool = True,
     include_profile: bool = True,
+    managed: object = None,
 ) -> Path:
     """Write ``.workflow-manager/installation.json`` under ``root``. Every
     field the malformed-manifest tests need to omit or corrupt is an
@@ -467,6 +468,8 @@ def write_installation_manifest(
         manifest["workflow_version"] = workflow_version
     if include_profile:
         manifest["profile"] = profile
+    if managed is not None:
+        manifest["managed"] = managed
     (manifest_dir / "installation.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest_dir / "installation.json"
 
@@ -685,7 +688,13 @@ def install_workflow_release(root: Path, release: str, *, profile: str = "full")
         dest = root / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(tree / rel_path, dest)
-    write_installation_manifest(root, workflow_version=release, profile=profile)
+    managed = None
+    if "scripts/workflow_protocol.py" in workflow_release_files(release):
+        # A release that ships the orchestration protocol: the record lists
+        # its files, as Workflow Manager's does, and the Controller takes the
+        # protocol's script set from that list (never from a directory).
+        managed = {path: dict(entry) for path, entry in workflow_release_files(release).items()}
+    write_installation_manifest(root, workflow_version=release, profile=profile, managed=managed)
     return root
 
 

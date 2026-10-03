@@ -16,4 +16,4 @@ build-backend = "setuptools.build_meta"
 packages = ["controller"]
 
 [tool.setuptools.package-data]
-controller = ["GENERATION.json"]
+controller = ["GENERATION.json", "protocol_schema.json"]

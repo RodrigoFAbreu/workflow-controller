@@ -77,7 +77,11 @@ class CheckTest(unittest.TestCase):
                 files = fixtures.workflow_release_files(release)
                 commands = [path for path in files if path.startswith(".claude/commands/")]
                 self.assertEqual(len(commands), 17)
-                self.assertEqual(sorted(set(files) - set(commands)), sorted(workflow_releases.VENDORED_SCRIPTS))
+                expected = list(workflow_releases.VENDORED_SCRIPTS)
+                if "scripts/workflow_protocol.py" in files:
+                    # A release that ships the orchestration protocol (2.7.0).
+                    expected += workflow_releases.PROTOCOL_PATHS
+                self.assertEqual(sorted(set(files) - set(commands)), sorted(expected))
                 self.assertTrue(files["scripts/prepare-ai-review.sh"]["executable"])
                 tree = fixtures.workflow_release_tree(release)
                 self.assertTrue(os.access(tree / "scripts" / "prepare-ai-review.sh", os.X_OK))
@@ -246,6 +250,35 @@ class SyncTest(unittest.TestCase):
             self._sync()
         self.assertIn("differs from the manifest's", str(ctx.exception))
         self.assertFalse(workflow_releases.release_dir(self.RELEASE, self.out).exists())
+
+    def test_a_release_unpacked_from_an_archive_records_the_archive_digest(self) -> None:
+        # No Git provenance is asked of a tree unpacked from a published
+        # archive; the archive's own digest is recorded instead.
+        fixtures.run(["git", "rm", "-rq", "--cached", "."], cwd=self.manager)
+        (self.distribution / self.RELEASE / "payload" / "scripts" / "uncommitted.txt").write_text("x")
+        self._sync(archive_sha256="ab" * 32)
+        record = workflow_releases.load_release(self.RELEASE, self.out)
+        self.assertEqual(record["manager_commit"], "archive-sha256:" + "ab" * 32)
+        self.assertEqual(record["manager_source"], f"workflow-{self.RELEASE}.tar.gz")
+
+    def test_the_protocol_files_are_vendored_when_the_release_has_them(self) -> None:
+        for target_path in workflow_releases.PROTOCOL_PATHS:
+            data = f"# {target_path}\n".encode()
+            location = f"payload/{target_path}"
+            path = self.distribution / self.RELEASE / location
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            manifest = json.loads(self.manifest_path.read_text())
+            manifest["artifacts"].append({"target_path": target_path, "location": location,
+                                          "category": "distribution", "sha256": hashlib.sha256(data).hexdigest(),
+                                          "executable": False})
+            self.manifest_path.write_text(json.dumps(manifest))
+        fixtures.run(["git", "add", "-A"], cwd=self.manager)
+        fixtures.run(["git", "commit", "-q", "-m", "protocol"], cwd=self.manager)
+        dest = self._sync()
+        for target_path in workflow_releases.PROTOCOL_PATHS:
+            self.assertTrue((dest / target_path).is_file(), target_path)
+        self.assertEqual(workflow_releases._check_tree(self.RELEASE, self.out), [])
 
     def test_a_release_that_is_not_a_dotted_version_is_refused(self) -> None:
         with self.assertRaises(ValueError):

@@ -8,10 +8,10 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-03).** Controller 1.5.0 is the latest release. It admits Workflow
+**Where things stand (2026-10-03).** Controller 1.6.0 is the latest release. It admits Workflow
 2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C4, auto-merge
 after acceptance and the wait for the release (11.3, accepted 2026-10-03), is complete. C4 is
-released as 1.6.0 when its pull request (#18) is squash-merged. Workflow 2.7.0 (W1) is published.
+released as 1.6.0 (PR #18, squash `f2ca24d`). Workflow 2.7.0 (W1) is published, so C9 is next.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -29,7 +29,9 @@ Usage limits are tracked, so a run never starts work it cannot finish before a l
 Manager together with the new `workflow` repository. The lanes meet at two points only: C9 needs
 Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 
-**Controller lane, in order.** Each step is one small milestone that is released on its own.
+**Controller lane, in order.** Each step is one small milestone that is released on its own. On
+2026-10-03 the user reordered the steps after C4: C9 first (Workflow 2.7.0 is published), then C8,
+then C5, then C6, C7, C10 and C11. The step numbers stay as they were.
 
 | # | Step | Needs | Section |
 |---|---|---|---|
@@ -37,12 +39,12 @@ Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
 | C1b | Reap every child process: the Controller collects every finished child it holds as a subreaper, in every state, and test repositories turn off Git's automatic maintenance (complete) | — | [11.1.1](#1111-reaping-every-child-process) |
 | C2 | CI reliability: fix the known timing flakes; make a re-run of a failed shard count (complete) | — | [11.2](#112-ci-reliability) |
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
-| C4 | Auto-merge after acceptance: enable GitHub auto-merge, wait for the release, close out, stop (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
+| C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
+| C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
+| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
-| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3, C7 | [11.6](#116-usage-budget) |
-| C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10 | [11.7](#117-the-kanban-runner) |
 
@@ -113,6 +115,21 @@ These are not blockers for the baseline, but should remain visible in later mile
    computing the plan-stage content id). The Controller then can neither explain nor select
    `/milestone-plan <id>`, the step that repairs the classification. It should fail closed with a
    named reason and that sanctioned resume command, never an error exit.
+6. With Controller 1.5.0, `run` declines `/milestone-plan <id>` in `AMENDING_PLAN` (exit 15,
+   "no verifiable ExpectedOutcome is declared for (AMENDING_PLAN, \"2.2\", /milestone-plan)"; reported
+   by the Workflow Manager lane on 2026-10-02). Declare the amendment re-plan's outcome
+   (`AMENDING_PLAN` -> `AWAITING_LOCAL_PLAN_REVIEW`, `plan_revision` + 1, a bound bundle, anchors
+   validated). Until then the step runs as a headless worker.
+7. Two timing tests fail rarely on CI and pass on a re-run, in code C4 did not touch:
+   `test_resume.ReattachAfterControllerLossTest.test_r15_resume_re_attaches_to_a_waiting_worker_and_reconciles_it`
+   (`RUNNING` missing from the history) and
+   `test_worker.OwnershipTest.test_a_gated_escapee_is_published_as_group_then_as_tag` (a sampled
+   source list). Widen their windows the way C2 did.
+8. A `test_worker` supervision test (`/tmp/cp3-supervise-*`) leaves its fake worker and stdin
+   anchor running when the test process is killed mid-test, because its cleanup never runs. Inside
+   a Controller-launched worker those leftovers kept the job draining for the full three-hour
+   bound (C4, 2026-10-02). Make the test's leftovers end with the test process, and consider
+   naming known test leftovers sooner than the drain bound.
 
 ---
 
@@ -1192,7 +1209,7 @@ through its policy (`milestone_branches.pull_request.auto_merge`), and the setti
 `merge.auto` turns it off on the machine. One deliberate change from the description below: the
 Controller does not enable GitHub's auto-merge, which could merge a later push. It sends one
 `gh pr merge --squash --match-head-commit` at the acceptance commit per attempt, so GitHub merges
-exactly that commit or refuses. Releases as 1.6.0 when PR #18 is squash-merged. The description
+exactly that commit or refuses. Released as 1.6.0 (PR #18, squash `f2ca24d`). The description
 below is the original problem statement.
 
 **Step C4.**
@@ -1291,7 +1308,7 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 11.1.1 C1b: reaping every child process                    COMPLETE (released as 1.4.1)
 11.2   C2: CI reliability                                    COMPLETE (released as 1.4.2)
 1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (released as 1.5.0)
-11.3   C4: auto-merge after acceptance and the release wait  COMPLETE (releases as 1.6.0)
+11.3   C4: auto-merge after acceptance and the release wait  COMPLETE (released as 1.6.0)
 ```
 
 ---

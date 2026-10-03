@@ -199,9 +199,10 @@ _LINK_RE = re.compile(r"\[(?:[^\]\n]|\n)*?\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*
 
 
 # A reference definition may sit inside block quotes (``> [g]: target``); a
-# label starting with ``^`` is a GitHub footnote, not a link.
+# label starting with ``^`` is a GitHub footnote, not a link. The title may be
+# quoted or parenthesized, and the destination may start on the next line.
 _DEFINITION_RE = re.compile(
-    r"^(?:[ \t]{0,3}>)*[ \t]{0,3}\[(?!\^)([^\]\n]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:\"[^\"]*\"|'[^']*'))?[ \t]*$", re.M)
+    r"^(?:[ \t]{0,3}>)*[ \t]{0,3}\[(?!\^)([^\]\n]+)\]:[ \t]*\n?[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:\"[^\"]*\"|'[^']*'|\([^()\n]*\)))?[ \t]*$", re.M)
 # ``a[i][j]`` (a word character right before the ``[``) is prose, not a
 # reference link; put such text in a code span.
 _REFERENCE_RE = re.compile(r"(?<![\w\]])\[(?!\^)((?:[^\]\n]|\n)+?)\]\[([^\]\n]*)\]")

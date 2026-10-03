@@ -195,6 +195,23 @@ class LinkRuleTest(TreeTestCase):
         self.tree.write("README.md", "# R\n\n> [g][g]\n>\n> [g]: docs/missing.md\n")
         self.assertTrue(any("missing file" in p for p in self.tree.check()))
 
+    def test_definitions_with_parenthesized_titles_and_next_line_destinations(self) -> None:
+        self.tree.write("docs/g.md", "# G\n\n## Sub\n")
+        forms = ["[g]: {t} (Guide)\n", "[g]:\n  {t}\n", "[g]:\n  {t} (Guide)\n"]
+        for form in forms:
+            for use in ("[g]", "[guide][g]"):
+                def put(target: str) -> list[str]:
+                    self.tree.write("README.md", f"# R\n\n{use}\n\n" + form.format(t=target))
+                    return self.tree.check()
+                self.assertEqual(put("docs/g.md#sub"), [], (form, use))
+                self.assertTrue(any("missing file" in p for p in put("docs/missing.md")), (form, use))
+                self.assertTrue(any("missing heading" in p for p in put("#missing")), (form, use))
+                self.assertTrue(any("missing heading" in p for p in put("docs/g.md#nope")), (form, use))
+        self.tree.write("README.md", "# R\n\n[guide][g]\n\n[g]: #r (Guide)\n")
+        self.assertEqual(self.tree.check(), [])
+        self.tree.write("README.md", "# R\n\n[guide][nope]\n\n[g]: #r (Guide)\n")
+        self.assertTrue(any("no definition" in p for p in self.tree.check()))
+
     def test_footnotes_and_prose_subscripts_are_not_links(self) -> None:
         self.tree.write("README.md", "# R\n\nNote[^1] and a[i][j] and [^1][x].\n\n[^1]: Note.\n")
         self.assertEqual(self.tree.check(), [])

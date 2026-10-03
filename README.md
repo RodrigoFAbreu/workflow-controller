@@ -16,59 +16,52 @@ It never writes Workflow state itself, never runs a command reserved for a
 human, never trusts a worker's own account of what it did, and merges a pull
 request only when the repository opts in, and then only the accepted commit.
 
-**Contents:** [Install](#install) · [First run](#first-run) ·
+**Contents:** [Quick start](#quick-start) ·
 [Commands](#commands) · [What runs automatically](#what-runs-automatically) ·
 [Milestone branches, pull requests and releases](#milestone-branches-pull-requests-and-releases) ·
 [When something goes wrong](#when-something-goes-wrong) ·
 [Development](#development) · [Documentation](#documentation)
 
-## Install
+## Quick start
 
-You need Python 3.12+, [pipx](https://pipx.pypa.io/), `git`, the `claude` CLI
-and `workflow-manager`; `gh` too if the repository uses milestone branches.
+About five minutes, from nothing to a first look at a repository.
 
-Install a release. Check the wheel against the release's `SHA256SUMS` first:
+1. Install a release and check it. You need Python 3.12+, [pipx](https://pipx.pypa.io/),
+   `git`, the `claude` CLI and `workflow-manager`; `gh` too if the repository uses
+   milestone branches. Download the wheel and `SHA256SUMS` from the
+   [releases page](https://github.com/RodrigoFAbreu/workflow-controller/releases), then:
 
-```bash
-VERSION=1.2.1   # see https://github.com/RodrigoFAbreu/workflow-controller/releases
-BASE=https://github.com/RodrigoFAbreu/workflow-controller/releases/download/v$VERSION
-curl -fLO "$BASE/workflow_controller-$VERSION-py3-none-any.whl"
-curl -fLO "$BASE/SHA256SUMS"
-sha256sum -c SHA256SUMS
-pipx install ./workflow_controller-$VERSION-py3-none-any.whl
-workflow-controller --version
-```
+   ```bash
+   sha256sum -c SHA256SUMS
+   pipx install ./workflow_controller-<version>-py3-none-any.whl
+   workflow-controller --version
+   ```
 
-**Upgrading:** check `workflow-controller status` shows `active: none`, then
-`pipx install --force` the new wheel. **Rolling back** works the same way with
-an older wheel.
+   The steps in full, with the settings file and uninstall, are in [install](docs/install.md).
 
-**From a checkout**, only when you need unreleased code: build a wheel with
-`python3 -m pip wheel --no-deps -w dist .` and `pipx install` it, or use
-`pip install -e .` for development.
+2. Look at a repository that has Workflow installed through Workflow Manager. This is
+   read-only and always safe:
 
-The full guide, including what an upgrade does to a Controller that is
-running and what a rollback across generations needs, is
-[Installing, upgrading and rolling back](docs/guide/installation.md).
+   ```bash
+   workflow-controller explain .
+   ```
 
-## First run
+3. Run until the next human step. `--follow` shows the worker's activity as it happens:
 
-From inside a repository that has Workflow installed through Workflow
-Manager:
+   ```bash
+   workflow-controller run --follow .
+   ```
 
-1. See where things stand. This is read-only and always safe:
-   `workflow-controller explain .`
-2. Run until the next human step: `workflow-controller run --follow .`
-   `--follow` shows the worker's activity as it happens.
-3. When it stops at a gate (exit `10`), do what it says, for example approve
-   a plan or paste an external review verdict, then run it again.
+4. When it stops at a gate (exit `10`), do what it says, for example approve a plan or
+   paste an external review verdict, then run it again.
 
-From another terminal, `workflow-controller follow .` attaches to whatever
-is running without affecting it, and `workflow-controller status` shows every
-active run and job.
+From another terminal, `workflow-controller follow .` attaches to whatever is running
+without affecting it, and `workflow-controller status` shows every active run and job.
+If the Controller or your terminal dies while a worker runs, the worker keeps going:
+`workflow-controller resume .` re-attaches to it and finishes the job.
 
-If the Controller or your terminal dies while a worker runs, the worker keeps
-going. `workflow-controller resume .` re-attaches to it and finishes the job.
+More: [run](docs/run.md) (`step` versus `run`, approval gates, bounding a run),
+[update and roll back](docs/update.md), [install](docs/install.md).
 
 ## Commands
 

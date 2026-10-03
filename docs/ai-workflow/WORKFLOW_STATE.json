@@ -5569,7 +5569,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-auto-merge-release-wait-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-auto-merge-release-wait-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 11,
       "functional_review_round": null,
@@ -5636,10 +5636,10 @@
         "recorded_at": "2026-10-02T07:27:22Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "b652463f28ab3f6fa483a74549407012b27e720d4934d48de508713b37305100",
-        "approved_review_content_id": "a5b48e0f7f44ce1587e9588625fa8acdaf4f685a82068f18705d9b89d47d4bb3",
+        "reviewed_bundle_id": "0b2b25f37904d0809a8449952fcb3388f87c506c358603a36e69047abd52a52b",
+        "approved_review_content_id": "ba5b4725051edf290b8c6c70c5ac56b78ff1ca42fd0704c875238ec67f937d71",
         "review_content_manifest": [
           {
             "path": "README.md",
@@ -5681,7 +5681,7 @@
             "path": "controller/milestone_branch.py",
             "exists": true,
             "mode": "100644",
-            "blob": "299edab2bf737335ae5a8d85b5974d37129ddb50"
+            "blob": "c169c40e66dd3f428fc5dbd9ead13acf5fa65d7e"
           },
           {
             "path": "controller/observe.py",
@@ -5753,7 +5753,7 @@
             "path": "docs/guide/milestone-branches.md",
             "exists": true,
             "mode": "100644",
-            "blob": "119ec4cbcec6e75f52e2f1221c40aedbb8008abf"
+            "blob": "31582573d0e1a60909f29a357915f025dff15f72"
           },
           {
             "path": "docs/guide/runtime.md",
@@ -5825,7 +5825,7 @@
             "path": "tests/test_pull_request_lifecycle.py",
             "exists": true,
             "mode": "100644",
-            "blob": "f6490ef7737f8448f74c2eb479668bf18bab9d63"
+            "blob": "8ea2f13735bd1c26994c6399881ca5d66a88b9fa"
           },
           {
             "path": "tests/test_release_txn.py",
@@ -5852,11 +5852,11 @@
             "blob": "84ff5198030d0ae373ad64716c3c5f4810486b4e"
           }
         ],
-        "reviewed_content_commit": "9efa17c1b968ba025adf9310f5ec4b6511d4c01d",
+        "reviewed_content_commit": "af5ffe64ca3406a84773d84aaa72524449ffc3e9",
         "legacy_evidence": null,
         "user_confirmation": "/approve-review implementation workflow-controller-auto-merge-release-wait",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-02T23:14:49Z"
+        "recorded_at": "2026-10-03T01:57:46Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -5876,8 +5876,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 72,
-      "last_transition": "2026-10-02T23:58:50Z",
+      "state_revision": 75,
+      "last_transition": "2026-10-03T01:57:46Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -5898,18 +5898,18 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "a5b48e0f7f44ce1587e9588625fa8acdaf4f685a82068f18705d9b89d47d4bb3",
+        "review_content_id": "ba5b4725051edf290b8c6c70c5ac56b78ff1ca42fd0704c875238ec67f937d71",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "b652463f28ab3f6fa483a74549407012b27e720d4934d48de508713b37305100",
+          "bundle_id": "0b2b25f37904d0809a8449952fcb3388f87c506c358603a36e69047abd52a52b",
           "verdict": "APPROVE",
-          "round": 11,
-          "completed_at": "2026-10-02T22:51:41Z"
+          "round": 12,
+          "completed_at": "2026-10-03T00:47:48Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "b652463f28ab3f6fa483a74549407012b27e720d4934d48de508713b37305100",
+          "bundle_id": "0b2b25f37904d0809a8449952fcb3388f87c506c358603a36e69047abd52a52b",
           "verdict": "APPROVE",
-          "round": 11,
-          "completed_at": "2026-10-02T22:59:43Z"
+          "round": 12,
+          "completed_at": "2026-10-03T00:56:46Z"
         }
       }
     }

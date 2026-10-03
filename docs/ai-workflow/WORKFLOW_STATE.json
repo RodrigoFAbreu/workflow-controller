@@ -5922,7 +5922,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestration-protocol-v1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 11,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -6011,8 +6011,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 63,
-      "last_transition": "2026-10-03T15:07:22Z",
+      "state_revision": 65,
+      "last_transition": "2026-10-03T15:36:49Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6090,7 +6090,17 @@
           "resolved_review_content_id": "c655ae87c366aa19444731e8e09d124fc2aff553497bacd8356a714f071d70a9"
         }
       ],
-      "amendment_base_commit": "425bac6f53d1939291362b2b43b09fb7086357c3"
+      "amendment_base_commit": "425bac6f53d1939291362b2b43b09fb7086357c3",
+      "implementation_review_stages": {
+        "review_content_id": "ecec9f076ac874392cd6d738e2c729741e863a9c99d2d28917691d91f2039c87",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "19a3507c30676c7ca07d2a9d65a0d0ca7e719c4158085847387956f8e33bffaf",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-03T15:13:09Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

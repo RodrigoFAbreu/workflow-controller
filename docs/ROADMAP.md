@@ -8,10 +8,11 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-03).** Controller 1.6.0 is the latest release. It admits Workflow
-2.5.1 and 2.6.0, and this repository runs Workflow 2.6.0. Every milestone through C9, the Controller
-on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 releases as 1.7.0 when its pull
-request (#21) is squash-merged. C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). C8 is next.
+**Where things stand (2026-10-03).** Controller 1.7.0 is the latest release. It admits Workflow
+2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
+repository runs Workflow 2.6.0. Every milestone through C9, the Controller
+on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
+`fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). C8 is next.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -130,6 +131,15 @@ These are not blockers for the baseline, but should remain visible in later mile
    a Controller-launched worker those leftovers kept the job draining for the full three-hour
    bound (C4, 2026-10-02). Make the test's leftovers end with the test process, and consider
    naming known test leftovers sooner than the drain bound.
+9. A message from another session can land in a Controller-launched worker mid-turn (C9,
+   2026-10-03). The Controller then classes the worker `AMBIGUOUS`
+   (`command_lifecycle_irregular`) and fails the job, although the work was done and the state was
+   coherent; the next run continued. Tolerate, or name, a peer message in a worker session.
+10. The milestone planner can write an artifact declaration from an old template that classifies
+   none of the paths the plan changes (C9 plan revision 10: `controller/`, `tests/`, `tools/`,
+   the guides). Both plan-review stages approved it, and the first checkpoint after `controller/`
+   changed refused with `UnclassifiedPathError`, needing a plan amendment. Check, at plan review,
+   that the declaration classifies every path the checkpoints name.
 
 ---
 
@@ -407,8 +417,8 @@ This should stay a compatibility/integration milestone, not become the full arch
 
 **Status:** Complete (`workflow-controller-orchestration-protocol-v1`, accepted 2026-10-03 under
 Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md`; the narrative is
-archived at `docs/milestones/completed/workflow-controller-orchestration-protocol-v1.md`). Releases as
-1.7.0 when PR #21 is squash-merged. The description below is the original problem statement.
+archived at `docs/milestones/completed/workflow-controller-orchestration-protocol-v1.md`). Released as
+1.7.0 (PR #21, squash `fd4e9a6`). The description below is the original problem statement.
 
 **Priority:** High after the 2.6 compatibility integration.
 
@@ -1314,7 +1324,7 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 11.2   C2: CI reliability                                    COMPLETE (released as 1.4.2)
 1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (released as 1.5.0)
 11.3   C4: auto-merge after acceptance and the release wait  COMPLETE (released as 1.6.0)
-1.7    C9: the Controller on Orchestration Protocol v1       COMPLETE (releases as 1.7.0)
+1.7    C9: the Controller on Orchestration Protocol v1       COMPLETE (released as 1.7.0)
 ```
 
 ---

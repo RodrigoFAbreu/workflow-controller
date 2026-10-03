@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-orchestration-protocol-v1",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -5922,7 +5922,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestration-protocol-v1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestration-protocol-v1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 11,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -6455,8 +6455,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 69,
-      "last_transition": "2026-10-03T16:11:53Z",
+      "state_revision": 70,
+      "last_transition": "2026-10-03T17:52:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

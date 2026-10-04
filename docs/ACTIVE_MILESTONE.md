@@ -70,7 +70,7 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
 ## Functional review checklist
 
 Documentation-only milestone (`docs:`; nothing under `controller/` changed). Review as a first-time reader
-would. Evidence below was re-measured in round 2 on 2026-10-04 at implementation revision 10 (head `c747e8c`) with the
+would. Evidence below was re-measured in round 3 on 2026-10-04 at implementation revision 15 (head `4768a24`) with the
 checkout's Controller 1.7.0 and the pipx-installed release 1.7.0. Findings go to `.ai-review/workflow-controller-documentation-reorganisation/feedback/FUNCTIONAL_REVIEW.md`.
 
 ### Setup
@@ -91,7 +91,7 @@ ctl() { python3 -P -m controller --runtime-dir $S/rt "$@"; }
 | # | Command | Expected (measured) |
 |---|---|---|
 | A1 | `python3 tools/check_docs.py` | no output, exit 0 |
-| A2 | `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` | `Ran 93 tests ... OK` (re-measured round 2) |
+| A2 | `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` | `Ran 93 tests ... OK` (re-measured round 3) |
 | A3 | `git diff 914d8f4 --stat -- controller .github .workflow-controller docs/adr docs/releases pyproject.toml setup.py` | empty (no protected path touched) |
 
 ### B. Commands shown on the task pages (scratch repository, `ctl` from Setup)
@@ -127,7 +127,7 @@ works (also click a few anchors), and nothing refers to a page or section that n
 8. Reorganised guides under `docs/guide/` (`how-it-works.md`, `commands.md`, `automation.md`, `workers.md`, `runtime.md`, `milestone-branches.md`, `troubleshooting.md`, `ci-and-releases.md`, `development.md` including "Documentation checks"): headers present; no duplicated exit table; `installation.md` is only a three-heading stub whose old inbound links (ADRs, release notes) still land somewhere sensible.
 9. `CLAUDE.md` names the task pages, the stub and the documentation check.
 
-### D. Round 2 additions (re-measured at revision 10)
+### D. Gate, exit-130 and install-status checks (re-measured at revision 15)
 
 | # | Check | Expected (measured) |
 |---|---|---|
@@ -136,6 +136,19 @@ works (also click a few anchors), and nothing refers to a page or section that n
 | D3 | Exit 130: `docs/exit-codes.md` row 130 against `controller/cli.py` (`main`, ~lines 1665-1680, and `_follow`, ~line 660) | Ctrl-C in `step`/`run`/`resume` exits 130 (one line while `run` waits for checks, merge or release; otherwise traceback); Ctrl-C in `follow` is caught and exits 0, run unaffected. Matches the code |
 | D4 | Pipx release, no `--runtime-dir`, scratch `HOME`/`XDG_*`: `env -u PYTHONPATH HOME=$S/h XDG_CONFIG_HOME=$S/c workflow-controller status` from `$S/repo` | Line 1 `controller: workflow-controller 1.7.0 -- package (release v1.7.0; built from fd4e9a69e25a; package 7876c07c5108)`; line 2 `no Controller runtime state at $S/h/.local/state/workflow-controller (ladder row 4)`; exit 0. Matches `install.md` line 51 (first line, `<root>` default `~/.local/state/workflow-controller`, row 4). With `XDG_STATE_HOME` set the root moves but the row stays 4. Not checkable here: a machine whose real root already holds state prints `active: none` instead |
 
+### E. Round 3 additions (what round 2 changed)
+
+**Deliberate omission, do not report it:** the pages do not restate when to commit a gate-policy file. They link the Workflow's gate policy reference for that rule, so the Controller documentation never has a second copy to drift.
+
+| # | Check | Expected (measured) |
+|---|---|---|
+| E1 | One way out: `grep -n "satisfy-gate" README.md docs/run.md docs/common-problems.md docs/glossary.md docs/guide/troubleshooting.md` | At a Workflow 2.8 automatic-gate stop each of the five pages names exactly one way out, `/satisfy-gate plan\|implementation\|acceptance <id>` run by the user in a Claude session, then run again. No page tells you to create `GATE_POLICY.json` as a way past the stop; they send "switch to human gates" to the Workflow's gates page |
+| E2 | Links well formed: the same five pages carry `https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md` and `https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md` (README, run.md, glossary, troubleshooting, common-problems; how-it-works links only the glossary) | Both URLs are complete and spelled identically everywhere. Offline, with the Workflow checkout at `../workflow`: `docs/gates.md` and `payload/docs/ai-workflow/GATE_POLICY.md` exist. Online, both open (the repository is `RodrigoFAbreu/workflow`, branch `main`) |
+| E3 | Each target says what the sentence claims: `docs/gates.md` (Workflow checkout, or the URL) and `payload/docs/ai-workflow/GATE_POLICY.md` | gates.md describes the three `/satisfy-gate` commands (around line 42) and how to switch to human gates (`human_approval` true, `{"schema_version": 1, "human_approval": true}`, around line 51); GATE_POLICY.md covers the policy file and its commit/timing rules (heading "The policy file" and the rules after it), so "when you commit the policy file matters" is explained there |
+| E4 | Default statement against the Workflow: read the glossary "Approval gate", `run.md` step 3, README "From Workflow 2.8", and `../workflow/docs/gates.md` table | Same table everywhere: version 2.2 all three gates automatic; 2.1 (the default of a freshly bootstrapped repository) automatic plan approval and acceptance but implementation approval always a person; 1 person for plan and implementation, acceptance automatic. Pages say a version 1 item keeps plan and implementation approval with a person, and "only a version 2.2 item has all three gates automatic". Check that the Workflow's table agrees (it does at Workflow 2.8.0) |
+| E5 | Glossary "Approval gate" paragraph, read end to end (`docs/glossary.md`, section "Approval gate" and the paragraph after it) | Reads as continuous prose: definition, up-to-2.7 vs 2.8 behavior, default and blocked-not-passed, the `human_approval` and `gates.<gate>.human` switches, link to the gate policy reference, the version 1 and 2.1 exceptions, "governing version is not the Workflow release", link to the gates page, review stages are not approvals. The follow-on paragraph says the Controller 1.7.0 stops at automatic gates (`workflow_unknown_disposition`) and gives the `/satisfy-gate` commands, then links Gate stop and run. No dangling sentence, no repeated clause, no broken link |
+| E6 | Scratch-directory sanity, B-table commands re-run in round 3 | Measured: B1 to B7 as listed (exit codes 0, 0, 0, 0, 0, 20 x4, 0). D4 pipx run prints the `package (release v1.7.0 ...)` line and `ladder row 4`, exit 0 |
+
 ### Functional review round 1 (applied)
 
 Findings 1 (install.md `status` row and `controller:` line), 3 (glossary links in update.md), 4 (`VERSION` in update.md), 5 (rollback below 1.7.0), 6 (gate-policy wording in run.md and glossary), 7 (exit 130 row), 8 (README route to Workflow Manager) and a one-sentence note for 9 (development.md) were fixed in documentation only, in one bounded commit. Finding 2 is a checklist wording note: B2's expected cell is the second-call output (the first `ctl status` on a fresh `$S/rt` prints the `no Controller runtime state` form; `install.md` now says the row depends on the root). Finding 9's `ACTIVE_THROUGH` gating in `tools/check_docs.py` is left as is (tool change, not wording). Re-test: install.md B2 line, update.md, run.md gate sentence, exit-codes 130 row, README step 2.
@@ -143,6 +156,10 @@ Findings 1 (install.md `status` row and `controller:` line), 3 (glossary links i
 ### Functional review round 2 (applied)
 
 Finding 1 (Important, no way past the Workflow 2.8 automatic-gate stop): run.md step 3, common-problems.md, glossary.md, troubleshooting.md and README.md now name the two ways out, `/satisfy-gate plan|implementation|acceptance <id>` run by the user, or a committed `docs/ai-workflow/GATE_POLICY.json` with `{"schema_version": 1, "human_approval": true}`. Findings 2-4 (governing version 1/2.1 wording, policy file path and "no file means default", functional-review actions in protocol mode in README) and 5 (README "At a gate stop") applied. The checklist expected-output note (finding 6 in the report) is not applied: skipped by instruction.
+
+### Functional review round 3 (pending)
+
+Round 3 re-measures the checks above after round 2's gate wording changes; findings go to the feedback file named at the top.
 
 ### Known limitations and out of scope
 

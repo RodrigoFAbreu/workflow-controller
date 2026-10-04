@@ -70,8 +70,8 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
 ## Functional review checklist
 
 Documentation-only milestone (`docs:`; nothing under `controller/` changed). Review as a first-time reader
-would. Evidence below was measured on 2026-10-04 at implementation head `1f58853` (plus state commits) with the
-checkout's Controller 1.7.0. Findings go to `.ai-review/workflow-controller-documentation-reorganisation/feedback/FUNCTIONAL_REVIEW.md`.
+would. Evidence below was re-measured in round 2 on 2026-10-04 at implementation revision 10 (head `c747e8c`) with the
+checkout's Controller 1.7.0 and the pipx-installed release 1.7.0. Findings go to `.ai-review/workflow-controller-documentation-reorganisation/feedback/FUNCTIONAL_REVIEW.md`.
 
 ### Setup
 
@@ -91,7 +91,7 @@ ctl() { python3 -P -m controller --runtime-dir $S/rt "$@"; }
 | # | Command | Expected (measured) |
 |---|---|---|
 | A1 | `python3 tools/check_docs.py` | no output, exit 0 |
-| A2 | `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` | `Ran 93 tests ... OK` |
+| A2 | `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` | `Ran 93 tests ... OK` (re-measured round 2) |
 | A3 | `git diff 914d8f4 --stat -- controller .github .workflow-controller docs/adr docs/releases pyproject.toml setup.py` | empty (no protected path touched) |
 
 ### B. Commands shown on the task pages (scratch repository, `ctl` from Setup)
@@ -126,6 +126,15 @@ works (also click a few anchors), and nothing refers to a page or section that n
 7. `docs/release-history.md`: every release 1.1.1 to 1.7.0, one line each, notes linked from 1.3.0.
 8. Reorganised guides under `docs/guide/` (`how-it-works.md`, `commands.md`, `automation.md`, `workers.md`, `runtime.md`, `milestone-branches.md`, `troubleshooting.md`, `ci-and-releases.md`, `development.md` including "Documentation checks"): headers present; no duplicated exit table; `installation.md` is only a three-heading stub whose old inbound links (ADRs, release notes) still land somewhere sensible.
 9. `CLAUDE.md` names the task pages, the stub and the documentation check.
+
+### D. Round 2 additions (re-measured at revision 10)
+
+| # | Check | Expected (measured) |
+|---|---|---|
+| D1 | Terms: `grep -rn -i "gate stop\|approval gate" README.md docs/*.md docs/guide/*.md` | "gate stop" means the Controller stopping for a person (exit 10; covers the three approval gates and the review waits); "approval gate" means plan approval, implementation (technical) approval, acceptance. Uses in `README.md`, `run.md`, `exit-codes.md`, `common-problems.md` match `glossary.md#gate-stop` and `#approval-gate`; no page uses one for the other |
+| D2 | Gate policy, Workflow 2.8.0: read `docs/glossary.md` (Approval gate), `docs/run.md` step 3, `docs/guide/how-it-works.md` (hard gates paragraph) and `README.md` ("From Workflow 2.8") | Same statements everywhere: up to 2.7 a person decides; from 2.8 default is automatic from complete evidence (glossary: no `GATE_POLICY.json` needed, gate with missing evidence is blocked); `human_approval` turns all three gates back to a person; `gates.<gate>.human: true` does it for one gate (glossary and how-it-works). `run.md` and `README.md` state only the policy and default and defer to the glossary for the switches. All say Controller 1.7.0 still stops at automatic gates (roadmap C10, `workflow_unknown_disposition`) |
+| D3 | Exit 130: `docs/exit-codes.md` row 130 against `controller/cli.py` (`main`, ~lines 1665-1680, and `_follow`, ~line 660) | Ctrl-C in `step`/`run`/`resume` exits 130 (one line while `run` waits for checks, merge or release; otherwise traceback); Ctrl-C in `follow` is caught and exits 0, run unaffected. Matches the code |
+| D4 | Pipx release, no `--runtime-dir`, scratch `HOME`/`XDG_*`: `env -u PYTHONPATH HOME=$S/h XDG_CONFIG_HOME=$S/c workflow-controller status` from `$S/repo` | Line 1 `controller: workflow-controller 1.7.0 -- package (release v1.7.0; built from fd4e9a69e25a; package 7876c07c5108)`; line 2 `no Controller runtime state at $S/h/.local/state/workflow-controller (ladder row 4)`; exit 0. Matches `install.md` line 51 (first line, `<root>` default `~/.local/state/workflow-controller`, row 4). With `XDG_STATE_HOME` set the root moves but the row stays 4. Not checkable here: a machine whose real root already holds state prints `active: none` instead |
 
 ### Functional review round 1 (applied)
 

@@ -6560,7 +6560,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 16,
       "functional_review_round": null,
@@ -6623,10 +6623,10 @@
         "recorded_at": "2026-10-03T20:16:12Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "221e4b061d1838edf0f85e75191dba8611ba45de44d25c979ce2fda7f1ff2dbb",
-        "approved_review_content_id": "7663c2157486ca53d2fe28e62d39db49b0ce2d9dad9e924524d8149e0de6f8bd",
+        "reviewed_bundle_id": "028c7b312c5deadcbc75f938270a2b3ea82f437e730aeef1a149c277646ea229",
+        "approved_review_content_id": "6f9b2aceb8c26505ad1ca71d0e7a9d0d20546b67970b9ade87b13006a4f33420",
         "review_content_manifest": [
           {
             "path": "CLAUDE.md",
@@ -6638,7 +6638,7 @@
             "path": "README.md",
             "exists": true,
             "mode": "100644",
-            "blob": "f0a36c3a469bb3535d8f8e7959f5bb2384f45ca6"
+            "blob": "4ab0dee3349ce9c5342412fa75a43b060b2423fa"
           },
           {
             "path": "docs/README.md",
@@ -6662,7 +6662,7 @@
             "path": "docs/compatibility.md",
             "exists": true,
             "mode": "100644",
-            "blob": "284dcff8abe38c24e66f382a326b2150c07275e1"
+            "blob": "3abd473e4cb75498a3d365270a04d452c271a690"
           },
           {
             "path": "docs/exit-codes.md",
@@ -6674,7 +6674,7 @@
             "path": "docs/glossary.md",
             "exists": true,
             "mode": "100644",
-            "blob": "b0548913555ecac7d2a0583a3917a29676162e8b"
+            "blob": "7da2dfcce2866edde556f721f4138cef3ea31ef7"
           },
           {
             "path": "docs/guide/automation.md",
@@ -6710,7 +6710,7 @@
             "path": "docs/guide/how-it-works.md",
             "exists": true,
             "mode": "100644",
-            "blob": "cc1366d315dc6f544be92d2cb576e080c2a25215"
+            "blob": "d153ce27e763a133525d0b6549d45c886efb1db8"
           },
           {
             "path": "docs/guide/installation.md",
@@ -6758,13 +6758,13 @@
             "path": "docs/run.md",
             "exists": true,
             "mode": "100644",
-            "blob": "015d20696383c765b3004cb1bb74e3b37822a06e"
+            "blob": "b2d895123ca7111bae4072e28b4dbde283eac4d3"
           },
           {
             "path": "docs/update.md",
             "exists": true,
             "mode": "100644",
-            "blob": "9fd7f9898e89f262cd200f7ffeedce844e291140"
+            "blob": "9b31cb0f11bb6fac86f5feeec8987b2e1881e9b0"
           },
           {
             "path": "tests/test_docs.py",
@@ -6779,11 +6779,11 @@
             "blob": "70affaef0dfad244c56a4d0d8de1e5b1fd4f4e14"
           }
         ],
-        "reviewed_content_commit": "089a44115b3de0cd718b55074b8f6cecca719745",
+        "reviewed_content_commit": "59bf9af24cbace54c7d45bd457bed1eee791750e",
         "legacy_evidence": null,
-        "user_confirmation": "I approve the implementation for workflow-controller-documentation-reorganisation at the implementation stage.",
+        "user_confirmation": "implementation workflow-controller-documentation-reorganisation",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-04T11:47:28Z"
+        "recorded_at": "2026-10-04T12:32:46Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -6803,8 +6803,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 76,
-      "last_transition": "2026-10-04T11:55:25Z",
+      "state_revision": 79,
+      "last_transition": "2026-10-04T12:32:46Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6825,18 +6825,18 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "7663c2157486ca53d2fe28e62d39db49b0ce2d9dad9e924524d8149e0de6f8bd",
+        "review_content_id": "6f9b2aceb8c26505ad1ca71d0e7a9d0d20546b67970b9ade87b13006a4f33420",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "221e4b061d1838edf0f85e75191dba8611ba45de44d25c979ce2fda7f1ff2dbb",
+          "bundle_id": "028c7b312c5deadcbc75f938270a2b3ea82f437e730aeef1a149c277646ea229",
           "verdict": "APPROVE",
-          "round": 15,
-          "completed_at": "2026-10-04T11:41:43Z"
+          "round": 16,
+          "completed_at": "2026-10-04T12:00:35Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "221e4b061d1838edf0f85e75191dba8611ba45de44d25c979ce2fda7f1ff2dbb",
+          "bundle_id": "028c7b312c5deadcbc75f938270a2b3ea82f437e730aeef1a149c277646ea229",
           "verdict": "APPROVE",
-          "round": 15,
-          "completed_at": "2026-10-04T11:45:05Z"
+          "round": 16,
+          "completed_at": "2026-10-04T12:05:04Z"
         }
       }
     }

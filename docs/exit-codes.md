@@ -20,7 +20,7 @@ copy, which the Controller's own tests compare with the code, is
 | 40 | the Controller itself was interrupted, or `resume` marked a record as interrupted | `workflow-controller resume <repo>` |
 | 45 | the worktree is held: another Controller, or a worker that may still be running, holds its lock, so nothing was launched | wait, or follow the message; the hold is not a failure |
 | 50 | a generation handoff is pending: a newer Controller generation is installed and the running one stopped on purpose | run again with the new version |
-| 130 | you pressed Ctrl-C (while `run` waited for checks, a merge or a release it prints one line; at any other time you get a traceback); the shell reports it as 128 plus the interrupt signal | `workflow-controller resume <repo>` if a job was left running |
+| 130 | you pressed Ctrl-C during `step`, `run` or `resume` (while `run` waited for checks, a merge or a release it prints one line; otherwise you get a traceback); Ctrl-C in `follow` is exit 0 and the run is unaffected; the shell reports 130 as 128 plus the interrupt signal | `workflow-controller resume <repo>` if a job was left running |
 
 Exit 10 and exit 50 are successes of the design, not errors, and exit 45 is a
 wait. An outer script should treat them differently from 0 and from 20.

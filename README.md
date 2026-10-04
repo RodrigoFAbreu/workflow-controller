@@ -49,7 +49,9 @@ About five minutes, from nothing to a first look at a repository.
 
    The steps in full, with the settings file and uninstall, are in [install](docs/install.md).
 
-2. Look at a repository that has Workflow installed through Workflow Manager. This is
+2. Look at a repository that has Workflow installed through
+   [Workflow Manager](https://github.com/RodrigoFAbreu/workflow-manager#readme) (its readme
+   explains how to install and bootstrap one). This is
    read-only and always safe:
 
    ```bash

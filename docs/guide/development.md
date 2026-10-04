@@ -238,7 +238,7 @@ What it checks:
 
 Adding a page: put a new user page in `USER_PAGES`, and in
 `COMMAND_PAGES` too if it shows commands, with the number `ACTIVE_THROUGH`
-holds. When a release changes a page, update its "Last checked with" line
+holds (the checkpoint gating is this milestone's scaffolding, so always use the current value). When a release changes a page, update its "Last checked with" line
 by hand; the check only asserts the line is there and has that shape.
 
 ## Throwaway Git repositories

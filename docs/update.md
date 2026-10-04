@@ -20,6 +20,7 @@ Goal: change the Controller's version safely, or move a repository to another Wo
 2. Install the new wheel over the old one.
 
    ```bash
+   VERSION=<new version>
    pipx install --force ./workflow_controller-$VERSION-py3-none-any.whl
    workflow-controller --version
    ```
@@ -27,7 +28,7 @@ Goal: change the Controller's version safely, or move a repository to another Wo
 What an update does to a Controller that is already running:
 
 - A running `step` or `run` executes from its own snapshot of the installed package, so the new files never reach it.
-- A new release of the same generation is ignored by a running `run`, which finishes on the old version.
+- A new release of the same [generation](glossary.md#generation) is ignored by a running `run`, which finishes on the old version.
 - A new generation stops a running `run` at its next boundary with exit 50 (all statuses are in [exit codes](exit-codes.md)) and a handoff record. Run again with the new version.
 - If `pipx install --force` lands in the middle of a boundary check, or the update changes Python's minor version, the run fails closed with exit 20. Run `run` again.
 
@@ -35,10 +36,10 @@ What an update does to a Controller that is already running:
 
 Install an older wheel the same way: `pipx install --force <older wheel>`. Going back across a generation has two consequences:
 
-- A job record written by the newer generation is refused by the older one, and `resume --abandon` refuses it too. Run `workflow-controller resume .` before you roll back and the problem does not arise. If you already rolled back and hit it (`StaleJobRecordError`), reinstall the newer version, let its own `resume` clear the record, then roll back.
+- A [job](glossary.md#job) record written by the newer generation is refused by the older one, and `resume --abandon` refuses it too. Run `workflow-controller resume .` before you roll back and the problem does not arise. If you already rolled back and hit it (`StaleJobRecordError`), reinstall the newer version, let its own `resume` clear the record, then roll back.
 - A `run` still executing the newer generation stops at its next boundary with exit 20.
 
-Rolling back to 1.2.1 refuses a repository already on Workflow 2.6.0 (exit 20).
+Rolling back to 1.2.1 refuses a repository already on Workflow 2.6.0 (exit 20). In the same way, rolling back below 1.7.0 refuses a repository already on Workflow 2.7.0 or later (`outside_supported_line`, exit 20; see [compatibility](compatibility.md)).
 
 ## Move a repository to a newer Workflow
 

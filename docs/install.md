@@ -48,7 +48,7 @@ The Controller finds Workflow Manager through `--workflow-manager`, then the `WO
 
 ## What you should see
 
-`sha256sum -c` prints `workflow_controller-<version>-py3-none-any.whl: OK`. `--version` prints two lines: `workflow-controller <version>`, then `runtime: package (release v<version>; built from <commit>; package <digest>)`. `status` on a new machine prints `no Controller runtime state at <root> (ladder row 1)`; once state exists it shows `active: none` when nothing runs.
+`sha256sum -c` prints `workflow_controller-<version>-py3-none-any.whl: OK`. `--version` prints two lines: `workflow-controller <version>`, then `runtime: package (release v<version>; built from <commit>; package <digest>)`. `status` always starts with a `controller: workflow-controller <version> -- package (...)` line. On a new machine it then prints `no Controller runtime state at <root> (ladder row <n>)`, where `<root>` is `~/.local/state/workflow-controller` by default (row 4); once state exists it shows `active: none` when nothing runs.
 
 The checksum is the proof that a wheel is the release; the word "release" in `--version` comes from the build and proves nothing about origin by itself. See [Runtime identity](guide/runtime.md#runtime-identity).
 

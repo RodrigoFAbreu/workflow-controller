@@ -40,7 +40,8 @@ gates. Three only a person can pass: plan approval, implementation approval
 (also called technical approval) and milestone acceptance. The other three wait
 for the external plan review, the external implementation review and the
 functional review. A tool may run everything between gates, but never
-crosses one for you.
+crosses one for you unless the repository's gate policy makes that gate
+automatic (Workflow 2.8 and later).
 
 ### Bundle
 

@@ -39,15 +39,19 @@ One of the points in a work item's lifecycle where it cannot move on until a
 decision is recorded: plan approval, implementation approval (also called
 technical approval) and milestone acceptance. Up to Workflow 2.7, a person
 always makes these decisions. From Workflow 2.8, each gate follows the
-repository's gate policy (`GATE_POLICY.json`). By default the Workflow
-satisfies the gate itself once its evidence is complete (for example, both
-reviews approve); a gate whose evidence is missing is blocked, not passed. A
-repository that turns `human_approval` on (all three gates), or sets `human: true`
-for one gate under `gates.<gate>` (for example `gates.plan_approval`), gets the
-person-decides behavior back for those gates. Work items governed by an older Workflow version
-keep their exceptions: a version 1 item always has a person for plan and
-implementation approval, and a version 2.1 item always has a person for
-implementation approval. The review stages (external plan review, external
+repository's gate policy, the file `docs/ai-workflow/GATE_POLICY.json`. With no
+file, the default applies: the Workflow satisfies the gate itself once its
+evidence is complete (for example, both reviews approve); a gate whose evidence
+is missing is blocked, not passed. A repository that turns `human_approval` on
+(all three gates), or sets `human: true` for one gate under `gates.<gate>` (for
+example `gates.plan_approval`), gets the person-decides behavior back for those
+gates. Work items whose governing version is 1 or 2.1 keep exceptions: a
+version 1 item always has a person for plan and implementation approval, and a
+version 2.1 item always has a person for implementation approval. Version 2.1
+is the default of a freshly bootstrapped repository, so there implementation
+approval stays with a person by default; only a version 2.2 item has all three
+gates automatic. The governing version is not the Workflow release. See the
+Workflow's [approval gates](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). The review stages (external plan review, external
 implementation review, functional review) are separate waiting points; they
 wait for a review result, not an approval.
 
@@ -55,8 +59,11 @@ The Controller stops at an approval gate when a person is needed. Controller
 1.7.0 also stops at Workflow 2.8 automatic gates, until a later release
 (roadmap C10): the Workflow answers them with a disposition (`validation`) that
 this Controller does not know, so `explain` reports
-`workflow_unknown_disposition` and nothing is launched. See
-[Gate stop](#gate-stop).
+`workflow_unknown_disposition` and nothing is launched. To get past it, run
+`/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>` or
+`/satisfy-gate acceptance <id>` yourself in a Claude session, or commit a gate
+policy that makes the gates human. See [Gate stop](#gate-stop) and
+[run](run.md#steps).
 
 ### Bundle
 

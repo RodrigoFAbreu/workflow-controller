@@ -140,6 +140,10 @@ works (also click a few anchors), and nothing refers to a page or section that n
 
 Findings 1 (install.md `status` row and `controller:` line), 3 (glossary links in update.md), 4 (`VERSION` in update.md), 5 (rollback below 1.7.0), 6 (gate-policy wording in run.md and glossary), 7 (exit 130 row), 8 (README route to Workflow Manager) and a one-sentence note for 9 (development.md) were fixed in documentation only, in one bounded commit. Finding 2 is a checklist wording note: B2's expected cell is the second-call output (the first `ctl status` on a fresh `$S/rt` prints the `no Controller runtime state` form; `install.md` now says the row depends on the root). Finding 9's `ACTIVE_THROUGH` gating in `tools/check_docs.py` is left as is (tool change, not wording). Re-test: install.md B2 line, update.md, run.md gate sentence, exit-codes 130 row, README step 2.
 
+### Functional review round 2 (applied)
+
+Finding 1 (Important, no way past the Workflow 2.8 automatic-gate stop): run.md step 3, common-problems.md, glossary.md, troubleshooting.md and README.md now name the two ways out, `/satisfy-gate plan|implementation|acceptance <id>` run by the user, or a committed `docs/ai-workflow/GATE_POLICY.json` with `{"schema_version": 1, "human_approval": true}`. Findings 2-4 (governing version 1/2.1 wording, policy file path and "no file means default", functional-review actions in protocol mode in README) and 5 (README "At a gate stop") applied. The checklist expected-output note (finding 6 in the report) is not applied: skipped by instruction.
+
 ### Known limitations and out of scope
 
 - Controller code, ADRs, release notes and CI are untouched; the lifecycle diagram is still the shipped SVG until the Workflow repository's overview page exists.

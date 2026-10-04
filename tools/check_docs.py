@@ -32,6 +32,7 @@ import json
 import re
 import shlex
 import sys
+import typing
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -195,14 +196,173 @@ def anchors(text: str) -> list[str]:
 
 
 _INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.S)
-_LINK_RE = re.compile(r"\[(?:[^\]\n]|\n)*?\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
+# One scanner for CommonMark's inline-link grammar (spec 0.31.2, 6.3 "Links")
+# and link-reference-definition grammar (4.7). Both forms share one
+# destination and one title sub-grammar, so they cannot drift apart:
+#   destination: ``<...>`` (no line break, spaces allowed) or a non-empty run
+#                of non-space characters with balanced parentheses;
+#   title:       ``"..."``, ``'...'`` or ``(...)``.
+# Link text may contain balanced brackets. Backslash escapes the next character.
+_DEFINITION_START_RE = re.compile(r"^(?:[ \t]{0,3}>)*[ \t]{0,3}\[(?!\^)([^\]\n]+)\]:", re.M)
+_BLOCK_QUOTE_PREFIX_RE = re.compile(r"(?:[ \t]{0,3}>)*[ \t]*")
+_SPACE_RE = re.compile(r"\s*")
+_BLANKS_RE = re.compile(r"[ \t]*")
 
 
-# A reference definition may sit inside block quotes (``> [g]: target``); a
-# label starting with ``^`` is a GitHub footnote, not a link. The title may be
-# quoted or parenthesized, and the destination may start on the next line.
-_DEFINITION_RE = re.compile(
-    r"^(?:[ \t]{0,3}>)*[ \t]{0,3}\[(?!\^)([^\]\n]+)\]:[ \t]*\n?[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:\"[^\"]*\"|'[^']*'|\([^()\n]*\)))?[ \t]*$", re.M)
+class LinkSpan(typing.NamedTuple):
+    kind: str  # "inline" or "definition"
+    label: str  # the definition's label; "" for an inline link
+    target: str
+    target_span: tuple[int, int]
+    span: tuple[int, int]  # the whole link, from ``[`` to the closing ``)``/title
+
+
+def _parse_destination(s: str, i: int) -> tuple[str, int, int] | None:
+    """``(destination, start, end)`` of the destination at ``i``, or ``None``."""
+    n = len(s)
+    if i < n and s[i] == "<":
+        j = i + 1
+        while j < n and s[j] not in "<>\n":
+            j += 2 if s[j] == "\\" else 1
+        if j < n and s[j] == ">" and j > i + 1:
+            return s[i + 1:j], i + 1, j + 1
+        return None
+    j, depth = i, 0
+    while j < n and not s[j].isspace():
+        c = s[j]
+        if c == "\\" and j + 1 < n:
+            j += 2
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            if depth == 0:
+                break
+            depth -= 1
+        j += 1
+    if j == i or depth != 0:
+        return None
+    return s[i:j], i, j
+
+
+def _parse_title(s: str, i: int) -> int | None:
+    """The end of the title starting at ``i``, or ``None``."""
+    n = len(s)
+    if i >= n or s[i] not in "\"'(":
+        return None
+    close = ")" if s[i] == "(" else s[i]
+    j = i + 1
+    while j < n and s[j] != close:
+        if s[j] == "\\":
+            j += 1
+        elif s[i] == "(" and s[j] == "(":
+            return None
+        j += 1
+    return j + 1 if j < n else None
+
+
+def _matching_bracket(s: str, i: int) -> int | None:
+    """The index of the ``]`` closing the ``[`` at ``i`` (brackets balance)."""
+    depth = 0
+    j = i
+    while j < len(s):
+        c = s[j]
+        if c == "\\":
+            j += 1
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                return j
+        j += 1
+    return None
+
+
+def _inline_link(s: str, i: int) -> tuple[int, str, int, int] | None:
+    """``(close, destination, start, stop)`` for the inline link opening at
+    ``s[i] == "["`` (``stop`` is the index after ``)``)."""
+    close = _matching_bracket(s, i)
+    if close is None or close + 1 >= len(s) or s[close + 1] != "(":
+        return None
+    j = _SPACE_RE.match(s, close + 2).end()
+    dest = _parse_destination(s, j)
+    if dest is None:
+        return None
+    target, start, j = dest
+    k = _SPACE_RE.match(s, j).end()
+    if k > j:
+        title_end = _parse_title(s, k)
+        if title_end is not None:
+            k = _SPACE_RE.match(s, title_end).end()
+    if k < len(s) and s[k] == ")":
+        return close, target, start, k + 1
+    return None
+
+
+def _scan_inline(s: str, lo: int, hi: int) -> list[tuple[int, int, int, int, str, bool]]:
+    """Inline links opening in ``s[lo:hi]``: ``(open, start, stop, tstart,
+    target, image)``. A link may not contain another link, so an outer link
+    holding an inner (non-image) link is dropped."""
+    found = []
+    i = lo
+    while i < hi:
+        if s[i] == "\\":
+            i += 2
+            continue
+        if s[i] == "[":
+            m = _inline_link(s, i)
+            if m is not None:
+                close, target, tstart, stop = m
+                image = i > 0 and s[i - 1] == "!"
+                inner = _scan_inline(s, i + 1, close)
+                found.extend(inner)
+                if image or not any(not x[5] for x in inner):
+                    found.append((i, i, stop, tstart, target, image))
+                i = stop
+                continue
+        i += 1
+    return found
+
+
+def _scan_definitions(s: str) -> list[LinkSpan]:
+    found = []
+    for m in _DEFINITION_START_RE.finditer(s):
+        j = m.end()
+        k = _BLANKS_RE.match(s, j).end()
+        if k < len(s) and s[k] == "\n":
+            k = _BLOCK_QUOTE_PREFIX_RE.match(s, k + 1).end()
+        dest = _parse_destination(s, k)
+        if dest is None:
+            continue
+        target, start, end = dest
+        stop = None
+        for candidate in (_title_on_line(s, end), end):
+            if candidate is None:
+                continue
+            rest = _BLANKS_RE.match(s, candidate).end()
+            if rest >= len(s) or s[rest] == "\n":
+                stop = rest
+                break
+        if stop is not None:
+            found.append(LinkSpan("definition", m.group(1), target, (start, end), (m.start(), stop)))
+    return found
+
+
+def _title_on_line(s: str, end: int) -> int | None:
+    k = _BLANKS_RE.match(s, end).end()
+    return _parse_title(s, k) if k > end else None
+
+
+def scan_links(text: str) -> list[LinkSpan]:
+    """Every inline link (in order) then every link-reference definition (in
+    order) of ``text``."""
+    inline = [LinkSpan("inline", "", target, (tstart, tstart + len(target)), (o, stop))
+              for o, _, stop, tstart, target, _ in sorted(_scan_inline(text, 0, len(text)))]
+    return inline + _scan_definitions(text)
+
+
+# A label starting with ``^`` is a GitHub footnote, not a link.
 # ``a[i][j]`` (a word character right before the ``[``) is prose, not a
 # reference link; put such text in a code span.
 _REFERENCE_RE = re.compile(r"(?<![\w\]])\[(?!\^)((?:[^\]\n]|\n)+?)\]\[([^\]\n]*)\]")
@@ -240,7 +400,9 @@ def _trim_bare_url(url: str) -> str:
 def bare_urls(text: str) -> list[str]:
     """Bare URLs of ``text`` (already free of inline links, definitions,
     reference links and ``<...>`` autolinks, which are blanked first)."""
-    for pattern in (_LINK_RE, _DEFINITION_RE, _REFERENCE_RE, _AUTOLINK_RE):
+    for link in reversed(sorted(scan_links(text), key=lambda x: x.span)):
+        text = text[:link.span[0]] + " " * (link.span[1] - link.span[0]) + text[link.span[1]:]
+    for pattern in (_REFERENCE_RE, _AUTOLINK_RE):
         text = pattern.sub(_blank, text)
     found = []
     for m in _BARE_URL_RE.finditer(text):
@@ -254,8 +416,7 @@ def links(text: str) -> list[str]:
     inline links, reference-link definitions, ``<...>`` autolinks and bare
     URLs."""
     body = _body(text)
-    found = [m.group(1) for m in _LINK_RE.finditer(body)]
-    found += [m.group(2) for m in _DEFINITION_RE.finditer(body)]
+    found = [link.target for link in scan_links(body)]
     found += [m.group(1) for m in _AUTOLINK_RE.finditer(body)]
     found += bare_urls(body)
     return found
@@ -264,8 +425,8 @@ def links(text: str) -> list[str]:
 def blank_link_targets(text: str) -> str:
     """``text`` with every link target (all forms of :func:`links`) removed,
     so a target is never scanned as prose."""
-    text = _LINK_RE.sub(lambda m: m.group(0).replace(m.group(1), ""), text)
-    text = _DEFINITION_RE.sub(lambda m: m.group(0).replace(m.group(2), ""), text)
+    for link in sorted(scan_links(text), key=lambda x: x.target_span, reverse=True):
+        text = text[:link.target_span[0]] + text[link.target_span[1]:]
     text = _AUTOLINK_RE.sub(lambda m: m.group(0).replace(m.group(1), ""), text)
     return _BARE_URL_RE.sub(lambda m: m.group(0).replace(_trim_bare_url(m.group(1)), ""), text)
 
@@ -273,7 +434,7 @@ def blank_link_targets(text: str) -> str:
 def undefined_references(text: str) -> list[str]:
     """Labels used by ``[text][label]`` / ``[label][]`` with no definition."""
     body = _body(text)
-    defined = {_label(m.group(1)) for m in _DEFINITION_RE.finditer(body)}
+    defined = {_label(link.label) for link in scan_links(body) if link.kind == "definition"}
     missing = []
     for m in _REFERENCE_RE.finditer(body):
         label = _label(m.group(2) or m.group(1))

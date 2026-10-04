@@ -212,6 +212,62 @@ class LinkRuleTest(TreeTestCase):
         self.tree.write("README.md", "# R\n\n[guide][nope]\n\n[g]: #r (Guide)\n")
         self.assertTrue(any("no definition" in p for p in self.tree.check()))
 
+    # One row per production of CommonMark's inline-link and link-reference-
+    # definition grammar: (name, form with {t} for the target, directory-and-
+    # file stem of the existing target page). A missing form is a missing row.
+    LINK_FORMS = (
+        ("inline", "[x]({t})\n", "docs/g.md"),
+        ("inline, double-quoted title", '[x]({t} "Title")\n', "docs/g.md"),
+        ("inline, single-quoted title", "[x]({t} 'Title')\n", "docs/g.md"),
+        ("inline, parenthesized title", "[x]({t} (Title))\n", "docs/g.md"),
+        ("inline, title on the next line", '[x]({t}\n  "Title")\n', "docs/g.md"),
+        ("inline, angle-bracket destination", "[x](<{t}>)\n", "docs/g.md"),
+        ("inline, angle-bracket destination with a space", "[x](<{t}>)\n", "docs/g file.md"),
+        ("inline, angle-bracket destination and title", '[x](<{t}> "Title")\n', "docs/g file.md"),
+        ("inline, balanced parentheses in the destination", "[x]({t})\n", "docs/a_(b).md"),
+        ("inline, bracketed link text", "[a [b] c]({t})\n", "docs/g.md"),
+        ("inline, image inside the link text", "[![i](docs/i.png)]({t})\n", "docs/g.md"),
+        ("definition", "[g]\n\n[g]: {t}\n", "docs/g.md"),
+        ("definition, full reference", "[x][g]\n\n[g]: {t}\n", "docs/g.md"),
+        ("definition, double-quoted title", '[g]\n\n[g]: {t} "Title"\n', "docs/g.md"),
+        ("definition, single-quoted title", "[g]\n\n[g]: {t} 'Title'\n", "docs/g.md"),
+        ("definition, parenthesized title", "[g]\n\n[g]: {t} (Title)\n", "docs/g.md"),
+        ("definition, destination on the next line", "[g]\n\n[g]:\n  {t}\n", "docs/g.md"),
+        ("definition, angle-bracket destination", "[g]\n\n[g]: <{t}>\n", "docs/g.md"),
+        ("definition, angle-bracket destination with a space", "[g]\n\n[g]: <{t}>\n", "docs/g file.md"),
+        ("definition, balanced parentheses", "[g]\n\n[g]: {t}\n", "docs/a_(b).md"),
+        ("block-quoted definition", "> [g]\n>\n> [g]: {t}\n", "docs/g.md"),
+        ("block-quoted definition, next-line destination", "> [g]\n>\n> [g]:\n> {t}\n", "docs/g.md"),
+        ("block-quoted definition, next-line angle destination",
+         "> [g]\n>\n> [g]:\n> <{t}>\n", "docs/g file.md"),
+    )
+
+    def test_every_link_form_is_validated(self) -> None:
+        for name, form, page in self.LINK_FORMS:
+            with self.subTest(name):
+                self.tree.write(page, "# G\n\n## Sub\n")
+                self.tree.write("docs/i.png", "")
+
+                def put(target: str) -> list[str]:
+                    self.tree.write("README.md", "# R\n\n" + form.format(t=target))
+                    return self.tree.check()
+
+                self.assertEqual(put(page), [])
+                self.assertEqual(put(page + "#sub"), [])
+                self.assertTrue(any("missing file" in p for p in put("docs/missing file.md"
+                                                                      if " " in page else "docs/missing.md")))
+                self.assertTrue(any("missing heading" in p for p in put(page + "#nope")))
+                self.assertTrue(any("missing heading" in p for p in put("#missing")))
+
+    def test_inline_links_with_nested_links_and_malformed_forms(self) -> None:
+        links = check_docs.links
+        # An outer link may not contain another link; an image may.
+        self.assertEqual(links("[a [b](x.md) c](y.md)\n"), ["x.md"])
+        self.assertEqual(links("[![i](i.png)](y.md)\n"), ["y.md", "i.png"])
+        # Not links: no destination, an unclosed destination, an unclosed title.
+        self.assertEqual(links("[x]() [y](a.md \"t) [z](a.md\n"), [])
+        self.assertEqual(links("[x](<a.md) [y](<a\nb.md>)\n"), [])
+
     def test_footnotes_and_prose_subscripts_are_not_links(self) -> None:
         self.tree.write("README.md", "# R\n\nNote[^1] and a[i][j] and [^1][x].\n\n[^1]: Note.\n")
         self.assertEqual(self.tree.check(), [])

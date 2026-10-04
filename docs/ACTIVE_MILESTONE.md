@@ -67,6 +67,73 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
   touches nothing under `controller/`, `.github/`, `.workflow-controller/`, `docs/adr/`,
   `docs/releases/`, `pyproject.toml` or `setup.py`.
 
+## Functional review checklist
+
+Documentation-only milestone (`docs:`; nothing under `controller/` changed). Review as a first-time reader
+would. Evidence below was measured on 2026-10-04 at implementation head `1f58853` (plus state commits) with the
+checkout's Controller 1.7.0. Findings go to `.ai-review/workflow-controller-documentation-reorganisation/feedback/FUNCTIONAL_REVIEW.md`.
+
+### Setup
+
+Work from the repository root on branch `milestone/workflow-controller-documentation-reorganisation`. No build is needed.
+For the command checks use a scratch repository and throwaway runtime and settings roots, never your real ones:
+
+```bash
+S=$(mktemp -d); C=$PWD
+git init -q $S/repo && git -C $S/repo -c user.email=a@b -c user.name=x commit -q --allow-empty -m init
+export PYTHONPATH=$C XDG_CONFIG_HOME=$S/cfg
+cd $S/repo
+ctl() { python3 -P -m controller --runtime-dir $S/rt "$@"; }
+```
+
+### A. The two automated checks (run from the repository root)
+
+| # | Command | Expected (measured) |
+|---|---|---|
+| A1 | `python3 tools/check_docs.py` | no output, exit 0 |
+| A2 | `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` | `Ran 93 tests ... OK` |
+| A3 | `git diff 914d8f4 --stat -- controller .github .workflow-controller docs/adr docs/releases pyproject.toml setup.py` | empty (no protected path touched) |
+
+### B. Commands shown on the task pages (scratch repository, `ctl` from Setup)
+
+The scratch repository is not Workflow-managed, so commands that need a managed repository refuse as `run.md` says.
+
+| # | Command | Expected (measured) |
+|---|---|---|
+| B1 | `ctl --version` | `workflow-controller 1.7.0`, then a `runtime: source (...)` line, exit 0 |
+| B2 | `ctl status` | `jobs: none`, `handoff: none`, `active: none`, a `runtime root: ... (ladder row 1)` line, exit 0. Note: `install.md` says a new machine prints `no Controller runtime state at <root> (ladder row 1)`; that text appears only when the runtime root does not exist yet (first run with a fresh `$S/rt`) |
+| B3 | `ctl settings path` | `$S/cfg/workflow-controller/settings.json`, exit 0 |
+| B4 | `ctl settings show` | `settings file: ... (not created yet)`, then `run.max_steps = 20 (default)` and the other keys, exit 0 |
+| B5 | `ctl follow .` | `nothing active for <repo>; no runs recorded`, exit 0 |
+| B6 | `ctl inspect .`, `ctl explain .`, `ctl step .`, `ctl run --max-steps 1 .` | each: `error: <repo> has no .workflow-manager/installation.json -- not a Workflow-managed repository`, exit 20 |
+| B7 | `workflow-manager --help` | usage text, exit 0 |
+
+Not executed (need a release download, pipx or a managed repository): the `curl`/`gh release download`, `sha256sum -c`,
+`pipx install`, `pipx uninstall`, `workflow-manager update`/`verify` and `git switch -c chore/workflow-update` commands.
+They are covered by `check_docs.py` (command and flag check) only; read them for correctness against the real tools.
+
+### C. Read-through, as a first-time reader
+
+For each page, check: header line ("For: ... Last checked with: ..."), the steps make sense in order, every link
+works (also click a few anchors), and nothing refers to a page or section that no longer exists.
+
+1. `README.md`: what the Controller is, how Workflow, Workflow Manager and the Controller fit together, quick start, "I want to ..." table. Can you get from zero to a first run using only this page and the pages it links?
+2. `docs/README.md`: the map; every row leads to the page it names; the release and ADR tables list what exists.
+3. `docs/install.md`, `docs/run.md`, `docs/update.md`: goal, prerequisites, numbered steps, "what you should see", "if it fails". Steps match B1-B7 where run.
+4. `docs/common-problems.md`: each problem has a symptom, a fix and a link to the long account in `guide/troubleshooting.md`; anchors resolve.
+5. `docs/glossary.md`: one heading per term; Workflow-generic terms first, then the Controller group; terms used on the task pages link here.
+6. `docs/compatibility.md`: Controller-to-Workflow table, the two 2.6.0 digests; `docs/exit-codes.md`: one table (0, 2, 10, 15, 16, 20, 30, 35, 40, 45, 50, 130) and each "what to do" is actionable (compare with `python3 -c "import controller.cli as c; print([n for n in dir(c) if n.startswith('EXIT_')])"`).
+7. `docs/release-history.md`: every release 1.1.1 to 1.7.0, one line each, notes linked from 1.3.0.
+8. Reorganised guides under `docs/guide/` (`how-it-works.md`, `commands.md`, `automation.md`, `workers.md`, `runtime.md`, `milestone-branches.md`, `troubleshooting.md`, `ci-and-releases.md`, `development.md` including "Documentation checks"): headers present; no duplicated exit table; `installation.md` is only a three-heading stub whose old inbound links (ADRs, release notes) still land somewhere sensible.
+9. `CLAUDE.md` names the task pages, the stub and the documentation check.
+
+### Known limitations and out of scope
+
+- Controller code, ADRs, release notes and CI are untouched; the lifecycle diagram is still the shipped SVG until the Workflow repository's overview page exists.
+- Cross-repository links point at the other repositories' `#readme`; they are checked for form and host only, offline.
+- The managed-repository, pipx and download commands were not executed (see B).
+- A `docs:` pull request releases nothing.
+
 ## Self-review
 
 No Blocking findings. Fixed: the glossary regained the "Pull request title" and "Runtime kind" terms and

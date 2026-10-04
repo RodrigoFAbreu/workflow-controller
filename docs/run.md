@@ -42,10 +42,9 @@ Global options go before the subcommand and the repository goes last, as in `wor
    `implementation.satisfy` or `acceptance.satisfy`) but no command to run. Run the gate's
    action yourself in a Claude session, `/satisfy-gate plan <id>`,
    `/satisfy-gate implementation <id>` or `/satisfy-gate acceptance <id>` (the Workflow's
-   [approval gates](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) page describes them), then run again. To make a repository's gates
-   human instead, follow the Workflow's [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md); do not commit the policy file
-   while a plan or implementation approval is open (write it uncommitted, approve, then
-   commit). At any other gate stop, do what `explain` says, then run again.
+   [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) describes them), then run again. To switch a
+   repository to human gates, see the same page: when you add the policy file matters,
+   and that page explains it. At any other gate stop, do what `explain` says, then run again.
 
 4. Watch from another terminal. `follow` attaches to whatever is running and changes nothing; `status` shows every active run and job.
 

@@ -41,15 +41,17 @@ technical approval) and milestone acceptance. Up to Workflow 2.7, a person
 always makes these decisions. From Workflow 2.8, each gate follows the
 repository's gate policy, the file `docs/ai-workflow/GATE_POLICY.json`. In a
 repository that has never had a policy, the default applies: the Workflow
-satisfies the gate itself once its evidence is complete (for example, both reviews approve); a gate whose evidence
-is missing is blocked, not passed. A repository that turns `human_approval` on
-(all three gates), or sets `human: true` for one gate under `gates.<gate>` (for
-example `gates.plan_approval`), gets the person-decides behavior back for those
-gates, and deleting the file later does not undo a human setting the Workflow has
-already seen. Do not commit the policy file while a plan or implementation
-approval is open; see the Workflow's [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). Work items whose governing version is 1 or 2.1 keep exceptions: a
-version 1 item always has a person for plan and implementation approval, and a
-version 2.1 item always has a person for implementation approval. Version 2.1
+satisfies the gate itself once its evidence is complete (for example, both
+reviews approve); a gate whose evidence is missing is blocked, not passed. A
+repository that turns `human_approval` on (all three gates), or sets
+`human: true` for one gate under `gates.<gate>` (for example
+`gates.plan_approval`), gets the person-decides behavior back for those gates,
+and deleting the file later does not undo a human setting the Workflow has
+already seen. When you add the policy file matters; the Workflow's
+[gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) explains it. Work items whose governing version is 1
+or 2.1 keep exceptions: a version 1 item always has a person for plan and
+implementation approval, and a version 2.1 item always has a person for
+implementation approval. Version 2.1
 is the default of a freshly bootstrapped repository, so there implementation
 approval stays with a person by default; only a version 2.2 item has all three
 gates automatic. The governing version is not the Workflow release. See the
@@ -63,8 +65,7 @@ The Controller stops at an approval gate when a person is needed. Controller
 this Controller does not know, so `explain` reports
 `workflow_unknown_disposition` and nothing is launched. To get past it, run
 `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>` or
-`/satisfy-gate acceptance <id>` yourself in a Claude session, or commit a gate
-policy that makes the gates human. See [Gate stop](#gate-stop) and
+`/satisfy-gate acceptance <id>` yourself in a Claude session. See [Gate stop](#gate-stop) and
 [run](run.md#steps).
 
 ### Bundle

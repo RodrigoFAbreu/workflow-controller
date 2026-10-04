@@ -112,7 +112,8 @@ with a person). Controller 1.7.0 still stops at them until a later release
 so `explain` reports `workflow_unknown_disposition` and nothing is launched.
 Run `/satisfy-gate plan|implementation|acceptance <id>` yourself; to switch the
 repository to human gates, see the Workflow's
-[gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). See also [run](docs/run.md#steps).
+[gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md): when you add the policy file matters, and
+that page explains it. See also [run](docs/run.md#steps).
 
 On a Workflow release that ships the orchestration protocol, such as 2.7.0,
 the Workflow itself says what comes next and whether each job made progress

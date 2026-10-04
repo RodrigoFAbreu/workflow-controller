@@ -59,8 +59,8 @@ implementation review, functional review) are separate waiting points; they
 wait for a review result, not an approval.
 
 The Controller stops at an approval gate when a person is needed. Controller
-1.7.0 also stops at Workflow 2.8 automatic gates, until a later release
-(roadmap C10): the Workflow answers them with a disposition (`validation`) that
+1.7.0 also stops at Workflow 2.8 automatic gates, until a later release:
+the Workflow answers them with a disposition (`validation`) that
 this Controller does not know, so `explain` reports
 `workflow_unknown_disposition` and nothing is launched. To get past it, run
 `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>` or
@@ -110,11 +110,11 @@ gate, a failure or its step limit.
 ### Gate stop
 
 What the Controller does when it needs a person: it stops, says what you must
-do, and `run` exits with status 10. A gate stop covers the three
-[approval gates](#approval-gate) and the review waits (external plan review,
-external implementation review and functional review). Controller 1.7.0 also
-stops at Workflow 2.8 automatic gates, which it cannot yet satisfy (roadmap
-C10). See [exit codes](exit-codes.md).
+do, and `step` and `run` exit with status 10. A gate stop covers, for example,
+the three [approval gates](#approval-gate), the review waits (external plan
+review, external implementation review and functional review) and the pull
+request and release gates. Controller 1.7.0 also stops at Workflow 2.8
+automatic gates, which it cannot yet satisfy. See [exit codes](exit-codes.md).
 
 ### Worker
 

@@ -6,7 +6,7 @@ Goal: change the Controller's version safely, or move a repository to another Wo
 
 ## Prerequisites
 
-- Nothing is running: `workflow-controller status` shows `active: none`. Update between jobs, not during one.
+- Nothing is running: `workflow-controller status` shows nothing active. Update between jobs, not during one.
 - The new release's wheel and `SHA256SUMS`, downloaded and checked as in [install](install.md).
 
 ## Update the Controller
@@ -17,11 +17,12 @@ Goal: change the Controller's version safely, or move a repository to another Wo
    workflow-controller status
    ```
 
-2. Install the new wheel over the old one.
+2. Replace the old install with the new wheel. pipx's `--force` fails to reuse an existing install with its default backend, so uninstall first. Your settings file is not part of the install and stays.
 
    ```bash
    VERSION=<new version>
-   pipx install --force ./workflow_controller-$VERSION-py3-none-any.whl
+   pipx uninstall workflow-controller
+   pipx install ./workflow_controller-$VERSION-py3-none-any.whl
    workflow-controller --version
    ```
 
@@ -30,11 +31,11 @@ What an update does to a Controller that is already running:
 - A running `step` or `run` executes from its own snapshot of the installed package, so the new files never reach it.
 - A new release of the same [generation](glossary.md#generation) is ignored by a running `run`, which finishes on the old version.
 - A new generation stops a running `run` at its next boundary with exit 50 (all statuses are in [exit codes](exit-codes.md)) and a handoff record. Run again with the new version.
-- If `pipx install --force` lands in the middle of a boundary check, or the update changes Python's minor version, the run fails closed with exit 20. Run `run` again.
+- If the reinstall lands in the middle of a boundary check, or the update changes Python's minor version, the run fails closed with exit 20. Run `run` again.
 
 ## Roll back
 
-Install an older wheel the same way: `pipx install --force <older wheel>`. Going back across a generation has two consequences:
+Install an older wheel the same way: `pipx uninstall workflow-controller`, then `pipx install <older wheel>`. Going back across a generation has two consequences:
 
 - A [job](glossary.md#job) record written by the newer generation is refused by the older one, and `resume --abandon` refuses it too. Run `workflow-controller resume .` before you roll back and the problem does not arise. If you already rolled back and hit it (`StaleJobRecordError`), reinstall the newer version, let its own `resume` clear the record, then roll back.
 - A `run` still executing the newer generation stops at its next boundary with exit 20.
@@ -55,7 +56,7 @@ workflow-controller inspect .
 git status
 ```
 
-`inspect` must admit the new release, and `git status` must show only the files the Manager wrote. Commit exactly those, open a pull request and merge it. Under the `conventional_commit` release trigger, give it a title that releases nothing, such as `chore: move to a newer Workflow`.
+`inspect` must print the new release without a refusal, and `git status` must show only the files the Manager wrote. Commit exactly those, open a pull request and merge it. Under the `conventional_commit` release trigger, give it a title that releases nothing, such as `chore: move to a newer Workflow`.
 
 Never move a repository while a worker runs or while a plan-approval transaction is unfinished. A job that straddles the move ends in `workflow_release_changed` and the next invocation decides again. The quick fix is in [common problems](common-problems.md#a-step-refuses-with-workflow_release_changed); the long account is in [Workflow release changes](guide/troubleshooting.md#workflow_release_changed-and-workflow_release_changed).
 
@@ -72,7 +73,7 @@ If you update the trunk while a milestone branch stays on the old release, the b
 
 ## What you should see
 
-After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` names the new release as admitted.
+After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal.
 
 ## If it fails
 

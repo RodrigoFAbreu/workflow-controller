@@ -110,7 +110,7 @@ The scratch repository is not Workflow-managed, so commands that need a managed 
 
 Not executed (need a release download, pipx or a managed repository): the `curl`/`gh release download`, `sha256sum -c`,
 `pipx install`, `pipx uninstall`, `workflow-manager update`/`verify` and `git switch -c chore/workflow-update` commands.
-They are covered by `check_docs.py` (command and flag check) only; read them for correctness against the real tools.
+`check_docs.py` checks only the `workflow-controller` commands; read these for correctness against the real tools.
 
 ### C. Read-through, as a first-time reader
 

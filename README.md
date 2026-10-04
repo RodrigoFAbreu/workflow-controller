@@ -107,8 +107,8 @@ approval and acceptance. From Workflow 2.8 those three approval gates follow the
 repository's gate policy and by default the Workflow satisfies them itself from
 complete evidence (all three for a version 2.2 item; a version 2.1 item, the
 default of a freshly bootstrapped repository, keeps implementation approval
-with a person). Controller 1.7.0 still stops at them until a later release
-(roadmap C10): the Workflow answers them with a disposition it does not know,
+with a person). Controller 1.7.0 still stops at them until a later release:
+the Workflow answers them with a disposition it does not know,
 so `explain` reports `workflow_unknown_disposition` and nothing is launched.
 Run `/satisfy-gate plan|implementation|acceptance <id>` yourself; to switch the
 repository to human gates, see the Workflow's

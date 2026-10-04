@@ -71,6 +71,6 @@ complete evidence (see the [glossary](../glossary.md#approval-gate)).
 The Controller never crosses a gate that needs a person: the commands a
 human must run are user-only, and the Controller refuses to launch them even
 if asked. Controller 1.7.0 also stops at Workflow 2.8 automatic gates, until a
-later release (roadmap C10): the Workflow answers them with a disposition
+later release: the Workflow answers them with a disposition
 (`validation`) the Controller does not know, so `explain` reports
 `workflow_unknown_disposition` and nothing is launched.

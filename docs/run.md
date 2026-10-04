@@ -28,14 +28,16 @@ Global options go before the subcommand and the repository goes last, as in `wor
    workflow-controller run --follow .
    ```
 
-3. At a [gate stop](glossary.md#gate-stop) the Controller stops with exit status 10. Up to
-   Workflow 2.7, plan approval, implementation approval and milestone acceptance are yours.
+3. At a [gate stop](glossary.md#gate-stop) the Controller stops with exit status 10.
+
+   Up to Workflow 2.7, plan approval, implementation approval and milestone acceptance are yours.
+
    From Workflow 2.8 they follow the repository's gate policy
    (`docs/ai-workflow/GATE_POLICY.json`) and are, by default, satisfied by the Workflow from
    complete evidence (all three for a version 2.2 item; a version 2.1 item, the default of a
    freshly bootstrapped repository, keeps implementation approval with a person; a version 1
    item keeps plan and implementation approval with a person). Controller 1.7.0 still stops at
-   those automatic gates until a later release (roadmap C10), because the Workflow answers them
+   those automatic gates until a later release, because the Workflow answers them
    with a disposition it does not know (`explain` reports `workflow_unknown_disposition`;
    nothing is launched). The external reviews and functional review stay yours in the
    Controller's flow. At that automatic-gate stop `explain` shows the action (`plan.satisfy`,

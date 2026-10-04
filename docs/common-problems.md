@@ -6,7 +6,7 @@ Start with `workflow-controller explain <repo>`. It is read-only, exits 0 (but r
 
 ## The run stopped and exited 10
 
-Not a failure: it is an [approval gate](glossary.md#approval-gate) waiting for you. Run `workflow-controller explain <repo>`, do what it says, then run again. See [run](run.md#steps).
+Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waiting for you. Run `workflow-controller explain <repo>`, do what it says, then run again. See [run](run.md#steps).
 
 ## The run exited 16
 

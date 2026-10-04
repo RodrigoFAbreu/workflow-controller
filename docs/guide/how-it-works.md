@@ -1,6 +1,6 @@
 # How it works
 
-> For: anyone who wants to understand what the Controller does. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone who wants to understand what the Controller does. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 [Back to the documentation map](../README.md)
 
@@ -64,12 +64,13 @@ The human steps are the Workflow's six hard gates
 ([`MILESTONE_WORKFLOW.md`](../ai-workflow/MILESTONE_WORKFLOW.md), "Hard gates
 summary"), plus the merge unless the repository opts in to auto-merge. The
 table shows them as a person's steps, which is how they work up to Workflow 2.7
-and for a repository that turns `human_approval` on. From Workflow 2.8 the
+and for a repository that turns `human_approval` on (or `human: true` for one gate). From Workflow 2.8 the
 three approvals (plan approval, technical approval, acceptance) follow the
 repository's gate policy and by default the Workflow satisfies them itself from
 complete evidence (see the [glossary](../glossary.md#approval-gate)).
 The Controller never crosses a gate that needs a person: the commands a
 human must run are user-only, and the Controller refuses to launch them even
 if asked. Controller 1.7.0 also stops at Workflow 2.8 automatic gates, until a
-later release (roadmap C10), because its protocol 1.0 action catalogue cannot
-launch the gate-satisfaction actions.
+later release (roadmap C10): the Workflow answers them with a disposition
+(`validation`) the Controller does not know, so `explain` reports
+`workflow_unknown_disposition` and nothing is launched.

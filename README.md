@@ -1,6 +1,6 @@
 # Workflow Controller
 
-> For: anyone new to the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone new to the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 Workflow Controller runs the Workflow development process on a repository for
 you. It reads the repository's Workflow state, starts a fresh Claude Code
@@ -16,7 +16,7 @@ is the development process and its commands, installed into a repository.
 [Workflow Manager](https://github.com/RodrigoFAbreu/workflow-manager#readme)
 installs, updates and verifies the Workflow from published, digest-pinned
 releases. [Workflow Controller](https://github.com/RodrigoFAbreu/workflow-controller#readme)
-runs the Workflow's lifecycle steps automatically and stops wherever an approval gate needs a person.
+runs the Workflow's lifecycle steps automatically and stops wherever a person is needed.
 
 ```text
 Workflow  ->  Workflow Manager  ->  Workflow Controller  ->  your repository
@@ -64,7 +64,7 @@ About five minutes, from nothing to a first look at a repository.
    workflow-controller run --follow .
    ```
 
-4. When it stops at an [approval gate](docs/glossary.md#approval-gate) (exit `10`), do what it says, for example approve a
+4. When it stops at a [gate stop](docs/glossary.md#gate-stop) (exit `10`), do what it says, for example approve a
    plan or paste an external review verdict, then run it again.
 
 From another terminal, `workflow-controller follow .` attaches to whatever is running
@@ -77,7 +77,7 @@ If the Controller or your terminal dies while a worker runs, the worker keeps go
 | I want to ... | Read |
 |---|---|
 | install the Controller, set up the settings file, uninstall | [Install](docs/install.md) |
-| run it on a repository: `step` versus `run`, following, approval gates | [Run](docs/run.md) |
+| run it on a repository: `step` versus `run`, following, gate stops | [Run](docs/run.md) |
 | upgrade or roll back, or move a repository to a newer Workflow | [Update](docs/update.md) |
 | know which Workflow releases a Controller release accepts | [Compatibility](docs/compatibility.md) |
 | fix a run that stopped | [Common problems](docs/common-problems.md), then [Troubleshooting](docs/guide/troubleshooting.md) |
@@ -105,7 +105,8 @@ functional review and merging, and, up to Workflow 2.7, plan and implementation
 approval and acceptance. From Workflow 2.8 those three approval gates follow the
 repository's gate policy and by default the Workflow satisfies them itself from
 complete evidence; Controller 1.7.0 still stops at them until a later release
-(roadmap C10), because it cannot yet launch the gate-satisfaction actions.
+(roadmap C10): the Workflow answers them with a disposition it does not know, so `explain` reports
+`workflow_unknown_disposition` and nothing is launched.
 
 On a Workflow release that ships the orchestration protocol, such as 2.7.0,
 the Workflow itself says what comes next and whether each job made progress
@@ -131,7 +132,7 @@ for one (`feat` a minor release, `fix` a patch, `!` a major); a
 ## When something goes wrong
 
 Run `workflow-controller explain .` first: it names the problem and the
-command that clears it. Exit `10` is the normal stop at an approval gate;
+command that clears it. Exit `10` is the normal gate stop;
 [Common problems](docs/common-problems.md) gives the quick fix for every other
 stop and [Exit codes](docs/exit-codes.md) the full table.
 

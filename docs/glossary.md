@@ -1,6 +1,6 @@
 # Glossary
 
-> For: anyone reading the Workflow or Controller documentation. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone reading the Workflow or Controller documentation. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 The words these projects use. The first group belongs to the Workflow and is
 worded so that another repository can reuse it unchanged. The second group is
@@ -42,18 +42,21 @@ always makes these decisions. From Workflow 2.8, each gate follows the
 repository's gate policy (`GATE_POLICY.json`). By default the Workflow
 satisfies the gate itself once its evidence is complete (for example, both
 reviews approve); a gate whose evidence is missing is blocked, not passed. A
-repository that turns `human_approval` on, for all gates or for one, gets the
-person-decides behavior back. Work items governed by an older Workflow version
+repository that turns `human_approval` on (all three gates), or sets `human: true`
+for one gate under `gates.<gate>` (for example `gates.plan_approval`), gets the
+person-decides behavior back for those gates. Work items governed by an older Workflow version
 keep their exceptions: a version 1 item always has a person for plan and
 implementation approval, and a version 2.1 item always has a person for
 implementation approval. The review stages (external plan review, external
 implementation review, functional review) are separate waiting points; they
 wait for a review result, not an approval.
 
-The Controller stops at a gate when a person is needed. Controller 1.7.0 also
-stops at Workflow 2.8 automatic gates, until a later release (roadmap C10),
-because its protocol 1.0 action catalogue cannot launch the new
-gate-satisfaction actions and reads them as blocked.
+The Controller stops at an approval gate when a person is needed. Controller
+1.7.0 also stops at Workflow 2.8 automatic gates, until a later release
+(roadmap C10): the Workflow answers them with a disposition (`validation`) that
+this Controller does not know, so `explain` reports
+`workflow_unknown_disposition` and nothing is launched. See
+[Gate stop](#gate-stop).
 
 ### Bundle
 
@@ -97,10 +100,12 @@ gate, a failure or its step limit.
 
 ### Gate stop
 
-What the Controller does at an approval gate: it stops, says what you must do,
-and `run` exits with status 10. Controller 1.7.0 stops at a gate when a person
-is needed and, until a later release (roadmap C10), also at Workflow 2.8
-automatic gates, which it cannot yet satisfy. See [exit codes](exit-codes.md).
+What the Controller does when it needs a person: it stops, says what you must
+do, and `run` exits with status 10. A gate stop covers the three
+[approval gates](#approval-gate) and the review waits (external plan review,
+external implementation review and functional review). Controller 1.7.0 also
+stops at Workflow 2.8 automatic gates, which it cannot yet satisfy (roadmap
+C10). See [exit codes](exit-codes.md).
 
 ### Worker
 

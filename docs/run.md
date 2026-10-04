@@ -1,6 +1,6 @@
 # Run the Controller on a repository
 
-> For: anyone driving a Workflow-managed repository with the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone driving a Workflow-managed repository with the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 Goal: run the Workflow lifecycle on a [target](glossary.md#target) until the next step only a person may take.
 
@@ -28,7 +28,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
    workflow-controller run --follow .
    ```
 
-3. At an [approval gate](glossary.md#approval-gate) the Controller stops with exit status 10. Up to Workflow 2.7, plan approval, implementation approval and milestone acceptance are yours. From Workflow 2.8 they follow the repository's gate policy and are, by default, satisfied by the Workflow from complete evidence; Controller 1.7.0 still stops at those automatic gates until a later release (roadmap C10), because its protocol 1.0 action catalogue cannot launch the gate-satisfaction actions. The external reviews and functional review stay yours in the Controller's flow. Do what `explain` says, then run again.
+3. At a [gate stop](glossary.md#gate-stop) the Controller stops with exit status 10. Up to Workflow 2.7, plan approval, implementation approval and milestone acceptance are yours. From Workflow 2.8 they follow the repository's gate policy and are, by default, satisfied by the Workflow from complete evidence; Controller 1.7.0 still stops at those automatic gates until a later release (roadmap C10), because the Workflow answers them with a disposition it does not know (`explain` reports `workflow_unknown_disposition`; nothing is launched). The external reviews and functional review stay yours in the Controller's flow. Do what `explain` says, then run again.
 
 4. Watch from another terminal. `follow` attaches to whatever is running and changes nothing; `status` shows every active run and job.
 

@@ -11,7 +11,7 @@ copy, which the Controller's own tests compare with the code, is
 |---|---|---|
 | 0 | the requested work completed and nothing is pending | nothing |
 | 2 | the command line did not parse | put global options such as `--work-item` before the subcommand and the repository last: `workflow-controller --work-item <id> explain <repo>` |
-| 10 | stopped cleanly at an approval gate, waiting for you | the normal end of a run. Run `workflow-controller explain <repo>`, do what it says, then run again |
+| 10 | stopped cleanly at a [gate stop](glossary.md#gate-stop), waiting for you | the normal end of a run. Run `workflow-controller explain <repo>`, do what it says, then run again |
 | 15 | the next action is valid but not automated, so it was reported and not launched | do it yourself; `explain` names the phase and the command |
 | 16 | `run` reached `--max-steps` with work still outstanding | run again, or raise `--max-steps` |
 | 20 | a fail-closed refusal: an unmanaged or drifted repository, a malformed state file, an unreconciled job file, a bad routing file, an unusable settings file, a changed Workflow release, or a failed Workflow query or protocol operation | read the message; for a pending job run `workflow-controller resume <repo>` |

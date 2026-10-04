@@ -11,7 +11,7 @@ together and has a five-minute quick start.
 | I want to ... | Page |
 |---|---|
 | install the Controller, set up the settings file, uninstall it | [Install](install.md) |
-| run it on a repository: a first run, `step` versus `run`, following, approval gates | [Run](run.md) |
+| run it on a repository: a first run, `step` versus `run`, following, gate stops | [Run](run.md) |
 | upgrade or roll back the Controller, or move a repository to a newer Workflow | [Update](update.md) |
 | know which Workflow releases a Controller release accepts | [Compatibility](compatibility.md) |
 | fix a run that stopped | [Common problems](common-problems.md) |

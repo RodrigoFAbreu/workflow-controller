@@ -127,6 +127,10 @@ works (also click a few anchors), and nothing refers to a page or section that n
 8. Reorganised guides under `docs/guide/` (`how-it-works.md`, `commands.md`, `automation.md`, `workers.md`, `runtime.md`, `milestone-branches.md`, `troubleshooting.md`, `ci-and-releases.md`, `development.md` including "Documentation checks"): headers present; no duplicated exit table; `installation.md` is only a three-heading stub whose old inbound links (ADRs, release notes) still land somewhere sensible.
 9. `CLAUDE.md` names the task pages, the stub and the documentation check.
 
+### Functional review round 1 (applied)
+
+Findings 1 (install.md `status` row and `controller:` line), 3 (glossary links in update.md), 4 (`VERSION` in update.md), 5 (rollback below 1.7.0), 6 (gate-policy wording in run.md and glossary), 7 (exit 130 row), 8 (README route to Workflow Manager) and a one-sentence note for 9 (development.md) were fixed in documentation only, in one bounded commit. Finding 2 is a checklist wording note: B2's expected cell is the second-call output (the first `ctl status` on a fresh `$S/rt` prints the `no Controller runtime state` form; `install.md` now says the row depends on the root). Finding 9's `ACTIVE_THROUGH` gating in `tools/check_docs.py` is left as is (tool change, not wording). Re-test: install.md B2 line, update.md, run.md gate sentence, exit-codes 130 row, README step 2.
+
 ### Known limitations and out of scope
 
 - Controller code, ADRs, release notes and CI are untouched; the lifecycle diagram is still the shipped SVG until the Workflow repository's overview page exists.

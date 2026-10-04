@@ -6641,8 +6641,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 45,
-      "last_transition": "2026-10-04T00:12:54Z",
+      "state_revision": 46,
+      "last_transition": "2026-10-04T00:30:51Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

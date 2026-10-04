@@ -401,11 +401,9 @@ disposition and action beside it.
   Install a Controller that knows it, or take the step by hand. No Controller
   release knows the Workflow 2.8 `validation` disposition yet (roadmap C10).
   At that automatic-gate stop, run `/satisfy-gate plan|implementation|acceptance
-  <id>` yourself in a Claude session, then run again; or commit
-  `docs/ai-workflow/GATE_POLICY.json` with
-  `{"schema_version": 1, "human_approval": true}` so the gates are human, as
-  with Workflow 2.7.0, and approve with `/approve-review` and
-  `/accept-milestone`.
+  <id>` yourself in a Claude session, then run again. To make the
+  gates human instead, see the Workflow's [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md); do not
+  commit the policy file while a plan or implementation approval is open.
 - `workflow_user_only_action`: an `automatic` answer whose worker is
   `user_only`. The Controller never launches it.
 - `workflow_invocation_mismatch`: the Workflow's invocation text for the

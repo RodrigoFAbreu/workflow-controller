@@ -99,14 +99,20 @@ example `workflow-controller --work-item <id> explain <repo>` or
 The Controller launches a Workflow command only when it can verify that
 command's outcome from committed state: planning, local plan review and
 revision, recording an already-pasted external verdict, implementation
-checkpoint by checkpoint, and local implementation review and remediation, and, in protocol mode, preparing the functional-review checklist and applying its findings.
+checkpoint by checkpoint, and local implementation review and remediation. In
+protocol mode it also prepares the functional-review checklist and applies its findings.
 Everything else stops for a person: the external reviews themselves,
 functional review and merging, and, up to Workflow 2.7, plan and implementation
 approval and acceptance. From Workflow 2.8 those three approval gates follow the
 repository's gate policy and by default the Workflow satisfies them itself from
-complete evidence (all three for a version 2.2 item; a version 2.1 item, the default of a freshly bootstrapped repository, keeps implementation approval with a person); Controller 1.7.0 still stops at them until a later release
-(roadmap C10): the Workflow answers them with a disposition it does not know, so `explain` reports
-`workflow_unknown_disposition` and nothing is launched. Run `/satisfy-gate` yourself or commit a human gate policy; see [run](docs/run.md#steps).
+complete evidence (all three for a version 2.2 item; a version 2.1 item, the
+default of a freshly bootstrapped repository, keeps implementation approval
+with a person). Controller 1.7.0 still stops at them until a later release
+(roadmap C10): the Workflow answers them with a disposition it does not know,
+so `explain` reports `workflow_unknown_disposition` and nothing is launched.
+Run `/satisfy-gate plan|implementation|acceptance <id>` yourself; to switch the
+repository to human gates, see the Workflow's
+[gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). See also [run](docs/run.md#steps).
 
 On a Workflow release that ships the orchestration protocol, such as 2.7.0,
 the Workflow itself says what comes next and whether each job made progress

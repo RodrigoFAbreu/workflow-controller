@@ -39,13 +39,15 @@ One of the points in a work item's lifecycle where it cannot move on until a
 decision is recorded: plan approval, implementation approval (also called
 technical approval) and milestone acceptance. Up to Workflow 2.7, a person
 always makes these decisions. From Workflow 2.8, each gate follows the
-repository's gate policy, the file `docs/ai-workflow/GATE_POLICY.json`. With no
-file, the default applies: the Workflow satisfies the gate itself once its
-evidence is complete (for example, both reviews approve); a gate whose evidence
+repository's gate policy, the file `docs/ai-workflow/GATE_POLICY.json`. In a
+repository that has never had a policy, the default applies: the Workflow
+satisfies the gate itself once its evidence is complete (for example, both reviews approve); a gate whose evidence
 is missing is blocked, not passed. A repository that turns `human_approval` on
 (all three gates), or sets `human: true` for one gate under `gates.<gate>` (for
 example `gates.plan_approval`), gets the person-decides behavior back for those
-gates. Work items whose governing version is 1 or 2.1 keep exceptions: a
+gates, and deleting the file later does not undo a human setting the Workflow has
+already seen. Do not commit the policy file while a plan or implementation
+approval is open; see the Workflow's [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). Work items whose governing version is 1 or 2.1 keep exceptions: a
 version 1 item always has a person for plan and implementation approval, and a
 version 2.1 item always has a person for implementation approval. Version 2.1
 is the default of a freshly bootstrapped repository, so there implementation

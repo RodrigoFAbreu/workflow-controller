@@ -6560,7 +6560,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -6622,7 +6622,169 @@
         "waived_guarantees": [],
         "recorded_at": "2026-10-03T20:16:12Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "222702ce06b40c47f61ecfe80512e44236c2efed48799791f8ac8bc11f35b2fc",
+        "approved_review_content_id": "7ee97a46bca4a10c92e057b3030284d9b91f8574333ff0d053d45a7a8cb8053d",
+        "review_content_manifest": [
+          {
+            "path": "CLAUDE.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b13c33420201a9d79ddcc55123261e504ad5b5ea"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b76181bec07bd594e6a147e9bd3236c35eb40827"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3ce86b2145d3b9bc9e667ea699b1e96423e15a34"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3c7814001cba949f82bf814a6f2350e495f8ebd4"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d66971017a47ab933dd0a19b3ede1ee54c9c13a3"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "284dcff8abe38c24e66f382a326b2150c07275e1"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "03b3738cbeddb3a7dc689c66a0da14f2181e37fc"
+          },
+          {
+            "path": "docs/glossary.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "67aa0afda444a3cca1b01621cbf9d67149d15278"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "edec41775efa7b287e43ba8fa9a1cf0e2b3fb8c2"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5fcea8026ce6a6f147ad946e34d8972e1dc162aa"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9378dfe9d195fb1e98574582e289151aa6c0d45a"
+          },
+          {
+            "path": "docs/guide/concepts.md",
+            "exists": false,
+            "mode": null,
+            "blob": null
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "944a179b5c59c10880ac821464db5a15a1b95ac1"
+          },
+          {
+            "path": "docs/guide/how-it-works.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dfe6177046219f0079b4b6b10e26668442d8cfd1"
+          },
+          {
+            "path": "docs/guide/installation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c8060fcf66e9befa196128d0fd8ca5ddaf1576b9"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9be8e764aaa0df4623a3b41de7fe9bd271ca067e"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1f2a1ab2ba3db7baf983bf58578a423d75d92720"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "adc22e758b14db94dea01f7a6f1ceebf729ace3f"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2902b4738716fb7d57b151b3a503843d1924c87d"
+          },
+          {
+            "path": "docs/install.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b7c48a9d18d281cfca8d3b31b47295f73fceffbd"
+          },
+          {
+            "path": "docs/release-history.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "954c0e0a02f794c1729d2b7de8f8eca1ea1ea132"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "44d2df38eac862c9d0b1d35d1b2a796b656329aa"
+          },
+          {
+            "path": "docs/update.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "690eb6b8b2c830ccb8200c11c2d18f5103d4ec6f"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6b0489bf587a9b366d9b8e16b9053aaa15bcb7e6"
+          },
+          {
+            "path": "tools/check_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "70affaef0dfad244c56a4d0d8de1e5b1fd4f4e14"
+          }
+        ],
+        "reviewed_content_commit": "1f58853df308822ee23b4dc65f049a504ccfc3b0",
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the implementation for workflow-controller-documentation-reorganisation at the implementation stage.",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-04T00:39:53Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
@@ -6641,8 +6803,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 46,
-      "last_transition": "2026-10-04T00:30:51Z",
+      "state_revision": 47,
+      "last_transition": "2026-10-04T00:39:53Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

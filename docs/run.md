@@ -28,7 +28,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
    workflow-controller run --follow .
    ```
 
-3. At an [approval gate](glossary.md#approval-gate) the Controller stops with exit status 10. Plan approval, implementation approval and milestone acceptance are yours, as are the external reviews and functional review, unless the repository's gate policy (Workflow 2.8 and later) makes a gate automatic; Controller 1.7.0 itself has not changed. Do what `explain` says, then run again.
+3. At an [approval gate](glossary.md#approval-gate) the Controller stops with exit status 10. Up to Workflow 2.7, plan approval, implementation approval and milestone acceptance are yours. From Workflow 2.8 they follow the repository's gate policy and are, by default, satisfied by the Workflow from complete evidence; Controller 1.7.0 still stops at those automatic gates until a later release (roadmap C10), because its protocol 1.0 action catalogue cannot launch the gate-satisfaction actions. The external reviews and functional review stay yours in the Controller's flow. Do what `explain` says, then run again.
 
 4. Watch from another terminal. `follow` attaches to whatever is running and changes nothing; `status` shows every active run and job.
 

@@ -35,13 +35,25 @@ item has one or more checkpoints, done one per implementation step.
 
 ### Approval gate
 
-A point where the Workflow stops until a person (by default) decides. There are six hard
-gates. Three, by default, only a person can pass: plan approval, implementation approval
-(also called technical approval) and milestone acceptance. The other three wait
-for the external plan review, the external implementation review and the
-functional review. A tool may run everything between gates, but never
-crosses one for you unless the repository's gate policy makes that gate
-automatic (Workflow 2.8 and later).
+One of the points in a work item's lifecycle where it cannot move on until a
+decision is recorded: plan approval, implementation approval (also called
+technical approval) and milestone acceptance. Up to Workflow 2.7, a person
+always makes these decisions. From Workflow 2.8, each gate follows the
+repository's gate policy (`GATE_POLICY.json`). By default the Workflow
+satisfies the gate itself once its evidence is complete (for example, both
+reviews approve); a gate whose evidence is missing is blocked, not passed. A
+repository that turns `human_approval` on, for all gates or for one, gets the
+person-decides behavior back. Work items governed by an older Workflow version
+keep their exceptions: a version 1 item always has a person for plan and
+implementation approval, and a version 2.1 item always has a person for
+implementation approval. The review stages (external plan review, external
+implementation review, functional review) are separate waiting points; they
+wait for a review result, not an approval.
+
+The Controller stops at a gate when a person is needed. Controller 1.7.0 also
+stops at Workflow 2.8 automatic gates, until a later release (roadmap C10),
+because its protocol 1.0 action catalogue cannot launch the new
+gate-satisfaction actions and reads them as blocked.
 
 ### Bundle
 
@@ -86,7 +98,9 @@ gate, a failure or its step limit.
 ### Gate stop
 
 What the Controller does at an approval gate: it stops, says what you must do,
-and `run` exits with status 10. See [exit codes](exit-codes.md).
+and `run` exits with status 10. Controller 1.7.0 stops at a gate when a person
+is needed and, until a later release (roadmap C10), also at Workflow 2.8
+automatic gates, which it cannot yet satisfy. See [exit codes](exit-codes.md).
 
 ### Worker
 

@@ -62,8 +62,14 @@ Controller, for a repository with a `.workflow-controller/policy.json`:
 
 The human steps are the Workflow's six hard gates
 ([`MILESTONE_WORKFLOW.md`](../ai-workflow/MILESTONE_WORKFLOW.md), "Hard gates
-summary"), plus the merge unless the repository opts in to auto-merge.
-The Controller never crosses one: the commands a
+summary"), plus the merge unless the repository opts in to auto-merge. The
+table shows them as a person's steps, which is how they work up to Workflow 2.7
+and for a repository that turns `human_approval` on. From Workflow 2.8 the
+three approvals (plan approval, technical approval, acceptance) follow the
+repository's gate policy and by default the Workflow satisfies them itself from
+complete evidence (see the [glossary](../glossary.md#approval-gate)).
+The Controller never crosses a gate that needs a person: the commands a
 human must run are user-only, and the Controller refuses to launch them even
-if asked. Reducing these gates where automated evidence is enough is on the
-[roadmap](../ROADMAP.md).
+if asked. Controller 1.7.0 also stops at Workflow 2.8 automatic gates, until a
+later release (roadmap C10), because its protocol 1.0 action catalogue cannot
+launch the gate-satisfaction actions.

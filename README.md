@@ -100,10 +100,12 @@ The Controller launches a Workflow command only when it can verify that
 command's outcome from committed state: planning, local plan review and
 revision, recording an already-pasted external verdict, implementation
 checkpoint by checkpoint, and local implementation review and remediation.
-Everything else stops for a person: the external reviews themselves, plan and
-implementation approval, functional review, acceptance, and merging. From
-Workflow 2.8 a gate policy can make an approval gate automatic; Controller
-1.7.0 itself has not changed.
+Everything else stops for a person: the external reviews themselves,
+functional review and merging, and, up to Workflow 2.7, plan and implementation
+approval and acceptance. From Workflow 2.8 those three approval gates follow the
+repository's gate policy and by default the Workflow satisfies them itself from
+complete evidence; Controller 1.7.0 still stops at them until a later release
+(roadmap C10), because it cannot yet launch the gate-satisfaction actions.
 
 On a Workflow release that ships the orchestration protocol, such as 2.7.0,
 the Workflow itself says what comes next and whether each job made progress

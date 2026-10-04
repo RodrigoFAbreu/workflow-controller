@@ -47,8 +47,8 @@ repository that turns `human_approval` on (all three gates), or sets
 `human: true` for one gate under `gates.<gate>` (for example
 `gates.plan_approval`), gets the person-decides behavior back for those gates,
 and deleting the file later does not undo a human setting the Workflow has
-already seen. When you add the policy file matters; the Workflow's
-[gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) explains it. Work items whose governing version is 1
+already seen. When you commit the policy file matters; the Workflow's
+[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. Work items whose governing version is 1
 or 2.1 keep exceptions: a version 1 item always has a person for plan and
 implementation approval, and a version 2.1 item always has a person for
 implementation approval. Version 2.1

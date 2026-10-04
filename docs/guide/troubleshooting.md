@@ -402,8 +402,9 @@ disposition and action beside it.
   release knows the Workflow 2.8 `validation` disposition yet (roadmap C10).
   At that automatic-gate stop, run `/satisfy-gate plan|implementation|acceptance
   <id>` yourself in a Claude session, then run again. To switch the
-  repository to human gates, see the Workflow's [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md):
-  when you add the policy file matters, and that page explains it.
+  repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).
+  When you commit the policy file matters; the Workflow's
+  [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it.
 - `workflow_user_only_action`: an `automatic` answer whose worker is
   `user_only`. The Controller never launches it.
 - `workflow_invocation_mismatch`: the Workflow's invocation text for the

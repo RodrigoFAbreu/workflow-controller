@@ -6,7 +6,7 @@ Start with `workflow-controller explain <repo>`. It is read-only, exits 0 (but r
 
 ## The run stopped and exited 10
 
-Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waiting for you. Run `workflow-controller explain <repo>`, do what it says, then run again. The exception is a Workflow 2.8 automatic gate, where `explain` reports `workflow_unknown_disposition` and shows the action (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command to run: run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session. To switch the repository to human gates, see the Workflow's [gate policy page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md): when you add the policy file matters, and that page explains it. See [run](run.md#steps).
+Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waiting for you. Run `workflow-controller explain <repo>`, do what it says, then run again. The exception is a Workflow 2.8 automatic gate, where `explain` reports `workflow_unknown_disposition` and shows the action (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command to run: run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session. To switch the repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). When you commit the policy file matters; the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. See [run](run.md#steps).
 
 ## The run exited 16
 

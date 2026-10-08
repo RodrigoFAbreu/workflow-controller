@@ -106,14 +106,14 @@ functional review and merging, and, up to Workflow 2.7, plan and implementation
 approval and acceptance. From Workflow 2.8 those three approval gates follow the
 repository's gate policy and by default the Workflow satisfies them itself from
 complete evidence (all three for a version 2.2 item; a version 2.1 item, the
-default of a freshly bootstrapped repository, keeps implementation approval
+default of a repository bootstrapped before Workflow 2.9, keeps implementation approval
 with a person). Controller 1.7.0 still stops at them until a later release:
 the Workflow answers them with a disposition it does not know,
 so `explain` reports `workflow_unknown_disposition` and nothing is launched.
 Run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session (at acceptance, `explain` may first ask for functional or pull-request evidence: see [run](docs/run.md#steps)); to switch the
 repository to human gates, see the Workflow's
-[gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is adopted, Controller 1.7.0 refuses the repository (exit 20). The
-Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains commit timing. See also [run](docs/run.md#steps).
+[gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). Commit the policy file (`docs/ai-workflow/GATE_POLICY.json`), then run `/adopt-gate-policy` in a Claude session; until it is adopted, Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20). The
+Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it. See also [run](docs/run.md#steps).
 
 On a Workflow release that ships the orchestration protocol, such as 2.7.0,
 the Workflow itself says what comes next and whether each job made progress

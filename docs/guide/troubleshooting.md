@@ -405,13 +405,10 @@ disposition and action beside it.
   repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).
   Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
   adopted, Controller 1.7.0 refuses the repository (see the `'warn'` bullet below). The Workflow's
-  [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains commit timing.
+  [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it.
 - `functional_evidence_needed`, `pr_evidence_needed`: at a Workflow 2.8 automatic
   acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
   not the unknown disposition; see [run](../run.md#steps) step 3.
-- `protocol verify gave an answer outside the protocol ... 'warn'` (exit 20): the Workflow's
-  `verify` reported a check as `warn`, which Controller 1.7.0 does not know. Adopt the
-  gate policy with `/adopt-gate-policy`, then run again.
 - `workflow_user_only_action`: an `automatic` answer whose worker is
   `user_only`. The Controller never launches it.
 - `workflow_invocation_mismatch`: the Workflow's invocation text for the
@@ -430,6 +427,17 @@ disposition and action beside it.
   counted job left: the next `no_progress` job then starts a new count of
   one. Running again without a change gets the same gate. A
   job that made progress, or a gate, also resets it.
+
+`protocol verify gave an answer outside the protocol ... 'warn'` (exit 20) is a refusal, not a
+gate: `explain`, `step` and `run` refuse, and nothing is launched. The Workflow's `verify`
+reported a check as `warn`, which Controller 1.7.0 does not know. For example, the gate policy
+file (`docs/ai-workflow/GATE_POLICY.json`) is present, committed or not, and not adopted yet:
+commit it, then run `/adopt-gate-policy` in a Claude session, then run again. Adopting the same policy does not
+clear every `warn`. While an adoption that lowers a gate is the newest adoption, or when a review
+verdict was recorded without `--run-ref`, the Workflow keeps reporting it; a later Controller
+release will accept it. To see which check it is, run
+`python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root . verify` and read the
+`gate_policy` check's detail. See [common problems](../common-problems.md#the-run-refuses-with-protocol-verify-gave-an-answer-outside-the-protocol-and-warn-exit-20).
 
 A protocol job can also end `FAILED` (`step` and `run` exit `30`) with:
 

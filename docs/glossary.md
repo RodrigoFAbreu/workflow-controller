@@ -46,13 +46,13 @@ reviews approve); a gate whose evidence is missing is blocked, not passed. A
 repository that turns `human_approval` on (all three gates), or sets
 `human: true` for one gate under `gates.<gate>` (for example
 `gates.plan_approval`), gets the person-decides behavior back for those gates.
-Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
-adopted, Controller 1.7.0 refuses the repository (exit 20, see [run](run.md#steps)). The Workflow's
-[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains commit timing. Two kinds of work item keep a person:
+Commit the policy file (`docs/ai-workflow/GATE_POLICY.json`), then run `/adopt-gate-policy` in a Claude session; until it is
+adopted, Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20, see [run](run.md#steps)). The Workflow's
+[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it. Two kinds of work item keep a person:
 
 - a version 1 item always has a person for plan and implementation approval;
 - a version 2.1 item always has a person for implementation approval. Version 2.1
-  is the default of a freshly bootstrapped repository, so there implementation
+  is the default of a repository bootstrapped before Workflow 2.9, so there implementation
   approval stays with a person by default.
 
 Only a version 2.2 item has all three

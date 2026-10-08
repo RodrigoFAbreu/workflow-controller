@@ -18,7 +18,7 @@ Under 1.7.0 and later, a release is admitted by capability when its installation
 record lists `scripts/workflow_protocol.py` and that script's `describe` answers
 protocol major 1. Workflow 2.7.0 is the first release that does. Controller 1.7.0
 admits 2.8.0 this way, with an advisory about action ids it does not know, and stops
-at the 2.8 automatic gates (see [run](run.md)). It also refuses a 2.8.0 repository (exit 20) whenever the Workflow's `verify` reports `warn`: an unadopted gate policy file, and, per the Workflow's reference, permanently after an adoption that lowers a gate. Anything else
+at the 2.8 automatic gates (see [run](run.md)). It also refuses `explain`, `step` and `run` (exit 20) on a 2.8.0 repository whenever the Workflow's `verify` reports `warn`: for example an unadopted gate policy file, or, while it is the newest adoption, one that lowers a gate. A later Controller release will accept it. Any other release
 is refused: 2.5.0 and 2.6.1 as not validated, a release older than the 2.5
 line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as

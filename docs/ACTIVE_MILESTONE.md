@@ -70,7 +70,7 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
 ## Functional review checklist
 
 Documentation-only milestone (`docs:`; nothing under `controller/` changed). Review as a first-time reader
-would. Evidence below is for round 4, implementation revision 16 (documentation head `59bf9af`; rounds 1-3 measured earlier) with the
+would. Evidence below is for round 5, implementation revision 17 (documentation head `a7f1c3c`; rounds 1-4 measured earlier) with the
 checkout's Controller 1.7.0 and the pipx-installed release 1.7.0. Findings go to `.ai-review/workflow-controller-documentation-reorganisation/feedback/FUNCTIONAL_REVIEW.md`.
 
 ### Setup
@@ -157,6 +157,19 @@ works (also click a few anchors), and nothing refers to a page or section that n
 | F2 | "What you should see" in `docs/update.md` | After an update `workflow-controller --version` prints the new version (`workflow-controller <version>`; compare B1); after a Workflow move `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints `repository: ... (Workflow <release>, ...)` with no refusal. Same lines as the steps above |
 | F3 | `docs/compatibility.md` and `docs/glossary.md#gate-stop` | Compatibility header and table cover Workflow 2.6.0, 2.7.0 and 2.8.0, with 2.8.0 admitted with an advisory and stopped at automatic gates (link to run). The Gate stop entry matches D1 and `exit-codes.md` row 10 |
 
+### G. Round 5 re-tests (what round 4 changed)
+
+| # | Check | Expected |
+|---|---|---|
+| G1 | `docs/run.md` step 3 | Five short bullets: "Up to Workflow 2.7", "On Workflow 2.8", "What Controller 1.7.0 does there", "Acceptance may ask for evidence first", "Human gates and commit timing", then "At any other gate stop". The evidence bullet names `functional_evidence_needed`, `pr_evidence_needed`, "Evidence kinds" and `record-external-result` in the Workflow's gate policy reference, and the alternative `gates.acceptance.human: true` with `/accept-milestone`. Compare with the Workflow v2.8.0 gate policy rows 38e-38h (functional and pull-request evidence, record-external-result, human acceptance): the bullet must not contradict them |
+| G2 | `docs/common-problems.md` | Two entries: "The run stopped and exited 10" (short, links `glossary.md#gate-stop` and `run.md#steps`) and "The run stopped at a Workflow 2.8 automatic gate" (`workflow_unknown_disposition`, `/satisfy-gate` in a Claude session, the evidence reports, human gates, links to the gates page and gate policy reference). `grep -n "^## The run stopped" docs/common-problems.md` lists both; the anchor `common-problems.md#the-run-stopped-at-a-workflow-28-automatic-gate` resolves (`python3 tools/check_docs.py` clean) |
+| G3 | `docs/update.md` | Line 20: the `--force` failure is limited to pipx's uv backend. Line 47: "Workflow 2.7.0 or later needs Controller 1.7.0 or later". Line 76: on Workflow 2.8.0 `inspect` also prints an `advisory:` line, described as expected, linking compatibility. `grep -n "uv backend\|2.7.0 or later\|advisory:" docs/update.md` shows the three lines |
+| G4 | "Last checked with" headers | `grep -l "Last checked with.*2\.8\.0" README.md docs/*.md docs/guide/*.md` lists the pages that name Workflow 2.8.0 (README, docs/README, install, run, update, compatibility, exit-codes, common-problems, glossary, release-history, guide/how-it-works); the common-problems, update, glossary and run headers read "2.6.0, 2.7.0 and 2.8.0" |
+| G5 | Roadmap id gone | `grep -n "C10" docs/guide/troubleshooting.md README.md docs/run.md docs/glossary.md docs/guide/how-it-works.md` prints nothing |
+| G6 | `docs/glossary.md` "Approval gate" | The version 1 / 2.1 exceptions are a two-item list, consistent with run.md "On Workflow 2.8" (2.2 all three automatic; 2.1 keeps implementation approval; 1 keeps plan and implementation approval) |
+| G7 | `README.md` | The `/satisfy-gate` sentence says "in a Claude session" and the parenthetical about evidence matches run.md |
+| G8 | Automated checks | `python3 tools/check_docs.py` clean; `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` OK |
+
 ### Functional review round 1 (applied)
 
 Findings 1 (install.md `status` row and `controller:` line), 3 (glossary links in update.md), 4 (`VERSION` in update.md), 5 (rollback below 1.7.0), 6 (gate-policy wording in run.md and glossary), 7 (exit 130 row), 8 (README route to Workflow Manager) and a one-sentence note for 9 (development.md) were fixed in documentation only, in one bounded commit. Finding 2 is a checklist wording note: B2's expected cell is the second-call output (the first `ctl status` on a fresh `$S/rt` prints the `no Controller runtime state` form; `install.md` now says the row depends on the root). Finding 9's `ACTIVE_THROUGH` gating in `tools/check_docs.py` is left as is (tool change, not wording). Re-test: install.md B2 line, update.md, run.md gate sentence, exit-codes 130 row, README step 2.
@@ -173,8 +186,13 @@ Fixed in documentation only (revision 16): `update.md` update and rollback now r
 
 Fixed in documentation only (revision 17): `run.md` step 3 is split into short "Up to Workflow 2.7" and "On Workflow 2.8" parts and says that acceptance may first ask for functional or pull-request evidence (`functional_evidence_needed`, `pr_evidence_needed`), recorded as the Workflow's gate policy reference describes or avoided with `gates.acceptance.human: true` (also in `glossary.md`, `common-problems.md` as its own entry, and `README.md`); `update.md` limits the `--force` reason to pipx's uv backend, says Workflow 2.7.0 or later needs Controller 1.7.0 or later and notes the expected `advisory:` line on 2.8.0; the "Last checked with" headers name 2.8.0; "roadmap C10" is gone from the troubleshooting guide; the glossary lists the version 1 / 2.1 exceptions as two items; README's `/satisfy-gate` sentence says "in a Claude session". Re-test: the F1 sentence in `run.md`, `update.md` lines 20, 47 and 76, and the `common-problems.md` entry.
 
+### Functional review round 5 (pending)
+
+Not yet tested. Re-test list: G1 to G8 above, plus the round-4 re-test sentence (F1 sentence in `run.md`, `update.md` lines 20, 47 and 76, the `common-problems.md` entry).
+
 ### Known limitations and out of scope
 
+- Two Controller tests (`tests.test_release_notes.TrailerRuleTest.test_a_bare_url_and_a_one_line_note_are_refused` and `tests.test_pull_request_lifecycle.SquashReleaseNotesTest.test_a_trailer_paragraph_refuses_with_no_edit`) fail on this machine only because its Git is 2.56.0; they are unrelated to this documentation milestone.
 - Controller code, ADRs, release notes and CI are untouched; the lifecycle diagram is still the shipped SVG until the Workflow repository's overview page exists.
 - Cross-repository links point at the other repositories' `#readme`; they are checked for form and host only, offline.
 - The managed-repository, pipx and download commands were not executed (see B).

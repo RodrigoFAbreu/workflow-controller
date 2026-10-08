@@ -38,13 +38,16 @@ Deferred follow-ups, not conditions of acceptance:
   - a roadmap entry for accepting the protocol's `warn` check status;
   - the follow-ups noted during D1: the Git 2.56 trailer rule (two tests fail locally only), and
     the selection of a dormant legacy work item.
-- **Moving this repository to a newer Workflow, with automatic gates.** Workflow 2.8.0 and 2.9.0
-  are published. First, the Controller must accept the protocol's `warn` check status, which
-  Controller 1.7.0 refuses. Workflow 2.9.0 has not been checked against the Controller yet.
+- **Moving this repository to Workflow 2.9.0, with automatic gates**, after C9b (see Next action).
+  Controller 1.7.0 admits 2.9.0, but refuses whenever `verify` reports `warn`.
 - Carried over, unchanged: the deferred items of the earlier milestones, listed in their
   acceptance commits.
 
 ## Next action
 
-After the merge and the Workflow move: `/milestone-plan` for step C8 (usage budget,
-`docs/ROADMAP.md` section 11.6), then C5, C6, C7, C10 and C11, in the order the roadmap gives.
+`/milestone-plan` for step C9b (`docs/ROADMAP.md`, "At a glance" and follow-up 11). It accepts the
+protocol's `warn` check status as advisory, vendors the Workflow 2.9.0 schema (protocol 1.2) and
+documents 2.9.0, and is released as a patch. The user chose this order on 2026-10-09:
+1. C9b, under Workflow 2.6.0 with human gates;
+2. then this repository moves to Workflow 2.9.0, with automatic gates;
+3. then C8 (usage budget, section 11.6), followed by C5, C6, C7, C10 and C11.

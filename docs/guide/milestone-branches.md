@@ -1,6 +1,12 @@
 # Milestone branches and pull requests
 
+> For: operators of a repository that uses milestone branches, pull requests and releases. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
+
+The branch and pull request each milestone gets, the readiness gates, merging and close-out, auto-merge, and getting out of a stuck milestone. The sections below start with how one milestone runs.
+
+## How a milestone runs under the policy
 
 This behaviour is **off** unless the target commits
 `.workflow-controller/policy.json` with `milestone_branches.enabled`. The
@@ -10,9 +16,9 @@ or an invalid value) refuses every lifecycle command rather than being
 ignored. This repository's own policy is the reference configuration:
 trunk `main` on `origin`, forge `github`, branches
 `milestone/{work_item_id}`, Draft pull requests that become ready only
-with green checks, merged with "Squash and merge" (from the
-[cutover](ci-and-releases.md#cutover-from-the-version-file-model) on;
-before it, with "Create a merge commit").
+with green checks, merged with "Squash and merge" (see the
+[cutover](ci-and-releases.md#cutover-from-the-version-file-model) for how a
+repository moves to squash merging).
 
 `milestone_branches.pull_request.merge_method` chooses how a milestone
 pull request is merged: `"merge"` (the default) or `"squash"`. A policy
@@ -39,8 +45,7 @@ the last line reads instead:
 In merge mode the flow is the same, but the PR is titled with the
 work-item id, readiness edits nothing, the human merges with "Create a
 merge commit", and every text below that names "Squash and merge" names
-"Create a merge commit" instead. Merge mode's titles, bodies, gates and
-close-out are 1.3.0's.
+"Create a merge commit" instead.
 
 - **Trunk start.** Before `/milestone-plan`, `HEAD` must be on
   `main`, the tracked tree clean, and local `main` equal to
@@ -350,7 +355,7 @@ avoid it, wrap the section at 72 columns while you write it.
 
 ## Auto-merge and the release wait
 
-From 1.6.0 a repository can let the Controller merge an accepted
+A repository can let the Controller merge an accepted
 milestone, wait for its release and close it out, so that nothing is
 left to a person after `/accept-milestone`. It opts in with two optional
 policy keys:
@@ -461,7 +466,7 @@ show the merge and closes out as for any merge. (A repository that
 deletes merged branches removes the pull request's head branch itself.)
 Otherwise a refused merge is `merge_pending` with GitHub's message, sent
 again only on a later re-read that shows the pull request mergeable.
-After three refused attempts the Controller refuses (exit `20`) and
+After three refused attempts the Controller refuses (exit `20`, see [exit codes](../exit-codes.md)) and
 sends nothing more for this pull request: merge on GitHub with "Squash
 and merge" (the message names the cause, for example squash merging
 turned off), and the next step closes out. When the three attempts are

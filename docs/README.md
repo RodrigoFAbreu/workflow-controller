@@ -1,24 +1,49 @@
 # Documentation map
 
-Where to find what, and who maintains it. Start with the
-[project README](../README.md) if you are new.
+> For: anyone looking for the right page. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
-## Using the Controller
+Where to find what. Start with the [project README](../README.md) if you are
+new: it explains how Workflow, Workflow Manager and the Controller fit
+together and has a five-minute quick start.
+
+## I want to ...
+
+| I want to ... | Page |
+|---|---|
+| install the Controller, set up the settings file, uninstall it | [Install](install.md) |
+| run it on a repository: a first run, `step` versus `run`, following, gate stops | [Run](run.md) |
+| upgrade or roll back the Controller, or move a repository to a newer Workflow | [Update](update.md) |
+| know which Workflow releases a Controller release accepts | [Compatibility](compatibility.md) |
+| fix a run that stopped | [Common problems](common-problems.md) |
+| know what an exit status means and what to do | [Exit codes](exit-codes.md) |
+| look up a term (work item, phase, checkpoint, approval gate, ...) | [Glossary](glossary.md) |
+| see what each release changed | [Release history](release-history.md) |
+
+## Reference guides
+
+These go deeper than the pages above; a task page links to the guide that
+explains why.
 
 | Guide | Read it for |
 |---|---|
-| [Concepts](guide/concepts.md) | how Workflow, Workflow Manager and the Controller fit together, a milestone end to end, and a glossary |
-| [Installing, upgrading and rolling back](guide/installation.md) | requirements, installing a release, building from a checkout, upgrades and rollbacks |
+| [How it works](guide/how-it-works.md) | how Workflow, Workflow Manager and the Controller fit together, and a milestone end to end; the [lifecycle diagram](ai-workflow/diagrams/workflow-v2-1-lifecycle.drawio.svg) draws the lifecycle |
 | [Commands, options and worker routing](guide/commands.md) | every command and global option, the `run` loop, which model and effort each worker gets |
 | [What the Controller automates, and how it stays safe](guide/automation.md) | the safety model, the rule that decides what is launched, the phase table, implementation-review apply rounds |
 | [Workers: lifecycle, recovery and observation](guide/workers.md) | how workers run and end, background work, the lifecycle lock, `resume`, job records and their recovery, `follow` |
-| [Runtime state and runtime identity](guide/runtime.md) | where the Controller keeps its state, and how it knows and records what code it is running |
+| [Runtime state and runtime identity](guide/runtime.md) | the settings file, where the Controller keeps its state, and how it knows and records what code it is running |
 | [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, the release notes in the pull request body, merge and close-out, auto-merge and the release wait, stuck milestones |
-| [Continuous integration and releases](guide/ci-and-releases.md) | the CI workflows, how a release is made, release notes from the milestones, and this repository's GitHub settings |
-| [Development and the test runner](guide/development.md) | working from a checkout, running tests, the sharded test runner |
-| [Troubleshooting](guide/troubleshooting.md) | exit codes and the usual situations |
+| [Troubleshooting](guide/troubleshooting.md) | the long account of every stop and the situations behind it |
 
-These guides are maintained by hand in this repository.
+For maintainers of this repository:
+
+| Guide | Read it for |
+|---|---|
+| [Continuous integration and releases](guide/ci-and-releases.md) | the CI workflows, how a release is made, release notes from the milestones, and this repository's GitHub settings |
+| [Development and the test runner](guide/development.md) | working from a checkout, installing from one, running tests, the sharded test runner, the documentation checks |
+
+These pages are maintained by hand in this repository, and
+`python3 tools/check_docs.py` keeps their links and shown commands true
+([Documentation checks](guide/development.md#documentation-checks)).
 
 ## Releases
 
@@ -32,17 +57,11 @@ These guides are maintained by hand in this repository.
 | [1.4.0](releases/1.4.0.md) | squash merges, release versions derived from Conventional Commit pull request titles and the release tags, `MERGED_SQUASHED`, and the cutover |
 | [1.3.0](releases/1.3.0.md) | Workflow 2.6.0 admitted beside 2.5.1, the new error codes and gates, and the 1.2.1 changes that shipped without notes |
 
-Releases 1.3.0, 1.4.0, 1.4.1, 1.4.2, 1.5.0, 1.6.0 and 1.7.0 have their notes in `releases/`. From
-1.5.0 on, release notes can follow the milestone, as a policy opt-in: a
-repository that sets `milestone_branches.pull_request.release_notes` and uses
-`{release_notes}` in its release notes template gets each milestone's notes
-section in its pull request body, from there in the squash commit, and from
-there in the GitHub release notes
-([Release notes from the milestones](guide/ci-and-releases.md#release-notes-from-the-milestones)).
-This repository opts in with a cutover pull request after 1.5.0 is installed;
-until then, each release's notes are still copied into `releases/` by hand
-after it is published. The GitHub release itself carries the wheel and
-`SHA256SUMS` ([Releasing](guide/ci-and-releases.md#releasing)).
+Every release, with one line each and the ones before 1.3.0, is in the
+[release history](release-history.md). The GitHub release itself carries the
+wheel and `SHA256SUMS` ([Releasing](guide/ci-and-releases.md#releasing)); how a
+milestone's notes reach the release is in
+[Release notes from the milestones](guide/ci-and-releases.md#release-notes-from-the-milestones).
 
 ## Direction
 
@@ -87,6 +106,13 @@ guides, the guides and the code are current.
 | Trunk branch, PR and release orchestration | [plan](ai-workflow/CONTROLLER_TRUNK_BRANCH_PR_RELEASE_PLAN.md) | [narrative](milestones/completed/workflow-controller-trunk-branch-pr-release-orchestration.md) |
 | Worker lifecycle ownership | [plan](ai-workflow/CONTROLLER_WORKER_LIFECYCLE_OWNERSHIP_PLAN.md) | [narrative](milestones/completed/workflow-controller-worker-lifecycle-ownership.md) |
 | Adaptive test sharding | [plan](ai-workflow/CONTROLLER_ADAPTIVE_TEST_SHARDING_PLAN.md) | [narrative](milestones/completed/workflow-controller-adaptive-test-sharding.md) |
+| Workflow 2.6 integration (1.3.0) | [plan](ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md) | [narrative](milestones/completed/workflow-controller-workflow-2-6-integration.md) |
+| Squash merges and tag-derived versions (1.4.0) | [plan](ai-workflow/CONTROLLER_SQUASH_MERGE_TAG_VERSIONING_PLAN.md) | [narrative](milestones/completed/workflow-controller-squash-merge-tag-versioning.md) |
+| Child-process reaping (1.4.1) | [plan](ai-workflow/CONTROLLER_CHILD_PROCESS_REAPING_PLAN.md) | [narrative](milestones/completed/workflow-controller-child-process-reaping.md) |
+| CI reliability (1.4.2) | [plan](ai-workflow/CONTROLLER_CI_RELIABILITY_PLAN.md) | [narrative](milestones/completed/workflow-controller-ci-reliability.md) |
+| Settings and telemetry (1.5.0) | [plan](ai-workflow/CONTROLLER_SETTINGS_AND_TELEMETRY_PLAN.md) | [narrative](milestones/completed/workflow-controller-settings-and-telemetry.md) |
+| Auto-merge and the release wait (1.6.0) | [plan](ai-workflow/CONTROLLER_AUTO_MERGE_RELEASE_WAIT_PLAN.md) | [narrative](milestones/completed/workflow-controller-auto-merge-release-wait.md) |
+| Orchestration protocol v1 (1.7.0) | [plan](ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md) | [narrative](milestones/completed/workflow-controller-orchestration-protocol-v1.md) |
 
 Also part of the Workflow's record: `ai-workflow/registry/` and
 `ai-workflow/requirements/` (each milestone's checkpoints and requirement
@@ -97,8 +123,8 @@ work item's narrative, which Workflow commands write.
 
 These files are installed and kept byte-identical by Workflow Manager, at the
 Workflow release recorded in `.workflow-manager/installation.json`. A local
-edit shows up as drift and is refused; change them upstream, in the Workflow
-Manager repository.
+edit shows up as drift and is refused; change them upstream, in the
+[Workflow](https://github.com/RodrigoFAbreu/workflow#readme) repository.
 
 | Document | Read it for |
 |---|---|

@@ -1,5 +1,7 @@
 # Development and the test runner
 
+> For: contributors and maintainers working from a checkout. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## Working from a checkout
@@ -31,6 +33,42 @@ then imports its decoy and fails. Some tests need package-index access,
 because `fixtures.editable_install` runs a build-isolated `pip install -e`.
 Run the suite in the foreground: a job backgrounded with a plain `&`
 ignores SIGINT, and the Ctrl-C tests then fail spuriously.
+
+## Install from a checkout
+
+Prefer a [release](../install.md). Build from a checkout only to test unreleased code, or when no release is reachable. There are two ways, and they give different runtimes.
+
+**A local wheel (a `package` runtime, like a release).** Build the wheel and install it with pipx:
+
+```bash
+git clone https://github.com/RodrigoFAbreu/workflow-controller.git
+cd workflow-controller
+python3 -m pip wheel --no-deps -w dist .
+pipx install --force ./dist/workflow_controller-*-py3-none-any.whl
+workflow-controller --version    # runtime: package (local build from <commit>)
+```
+
+The build records the checkout's commit, whether it had uncommitted
+changes, and a digest of the package. The wheel's version is the checkout's:
+the highest release tag reachable from `HEAD`, so a checkout ahead of
+`v1.4.0` builds `workflow_controller-1.4.0-py3-none-any.whl` (see
+[Building from a checkout](#building-from-a-checkout)). A clone that reaches
+no release tag, a shallow one for example, builds `0.0.0`, so build from a
+full clone. The line `package (local build from <commit>)`, not the
+version, tells such a wheel apart from a release. A wheel built from
+uncommitted changes, or with no verifiable provenance, needs
+`--allow-dirty-source` to run `step`, `run` or `resume`. A plain
+`pip install .` also gives a `package` runtime.
+
+**An editable install (a `source` runtime, for development).** `pip install -e .`
+runs the checkout itself. `step`, `run` and `resume` snapshot the checkout's
+committed `HEAD` with `git archive`, so what runs is always a commit. With
+uncommitted changes to the Controller's own files they refuse
+(`DirtyControllerSourceError`) unless you pass `--allow-dirty-source`, which
+snapshots the working tree instead. A source runtime keeps its state in
+`<checkout>/.controller/` (row 3 of the
+[runtime root ladder](runtime.md#controller-owned-runtime-state); see also
+[Runtime identity](runtime.md#runtime-identity)).
 
 ## Building from a checkout
 
@@ -150,6 +188,59 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
 - **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.
+
+## Documentation checks
+
+`tools/check_docs.py` keeps the documentation true without a network or a
+running Controller. It uses only the standard library, and
+`tests/test_docs.py` runs it on the repository and tries every rule on
+small synthetic trees, so the checks run inside the validate job's `tests`
+shards with no workflow change.
+
+```bash
+python3 tools/check_docs.py             # exit 0 when clean, 1 with one line per problem
+python3 tools/check_docs.py --root DIR  # check another tree
+python3 -m unittest tests.test_docs
+```
+
+What it checks:
+
+- **Links and anchors.** Every relative Markdown link and `#anchor` in
+  `README.md`, `docs/*.md`, `docs/guide/`, `docs/adr/` and
+  `docs/releases/` must reach an existing file and, for a Markdown file, a
+  heading, using GitHub's anchor rule (lowercase, inline-code text kept,
+  letters, digits, underscores and hyphens preserved, a repeated heading
+  numbered `-1`, `-2`, ...). `docs/ROADMAP.md` and
+  `docs/ACTIVE_MILESTONE.md` are skipped, and so are the Workflow's own
+  records under `docs/ai-workflow/` and `docs/milestones/`. A link to
+  github.com must name one of the three repositories
+  (`workflow-controller`, `workflow-manager`, `workflow`) in a known form
+  (`#readme`, `blob/<ref>/<path>`, `tree/...`, `releases`, `issues/N`,
+  `pull/N`); any other host must be on the check's short allow-list.
+- **Commands and flags.** Every `workflow-controller` line in a fenced
+  code block of `README.md`, `docs/install.md`, `docs/run.md`,
+  `docs/update.md` and `docs/common-problems.md` is parsed with the
+  Controller's own argument parser, never run: each subcommand, option and
+  choice must exist. `--help` and `--version` are accepted without running
+  anything, but the rest of the line is still checked. `<placeholders>`
+  and shell variables are replaced by fixed words first; a block marked
+  `text` is not checked.
+- **User pages.** Each page in the check's `USER_PAGES` list opens with
+  the `> For: <reader>. Last checked with: <versions>.` line right after
+  its title, and names no internal id (checkpoint or review-finding
+  numbers, work item ids).
+- **Facts kept in one place.** The [exit-code page](../exit-codes.md) lists exactly the
+  Controller's exit statuses (and the shell's 130 for Ctrl-C), matching
+  ADR 0001's table; the compatibility page carries exactly the pinned
+  script digests of `controller/workflow_contract.py`; the
+  `docs/guide/installation.md` stub keeps its three headings, which older
+  ADRs and release notes link to.
+
+Adding a page: put a new user page in `USER_PAGES`, and in
+`COMMAND_PAGES` too if it shows commands, with the number `ACTIVE_THROUGH`
+holds. The per-page numbers already in the file are historical, so a new
+page uses the current `ACTIVE_THROUGH` value. When a release changes a page,
+update its "Last checked with" line by hand; the check only asserts the line is there and has that shape.
 
 ## Throwaway Git repositories
 

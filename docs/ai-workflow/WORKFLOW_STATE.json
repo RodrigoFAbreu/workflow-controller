@@ -6550,6 +6550,295 @@
           "completed_at": "2026-10-03T16:10:13Z"
         }
       }
+    },
+    "workflow-controller-documentation-reorganisation": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-documentation-reorganisation",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORGANISATION_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 5,
+      "implementation_revision": 20,
+      "functional_review_round": null,
+      "base_commit": "914d8f4e0edea9c713c4d1ff8900c5f8ae146b0e",
+      "reviewed_implementation_head": "42df66e613f23089201f6143f81c1d4641485295",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP5",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "5d6bcc32dc706b123a615ca2e608fdd30387e999"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "ee2ffeb4c487415fff86ea1a445580a0740f7650"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "beac312f3fb2ddcc5e9269e84fd54abb8f911356"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "2bc0cb2d6568b9b6bcefdb9d547a17737961b656"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "92ce275677730a0e78a49c499b19623c2fb95b0e"
+        }
+      },
+      "current_bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+        "approved_review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORGANISATION_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c8e43cdcf2593aaa99452f6c12b43876e5639db1"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "91bc36c819e82ae0cb59edf857b96220438b25d7"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7c8f2ba2aaf9231ea7f59cf1e77eee37cc2cbf4c"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "I approve the plan for workflow-controller-documentation-reorganisation at the plan stage.",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-03T20:16:12Z"
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "9c8e3b6e2cbb914a71ef3625f6e74526756a0b75d46c7d65db27f5288a50f82e",
+        "approved_review_content_id": "99f6be0c43d3381a5f6231936c5bb348049e0ea4924857dd3b1743d07e4759a5",
+        "review_content_manifest": [
+          {
+            "path": "CLAUDE.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b13c33420201a9d79ddcc55123261e504ad5b5ea"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f6c579caf0b4bce7aab7f2a9652c76c5b9f7b916"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a2e0e15362e46f81bc4904775a729fd51a27b428"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3c7814001cba949f82bf814a6f2350e495f8ebd4"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "be781d012a2fba730a51565d70ddff79390345ab"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "60c65bc994e7120a9eca49b04dc578037ee259ae"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "510397b442e921995c44508fa07f1bb851409c6e"
+          },
+          {
+            "path": "docs/glossary.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c3ca16a78d926e30799e88afbf2b57f3998d65e5"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "edec41775efa7b287e43ba8fa9a1cf0e2b3fb8c2"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5fcea8026ce6a6f147ad946e34d8972e1dc162aa"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9378dfe9d195fb1e98574582e289151aa6c0d45a"
+          },
+          {
+            "path": "docs/guide/concepts.md",
+            "exists": false,
+            "mode": null,
+            "blob": null
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3e066693fca57d9ae45bae3c14370f62105bed6c"
+          },
+          {
+            "path": "docs/guide/how-it-works.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d153ce27e763a133525d0b6549d45c886efb1db8"
+          },
+          {
+            "path": "docs/guide/installation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c8060fcf66e9befa196128d0fd8ca5ddaf1576b9"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9be8e764aaa0df4623a3b41de7fe9bd271ca067e"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1f2a1ab2ba3db7baf983bf58578a423d75d92720"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c11c4538daf088f87aff698fb9e885acdde887be"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2902b4738716fb7d57b151b3a503843d1924c87d"
+          },
+          {
+            "path": "docs/install.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "79626eda7de3ccd8b7e32d857225a7e3f9ceaef2"
+          },
+          {
+            "path": "docs/release-history.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c9d9679744eeae737f58f9891fd417bb9e5aea2c"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b458719aba2580fa3958773fb98f48ce5ec3a4c9"
+          },
+          {
+            "path": "docs/update.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "25a0a24670ff8aedafa50bfd23839cf9af8f6286"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6b0489bf587a9b366d9b8e16b9053aaa15bcb7e6"
+          },
+          {
+            "path": "tools/check_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "70affaef0dfad244c56a4d0d8de1e5b1fd4f4e14"
+          }
+        ],
+        "reviewed_content_commit": "42df66e613f23089201f6143f81c1d4641485295",
+        "legacy_evidence": null,
+        "user_confirmation": "/approve-review implementation workflow-controller-documentation-reorganisation",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-08T22:19:05Z"
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-03T20:11:52Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-03T20:14:36Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 97,
+      "last_transition": "2026-10-08T23:16:42Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-03T20:10:13Z",
+        "consumed": {
+          "review_content_id": "30beeb93af2469246284c1f046e66029c9fbeecbe0fc1609c186acbd9a81395c",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "aa1e706f913f3ecf57b523d6b53436e27e08687597907ebfeaec863e84d8d888",
+          "bundle_id": "a197c2b24aa558c7b753f2dce1725420ec14696bb314024fd436689c78afc78a",
+          "plan_revision": 5
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "99f6be0c43d3381a5f6231936c5bb348049e0ea4924857dd3b1743d07e4759a5",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "9c8e3b6e2cbb914a71ef3625f6e74526756a0b75d46c7d65db27f5288a50f82e",
+          "verdict": "APPROVE",
+          "round": 20,
+          "completed_at": "2026-10-08T22:02:07Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "9c8e3b6e2cbb914a71ef3625f6e74526756a0b75d46c7d65db27f5288a50f82e",
+          "verdict": "APPROVE",
+          "round": 20,
+          "completed_at": "2026-10-08T22:12:39Z"
+        }
+      }
     }
   }
 }

@@ -1,32 +1,27 @@
 # Troubleshooting
 
+> For: anyone whose run stopped and the quick fix in common problems was not enough. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+
 [Back to the documentation map](../README.md)
 
-Start with `workflow-controller explain <repo>`. It is read-only, always exits
-`0`, and prints the pending job files (each with the command that clears it),
+Start with `workflow-controller explain <repo>`. It is read-only, exits `0`
+(but refuses with `20`, like every other command, when the repository is not
+admitted), and prints the pending job files (each with the command that clears it),
 the lifecycle lock's state, the next decision with its evidence and, at a
 gate, exactly what a human must do. `workflow-controller status` shows what is
 running across the whole runtime root.
 
 ## By exit code
 
-The normative table is in
+The one table of exit statuses, with what to do for each, is
+[exit codes](../exit-codes.md); the normative copy is
 [ADR 0001, "Exit codes"](../adr/0001-controller-generation-1-architecture.md#exit-codes).
-What each code usually means in practice:
-
-| Exit | Meaning | What to do |
-|---|---|---|
-| `0` | done, nothing pending | nothing |
-| `2` | the command line did not parse | global options such as `--work-item` go *before* the subcommand, and the repository last: `workflow-controller --work-item <id> explain <repo>` |
-| `10` | stopped at a human gate | the normal end of a run. `explain` says what to do; do it, then `run` again |
-| `15` | the next action is valid but not automated (declined) | do it yourself; `explain` names the phase and command |
-| `16` | `run` reached `--max-steps` with work left | `run` again, or raise `--max-steps` |
-| `20` | fail-closed refusal: unmanaged or drifted repository, malformed state, an unreconciled job file, a bad routing config, an unusable settings file, a changed Workflow release, a failed Workflow query or protocol operation | read the message; for a pending job run `workflow-controller resume <repo>`; for the settings file see [The settings file is refused](#the-settings-file-is-refused-settingserror); for the last three see [Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries) |
-| `30` | a worker ran and failed its expected outcome | `explain` shows what was checked; fix and rerun, or finish the step by hand |
-| `35` | a worker stopped without completing its action | `explain` and the job's log show why |
-| `40` | the Controller was interrupted | `workflow-controller resume <repo>` |
-| `45` | the worktree is held: another Controller, or a worker that may still be running | wait, or follow the message; see [Restart](workers.md#restart-resume-re-attaches) |
-| `50` | a newer Controller generation is installed | rerun with the new version |
+The short fixes are in [common problems](../common-problems.md). The
+detail is below: for `20` and the settings file see
+[The settings file is refused](#the-settings-file-is-refused-settingserror),
+for a changed Workflow release or a failed Workflow query see
+[Workflow releases and Workflow's queries](#workflow-releases-and-workflows-queries),
+and for `45` see [Restart](workers.md#restart-resume-re-attaches).
 
 ## Common situations
 
@@ -219,19 +214,16 @@ These are warnings on stderr, not refusals. The command goes on.
 
 ## Workflow releases and Workflow's queries
 
-What each Workflow release changes is in
-[Supported Workflow releases](installation.md#supported-workflow-releases)
-and [Workflow's queries](automation.md#workflows-queries-260-and-later);
+Which Workflow releases a Controller admits is in
+[compatibility](../compatibility.md); the queries are in
+[Workflow's queries](automation.md#workflows-queries-260-and-later);
 protocol mode (2.7.0 and later) is in
 [Protocol mode](automation.md#protocol-mode-workflow-27-and-later).
 
 ### The repository is refused as unmanaged or unsupported
 
 The Controller admits only a Workflow installation that Workflow Manager
-verifies, at a Workflow release it has been validated against
-(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`: 2.5.1 and 2.6.0) or,
-from 1.7.0, one that ships the orchestration protocol (2.7.0 and later;
-[Protocol mode](automation.md#protocol-mode-workflow-27-and-later)).
+verifies, at a Workflow release it admits ([compatibility](../compatibility.md)).
 Run Workflow Manager's `verify` command against the target to see what is
 wrong with the installation.
 
@@ -260,7 +252,7 @@ A Controller before 1.7.0 refuses 2.7.0 as `outside_supported_line`.
 Both carry `supported_workflow_lines`, a sorted list; before 1.3.0 this key
 was `supported_workflow_line`, a string. Either install a Controller that
 admits the release, or move the target to an admitted one through Workflow
-Manager ([Moving a target](installation.md#moving-a-target-to-another-workflow-release)).
+Manager ([Moving a repository](../update.md#move-a-repository-to-a-newer-workflow)).
 
 ### `WORKFLOW_RELEASE_CHANGED` and `workflow_release_changed`
 
@@ -406,7 +398,18 @@ disposition and action beside it.
 - `workflow_unknown_disposition`, `workflow_unknown_action`,
   `workflow_unknown_worker_role`: the Workflow answered a value this
   Controller release does not know (a later protocol minor may add one).
-  Install a Controller that knows it, or take the step by hand.
+  Install a Controller that knows it, or take the step by hand. No Controller
+  release knows the Workflow 2.8 `validation` disposition yet.
+  At that automatic-gate stop, run `/satisfy-gate plan|implementation|acceptance
+  <id>` yourself in a Claude session, then run again. To switch the
+  repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).
+  Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
+  adopted, Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20; see the `'warn'`
+  paragraph below the list). The Workflow's
+  [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it.
+- `functional_evidence_needed`, `pr_evidence_needed`: at a Workflow 2.8 automatic
+  acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
+  not the unknown disposition; see [run](../run.md#steps) step 3.
 - `workflow_user_only_action`: an `automatic` answer whose worker is
   `user_only`. The Controller never launches it.
 - `workflow_invocation_mismatch`: the Workflow's invocation text for the
@@ -425,6 +428,19 @@ disposition and action beside it.
   counted job left: the next `no_progress` job then starts a new count of
   one. Running again without a change gets the same gate. A
   job that made progress, or a gate, also resets it.
+
+`protocol verify gave an answer outside the protocol ... 'warn'` (exit 20) is a refusal, not a
+gate: `explain`, `step` and `run` refuse, and nothing is launched. The Workflow's `verify`
+reported a check as `warn`, which Controller 1.7.0 does not know. For example, the gate policy
+file (`docs/ai-workflow/GATE_POLICY.json`) is present, committed or not, and not adopted yet:
+commit it, then run `/adopt-gate-policy` in a Claude session, then run again. Two other causes
+differ. A review verdict recorded without `--run-ref` is not cleared by any adoption. A
+gate-lowering `warn` lasts while the adoption that lowers the gate is the newest adoption; a
+later adoption that lowers nothing clears it, but do not adopt again only to hide it, because the
+Workflow treats it as the expected signal of a lowered gate. A later Controller release will
+accept the `warn`. To see which check it is, run
+`python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root . verify` and read the
+`gate_policy` check's detail. See [common problems](../common-problems.md#the-run-refuses-with-protocol-verify-gave-an-answer-outside-the-protocol-and-warn-exit-20).
 
 A protocol job can also end `FAILED` (`step` and `run` exit `30`) with:
 

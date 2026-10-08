@@ -1,5 +1,7 @@
 # Commands, options and worker routing
 
+> For: anyone using the command line, and anyone choosing worker models. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## CLI surface
@@ -7,7 +9,7 @@
 | Command | Behaviour |
 |---|---|
 | `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version, the managed-script digest map and, as an advisory, any action id `describe` lists that this release does not know (`unknown_action_ids`) |
-| `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; for a protocol-mode target also the Workflow's row, disposition and action (a `protocol` block with `--json`); read-only, always exits 0 |
+| `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; for a protocol-mode target also the Workflow's row, disposition and action (a `protocol` block with `--json`); read-only; exits 0, but refuses (exit `20`) like every other command when the repository is not admitted |
 | `workflow-controller step [--follow] <repo>` | execute exactly one automatic action, validate the transition, stop |
 | `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
 | `workflow-controller resume [--drain-timeout SECONDS] <repo>` | re-attach to a job whose worker still runs with no Controller supervising it and supervise it to its end, then reconcile this target's non-terminal job records and report; never launches a worker. `--drain-timeout` bounds this re-attach's drain (see [the drain bound](workers.md#owned-processes-the-daemon-list-and-the-drain-bound)) |
@@ -59,13 +61,11 @@ worker, and the run log records a `waiting` event per gate (see
 ends with exit `0` and `run` stops, instead of planning the next
 milestone in the same run.
 
-Exit codes are part of the CLI's contract and are normative in
-[`docs/adr/0001-controller-generation-1-architecture.md`](../adr/0001-controller-generation-1-architecture.md)
--- read that table to write an outer supervisor's `case` statement. Exit
-45 (the target worktree is held) came with the automatic lifecycle
-orchestration work. Version 1.1 adds no exit code: `follow` uses only
-`0`, `2` and `20`
-([`docs/adr/0002-release-runtime-identity-and-observability.md`](../adr/0002-release-runtime-identity-and-observability.md)).
+Exit codes are part of the CLI's contract. The one table of them is
+[exit codes](../exit-codes.md), whose normative copy is
+[ADR 0001](../adr/0001-controller-generation-1-architecture.md#exit-codes);
+read it to write an outer supervisor's `case` statement. `follow` uses only
+`0`, `2` and `20`.
 
 ## `status`
 

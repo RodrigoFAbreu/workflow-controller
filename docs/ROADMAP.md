@@ -8,11 +8,14 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-03).** Controller 1.7.0 is the latest release. It admits Workflow
+**Where things stand (2026-10-09).** Controller 1.7.0 is the latest release. It admits Workflow
 2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
 repository runs Workflow 2.6.0. Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
-`fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). C8 is next.
+`fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
+reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
+that releases nothing. Next, this repository moves to a newer Workflow with automatic gates (the
+Controller must first accept the protocol's `warn` check status), then C8.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -43,7 +46,7 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
-| D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history | — | [11.8](#118-documentation-reorganisation) |
+| D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -1309,6 +1312,11 @@ plan's 5-hour window, and Codex's limits.
   or when the usage budget says to wait.
 
 ## 11.8 Documentation reorganisation
+
+**Status:** Complete (`workflow-controller-documentation-reorganisation`, accepted 2026-10-09 under
+Workflow 2.6.0; plan `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORGANISATION_PLAN.md`; the narrative is
+archived at `docs/milestones/completed/workflow-controller-documentation-reorganisation.md`). Merges as a
+`docs:` pull request (#25), which releases nothing. The description below is the original problem statement.
 
 **Step D1** (user request, 2026-10-03). A documentation milestone; no Controller behaviour changes, no
 release (`docs:` title). Its only code is the two documentation checks run in CI.

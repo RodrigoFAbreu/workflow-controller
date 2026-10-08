@@ -1,5 +1,7 @@
 # Continuous integration and releases
 
+> For: maintainers of a repository that releases through the Controller, and of this one. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## Continuous integration
@@ -402,17 +404,6 @@ create the release for that tag by hand, with the right notes. Create it
 as a draft: the next run then uploads what the draft lacks and publishes
 it, keeping the draft's notes, which are yours.
 
-**This repository's cutover.** This repository's
-`.workflow-controller/policy.json` does not opt in yet: the driving
-Controller reads the branch's committed policy at every step, and 1.4.x
-refuses the new keys. Once 1.5.0 is installed, a `chore:` cutover pull
-request, merged between milestones, sets
-`"release_notes": {"path": "docs/milestones/completed/{work_item_id}.md", "heading": "Release notes"}`
-and `"notes": "workflow-controller {tag}\n\n{release_notes}"`. 1.5.0's
-own notes are copied into `docs/releases/` by hand one last time. From
-the cutover on, a milestone's `## Release notes` section is wrapped at
-72 columns.
-
 ### An unclassifiable subject: `INVALID_SUBJECT`
 
 The `PR title` check and squash-only merging make it rare, but a commit
@@ -577,40 +568,29 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
 
 ## Cutover from the version-file model
 
-Controller 1.4.0 ships both triggers, but a repository moves to the new
-one only when its committed policy says so. The driving Controller reads
-the policy at every lifecycle step, and 1.3.0 refuses the new policy,
-so the switch is its own small pull request, made between
-milestones. For this repository:
+A repository moves from the version-file trigger to the
+`conventional_commit` trigger only when its committed policy says so. The
+driving Controller reads the policy at every lifecycle step, and a
+Controller before 1.4.0 refuses the new policy (it names the unknown key
+`milestone_branches.pull_request.merge_method`), so the switch is its own
+small pull request, made between milestones, with no work item in flight:
 
-1. The milestone that brought the code
-   (`workflow-controller-squash-merge-tag-versioning`) is merged with
-   "Create a merge commit", as before, and closed out by 1.3.0. Its merge
-   still runs the legacy policy with a static `1.3.0` and classifies
-   `NO_CHANGE`. `PR title` already runs, and passes ("not release input").
-2. The settings change, with the user's approval, and with no pull
-   request in flight: squash merging only, the "Pull request title and
-   description" default, the ruleset's merge method squash, `PR title`
-   required, and linear history required (see
+1. Change the repository settings first: squash merging only, the "Pull
+   request title and description" default, the ruleset's merge method
+   squash, `PR title` required, and linear history required (see
    [Repository settings](#repository-settings)).
-3. The cutover pull request changes exactly two files:
-   `pyproject.toml`'s `version = "1.3.0"` becomes `dynamic = ["version"]`,
-   and `.workflow-controller/policy.json` gains
-   `"trigger": "conventional_commit"`, `change_types` and
-   `"merge_method": "squash"`, and loses `version_source`. Its title is
-   `feat: squash merges with release versions derived from pull request
-   titles`, and it is squash-merged.
-4. That push classifies `RELEASE_DUE` 1.4.0: the base is `v1.3.0`, every
-   commit since it but the cutover is legacy, and the cutover is a
-   `feat`.
-5. Install 1.4.0 once `status` shows `active: none`. Until then 1.3.0
-   refuses every lifecycle command on the repository: it cannot read the
-   new policy, and names the unknown key
-   `milestone_branches.pull_request.merge_method`. From then on the
-   bootstrap starts the next milestone as `/milestone-plan <main tip>`.
+2. The cutover pull request changes two files: `pyproject.toml`'s static
+   `version = "..."` becomes `dynamic = ["version"]`, and
+   `.workflow-controller/policy.json` gains `"trigger":
+   "conventional_commit"`, `change_types` and `"merge_method": "squash"`,
+   and loses `version_source`. Its title is a Conventional Commit that
+   releases, and it is squash-merged.
+3. Install a Controller of 1.4.0 or later once `status` shows `active:
+   none`. From then on the bootstrap starts the next milestone as
+   `/milestone-plan <main tip>`.
 
-To go back, either run 1.4.0 or later, or revert the cutover pull request
-(a `revert:` squash). A revert restores the legacy policy and the static
-`1.3.0`, which 1.3.0 reads again; the tags stay as they are. Switch the
-merge settings back too: in merge mode a squash-merged milestone gates
-`merge_method_rewrote_history` instead of closing out.
+To go back, run a Controller of 1.4.0 or later, or revert the cutover pull
+request (a `revert:` squash), which restores the legacy policy and the
+static version. Switch the merge settings back too: in merge mode a
+squash-merged milestone gates `merge_method_rewrote_history` instead of
+closing out.

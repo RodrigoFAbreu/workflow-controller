@@ -40,8 +40,14 @@ on update. Add repository-specific guidance below it; it is never touched.
 ## Controller documentation
 
 - Documentation map (guides, ADRs, roadmap, history): `docs/README.md`
-- Operator and developer guides: `docs/guide/`. Keep them current when a
-  change alters behaviour they describe; plans and completed-milestone
+- Task and reference pages: `docs/install.md`, `docs/run.md`,
+  `docs/update.md`, `docs/compatibility.md`, `docs/common-problems.md`,
+  `docs/exit-codes.md`, `docs/glossary.md`, `docs/release-history.md`.
+- Operator and developer guides: `docs/guide/` (`docs/guide/installation.md`
+  is only a stub kept for old links). Keep the pages and guides current when
+  a change alters behaviour they describe; plans and completed-milestone
   narratives are historical records and are not updated afterwards.
+- `python3 tools/check_docs.py` checks links, anchors and the commands shown
+  on the task pages (see `docs/guide/development.md`).
 - A milestone plan declares its pull request title (see
   `docs/guide/milestone-branches.md`).

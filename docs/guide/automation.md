@@ -1,5 +1,7 @@
 # What the Controller automates, and how it stays safe
 
+> For: anyone who wants to know what the Controller launches by itself and how it stays safe. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+
 [Back to the documentation map](../README.md)
 
 ## Safety model
@@ -42,7 +44,7 @@
 - **Never hot-reloads.** A running Controller generation executes from an
   immutable, content-addressed snapshot of its own source and never
   mutates or reloads it; a newer approved generation triggers an
-  intentional stop (a durable handoff record, exit 50), never an
+  intentional stop (a durable handoff record, exit 50; every status is in [exit codes](../exit-codes.md)), never an
   in-process update.
 - **Merges only the accepted head, never rewrites.** The Controller
   merges a pull request only when the repository opts in
@@ -235,12 +237,17 @@ quote only as the alternative that discards both review stages.
 From 1.7.0 a Workflow release with no per-release contract is admitted by
 capability: its installation record lists `scripts/workflow_protocol.py`
 and `describe` answers protocol major 1 (2.7.0 does;
-[Supported Workflow releases](installation.md#supported-workflow-releases)).
+[compatibility](../compatibility.md)).
 For such a target the Controller keeps no lifecycle rule of its own. The
 Workflow's `next-action` says what to do next, and its `reconcile` says
 whether a job made progress. 2.5.1 and 2.6.0 stay in legacy mode, exactly
 as described above. The design record is
 [ADR 0010](../adr/0010-orchestration-protocol-admission-by-capability.md).
+
+In protocol mode the Controller itself launches `/prepare-functional-review`
+(which writes and commits the checklist) and `/apply-functional-review`
+(which applies the operator's findings) without a prompt; the functional
+testing itself stays with a person.
 
 **How an operation runs.** `describe`, `next-action` and `reconcile` run
 the way the queries above do: from a private copy of the Workflow's
@@ -315,35 +322,6 @@ class and any invalid reasons on the job's line. In order:
 | `no_progress` from a worker that succeeded | `FINISHED`, with `progress: "none"`; no `resume` is needed |
 | `no_progress` from an interrupted worker, or one whose end was not recorded | `INTERRUPTED` |
 
-**What changes from 1.6.0.** Measured on the same states
-(`tests/golden/protocol_vs_legacy_differences.json`), the Workflow's
-decisions differ from legacy mode's in exactly seven ways. Three are
-launches 1.6.0 never made:
-
-- **D5.** At `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, a `"1"` or `"2.1"`
-  item with a current `REVISE` or `BLOCK` external verdict: the Controller
-  launches `/apply-implementation-review` on its own (1.6.0 only reported).
-- **D6.** At `AWAITING_FUNCTIONAL_REVIEW` with no current checklist: the
-  Controller launches `/prepare-functional-review`, which writes and commits
-  the functional-review checklist without a prompt (1.6.0 stopped at a
-  gate).
-- **D7.** At `AWAITING_FUNCTIONAL_REVIEW` with an unconsumed
-  `FUNCTIONAL_REVIEW.md`: the Controller launches `/apply-functional-review`,
-  which applies the operator's findings without a prompt (1.6.0 declined
-  it).
-
-The other four: D1, at `REVISING_PLAN` (`"2.1"`/`"2.2"`) with no
-applicable `REVISE`, the launch is `/milestone-plan`, not
-`/apply-plan-review`; D2, a `"1"` item at a phase where 1.6.0 launched is
-blocked; D3, `/milestone-plan` at `AMENDING_PLAN` (`"2.1"`/`"2.2"`) is
-launched, where `run` declined it with exit `15`; D4,
-`/apply-implementation-review` at `APPLYING_REVIEW_FEEDBACK` is launched for
-`"1"` and `"2.1"` items too. D6 and D7 run under two new routing roles,
-`prepare-functional-review` and `apply-functional-review`
-([Worker routing](commands.md#worker-routing)). The human gates are
-unchanged: the functional review itself, the approvals and acceptance stay
-the human's.
-
 ## Implementation-review apply rounds
 
 `/apply-implementation-review` at a `"2.2"` `APPLYING_REVIEW_FEEDBACK`
@@ -362,7 +340,7 @@ has three safeguards:
   `selected_action.task_addendum`. This is the only place a worker's task
   is not the bare selected command.
 - **The malformed-`T` gate.** If a worker lands the generation-record
-  commit `T` anyway, with no phase change in its own diff (`OPUS-R101-001`),
+  commit `T` anyway, with no phase change in its own diff,
   the next decision names that commit and says that no Workflow command
   repairs it. A human repairs the unpushed history so the pending write
   lands alone before `T`, then reruns the command's step 7. The

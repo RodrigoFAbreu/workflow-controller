@@ -135,7 +135,10 @@ These are not blockers for the baseline, but should remain visible in later mile
    anchor running when the test process is killed mid-test, because its cleanup never runs. Inside
    a Controller-launched worker those leftovers kept the job draining for the full three-hour
    bound (C4, 2026-10-02). Make the test's leftovers end with the test process, and consider
-   naming known test leftovers sooner than the drain bound.
+   naming known test leftovers sooner than the drain bound. Seen again on 2026-10-08 in D1: a
+   review worker's full test run left `tests/fake_claude.py` and its stdin anchor (working
+   directory `/tmp/controller-lifecycle-*`) running, and the job drained for 30 minutes until they
+   were ended by hand.
 9. A message from another session can land in a Controller-launched worker mid-turn (C9,
    2026-10-03). The Controller then classes the worker `AMBIGUOUS`
    (`command_lifecycle_irregular`) and fails the job, although the work was done and the state was
@@ -145,6 +148,35 @@ These are not blockers for the baseline, but should remain visible in later mile
    the guides). Both plan-review stages approved it, and the first checkpoint after `controller/`
    changed refused with `UnclassifiedPathError`, needing a plan amendment. Check, at plan review,
    that the declaration classifies every path the checkpoints name.
+11. Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20, "protocol verify gave an answer
+   outside the protocol ... 'warn'") whenever a Workflow 2.8.0 repository's `verify` reports a
+   check as `warn`. Orchestration Protocol 1.1 added that status, and
+   `controller/protocol_schema.json` allows only `pass`, `fail` and `skip`. Known causes include:
+   - an unadopted gate policy file that tightens the policy;
+   - an adoption that lowers a gate, while it is the newest adoption;
+   - a review verdict recorded without `--run-ref`.
+
+   Accept `warn` as advisory and show the check's detail. With it, vendor the newer protocol
+   schema (1.2, Workflow 2.9.0: two new user-only action ids, `legacy.retire` and
+   `implementation.resume`) and add 2.9.0 to `docs/compatibility.md`. Controller 1.7.0 already
+   admits a 2.9.0 repository by capability; this was checked on a scratch copy on 2026-10-09. This blocks moving this repository to
+   Workflow 2.8.0 or later with automatic gates, so it comes first. The fix also updates the pages
+   that document the refusal: `docs/run.md`, `docs/common-problems.md`, `docs/compatibility.md`,
+   `docs/glossary.md`, `README.md` and the troubleshooting guide. It takes up the wording notes
+   left from D1's last functional review: say "some causes" rather than "two other causes",
+   mention the `warn` case beside "refuses with exit 20 when the repository is not admitted", and
+   link the adoption-timing advice from every page that says "commit, then adopt".
+12. Git 2.56.0 no longer parses a paragraph that is only a bare URL as trailers, so the release-notes
+   "no trailer paragraph" rule, which relies on `git interpret-trailers --parse`, no longer refuses
+   one. Two tests fail on a machine with Git 2.56 and pass on CI's older Git:
+   - `test_release_notes.TrailerRuleTest.test_a_bare_url_and_a_one_line_note_are_refused`;
+   - `test_pull_request_lifecycle.SquashReleaseNotesTest.test_a_trailer_paragraph_refuses_with_no_edit`.
+
+   Make the rule independent of the Git version.
+13. With no active work item and none named, Controller 1.7.0 selects a dormant `LEGACY_READY` work
+   item and stops on it (reported 2026-10-04 on a Workflow 2.8.0 repository). `LEGACY_READY` is
+   dormant, not terminal, but it should not be chosen automatically. Treat it as "no work item".
+   Until then, pass `--work-item`.
 
 ---
 

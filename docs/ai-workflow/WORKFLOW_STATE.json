@@ -6560,7 +6560,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 20,
       "functional_review_round": null,
@@ -6623,10 +6623,10 @@
         "recorded_at": "2026-10-03T20:16:12Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "9c336b081f7037ae97be0b8011e0881fcef94812a4ce50fa94de732325307675",
-        "approved_review_content_id": "c7ac1ea4b0d4c6d8490d202b19207d97b92f906e78275f99e8288bc07e31aab6",
+        "reviewed_bundle_id": "9c8e3b6e2cbb914a71ef3625f6e74526756a0b75d46c7d65db27f5288a50f82e",
+        "approved_review_content_id": "99f6be0c43d3381a5f6231936c5bb348049e0ea4924857dd3b1743d07e4759a5",
         "review_content_manifest": [
           {
             "path": "CLAUDE.md",
@@ -6638,7 +6638,7 @@
             "path": "README.md",
             "exists": true,
             "mode": "100644",
-            "blob": "32e74ab92c64a9e774990c5e6733843b4fdae36a"
+            "blob": "f6c579caf0b4bce7aab7f2a9652c76c5b9f7b916"
           },
           {
             "path": "docs/README.md",
@@ -6656,13 +6656,13 @@
             "path": "docs/common-problems.md",
             "exists": true,
             "mode": "100644",
-            "blob": "b95a9d1a6fd912f0efd30408f526694e98c4d409"
+            "blob": "be781d012a2fba730a51565d70ddff79390345ab"
           },
           {
             "path": "docs/compatibility.md",
             "exists": true,
             "mode": "100644",
-            "blob": "941815d8d4a3c80155aa9a4c94d7b3e890878c15"
+            "blob": "60c65bc994e7120a9eca49b04dc578037ee259ae"
           },
           {
             "path": "docs/exit-codes.md",
@@ -6674,7 +6674,7 @@
             "path": "docs/glossary.md",
             "exists": true,
             "mode": "100644",
-            "blob": "a21eb8da88b5cd13f7d1d744b94b702a8bf355c8"
+            "blob": "c3ca16a78d926e30799e88afbf2b57f3998d65e5"
           },
           {
             "path": "docs/guide/automation.md",
@@ -6734,7 +6734,7 @@
             "path": "docs/guide/troubleshooting.md",
             "exists": true,
             "mode": "100644",
-            "blob": "6083c3210c81c32873de8507f26735ced3d0760e"
+            "blob": "c11c4538daf088f87aff698fb9e885acdde887be"
           },
           {
             "path": "docs/guide/workers.md",
@@ -6758,7 +6758,7 @@
             "path": "docs/run.md",
             "exists": true,
             "mode": "100644",
-            "blob": "94198565f9ff8d4cdf09f0196e9602bd3a2259de"
+            "blob": "b458719aba2580fa3958773fb98f48ce5ec3a4c9"
           },
           {
             "path": "docs/update.md",
@@ -6779,11 +6779,11 @@
             "blob": "70affaef0dfad244c56a4d0d8de1e5b1fd4f4e14"
           }
         ],
-        "reviewed_content_commit": "d2a0292d924a53dddd7522536f53cc721df554f0",
+        "reviewed_content_commit": "42df66e613f23089201f6143f81c1d4641485295",
         "legacy_evidence": null,
         "user_confirmation": "/approve-review implementation workflow-controller-documentation-reorganisation",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-08T19:43:02Z"
+        "recorded_at": "2026-10-08T22:19:05Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -6803,8 +6803,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 93,
-      "last_transition": "2026-10-08T21:50:07Z",
+      "state_revision": 96,
+      "last_transition": "2026-10-08T22:19:05Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6825,18 +6825,18 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "c7ac1ea4b0d4c6d8490d202b19207d97b92f906e78275f99e8288bc07e31aab6",
+        "review_content_id": "99f6be0c43d3381a5f6231936c5bb348049e0ea4924857dd3b1743d07e4759a5",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "9c336b081f7037ae97be0b8011e0881fcef94812a4ce50fa94de732325307675",
+          "bundle_id": "9c8e3b6e2cbb914a71ef3625f6e74526756a0b75d46c7d65db27f5288a50f82e",
           "verdict": "APPROVE",
-          "round": 18,
-          "completed_at": "2026-10-08T19:26:18Z"
+          "round": 20,
+          "completed_at": "2026-10-08T22:02:07Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "9c336b081f7037ae97be0b8011e0881fcef94812a4ce50fa94de732325307675",
+          "bundle_id": "9c8e3b6e2cbb914a71ef3625f6e74526756a0b75d46c7d65db27f5288a50f82e",
           "verdict": "APPROVE",
-          "round": 18,
-          "completed_at": "2026-10-08T19:35:23Z"
+          "round": 20,
+          "completed_at": "2026-10-08T22:12:39Z"
         }
       }
     }

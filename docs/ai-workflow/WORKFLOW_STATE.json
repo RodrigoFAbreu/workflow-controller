@@ -6560,7 +6560,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-documentation-reorganisation-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 17,
       "functional_review_round": null,
@@ -6623,10 +6623,10 @@
         "recorded_at": "2026-10-03T20:16:12Z"
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "EXTERNAL_APPROVE",
-        "reviewed_bundle_id": "028c7b312c5deadcbc75f938270a2b3ea82f437e730aeef1a149c277646ea229",
-        "approved_review_content_id": "6f9b2aceb8c26505ad1ca71d0e7a9d0d20546b67970b9ade87b13006a4f33420",
+        "reviewed_bundle_id": "7ff36c714c07261f3014e085a16cdbff7011c3e189dd5cb2799118900a781798",
+        "approved_review_content_id": "1c3099b447cd9d2ff122031f58855c0be40836c700124dac36e70c223bf6e253",
         "review_content_manifest": [
           {
             "path": "CLAUDE.md",
@@ -6638,13 +6638,13 @@
             "path": "README.md",
             "exists": true,
             "mode": "100644",
-            "blob": "4ab0dee3349ce9c5342412fa75a43b060b2423fa"
+            "blob": "11e0b228f19826a0fb507f36cdc9b0784c1287b1"
           },
           {
             "path": "docs/README.md",
             "exists": true,
             "mode": "100644",
-            "blob": "e893d1d2347f4bb8620d0075c4d19e3c6c56be91"
+            "blob": "a2e0e15362e46f81bc4904775a729fd51a27b428"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-documentation-reorganisation-artifacts.json",
@@ -6656,7 +6656,7 @@
             "path": "docs/common-problems.md",
             "exists": true,
             "mode": "100644",
-            "blob": "30681c9d6cb6e1b3204ec1d84d82d0093c6d494b"
+            "blob": "e522219964576db3cf69f032905dd0c721f879db"
           },
           {
             "path": "docs/compatibility.md",
@@ -6668,13 +6668,13 @@
             "path": "docs/exit-codes.md",
             "exists": true,
             "mode": "100644",
-            "blob": "eab548286d8bd84d8d31d2f3d6c04a3572b9662f"
+            "blob": "510397b442e921995c44508fa07f1bb851409c6e"
           },
           {
             "path": "docs/glossary.md",
             "exists": true,
             "mode": "100644",
-            "blob": "7da2dfcce2866edde556f721f4138cef3ea31ef7"
+            "blob": "169a5d5ed5bdacafc9049e07576f09f19a9d65be"
           },
           {
             "path": "docs/guide/automation.md",
@@ -6734,7 +6734,7 @@
             "path": "docs/guide/troubleshooting.md",
             "exists": true,
             "mode": "100644",
-            "blob": "0914075490c2615fa0b84faccc03f8ad54c3bc73"
+            "blob": "71a1c6843b725b62d8daf12b4ce11e01033734d6"
           },
           {
             "path": "docs/guide/workers.md",
@@ -6746,25 +6746,25 @@
             "path": "docs/install.md",
             "exists": true,
             "mode": "100644",
-            "blob": "3edac28fa647cf0d28519e281aad3fb255d6f68a"
+            "blob": "79626eda7de3ccd8b7e32d857225a7e3f9ceaef2"
           },
           {
             "path": "docs/release-history.md",
             "exists": true,
             "mode": "100644",
-            "blob": "954c0e0a02f794c1729d2b7de8f8eca1ea1ea132"
+            "blob": "7a6eb1f2c8d4e16ed71bb5753db1aebb5c363eb3"
           },
           {
             "path": "docs/run.md",
             "exists": true,
             "mode": "100644",
-            "blob": "b2d895123ca7111bae4072e28b4dbde283eac4d3"
+            "blob": "9cfea344dd41a27e3260cba9aa1b94b854213df3"
           },
           {
             "path": "docs/update.md",
             "exists": true,
             "mode": "100644",
-            "blob": "9b31cb0f11bb6fac86f5feeec8987b2e1881e9b0"
+            "blob": "7b6a4855e7aca16e7ed1babbe75602726ee779b3"
           },
           {
             "path": "tests/test_docs.py",
@@ -6779,11 +6779,11 @@
             "blob": "70affaef0dfad244c56a4d0d8de1e5b1fd4f4e14"
           }
         ],
-        "reviewed_content_commit": "59bf9af24cbace54c7d45bd457bed1eee791750e",
+        "reviewed_content_commit": "a7f1c3c21886353c501b951f9aa6a9b3133f2c07",
         "legacy_evidence": null,
-        "user_confirmation": "implementation workflow-controller-documentation-reorganisation",
+        "user_confirmation": "/approve-review implementation workflow-controller-documentation-reorganisation",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-04T12:32:46Z"
+        "recorded_at": "2026-10-08T18:40:06Z"
       },
       "technical_review_block_pins": [],
       "plan_review_stages": {
@@ -6803,8 +6803,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 81,
-      "last_transition": "2026-10-08T13:06:18Z",
+      "state_revision": 84,
+      "last_transition": "2026-10-08T18:40:06Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6825,18 +6825,18 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "6f9b2aceb8c26505ad1ca71d0e7a9d0d20546b67970b9ade87b13006a4f33420",
+        "review_content_id": "1c3099b447cd9d2ff122031f58855c0be40836c700124dac36e70c223bf6e253",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "028c7b312c5deadcbc75f938270a2b3ea82f437e730aeef1a149c277646ea229",
+          "bundle_id": "7ff36c714c07261f3014e085a16cdbff7011c3e189dd5cb2799118900a781798",
           "verdict": "APPROVE",
-          "round": 16,
-          "completed_at": "2026-10-04T12:00:35Z"
+          "round": 17,
+          "completed_at": "2026-10-08T13:13:12Z"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "028c7b312c5deadcbc75f938270a2b3ea82f437e730aeef1a149c277646ea229",
+          "bundle_id": "7ff36c714c07261f3014e085a16cdbff7011c3e189dd5cb2799118900a781798",
           "verdict": "APPROVE",
-          "round": 16,
-          "completed_at": "2026-10-04T12:05:04Z"
+          "round": 17,
+          "completed_at": "2026-10-08T13:17:52Z"
         }
       }
     }

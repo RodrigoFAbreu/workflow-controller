@@ -70,7 +70,7 @@ request releases nothing. Plan: `docs/ai-workflow/CONTROLLER_DOCUMENTATION_REORG
 ## Functional review checklist
 
 Documentation-only milestone (`docs:`; nothing under `controller/` changed). Review as a first-time reader
-would. Evidence below is for round 5, implementation revision 17 (documentation head `a7f1c3c`; rounds 1-4 measured earlier) with the
+would. Evidence below is for round 6, implementation revision 18 (documentation head `d2a0292`; rounds 1-5 measured earlier) with the
 checkout's Controller 1.7.0 and the pipx-installed release 1.7.0. Findings go to `.ai-review/workflow-controller-documentation-reorganisation/feedback/FUNCTIONAL_REVIEW.md`.
 
 ### Setup
@@ -169,6 +169,22 @@ works (also click a few anchors), and nothing refers to a page or section that n
 | G6 | `docs/glossary.md` "Approval gate" | The version 1 / 2.1 exceptions are a two-item list, consistent with run.md "On Workflow 2.8" (2.2 all three automatic; 2.1 keeps implementation approval; 1 keeps plan and implementation approval) |
 | G7 | `README.md` | The `/satisfy-gate` sentence says "in a Claude session" and the parenthetical about evidence matches run.md |
 | G8 | Automated checks | `python3 tools/check_docs.py` clean; `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` OK |
+
+### H. Round 6 re-tests (what round 5 changed)
+
+| # | Check | Expected |
+|---|---|---|
+| H1 | Adopt before a human gate: `grep -n "adopt-gate-policy" README.md docs/run.md docs/glossary.md docs/common-problems.md docs/guide/troubleshooting.md` | Each of the five pages tells a reader who makes a gate human to commit the policy file and run `/adopt-gate-policy` in a Claude session, and says Controller 1.7.0 refuses the repository until it is adopted (exit 20). None still says only "when you commit the policy file matters" (`grep -rn "matters" README.md docs/run.md docs/glossary.md docs/guide/troubleshooting.md` finds no such sentence). Each sentence reads on its own; each still links the gate policy reference for commit timing |
+| H2 | New entry, `docs/common-problems.md`: `grep -n "^## The run refuses" docs/common-problems.md` | One heading, "The run refuses with "protocol verify gave an answer outside the protocol" and `'warn'` (exit 20)". Body: `verify` reported `warn`, Controller 1.7.0 does not know it; on 2.8.0 caused by a committed but unadopted policy; fix `/adopt-gate-policy` then run again; permanent `warn` after an adoption that lowers a gate; a later release will accept it; links compatibility. The "satisfy" entry points to it ("see the next entry"). Compare with the message in `controller/protocol_schema.json` (accepts `pass`, `fail`, `skip`) |
+| H3 | `docs/compatibility.md` (2.8.0 paragraph) | Says Controller 1.7.0 also refuses a 2.8.0 repository (exit 20) whenever the Workflow's `verify` reports `warn`: an unadopted gate policy file and, per the Workflow's reference, permanently after an adoption that lowers a gate. The sentence joins the paragraph without a dangling "Anything else" |
+| H4 | `docs/run.md` step 3 evidence bullets | `functional_evidence_needed` has one `record-external-result` example line (`--work-item <id> --kind functional_evidence --input result.json`) and a pointer to "Evidence kinds" for the input fields, with no schema restated. `pr_evidence_needed`: push the pull request, wait for its checks, run `/satisfy-gate acceptance <id>` (asks GitHub itself); automatic acceptance needs an open, pushed pull request, and a repository without milestone branches keeps acceptance with a person. "Record" appears only for functional evidence. Third item: `gates.acceptance.human: true` and `/accept-milestone`. Compare with the Workflow v2.8.0 gate policy rows 38e-38h and "Evidence kinds" (`pr_review_result` only tightens) |
+| H5 | `docs/run.md` "Human gates" bullet | Commit the policy file, run `/adopt-gate-policy`, until then exit 20 with the quoted message and the reason (an unadopted policy that tightens is `warn`); the bullet title no longer says "and commit timing" and the gate policy reference is linked for commit timing |
+| H6 | `docs/common-problems.md` evidence sentence | `functional_evidence_needed` (record the functional result) and `pr_evidence_needed` (push, wait for checks, `/satisfy-gate acceptance <id>`) are each given their own remedy; "see run, which has an example command" resolves; the human-gates sentence names `/adopt-gate-policy` |
+| H7 | `docs/guide/troubleshooting.md` | Header reads "Workflow 2.6.0, 2.7.0 and 2.8.0"; "Protocol-mode gates and job failures" has two new bullets: the two evidence needs (an `external_gate`, not the unknown disposition, link to run step 3) and the `'warn'` refusal (exit 20, `/adopt-gate-policy`); the human-gate bullet points to the `'warn'` bullet |
+| H8 | `docs/update.md` Workflow-move section | One sentence before the steps' end: Workflow 2.8.0 makes the approval gates automatic unless the repository has a gate policy, so decide the policy before the move, linking `run.md#steps` step 3. Anchor resolves |
+| H9 | Wording notes: `docs/glossary.md` ("Approval gate" paragraph and "Workflow release"), `docs/release-history.md` (1.1.1, 1.2.0) | Glossary no longer links "see run" twice in one paragraph and the commit-the-policy sentence is imperative; "Workflow release" says the governing version is "the Workflow version that one work item was ...", not "the protocol version"; release history reads "first release published at all" (1.1.1) beside "first release the release pipeline published itself" (1.2.0). In `run.md` step 3 "report" now only means what `explain` prints, and "Record them" (reason codes) is gone |
+| H10 | Round 1-5 checks still hold | `grep -n C10 README.md docs/run.md docs/glossary.md docs/guide/how-it-works.md` empty (G5); B1-B7 and D3 unchanged (no Controller code changed: A3 empty); E5 glossary paragraph still reads as continuous prose |
+| H11 | Automated checks | `python3 tools/check_docs.py` exit 0, no output; `python3 -m unittest tests.test_docs tests.test_plan_document_consistency` OK |
 
 ### Functional review round 1 (applied)
 

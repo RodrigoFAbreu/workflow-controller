@@ -399,7 +399,7 @@ disposition and action beside it.
   `workflow_unknown_worker_role`: the Workflow answered a value this
   Controller release does not know (a later protocol minor may add one).
   Install a Controller that knows it, or take the step by hand. No Controller
-  release knows the Workflow 2.8 `validation` disposition yet (roadmap C10).
+  release knows the Workflow 2.8 `validation` disposition yet.
   At that automatic-gate stop, run `/satisfy-gate plan|implementation|acceptance
   <id>` yourself in a Claude session, then run again. To switch the
   repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).

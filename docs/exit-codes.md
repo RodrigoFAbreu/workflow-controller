@@ -1,6 +1,6 @@
 # Exit codes
 
-> For: anyone who runs the Controller by hand or from a script. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone who runs the Controller by hand or from a script. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 The Controller is built to be driven by an outer supervisor, so its exit
 status is part of its contract. This is the one table of them. The normative

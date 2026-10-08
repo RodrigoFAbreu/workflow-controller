@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the

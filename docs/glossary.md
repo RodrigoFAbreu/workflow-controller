@@ -47,12 +47,14 @@ repository that turns `human_approval` on (all three gates), or sets
 `human: true` for one gate under `gates.<gate>` (for example
 `gates.plan_approval`), gets the person-decides behavior back for those gates.
 When you commit the policy file matters; the Workflow's
-[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. Work items whose governing version is 1
-or 2.1 keep exceptions: a version 1 item always has a person for plan and
-implementation approval, and a version 2.1 item always has a person for
-implementation approval. Version 2.1
-is the default of a freshly bootstrapped repository, so there implementation
-approval stays with a person by default; only a version 2.2 item has all three
+[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. Two kinds of work item keep a person:
+
+- a version 1 item always has a person for plan and implementation approval;
+- a version 2.1 item always has a person for implementation approval. Version 2.1
+  is the default of a freshly bootstrapped repository, so there implementation
+  approval stays with a person by default.
+
+Only a version 2.2 item has all three
 gates automatic. The governing version is not the Workflow release. See the
 Workflow's [approval gates](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). The review stages (external plan review, external
 implementation review, functional review) are separate waiting points; they
@@ -64,7 +66,8 @@ the Workflow answers them with a disposition (`validation`) that
 this Controller does not know, so `explain` reports
 `workflow_unknown_disposition` and nothing is launched. To get past it, run
 `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>` or
-`/satisfy-gate acceptance <id>` yourself in a Claude session. See [Gate stop](#gate-stop) and
+`/satisfy-gate acceptance <id>` yourself in a Claude session. Acceptance may first
+ask for functional or pull-request evidence (see [run](run.md#steps)). See [Gate stop](#gate-stop) and
 [run](run.md#steps).
 
 ### Bundle

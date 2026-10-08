@@ -30,23 +30,30 @@ Global options go before the subcommand and the repository goes last, as in `wor
 
 3. At a [gate stop](glossary.md#gate-stop) the Controller stops with exit status 10.
 
-   Up to Workflow 2.7, plan approval, implementation approval and milestone acceptance are yours.
-
-   From Workflow 2.8 they follow the repository's gate policy
-   (`docs/ai-workflow/GATE_POLICY.json`) and are, by default, satisfied by the Workflow from
-   complete evidence (all three for a version 2.2 item; a version 2.1 item, the default of a
-   freshly bootstrapped repository, keeps implementation approval with a person; a version 1
-   item keeps plan and implementation approval with a person). Controller 1.7.0 still stops at
-   those automatic gates until a later release, because the Workflow answers them
-   with a disposition it does not know (`explain` reports `workflow_unknown_disposition`;
-   nothing is launched). The external reviews and functional review stay yours in the
-   Controller's flow. At that automatic-gate stop `explain` shows the action (`plan.satisfy`,
-   `implementation.satisfy` or `acceptance.satisfy`) but no command to run. Run the gate's
-   action yourself in a Claude session, `/satisfy-gate plan <id>`,
-   `/satisfy-gate implementation <id>` or `/satisfy-gate acceptance <id>` (the Workflow's
-   [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) describes them), then run again. To switch a
-   repository to human gates, see the same gates page. When you commit the policy file
-   matters; the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. At any other gate stop, do what `explain` says, then run again.
+   - **Up to Workflow 2.7:** plan approval, implementation approval and milestone acceptance are yours.
+   - **On Workflow 2.8:** these three follow the repository's gate policy
+     (`docs/ai-workflow/GATE_POLICY.json`). By default the Workflow satisfies them from
+     complete evidence: all three for a version 2.2 item; a version 2.1 item (the default of a
+     freshly bootstrapped repository) keeps implementation approval with a person; a version 1
+     item keeps plan and implementation approval with a person.
+   - **What Controller 1.7.0 does there:** it still stops at an automatic gate until a later
+     release, because the Workflow answers with a disposition it does not know (`explain`
+     reports `workflow_unknown_disposition`; nothing is launched). `explain` shows the action
+     (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command. Run it
+     yourself in a Claude session: `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>`
+     or `/satisfy-gate acceptance <id>` (the Workflow's
+     [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) describes
+     them), then run again.
+   - **Acceptance may ask for evidence first:** `explain` can instead report
+     `functional_evidence_needed` or `pr_evidence_needed`, which Controller 1.7.0 does not
+     report for you. Record them as the Workflow's
+     [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md)
+     describes (its "Evidence kinds", `record-external-result`), or make acceptance a person's
+     with `gates.acceptance.human: true` and accept with `/accept-milestone`. The external reviews
+     and, unless that evidence is recorded, the functional review stay yours.
+   - **Human gates and commit timing:** to switch a repository to human gates, see the same
+     gates page. When you commit the policy file matters; the gate policy reference explains it.
+   - At any other gate stop, do what `explain` says, then run again.
 
 4. Watch from another terminal. `follow` attaches to whatever is running and changes nothing; `status` shows every active run and job.
 

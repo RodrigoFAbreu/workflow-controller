@@ -110,7 +110,7 @@ default of a freshly bootstrapped repository, keeps implementation approval
 with a person). Controller 1.7.0 still stops at them until a later release:
 the Workflow answers them with a disposition it does not know,
 so `explain` reports `workflow_unknown_disposition` and nothing is launched.
-Run `/satisfy-gate plan|implementation|acceptance <id>` yourself; to switch the
+Run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session (at acceptance, `explain` may first ask for functional or pull-request evidence: see [run](docs/run.md#steps)); to switch the
 repository to human gates, see the Workflow's
 [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). When you commit the policy file matters; the
 Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. See also [run](docs/run.md#steps).

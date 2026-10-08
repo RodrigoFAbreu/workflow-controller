@@ -1,6 +1,6 @@
 # Update, roll back and move a repository to a newer Workflow
 
-> For: anyone who already runs the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone who already runs the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 Goal: change the Controller's version safely, or move a repository to another Workflow release.
 
@@ -17,7 +17,7 @@ Goal: change the Controller's version safely, or move a repository to another Wo
    workflow-controller status
    ```
 
-2. Replace the old install with the new wheel. pipx's `--force` fails to reuse an existing install with its default backend, so uninstall first. Your settings file is not part of the install and stays.
+2. Replace the old install with the new wheel. When pipx uses its uv backend (its default when uv is installed), `--force` fails to reuse an existing install, so uninstall first. Your settings file is not part of the install and stays.
 
    ```bash
    VERSION=<new version>
@@ -44,7 +44,7 @@ Rolling back to 1.2.1 refuses a repository already on Workflow 2.6.0 (exit 20). 
 
 ## Move a repository to a newer Workflow
 
-A repository moves to a new Workflow release through Workflow Manager, never by hand, and the Controller must admit the new release first: install a Controller that admits it before the move. [Compatibility](compatibility.md) has the table; Workflow 2.7.0 needs Controller 1.7.0 or later. The Manager's `update` replaces the managed files and rewrites `installation.json`. It commits nothing and migrates nothing.
+A repository moves to a new Workflow release through Workflow Manager, never by hand, and the Controller must admit the new release first: install a Controller that admits it before the move. [Compatibility](compatibility.md) has the table; Workflow 2.7.0 or later needs Controller 1.7.0 or later. The Manager's `update` replaces the managed files and rewrites `installation.json`. It commits nothing and migrates nothing.
 
 Do it between milestones, with no work item in flight and nothing running, on a branch of its own.
 
@@ -73,7 +73,7 @@ If you update the trunk while a milestone branch stays on the old release, the b
 
 ## What you should see
 
-After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal.
+After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal. On Workflow 2.8.0 `inspect` also prints an `advisory:` line about action ids this Controller release does not know; that is expected (see [compatibility](compatibility.md)).
 
 ## If it fails
 

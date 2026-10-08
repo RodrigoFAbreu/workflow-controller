@@ -1,6 +1,6 @@
 # Documentation map
 
-> For: anyone looking for the right page. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone looking for the right page. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 Where to find what. Start with the [project README](../README.md) if you are
 new: it explains how Workflow, Workflow Manager and the Controller fit

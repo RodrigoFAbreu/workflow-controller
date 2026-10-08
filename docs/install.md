@@ -1,6 +1,6 @@
 # Install the Controller
 
-> For: anyone installing the Controller on a machine. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone installing the Controller on a machine. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 Goal: a verified `workflow-controller` on your `PATH`, installed from a release wheel.
 

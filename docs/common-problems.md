@@ -1,12 +1,16 @@
 # Common problems
 
-> For: anyone whose run stopped and wants the quick fix. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone whose run stopped and wants the quick fix. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 Start with `workflow-controller explain <repo>`. It is read-only, exits 0 (but refuses with exit 20 when the repository is not admitted, as on an unmanaged one), and prints the pending job files with the command that clears each one, the next decision with its evidence and, at a gate, exactly what a person must do. Each entry below is the symptom, the one-line fix and where the detail is. What each exit status means is in [exit codes](exit-codes.md); the long account of every stop is the [troubleshooting guide](guide/troubleshooting.md).
 
 ## The run stopped and exited 10
 
-Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waiting for you. Run `workflow-controller explain <repo>`, do what it says, then run again. The exception is a Workflow 2.8 automatic gate, where `explain` reports `workflow_unknown_disposition` and shows the action (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command to run: run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session. To switch the repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). When you commit the policy file matters; the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. See [run](run.md#steps).
+Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waiting for you. Run `workflow-controller explain <repo>`, do what it says, then run again. See [run](run.md#steps).
+
+## The run stopped at a Workflow 2.8 automatic gate
+
+`explain` reports `workflow_unknown_disposition` and shows the action (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command to run. Run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session. At acceptance, `explain` may first report `functional_evidence_needed` or `pr_evidence_needed`: record that evidence as the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) describes, or set `gates.acceptance.human: true` and accept with `/accept-milestone`. To switch the repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md); the gate policy reference also says when to commit the policy file. See [run](run.md#steps).
 
 ## The run exited 16
 

@@ -46,6 +46,8 @@ Rolling back to 1.2.1 refuses a repository already on Workflow 2.6.0 (exit 20). 
 
 A repository moves to a new Workflow release through Workflow Manager, never by hand, and the Controller must admit the new release first: install a Controller that admits it before the move. [Compatibility](compatibility.md) has the table; Workflow 2.7.0 or later needs Controller 1.7.0 or later. The Manager's `update` replaces the managed files and rewrites `installation.json`. It commits nothing and migrates nothing.
 
+Workflow 2.8.0 makes the approval gates automatic unless the repository has a gate policy, so decide the policy before the move (see [run](run.md#steps), step 3).
+
 Do it between milestones, with no work item in flight and nothing running, on a branch of its own.
 
 ```bash

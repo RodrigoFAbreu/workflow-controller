@@ -46,8 +46,9 @@ reviews approve); a gate whose evidence is missing is blocked, not passed. A
 repository that turns `human_approval` on (all three gates), or sets
 `human: true` for one gate under `gates.<gate>` (for example
 `gates.plan_approval`), gets the person-decides behavior back for those gates.
-When you commit the policy file matters; the Workflow's
-[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. Two kinds of work item keep a person:
+Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
+adopted, Controller 1.7.0 refuses the repository (exit 20, see [run](run.md#steps)). The Workflow's
+[gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains commit timing. Two kinds of work item keep a person:
 
 - a version 1 item always has a person for plan and implementation approval;
 - a version 2.1 item always has a person for implementation approval. Version 2.1
@@ -67,7 +68,7 @@ this Controller does not know, so `explain` reports
 `workflow_unknown_disposition` and nothing is launched. To get past it, run
 `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>` or
 `/satisfy-gate acceptance <id>` yourself in a Claude session. Acceptance may first
-ask for functional or pull-request evidence (see [run](run.md#steps)). See [Gate stop](#gate-stop) and
+ask for functional or pull-request evidence. See [Gate stop](#gate-stop) and
 [run](run.md#steps).
 
 ### Bundle
@@ -102,7 +103,7 @@ needs a Workflow installation that Workflow Manager verifies, at a release the
 
 The version of the Workflow installed in a target, for example `2.6.0`, as
 recorded in `.workflow-manager/installation.json`. It is not the same as a work
-item's governing version, which is the protocol version that one work item was
+item's governing version, the Workflow version that one work item was
 started under and never changes.
 
 ### Step and run

@@ -10,7 +10,11 @@ Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waitin
 
 ## The run stopped at a Workflow 2.8 automatic gate
 
-`explain` reports `workflow_unknown_disposition` and shows the action (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command to run. Run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session. At acceptance, `explain` may first report `functional_evidence_needed` or `pr_evidence_needed`: record that evidence as the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) describes, or set `gates.acceptance.human: true` and accept with `/accept-milestone`. To switch the repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md); the gate policy reference also says when to commit the policy file. See [run](run.md#steps).
+`explain` reports `workflow_unknown_disposition` and shows the action (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command to run. Run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session. At acceptance, `explain` may first report `functional_evidence_needed` (record the functional result) or `pr_evidence_needed` (push the pull request, wait for its checks, then run `/satisfy-gate acceptance <id>`), or you can set `gates.acceptance.human: true` and accept with `/accept-milestone`. See [run](run.md#steps), which has an example command. To switch the repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md), commit the policy file and run `/adopt-gate-policy` (see the next entry).
+
+## The run refuses with "protocol verify gave an answer outside the protocol" and `'warn'` (exit 20)
+
+The Workflow's `verify` reported a check as `warn`, which Controller 1.7.0 does not know. On Workflow 2.8.0 this happens when a gate policy file is committed but not adopted yet. Run `/adopt-gate-policy` in a Claude session, then run again. The Workflow also reports `warn` permanently after an adoption that lowers a gate; see its [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md). A later Controller release will accept it. See [compatibility](compatibility.md).
 
 ## The run exited 16
 

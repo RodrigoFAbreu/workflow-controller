@@ -16,7 +16,7 @@ linked. Which Workflow each release admits is on the
 | 1.4.0 | Squash-merged pull requests, with the release version taken from the pull request title and the Git tag as the only version authority | [1.4.0](releases/1.4.0.md) |
 | 1.3.0 | Drives a target on Workflow 2.6.0 as well as 2.5.1 | [1.3.0](releases/1.3.0.md) |
 | 1.2.1 | A faster, balanced test runner shared by CI and local runs, and a longer bound for a worker's background processes to finish | none |
-| 1.2.0 | Milestone branches, pull requests and automatic releases; the first release published by the pipeline; and safer ownership of a worker's lifecycle | none |
-| 1.1.1 | The first published release, with an isolated runtime, a wheel with checksums and live observation of workers; it ships what 1.1.0 was meant to | none |
+| 1.2.0 | Milestone branches, pull requests and automatic releases; the first release the release pipeline published itself; and safer ownership of a worker's lifecycle | none |
+| 1.1.1 | The first release published at all, with an isolated runtime, a wheel with checksums and live observation of workers; it ships what 1.1.0 was meant to | none |
 
 Version 1.1.0 was tagged but its release validation failed before anything was published, so it is recorded as abandoned.

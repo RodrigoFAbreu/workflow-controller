@@ -45,14 +45,23 @@ Global options go before the subcommand and the repository goes last, as in `wor
      [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) describes
      them), then run again.
    - **Acceptance may ask for evidence first:** `explain` can instead report
-     `functional_evidence_needed` or `pr_evidence_needed`, which Controller 1.7.0 does not
-     report for you. Record them as the Workflow's
-     [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md)
-     describes (its "Evidence kinds", `record-external-result`), or make acceptance a person's
-     with `gates.acceptance.human: true` and accept with `/accept-milestone`. The external reviews
-     and, unless that evidence is recorded, the functional review stay yours.
-   - **Human gates and commit timing:** to switch a repository to human gates, see the same
-     gates page. When you commit the policy file matters; the gate policy reference explains it.
+     `functional_evidence_needed` or `pr_evidence_needed`. Controller 1.7.0 does not collect
+     either for you.
+     - `functional_evidence_needed`: have one functional result recorded per required flow, for
+       example `python3 scripts/workflow_protocol.py record-external-result --work-item <id> --kind functional_evidence --input result.json`.
+       The input fields are in "Evidence kinds" in the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md).
+     - `pr_evidence_needed`: push the pull request, wait for its checks, then run
+       `/satisfy-gate acceptance <id>`, which asks GitHub itself. Automatic acceptance needs an
+       open, pushed pull request; a repository without milestone branches keeps acceptance
+       with a person.
+     - Or make acceptance a person's: set `gates.acceptance.human: true` and accept with
+       `/accept-milestone`. The external reviews and, unless functional evidence is recorded,
+       the functional review stay yours.
+   - **Human gates:** to switch a repository to human gates, see the same gates page. Commit
+     the policy file, then run `/adopt-gate-policy` in a Claude session. Until it is adopted,
+     Controller 1.7.0 refuses the repository with exit 20 and "protocol verify gave an answer
+     outside the protocol ... 'warn'": the Workflow reports an unadopted policy that tightens
+     as `warn`, which this Controller does not know. The [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) also explains commit timing.
    - At any other gate stop, do what `explain` says, then run again.
 
 4. Watch from another terminal. `follow` attaches to whatever is running and changes nothing; `status` shows every active run and job.

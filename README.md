@@ -112,8 +112,8 @@ the Workflow answers them with a disposition it does not know,
 so `explain` reports `workflow_unknown_disposition` and nothing is launched.
 Run `/satisfy-gate plan|implementation|acceptance <id>` yourself in a Claude session (at acceptance, `explain` may first ask for functional or pull-request evidence: see [run](docs/run.md#steps)); to switch the
 repository to human gates, see the Workflow's
-[gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). When you commit the policy file matters; the
-Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it. See also [run](docs/run.md#steps).
+[gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md). Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is adopted, Controller 1.7.0 refuses the repository (exit 20). The
+Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains commit timing. See also [run](docs/run.md#steps).
 
 On a Workflow release that ships the orchestration protocol, such as 2.7.0,
 the Workflow itself says what comes next and whether each job made progress

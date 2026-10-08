@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> For: anyone whose run stopped and the quick fix in common problems was not enough. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone whose run stopped and the quick fix in common problems was not enough. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
 
 [Back to the documentation map](../README.md)
 
@@ -403,8 +403,15 @@ disposition and action beside it.
   At that automatic-gate stop, run `/satisfy-gate plan|implementation|acceptance
   <id>` yourself in a Claude session, then run again. To switch the
   repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).
-  When you commit the policy file matters; the Workflow's
-  [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains it.
+  Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
+  adopted, Controller 1.7.0 refuses the repository (see the `'warn'` bullet below). The Workflow's
+  [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains commit timing.
+- `functional_evidence_needed`, `pr_evidence_needed`: at a Workflow 2.8 automatic
+  acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
+  not the unknown disposition; see [run](../run.md#steps) step 3.
+- `protocol verify gave an answer outside the protocol ... 'warn'` (exit 20): the Workflow's
+  `verify` reported a check as `warn`, which Controller 1.7.0 does not know. Adopt the
+  gate policy with `/adopt-gate-policy`, then run again.
 - `workflow_user_only_action`: an `automatic` answer whose worker is
   `user_only`. The Controller never launches it.
 - `workflow_invocation_mismatch`: the Workflow's invocation text for the

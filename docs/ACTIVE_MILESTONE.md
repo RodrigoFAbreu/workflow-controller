@@ -186,9 +186,9 @@ Fixed in documentation only (revision 16): `update.md` update and rollback now r
 
 Fixed in documentation only (revision 17): `run.md` step 3 is split into short "Up to Workflow 2.7" and "On Workflow 2.8" parts and says that acceptance may first ask for functional or pull-request evidence (`functional_evidence_needed`, `pr_evidence_needed`), recorded as the Workflow's gate policy reference describes or avoided with `gates.acceptance.human: true` (also in `glossary.md`, `common-problems.md` as its own entry, and `README.md`); `update.md` limits the `--force` reason to pipx's uv backend, says Workflow 2.7.0 or later needs Controller 1.7.0 or later and notes the expected `advisory:` line on 2.8.0; the "Last checked with" headers name 2.8.0; "roadmap C10" is gone from the troubleshooting guide; the glossary lists the version 1 / 2.1 exceptions as two items; README's `/satisfy-gate` sentence says "in a Claude session". Re-test: the F1 sentence in `run.md`, `update.md` lines 20, 47 and 76, and the `common-problems.md` entry.
 
-### Functional review round 5 (pending)
+### Functional review round 5 (applied)
 
-Not yet tested. Re-test list: G1 to G8 above, plus the round-4 re-test sentence (F1 sentence in `run.md`, `update.md` lines 20, 47 and 76, the `common-problems.md` entry).
+Fixed in documentation only (revision 18): the pages that tell a reader to make a gate human now say to commit the policy file and run `/adopt-gate-policy`, because until it is adopted Controller 1.7.0 refuses the repository with exit 20 ("protocol verify gave an answer outside the protocol ... 'warn'"; the Controller's missing `warn` support is a separate follow-up, not changed here); `common-problems.md` has an entry for that message, `compatibility.md` and the troubleshooting guide name it, and the guide lists the two evidence needs; `run.md` splits the evidence bullet (`pr_evidence_needed`: push the pull request, then `/satisfy-gate acceptance <id>`; `functional_evidence_needed`: one `record-external-result` example); `update.md` warns that Workflow 2.8.0 makes gates automatic; the troubleshooting header names 2.8.0; wording notes applied in the glossary and release history. Re-test: the `run.md` step 3 bullets, the new `common-problems.md` entry, and the `update.md` Workflow-move sentence.
 
 ### Known limitations and out of scope
 

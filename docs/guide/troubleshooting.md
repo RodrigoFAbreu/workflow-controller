@@ -404,7 +404,8 @@ disposition and action beside it.
   <id>` yourself in a Claude session, then run again. To switch the
   repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).
   Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
-  adopted, Controller 1.7.0 refuses the repository (see the `'warn'` bullet below). The Workflow's
+  adopted, Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20; see the `'warn'`
+  paragraph below the list). The Workflow's
   [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it.
 - `functional_evidence_needed`, `pr_evidence_needed`: at a Workflow 2.8 automatic
   acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
@@ -432,10 +433,12 @@ disposition and action beside it.
 gate: `explain`, `step` and `run` refuse, and nothing is launched. The Workflow's `verify`
 reported a check as `warn`, which Controller 1.7.0 does not know. For example, the gate policy
 file (`docs/ai-workflow/GATE_POLICY.json`) is present, committed or not, and not adopted yet:
-commit it, then run `/adopt-gate-policy` in a Claude session, then run again. Adopting the same policy does not
-clear every `warn`. While an adoption that lowers a gate is the newest adoption, or when a review
-verdict was recorded without `--run-ref`, the Workflow keeps reporting it; a later Controller
-release will accept it. To see which check it is, run
+commit it, then run `/adopt-gate-policy` in a Claude session, then run again. Two other causes
+differ. A review verdict recorded without `--run-ref` is not cleared by any adoption. A
+gate-lowering `warn` lasts while the adoption that lowers the gate is the newest adoption; a
+later adoption that lowers nothing clears it, but do not adopt again only to hide it, because the
+Workflow treats it as the expected signal of a lowered gate. A later Controller release will
+accept the `warn`. To see which check it is, run
 `python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root . verify` and read the
 `gate_policy` check's detail. See [common problems](../common-problems.md#the-run-refuses-with-protocol-verify-gave-an-answer-outside-the-protocol-and-warn-exit-20).
 

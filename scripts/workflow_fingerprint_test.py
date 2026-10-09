@@ -3261,6 +3261,164 @@ class TestReviewImplementationFeedbackBindingRoundTrip(unittest.TestCase):
         )
 
 
+class TestPinnedReviewContentIdLabel(unittest.TestCase):
+    """workflow-2.7.0 `D-Feedback-Label` (`v2.6.0-002`, CP1): one pinned
+    `Reviewed review_content_id:` label, the spaced form kept as a legacy
+    alias, read from the header block only; `Status:` and the three
+    binding fields keep their 2.6.0 whole-file scan."""
+
+    def _verdict(self, *id_lines, body=""):
+        return (
+            "# Review Decision\n\n"
+            "Status: REVISE\n"
+            "Reviewer role: MANUAL_EXTERNAL_PLAN_REVIEW\n\n"
+            f"Reviewed bundle ID: {FAKE_ID_A}\n"
+            f"Reviewed base commit: {'c' * 40}\n"
+            "Work item: workflow-manager-trunk-model\n"
+            + "".join(f"{line}\n" for line in id_lines)
+            + "\n## Blocking findings\n\n"
+            + body
+        )
+
+    def test_pinned_label_only_parses(self):
+        content = self._verdict(f"Reviewed review_content_id: {FAKE_ID_B}")
+        self.assertEqual(wf.parse_feedback_review_content_id(content), FAKE_ID_B)
+
+    def test_legacy_alias_only_parses(self):
+        content = self._verdict(f"Reviewed review content ID: {FAKE_ID_B}")
+        self.assertEqual(wf.parse_feedback_review_content_id(content), FAKE_ID_B)
+
+    def test_bare_form_parses(self):
+        content = self._verdict(f"review_content_id: {FAKE_ID_B}")
+        self.assertEqual(wf.parse_feedback_review_content_id(content), FAKE_ID_B)
+
+    def test_alias_is_case_insensitive(self):
+        content = self._verdict(f"reviewed Review Content id: {FAKE_ID_B}")
+        self.assertEqual(wf.parse_feedback_review_content_id(content), FAKE_ID_B)
+
+    def test_alias_plus_pinned_with_the_same_value_parses(self):
+        content = self._verdict(
+            f"Reviewed review_content_id: {FAKE_ID_B}",
+            f"Reviewed review content ID: {FAKE_ID_B}",
+        )
+        self.assertEqual(wf.parse_feedback_review_content_id(content), FAKE_ID_B)
+
+    def test_two_labels_with_different_values_give_none(self):
+        content = self._verdict(
+            f"Reviewed review_content_id: {FAKE_ID_B}",
+            f"Reviewed review content ID: {FAKE_ID_A}",
+        )
+        self.assertIsNone(wf.parse_feedback_review_content_id(content))
+
+    def test_id_after_the_first_section_following_a_field_is_ignored(self):
+        content = self._verdict(body=f"Reviewed review_content_id: {FAKE_ID_B}\n")
+        self.assertIsNone(wf.parse_feedback_review_content_id(content))
+
+    def test_verdict_opening_with_review_decision_section_parses_every_field(self):
+        content = (
+            "## Review Decision\n\n"
+            "Status: APPROVE\n"
+            "Reviewer role: LOCAL_MODEL_PLAN_REVIEW\n"
+            f"Reviewed bundle ID: {FAKE_ID_A}\n"
+            f"Reviewed base commit: {'c' * 40}\n"
+            "Work item: orchestration-protocol-v1\n"
+            f"Reviewed review_content_id: {FAKE_ID_B}\n\n"
+            "## Blocking findings\n\nNone.\n"
+        )
+        self.assertEqual(
+            wf.parse_review_feedback_header(content),
+            {
+                "status": "APPROVE",
+                "reviewer_role": "LOCAL_MODEL_PLAN_REVIEW",
+                "reviewed_bundle_id": FAKE_ID_A,
+                "reviewed_base_commit": "c" * 40,
+                "work_item": "orchestration-protocol-v1",
+                "review_content_id": FAKE_ID_B,
+                "reviewer_model": None,
+            },
+        )
+
+    def test_reviewer_model_is_read_from_the_header_block_only(self):
+        # CP2 (`LPR-R17-O1`, `LPR-R17-O2`): the declared `<vendor>/<model>` form
+        # parses from the header; the same text quoted in the body declares nothing.
+        header = self._verdict(
+            f"Reviewed review_content_id: {FAKE_ID_B}", "Reviewer model: anthropic/claude-opus-5-5")
+        self.assertEqual(wf.parse_review_feedback_header(header)["reviewer_model"], "anthropic/claude-opus-5-5")
+        body_only = self._verdict(
+            f"Reviewed review_content_id: {FAKE_ID_B}",
+            body="- The reviewer wrote\nReviewer model: openai/x\nin the paste.\n")
+        self.assertIsNone(wf.parse_review_feedback_header(body_only)["reviewer_model"])
+        conflicting = self._verdict(
+            f"Reviewed review_content_id: {FAKE_ID_B}", "Reviewer model: a/b", "Reviewer model: c/d")
+        self.assertIsNone(wf.parse_feedback_reviewer_model(conflicting), "an ambiguous statement never matches")
+
+    def test_finding_quoting_another_id_leaves_the_parse_intact(self):
+        content = self._verdict(
+            f"Reviewed review_content_id: {FAKE_ID_B}",
+            body=f"- The earlier round reviewed\n  review_content_id: {FAKE_ID_A}\n",
+        )
+        self.assertEqual(wf.parse_feedback_review_content_id(content), FAKE_ID_B)
+
+    def test_header_on_the_m1_round_1_verdict_shape(self):
+        # Workflow-manager M1, MANUAL_EXTERNAL_PLAN_REVIEW round 1: the
+        # underscore form only, which Controller 1.3.0 read as absent.
+        content = self._verdict(f"Reviewed review_content_id: {FAKE_ID_B}", body="- finding\n")
+        header = wf.parse_review_feedback_header(content)
+        self.assertEqual(header["status"], "REVISE")
+        self.assertEqual(header["reviewer_role"], "MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.assertEqual(header["work_item"], "workflow-manager-trunk-model")
+        self.assertEqual(header["review_content_id"], FAKE_ID_B)
+
+    def test_header_on_the_controller_archived_spaced_only_shape(self):
+        content = (
+            "# Review Decision\n\n"
+            "Status: REVISE\n"
+            "Reviewer role: MANUAL_EXTERNAL_PLAN_REVIEW\n"
+            f"Reviewed bundle ID: {FAKE_ID_A}\n"
+            f"Reviewed base commit: {'c' * 40}\n"
+            "Work item: workflow-controller-gen1\n"
+            f"Reviewed review content ID: {FAKE_ID_B}\n\n"
+            "## Blocking findings\n\n"
+            "Status: this is prose quoting the template, never a live field.\n"
+        )
+        header = wf.parse_review_feedback_header(content)
+        self.assertEqual(header["status"], "REVISE")
+        self.assertEqual(header["reviewed_bundle_id"], FAKE_ID_A)
+        self.assertEqual(header["review_content_id"], FAKE_ID_B)
+
+    def test_absent_fields_parse_as_none(self):
+        header = wf.parse_review_feedback_header("# Review Decision\n\nStatus: APPROVE\n")
+        self.assertEqual(header["status"], "APPROVE")
+        for key in ("reviewer_role", "reviewed_bundle_id", "reviewed_base_commit",
+                    "work_item", "review_content_id"):
+            self.assertIsNone(header[key], key)
+
+    def test_binding_fields_keep_the_whole_file_scan(self):
+        content = (
+            "# Review Decision\n\n"
+            f"Reviewed bundle ID: {FAKE_ID_A}\n\n"
+            "## Notes\n\n"
+            "Status: APPROVE\n"
+            "Work item: orchestration-protocol-v1\n"
+        )
+        fields = wf.parse_review_feedback_binding_fields(content)
+        self.assertEqual(fields["status"], "APPROVE")
+        self.assertEqual(fields["work_item"], "orchestration-protocol-v1")
+        header = wf.parse_review_feedback_header(content)
+        self.assertEqual(header["status"], "APPROVE")
+        self.assertEqual(header["work_item"], "orchestration-protocol-v1")
+
+    def test_each_command_file_names_exactly_the_pinned_label(self):
+        commands = Path(__file__).resolve().parent.parent / ".claude" / "commands"
+        for name in ("review-plan.md", "review-implementation.md",
+                     "record-manual-plan-review.md", "record-manual-implementation-review.md"):
+            text = (commands / name).read_text()
+            self.assertIn(wf.FEEDBACK_REVIEW_CONTENT_ID_LABEL, text, name)
+        for name in ("review-plan.md", "review-implementation.md"):
+            text = (commands / name).read_text()
+            self.assertNotIn("Reviewed review content ID:", text, name)
+
+
 class TestBinaryAndUnusualPathBundleEntries(unittest.TestCase):
     """`OPUS-R6-019`/`WFR-05`: `compute_bundle_id` treats bundle-file
     content as opaque bytes throughout, so binaries and unusual-but-

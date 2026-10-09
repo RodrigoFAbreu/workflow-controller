@@ -349,7 +349,9 @@ class ReviewContentIdMismatchError(Exception):
 
 class WorktreeOrHeadMismatchError(Exception):
     """Raised by a **repository-local** consumer (`/approve-review`,
-    `/review-plan`, `/review-implementation`) when the current worktree
+    `/review-plan`, `/review-implementation`, and -- workflow-2.7.0 --
+    `/record-manual-plan-review`/`/record-manual-implementation-review`
+    through `workflow_state.ingest_manual_review_verdict`) when the current worktree
     root or HEAD SHA differs from what `MANIFEST.md` recorded at
     bundle-generation time — the actual first-party Milestone-8 incident
     (a stale bundle read from a different worktree) this check exists to
@@ -3159,7 +3161,13 @@ def assert_local_generation_matches(
     repo_root: Path, manifest_path: Path, *, require_metadata: bool = False,
 ) -> None:
     """**Repository-local commands only** (`/approve-review`,
-    `/review-plan`, `/review-implementation`): stop if the current worktree
+    `/review-plan`, `/review-implementation`, and -- workflow-2.7.0 --
+    `/record-manual-plan-review`/`/record-manual-implementation-review` and
+    the protocol's `record-external-result`, all through
+    `workflow_state.ingest_manual_review_verdict`, and the
+    repository-aware gate wrappers `workflow_state.plan_approval_gate_status`/
+    `technical_approval_gate_status`, which `/approve-review` and the
+    orchestration protocol's `next-action` call): stop if the current worktree
     root or HEAD SHA differs from what `MANIFEST.md` recorded at
     generation time, naming both. Never call this from a path that also
     serves external reviewers -- see `WorktreeOrHeadMismatchError` and
@@ -3362,20 +3370,83 @@ def parse_review_feedback_binding_fields(content: str) -> dict[str, str | None]:
 
 
 _FEEDBACK_REVIEW_CONTENT_ID_RE = re.compile(
-    r"^[ \t]*(?:[-*][ \t]+)?(?:Reviewed[ \t]+)?`?review_content_id`?:[ \t]*`?([0-9a-f]{64})`?[ \t]*$",
+    r"^[ \t]*(?:[-*][ \t]+)?(?:Reviewed[ \t]+)?"
+    r"(?:`?review_content_id`?|review[ \t]+content[ \t]+ID)"
+    r":[ \t]*`?([0-9a-f]{64})`?[ \t]*$",
     re.MULTILINE | re.IGNORECASE,
 )
+_FEEDBACK_FIELD_LINE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?`?[A-Za-z][A-Za-z0-9_ \t]*`?:[ \t]*\S")
+_FEEDBACK_REVIEWER_ROLE_RE = re.compile(r"^Reviewer role:\s*(\S+)\s*$", re.MULTILINE)
+
+#: The label `/review-plan` and `/review-implementation` write, and every
+#: two-stage stage verdict must carry (`D-Feedback-Label`, workflow-2.7.0,
+#: `v2.6.0-002`). `Reviewed review content ID:` stays a legacy alias.
+FEEDBACK_REVIEW_CONTENT_ID_LABEL = "Reviewed review_content_id:"
+
+
+def feedback_header_block(content: str) -> str:
+    """The header block of a `REVIEW_FEEDBACK.md` (`D-Feedback-Label`,
+    workflow-2.7.0): every line before the first `## ` heading that
+    follows a field line (`key: value`). A verdict that opens with
+    `## Review Decision` and states its fields under it keeps those fields
+    in its header; only a `## ` heading after a field line ends it."""
+    lines = content.splitlines(keepends=True)
+    seen_field = False
+    for index, line in enumerate(lines):
+        if line.startswith("## ") and seen_field:
+            return "".join(lines[:index])
+        if _FEEDBACK_FIELD_LINE_RE.match(line):
+            seen_field = True
+    return content
 
 
 def parse_feedback_review_content_id(content: str) -> str | None:
-    """The plan-stage `review_content_id` a `REVIEW_FEEDBACK.md` states as
-    its own labelled line (`review_content_id: <hex>`, optionally
-    `Reviewed review_content_id:`, a list bullet or backticks), used by
-    `/apply-plan-review`'s durable feedback check (workflow-2.6.0). `None`
-    when absent, or when the file states more than one distinct value --
-    an ambiguous statement never matches."""
-    values = {match.group(1).lower() for match in _FEEDBACK_REVIEW_CONTENT_ID_RE.finditer(content)}
+    """The `review_content_id` a `REVIEW_FEEDBACK.md` states as its own
+    labelled line in its header block (`feedback_header_block`): the
+    pinned `Reviewed review_content_id: <hex>`, the bare
+    `review_content_id: <hex>`, or the legacy alias
+    `Reviewed review content ID: <hex>`, case-insensitively, optionally as a
+    list bullet or in backticks. Used by `/apply-plan-review`'s durable
+    feedback check (workflow-2.6.0); header-only since workflow-2.7.0
+    (`v2.6.0-002`), so a finding that quotes another ID cannot disturb it.
+    `None` when absent, or when the header states more than one distinct
+    value -- an ambiguous statement never matches."""
+    header = feedback_header_block(content)
+    values = {match.group(1).lower() for match in _FEEDBACK_REVIEW_CONTENT_ID_RE.finditer(header)}
     return values.pop() if len(values) == 1 else None
+
+
+_FEEDBACK_REVIEWER_MODEL_RE = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?`?Reviewer model:`?[ \t]*(\S.*?)[ \t]*$", re.MULTILINE | re.IGNORECASE)
+
+
+def parse_feedback_reviewer_model(content: str) -> str | None:
+    """The `Reviewer model: <vendor>/<model>` a `REVIEW_FEEDBACK.md` declares
+    (workflow-2.8.0, `D-GP-Gates`, `LPR-R17-O2`), header-only exactly like
+    `parse_feedback_review_content_id`: only within the leading header block
+    (`feedback_header_block`), never from a body line, so a verdict that
+    quotes the text in its body declares nothing. The value is returned as
+    written, trimmed. `None` when absent, or when the header states more than
+    one distinct value -- an ambiguous statement never matches."""
+    header = feedback_header_block(content)
+    values = {match.group(1).strip() for match in _FEEDBACK_REVIEWER_MODEL_RE.finditer(header)}
+    return values.pop() if len(values) == 1 else None
+
+
+def parse_review_feedback_header(content: str) -> dict[str, str | None]:
+    """The single verdict parser (`D-Feedback-Label`, workflow-2.7.0):
+    `status`, `reviewed_bundle_id`, `reviewed_base_commit` and `work_item`
+    from `parse_review_feedback_binding_fields` (whole-file, as in 2.6.0),
+    `reviewer_role` by the same whole-file first-match convention, and
+    `review_content_id` from `parse_feedback_review_content_id` and
+    `reviewer_model` from `parse_feedback_reviewer_model`, the two
+    header-only fields. Each key is `None` when absent."""
+    fields: dict[str, str | None] = dict(parse_review_feedback_binding_fields(content))
+    role_match = _FEEDBACK_REVIEWER_ROLE_RE.search(content)
+    fields["reviewer_role"] = role_match.group(1) if role_match else None
+    fields["review_content_id"] = parse_feedback_review_content_id(content)
+    fields["reviewer_model"] = parse_feedback_reviewer_model(content)
+    return fields
 
 
 def assert_manual_feedback_names_work_item(content: str, *, work_item_id: str) -> None:

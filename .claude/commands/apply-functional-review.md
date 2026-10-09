@@ -40,6 +40,11 @@ rule for an item without the field.
      also read `docs/ai-workflow/WORKFLOW_CONFIG.json`
      (`workflow_state.load_config`). Step 4 is replaced by the per-finding
      three-way branch below; steps 1-3 and 5-7 execute unchanged.
+     A finding never completes an outstanding registry checkpoint: for a
+     `2.1`/`2.2` item at this phase with one outstanding (`next-action` row
+     38c), the way back to `IMPLEMENTING` is the user-only
+     `/resume-implementation <id>` (workflow-2.9.0), which this command
+     never runs on the user's behalf.
 
 1. Read `<feedback_dir>/FUNCTIONAL_REVIEW.md`. If it does not exist,
    stop and say so, printing the exact resolved path
@@ -133,7 +138,8 @@ all in the same invocation.
      phase is `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, byte-identical to
      before this checkpoint. Persist the returned state to
      `WORKFLOW_STATE.json`, and commit it
-     **alone**: stage exactly that one path (never a broader `git add`) and
+     **alone**: stage exactly that one path (never a broader `git add`;
+     **Item-scoped staging** (workflow-2.8.0, `LPR-R6-001`): stage the state file with `workflow_state.stage_scoped_state(repo_root, <work_item_id>)` in place of the bare `git add` of that path (it returns `False`, and the ordinary single-path `git add` runs, unless another work item holds uncommitted residue in the state file).) and
      create one commit carrying, for `"ordinary"`,
      `Workflow-Bundle-Generation-Record: <work_item_id>/<implementation_revision>`
      + `Workflow-Work-Item: <work_item_id>` trailers, no other trailer; for
@@ -233,7 +239,11 @@ all in the same invocation.
      `/milestone-plan <child-id>` → `/review-plan <child-id>` →
      `/record-manual-plan-review <child-id>` (a `"1"`-governed child uses
      `/apply-plan-review <child-id>` instead of those two) →
-     `/approve-review plan <child-id>` → `/milestone-implement <child-id>`
+     `/approve-review plan <child-id>` (or, where the gate policy makes the
+     plan gate automatic and every requirement is met, `/satisfy-gate plan
+     <child-id>` in its place; likewise `/satisfy-gate implementation
+     <child-id>` for `/approve-review implementation <child-id>` below) →
+     `/milestone-implement <child-id>`
      (× N) → `/review-implementation <child-id>` (optional for a `"1"`/
      `"2.1"` child; a `"2.2"`-governed child instead uses it as the
      authoritative `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage writer,
@@ -244,7 +254,9 @@ all in the same invocation.
      `/prepare-functional-review <child-id>` → `/review-functional
      <child-id>` (optional) → `/apply-functional-review <child-id>` (only
      if the child's own functional pass produces findings; its own three
-     branches apply recursively) → `/accept-milestone <child-id>`. A
+     branches apply recursively) → `/accept-milestone <child-id>` (a child
+     whose pull request later turns red is reopened by `/apply-pr-review
+     <child-id>`, `workflow-2.8.0`). A
      `REVISE` at either review stage diverts through `/apply-plan-review
      <child-id>` or `/apply-implementation-review <child-id>`
      respectively, and `/recover-implementation-provenance <child-id>`
@@ -295,3 +307,9 @@ all in the same invocation.
    stop already happened above instead (a fresh implementation-review
    round is required first); do not report both stops as satisfied by the
    same invocation.
+
+Once the item is back at `AWAITING_FUNCTIONAL_REVIEW` with current functional
+evidence, `/accept-milestone` accepts it as always; where the gate policy makes
+acceptance automatic and every requirement is met, `/satisfy-gate acceptance`
+does instead (`workflow-2.8.0`). A finding that left the pull request red or
+`CHANGES_REQUESTED` blocks the automatic path until it is pushed and cleared.

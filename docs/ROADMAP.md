@@ -10,18 +10,18 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 **Where things stand (2026-10-09).** Controller 1.7.1 is the latest release (PR #28, squash `b2323e1`). It admits Workflow
 2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
-repository runs Workflow 2.6.0. Every milestone through C9, the Controller
+repository runs Workflow 2.9.0 with automatic gates (since 2026-10-09). Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
 that releases nothing. C9b, the patch that accepts the protocol's `warn` check status and protocol
 1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. C9c, which
 prepares this repository's move to Workflow 2.9.0 (follow-up 15, accepted 2026-10-09), is complete
-and merges as a `test:` pull request that releases nothing. Next (user decisions, 2026-10-09):
-1. The `chore:` pull request that runs `workflow-manager --release-version 2.9.0 update .`, so that
-   later milestones run with automatic gates.
+and merged as a `test:` pull request that released nothing (PR #32); a `chore:` pull request then
+moved this repository to Workflow 2.9.0. Next (user decisions, 2026-10-09):
+1. C9d, the installed-release test made version-agnostic, the first milestone with automatic gates.
 2. C8.
-Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
+Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -53,12 +53,13 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
 | C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release) (complete) | — | [follow-up 11](#known-follow-ups-carried-forward) |
 | C9c | Move this repository to the latest compatible Workflow (2.9.0 today) with automatic gates: vendor that release's tree under `tests/workflow_releases/`, let the installed-release test admit a protocol release by capability, then run the Workflow Manager update (a `chore:` pull request, no release); once the milestone is merged the update is the next action (complete) | C9b | [follow-up 15](#known-follow-ups-carried-forward) |
+| C9d | The installed-release test made version-agnostic: drop the requirement that this repository's own installed Workflow has a vendored tree, and admit it through the Controller's capability rule or `inspect`, with no vendored copy and no version literal, so a later Workflow move needs no test change | C9c | [follow-up 16](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
-| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
+| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10 | [11.7](#117-the-kanban-runner) |
 
 **Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
@@ -212,7 +213,24 @@ These are not blockers for the baseline, but should remain visible in later mile
    **Done in C9c** (`workflow-controller-workflow-2-9-0-move`, accepted 2026-10-09, a `test:` pull
    request that releases nothing): the 2.9.0 tree is vendored with the gate-policy scripts, the
    installed-release and live-repository admission tests admit a protocol release by capability, and
-   every vendored protocol tree is shown to run. The `chore:` update is next.
+   every vendored protocol tree is shown to run. The `chore:` update pull request that followed
+   moved this repository to Workflow 2.9.0 (2026-10-09); with no `GATE_POLICY.json`, its gates are
+   automatic.
+16. The installed-release test still ties this repository's own installed Workflow to a vendored
+   tree (`InstalledReleaseTest.test_the_installed_files_equal_the_vendored_tree`), so every Workflow
+   move needs a test change first (C9c). Testing the Controller against vendored releases is
+   right; checking this repository's own installation against one is a leftover from before C9.
+   C9d (user decision, 2026-10-09) drops that requirement and checks the repository's own
+   installation through the Controller's capability rule or `managed_repo.inspect`, with no
+   vendored copy and no version literal. It is a permanent fix: a later Workflow that speaks
+   protocol major 1 needs no test change, and a protocol major 2 is refused by design. C9d is the
+   first milestone this repository runs with automatic gates.
+17. A closed enum in the vendored protocol schema can still refuse a protocol 1.x minor release: a
+   value the schema does not list (a new check status, as `warn` was in protocol 1.1) makes the
+   whole answer "outside the protocol" (exit 20), although a minor release only adds. In C10
+   (user decision, 2026-10-09), a value unknown to the vendored schema's closed enums in a 1.x
+   answer is treated like an unknown action id: advisory where it is informational, blocked
+   where a decision depends on it. Only a protocol major change refuses.
 
 ---
 

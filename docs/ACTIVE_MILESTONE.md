@@ -34,7 +34,6 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-The `chore:` pull request that moves this repository to Workflow 2.9.0
-(`workflow-manager --release-version 2.9.0 update .` on a fresh branch from `main`, with no work item
-active, D3). It also adds the roadmap entries the user decided on 2026-10-09. Then `/milestone-plan`
-for the next incomplete milestone in `docs/ROADMAP.md`.
+This repository runs Workflow 2.9.0 since the `chore:` update pull request that followed C9c, and its
+gates are automatic (no `docs/ai-workflow/GATE_POLICY.json`). `/milestone-plan` for C9d, the
+installed-release test made version-agnostic (`docs/ROADMAP.md` follow-up 16).

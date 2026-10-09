@@ -18,6 +18,11 @@ follow-up 16), plan revision 2, base commit `5532cdd`. The plan is
   tests.test_managed_repo` passes (the live-Manager test is skipped here).
 - **CP2 -- complete (verified).** `docs/guide/development.md` now says the installed tree needs no vendored tree and is checked by capability and `installation.json`; `docs/ROADMAP.md` marks C9d and follow-up 16 complete and the Next list names C8. `docs/compatibility.md` and `docs/update.md` state no vendored-tree requirement, so are unchanged. `tools/check_docs.py` passes; the full suite (`tools/run_tests.py --jobs 2`, 3095 tests) fails only the two Git 2.56 trailer tests (follow-up 12).
 
+- **Self-review -- complete (2026-10-10).** The full milestone diff matches D1-D6: the test's admission
+  follows `managed_repo.inspect`'s non-Manager steps in order, no `controller/` change, and the vendored-tree
+  tests are unchanged. No defects found. `tools/check_docs.py` and `tools/workflow_releases.py check` exit 0;
+  `tools/run_tests.py` (3095 tests, 8 shards) fails only the two Git 2.56 trailer tests (follow-up 12).
+
 ## Next action
 
-`/milestone-implement workflow-controller-installed-release-test-agnostic` to enter self-review.
+Implementation review of the generated bundle (`.ai-review/workflow-controller-installed-release-test-agnostic/`).

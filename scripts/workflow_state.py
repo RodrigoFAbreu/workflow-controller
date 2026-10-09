@@ -191,6 +191,7 @@ from types import MappingProxyType
 from typing import Callable, Mapping, NamedTuple
 
 import workflow_fingerprint as fingerprint
+import workflow_gate_policy as gate_policy
 from workflow_fingerprint import (  # noqa: F401 - re-exported for callers
     InvalidWorkItemIdError,
     InvalidWorkItemTypeError,
@@ -244,7 +245,12 @@ CHECKPOINT_STATUSES = frozenset({"IN_PROGRESS", "COMPLETE", "NEEDS_REVALIDATION"
 # "CURRENT"), so this addition disambiguates a value that was previously
 # only theoretical, not one any existing record actually held.
 APPROVAL_STATUSES = frozenset({"CURRENT", "STALE", "SUPERSEDED"})
-APPROVAL_BASES = frozenset({"EXTERNAL_APPROVE", "USER_OVERRIDE", "LEGACY_V1"})
+# workflow-2.8.0 (`D-GP-Satisfy`): `POLICY_SATISFIED` is an approval the
+# Workflow records itself when the gate policy makes the gate automatic and
+# every requirement is met; it names no person (its `user_confirmation` is the
+# literal `policy:<digest>`) and carries `policy_evidence`.
+POLICY_SATISFIED = "POLICY_SATISFIED"
+APPROVAL_BASES = frozenset({"EXTERNAL_APPROVE", "USER_OVERRIDE", "LEGACY_V1", POLICY_SATISFIED})
 # Narrowed per OPUS-R10-014: no_content_id removed -- the only basis that
 # uses waivers (LEGACY_V1) always backfills a real content ID at import
 # (D-Legacy), so no reachable state can ever emit it.
@@ -1031,10 +1037,12 @@ class PlanReviewNotPublishedError(Exception):
 
 class ConsumedPlanReviewContentError(Exception):
     """Raised by `publish_plan_revision` and `bind_plan_review_bundle` when
-    the content equals the `CONSUMED` record's `review_content_id`, or --
-    for a legacy marker, whose id is null -- when `plan_revision` does not
-    exceed the marker's. Content already taken out of review never
-    re-binds."""
+    the content is any `review_content_id` ever taken out of review -- the
+    `CONSUMED` slot's or one in `consumed_plan_review_content_ids`
+    (workflow-2.7.0, `v2.6.0-001`) -- or, for a legacy marker, whose id is
+    null, when `plan_revision` does not exceed the marker's. Content already
+    taken out of review never re-binds, even restored byte for byte; any
+    edit gives it a new id."""
 
 
 class LegacyPlanReviewBindingUnknownError(Exception):
@@ -1123,6 +1131,55 @@ class FeedbackNotForConsumedContentError(Exception):
     `REVISE`."""
 
 
+class FeedbackContentMismatchError(Exception):
+    """`assert_apply_review_feedback_binding`'s content binding
+    (workflow-2.7.0, `D-Apply-Binding`): the feedback's stated
+    `review_content_id` is not the content being applied -- at the plan
+    stage not the consumed one, or, at either stage, not the one the
+    reviewed bundle's `MANIFEST.md` records. Names both values. The verdict
+    is not for the round being applied, whatever its bundle fields say."""
+
+
+class ReviewBundleManifestMismatchError(Exception):
+    """`assert_apply_review_feedback_binding`'s content binding
+    (workflow-2.7.0, `D-Apply-Binding`, `MPR-R9-003`, `MPR-R10-001`): the
+    bundle directory on disk is not this item's reviewed bundle at this
+    stage -- its recomputed `bundle_id` differs from its own `MANIFEST.md`,
+    or the manifest names another work item, base commit or stage, or (at
+    the plan stage) another `review_content_id` than the consumed one.
+    Names the failing comparison and both values. Remedy: run from the
+    worktree that holds the reviewed bundle, or restore it -- never
+    regenerate it, since the feedback binds to the reviewed bundle."""
+
+
+class ImplementationReviewBundleUnverifiedError(Exception):
+    """`verify_implementation_review_bundle`'s refusal (workflow-2.7.0,
+    `LPR-R5-002`): the item's implementation-stage bundle is absent or
+    incomplete, its recomputed `bundle_id` is not its `MANIFEST.md`'s, or
+    the manifest's `review_content_id` is not the current
+    implementation-stage one -- including the stale-plan-stage-manifest
+    variant, named as such. Names the bundle path, the failing comparison
+    and both values. Remedy: regenerate the implementation bundle."""
+
+
+class ManualVerdictHeaderError(Exception):
+    """`ingest_manual_review_verdict`'s header check (workflow-2.7.0,
+    D-OP-External): the verdict lacks a field its ingest row requires --
+    `Status:`, `Reviewer role:` and a `review_content_id` label at a
+    two-stage row, `Status:` and the three binding fields at a
+    feedback-only row -- or states a `Round:` that is not a positive
+    integer. Names every missing field. Nothing is written."""
+
+
+class ConflictingReviewFeedbackError(Exception):
+    """`ingest_manual_review_verdict` at a feedback-only row
+    (workflow-2.7.0, `MPR-R7-002`): `REVIEW_FEEDBACK.md` already holds a
+    different verdict that binds to the current bundle, so a second,
+    concurrent or later ingest would silently replace a current verdict.
+    Identical bytes are the no-op; a verdict that no longer binds (an
+    earlier round's) is replaced. Nothing is written."""
+
+
 class InvalidPlanReviewBindingError(Exception):
     """Raised by `validate_state` for a malformed `plan_review_binding`
     record: an unknown `status`, a present `null`, a missing or extra key,
@@ -1172,6 +1229,20 @@ class InvalidApprovalRecordError(Exception):
     match D2's shape, including the plan-stage's permanently-null
     `reviewed_content_commit` rule (GPT-R9-006) and the `waived_guarantees`
     controlled vocabulary (OPUS-R6-025/OPUS-R10-014)."""
+
+
+class GateNotSatisfiableError(Exception):
+    """`/satisfy-gate` (workflow-2.8.0, `D-GP-Satisfy`): the gate's evaluation
+    is not `satisfiable` -- it is human, or a requirement is unmet, or the
+    wrapper is unreachable. Names the unmet requirements. Nothing was
+    written; `/approve-review` stays the human path."""
+
+
+class DistinctReviewerModelsRequiredError(Exception):
+    """`D-GP-Ingest` (`LPR-R17-001`): an `APPROVE` ingest under an automatic
+    gate whose effective `require` lists `distinct_reviewer_models` states no
+    `Reviewer model:` header line, or states a family equal to the other
+    stage's. Raised before any write; names the value and the two remedies."""
 
 
 class BlockCannotApproveError(Exception):
@@ -1243,6 +1314,70 @@ class LegacyAdoptionStaleApprovalError(Exception):
     implementation`); it never re-imports (D-Legacy phase 2, resolves
     `WFR-08`'s "no basis branch" rule applied to promotion time, not just
     import time)."""
+
+
+class LegacyRetirementWrongPhaseError(Exception):
+    """Raised when `retire_legacy_work_item` (workflow-2.9.0) names an item
+    that does not exist or whose `phase` is not exactly `LEGACY_READY`: a
+    promoted item (`AWAITING_FUNCTIONAL_REVIEW`), one already
+    `MILESTONE_COMPLETE` (retired or finished), and every other phase."""
+
+
+class LegacyRetirementActiveItemError(Exception):
+    """Raised when `retire_legacy_work_item` names the item
+    `active_work_item_id` points at. A `LEGACY_READY` item is dormant by
+    construction, so this is a defensive guard against a hand-edited pointer."""
+
+
+class LegacyRetirementUnfinishedChildrenError(Exception):
+    """Raised when `retire_legacy_work_item` names an item that still has
+    children not at `MILESTONE_COMPLETE` (`incomplete_children`)."""
+
+
+class MalformedLegacyRetirementCommitError(Exception):
+    """Raised by `validate_legacy_retirement_commit` when a commit carrying
+    the `Workflow-Legacy-Retirement` trailer is not exactly a retirement:
+    it touches a path other than the state file, changes a field other than
+    the item's `phase`, `current_checkpoint_id`, `state_revision` and
+    `last_transition`, is not a `LEGACY_READY` -> `MILESTONE_COMPLETE`
+    transition, or records no valid `Retirement-Confirmation`."""
+
+
+class AmbiguousLegacyRetirementCommitError(Exception):
+    """Raised by `discover_legacy_retirement_commit` when more than one
+    commit reachable from the head carries the retirement trailer for the
+    same work item."""
+
+
+class ResumeImplementationWrongPhaseError(Exception):
+    """Raised when `resume_implementation_state` (workflow-2.9.0) names an
+    item that does not exist or whose `phase` is not exactly
+    `AWAITING_FUNCTIONAL_REVIEW`."""
+
+
+class ResumeImplementationUnsupportedVersionError(Exception):
+    """Raised when `resume_implementation_state` names an item whose
+    governing version is not `2.1` or `2.2`: a `1` item has no resume route
+    (the open residual of `v2.6.0-003`)."""
+
+
+class ResumeImplementationRegistryTerminalError(Exception):
+    """Raised when `resume_implementation_state` finds every registry
+    checkpoint `COMPLETE` (or no registry at all): there is nothing to resume."""
+
+
+class ResumeWithoutTechnicalApprovalError(Exception):
+    """Raised when `resume_implementation_state` finds no `technical_approval`
+    record to mark `STALE`: the resume exists to invalidate a gate that was
+    passed, and a state with no such record is not one it can vouch for."""
+
+
+class MalformedResumeImplementationCommitError(Exception):
+    """Raised by `validate_resume_implementation_commit` when a commit is not
+    exactly a resume: it touches a path other than the state file, changes a
+    field outside `RESUME_IMPLEMENTATION_FIELDS` or another item, is not an
+    `AWAITING_FUNCTIONAL_REVIEW` -> `IMPLEMENTING` transition leaving the
+    technical approval `STALE`, or records no valid `Resume-Confirmation`."""
 
 
 class InvalidBundleGenerationStageError(Exception):
@@ -1794,7 +1929,7 @@ def _assert_technical_review_block_pins_monotonic(previous_state: dict, new_stat
             )
 
 
-def state_transaction(repo_root: Path, mutator, *, path: Path = DEFAULT_STATE_PATH) -> dict:
+def state_transaction(repo_root: Path, mutator, *, path: Path = DEFAULT_STATE_PATH, before_publish=None) -> dict:
     """The single required entry point for every production writer of
     `WORKFLOW_STATE.json` (item 354): holds `state_lock` across the
     **complete** critical section -- re-read `path` from disk, call
@@ -1810,12 +1945,22 @@ def state_transaction(repo_root: Path, mutator, *, path: Path = DEFAULT_STATE_PA
     from an earlier, unguarded read. Also enforces D2a's pin-ledger
     monotonicity (`_assert_technical_review_block_pins_monotonic`) against
     every candidate before it is ever published, for every caller, whether
-    or not this particular write touches that field."""
+    or not this particular write touches that field.
+
+    `before_publish` (workflow-2.7.0, `MPR-R7-002`/`MPR-R8-003`): an
+    optional callable receiving the candidate state, run inside the lock
+    after every pre-publication check and immediately before
+    `_publish_state_file` -- a check added later goes before it. An
+    exception from it aborts the transaction with nothing published.
+    `ingest_manual_review_verdict` writes its feedback file here, so the
+    file and the state it records are one critical section."""
     full_path = repo_root / path
     with state_lock(repo_root):
         state = _load_json(full_path) or {}
         new_state = mutator(state)
         _assert_technical_review_block_pins_monotonic(state, new_state)
+        if before_publish is not None:
+            before_publish(new_state)
         _publish_state_file(full_path, new_state)
     return new_state
 
@@ -2230,28 +2375,51 @@ def approval_is_current(
     return current_id == record["approved_review_content_id"]
 
 
-def implementing_entry_reachable(
+IMPLEMENTING_ENTRY_CAUSES = (
+    "plan_approval_not_current",
+    "plan_approval_commit_unreachable",
+    "plan_content_drifted",
+)
+
+
+def implementing_entry_status(
     repo_root: Path, work_item: dict, base_commit: str, head: str = "HEAD",
-) -> bool:
-    """D-Approval-Commits' `IMPLEMENTING` entry condition, in full:
+) -> dict:
+    """D-Approval-Commits' `IMPLEMENTING` entry condition, in full, with
+    the first failing condition named (workflow-2.7.0, `LPR-R3-002`):
+    `plan_approval.status == CURRENT` (else `plan_approval_not_current`);
     current HEAD (derived live) is the plan-approval commit or a
-    checkpoint-commit descendant of it, `plan_approval.status ==
-    CURRENT`, and a freshly recomputed plan-stage `review_content_id`
-    matches `plan_approval.approved_review_content_id` (missing-test item
-    9: true at checkpoints 1, 2, and N in a fresh session, since the
-    plan-approval commit stays a first-ancestor-chain ancestor of every
-    later checkpoint commit and the plan-stage projection stays
-    unchanged by them)."""
+    checkpoint-commit descendant of it (else
+    `plan_approval_commit_unreachable`); and a freshly recomputed
+    plan-stage `review_content_id` matches
+    `plan_approval.approved_review_content_id` (else
+    `plan_content_drifted`). Missing-test item 9: reachable at checkpoints
+    1, 2, and N in a fresh session, since the plan-approval commit stays a
+    first-ancestor-chain ancestor of every later checkpoint commit and the
+    plan-stage projection stays unchanged by them.
+
+    Returns `{"reachable": bool, "cause": str | None}`. `/milestone-implement`
+    step 1a and the protocol's catalogue row 22 call this one function."""
     plan_approval = work_item.get("plan_approval")
     if plan_approval is None or plan_approval.get("status") != "CURRENT":
-        return False
+        return {"reachable": False, "cause": "plan_approval_not_current"}
     approval_commit = discover_plan_approval_commit(
         repo_root, work_item["work_item_id"],
         plan_approval["approved_review_content_id"], base_commit, head,
     )
     if approval_commit is None or not _is_ancestor(repo_root, approval_commit, head):
-        return False
-    return approval_is_current(repo_root, work_item, stage="plan", base_commit=base_commit, head=head)
+        return {"reachable": False, "cause": "plan_approval_commit_unreachable"}
+    if not approval_is_current(repo_root, work_item, stage="plan", base_commit=base_commit, head=head):
+        return {"reachable": False, "cause": "plan_content_drifted"}
+    return {"reachable": True, "cause": None}
+
+
+def implementing_entry_reachable(
+    repo_root: Path, work_item: dict, base_commit: str, head: str = "HEAD",
+) -> bool:
+    """`implementing_entry_status(...)["reachable"]` -- D-Approval-Commits'
+    `IMPLEMENTING` entry condition as a boolean."""
+    return implementing_entry_status(repo_root, work_item, base_commit, head)["reachable"]
 
 
 def verify_post_approval_manifest_match(
@@ -2765,6 +2933,10 @@ def verify_plan_approval_commit(
             repo_root, commit, fingerprint.artifacts_path_for_work_item(work_item_id).as_posix(),
             journal["fifth_member_sha256"],
         )
+    # workflow-2.8.0 CP1 (D-GP-Policy): the approval commit carries the whole
+    # working-tree state, so a hand-edited adoption or a loosened floor
+    # would ride in it; apply the two content rules to this very commit.
+    assert_gate_policy_fields_unchanged_or_tightened(repo_root, commit)
     return work_item
 
 
@@ -10124,8 +10296,9 @@ def publish_plan_revision(
     - at `REVISING_PLAN`/`AMENDING_PLAN` with no record,
       `LegacyPlanReviewBindingUnknownError`; with a `BOUND` record,
       `PlanReviewBindingInconsistentError`;
-    - content equal to `consumed.review_content_id`, or -- for a legacy
-      marker -- a `plan_revision` not greater than the marker's,
+    - content equal to `consumed.review_content_id` or to any id in
+      `consumed_plan_review_content_ids` (workflow-2.7.0), or -- for a
+      legacy marker -- a `plan_revision` not greater than the marker's,
       `ConsumedPlanReviewContentError` (an early refusal that only saves a
       wasted generation; `bind` repeats it).
 
@@ -10190,7 +10363,7 @@ def _publish_plan_revision_two_stage(
             f"requires review_content_id=<the fresh plan-stage id>, got {review_content_id!r}"
         )
     record = _plan_review_binding_for_write(work_item, work_item_id)
-    _assert_not_consumed(record, work_item_id, review_content_id, plan_revision)
+    _assert_not_consumed(work_item, record, work_item_id, review_content_id, plan_revision)
 
     published = {"review_content_id": review_content_id, "plan_revision": plan_revision}
     if (
@@ -12536,6 +12709,34 @@ def work_item_completion_status(repo_root: Path, work_item: dict) -> tuple[bool,
     return (is_terminal and satisfied, outstanding_checkpoint_id, outstanding_obligations)
 
 
+def _incomplete_own_checkpoints_route(work_item: dict) -> str:
+    """The phase- and version-aware way forward `IncompleteOwnCheckpointsError`
+    names (`v2.6.0-003` (c), workflow-2.9.0 CP4). `complete_work_item` raises it
+    for every governing version and phase, so the text cannot always advise
+    `/milestone-implement`: that command cannot start a checkpoint once the item
+    has left `IMPLEMENTING`. Pure; writes no state."""
+    finding = (
+        "for a functional-review finding, use /apply-functional-review -- its bounded "
+        "branch for a same-scope fix, or its broad branch, which creates a "
+        "remediation child work item, for new or wider scope"
+    )
+    phase = work_item.get("phase")
+    version = work_item.get("governing_workflow_version")
+    if phase == "IMPLEMENTING":
+        return f"Finish it with /milestone-implement if it is still part of this milestone; {finding}"
+    if version == "1":
+        return (
+            "No command completes a checkpoint of a governing-\"1\" item, and the item "
+            "cannot be accepted until its registry is terminal (a residual of "
+            f"v2.6.0-003); {finding}"
+        )
+    return (
+        f"No command completes a checkpoint from {phase}, so /milestone-implement cannot "
+        f"finish it. A 2.1/2.2 item with a CURRENT plan approval can be returned to "
+        f"IMPLEMENTING with the user-only /resume-implementation; {finding}"
+    )
+
+
 def complete_work_item(state: dict, work_item_id: str, now: str, *, repo_root: Path) -> dict:
     """D1's completion/reset text: on `MILESTONE_COMPLETE` (or
     process-completion archival), the entry's phase becomes terminal and,
@@ -12586,11 +12787,8 @@ def complete_work_item(state: dict, work_item_id: str, now: str, *, repo_root: P
     if not is_terminal:
         raise IncompleteOwnCheckpointsError(
             f"{work_item_id!r} cannot reach MILESTONE_COMPLETE -- its own checkpoint "
-            f"{outstanding_checkpoint_id!r} is not COMPLETE. Finish it with "
-            f"/milestone-implement if it is still part of this milestone; for a "
-            f"functional-review finding, use /apply-functional-review -- its bounded "
-            f"branch for a same-scope fix, or its broad branch, which creates a "
-            f"remediation child work item, for new or wider scope"
+            f"{outstanding_checkpoint_id!r} is not COMPLETE. "
+            + _incomplete_own_checkpoints_route(work_item)
         )
 
     verdicts = resolve_completion_obligations(repo_root, work_item)
@@ -12935,6 +13133,205 @@ def plan_approval_gate_reachable(
 
 
 # ---------------------------------------------------------------------------
+# workflow-2.7.0 (`D-OP-Next`, `LPR-R1-003`, `LPR-R3-004`): the two
+# repository-aware gate wrappers. Each computes the inputs `/approve-review`
+# used to compute in its own steps, then calls the pure predicate above, and
+# names the first failing input. Read-only.
+# ---------------------------------------------------------------------------
+
+#: The causes the plan gate wrapper reports, in its evaluation order.
+PLAN_APPROVAL_GATE_CAUSES = (
+    "bundle_generation_mismatch",
+    "plan_review_bundle_unbound",
+    "bundle_unverified",
+    "no_review_round",
+    "review_blocked",
+    "review_ledger_stale",
+)
+
+#: The causes the technical gate wrapper reports, in its evaluation order.
+TECHNICAL_APPROVAL_GATE_CAUSES = (
+    "bundle_generation_mismatch",
+    "bundle_unverified",
+    "review_block_pinned",
+    "no_review_round",
+    "review_blocked",
+    "protected_path_dirty",
+    "implementation_provenance_stale",
+    "review_ledger_stale",
+)
+
+
+def read_review_feedback(repo_root: Path, work_item_id: str) -> str | None:
+    """The item's `<feedback_dir>/REVIEW_FEEDBACK.md` text, or `None` when
+    the file is absent (`resolve_feedback_dir`, `D-Feedback-Layout`)."""
+    path = Path(repo_root) / fingerprint.resolve_feedback_dir(repo_root, work_item_id) / "REVIEW_FEEDBACK.md"
+    try:
+        return path.read_text()
+    except FileNotFoundError:
+        return None
+
+
+def _gate_status(reachable: bool, cause: str | None, inputs: dict) -> dict:
+    return {"reachable": reachable, "cause": None if reachable else cause, "inputs": inputs}
+
+
+def plan_approval_gate_status(repo_root: Path, state: dict, work_item_id: str) -> dict:
+    """`AWAITING_PLAN_APPROVAL`'s gate, repository-aware (workflow-2.7.0):
+    the generation check over the plan bundle's `MANIFEST.md`
+    (`bundle_generation_mismatch`); then, for a
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` item, `assert_plan_review_bundle_bound`
+    (`plan_review_bundle_unbound`), or, for a `"1"` item, the computation of
+    the plan bundle's `bundle_id` (`bundle_unverified` on
+    `MissingRequiredBundleFileError`); then `plan_approval_gate_reachable`
+    over `latest_round_status` (from `REVIEW_FEEDBACK.md`), the ledger and
+    the current plan-stage `review_content_id` -- `no_review_round` (no
+    feedback), `review_blocked` (a status other than `REVISE`/`APPROVE`),
+    `review_ledger_stale` (the two-stage ledger does not record both
+    `APPROVE`s for the current content).
+
+    Returns `{"reachable", "cause", "inputs"}`; `reachable` is false
+    whenever a pre-predicate check refuses, and otherwise is exactly the
+    pure predicate's result over `inputs`. `/approve-review plan` calls
+    this for its gate check, so it reports the same first cause."""
+    work_item = state["work_items"][work_item_id]
+    gv = work_item.get("governing_workflow_version")
+    bundle_dir = fingerprint.resolve_bundle_dir(repo_root, work_item_id, stage="plan")
+    inputs: dict = {"governing_workflow_version": gv, "bundle_dir": bundle_dir.as_posix()}
+    try:
+        fingerprint.assert_local_generation_matches(
+            repo_root, Path(repo_root) / bundle_dir / fingerprint.MANIFEST_FILENAME)
+    except fingerprint.WorktreeOrHeadMismatchError as exc:
+        inputs["generation_check"] = str(exc)
+        return _gate_status(False, "bundle_generation_mismatch", inputs)
+    inputs["generation_check"] = "pass"
+    two_stage = gv in TWO_STAGE_PLAN_REVIEW_VERSIONS
+    if two_stage:
+        try:
+            inputs["bundle_bound_advisory"] = assert_plan_review_bundle_bound(
+                repo_root, work_item_id, state=state)
+        except (ReviewedContentDriftError, PlanReviewBundleUnverifiedError,
+                PlanReviewBindingInconsistentError, PlanReviewNotReadyError) as exc:
+            inputs["bundle_bound"] = f"{type(exc).__name__}: {exc}"
+            return _gate_status(False, "plan_review_bundle_unbound", inputs)
+        inputs["bundle_bound"] = "pass"
+    else:
+        try:
+            inputs["bundle_id"], _ = fingerprint.compute_bundle_id(Path(repo_root) / bundle_dir)
+        except fingerprint.MissingRequiredBundleFileError as exc:
+            inputs["bundle_id"] = None
+            inputs["bundle_error"] = str(exc)
+            return _gate_status(False, "bundle_unverified", inputs)
+    feedback = read_review_feedback(repo_root, work_item_id)
+    status = fingerprint.parse_review_feedback_binding_fields(feedback)["status"] if feedback is not None else None
+    current_review_content_id = (
+        fingerprint.compute_review_content_id_plan_stage_for_work_item(repo_root, work_item_id)[0]
+        if two_stage else None
+    )
+    inputs.update(
+        feedback_present=feedback is not None,
+        latest_round_status=status,
+        plan_review_stages=work_item.get("plan_review_stages"),
+        current_review_content_id=current_review_content_id,
+    )
+    reachable = plan_approval_gate_reachable(
+        latest_round_status=status, governing_workflow_version=gv,
+        plan_review_stages=work_item.get("plan_review_stages"),
+        current_review_content_id=current_review_content_id,
+    )
+    if feedback is None:
+        cause = "no_review_round"
+    elif not approval_gate_reachable(status):
+        cause = "review_blocked"
+    else:
+        cause = "review_ledger_stale"
+    return _gate_status(reachable, cause, inputs)
+
+
+def technical_approval_gate_status(repo_root: Path, state: dict, work_item_id: str) -> dict:
+    """The technical (implementation-stage) approval gate, repository-aware
+    (workflow-2.7.0): the generation check over the implementation bundle's
+    `MANIFEST.md` (`bundle_generation_mismatch`); the computation of the
+    current `bundle_id` (`bundle_unverified` on
+    `MissingRequiredBundleFileError`); then
+    `technical_approval_gate_reachable` over `pinned_block`
+    (`is_technical_review_block_pinned`), `latest_round_status` (from
+    `REVIEW_FEEDBACK.md`), `protected_path_dirty`
+    (`any_protected_path_dirty` with the implementation-stage
+    classification), `head_matches_reviewed_implementation_head`
+    (`implementation_provenance_interval_reachable`), the
+    implementation-review ledger and the current implementation-stage
+    `review_content_id` -- causes, in the predicate's own order:
+    `review_block_pinned`, `no_review_round`, `review_blocked`,
+    `protected_path_dirty`, `implementation_provenance_stale`,
+    `review_ledger_stale`.
+
+    Read-only: `/approve-review implementation` records a `BLOCK` pin
+    (`record_technical_review_block_pin`) *before* calling this, on the
+    state re-read after that write (`LPR-R2-008`)."""
+    work_item = state["work_items"][work_item_id]
+    gv = work_item.get("governing_workflow_version")
+    base_commit = work_item["base_commit"]
+    bundle_dir = fingerprint.resolve_bundle_dir(repo_root, work_item_id)
+    inputs: dict = {"governing_workflow_version": gv, "bundle_dir": bundle_dir.as_posix()}
+    try:
+        fingerprint.assert_local_generation_matches(
+            repo_root, Path(repo_root) / bundle_dir / fingerprint.MANIFEST_FILENAME)
+    except fingerprint.WorktreeOrHeadMismatchError as exc:
+        inputs["generation_check"] = str(exc)
+        return _gate_status(False, "bundle_generation_mismatch", inputs)
+    inputs["generation_check"] = "pass"
+    try:
+        bundle_id, _ = fingerprint.compute_bundle_id(Path(repo_root) / bundle_dir)
+    except fingerprint.MissingRequiredBundleFileError as exc:
+        inputs["bundle_id"] = None
+        inputs["bundle_error"] = str(exc)
+        return _gate_status(False, "bundle_unverified", inputs)
+    inputs["bundle_id"] = bundle_id
+    feedback = read_review_feedback(repo_root, work_item_id)
+    status = fingerprint.parse_review_feedback_binding_fields(feedback)["status"] if feedback is not None else None
+    pinned = is_technical_review_block_pinned(work_item, bundle_id)
+    classification = fingerprint.load_implementation_stage_classification(
+        repo_root, fingerprint.artifacts_path_for_work_item(work_item_id))
+    dirty = any_protected_path_dirty(repo_root, *classification)
+    head_matches = implementation_provenance_interval_reachable(repo_root, work_item, base_commit)
+    current_review_content_id = approval_review_content_id(
+        repo_root, stage="implementation", base_commit=base_commit,
+        work_item_type=work_item["work_item_type"], work_item_id=work_item_id, head="HEAD",
+        artifacts_path=fingerprint.artifacts_path_for_work_item(work_item_id),
+    )
+    inputs.update(
+        feedback_present=feedback is not None,
+        latest_round_status=status,
+        pinned_block=pinned,
+        protected_path_dirty=dirty,
+        head_matches_reviewed_implementation_head=head_matches,
+        implementation_review_stages=work_item.get("implementation_review_stages"),
+        current_review_content_id=current_review_content_id,
+    )
+    reachable = technical_approval_gate_reachable(
+        latest_round_status=status, protected_path_dirty=dirty,
+        head_matches_reviewed_implementation_head=head_matches, pinned_block=pinned,
+        governing_workflow_version=gv,
+        implementation_review_stages=work_item.get("implementation_review_stages"),
+        current_review_content_id=current_review_content_id,
+    )
+    if pinned:
+        cause = "review_block_pinned"
+    elif feedback is None:
+        cause = "no_review_round"
+    elif not approval_gate_reachable(status):
+        cause = "review_blocked"
+    elif dirty:
+        cause = "protected_path_dirty"
+    elif not head_matches:
+        cause = "implementation_provenance_stale"
+    else:
+        cause = "review_ledger_stale"
+    return _gate_status(reachable, cause, inputs)
+
+
+# ---------------------------------------------------------------------------
 # D2: unified plan_approval/technical_approval record -- shape, basis
 # decision, and the mechanism-independent user-only guard's second control
 # ---------------------------------------------------------------------------
@@ -12962,6 +13359,51 @@ def validate_user_confirmation(text: str, *, work_item_id: str, stage: str) -> N
     if stage not in text:
         raise UserConfirmationRejectedError(
             f"user_confirmation does not name stage {stage!r}: {text!r}"
+        )
+
+
+#: The stage words of the user-only actions that are not approvals
+#: (workflow-2.9.0): `retirement` (`/retire-legacy-work-item`) and
+#: `resumption` (`/resume-implementation`). Distinct from `APPROVAL_STAGES`,
+#: which also types the approval records and is deliberately not extended.
+USER_ONLY_ACTION_STAGES = frozenset({"retirement", "resumption"})
+
+_ID_ALPHABET = "A-Za-z0-9_-"
+
+
+def validate_user_only_confirmation(text: str, *, work_item_id: str, stage: str) -> None:
+    """The confirmation check of the user-only actions that are not approvals
+    (`/retire-legacy-work-item`, `/resume-implementation`). Stricter than
+    `validate_user_confirmation` by design: that function tests
+    `work_item_id in text`, so a confirmation naming `milestone-80` would
+    authorize `milestone-8`. Here the id must appear as an exact token (not
+    adjacent to a character of the id alphabet, case-insensitively; a full
+    stop or other punctuation after it is allowed) and the stage word as a
+    whole word. Raises `UserConfirmationRejectedError`."""
+    if stage not in USER_ONLY_ACTION_STAGES:
+        raise InvalidApprovalRecordError(f"unknown user-only action stage: {stage!r}")
+    if not isinstance(text, str) or not text.strip():
+        raise UserConfirmationRejectedError(
+            f"user_confirmation is empty -- must name work_item_id {work_item_id!r} "
+            f"and the word {stage!r}"
+        )
+    id_token = re.compile(
+        rf"(?<![{_ID_ALPHABET}]){re.escape(work_item_id)}(?![{_ID_ALPHABET}])", re.IGNORECASE)
+    if not id_token.search(text):
+        raise UserConfirmationRejectedError(
+            f"user_confirmation does not name work_item_id {work_item_id!r} as an exact token: {text!r}"
+        )
+    # The stage word must stand outside every occurrence of the item id, or an
+    # id such as `legacy-retirement` would supply the word for the other action.
+    # An id that is itself the stage word (`retirement`) is masked only at its
+    # first occurrence, so a separate, explicit stage word still counts.
+    outside_id = id_token.sub(" ", text, count=1 if work_item_id.lower() == stage.lower() else 0)
+    # The stage word takes the same id-alphabet boundary as the id: a foreign
+    # compound token (`legacy-retirement`, `retirement-2`) cannot supply it.
+    if not re.search(
+            rf"(?<![{_ID_ALPHABET}]){re.escape(stage)}(?![{_ID_ALPHABET}])", outside_id, re.IGNORECASE):
+        raise UserConfirmationRejectedError(
+            f"user_confirmation does not name {stage!r} as a whole word: {text!r}"
         )
 
 
@@ -13016,6 +13458,52 @@ def resolve_approval_basis(
     return "USER_OVERRIDE"
 
 
+POLICY_EVIDENCE_KEYS = (
+    "policy_digest", "policy_source", "file_digest", "adopted_digest", "adopted_at",
+    "requirements", "inputs", "floor_digest", "trust", "evaluated_at", "workflow_release",
+)
+POLICY_CONFIRMATION_PREFIX = "policy:"
+
+
+def validate_policy_satisfied_confirmation(value: str, policy_digest: str) -> None:
+    """`D-GP-Satisfy`: a `POLICY_SATISFIED` record's `user_confirmation` is
+    exactly the literal `policy:` plus the record's own
+    `policy_evidence.policy_digest` -- never text that claims a person."""
+    expected = f"{POLICY_CONFIRMATION_PREFIX}{policy_digest}"
+    if value != expected:
+        raise InvalidApprovalRecordError(
+            f"a {POLICY_SATISFIED} record's user_confirmation must be exactly {expected!r}, got {value!r}")
+
+
+def resolve_policy_approval_basis(state: dict, work_item_id: str, stage: str, evaluation: dict) -> str:
+    """`/satisfy-gate`'s basis decision (`D-GP-Satisfy`), the automatic
+    counterpart of `resolve_approval_basis`: keeps its `BLOCK` refusals (a
+    pinned `BLOCK` for the implementation stage, and a gate whose evaluation
+    does not hold) and returns `POLICY_SATISFIED` only for a `satisfiable`
+    evaluation of the stage's own gate. Never `USER_OVERRIDE`: a verdict that
+    is not an `APPROVE` bound to the current bundle is unmet by the
+    evaluation, so it cannot reach here satisfiable."""
+    gate_id = {"plan": "plan_approval", "implementation": "technical_approval"}.get(stage)
+    if gate_id is None:
+        raise InvalidApprovalRecordError(f"unknown approval stage for a policy approval: {stage!r}")
+    work_item = state["work_items"][work_item_id]
+    if stage == "implementation":
+        for pin in work_item.get("technical_review_block_pins") or []:
+            if pin.get("bundle_id") == evaluation.get("bundle_id"):
+                raise BlockCannotApproveError(
+                    f"{work_item_id}/{stage}: a durable BLOCK-verdict pin exists for the current "
+                    f"bundle ({pin.get('bundle_id')!r}) -- a policy approval is not reachable")
+    if evaluation.get("gate") != gate_id:
+        raise GateNotSatisfiableError(
+            f"{work_item_id}/{stage}: the evaluation is for {evaluation.get('gate')!r}, not {gate_id!r}")
+    if evaluation.get("mode") != "automatic" or not evaluation.get("satisfiable"):
+        unmet = [f"{r['id']}: {r['detail']}" for r in evaluation.get("requirements", []) if not r.get("met")]
+        raise GateNotSatisfiableError(
+            f"{work_item_id}/{stage}: the {gate_id} gate is not satisfiable by policy "
+            f"(mode {evaluation.get('mode')!r}); unmet: {unmet}. Nothing was written")
+    return POLICY_SATISFIED
+
+
 def build_approval_record(
     *, basis: str, stage: str, user_confirmation: str, now: str,
     reviewed_bundle_id: str | None = None,
@@ -13024,6 +13512,7 @@ def build_approval_record(
     reviewed_content_commit: str | None = None,
     legacy_evidence: object | None = None,
     waived_guarantees: list[str] | None = None,
+    policy_evidence: dict | None = None,
 ) -> dict:
     """Builds a D2-shaped `plan_approval`/`technical_approval` record and
     validates it before returning -- `reviewed_content_commit` is the
@@ -13041,6 +13530,10 @@ def build_approval_record(
         "waived_guarantees": list(waived_guarantees or []),
         "recorded_at": now,
     }
+    if policy_evidence is not None:
+        # Only a POLICY_SATISFIED record carries the key, so every other
+        # record's bytes are 2.7.0's (INV-1).
+        record["policy_evidence"] = policy_evidence
     validate_approval_record(record, stage=stage)
     return record
 
@@ -13129,6 +13622,19 @@ def validate_approval_record(record: dict, *, stage: str) -> None:
         raise InvalidApprovalRecordError(shape_error)
     if not record.get("user_confirmation"):
         raise InvalidApprovalRecordError("approval record must set a non-empty user_confirmation")
+    if basis == POLICY_SATISFIED:
+        evidence = record.get("policy_evidence")
+        if not isinstance(evidence, dict) or not evidence.get("policy_digest"):
+            raise InvalidApprovalRecordError(
+                "a POLICY_SATISFIED approval record must set policy_evidence with a policy_digest")
+        missing_keys = [key for key in POLICY_EVIDENCE_KEYS if key not in evidence]
+        if missing_keys:
+            raise InvalidApprovalRecordError(
+                f"policy_evidence is missing {missing_keys} (D-GP-Satisfy)")
+        validate_policy_satisfied_confirmation(record["user_confirmation"], evidence["policy_digest"])
+    elif "policy_evidence" in record and record["policy_evidence"] is not None:
+        raise InvalidApprovalRecordError(
+            f"policy_evidence belongs to a {POLICY_SATISFIED} record only, not a {basis} one")
     for guarantee in record.get("waived_guarantees") or []:
         if guarantee not in WAIVED_GUARANTEES:
             raise InvalidApprovalRecordError(f"unknown waived_guarantees entry: {guarantee!r}")
@@ -13696,7 +14202,8 @@ def record_bundle_generation(
     transition (OPUS-R101-001, widened by workflow-v2-3-followups's own
     continued scope): legality is stage-specific
     (`BUNDLE_GENERATION_LEGAL_SOURCE_PHASES_BY_STAGE`) -- `"implementation"`
-    only from `SELF_REVIEWING_IMPLEMENTATION`; `"post-fix"` from
+    only from `SELF_REVIEWING_IMPLEMENTATION` (and, for a governing-`"1"`
+    item alone, from `IMPLEMENTING`, `v2.6.0-003` (a)); `"post-fix"` from
     `APPLYING_REVIEW_FEEDBACK`, or from `AWAITING_FUNCTIONAL_REVIEW` when
     (and only when) `technical_approval.status == "STALE"`, the bounded-fix
     marker `/apply-functional-review`'s own branch writes before its first
@@ -13754,6 +14261,17 @@ def record_bundle_generation(
     work_item = new_state["work_items"][work_item_id]
     current_phase = work_item.get("phase")
     legal_phases_for_stage = BUNDLE_GENERATION_LEGAL_SOURCE_PHASES_BY_STAGE[stage]
+    # `v2.6.0-003` (a), workflow-2.9.0 CP4: the `"1"` branch of
+    # `/milestone-implement` step 4 is documented to call this from
+    # `IMPLEMENTING` (it has no `SELF_REVIEWING_IMPLEMENTATION` write), so that
+    # one source phase is legal for that one version at that one stage. Every
+    # other version and stage refuses exactly as before; the table is unchanged.
+    if (
+        stage == "implementation"
+        and current_phase == "IMPLEMENTING"
+        and work_item.get("governing_workflow_version") == "1"
+    ):
+        legal_phases_for_stage = legal_phases_for_stage | {"IMPLEMENTING"}
     if current_phase not in legal_phases_for_stage:
         raise IllegalBundleGenerationSourcePhaseError(
             f"record_bundle_generation invoked from phase {current_phase!r} for stage "
@@ -13837,6 +14355,14 @@ ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     # `implementation_review_stages` at read time, so the vocabulary is
     # rejected, not just unreached.
     "implementation_review_stages",
+    # workflow-2.8.0 CP3 (`D-GP-Compat`, `LPR-R3-002`): this item's own ingested
+    # evidence and pull-request facts sit uncommitted until its next commit.
+    # Another item's residue never reaches a commit (item-scoped staging).
+    "gate_evidence",
+    # workflow-2.8.0 CP5 (`D-GP-Reopen`, `D-GP-Compat`, `LPR-R3-002`): this
+    # item's own `reopenings` entries (and a reopen's `phase`) sit uncommitted
+    # until its next commit, exactly as its `gate_evidence` does.
+    "reopenings",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
@@ -13846,6 +14372,14 @@ RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     # republication (record_bundle_generation(outcome="same_content"), the
     # recovered role) can carry the same stale ledger residue.
     "implementation_review_stages",
+    # workflow-2.8.0 CP3 (`D-GP-Compat`, `LPR-R3-002`): this item's own ingested
+    # evidence and pull-request facts sit uncommitted until its next commit.
+    # Another item's residue never reaches a commit (item-scoped staging).
+    "gate_evidence",
+    # workflow-2.8.0 CP5 (`D-GP-Reopen`, `D-GP-Compat`, `LPR-R3-002`): this
+    # item's own `reopenings` entries (and a reopen's `phase`) sit uncommitted
+    # until its next commit, exactly as its `gate_evidence` does.
+    "reopenings",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES = (
@@ -13964,7 +14498,11 @@ def _work_item_field_diff(repo_root: Path, commit: str, work_item_id: str) -> se
     before_item = before.get("work_items", {}).get(work_item_id, {})
     after_item = after.get("work_items", {}).get(work_item_id, {})
     keys = set(before_item) | set(after_item)
-    return {k for k in keys if before_item.get(k) != after_item.get(k)}
+    # A key present with a null value differs from an absent key.
+    return {
+        k for k in keys
+        if (k in before_item) != (k in after_item) or before_item.get(k) != after_item.get(k)
+    }
 
 
 def _forbidden_state_mutation(repo_root: Path, commit: str, work_item_id: str) -> str | None:
@@ -13984,7 +14522,8 @@ def _forbidden_state_mutation(repo_root: Path, commit: str, work_item_id: str) -
     before_top = {k: v for k, v in before.items() if k != "work_items"}
     after_top = {k: v for k, v in after.items() if k != "work_items"}
     changed_top = sorted(
-        k for k in set(before_top) | set(after_top) if before_top.get(k) != after_top.get(k)
+        k for k in set(before_top) | set(after_top)
+        if (k in before_top) != (k in after_top) or before_top.get(k) != after_top.get(k)
     )
     if changed_top:
         return f"top-level field(s) {changed_top}"
@@ -13992,7 +14531,9 @@ def _forbidden_state_mutation(repo_root: Path, commit: str, work_item_id: str) -
     after_items = after.get("work_items", {})
     other_ids = (set(before_items) | set(after_items)) - {work_item_id}
     changed_others = sorted(
-        wid for wid in other_ids if before_items.get(wid) != after_items.get(wid)
+        wid for wid in other_ids
+        if (wid in before_items) != (wid in after_items)
+        or before_items.get(wid) != after_items.get(wid)
     )
     if changed_others:
         return f"other work item(s) {changed_others}"
@@ -14028,6 +14569,14 @@ TECHNICAL_APPROVAL_COMMIT_FIELDS = frozenset({
     # `implementation_review_stages` at read time, so the vocabulary is
     # rejected, not just unreached.
     "implementation_review_stages",
+    # workflow-2.8.0 CP3 (`D-GP-Compat`, `LPR-R3-002`): this item's own ingested
+    # evidence and pull-request facts sit uncommitted until its next commit.
+    # Another item's residue never reaches a commit (item-scoped staging).
+    "gate_evidence",
+    # workflow-2.8.0 CP5 (`D-GP-Reopen`, `D-GP-Compat`, `LPR-R3-002`): this
+    # item's own `reopenings` entries (and a reopen's `phase`) sit uncommitted
+    # until its next commit, exactly as its `gate_evidence` does.
+    "reopenings",
 })
 
 
@@ -14837,9 +15386,43 @@ def validate_local_plan_review_preconditions(work_item: dict) -> None:
         )
 
 
+LEDGER_AUDIT_KEYS = ("verdict_sha256", "run_ref", "reviewer_model")
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _ledger_entry(bundle_id: str, round: int, now: str, audit: dict | None) -> dict:
+    """One completed review-stage ledger entry. `audit` (workflow-2.8.0,
+    `D-GP-Gates`/`D-GP-Trust`) is `None` while the stage's gate is human, and
+    then the entry is exactly 2.7.0's bytes (INV-1); otherwise it holds
+    `verdict_sha256` and `run_ref` (possibly `None`, a declared and unverified
+    reference), plus `reviewer_model` only when one was declared."""
+    entry = {"bundle_id": bundle_id, "verdict": "APPROVE", "round": round, "completed_at": now}
+    if audit is not None:
+        entry["verdict_sha256"] = audit["verdict_sha256"]
+        entry["run_ref"] = audit.get("run_ref")
+        if audit.get("reviewer_model") is not None:
+            entry["reviewer_model"] = audit["reviewer_model"]
+    return entry
+
+
+def _validate_ledger_entry_audit(label: str, entry: dict | None) -> None:
+    if entry is None:
+        return
+    extra = [key for key in LEDGER_AUDIT_KEYS if key in entry]
+    if not extra:
+        return
+    digest = entry.get("verdict_sha256")
+    if not isinstance(digest, str) or not _SHA256_HEX_RE.match(digest):
+        raise InvalidLedgerAuditError(f"{label}.verdict_sha256 must be a sha256 hex digest, got {digest!r}")
+    if entry.get("run_ref") is not None and not isinstance(entry["run_ref"], str):
+        raise InvalidLedgerAuditError(f"{label}.run_ref must be a string or null")
+    if "reviewer_model" in entry and not (isinstance(entry["reviewer_model"], str) and entry["reviewer_model"].strip()):
+        raise InvalidLedgerAuditError(f"{label}.reviewer_model must be a non-empty string")
+
+
 def record_local_plan_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str,
-    review_content_id: str, round: int, now: str,
+    review_content_id: str, round: int, now: str, audit: dict | None = None,
 ) -> dict:
     """`/review-plan`'s sole state write set (D-Plan-Review-Stages transition
     table, resolves `GPT-R12-001`/`-002`):
@@ -14868,10 +15451,7 @@ def record_local_plan_review(
     if verdict == "APPROVE":
         work_item["plan_review_stages"] = {
             "review_content_id": review_content_id,
-            LOCAL_MODEL_PLAN_REVIEW: {
-                "bundle_id": bundle_id, "verdict": "APPROVE",
-                "round": round, "completed_at": now,
-            },
+            LOCAL_MODEL_PLAN_REVIEW: _ledger_entry(bundle_id, round, now, audit),
             MANUAL_EXTERNAL_PLAN_REVIEW: None,
         }
         work_item["phase"] = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
@@ -14969,7 +15549,7 @@ def check_manual_stage_bundle_id_advisory(
 def record_manual_plan_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str, round: int,
     now: str, current_review_content_id: str, feedback_role: str,
-    feedback_review_content_id: str,
+    feedback_review_content_id: str, audit: dict | None = None,
 ) -> dict:
     """`/record-manual-plan-review`'s sole state write set (D-Plan-Review-
     Stages transition table, resolves `GPT-R12-002`/`-003`):
@@ -14996,10 +15576,8 @@ def record_manual_plan_review(
     )
 
     if verdict == "APPROVE":
-        work_item["plan_review_stages"][MANUAL_EXTERNAL_PLAN_REVIEW] = {
-            "bundle_id": bundle_id, "verdict": "APPROVE",
-            "round": round, "completed_at": now,
-        }
+        work_item["plan_review_stages"][MANUAL_EXTERNAL_PLAN_REVIEW] = _ledger_entry(
+            bundle_id, round, now, audit)
         work_item["phase"] = "AWAITING_PLAN_APPROVAL"
     elif verdict == "REVISE":
         work_item["phase"] = "REVISING_PLAN"
@@ -15051,6 +15629,10 @@ PLAN_REVIEW_BINDING_KEYS = frozenset({"status", "at", "consumed", "published", "
 _PLAN_REVIEW_BINDING_CONSUMED_KEYS = frozenset({"review_content_id", "plan_revision", "legacy"})
 _PLAN_REVIEW_BINDING_PUBLISHED_KEYS = frozenset({"review_content_id", "plan_revision"})
 _PLAN_REVIEW_BINDING_BOUND_KEYS = frozenset({"review_content_id", "bundle_id", "plan_revision"})
+# workflow-2.7.0 (`v2.6.0-001`): the durable consumed history, a work-item
+# key outside `plan_review_binding` so that record's exact key set is
+# unchanged and a `2.6.0` reader ignores it.
+CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY = "consumed_plan_review_content_ids"
 
 # `plan_review_publication_status`'s status vocabulary, one per row group of
 # section 5.3 item 6's decision table (rows 4d and 6 refuse instead).
@@ -15224,16 +15806,56 @@ def _plan_review_binding_for_write(work_item: dict, work_item_id: str) -> dict |
     return record
 
 
-def _assert_not_consumed(record: dict | None, work_item_id: str, review_content_id: str, plan_revision: int) -> None:
+def _validate_consumed_plan_review_content_ids(work_item_id: str, work_item: dict) -> None:
+    """`validate_state`'s shape check for `consumed_plan_review_content_ids`
+    (workflow-2.7.0, `v2.6.0-001`, INV-3): absent means a `2.6.0` record,
+    whose history is its slot alone; a present value must be a sorted,
+    duplicate-free list of 64-hex ids. It need not hold the slot's id -- a
+    `2.6.0` writer after a downgrade can write a slot the list lacks, and
+    every reader takes the union."""
+    if CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY not in work_item:
+        return
+    value = work_item[CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY]
+    if (
+        not isinstance(value, list)
+        or not all(isinstance(entry, str) and _SHA256_HEX_RE.fullmatch(entry) for entry in value)
+        or value != sorted(set(value))
+    ):
+        raise InvalidPlanReviewBindingError(
+            f"work_items[{work_item_id!r}].{CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY} must be a "
+            f"sorted, duplicate-free list of 64-hex review_content_ids: {value!r}"
+        )
+
+
+def _consumed_plan_review_content_ids(work_item: dict) -> list[str]:
+    """Every `review_content_id` ever taken out of review for this item
+    (workflow-2.7.0, `v2.6.0-001`): the union of the durable
+    `consumed_plan_review_content_ids` list and the `plan_review_binding`
+    slot's non-null `consumed.review_content_id`, sorted. Migration is read
+    time only -- a `2.6.0` item with no list has the history `[slot id]`,
+    or `[]` for a legacy marker."""
+    _validate_consumed_plan_review_content_ids(work_item.get("work_item_id"), work_item)
+    history = set(work_item.get(CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY) or [])
+    record = work_item.get("plan_review_binding")
+    consumed = record.get("consumed") if isinstance(record, dict) else None
+    if isinstance(consumed, dict) and isinstance(consumed.get("review_content_id"), str):
+        history.add(consumed["review_content_id"])
+    return sorted(history)
+
+
+def _assert_not_consumed(
+    work_item: dict, record: dict | None, work_item_id: str, review_content_id: str, plan_revision: int,
+) -> None:
+    if review_content_id in _consumed_plan_review_content_ids(work_item):
+        raise ConsumedPlanReviewContentError(
+            f"{work_item_id!r}: review_content_id {review_content_id!r} is content already "
+            f"taken out of review ({CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY} or "
+            f"plan_review_binding.consumed) -- withdrawn, revised or amended content never "
+            f"re-binds, not even restored byte for byte; edit the plan, then regenerate"
+        )
     consumed = record.get("consumed") if record is not None else None
     if consumed is None:
         return
-    if consumed["review_content_id"] is not None and consumed["review_content_id"] == review_content_id:
-        raise ConsumedPlanReviewContentError(
-            f"{work_item_id!r}: review_content_id {review_content_id!r} is the content already "
-            f"taken out of review (plan_review_binding.consumed, plan_revision "
-            f"{consumed['plan_revision']}) -- it never re-binds; edit the plan, then regenerate"
-        )
     if consumed["legacy"] and plan_revision <= consumed["plan_revision"]:
         raise ConsumedPlanReviewContentError(
             f"{work_item_id!r}: the fail-closed legacy marker records no review_content_id, so "
@@ -15247,7 +15869,17 @@ def _write_consumed_plan_review_binding(
 ) -> None:
     """In-place `CONSUMED` write shared by every transition that takes
     content out of review for editing, from that transition's own inputs.
-    A null id writes the fail-closed legacy marker (`legacy: true`)."""
+    A null id writes the fail-closed legacy marker (`legacy: true`).
+
+    Also the sole writer of `consumed_plan_review_content_ids`
+    (workflow-2.7.0, `v2.6.0-001`): the slot is overwritten here, so the id
+    it held and the new one are first added to the durable history. A
+    legacy marker adds no id, and an empty history leaves the key absent."""
+    history = set(_consumed_plan_review_content_ids(work_item))
+    if review_content_id is not None:
+        history.add(review_content_id)
+    if history:
+        work_item[CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY] = sorted(history)
     work_item["plan_review_binding"] = {
         "status": PLAN_REVIEW_BINDING_CONSUMED,
         "at": now,
@@ -15325,8 +15957,9 @@ def bind_plan_review_bundle(state: dict, work_item_id: str, *, binding: dict, no
       `plan_revision` equal `published`'s and the latter equals the
       current mirror (`PlanReviewNotPublishedError` otherwise);
     - the binding's id differs from a non-null `consumed.review_content_id`
-      and, for a legacy marker, its `plan_revision` exceeds the marker's
-      (`ConsumedPlanReviewContentError`).
+      and from every id in `consumed_plan_review_content_ids`
+      (workflow-2.7.0) and, for a legacy marker, its `plan_revision`
+      exceeds the marker's (`ConsumedPlanReviewContentError`).
     A legacy mid-round item with no record refuses
     (`LegacyPlanReviewBindingUnknownError`), as does a non-ready `BOUND`
     record (`PlanReviewBindingInconsistentError`).
@@ -15366,7 +15999,7 @@ def bind_plan_review_bundle(state: dict, work_item_id: str, *, binding: dict, no
             f"{work_item_id!r} has no PUBLISHED plan_review_binding record -- publish the "
             f"completed content (publish_plan_revision) before binding a bundle of it"
         )
-    _assert_not_consumed(record, work_item_id, binding["review_content_id"], binding["plan_revision"])
+    _assert_not_consumed(work_item, record, work_item_id, binding["review_content_id"], binding["plan_revision"])
     expected = {"review_content_id": binding["review_content_id"], "plan_revision": binding["plan_revision"]}
     if (
         record["status"] != PLAN_REVIEW_BINDING_PUBLISHED
@@ -15699,6 +16332,12 @@ def plan_review_publication_status(repo_root: Path, state: dict, work_item_id: s
         consumed = record["consumed"]
         if mirror == registry_revision == consumed["plan_revision"] and fresh == consumed["review_content_id"]:
             return _row("10", PLAN_REVIEW_STATUS_NEEDS_EDIT, normal, fresh_review_content_id=fresh)
+    # workflow-2.7.0 (`v2.6.0-001`, `LPR-R1-010`): the list stores ids only,
+    # so a list hit is id-only, exactly as `_assert_not_consumed`; the slot
+    # keeps the full predicate above.
+    _validate_consumed_plan_review_content_ids(work_item_id, work_item)
+    if fresh is not None and fresh in work_item.get(CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY, []):
+        return _row("10", PLAN_REVIEW_STATUS_NEEDS_EDIT, normal, fresh_review_content_id=fresh)
     return _row("11", PLAN_REVIEW_STATUS_EDIT_IN_PROGRESS, normal, fresh_review_content_id=fresh)
 
 
@@ -15819,6 +16458,239 @@ def assert_apply_plan_review_feedback(
 
 
 # ---------------------------------------------------------------------------
+# workflow-2.7.0 (`D-Apply-Binding`, `MPR-R9-001`, `MPR-R10-001`,
+# `OD-W1-11`): a two-stage `REVISE` is applied by content.
+# ---------------------------------------------------------------------------
+
+APPLY_REVIEW_BINDING_STAGES = ("plan", "implementation")
+
+
+def _apply_review_bundle_dir(repo_root: Path, work_item_id: str, stage: str) -> Path:
+    if stage == "plan":
+        return fingerprint.resolve_bundle_dir(repo_root, work_item_id, stage="plan")
+    return fingerprint.resolve_bundle_dir(repo_root, work_item_id)
+
+
+def apply_review_feedback_binding_selection(
+    repo_root: Path, work_item: dict, work_item_id: str, *, stage: str, feedback_content: str,
+) -> str:
+    """Which binding `assert_apply_review_feedback_binding` applies:
+    `"content"` when the item is two-stage for `stage` (`gv` in
+    `TWO_STAGE_PLAN_REVIEW_VERSIONS` at the plan stage, `"2.2"` at the
+    implementation stage), the feedback's `Status:` is `REVISE`, it states a
+    `review_content_id`, the plan-stage `consumed` record is not the legacy
+    marker (the implementation stage: the phase is
+    `APPLYING_REVIEW_FEEDBACK`), and the bundle's `MANIFEST.md` states a
+    `work_item_id`; `"bundle"` otherwise. Read-only."""
+    gv = work_item.get("governing_workflow_version")
+    if stage == "plan":
+        if gv not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+            return "bundle"
+        record = _plan_review_binding_record(work_item, work_item_id)
+        consumed = record.get("consumed") if record is not None else None
+        if consumed is None or consumed["legacy"]:
+            return "bundle"
+    else:
+        if gv != "2.2" or work_item.get("phase") != "APPLYING_REVIEW_FEEDBACK":
+            return "bundle"
+    fields = fingerprint.parse_review_feedback_header(feedback_content)
+    if fields.get("status") != "REVISE" or fields.get("review_content_id") is None:
+        return "bundle"
+    manifest_path = Path(repo_root) / _apply_review_bundle_dir(repo_root, work_item_id, stage) / fingerprint.MANIFEST_FILENAME
+    if fingerprint._read_manifest_binding_fields(manifest_path)["work_item_id"] is None:
+        return "bundle"
+    return "content"
+
+
+def assert_apply_review_feedback_binding(
+    repo_root: Path, work_item: dict, work_item_id: str, *, stage: str, feedback_content: str,
+) -> dict:
+    """`/apply-plan-review` step 1 (in `"bundle"` mode) and
+    `/apply-implementation-review` step 1's binding of the feedback being
+    applied (workflow-2.7.0, `D-Apply-Binding`). Reads the state and the
+    bundle, writes nothing. Selects a binding
+    (`apply_review_feedback_binding_selection`):
+
+    - **content** -- a two-stage `REVISE` that states a `review_content_id`,
+      checked in order: (1) a present `Work item:` naming another item
+      refuses (`FeedbackBundleMismatchError`); (2) at the plan stage, the
+      feedback's `review_content_id` must be the consumed one
+      (`FeedbackContentMismatchError`); (3) the bundle's `bundle_id` is
+      computed (`MissingRequiredBundleFileError`) and must equal its own
+      `MANIFEST.md`'s, whose `work_item_id` must be this item, whose
+      `base_commit` (when present) must be the item's, whose `stage` must
+      be this stage, and -- at the plan stage -- whose `review_content_id`
+      must be the consumed one (`ReviewBundleManifestMismatchError`); (4)
+      the feedback's `review_content_id` must equal the manifest's
+      (`FeedbackContentMismatchError`). `Reviewed bundle ID:` and
+      `Reviewed base commit:` are not compared: a present, differing value
+      is reported as the advisory.
+    - **bundle** -- exactly 2.6.0's `assert_feedback_matches_bundle`
+      against the recomputed `bundle_id`, the item's `base_commit` and its
+      id (`MissingRequiredBundleFileError` when the bundle cannot be
+      hashed).
+
+    Every refusal carries a `binding` attribute naming the selected
+    binding, and a `bundle_id` attribute: the bundle binding's recomputed
+    `bundle_id`, or `None` where none was computed. Returns `{binding, bundle_id, review_content_id, advisory}`."""
+    if stage not in APPLY_REVIEW_BINDING_STAGES:
+        raise ValueError(f"unknown apply-review binding stage {stage!r}")
+    binding = apply_review_feedback_binding_selection(
+        repo_root, work_item, work_item_id, stage=stage, feedback_content=feedback_content)
+    bundle_id = None
+    try:
+        if binding == "content":
+            return _content_bound_apply_review_feedback(
+                repo_root, work_item, work_item_id, stage=stage, feedback_content=feedback_content)
+        bundle_dir = Path(repo_root) / _apply_review_bundle_dir(repo_root, work_item_id, stage)
+        bundle_id, _ = fingerprint.compute_bundle_id(bundle_dir)
+        fingerprint.assert_feedback_matches_bundle(
+            fingerprint.parse_review_feedback_binding_fields(feedback_content),
+            bundle_id=bundle_id, base_commit=work_item["base_commit"], work_item_id=work_item_id,
+        )
+        return {
+            "binding": "bundle", "bundle_id": bundle_id,
+            "review_content_id": fingerprint.parse_feedback_review_content_id(feedback_content),
+            "advisory": None,
+        }
+    except Exception as exc:
+        exc.binding = binding
+        exc.bundle_id = bundle_id
+        raise
+
+
+def _content_bound_apply_review_feedback(
+    repo_root: Path, work_item: dict, work_item_id: str, *, stage: str, feedback_content: str,
+) -> dict:
+    fields = fingerprint.parse_review_feedback_header(feedback_content)
+    feedback_content_id = fields["review_content_id"]
+    named = fields.get("work_item")
+    if named is not None and named != work_item_id:
+        raise fingerprint.FeedbackBundleMismatchError(
+            f"feedback names work item {named!r}, expected {work_item_id!r}"
+        )
+    consumed_id = None
+    if stage == "plan":
+        consumed_id = _plan_review_binding_record(work_item, work_item_id)["consumed"]["review_content_id"]
+        if feedback_content_id != consumed_id:
+            raise FeedbackContentMismatchError(
+                f"{work_item_id!r}: the feedback's review_content_id {feedback_content_id!r} is not "
+                f"the consumed content {consumed_id!r} -- the verdict is not for the round being applied"
+            )
+    bundle_rel = _apply_review_bundle_dir(repo_root, work_item_id, stage)
+    bundle_dir = Path(repo_root) / bundle_rel
+    manifest_path = bundle_dir / fingerprint.MANIFEST_FILENAME
+    bundle_id, _ = fingerprint.compute_bundle_id(bundle_dir)
+    manifest = fingerprint.read_plan_stage_manifest_fields(manifest_path)
+    manifest_base_commit = fingerprint._read_manifest_binding_fields(manifest_path)["base_commit"]
+    comparisons = [
+        ("bundle_id", manifest.get("bundle_id"), bundle_id, "the recomputed bundle_id of the directory"),
+        ("work_item_id", manifest.get("work_item_id"), work_item_id, "this work item"),
+        ("stage", manifest.get("stage"), stage, f"the {stage} stage"),
+    ]
+    if manifest_base_commit is not None:
+        comparisons.append(("base_commit", manifest_base_commit, work_item["base_commit"], "the item's base_commit"))
+    if stage == "plan":
+        comparisons.append(("review_content_id", manifest.get("review_content_id"), consumed_id, "the consumed content"))
+    for field, recorded, expected, what in comparisons:
+        if recorded != expected:
+            note = (
+                " -- the manifest names another work item; the flat .ai-review/current/ is shared, so "
+                "this is another item's bundle"
+                if field == "work_item_id" else ""
+            )
+            raise ReviewBundleManifestMismatchError(
+                f"{work_item_id!r}: {bundle_rel.as_posix()}/MANIFEST.md records {field} {recorded!r}, "
+                f"not {what} ({expected!r}) -- the directory is not this item's reviewed {stage} "
+                f"bundle{note}"
+            )
+    manifest_content_id = manifest.get("review_content_id")
+    if feedback_content_id != manifest_content_id:
+        raise FeedbackContentMismatchError(
+            f"{work_item_id!r}: the feedback's review_content_id {feedback_content_id!r} is not the "
+            f"reviewed bundle's {manifest_content_id!r} ({bundle_rel.as_posix()}/MANIFEST.md)"
+        )
+    advisories = []
+    if fields.get("reviewed_bundle_id") is not None and fields["reviewed_bundle_id"] != bundle_id:
+        advisories.append(check_manual_stage_bundle_id_advisory(fields["reviewed_bundle_id"], bundle_id))
+    if fields.get("reviewed_base_commit") is not None and fields["reviewed_base_commit"] != work_item["base_commit"]:
+        advisories.append(
+            f"base commit mismatch (advisory only, the verdict is bound by content): feedback "
+            f"base_commit={fields['reviewed_base_commit']!r}, the item's base_commit="
+            f"{work_item['base_commit']!r}"
+        )
+    return {
+        "binding": "content", "bundle_id": bundle_id, "review_content_id": feedback_content_id,
+        "advisory": "; ".join(advisories) if advisories else None,
+    }
+
+
+def verify_implementation_review_bundle(repo_root: Path, work_item_id: str, *, state: dict | None = None) -> dict:
+    """`/review-implementation` step 4's bundle check as one read-only
+    function (workflow-2.7.0, `LPR-R5-002`), over the item's resolved
+    implementation-stage bundle directory: `MANIFEST.md` is present;
+    `compute_bundle_id` succeeds; the recomputed `bundle_id` equals the
+    manifest's; and the manifest's `review_content_id` equals the current
+    implementation-stage `review_content_id`, computed commit-source at
+    `HEAD` (`approval_review_content_id(..., stage="implementation",
+    base_commit=work_item["base_commit"], head="HEAD")`). Any failure
+    raises `ImplementationReviewBundleUnverifiedError`, naming the bundle
+    path, the failing comparison and both values -- and the
+    stale-plan-stage-manifest variant by name when the manifest records
+    `stage: plan`. Does not compare the archive, and does not run
+    `assert_local_generation_matches`, which catches a different failure.
+    Returns `{bundle_id, review_content_id}`. `state`, if given, supplies
+    the work item; otherwise it is read from the worktree."""
+    if state is None:
+        state = _load_json(Path(repo_root) / DEFAULT_STATE_PATH)
+    work_item = state["work_items"][work_item_id]
+    bundle_rel = fingerprint.resolve_bundle_dir(repo_root, work_item_id)
+    bundle_dir = Path(repo_root) / bundle_rel
+    manifest_path = bundle_dir / fingerprint.MANIFEST_FILENAME
+
+    def _unverified(detail: str) -> ImplementationReviewBundleUnverifiedError:
+        return ImplementationReviewBundleUnverifiedError(
+            f"{work_item_id!r}'s implementation-review bundle ({bundle_rel.as_posix()}) does not verify: {detail}"
+        )
+
+    if not manifest_path.is_file():
+        raise _unverified(
+            f"no MANIFEST.md -- no implementation bundle has been generated here (candidates: "
+            f".ai-review/{work_item_id}/current/ and .ai-review/current/); regenerate it"
+        )
+    try:
+        ondisk_bundle_id, _ = fingerprint.compute_bundle_id(bundle_dir)
+    except fingerprint.MissingRequiredBundleFileError as exc:
+        raise _unverified(f"the bundle is incomplete ({exc})") from exc
+    fields = fingerprint.read_plan_stage_manifest_fields(manifest_path)
+    if fields.get("stage") == "plan":
+        raise _unverified(
+            f"MANIFEST.md records stage: plan -- the stale-plan-stage-manifest variant: an "
+            f"implementation-stage bundle written into a directory that holds a plan-stage manifest "
+            f"compares today's implementation-stage content against a stale plan-stage identity "
+            f"(manifest review_content_id {fields.get('review_content_id')!r})"
+        )
+    recorded_bundle_id = fields.get("bundle_id")
+    if recorded_bundle_id != ondisk_bundle_id:
+        raise _unverified(
+            f"bundle_id: MANIFEST.md records {recorded_bundle_id!r}, the directory hashes to "
+            f"{ondisk_bundle_id!r}"
+        )
+    current = approval_review_content_id(
+        repo_root, stage="implementation", base_commit=work_item["base_commit"],
+        work_item_type=work_item["work_item_type"], work_item_id=work_item_id, head="HEAD",
+        artifacts_path=fingerprint.artifacts_path_for_work_item(work_item_id),
+    )
+    recorded_content_id = fields.get("review_content_id")
+    if recorded_content_id != current:
+        raise _unverified(
+            f"review_content_id: MANIFEST.md records {recorded_content_id!r}, the current "
+            f"implementation-stage review_content_id is {current!r}"
+        )
+    return {"bundle_id": ondisk_bundle_id, "review_content_id": recorded_content_id}
+
+
+# ---------------------------------------------------------------------------
 # workflow-2.5.0 CP3: D-Implementation-Review-Stages -- two-stage
 # local-then-manual-external *implementation*-review protocol's ledger
 # writers and gate widening, mirroring WF4a-iv's plan-review-stage section
@@ -15869,7 +16741,7 @@ def validate_local_implementation_review_preconditions(work_item: dict) -> None:
 
 def record_local_implementation_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str,
-    review_content_id: str, round: int, now: str,
+    review_content_id: str, round: int, now: str, audit: dict | None = None,
 ) -> dict:
     """`/review-implementation`'s sole state write set in its `"2.2"`
     authoritative role (D-Implementation-Review-Stages transition table),
@@ -15904,10 +16776,7 @@ def record_local_implementation_review(
     if verdict == "APPROVE":
         work_item["implementation_review_stages"] = {
             "review_content_id": review_content_id,
-            LOCAL_MODEL_IMPLEMENTATION_REVIEW: {
-                "bundle_id": bundle_id, "verdict": "APPROVE",
-                "round": round, "completed_at": now,
-            },
+            LOCAL_MODEL_IMPLEMENTATION_REVIEW: _ledger_entry(bundle_id, round, now, audit),
             MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW: None,
         }
         work_item["phase"] = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
@@ -15986,7 +16855,7 @@ def validate_manual_implementation_review_preconditions(
 def record_manual_implementation_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str, round: int,
     now: str, current_review_content_id: str, feedback_role: str,
-    feedback_review_content_id: str,
+    feedback_review_content_id: str, audit: dict | None = None,
 ) -> dict:
     """`/record-manual-implementation-review`'s sole state write set
     (D-Implementation-Review-Stages transition table), mirroring
@@ -16022,10 +16891,8 @@ def record_manual_implementation_review(
     )
 
     if verdict == "APPROVE":
-        work_item["implementation_review_stages"][MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW] = {
-            "bundle_id": bundle_id, "verdict": "APPROVE",
-            "round": round, "completed_at": now,
-        }
+        work_item["implementation_review_stages"][MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW] = _ledger_entry(
+            bundle_id, round, now, audit)
         work_item["phase"] = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
     elif verdict == "REVISE":
         work_item["phase"] = "APPLYING_REVIEW_FEEDBACK"
@@ -16036,6 +16903,356 @@ def record_manual_implementation_review(
     work_item["last_transition"] = now
     _validate_implementation_review_stages(work_item)
     return new_state
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.7.0 (ORCHESTRATION_PROTOCOL_V1_PLAN.md, D-OP-External, CP5): the
+# one ingest of a manual external review verdict, shared by
+# `/record-manual-plan-review`, `/record-manual-implementation-review` and
+# the orchestration protocol's `record-external-result`. One row of the
+# ingest table is selected from the item's stage, governing version and
+# phase; its guards run in 2.6.0's command order, on the state re-read under
+# `state_lock`, and the feedback file and the state are written in that same
+# critical section (`MPR-R7-002`).
+# ---------------------------------------------------------------------------
+
+MANUAL_VERDICT_STAGES = ("plan", "implementation")
+
+_MANUAL_VERDICT_ROUND_RE = re.compile(r"^Round:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
+_POSITIVE_INTEGER_RE = re.compile(r"^[1-9][0-9]*$")
+
+#: The advisory reported when a two-stage verdict names no bundle
+#: (`LPR-R3-005`): `bundle_id` is recorded as `null`.
+ABSENT_REVIEWED_BUNDLE_ID_ADVISORY = "Reviewed bundle ID: absent"
+
+
+def _manual_verdict_row_is_two_stage(work_item: dict, *, stage: str, two_stage_only: bool) -> bool:
+    """Whether `stage`'s ingest row for this item's governing version is a
+    two-stage row; refuses an unmatched version (see
+    `select_manual_verdict_row`). The governing version alone decides it."""
+    if stage not in MANUAL_VERDICT_STAGES:
+        raise ValueError(f"unknown manual verdict stage {stage!r}")
+    version = work_item.get("governing_workflow_version")
+    if stage == "plan":
+        if version in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+            return True
+        if version == "1" and not two_stage_only:
+            return False
+        _require_v2_1_plan_review(work_item)
+    if version == "2.2":
+        return True
+    if version in ("1", "2.1") and not two_stage_only:
+        return False
+    _require_implementation_review_stage_version(work_item)
+    raise AssertionError("unreachable")
+
+
+_MANUAL_VERDICT_ROW_PHASES = {
+    ("plan", True): "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+    ("plan", False): "AWAITING_EXTERNAL_PLAN_REVIEW",
+    ("implementation", True): "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    ("implementation", False): "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+}
+
+
+def select_manual_verdict_row(work_item: dict, *, stage: str, two_stage_only: bool = False) -> dict:
+    """D-OP-External's row selection for `ingest_manual_review_verdict`:
+    `{stage, two_stage, phase}`, where `phase` is the row's accepted phase.
+    The two-stage rows are the plan stage at `TWO_STAGE_PLAN_REVIEW_VERSIONS`
+    and the implementation stage at `"2.2"`; the feedback-only rows are the
+    plan stage at `"1"` and the implementation stage at `"1"`/`"2.1"`.
+
+    `two_stage_only` is the record-manual commands' 2.6.0 governing-version
+    guard: a feedback-only item refuses with
+    `WrongGoverningVersionForPlanReviewStageError`/
+    `WrongGoverningVersionForImplementationReviewStageError`, as any other
+    unmatched governing version does. A matched version at another phase
+    refuses with `WrongPhaseForPlanReviewStageError`/
+    `WrongPhaseForImplementationReviewStageError`. The protocol reports
+    each of these as `not_applicable`."""
+    two_stage = _manual_verdict_row_is_two_stage(work_item, stage=stage, two_stage_only=two_stage_only)
+    phase = _MANUAL_VERDICT_ROW_PHASES[(stage, two_stage)]
+    if work_item.get("phase") != phase:
+        wrong_phase = WrongPhaseForPlanReviewStageError if stage == "plan" else WrongPhaseForImplementationReviewStageError
+        raise wrong_phase(
+            f"{work_item['work_item_id']}: phase is {work_item.get('phase')!r}, not {phase!r} -- no "
+            f"{stage}-stage manual verdict is accepted at governing version "
+            f"{work_item.get('governing_workflow_version')!r} in this phase"
+        )
+    return {"stage": stage, "two_stage": two_stage, "phase": phase}
+
+
+def parse_manual_verdict(verdict_text: str) -> dict:
+    """The verdict's fields, by the Workflow's verdict parser
+    (`parse_review_feedback_header`, `D-Feedback-Label`), plus `round`: the
+    text of a header-block `Round:` line, or `None` when absent. Reads no
+    state and refuses nothing; `require_manual_verdict_fields` checks them
+    against the selected row."""
+    fields = fingerprint.parse_review_feedback_header(verdict_text)
+    round_match = _MANUAL_VERDICT_ROUND_RE.search(fingerprint.feedback_header_block(verdict_text))
+    fields["round"] = round_match.group(1) if round_match is not None else None
+    return fields
+
+
+def require_manual_verdict_fields(fields: dict, *, two_stage: bool) -> dict:
+    """Refuses with `ManualVerdictHeaderError` when a field the row
+    requires is missing -- `Status:`, `Reviewer role:` and a
+    `review_content_id` label at a two-stage row (the three values 2.6.0's
+    commands hard-checked); `Status:` and the three binding fields at a
+    feedback-only row -- or, at a two-stage row, when `Round:` is present
+    but not a positive integer. Returns `fields` with `round` an `int` or
+    `None` (always `None` at a feedback-only row, which records no round)."""
+    if two_stage:
+        required = ("status", "reviewer_role", "review_content_id")
+    else:
+        required = ("status", "reviewed_bundle_id", "reviewed_base_commit", "work_item")
+    labels = {
+        "status": "Status:", "reviewer_role": "Reviewer role:",
+        "review_content_id": f"a review_content_id label ({fingerprint.FEEDBACK_REVIEW_CONTENT_ID_LABEL}) "
+                             f"in the header block, before the first '## ' section that follows a field",
+        "reviewed_bundle_id": "Reviewed bundle ID:", "reviewed_base_commit": "Reviewed base commit:",
+        "work_item": "Work item:",
+    }
+    missing = [labels[key] for key in required if fields.get(key) is None]
+    if missing:
+        raise ManualVerdictHeaderError(
+            f"the verdict is missing {', '.join(missing)} -- required at a "
+            f"{'two-stage' if two_stage else 'feedback-only'} ingest row. Nothing was written"
+        )
+    if not two_stage:
+        return dict(fields, round=None)
+    stated_round = fields.get("round")
+    if stated_round is not None and not isinstance(stated_round, int):
+        if not _POSITIVE_INTEGER_RE.match(stated_round):
+            raise ManualVerdictHeaderError(
+                f"the verdict states Round: {stated_round!r}, not a positive integer. Nothing was written"
+            )
+        fields = dict(fields, round=int(stated_round))
+    return fields
+
+
+def _write_review_feedback_atomically(path: Path, text: str) -> None:
+    """`text` to `path` through a same-directory temporary file and
+    `os.replace`, so a reader sees the old file or the new one, never a
+    partial write."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
+def _store_manual_verdict(repo_root: Path, work_item_id: str, verdict_text: str, *, state: dict) -> bool:
+    """D-OP-External step 5: writes the verdict to the resolved
+    `<feedback_dir>/REVIEW_FEEDBACK.md` under the feedback-ownership guard.
+    Identical bytes are the no-op (returns `False`)."""
+    path = Path(repo_root) / fingerprint.resolve_feedback_dir(repo_root, work_item_id) / "REVIEW_FEEDBACK.md"
+    existing = read_review_feedback(repo_root, work_item_id)
+    if existing == verdict_text:
+        return False
+    fingerprint.assert_feedback_not_owned_by_other_work_item(existing, work_item_id=work_item_id, state=state)
+    _write_review_feedback_atomically(path, verdict_text)
+    return True
+
+
+def _manual_verdict_bundle_advisory(feedback_bundle_id: str | None, current_bundle_id: str) -> str | None:
+    if feedback_bundle_id is None:
+        return ABSENT_REVIEWED_BUNDLE_ID_ADVISORY
+    return check_manual_stage_bundle_id_advisory(feedback_bundle_id, current_bundle_id)
+
+
+def _join_advisories(*advisories: str | None) -> str | None:
+    present = [advisory for advisory in advisories if advisory]
+    return "; ".join(present) if present else None
+
+
+def _two_stage_manual_verdict_guards(repo_root: Path, state: dict, work_item_id: str, *, stage: str,
+                                     verdict_text: str, fields: dict) -> dict:
+    """The two-stage rows' guards, in 2.6.0's command order, except the
+    final `assert_bundle_not_rejected`. Returns the recomputed content and
+    bundle ids and the advisory."""
+    work_item = state["work_items"][work_item_id]
+    fingerprint.assert_manual_feedback_names_work_item(verdict_text, work_item_id=work_item_id)
+    if stage == "plan":
+        bundle_rel = fingerprint.resolve_bundle_dir(repo_root, work_item_id, stage="plan")
+        fingerprint.assert_local_generation_matches(
+            repo_root, Path(repo_root) / bundle_rel / fingerprint.MANIFEST_FILENAME)
+        fingerprint.assert_bundle_not_rejected(repo_root, work_item_id)
+        bound_advisory = assert_plan_review_bundle_bound(repo_root, work_item_id, state=state)
+        current_content_id, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(
+            repo_root, work_item_id)
+        validate_manual_plan_review_preconditions(
+            work_item, current_review_content_id=current_content_id, feedback_role=fields["reviewer_role"],
+            feedback_review_content_id=fields["review_content_id"],
+        )
+        current_bundle_id, _ = fingerprint.compute_bundle_id(Path(repo_root) / bundle_rel)
+    else:
+        bound_advisory = None
+        verified = verify_implementation_review_bundle(repo_root, work_item_id, state=state)
+        bundle_rel = fingerprint.resolve_bundle_dir(repo_root, work_item_id)
+        fingerprint.assert_local_generation_matches(
+            repo_root, Path(repo_root) / bundle_rel / fingerprint.MANIFEST_FILENAME)
+        fingerprint.assert_bundle_not_rejected(repo_root, work_item_id)
+        current_content_id = verified["review_content_id"]
+        validate_manual_implementation_review_preconditions(
+            work_item, current_review_content_id=current_content_id, feedback_role=fields["reviewer_role"],
+            feedback_review_content_id=fields["review_content_id"],
+        )
+        current_bundle_id = verified["bundle_id"]
+    return {
+        "review_content_id": current_content_id,
+        "advisory": _join_advisories(
+            bound_advisory, _manual_verdict_bundle_advisory(fields["reviewed_bundle_id"], current_bundle_id)),
+    }
+
+
+def _local_approval_round(work_item: dict, stage: str) -> int:
+    if stage == "plan":
+        return normalize_plan_review_stages(work_item["plan_review_stages"])[LOCAL_MODEL_PLAN_REVIEW]["round"]
+    stages = normalize_implementation_review_stages(work_item["implementation_review_stages"])
+    return stages[LOCAL_MODEL_IMPLEMENTATION_REVIEW]["round"]
+
+
+def ingest_manual_review_verdict(
+    repo_root: Path, work_item_id: str, *, stage: str, verdict_text: str, now: str,
+    two_stage_only: bool = False, run_ref: str | None = None,
+) -> dict:
+    """The one ingest of a manual external review verdict (workflow-2.7.0,
+    D-OP-External), called with the verdict's text by
+    `/record-manual-plan-review` and `/record-manual-implementation-review`
+    (`two_stage_only=True`, their 2.6.0 governing-version guard) and by the
+    orchestration protocol's `record-external-result`. In order:
+
+    1. parses the verdict (`parse_manual_verdict`, reading no state);
+    2. holds `state_lock` through step 6, so the steps below read the state
+       fresh and no other ingest or state writer runs between them;
+    3. selects the ingest row (`select_manual_verdict_row`) and checks its
+       required fields (`ManualVerdictHeaderError`);
+    4. runs the row's guards in order, the last `assert_bundle_not_rejected`
+       immediately before step 5. A two-stage row then computes
+       `record_manual_plan_review`/`record_manual_implementation_review`,
+       which is pure, so a refusal of the writer also precedes any write;
+    5. writes `verdict_text` to `<feedback_dir>/REVIEW_FEEDBACK.md`
+       atomically, under `assert_feedback_not_owned_by_other_work_item`;
+       identical bytes are the no-op. A feedback-only row first refuses a
+       different verdict that already binds to the current bundle
+       (`ConflictingReviewFeedbackError`);
+    6. a two-stage row publishes the state of step 4 through
+       `state_transaction` (steps 3-4 are its mutator, step 5 its
+       `before_publish`); a feedback-only row writes no state.
+
+    The guards: a two-stage plan row runs
+    `assert_manual_feedback_names_work_item`, `assert_local_generation_matches`,
+    `assert_bundle_not_rejected`, `assert_plan_review_bundle_bound`,
+    `validate_manual_plan_review_preconditions` and
+    `check_manual_stage_bundle_id_advisory`; the implementation row runs
+    `verify_implementation_review_bundle` in place of the bound check,
+    before `assert_local_generation_matches`, with
+    `validate_manual_implementation_review_preconditions`. A feedback-only
+    row runs `assert_manual_feedback_names_work_item`,
+    `assert_bundle_not_rejected` and `assert_feedback_matches_bundle`
+    against the current bundle.
+
+    `round` is the verdict's `Round:`, else the round of the local
+    `APPROVE` of the same content; `bundle_id` is its `Reviewed bundle ID:`,
+    recorded verbatim, else `null` with the advisory
+    `"Reviewed bundle ID: absent"` and no advisory check. Both are `None` at
+    a feedback-only row. Returns `{stage, verdict, review_content_id, round,
+    bundle_id, advisory, feedback_written}`."""
+    repo_root = Path(repo_root)
+    parsed = parse_manual_verdict(verdict_text)
+    peek = (_load_json(repo_root / DEFAULT_STATE_PATH) or {})["work_items"][work_item_id]
+    two_stage = _manual_verdict_row_is_two_stage(peek, stage=stage, two_stage_only=two_stage_only)
+    if two_stage:
+        return _ingest_two_stage_manual_verdict(
+            repo_root, work_item_id, stage=stage, verdict_text=verdict_text, parsed=parsed, now=now,
+            two_stage_only=two_stage_only, run_ref=run_ref)
+    return _ingest_feedback_only_verdict(
+        repo_root, work_item_id, stage=stage, verdict_text=verdict_text, parsed=parsed)
+
+
+def _ingest_two_stage_manual_verdict(repo_root: Path, work_item_id: str, *, stage: str, verdict_text: str,
+                                     parsed: dict, now: str, two_stage_only: bool,
+                                     run_ref: str | None = None) -> dict:
+    outcome: dict = {}
+
+    def mutator(state: dict) -> dict:
+        work_item = state["work_items"][work_item_id]
+        row = select_manual_verdict_row(work_item, stage=stage, two_stage_only=two_stage_only)
+        if not row["two_stage"]:
+            raise AssertionError(f"{work_item_id}'s ingest row changed under the lock: {row!r}")
+        fields = require_manual_verdict_fields(parsed, two_stage=True)
+        guarded = _two_stage_manual_verdict_guards(
+            repo_root, state, work_item_id, stage=stage, verdict_text=verdict_text, fields=fields)
+        fingerprint.assert_bundle_not_rejected(repo_root, work_item_id)
+        assert_ingest_reviewer_model_admissible(
+            repo_root, state, work_item_id, stage=stage, verdict=fields["status"], verdict_text=verdict_text)
+        audit = (review_stage_audit(repo_root, state, work_item_id, stage, verdict_text, run_ref=run_ref)
+                 if fields["status"] == "APPROVE" else None)
+        round_ = fields["round"] if fields["round"] is not None else _local_approval_round(work_item, stage)
+        writer = record_manual_plan_review if stage == "plan" else record_manual_implementation_review
+        new_state = writer(
+            state, work_item_id, verdict=fields["status"], bundle_id=fields["reviewed_bundle_id"], round=round_,
+            now=now, current_review_content_id=guarded["review_content_id"],
+            feedback_role=fields["reviewer_role"], feedback_review_content_id=fields["review_content_id"],
+            audit=audit,
+        )
+        outcome.update({
+            "stage": stage, "verdict": fields["status"], "review_content_id": guarded["review_content_id"],
+            "round": round_, "bundle_id": fields["reviewed_bundle_id"], "advisory": guarded["advisory"],
+            "_state": state,
+        })
+        return new_state
+
+    def before_publish(new_state: dict) -> None:
+        outcome["feedback_written"] = _store_manual_verdict(
+            repo_root, work_item_id, verdict_text, state=outcome.pop("_state"))
+
+    state_transaction(repo_root, mutator, before_publish=before_publish)
+    return outcome
+
+
+def _ingest_feedback_only_verdict(repo_root: Path, work_item_id: str, *, stage: str, verdict_text: str,
+                                  parsed: dict) -> dict:
+    with state_lock(repo_root):
+        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+        work_item = state["work_items"][work_item_id]
+        row = select_manual_verdict_row(work_item, stage=stage)
+        if row["two_stage"]:
+            raise AssertionError(f"{work_item_id}'s ingest row changed under the lock: {row!r}")
+        fields = require_manual_verdict_fields(parsed, two_stage=False)
+        fingerprint.assert_manual_feedback_names_work_item(verdict_text, work_item_id=work_item_id)
+        fingerprint.assert_bundle_not_rejected(repo_root, work_item_id)
+        bundle_rel = fingerprint.resolve_bundle_dir(
+            repo_root, work_item_id, stage="plan" if stage == "plan" else None)
+        bundle_id, _ = fingerprint.compute_bundle_id(repo_root / bundle_rel)
+        binding = {"bundle_id": bundle_id, "base_commit": work_item["base_commit"], "work_item_id": work_item_id}
+        fingerprint.assert_feedback_matches_bundle(fields, **binding)
+        existing = read_review_feedback(repo_root, work_item_id)
+        if existing is not None and existing != verdict_text:
+            try:
+                fingerprint.assert_feedback_matches_bundle(
+                    fingerprint.parse_review_feedback_binding_fields(existing), **binding)
+            except (fingerprint.MissingFeedbackBindingFieldError, fingerprint.FeedbackBundleMismatchError):
+                pass
+            else:
+                raise ConflictingReviewFeedbackError(
+                    f"{work_item_id}: REVIEW_FEEDBACK.md already holds a different verdict for the current "
+                    f"bundle {bundle_id} (Status: "
+                    f"{fingerprint.parse_review_feedback_binding_fields(existing)['status']}) -- refusing to "
+                    f"replace a current verdict. Nothing was written"
+                )
+        written = _store_manual_verdict(repo_root, work_item_id, verdict_text, state=state)
+    return {
+        "stage": stage, "verdict": fields["status"], "review_content_id": fields["review_content_id"],
+        "round": None, "bundle_id": None, "advisory": None, "feedback_written": written,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -16246,6 +17463,313 @@ def promote_legacy_work_item(
 
 
 # ---------------------------------------------------------------------------
+# workflow-2.9.0: retiring a dormant legacy item (D-Retire)
+# ---------------------------------------------------------------------------
+
+LEGACY_RETIREMENT_TRAILER = "Workflow-Legacy-Retirement"
+LEGACY_RETIREMENT_CONFIRMATION_PREFIX = "Retirement-Confirmation:"
+#: The only fields of the retired item a retirement commit may change.
+LEGACY_RETIREMENT_FIELDS = frozenset({
+    "phase", "current_checkpoint_id", "state_revision", "last_transition",
+})
+
+
+def retire_legacy_work_item(state: dict, work_item_id: str, now: str, user_confirmation: str) -> dict:
+    """D-Retire (workflow-2.9.0): moves a dormant `LEGACY_READY` item to
+    `MILESTONE_COMPLETE` as already finished, for `/retire-legacy-work-item`.
+    Run inside `state_transaction`.
+
+    Refuses, writing nothing, in this order: a missing, empty or wrong
+    `user_confirmation` (`UserConfirmationRejectedError`, through
+    `validate_user_only_confirmation`, before any other check, so the writer
+    itself and not only the command file is the guard); an unknown id or a
+    phase other than exactly `LEGACY_READY`
+    (`LegacyRetirementWrongPhaseError`); the item `active_work_item_id`
+    points at (`LegacyRetirementActiveItemError`); unfinished children
+    (`LegacyRetirementUnfinishedChildrenError`).
+
+    Changes four fields of the one item (`phase`, `current_checkpoint_id`,
+    `state_revision`, `last_transition`) and nothing else: `technical_approval`
+    (basis `LEGACY_V1`), the governing version, the paths and the checkpoints
+    stay byte-identical, and no `completion_obligations_accepted` is written.
+    Never calls `complete_work_item`, `promote_legacy_work_item`,
+    `verify_legacy_branch_reconciliation` or `any_protected_path_changed_since`
+    (retirement does not adopt: no stale-approval check applies).
+
+    Deliberately outside the lifecycle-witness mechanism: it takes no
+    `lifecycle_lock`. A `LEGACY_READY` item has no checkpoints, claims or
+    amendments; a sibling's lifecycle is covered by the unfinished-children
+    refusal."""
+    validate_user_only_confirmation(
+        user_confirmation, work_item_id=work_item_id, stage="retirement")
+    work_item = (state.get("work_items") or {}).get(work_item_id)
+    if not isinstance(work_item, dict):
+        raise LegacyRetirementWrongPhaseError(f"{work_item_id!r} names no work item")
+    if work_item.get("phase") != "LEGACY_READY":
+        raise LegacyRetirementWrongPhaseError(
+            f"{work_item_id!r} is not LEGACY_READY (phase={work_item.get('phase')!r}) -- "
+            f"retirement only closes a dormant legacy entry"
+        )
+    if state.get("active_work_item_id") == work_item_id:
+        raise LegacyRetirementActiveItemError(
+            f"{work_item_id!r} is the active work item -- a dormant legacy item is never active"
+        )
+    children = incomplete_children(state, work_item_id)
+    if children:
+        raise LegacyRetirementUnfinishedChildrenError(
+            f"{work_item_id!r} has unfinished child work item(s) {children}"
+        )
+    new_state = copy.deepcopy(state)
+    new_item = new_state["work_items"][work_item_id]
+    new_item["phase"] = "MILESTONE_COMPLETE"
+    new_item["current_checkpoint_id"] = None
+    new_item["state_revision"] = new_item.get("state_revision", 1) + 1
+    new_item["last_transition"] = now
+    return new_state
+
+
+def discover_legacy_retirement_commit(
+    repo_root: Path, work_item_id: str, head: str = "HEAD",
+) -> str | None:
+    """The commit reachable from `head` carrying
+    `Workflow-Legacy-Retirement: <work_item_id>` + `Workflow-Work-Item:
+    <work_item_id>` trailers, or `None`. The audit query for a retirement
+    (the protocol's `verify` reports nothing about it). Raises
+    `AmbiguousLegacyRetirementCommitError` when more than one matches."""
+    out = _run(["git", "log", "--format=%H", head], cwd=repo_root)
+    matches = []
+    for commit in (line for line in out.splitlines() if line):
+        trailers = _commit_trailers(repo_root, commit)
+        if (trailers.get("Workflow-Work-Item") == work_item_id
+                and trailers.get(LEGACY_RETIREMENT_TRAILER) == work_item_id):
+            matches.append(commit)
+    if len(matches) > 1:
+        raise AmbiguousLegacyRetirementCommitError(
+            f"{len(matches)} commits carry {LEGACY_RETIREMENT_TRAILER}: {work_item_id} ({matches})"
+        )
+    return matches[0] if matches else None
+
+
+def _require_state_revision_step(commit: str, before_item: dict, after_item: dict, error: type) -> None:
+    """A state-writer commit advances the item's `state_revision` by exactly one."""
+    before_rev, after_rev = before_item.get("state_revision"), after_item.get("state_revision")
+    if not isinstance(before_rev, int) or after_rev != before_rev + 1:
+        raise error(f"{commit} moves state_revision from {before_rev!r} to {after_rev!r}, not by one")
+
+
+def validate_legacy_retirement_commit(repo_root: Path, commit: str, work_item_id: str) -> None:
+    """Validates a discovered retirement commit: it touches only
+    `WORKFLOW_STATE.json`; changes nothing outside `work_items[work_item_id]`
+    (no top-level field, no other item); changes only that item's `phase`,
+    `current_checkpoint_id`, `state_revision` and `last_transition`, with the
+    phase going from `LEGACY_READY` to `MILESTONE_COMPLETE`; carries both
+    trailers naming the id; and records a `Retirement-Confirmation` line that
+    passes `validate_user_only_confirmation` for the id (an exact token, so a
+    prefix-related id never validates). Raises
+    `MalformedLegacyRetirementCommitError` naming the mismatch."""
+    state_rel = DEFAULT_STATE_PATH.as_posix()
+    changed_paths = _commit_own_changed_paths(repo_root, commit)
+    if changed_paths != {state_rel}:
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit} touches {sorted(changed_paths)}, not exactly {{{state_rel!r}}}")
+    outside_diff = _forbidden_state_mutation(repo_root, commit, work_item_id)
+    if outside_diff is not None:
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit} also changed {outside_diff} -- a retirement commit may only change "
+            f"its own work item's fields")
+    trailers = _commit_trailers(repo_root, commit)
+    for key in (LEGACY_RETIREMENT_TRAILER, "Workflow-Work-Item"):
+        if trailers.get(key) != work_item_id:
+            raise MalformedLegacyRetirementCommitError(
+                f"{commit}'s {key} trailer is {trailers.get(key)!r}, not {work_item_id!r}")
+    field_diff = _work_item_field_diff(repo_root, commit, work_item_id)
+    if "phase" not in field_diff or not field_diff <= LEGACY_RETIREMENT_FIELDS:
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit}'s own {work_item_id!r} field changes are {sorted(field_diff)}, not a set "
+            f"containing 'phase' within {sorted(LEGACY_RETIREMENT_FIELDS)}")
+    parent = _run(["git", "rev-parse", f"{commit}^"], cwd=repo_root).strip()
+    before = _read_json_at_commit_or_empty(repo_root, parent, state_rel)
+    after = _read_json_at_commit_or_empty(repo_root, commit, state_rel)
+    before_phase = before.get("work_items", {}).get(work_item_id, {}).get("phase")
+    after_phase = after.get("work_items", {}).get(work_item_id, {}).get("phase")
+    if (before_phase, after_phase) != ("LEGACY_READY", "MILESTONE_COMPLETE"):
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit} moves {work_item_id!r} from {before_phase!r} to {after_phase!r}, not "
+            f"LEGACY_READY to MILESTONE_COMPLETE")
+    after_item = after.get("work_items", {}).get(work_item_id, {})
+    if after_item.get("current_checkpoint_id") is not None:
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit} leaves {work_item_id!r}'s current_checkpoint_id "
+            f"{after_item.get('current_checkpoint_id')!r}, not None")
+    _require_state_revision_step(commit, before.get("work_items", {}).get(work_item_id, {}),
+                                 after_item, MalformedLegacyRetirementCommitError)
+    body = _run(["git", "log", "-1", "--format=%B", commit], cwd=repo_root)
+    recorded = [line[len(LEGACY_RETIREMENT_CONFIRMATION_PREFIX):].strip() for line in body.splitlines()
+                if line.startswith(LEGACY_RETIREMENT_CONFIRMATION_PREFIX)]
+    if len(recorded) != 1:
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit} records {len(recorded)} {LEGACY_RETIREMENT_CONFIRMATION_PREFIX!r} lines, not exactly one")
+    try:
+        validate_user_only_confirmation(recorded[0], work_item_id=work_item_id, stage="retirement")
+    except UserConfirmationRejectedError as exc:
+        raise MalformedLegacyRetirementCommitError(
+            f"{commit}'s recorded confirmation is invalid: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.9.0: resuming implementation of an outstanding checkpoint (D-Fix-003 (b))
+# ---------------------------------------------------------------------------
+
+RESUME_CONFIRMATION_PREFIX = "Resume-Confirmation:"
+#: The only fields of the resumed item a resume commit may change.
+RESUME_IMPLEMENTATION_FIELDS = frozenset({
+    "phase", "technical_approval", "state_revision", "last_transition",
+})
+
+
+def resume_implementation_state(
+    state: dict, repo_root: Path, work_item_id: str, now: str, user_confirmation: str,
+) -> dict:
+    """D-Fix-003 (b) (workflow-2.9.0): the pure check-and-write of
+    `/resume-implementation`, the user-only way back from
+    `AWAITING_FUNCTIONAL_REVIEW` to `IMPLEMENTING` for a `2.1`/`2.2` item
+    with a registry checkpoint outstanding. Run inside `state_transaction`
+    (through `resume_implementation`, which adds the lifecycle check).
+
+    Refuses, writing nothing, in this order: a missing, empty, generic or
+    wrong-item confirmation (`UserConfirmationRejectedError`, through
+    `validate_user_only_confirmation` with stage `resumption`, before any
+    other check); an unknown id or a phase other than exactly
+    `AWAITING_FUNCTIONAL_REVIEW` (`ResumeImplementationWrongPhaseError`); a
+    governing version other than `2.1`/`2.2`
+    (`ResumeImplementationUnsupportedVersionError`); a missing or not
+    `CURRENT` plan approval, or a registry the approval does not cover
+    (`StalePlanApprovalRegistryReadError`, from
+    `resolve_own_registry_completion_status`, exactly as row 38a reports it);
+    a terminal registry (`ResumeImplementationRegistryTerminalError`); no
+    `technical_approval` record (`ResumeWithoutTechnicalApprovalError`).
+
+    Writes `phase` `IMPLEMENTING`, `technical_approval.status` `STALE` (an
+    already-`STALE` record is left as it is), `state_revision` and
+    `last_transition`, and nothing else: `current_checkpoint_id` stays
+    `None`, the plan approval, `gate_evidence`, `reopenings` and
+    `implementation_review_stages` are untouched (earlier evidence is
+    identity-bound and cannot satisfy a gate for the new content)."""
+    validate_user_only_confirmation(
+        user_confirmation, work_item_id=work_item_id, stage="resumption")
+    work_item = (state.get("work_items") or {}).get(work_item_id)
+    if not isinstance(work_item, dict):
+        raise ResumeImplementationWrongPhaseError(f"{work_item_id!r} names no work item")
+    if work_item.get("phase") != "AWAITING_FUNCTIONAL_REVIEW":
+        raise ResumeImplementationWrongPhaseError(
+            f"{work_item_id!r} is at phase {work_item.get('phase')!r}, not AWAITING_FUNCTIONAL_REVIEW -- "
+            f"a resume only leaves the functional gate")
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        raise ResumeImplementationUnsupportedVersionError(
+            f"{work_item_id!r} is governed by {work_item.get('governing_workflow_version')!r}; "
+            f"a resume is defined for {sorted(TWO_STAGE_PLAN_REVIEW_VERSIONS)} only")
+    terminal, outstanding = resolve_own_registry_completion_status(Path(repo_root), work_item)
+    if terminal:
+        raise ResumeImplementationRegistryTerminalError(
+            f"{work_item_id!r} has no outstanding checkpoint -- there is nothing to resume")
+    record = work_item.get("technical_approval")
+    if not isinstance(record, dict):
+        raise ResumeWithoutTechnicalApprovalError(
+            f"{work_item_id!r} has no technical_approval record to mark STALE (checkpoint "
+            f"{outstanding} is outstanding)")
+    new_state = copy.deepcopy(state)
+    new_item = new_state["work_items"][work_item_id]
+    new_item["phase"] = "IMPLEMENTING"
+    new_item["technical_approval"]["status"] = "STALE"
+    new_item["state_revision"] = new_item.get("state_revision", 1) + 1
+    new_item["last_transition"] = now
+    return new_state
+
+
+def resume_implementation(repo_root: Path, work_item_id: str, now: str, user_confirmation: str) -> dict:
+    """The public entry of `/resume-implementation` (workflow-2.9.0).
+    Validates the confirmation first, then joins the claim side of the
+    repository-global lifecycle (`v2.4.0-002`): holds `lifecycle_lock` and
+    runs `_enforce_claim_lifecycle` inside the transaction's mutator (after
+    the re-read), in the order `claim_checkpoint` uses, then performs the single
+    `state_transaction` around `resume_implementation_state`. The refusals
+    are the claim side's own, unextended: `AmendmentInFlightError`,
+    `StaleLifecycleStateError`, `LaggingWorktreeAmendmentError`,
+    `AmendmentWitnessUnavailableError` (and the rest of `LifecycleRefusalError`).
+    Returns the new state."""
+    validate_user_only_confirmation(
+        user_confirmation, work_item_id=work_item_id, stage="resumption")
+    repo_root = Path(repo_root)
+
+    def mutator(state: dict) -> dict:
+        _enforce_claim_lifecycle(repo_root, work_item_id)
+        return resume_implementation_state(state, repo_root, work_item_id, now, user_confirmation)
+
+    with lifecycle_lock(repo_root, work_item_id):
+        return state_transaction(repo_root, mutator)
+
+
+def validate_resume_implementation_commit(repo_root: Path, commit: str, work_item_id: str) -> None:
+    """Validates a `/resume-implementation` commit: it touches only
+    `WORKFLOW_STATE.json`; changes nothing outside `work_items[work_item_id]`;
+    changes only that item's `RESUME_IMPLEMENTATION_FIELDS`, including `phase`,
+    from `AWAITING_FUNCTIONAL_REVIEW` to `IMPLEMENTING` with the technical
+    approval `STALE` afterwards; carries a `Workflow-Work-Item` trailer naming
+    the id; and records exactly one `Resume-Confirmation` line that passes
+    `validate_user_only_confirmation` for the id (an exact token). Raises
+    `MalformedResumeImplementationCommitError` naming the mismatch."""
+    state_rel = DEFAULT_STATE_PATH.as_posix()
+    changed_paths = _commit_own_changed_paths(repo_root, commit)
+    if changed_paths != {state_rel}:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit} touches {sorted(changed_paths)}, not exactly {{{state_rel!r}}}")
+    outside_diff = _forbidden_state_mutation(repo_root, commit, work_item_id)
+    if outside_diff is not None:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit} also changed {outside_diff} -- a resume commit may only change "
+            f"its own work item's fields")
+    trailers = _commit_trailers(repo_root, commit)
+    if trailers.get("Workflow-Work-Item") != work_item_id:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit}'s Workflow-Work-Item trailer is {trailers.get('Workflow-Work-Item')!r}, "
+            f"not {work_item_id!r}")
+    field_diff = _work_item_field_diff(repo_root, commit, work_item_id)
+    if "phase" not in field_diff or not field_diff <= RESUME_IMPLEMENTATION_FIELDS:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit}'s own {work_item_id!r} field changes are {sorted(field_diff)}, not a set "
+            f"containing 'phase' within {sorted(RESUME_IMPLEMENTATION_FIELDS)}")
+    parent = _run(["git", "rev-parse", f"{commit}^"], cwd=repo_root).strip()
+    before = _read_json_at_commit_or_empty(repo_root, parent, state_rel)
+    after = _read_json_at_commit_or_empty(repo_root, commit, state_rel)
+    before_item = before.get("work_items", {}).get(work_item_id, {})
+    after_item = after.get("work_items", {}).get(work_item_id, {})
+    if (before_item.get("phase"), after_item.get("phase")) != ("AWAITING_FUNCTIONAL_REVIEW", "IMPLEMENTING"):
+        raise MalformedResumeImplementationCommitError(
+            f"{commit} moves {work_item_id!r} from {before_item.get('phase')!r} to "
+            f"{after_item.get('phase')!r}, not AWAITING_FUNCTIONAL_REVIEW to IMPLEMENTING")
+    before_approval = before_item.get("technical_approval")
+    if not isinstance(before_approval, dict):
+        raise MalformedResumeImplementationCommitError(
+            f"{commit}'s parent holds no technical approval record for {work_item_id!r} to mark STALE")
+    if after_item.get("technical_approval") != {**before_approval, "status": "STALE"}:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit} does not leave {work_item_id!r}'s technical approval as the parent's record "
+            f"with only its status changed to STALE")
+    _require_state_revision_step(commit, before_item, after_item, MalformedResumeImplementationCommitError)
+    body = _run(["git", "log", "-1", "--format=%B", commit], cwd=repo_root)
+    recorded = [line[len(RESUME_CONFIRMATION_PREFIX):].strip() for line in body.splitlines()
+                if line.startswith(RESUME_CONFIRMATION_PREFIX)]
+    if len(recorded) != 1:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit} records {len(recorded)} {RESUME_CONFIRMATION_PREFIX!r} lines, not exactly one")
+    try:
+        validate_user_only_confirmation(recorded[0], work_item_id=work_item_id, stage="resumption")
+    except UserConfirmationRejectedError as exc:
+        raise MalformedResumeImplementationCommitError(
+            f"{commit}'s recorded confirmation is invalid: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
 # WORKFLOW_STATE.json
 # ---------------------------------------------------------------------------
 
@@ -16269,6 +17793,7 @@ def _validate_plan_review_stages(work_item: dict) -> None:
             f"while {LOCAL_MODEL_PLAN_REVIEW} is absent"
         )
     for stage_name, stage in ((LOCAL_MODEL_PLAN_REVIEW, local), (MANUAL_EXTERNAL_PLAN_REVIEW, manual)):
+        _validate_ledger_entry_audit(f"{work_item['work_item_id']}.{stage_name}", stage)
         if stage is not None and stage.get("verdict") != "APPROVE":
             raise StageVerdictNotApproveError(
                 f"{work_item['work_item_id']}.{stage_name}.verdict is "
@@ -16308,6 +17833,7 @@ def _validate_implementation_review_stages(work_item: dict) -> None:
     for stage_name, stage in (
         (LOCAL_MODEL_IMPLEMENTATION_REVIEW, local), (MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW, manual),
     ):
+        _validate_ledger_entry_audit(f"{work_item['work_item_id']}.{stage_name}", stage)
         if stage is not None and stage.get("verdict") != "APPROVE":
             raise StageVerdictNotApproveError(
                 f"{work_item['work_item_id']}.{stage_name}.verdict is "
@@ -16385,6 +17911,7 @@ def _validate_work_item(work_item_id: str, work_item: dict) -> None:
     _validate_implementation_review_stages(work_item)
     _validate_technical_review_block_pins(work_item)
     _validate_plan_review_binding(work_item_id, work_item)
+    _validate_consumed_plan_review_content_ids(work_item_id, work_item)
 
     # I2 (workflow-v2-3-followups continued scope, external cross-model
     # review rounds 2 and 4): validate_approval_record's shape check
@@ -16410,6 +17937,21 @@ def _validate_work_item(work_item_id: str, work_item: dict) -> None:
     technical_approval = work_item.get("technical_approval")
     if technical_approval is not None:
         validate_approval_record(technical_approval, stage="implementation")
+
+    if "gate_evidence" in work_item:
+        problems = gate_policy.gate_evidence_errors(work_item["gate_evidence"])
+        if problems:
+            raise InvalidGateEvidenceError(f"work_items[{work_item_id!r}]: " + "; ".join(problems))
+
+    if work_item.get("acceptance_satisfaction") is not None:
+        problems = acceptance_satisfaction_errors(work_item["acceptance_satisfaction"])
+        if problems:
+            raise InvalidAcceptanceSatisfactionError(f"work_items[{work_item_id!r}]: " + "; ".join(problems))
+
+    if "reopenings" in work_item:
+        problems = reopenings_errors(work_item["reopenings"], work_item.get("gate_evidence"))
+        if problems:
+            raise InvalidReopeningsError(f"work_items[{work_item_id!r}]: " + "; ".join(problems))
 
 
 def validate_state(state: dict, *, registry: dict | None = None, repo_root: Path | None = None) -> None:
@@ -16584,6 +18126,8 @@ def validate_state(state: dict, *, registry: dict | None = None, repo_root: Path
                     f"{state_plan_revision!r}, but registry {registry_path!r} declares "
                     f"plan_revision == {registry_plan_revision!r}"
                 )
+
+    _validate_gate_policy_state_fields(state)
 
     active_id = state.get("active_work_item_id")
     if active_id is not None:
@@ -17274,6 +18818,1171 @@ def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
         return 1
     print(json.dumps({k: v for k, v in status.items() if not k.startswith("_")}, sort_keys=True))
     return 0
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.8.0 CP1 (`gate-policy-and-reopening`, D-GP-Policy): the optional
+# top-level `gate_policy_adoption` and `gate_policy_floor`, their writers,
+# their own commits and validators, and item-scoped staging.
+#
+# The policy model itself (schema, default, tighten-only effective policy,
+# provenance by content and chain) is `workflow_gate_policy`; this section is
+# the part that writes the state file and creates commits.
+# ---------------------------------------------------------------------------
+
+GATE_POLICY_ADOPTION_KEY = gate_policy.ADOPTION_KEY
+GATE_POLICY_FLOOR_KEY = gate_policy.FLOOR_KEY
+GATE_POLICY_ADOPTION_TRAILER = gate_policy.ADOPTION_TRAILER
+GATE_POLICY_FLOOR_TRAILER = gate_policy.FLOOR_TRAILER
+
+#: `stage_scoped_state`'s two top-level scopes (a work-item scope is the id).
+GATE_POLICY_ADOPTION_SCOPE = (GATE_POLICY_ADOPTION_KEY, GATE_POLICY_FLOOR_KEY)
+GATE_POLICY_FLOOR_SCOPE = (GATE_POLICY_FLOOR_KEY,)
+
+#: Phases whose review bundle an adoption commit stales (`HEAD` moves past the
+#: bundle's `generation_head`), with the way out of each.
+_PLAN_STAGE_OPEN_BUNDLE_PHASES = frozenset(PLAN_REVIEW_READY_PHASES | {"AWAITING_EXTERNAL_PLAN_REVIEW"})
+_IMPLEMENTATION_STAGE_OPEN_BUNDLE_PHASES = frozenset({
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+})
+
+
+#: Re-exported so a caller of the writers below catches them from this module.
+GatePolicyConfirmationRejectedError = gate_policy.GatePolicyConfirmationRejectedError
+GatePolicyFieldsChangedError = gate_policy.GatePolicyFieldsChangedError
+InvalidGatePolicyError = gate_policy.InvalidGatePolicyError
+
+
+class InvalidGatePolicyStateError(Exception):
+    """`validate_state` found a `gate_policy_adoption` or `gate_policy_floor`
+    that breaks its own record shape (`_validate_gate_policy_state_fields`)."""
+
+
+class InvalidGatePolicyAdoptionError(Exception):
+    """`record_gate_policy_adoption` was given a policy or confirmation it
+    cannot record."""
+
+
+class MalformedGatePolicyAdoptionCommitError(Exception):
+    """`validate_gate_policy_adoption_commit` refused a commit: an adoption
+    commit changes exactly the two top-level keys `gate_policy_adoption` and
+    `gate_policy_floor` (the floor reset to the adopted policy's resolved
+    form), touches only `WORKFLOW_STATE.json`, and carries a valid adoption."""
+
+
+class MalformedGatePolicyFloorCommitError(Exception):
+    """`validate_gate_policy_floor_commit` refused a commit: a floor commit
+    changes exactly the top-level key `gate_policy_floor`, touches only
+    `WORKFLOW_STATE.json`, and records a floor no looser than its parent's."""
+
+
+class GatePolicyFileInvalidError(Exception):
+    """`adopt_gate_policy` was asked to adopt a `GATE_POLICY.json` that is
+    absent or invalid; `errors` lists why."""
+
+    def __init__(self, message: str, errors: list[str]):
+        self.errors = list(errors)
+        super().__init__(message)
+
+
+class GatePolicyFileUncommittedError(GatePolicyFileInvalidError):
+    """`gate_policy_adoption_preview`/`adopt_gate_policy` refused a working-tree
+    `GATE_POLICY.json` that differs from `HEAD`'s: the adoption commit stages
+    only the state file, so an uncommitted file would be reported as adopted
+    while the committed policy (and its floor) stayed in force."""
+
+
+def validate_gate_policy_confirmation(text: str, digest: str) -> None:
+    """The adoption's user-only guard (`LPR-R1-003`): the text must contain
+    the literal `gate_policy` and the first 12 hex characters of `digest`.
+    Raises `workflow_gate_policy.GatePolicyConfirmationRejectedError`.
+    Work-item-free; touches neither `validate_user_confirmation` nor
+    `APPROVAL_STAGES`."""
+    gate_policy.validate_gate_policy_confirmation(text, digest)
+
+
+def assert_gate_policy_fields_unchanged_or_tightened(repo_root: Path, commit: str) -> None:
+    """Applies the two content rules of D-GP-Policy to one commit: a change
+    to `gate_policy_adoption` must be self-consistent and chained onto its
+    first parent's adoption, and a change to `gate_policy_floor` must be no
+    looser than its bound. Called after each unvalidated whole-file state
+    commit (the plan approval, the checkpoint and self-review commits,
+    `/request-plan-amendment`'s commit) and by
+    `verify_gate_policy_provenance`. Raises
+    `workflow_gate_policy.GatePolicyFieldsChangedError`."""
+    gate_policy.assert_gate_policy_fields_unchanged_or_tightened(repo_root, commit)
+
+
+def _validate_gate_policy_state_fields(state: dict) -> None:
+    """The two optional top-level keys, shape and self-consistency only (a
+    present key must be a well-formed record); provenance, the chain and the
+    floor's monotonicity are `verify_gate_policy_provenance`'s."""
+    if GATE_POLICY_ADOPTION_KEY in state:
+        errors = gate_policy.adoption_record_errors(state[GATE_POLICY_ADOPTION_KEY])
+        if errors:
+            raise InvalidGatePolicyStateError("; ".join(errors))
+    if GATE_POLICY_FLOOR_KEY in state:
+        errors = gate_policy.floor_record_errors(state[GATE_POLICY_FLOOR_KEY])
+        if errors:
+            raise InvalidGatePolicyStateError("; ".join(errors))
+
+
+def gate_policy_adoption_lowering(adoption_before: dict | None, floor_before: dict | None,
+                                  policy: dict) -> list[str]:
+    """The fields a new adoption of raw `policy` lowers (`workflow_gate_policy.
+    adoption_lowering`, the one definition the label and the recomputation
+    share)."""
+    return gate_policy.adoption_lowering(adoption_before, floor_before, policy)
+
+
+def record_gate_policy_adoption(
+    state: dict, *, policy: dict, confirmation: str, now: str, lowered: list[str],
+) -> dict:
+    """The one writer of the top-level `gate_policy_adoption`, which also
+    resets `gate_policy_floor` to the adopted policy's resolved form (an
+    adoption is the user's act of loosening). Returns a new state; `state` is
+    untouched. The record is `{sha256, adopted_at, confirmation, policy,
+    history, lowered}`: the digest of the canonical bytes of `policy`, the
+    body itself (so a deleted file cannot loosen what was adopted), the
+    earlier adopted digests, and `lowered`, the gate-lowering label (an audit
+    label, never a precondition)."""
+    try:
+        gate_policy.validate_policy(policy)
+    except gate_policy.InvalidGatePolicyError as exc:
+        raise InvalidGatePolicyAdoptionError(f"the policy is invalid: {exc}") from exc
+    digest = gate_policy.policy_digest(policy)
+    gate_policy.validate_gate_policy_confirmation(confirmation, digest)
+    previous = state.get(GATE_POLICY_ADOPTION_KEY)
+    history: list[str] = []
+    if isinstance(previous, dict):
+        history = list(previous.get("history", [])) + [previous["sha256"]]
+    record = {
+        "sha256": digest, "adopted_at": now, "confirmation": confirmation,
+        "policy": copy.deepcopy(policy), "history": history, "lowered": list(lowered),
+    }
+    problems = gate_policy.adoption_record_errors(record)
+    if problems:
+        raise InvalidGatePolicyAdoptionError("; ".join(problems))
+    resolved = gate_policy.resolve_policy(policy)
+    new_state = copy.deepcopy(state)
+    new_state[GATE_POLICY_ADOPTION_KEY] = record
+    new_state[GATE_POLICY_FLOOR_KEY] = {
+        "policy": resolved, "digest": gate_policy.policy_digest(resolved),
+        "recorded_at": now, "observed": [digest],
+    }
+    return new_state
+
+
+def _commit_top_level_diff(repo_root: Path, commit: str) -> tuple[set[str], dict, dict]:
+    """The top-level keys (`work_items` as one key) whose value differs
+    between a commit's first parent and the commit, with both committed
+    states."""
+    parent = _run(["git", "rev-parse", f"{commit}^"], cwd=repo_root).strip()
+    state_rel = DEFAULT_STATE_PATH.as_posix()
+    before = _read_json_at_commit_or_empty(repo_root, parent, state_rel)
+    after = _read_json_at_commit_or_empty(repo_root, commit, state_rel)
+    changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+    return changed, before, after
+
+
+def validate_gate_policy_adoption_commit(repo_root: Path, commit: str) -> None:
+    """`LPR-R3-002`/`LPR-R9-003`: the adoption commit's exact contract. It
+    touches only `WORKFLOW_STATE.json`; its state diff is exactly the two
+    top-level keys `gate_policy_adoption` and `gate_policy_floor` (so the
+    adoption key alone, the floor alone, a third key or any work-item change
+    is refused); the adoption is valid (self-consistent, chained onto its
+    first parent's, trailer-consistent); the floor is exactly the adopted
+    policy's resolved form; and the commit carries the
+    `Workflow-Gate-Policy-Adoption` trailer equal to the adoption's digest.
+    Run by the command right after the commit and again on discovery."""
+    changed_paths = _commit_own_changed_paths(repo_root, commit)
+    state_rel = DEFAULT_STATE_PATH.as_posix()
+    if changed_paths != {state_rel}:
+        raise MalformedGatePolicyAdoptionCommitError(
+            f"{commit} is a gate-policy adoption commit but touches {sorted(changed_paths)}, "
+            f"not exactly {{{state_rel!r}}}")
+    changed, _before, after = _commit_top_level_diff(repo_root, commit)
+    if changed != set(GATE_POLICY_ADOPTION_SCOPE):
+        raise MalformedGatePolicyAdoptionCommitError(
+            f"{commit}'s state diff changes {sorted(changed)}, not exactly the two top-level "
+            f"keys {sorted(GATE_POLICY_ADOPTION_SCOPE)}")
+    adoption = after[GATE_POLICY_ADOPTION_KEY]
+    try:
+        gate_policy.assert_gate_policy_fields_unchanged_or_tightened(repo_root, commit)
+    except gate_policy.GatePolicyFieldsChangedError as exc:
+        raise MalformedGatePolicyAdoptionCommitError(f"{commit}: {exc}") from exc
+    resolved = gate_policy.resolve_policy(adoption["policy"])
+    floor = after[GATE_POLICY_FLOOR_KEY]
+    if floor.get("policy") != resolved:
+        raise MalformedGatePolicyAdoptionCommitError(
+            f"{commit}'s gate_policy_floor is not the adopted policy's resolved form (the reset)")
+    trailer = _commit_trailers(repo_root, commit).get(GATE_POLICY_ADOPTION_TRAILER)
+    if trailer != adoption["sha256"]:
+        raise MalformedGatePolicyAdoptionCommitError(
+            f"{commit} carries {GATE_POLICY_ADOPTION_TRAILER}: {trailer!r}, not the adoption's "
+            f"sha256 {adoption['sha256']!r}")
+
+
+def validate_gate_policy_floor_commit(repo_root: Path, commit: str) -> None:
+    """The floor commit's contract: only `WORKFLOW_STATE.json`, exactly the
+    top-level key `gate_policy_floor` changed, a floor no looser than its
+    parent's, and the `Workflow-Gate-Policy-Floor` trailer equal to the
+    floor's digest."""
+    changed_paths = _commit_own_changed_paths(repo_root, commit)
+    state_rel = DEFAULT_STATE_PATH.as_posix()
+    if changed_paths != {state_rel}:
+        raise MalformedGatePolicyFloorCommitError(
+            f"{commit} is a gate-policy floor commit but touches {sorted(changed_paths)}, "
+            f"not exactly {{{state_rel!r}}}")
+    changed, _before, after = _commit_top_level_diff(repo_root, commit)
+    if changed != set(GATE_POLICY_FLOOR_SCOPE):
+        raise MalformedGatePolicyFloorCommitError(
+            f"{commit}'s state diff changes {sorted(changed)}, not exactly "
+            f"{sorted(GATE_POLICY_FLOOR_SCOPE)}")
+    try:
+        gate_policy.assert_gate_policy_fields_unchanged_or_tightened(repo_root, commit)
+    except gate_policy.GatePolicyFieldsChangedError as exc:
+        raise MalformedGatePolicyFloorCommitError(f"{commit}: {exc}") from exc
+    trailer = _commit_trailers(repo_root, commit).get(GATE_POLICY_FLOOR_TRAILER)
+    if trailer != after[GATE_POLICY_FLOOR_KEY]["digest"]:
+        raise MalformedGatePolicyFloorCommitError(
+            f"{commit} carries {GATE_POLICY_FLOOR_TRAILER}: {trailer!r}, not the floor's digest "
+            f"{after[GATE_POLICY_FLOOR_KEY]['digest']!r}")
+
+
+def stage_scoped_state(repo_root: Path, scope) -> bool:
+    """Item-scoped (or top-level-scoped) staging of `WORKFLOW_STATE.json` for a
+    validated commit (`LPR-R4-002`, `LPR-R5-001`, `LPR-R5-002`). `scope` is a
+    work item id, or `GATE_POLICY_ADOPTION_SCOPE` / `GATE_POLICY_FLOOR_SCOPE`.
+
+    Reads `HEAD`'s committed state and the working-tree state. When they
+    differ only inside `work_items[scope]` (or, for a top-level scope, only
+    in those keys) it does nothing and returns `False`: the caller's ordinary
+    single-path `git add` then runs and the bytes are exactly what they were
+    before this function existed. Otherwise it builds `HEAD`'s state with
+    only the scope taken from the working tree (a foreign work item's
+    residue and every other top-level key come from `HEAD`), serializes it
+    with the module's one canonical serializer, writes it as a blob and stages
+    it with `git update-index --cacheinfo`, leaves the working-tree file
+    untouched, and returns `True`. Raises `DirtyIndexBeforeStagingError` when
+    the state path is already staged and differs from `HEAD` (checked only
+    when it would stage)."""
+    state_path = DEFAULT_STATE_PATH
+    state_rel = state_path.as_posix()
+    head = _read_json_at_commit_or_empty(repo_root, "HEAD", state_rel)
+    if not head:
+        return False
+    working = _load_json(repo_root / state_path)
+    if not isinstance(working, dict):
+        return False
+    if isinstance(scope, str):
+        def outside_equal() -> bool:
+            top_head = {k: v for k, v in head.items() if k != "work_items"}
+            top_work = {k: v for k, v in working.items() if k != "work_items"}
+            if top_head != top_work:
+                return False
+            items_head = head.get("work_items", {})
+            items_work = working.get("work_items", {})
+            return all(items_head.get(k) == items_work.get(k)
+                       for k in (set(items_head) | set(items_work)) - {scope})
+    else:
+        keys = set(scope)
+
+        def outside_equal() -> bool:
+            return all(head.get(k) == working.get(k)
+                       for k in (set(head) | set(working)) - keys)
+    if outside_equal():
+        return False
+    already = _run(
+        ["git", "diff", "--name-only", "--cached", "HEAD", "--", state_rel], cwd=repo_root).strip()
+    if already:
+        raise DirtyIndexBeforeStagingError(
+            f"{state_rel} is already staged and differs from HEAD before scoped staging ran "
+            f"-- resolve or unstage it first")
+    scoped = copy.deepcopy(head)
+    if isinstance(scope, str):
+        items = scoped.setdefault("work_items", {})
+        if scope in working.get("work_items", {}):
+            items[scope] = copy.deepcopy(working["work_items"][scope])
+        else:
+            items.pop(scope, None)
+    else:
+        for key in scope:
+            if key in working:
+                scoped[key] = copy.deepcopy(working[key])
+            else:
+                scoped.pop(key, None)
+    mode_and_sha = _blob_mode_and_sha_at_commit(repo_root, "HEAD", state_rel)
+    mode = mode_and_sha[0] if mode_and_sha is not None else _FALLBACK_STATE_BLOB_MODE
+    blob_sha = subprocess.run(
+        ["git", "hash-object", "-w", "--stdin"], cwd=repo_root,
+        input=_serialize_state(scoped), capture_output=True, check=True,
+    ).stdout.decode("ascii").strip()
+    _run(["git", "update-index", "--add", "--cacheinfo", f"{mode},{blob_sha},{state_rel}"],
+         cwd=repo_root)
+    return True
+
+
+def _assert_index_clean_apart_from_state(repo_root: Path) -> None:
+    """The floor and adoption commits commit the whole index (`LPR-R18-O1`),
+    so a user's own staged paths would be swept into a commit the validator
+    could only reject after it landed."""
+    staged = [line for line in _run(["git", "diff", "--name-only", "--cached"], cwd=repo_root).splitlines()
+              if line and line != DEFAULT_STATE_PATH.as_posix()]
+    if staged:
+        raise DirtyIndexBeforeStagingError(
+            f"the index holds staged paths other than {DEFAULT_STATE_PATH.as_posix()}: "
+            f"{sorted(staged)} -- unstage them before this commit")
+
+
+def _stage_state_for_commit(repo_root: Path, scope) -> None:
+    if not stage_scoped_state(repo_root, scope):
+        _run(["git", "add", "--", DEFAULT_STATE_PATH.as_posix()], cwd=repo_root)
+
+
+def _head_sha(repo_root: Path) -> str:
+    return _run(["git", "rev-parse", "HEAD"], cwd=repo_root).strip()
+
+
+def commit_gate_policy_floor(repo_root: Path, *, now: str) -> str | None:
+    """Records the floor (`workflow_gate_policy.record_gate_policy_floor`
+    inside one `state_transaction`) and commits it in its own state-only
+    commit carrying `Workflow-Gate-Policy-Floor: <digest>`, staged
+    top-level-scoped, then validates it. Returns the commit sha, or `None`
+    when nothing observed is stricter than the current floor and the base
+    (nothing is written and no commit is made). A `/satisfy-gate` that made
+    its satisfying commit calls this afterwards, never before its own
+    evaluation (`LPR-R18-001`)."""
+    state_full = repo_root / DEFAULT_STATE_PATH
+    current = _load_json(state_full) or {}
+    if gate_policy.record_gate_policy_floor(repo_root, current, now) is current:
+        return None
+    _assert_index_clean_apart_from_state(repo_root)
+    new_state = state_transaction(
+        repo_root, lambda state: gate_policy.record_gate_policy_floor(repo_root, state, now))
+    floor = new_state[GATE_POLICY_FLOOR_KEY]
+    _stage_state_for_commit(repo_root, GATE_POLICY_FLOOR_SCOPE)
+    if not _run(["git", "diff", "--cached", "--name-only"], cwd=repo_root).strip():
+        return None  # a concurrent writer recorded the same floor first
+    _run(["git", "commit", "-q", "-m", f"chore: record gate policy floor {floor['digest'][:12]}",
+          "-m", f"{GATE_POLICY_FLOOR_TRAILER}: {floor['digest']}"], cwd=repo_root)
+    commit = _head_sha(repo_root)
+    validate_gate_policy_floor_commit(repo_root, commit)
+    gate_policy.clear_caches()
+    return commit
+
+
+def open_bundles_staled_by_adoption(state: dict) -> list[dict]:
+    """Every open plan-stage and implementation-stage bundle of any work item
+    that an adoption commit will stale (`HEAD` is repository-wide), each with
+    the way out, for the adoption's confirmation display."""
+    result: list[dict] = []
+    for work_item_id, work_item in sorted((state.get("work_items") or {}).items()):
+        if not isinstance(work_item, dict):
+            continue
+        phase = work_item.get("phase")
+        if phase in _PLAN_STAGE_OPEN_BUNDLE_PHASES:
+            result.append({
+                "work_item_id": work_item_id, "stage": "plan", "phase": phase,
+                "way_out": f"withdraw and regenerate it with /milestone-plan {work_item_id} "
+                           f"(both review stages are then recorded again)",
+            })
+        elif phase in _IMPLEMENTATION_STAGE_OPEN_BUNDLE_PHASES:
+            result.append({
+                "work_item_id": work_item_id, "stage": "implementation", "phase": phase,
+                "way_out": f"recover it with /recover-implementation-provenance {work_item_id} "
+                           f"from the phases that command admits, otherwise regenerate it through "
+                           f"the item's own remediation cycle",
+            })
+    return result
+
+
+def gate_policy_adoption_preview(repo_root: Path) -> dict:
+    """What `/adopt-gate-policy` shows the user before they confirm: the
+    file's digest (the one to quote), the resolved difference from the
+    current effective policy (each loosening and tightening), the floor the
+    adoption resets, the `lowered` label it will record, and every open
+    bundle the adoption commit will stale. Reads only. Raises
+    `GatePolicyFileInvalidError` when the file is absent or invalid and its
+    subclass `GatePolicyFileUncommittedError` when the working-tree file
+    differs from `HEAD`'s (commit it first)."""
+    file_info = gate_policy.read_policy_file(repo_root)
+    if not file_info["present"]:
+        raise GatePolicyFileInvalidError(
+            f"{gate_policy.POLICY_PATH} does not exist; there is nothing to adopt", [])
+    if not file_info["valid"]:
+        raise GatePolicyFileInvalidError(
+            f"{gate_policy.POLICY_PATH} is invalid and cannot be adopted", file_info["errors"])
+    if gate_policy.working_file_differs_from_head(repo_root):
+        raise GatePolicyFileUncommittedError(
+            f"{gate_policy.POLICY_PATH} differs from HEAD's copy; the adoption commit stages only "
+            f"{DEFAULT_STATE_PATH.as_posix()}, so an uncommitted file would be reported as adopted while the "
+            f"committed policy stayed in force. Commit the file, then run /adopt-gate-policy. Nothing was written",
+            [])
+    state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    # The policy in effect without the file being adopted (its observations
+    # of the working tree are excluded, so the difference is the change).
+    before = gate_policy.effective_policy(repo_root, state, ignore_file=True)
+    adopted = file_info["resolved"]
+    committed_adoption = _read_json_at_commit_or_empty(
+        repo_root, "HEAD", DEFAULT_STATE_PATH.as_posix()) if gate_policy.head_commit(repo_root) else {}
+    lowered = gate_policy_adoption_lowering(
+        committed_adoption.get(GATE_POLICY_ADOPTION_KEY),
+        committed_adoption.get(GATE_POLICY_FLOOR_KEY), file_info["policy"])
+    return {
+        "digest": file_info["sha256"],
+        "digest_prefix": file_info["sha256"][:gate_policy.CONFIRMATION_DIGEST_CHARS],
+        "policy": file_info["policy"], "resolved": adopted,
+        "current": {"source": before["source"], "policy": before["policy"], "digest": before["digest"]},
+        "loosened": gate_policy.loosened_fields(before["policy"], adopted),
+        "tightened": gate_policy.tightened_fields(before["policy"], adopted),
+        "lowered": lowered,
+        "floor_reset_to": adopted,
+        "floor_before": before["floor"],
+        "stales": open_bundles_staled_by_adoption(state),
+        "provenance_ok": before["provenance"]["ok"],
+    }
+
+
+def adopt_gate_policy(repo_root: Path, *, confirmation: str, now: str) -> str:
+    """`/adopt-gate-policy`'s one writer: adopts the working-tree
+    `GATE_POLICY.json`. Validates the file and the confirmation (the literal
+    `gate_policy` plus the digest prefix shown by the preview), refuses a
+    non-empty index apart from the state path, records the adoption and the
+    reset floor inside one `state_transaction`, stages them top-level-scoped
+    (another item's residue is neither committed nor refused), commits with
+    the `Workflow-Gate-Policy-Adoption` trailer and runs
+    `validate_gate_policy_adoption_commit`. Returns the commit sha."""
+    preview = gate_policy_adoption_preview(repo_root)
+    gate_policy.validate_gate_policy_confirmation(confirmation, preview["digest"])
+    _assert_index_clean_apart_from_state(repo_root)
+    policy = preview["policy"]
+    lowered = preview["lowered"]
+    state_transaction(repo_root, lambda state: record_gate_policy_adoption(
+        state, policy=policy, confirmation=confirmation, now=now, lowered=lowered))
+    _stage_state_for_commit(repo_root, GATE_POLICY_ADOPTION_SCOPE)
+    _run(["git", "commit", "-q", "-m", f"chore: adopt gate policy {preview['digest_prefix']}",
+          "-m", f"{GATE_POLICY_ADOPTION_TRAILER}: {preview['digest']}"], cwd=repo_root)
+    commit = _head_sha(repo_root)
+    validate_gate_policy_adoption_commit(repo_root, commit)
+    gate_policy.clear_caches()
+    return commit
+
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.8.0 CP2 (`D-GP-Gates`, `D-GP-Ingest`, `D-GP-Satisfy`,
+# `D-GP-Trust`): the audit keys a review-stage ledger entry carries while its
+# gate is automatic, the ingest refusal of a missing or equal reviewer-model
+# family, and the `POLICY_SATISFIED` approval record `/satisfy-gate` writes.
+# ---------------------------------------------------------------------------
+
+#: The `run_ref` a standalone session records for a verdict it produced
+#: itself: this prefix plus the feedback artifact's path.
+LOCAL_RUN_REF_PREFIX = "session:local"
+
+#: The `trust` statement of every `policy_evidence` (`D-GP-Trust`).
+POLICY_EVIDENCE_TRUST = {"review_verdicts": "orchestrator"}
+
+
+class InvalidLedgerAuditError(Exception):
+    """A review-stage ledger entry carries malformed audit keys
+    (`verdict_sha256`, `run_ref`, `reviewer_model`)."""
+
+
+def review_stage_gate_context(repo_root: Path, state: dict, work_item_id: str, stage: str) -> dict:
+    """What the stage's gate asks of a ledger write: `{gate, automatic,
+    requires_distinct}`. `automatic` is the gate's mode for this item under
+    the effective policy; `requires_distinct` additionally needs the effective
+    `require` to list `distinct_reviewer_models`. A human gate asks for
+    nothing, so its ledger bytes stay 2.7.0's (INV-1)."""
+    gate_id = gate_policy.STAGE_GATE[stage]
+    work_item = state["work_items"][work_item_id]
+    effective = gate_policy.effective_policy(repo_root, state)
+    mode = gate_policy.gate_mode(effective, gate_id, work_item.get("governing_workflow_version"))
+    automatic = mode == "automatic"
+    return {
+        "gate": gate_id, "automatic": automatic,
+        "requires_distinct": automatic and "distinct_reviewer_models" in effective["policy"][gate_id]["require"],
+    }
+
+
+def review_stage_audit(repo_root: Path, state: dict, work_item_id: str, stage: str, verdict_text: str, *,
+                       run_ref: str | None = None) -> dict | None:
+    """The `audit` argument of the four ledger writers: `None` while the
+    stage's gate is human; otherwise `verdict_sha256` (the sha256 of the
+    verdict's own bytes), `run_ref` as given (a declared reference, `None`
+    when the reporter gave none) and, only when the gate also requires
+    distinct models, the `reviewer_model` the verdict's header declares."""
+    context = review_stage_gate_context(repo_root, state, work_item_id, stage)
+    if not context["automatic"]:
+        return None
+    audit: dict = {"verdict_sha256": hashlib.sha256(verdict_text.encode("utf-8")).hexdigest(), "run_ref": run_ref}
+    if context["requires_distinct"]:
+        model = fingerprint.parse_feedback_reviewer_model(verdict_text)
+        if model is not None:
+            audit["reviewer_model"] = model
+    return audit
+
+
+def local_review_audit(repo_root: Path, state: dict, work_item_id: str, stage: str, *,
+                       feedback_text: str, feedback_path: str) -> dict | None:
+    """`review_stage_audit` for a verdict this session wrote itself
+    (`/review-plan`, `/review-implementation`): the `run_ref` is
+    `session:local <feedback artifact path>`."""
+    return review_stage_audit(repo_root, state, work_item_id, stage, feedback_text,
+                              run_ref=f"{LOCAL_RUN_REF_PREFIX} {feedback_path}")
+
+
+def _stage_ledger_entries(work_item: dict, stage: str) -> tuple[dict | None, dict | None]:
+    if stage == "plan":
+        stages = normalize_plan_review_stages(work_item.get("plan_review_stages") or {})
+        return stages.get(LOCAL_MODEL_PLAN_REVIEW), stages.get(MANUAL_EXTERNAL_PLAN_REVIEW)
+    stages = normalize_implementation_review_stages(work_item.get("implementation_review_stages") or {})
+    return stages.get(LOCAL_MODEL_IMPLEMENTATION_REVIEW), stages.get(MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW)
+
+
+def assert_ingest_reviewer_model_admissible(repo_root: Path, state: dict, work_item_id: str, *, stage: str,
+                                            verdict: str, verdict_text: str) -> None:
+    """`D-GP-Ingest`'s refusal, raised before any write: an `APPROVE` ingest
+    for a stage whose gate is automatic and whose effective `require` lists
+    `distinct_reviewer_models` must declare a `Reviewer model:` header line,
+    and its family must differ from the other stage's recorded family. A
+    `REVISE`/`BLOCK`, and an ingest under a human gate, are admitted
+    unchanged. The message names the value and the two remedies that work at
+    the open phase: re-submit with a second family, or turn that gate human."""
+    if verdict != "APPROVE":
+        return
+    if not review_stage_gate_context(repo_root, state, work_item_id, stage)["requires_distinct"]:
+        return
+    gate_id = gate_policy.STAGE_GATE[stage]
+    declared = fingerprint.parse_feedback_reviewer_model(verdict_text)
+    family = gate_policy.reviewer_family(declared)
+    remedies = (
+        f"Remedies: (1) re-submit the same verdict with a `Reviewer model: <vendor>/<model>` line of a "
+        f"second declared family; (2) turn the {gate_id} gate human (set \"human_approval\": true for it "
+        f"in docs/ai-workflow/GATE_POLICY.json), which takes effect immediately, and re-submit the same "
+        f"verdict, which is then admitted with no line. Nothing was written"
+    )
+    if family is None:
+        raise DistinctReviewerModelsRequiredError(
+            f"{work_item_id}: the {gate_id} gate is automatic and requires distinct reviewer models, but "
+            f"the {stage}-stage verdict states no `Reviewer model:` header line. {remedies}")
+    local, _manual = _stage_ledger_entries(state["work_items"][work_item_id], stage)
+    other = gate_policy.reviewer_family((local or {}).get("reviewer_model"))
+    if other is not None and other == family:
+        raise DistinctReviewerModelsRequiredError(
+            f"{work_item_id}: the {gate_id} gate is automatic and requires distinct reviewer models, but "
+            f"the verdict declares the family {family!r} ({declared!r}), equal to the family already "
+            f"recorded for the other stage. {remedies}")
+
+
+def _policy_ledger_inputs(entry: dict | None) -> dict | None:
+    if entry is None:
+        return None
+    return {
+        "bundle_id": entry.get("bundle_id"), "verdict": entry.get("verdict"), "round": entry.get("round"),
+        "verdict_sha256": entry.get("verdict_sha256"),
+        "ledger_entry_sha256": gate_policy.ledger_entry_sha256(entry),
+        "run_ref": entry.get("run_ref"), "reviewer_model": entry.get("reviewer_model"),
+    }
+
+
+def build_policy_evidence(repo_root: Path, state: dict, evaluation: dict, *, now: str) -> dict:
+    """The `policy_evidence` of a `POLICY_SATISFIED` record (`D-GP-Satisfy`,
+    INV-4): the effective policy's digest and source, the file, adopted and
+    floor digests, every requirement with its detail, the inputs the decision
+    read (the content id, each ledger stage's bundle id, verdict, hashes and
+    run reference, the gate status digest), the `trust` statement and the
+    evaluation time and release."""
+    import workflow_protocol  # lazy: the protocol imports this module
+
+    adoption = state.get("gate_policy_adoption") or {}
+    evidence = evaluation["evidence"]
+    digests = evaluation["digests"]
+    return {
+        "policy_digest": evaluation["policy_digest"], "policy_source": evaluation["source"],
+        "file_digest": digests["file"], "adopted_digest": digests["adopted"],
+        "adopted_at": adoption.get("adopted_at") if digests["adopted"] else None,
+        "requirements": [dict(r) for r in evaluation["requirements"]],
+        "inputs": {
+            "review_content_id": evidence["review_content_id"],
+            "ledger": {name: _policy_ledger_inputs(entry) for name, entry in evidence["ledger"].items()},
+            "gate_status_digest": evidence["gate_status_digest"],
+        },
+        "floor_digest": digests["floor"], "trust": dict(POLICY_EVIDENCE_TRUST),
+        "evaluated_at": now, "workflow_release": workflow_protocol.WORKFLOW_RELEASE,
+    }
+
+
+def build_policy_approval_record(repo_root: Path, state: dict, work_item_id: str, stage: str, *, now: str) -> dict:
+    """`/satisfy-gate`'s record (`D-GP-Satisfy`): evaluates the stage's gate
+    on `state`, resolves the basis (`resolve_policy_approval_basis`; a gate
+    that is human, unmet or unreachable raises `GateNotSatisfiableError`),
+    recomputes the `review_content_id` and manifest from the content the
+    reviewers saw, and builds the validated `POLICY_SATISFIED` record. Writes
+    nothing: the command persists it through `apply_plan_approval` /
+    `apply_technical_approval` inside its own transaction, calling this again
+    on the freshly re-read state so a toggle turned human meanwhile refuses."""
+    work_item = state["work_items"][work_item_id]
+    gate_id = gate_policy.STAGE_GATE.get(stage)
+    if gate_id is None:
+        raise InvalidApprovalRecordError(f"unknown approval stage: {stage!r}")
+    evaluation = gate_policy.evaluate_gate(repo_root, state, work_item_id, gate_id)
+    resolve_policy_approval_basis(state, work_item_id, stage, evaluation)
+    if stage == "plan":
+        content_id, projection = fingerprint.compute_review_content_id_plan_stage_for_work_item(
+            repo_root, work_item_id)
+        reviewed_content_commit = None
+    else:
+        artifacts_path = fingerprint.artifacts_path_for_work_item(work_item_id)
+        classification = fingerprint.load_implementation_stage_classification(repo_root, artifacts_path)
+        content_id, projection = fingerprint.compute_review_content_id_implementation_stage_at_commit(
+            repo_root, work_item["base_commit"], "HEAD", work_item["work_item_type"], work_item_id,
+            *classification)
+        reviewed_content_commit = work_item.get("reviewed_implementation_head")
+    if content_id != evaluation["evidence"]["review_content_id"]:
+        raise GateNotSatisfiableError(
+            f"{work_item_id}/{stage}: the recomputed review_content_id {content_id!r} is not the one the "
+            f"reviewers saw ({evaluation['evidence']['review_content_id']!r}). Nothing was written")
+    evidence = build_policy_evidence(repo_root, state, evaluation, now=now)
+    return build_approval_record(
+        basis=POLICY_SATISFIED, stage=stage, now=now,
+        user_confirmation=f"{POLICY_CONFIRMATION_PREFIX}{evidence['policy_digest']}",
+        reviewed_bundle_id=evaluation["bundle_id"], approved_review_content_id=content_id,
+        review_content_manifest=projection["review_content_manifest"],
+        reviewed_content_commit=reviewed_content_commit, policy_evidence=evidence)
+
+
+def assert_policy_still_satisfied(repo_root: Path, state: dict, work_item_id: str, stage: str, record: dict) -> None:
+    """The re-evaluation inside `/satisfy-gate plan`'s transaction
+    (`D-GP-Satisfy`): the policy file is an uncommitted working-tree input the
+    state compare-and-swap cannot see, so the command re-evaluates the gate on
+    the freshly read `state` at step 6.2 and again immediately before step 6.4's
+    commit. Refuses with `GateNotSatisfiableError`, writing nothing, when the
+    gate is no longer automatic and `satisfiable` (a human toggle turned on
+    meanwhile) or when the effective policy is no longer the one `record`
+    names (`policy_evidence.policy_digest`)."""
+    gate_id = gate_policy.STAGE_GATE[stage]
+    evaluation = gate_policy.evaluate_gate(repo_root, state, work_item_id, gate_id)
+    if evaluation["mode"] != "automatic" or not evaluation["satisfiable"]:
+        unmet = [f"{r['id']}: {r['detail']}" for r in evaluation["requirements"] if not r["met"]]
+        raise GateNotSatisfiableError(
+            f"{work_item_id}/{stage}: the {gate_id} gate is no longer satisfiable by policy "
+            f"(mode {evaluation['mode']!r}); unmet: {unmet}. Nothing was written")
+    named = record["policy_evidence"]["policy_digest"]
+    if evaluation["policy_digest"] != named:
+        raise GateNotSatisfiableError(
+            f"{work_item_id}/{stage}: the effective policy changed since the record was built "
+            f"({named[:12]} -> {evaluation['policy_digest'][:12]}). Nothing was written")
+
+
+def gate_satisfied_by_trailer(record: dict) -> str:
+    """The `Workflow-Gate-Satisfied-By` trailer value of the commit that
+    records `record`: `policy:` plus the first 12 hex characters of its
+    policy digest (`D-GP-Satisfy`)."""
+    return f"{POLICY_CONFIRMATION_PREFIX}{record['policy_evidence']['policy_digest'][:12]}"
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.8.0 CP3 (`D-GP-Evidence`, `D-GP-Invalidation`, `D-GP-Trust`): the
+# writers of an item's `gate_evidence`. Each runs the pure
+# `workflow_gate_policy` function inside `state_transaction`, so the re-read,
+# the apply and the publish happen under one lock; a refusal writes nothing.
+# Neither writer reopens an item or commits: the evidence is the item's own
+# uncommitted residue until its next validated commit (`gate_evidence` joins
+# the three commit field sets), and another item's commit never carries it
+# (`stage_scoped_state`).
+# ---------------------------------------------------------------------------
+
+class InvalidGateEvidenceError(Exception):
+    """`validate_state` found a malformed or unknown-keyed `gate_evidence`."""
+
+
+def _record_gate_evidence(repo_root: Path, writer) -> dict:
+    captured: dict = {}
+
+    def mutator(state: dict) -> dict:
+        new_state, result = writer(state)
+        captured.update(result)
+        return new_state
+
+    state_transaction(Path(repo_root), mutator)
+    return captured
+
+
+def record_functional_evidence(repo_root: Path, work_item_id: str, record: dict, *, now: str) -> dict:
+    """Ingests one flow's `functional_evidence` result under every policy
+    (inert under a human acceptance gate). Returns `{flow_id, identity,
+    stored}`; refuses with `EvidenceRefusedError`, writing nothing."""
+    return _record_gate_evidence(Path(repo_root), lambda state: gate_policy.ingest_functional_evidence(
+        Path(repo_root), state, work_item_id, record, now=now))
+
+
+def record_pr_fact(repo_root: Path, work_item_id: str, payload: dict, *, now: str,
+                   repository: str | None = None) -> dict:
+    """Ingests an orchestrator's `pr_review_result` (forge provenance
+    required) into `gate_evidence.pr_reported`; tighten-only, so it can only
+    arm the query trigger. Returns `{slot, fact}`."""
+    return _record_gate_evidence(Path(repo_root), lambda state: gate_policy.ingest_pr_facts(
+        Path(repo_root), state, work_item_id, payload, now=now, repository=repository))
+
+
+def query_and_store_pr_fact(repo_root: Path, work_item_id: str, *, now: str, run_ref: str | None = None,
+                            run=None, resolve=None) -> dict:
+    """Runs the Workflow's own fixed `gh` query for the item's anchor commit
+    inside the state transaction and stores the result as
+    `gate_evidence.pr` (provenance `workflow_gh`), also when a later gate is
+    refused, so a red answer is not lost and a poll does not loop. A
+    `ForgeError` (`forge_unavailable`, `forge_undecidable`) or an
+    `EvidenceRefusedError` writes nothing."""
+    import workflow_forge
+
+    def writer(state: dict) -> tuple[dict, dict]:
+        work_item = state["work_items"][work_item_id]
+        anchor = gate_policy.anchor_of(Path(repo_root), work_item_id, work_item)
+        if anchor is None:
+            raise workflow_forge.ForgeUndecidableError(
+                f"{work_item_id}: no anchor commit (no technical approval and no reviewed implementation head)")
+        kwargs = {"run": run} if run is not None else {}
+        query = workflow_forge.query_forge_pr_facts(Path(repo_root), anchor["commit"], resolve=resolve, **kwargs)
+        return gate_policy.store_workflow_pr_fact(Path(repo_root), state, work_item_id, query, now=now, run_ref=run_ref)
+
+    return _record_gate_evidence(Path(repo_root), writer)
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.8.0 CP4 (`D-GP-Acceptance`): the `acceptance_satisfaction` record
+# of an automatic milestone acceptance and the act that writes it. The record
+# is set in the same mutator as `complete_work_item`, so a refusal by that
+# function leaves nothing written; the completion commit has no field
+# contract, so the record needs no widening of a commit validator.
+# ---------------------------------------------------------------------------
+
+ACCEPTANCE_SATISFACTION_KEY = "acceptance_satisfaction"
+_ACCEPTANCE_SATISFACTION_FIELDS = frozenset({
+    "policy_digest", "policy_source", "file_digest", "adopted_digest", "floor_digest", "requirements",
+    "inputs", "trust", "evaluated_at", "workflow_release"})
+_ACCEPTANCE_INPUT_FIELDS = frozenset({"anchor_commit", "anchor_identity", "technical_approval", "functional", "pr"})
+
+
+class InvalidAcceptanceSatisfactionError(Exception):
+    """`validate_state` found a malformed `acceptance_satisfaction`."""
+
+
+def acceptance_satisfaction_errors(record) -> list[str]:
+    if not isinstance(record, dict):
+        return ["acceptance_satisfaction must be an object"]
+    errors = [f"acceptance_satisfaction key {key!r} is unexpected or missing"
+              for key in sorted(set(record) ^ _ACCEPTANCE_SATISFACTION_FIELDS)]
+    if errors:
+        return errors
+    digest = record["policy_digest"]
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        errors.append("acceptance_satisfaction.policy_digest must be 64 hex")
+    requirements = record["requirements"]
+    if not isinstance(requirements, list) or not requirements or any(
+            not isinstance(r, dict) or set(r) != {"id", "met", "detail"} or r["met"] is not True
+            for r in requirements):
+        errors.append("acceptance_satisfaction.requirements must be a non-empty list of met {id, met, detail}")
+    inputs = record["inputs"]
+    if not isinstance(inputs, dict) or set(inputs) != _ACCEPTANCE_INPUT_FIELDS:
+        errors.append(f"acceptance_satisfaction.inputs must have exactly {sorted(_ACCEPTANCE_INPUT_FIELDS)}")
+    else:
+        pr = inputs["pr"]
+        if not isinstance(pr, dict) or pr.get("provenance") != gate_policy.SOURCE_WORKFLOW_GH or not pr.get("raw_sha256"):
+            errors.append("acceptance_satisfaction.inputs.pr must name a workflow_gh fact and its raw_sha256")
+        functional = inputs["functional"]
+        if not isinstance(functional, dict) or not functional or any(
+                not isinstance(v, dict) or not v.get("log_digest") for v in functional.values()):
+            errors.append("acceptance_satisfaction.inputs.functional must name each flow's log_digest")
+    if not isinstance(record["trust"], dict):
+        errors.append("acceptance_satisfaction.trust must be an object")
+    return errors
+
+
+def build_acceptance_satisfaction(evaluation: dict, *, now: str) -> dict:
+    """The record of a `satisfiable` automatic acceptance evaluation
+    (`D-GP-Acceptance`, INV-4): the policy digests and source, every
+    requirement, the inputs read (anchor, technical approval, each flow's
+    `log_digest`/`run_ref`, the pull-request fact's provenance and
+    `raw_sha256`), the trust statement, the time and the release."""
+    import workflow_protocol  # lazy: the protocol imports this module
+
+    digests = evaluation["digests"]
+    return {
+        "policy_digest": evaluation["policy_digest"], "policy_source": evaluation["source"],
+        "file_digest": digests["file"], "adopted_digest": digests["adopted"], "floor_digest": digests["floor"],
+        "requirements": [dict(r) for r in evaluation["requirements"]],
+        "inputs": copy.deepcopy(evaluation["evidence"]), "trust": dict(gate_policy.ACCEPTANCE_TRUST),
+        "evaluated_at": now, "workflow_release": workflow_protocol.WORKFLOW_RELEASE,
+    }
+
+
+def acceptance_satisfied_by_trailer(record: dict) -> str:
+    """The `Workflow-Gate-Satisfied-By` value of the completion commit."""
+    return f"{POLICY_CONFIRMATION_PREFIX}{record['policy_digest'][:12]}"
+
+
+def apply_acceptance_satisfaction(state: dict, work_item_id: str, now: str, *, repo_root: Path) -> dict:
+    """Re-evaluates the acceptance gate on `state` (the freshly re-read one,
+    after the Workflow's own query stored its fact), then completes the item
+    and sets its `acceptance_satisfaction` in one returned state. Raises
+    `GateNotSatisfiableError` (the gate is human or unmet) or whatever
+    `complete_work_item` raises; either way nothing is returned to persist.
+    A re-acceptance overwrites the record."""
+    try:
+        evaluation = gate_policy.assert_acceptance_evidence_current(Path(repo_root), state, work_item_id)
+    except gate_policy.AcceptanceEvidenceNotCurrentError as exc:
+        raise GateNotSatisfiableError(f"{exc}. Nothing was written") from exc
+    record = build_acceptance_satisfaction(evaluation, now=now)
+    problems = acceptance_satisfaction_errors(record)
+    if problems:
+        raise InvalidAcceptanceSatisfactionError("; ".join(problems))
+    new_state = complete_work_item(state, work_item_id, now, repo_root=Path(repo_root))
+    new_state["work_items"][work_item_id][ACCEPTANCE_SATISFACTION_KEY] = record
+    return new_state
+
+
+def satisfy_acceptance_gate(repo_root: Path, work_item_id: str, *, now: str, run_ref: str | None = None,
+                            run=None, resolve=None) -> dict:
+    """The act of `/satisfy-gate acceptance` (`D-GP-Acceptance`), all inside
+    one `state_transaction`: (1) the Workflow's own fresh `gh` query for the
+    anchor commit, stored as `gate_evidence.pr` -- a `ForgeError` (`gh`
+    unavailable, an unsafe `gh`, a full page) writes nothing; (2) the
+    evaluation on the re-read state; (3) if it is not `satisfiable` (or the
+    gate is human) only the fact the query read is stored and
+    `GateNotSatisfiableError` is raised after the transaction; (4) otherwise
+    `apply_acceptance_satisfaction`, whose refusals write nothing at all.
+    Returns `{record, trailer}`."""
+    import workflow_forge
+
+    repo_root = Path(repo_root)
+    outcome: dict = {}
+
+    def mutator(state: dict) -> dict:
+        work_item = state["work_items"][work_item_id]
+        anchor = gate_policy.anchor_of(repo_root, work_item_id, work_item)
+        if anchor is None:
+            raise workflow_forge.ForgeUndecidableError(
+                f"{work_item_id}: no anchor commit (no technical approval and no reviewed implementation head)")
+        kwargs = {"run": run} if run is not None else {}
+        query = workflow_forge.query_forge_pr_facts(repo_root, anchor["commit"], resolve=resolve, **kwargs)
+        with_fact, _ = gate_policy.store_workflow_pr_fact(repo_root, state, work_item_id, query, now=now, run_ref=run_ref)
+        # The one query path that reopens (`D-GP-Invalidation`, `LPR-R26-001`): an
+        # actionable red fact reopens the same item inside this transaction.
+        with_fact, reopen = reopen_for_stored_fact(repo_root, with_fact, work_item_id, now=now)
+        outcome["reopen"] = reopen
+        evaluation = gate_policy.evaluate_gate(repo_root, with_fact, work_item_id, "acceptance")
+        if evaluation["mode"] != "automatic" or not evaluation["satisfiable"]:
+            outcome["refused"] = evaluation
+            return with_fact
+        completed = apply_acceptance_satisfaction(with_fact, work_item_id, now, repo_root=repo_root)
+        outcome["record"] = completed["work_items"][work_item_id][ACCEPTANCE_SATISFACTION_KEY]
+        return completed
+
+    state_transaction(repo_root, mutator)
+    if "refused" in outcome:
+        evaluation = outcome["refused"]
+        unmet = [f"{r['id']}: {r['detail']}" for r in evaluation["requirements"] if not r["met"]]
+        raise GateNotSatisfiableError(
+            f"{work_item_id}/acceptance: the gate is not satisfiable by policy (mode {evaluation['mode']!r}); "
+            f"unmet: {unmet}. Only the pull-request fact the query read was stored"
+            + (f"; the item was reopened for remediation on {outcome['reopen']['key']} (run /apply-pr-review {work_item_id})"
+               if outcome.get("reopen", {}).get("reopened") else ""))
+    return {"record": outcome["record"], "trailer": acceptance_satisfied_by_trailer(outcome["record"])}
+
+
+class PullRequestNotApprovedError(GateNotSatisfiableError):
+    """`/accept-milestone` step 2a: `requires_pr_approved` is set and the
+    Workflow's own query did not find a current, approved pull request."""
+
+
+def assert_human_acceptance_pr_approved(repo_root: Path, work_item_id: str, *, now: str, run_ref: str | None = None,
+                                        run=None, resolve=None) -> dict | None:
+    """`/accept-milestone` step 2a's added precondition (`D-GP-Acceptance`,
+    "The human path"): only when the effective `requires_pr_approved` is
+    true, run the Workflow's own query and store the `workflow_gh` fact it
+    read (a successful query only, also when this then refuses, `LPR-R12-002`),
+    then refuse with `PullRequestNotApprovedError` unless that fact is
+    current and the pull request approved. A `ForgeError` (`forge_unavailable`,
+    `forge_undecidable`) writes nothing. Returns `None` when the option is off
+    (nothing was run or written), otherwise the met requirements."""
+    repo_root = Path(repo_root)
+    state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    if not gate_policy.requires_pr_approved(gate_policy.effective_policy(repo_root, state)):
+        return None
+    query_and_store_pr_fact(repo_root, work_item_id, now=now, run_ref=run_ref, run=run, resolve=resolve)
+    state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    requirements = gate_policy.pr_approved_requirements(repo_root, state, work_item_id)
+    unmet = [f"{r['id']}: {r['detail']}" for r in requirements if not r["met"]]
+    if unmet:
+        raise PullRequestNotApprovedError(
+            f"{work_item_id}: requires_pr_approved is set and the pull request is not approved; unmet: {unmet}")
+    return requirements
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.8.0 CP5 (`D-GP-Reopen`): reopening the same work item into
+# remediation. `reopen_work_item` is the only writer of an item's `reopenings`
+# list. It never sets `active_work_item_id` (a top-level field the exhaustive
+# commit validators refuse to see changed): every command and `next-action`
+# call names the item explicitly. A completed item's side effects (the roadmap
+# row, the cleared `docs/ACTIVE_MILESTONE.md`) are deliberately not undone.
+# ---------------------------------------------------------------------------
+
+REOPENINGS_KEY = "reopenings"
+_REOPENING_FIELDS = frozenset({"n", "at", "from_phase", "cause", "pr_number", "pr_head", "fact_id", "key"})
+
+
+class InvalidReopeningsError(Exception):
+    """`validate_state` found a malformed `reopenings` list."""
+
+
+def reopenings_errors(reopenings, evidence=None) -> list[str]:
+    """Shape errors of an item's `reopenings`: entries numbered from 1 in
+    order, a legal `from_phase`, a known cause, and a `key` that is also in
+    `gate_evidence.pr_keys.reopened_for` (the writer adds both together)."""
+    if not isinstance(reopenings, list):
+        return ["reopenings must be a list"]
+    reopened = set()
+    if isinstance(evidence, dict) and isinstance(evidence.get("pr_keys"), dict):
+        reopened = set(evidence["pr_keys"].get("reopened_for") or [])
+    errors = []
+    for index, entry in enumerate(reopenings, start=1):
+        label = f"reopenings[{index - 1}]"
+        if not isinstance(entry, dict) or set(entry) != _REOPENING_FIELDS:
+            errors.append(f"{label} must have exactly {sorted(_REOPENING_FIELDS)}")
+            continue
+        if entry["n"] != index or isinstance(entry["n"], bool):
+            errors.append(f"{label}.n must be {index}")
+        if entry["from_phase"] not in gate_policy.REOPENABLE_PHASES:
+            errors.append(f"{label}.from_phase must be one of {sorted(gate_policy.REOPENABLE_PHASES)}")
+        if entry["cause"] not in gate_policy.CAUSES:
+            errors.append(f"{label}.cause must be one of {list(gate_policy.CAUSES)}")
+        if not isinstance(entry["at"], str) or not entry["at"]:
+            errors.append(f"{label}.at must be a time string")
+        if not isinstance(entry["pr_number"], int) or isinstance(entry["pr_number"], bool):
+            errors.append(f"{label}.pr_number must be an integer")
+        if not isinstance(entry["pr_head"], str) or not re.fullmatch(r"[0-9a-f]{40}", entry["pr_head"]):
+            errors.append(f"{label}.pr_head must be 40 hex")
+        if not isinstance(entry["fact_id"], str) or not re.fullmatch(r"[0-9a-f]{64}", entry["fact_id"]):
+            errors.append(f"{label}.fact_id must be 64 hex")
+        if not isinstance(entry["key"], str) or entry["key"] not in reopened:
+            errors.append(f"{label}.key must be in gate_evidence.pr_keys.reopened_for")
+    return errors
+
+
+def reopen_work_item(state: dict, work_item_id: str, *, cause: str, fact: dict, now: str,
+                     repo_root: Path) -> dict:
+    """Reopens `work_item_id` into remediation on the stored `workflow_gh`
+    `fact` (`D-GP-Reopen`): appends the `reopenings` entry, adds the cause's
+    key to `gate_evidence.pr_keys.reopened_for`, and sets the phase to
+    `AWAITING_FUNCTIONAL_REVIEW` (leaving the technical approval `CURRENT`:
+    staling is the fix command's job). Legal from `AWAITING_FUNCTIONAL_REVIEW`
+    (the phase stays) and `MILESTONE_COMPLETE`. Refuses, writing nothing, with
+    a stable code: `reopen_phase_illegal`, `pr_fact_not_workflow_gh`,
+    `pr_merged`, `pr_review_disabled`, `cause_not_actionable`,
+    `key_consumed` (already in `applied`), `already_reopened` (an
+    `AWAITING_FUNCTIONAL_REVIEW` item whose key already caused an entry),
+    `incomplete_child`, `reopen_plan_archived` (a `MILESTONE_COMPLETE` item
+    whose `plan_path` no longer resolves; restore the plan from
+    `docs/milestones/completed/`), `reopen_retired_legacy_item` (a
+    `MILESTONE_COMPLETE` item with governing version `1` and a `LEGACY_V1`
+    basis, retired by `/retire-legacy-work-item`; `begin_pr_review` raises it
+    too). Never touches `active_work_item_id`."""
+    repo_root = Path(repo_root)
+    refuse = gate_policy.EvidenceRefusedError
+    work_item = (state.get("work_items") or {}).get(work_item_id)
+    if not isinstance(work_item, dict):
+        raise refuse("reopen_unknown_work_item", f"{work_item_id!r} names no work item")
+    phase = work_item.get("phase")
+    if phase not in gate_policy.REOPENABLE_PHASES:
+        raise refuse("reopen_phase_illegal",
+                     f"{work_item_id}: a reopen is legal only from {sorted(gate_policy.REOPENABLE_PHASES)}, not {phase!r}")
+    if gate_policy.is_retired_legacy_item(work_item):
+        raise refuse("reopen_retired_legacy_item",
+                     f"{work_item_id}: a retired legacy item is closed by design; start a new work item for further work")
+    if not isinstance(fact, dict) or (fact.get("provenance") or {}).get("source") != gate_policy.SOURCE_WORKFLOW_GH:
+        raise refuse("pr_fact_not_workflow_gh", "a reopen reads only the Workflow's own (workflow_gh) pull-request fact")
+    if fact.get("state") == "merged":
+        raise refuse("pr_merged", f"{work_item_id}: the pull request is merged; the follow-up is a new work item")
+    policy = gate_policy.effective_policy(repo_root, state)["policy"]
+    if not policy["pr_review"]["enabled"]:
+        raise refuse("pr_review_disabled", "pr_review is disabled in the policy in effect")
+    if not gate_policy.pr_key_actionable(policy, fact, cause):
+        raise refuse("cause_not_actionable", f"{cause!r} does not reopen under the policy in effect for this fact")
+    position = gate_policy.position_of(repo_root, work_item_id, work_item, fact["head"],
+                                       identity_at_head=fact.get("identity_at_head"))
+    if cause not in gate_policy.evidential_causes(position, fact):
+        raise refuse("cause_not_actionable", f"the fact does not evidence {cause!r} against the anchor (position {position!r})")
+    key = gate_policy.cause_key(cause, fact)
+    evidence = gate_policy.gate_evidence_of(work_item)
+    if key in evidence["pr_keys"]["applied"]:
+        raise refuse("key_consumed", f"{key} was already applied by /apply-pr-review")
+    if phase == "AWAITING_FUNCTIONAL_REVIEW" and key in evidence["pr_keys"]["reopened_for"]:
+        raise refuse("already_reopened", f"{key} already caused a reopening entry")
+    blocking = incomplete_children(state, work_item_id)
+    if blocking:
+        raise refuse("incomplete_child", f"{work_item_id}: child work item(s) {blocking} have not reached MILESTONE_COMPLETE")
+    if phase == "MILESTONE_COMPLETE":
+        plan_path = work_item.get("plan_path")
+        if not plan_path or not (repo_root / plan_path).is_file():
+            raise refuse(
+                "reopen_plan_archived",
+                f"{work_item_id}: plan_path {plan_path!r} does not resolve; restore the plan from "
+                f"docs/milestones/completed/ to plan_path, then retry")
+    new_state = copy.deepcopy(state)
+    new_item = new_state["work_items"][work_item_id]
+    if key not in evidence["pr_keys"]["reopened_for"]:
+        evidence["pr_keys"]["reopened_for"].append(key)
+    new_item[gate_policy.GATE_EVIDENCE_KEY] = evidence
+    reopenings = list(new_item.get(REOPENINGS_KEY) or [])
+    reopenings.append({
+        "n": len(reopenings) + 1, "at": now, "from_phase": phase, "cause": cause,
+        "pr_number": fact["pr"]["number"], "pr_head": fact["head"], "fact_id": fact["fact_id"], "key": key})
+    new_item[REOPENINGS_KEY] = reopenings
+    new_item["phase"] = "AWAITING_FUNCTIONAL_REVIEW"
+    new_item["state_revision"] = new_item.get("state_revision", 1) + 1
+    new_item["last_transition"] = now
+    return new_state
+
+
+def mark_pr_key_applied(state: dict, work_item_id: str, key: str, now: str) -> dict:
+    """Adds `key` to `gate_evidence.pr_keys.applied` (`/apply-pr-review`'s one
+    consumption write; every branch makes it, composed in the branch's own
+    mutator). Idempotent: a key already applied returns `state` unchanged."""
+    work_item = state["work_items"][work_item_id]
+    evidence = gate_policy.gate_evidence_of(work_item)
+    if key in evidence["pr_keys"]["applied"]:
+        return state
+    evidence["pr_keys"]["applied"].append(key)
+    new_state = copy.deepcopy(state)
+    new_item = new_state["work_items"][work_item_id]
+    new_item[gate_policy.GATE_EVIDENCE_KEY] = evidence
+    new_item["state_revision"] = new_item.get("state_revision", 1) + 1
+    new_item["last_transition"] = now
+    return new_state
+
+
+def reopen_for_stored_fact(repo_root: Path, state: dict, work_item_id: str, *, now: str) -> tuple[dict, dict]:
+    """The store-time reopen (`D-GP-Invalidation`, "Phases at ingest"): called
+    by a Workflow query path that reopens (`satisfy_acceptance_gate`) inside
+    the transaction that stored the `workflow_gh` fact. At
+    `AWAITING_FUNCTIONAL_REVIEW` or `MILESTONE_COMPLETE`, a stored fact that
+    yields an actionable, unapplied key not yet in `reopened_for` reopens
+    through `reopen_work_item`. Any other phase, or no such key, records only.
+    A refusal of the reopen itself (an incomplete child, an archived plan)
+    leaves the stored fact and returns `{"refused": code}`; it never raises.
+    Returns `(state, {"reopened": bool, "cause", "key", "refused"})`."""
+    outcome = {"reopened": False, "cause": None, "key": None, "refused": None}
+    work_item = state["work_items"][work_item_id]
+    if work_item.get("phase") not in gate_policy.REOPENABLE_PHASES:
+        return state, outcome
+    policy = gate_policy.effective_policy(Path(repo_root), state)["policy"]
+    candidate = gate_policy.reopen_candidate(Path(repo_root), state, work_item_id, policy)
+    if candidate is None:
+        return state, outcome
+    fact = gate_policy.gate_evidence_of(work_item)["pr"]
+    try:
+        new_state = reopen_work_item(state, work_item_id, cause=candidate["cause"], fact=fact, now=now,
+                                     repo_root=Path(repo_root))
+    except gate_policy.EvidenceRefusedError as exc:
+        outcome.update(cause=candidate["cause"], key=candidate["key"], refused=exc.code)
+        return state, outcome
+    outcome.update(reopened=True, cause=candidate["cause"], key=candidate["key"])
+    return new_state, outcome
+
+
+def begin_pr_review(repo_root: Path, work_item_id: str, *, now: str, run_ref: str | None = None,
+                    run=None, resolve=None) -> dict:
+    """`/apply-pr-review`'s first step (`D-GP-Reopen`), one `state_transaction`.
+    Returns `{result, cause, key, phase, reopened, ...}` where `result` is:
+
+    - `reopened` / `already_reopened`: the item is at
+      `AWAITING_FUNCTIONAL_REVIEW` on `cause`/`key`, and the command continues
+      into the cause table's branch;
+    - `nothing_to_apply`: no actionable unapplied key (case (a) alone, stored);
+    - `pr_fact_refreshed`: the fresh fact yields no key and none was stored
+      (recorded; the stale trigger clears);
+    - refusals that store the fresh fact and leave the phase: `pr_merged`,
+      `pr_fact_superseded` (S stays unapplied, `LPR-R32-001`), and the reopen's
+      own `incomplete_child` / `reopen_plan_archived`.
+
+    Case (a) alone (a stored actionable key, no query trigger) at
+    `AWAITING_FUNCTIONAL_REVIEW` reopens without a query when the key is not
+    in `reopened_for`. Otherwise the fresh `workflow_gh` query runs first
+    (the trigger takes precedence over a stored key, `LPR-R30-001`) and is
+    stored **without** the store-time reopen (`LPR-R26-001`); steps 2-3 make
+    the one reopen decision. A forge or head refusal (`forge_unavailable`,
+    `forge_undecidable`, `pr_head_unknown`, `pr_head_not_in_branch`) raises
+    and stores nothing. Nothing here ever adds a key to `applied`."""
+    import workflow_forge
+
+    repo_root = Path(repo_root)
+    outcome: dict = {}
+
+    def result(name: str, state: dict, **extra) -> dict:
+        outcome.update(result=name, phase=state["work_items"][work_item_id]["phase"], **extra)
+        return state
+
+    def mutator(state: dict) -> dict:
+        work_item = state["work_items"].get(work_item_id)
+        if not isinstance(work_item, dict):
+            raise gate_policy.EvidenceRefusedError("reopen_unknown_work_item", f"{work_item_id!r} names no work item")
+        phase = work_item["phase"]
+        if phase not in gate_policy.REOPENABLE_PHASES:
+            raise gate_policy.EvidenceRefusedError(
+                "reopen_phase_illegal", f"{work_item_id}: /apply-pr-review runs only from "
+                f"{sorted(gate_policy.REOPENABLE_PHASES)}, not {phase!r}")
+        if gate_policy.is_retired_legacy_item(work_item):
+            raise gate_policy.EvidenceRefusedError(
+                "reopen_retired_legacy_item",
+                f"{work_item_id}: a retired legacy item is closed by design; start a new work item for further work")
+        policy = gate_policy.effective_policy(repo_root, state)["policy"]
+        trigger = gate_policy.pr_query_trigger(state, work_item_id, policy)
+        stored = gate_policy.actionable_pr_keys(repo_root, state, work_item_id, policy)
+        if phase == "AWAITING_FUNCTIONAL_REVIEW" and not trigger:
+            if not stored:
+                return result("nothing_to_apply", state, cause=None, key=None, reopened=False)
+            candidate, evidence = stored[0], gate_policy.gate_evidence_of(work_item)
+            if candidate["key"] in evidence["pr_keys"]["reopened_for"]:
+                return result("already_reopened", state, cause=candidate["cause"], key=candidate["key"], reopened=False)
+            new_state = reopen_work_item(state, work_item_id, cause=candidate["cause"], fact=evidence["pr"], now=now,
+                                         repo_root=repo_root)
+            return result("reopened", new_state, cause=candidate["cause"], key=candidate["key"], reopened=True)
+        # The query path: S is read once, before the query.
+        stored_key = stored[0] if stored else None
+        anchor = gate_policy.anchor_of(repo_root, work_item_id, work_item)
+        if anchor is None:
+            raise workflow_forge.ForgeUndecidableError(
+                f"{work_item_id}: no anchor commit (no technical approval and no reviewed implementation head)")
+        kwargs = {"run": run} if run is not None else {}
+        query = workflow_forge.query_forge_pr_facts(repo_root, anchor["commit"], resolve=resolve, **kwargs)
+        with_fact, stored_fact = gate_policy.store_workflow_pr_fact(repo_root, state, work_item_id, query, now=now,
+                                                                    run_ref=run_ref)
+        fact = stored_fact["fact"]
+        fresh = gate_policy.actionable_pr_keys(repo_root, with_fact, work_item_id, policy)
+        if fact.get("state") == "merged" and stored_key is not None:
+            return result("pr_merged", with_fact, cause=None, key=stored_key["key"], reopened=False)
+        if not fresh or (not trigger and stored_key is not None and fresh[0]["key"] != stored_key["key"]):
+            name = "pr_fact_superseded" if stored_key is not None else "pr_fact_refreshed"
+            return result(name, with_fact, cause=None, key=stored_key["key"] if stored_key else None, reopened=False)
+        chosen = fresh[0] if trigger or stored_key is None else next(
+            c for c in fresh if c["key"] == stored_key["key"])
+        evidence = gate_policy.gate_evidence_of(with_fact["work_items"][work_item_id])
+        if phase == "AWAITING_FUNCTIONAL_REVIEW" and chosen["key"] in evidence["pr_keys"]["reopened_for"]:
+            return result("already_reopened", with_fact, cause=chosen["cause"], key=chosen["key"], reopened=False)
+        try:
+            reopened = reopen_work_item(with_fact, work_item_id, cause=chosen["cause"], fact=evidence["pr"], now=now,
+                                        repo_root=repo_root)
+        except gate_policy.EvidenceRefusedError as exc:
+            return result(exc.code, with_fact, cause=chosen["cause"], key=chosen["key"], reopened=False, refused=True)
+        return result("reopened", reopened, cause=chosen["cause"], key=chosen["key"], reopened=True)
+
+    state_transaction(repo_root, mutator)
+    return outcome
 
 
 if __name__ == "__main__":

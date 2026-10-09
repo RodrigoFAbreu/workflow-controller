@@ -224,6 +224,20 @@ class TestFullPassAuthorizedCommitKinds(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestTemplateDefaultCreatesTwoPointTwoItem(unittest.TestCase):
+    def test_item_created_under_the_2_2_template_is_2_2_and_default_config_is_unchanged(self):
+        template = {"schema_version": 1, "default_workflow_version": "2.2",
+                    "supported_versions": ["1", "2.1", "2.2"]}
+        ws.validate_config(template)
+        state = ws.route_work_item(
+            {"schema_version": 1, "active_work_item_id": None, "work_items": {}},
+            template, work_item_id="wi", work_item_type="process", work_item_kind="process",
+            plan_path="p", registry_path="r", plan_revision=1, now="t",
+        )
+        self.assertEqual(state["work_items"]["wi"]["governing_workflow_version"], "2.2")
+        self.assertEqual(ws.default_config()["default_workflow_version"], "1")
+
+
 class TestSelectNextCheckpointDeterminismAlongFullWalk(unittest.TestCase):
     """Missing-test item 58: "at every point in the registry order, exactly
     one command can select and implement the next incomplete checkpoint."
@@ -753,6 +767,15 @@ class TestVersion21OnlyCommandsRefuseCleanlyForV1(unittest.TestCase):
 # below, for the two files where a real pre-v2.1 copy is actually
 # available to diff against.
 _GOLDEN_COMMAND_FILE_SHA256 = {
+    # workflow-2.8.0 (gate-policy-and-reopening, CP2): `approve-review.md`
+    # gains the pointer to `/satisfy-gate`; `milestone-plan.md`,
+    # `apply-plan-review.md`, `milestone-implement.md` and
+    # `apply-implementation-review.md` gain the sentence asking the reviewer for
+    # `Reviewer model:` when the gate requires distinct models;
+    # `review-plan.md`, `review-implementation.md` and
+    # `record-manual-plan-review.md` gain the `Reviewer model:` line and the audit
+    # keys; `apply-functional-review.md` names `/satisfy-gate` in the child
+    # sequence -- intentional content changes, not regressions.
     # Updated by WFO-STATE-SERIALIZATION (item 354/357): every writer
     # command file below gained a `state_writer: true` frontmatter
     # declaration and a "State-writer discipline" paragraph naming
@@ -844,7 +867,10 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # commit's widened member set (every declared protected path).
     # Implementation review round 2 (I1): step 3's intent-to-add staging is
     # `git --literal-pathspecs add -N` -- intentional.
-    "milestone-plan.md": "1369139371201c39b9505b00bbbbed87b2cfeebf7f2112e98a42b031b1a8f003",
+    # milestone-plan.md further updated, D-Consumed-History (workflow-2.7.0,
+    # CP2, v2.6.0-001): the withdrawal report names the durable
+    # consumed_plan_review_content_ids history -- intentional content change.
+    "milestone-plan.md": "e3f1c979871fe65b1f6d20aedabb2e6afe797b40af19944a314a96ee247e6ed3",
     # milestone-implement.md further updated, OPUS-R129-001: step 1f's
     # checkpoint-completion commit instruction now states explicitly that
     # the Workflow-Checkpoint/Workflow-Work-Item trailer must be the
@@ -867,7 +893,16 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # 1c routes adopt_claim's to them, and step 1d states that
     # claim_checkpoint returns the claim record whose owner_token field is
     # the token -- intentional content change.
-    "milestone-implement.md": "dd3ceefd29d6ad2533f8df6ad14a76ea0acb35cb021e2b788174aa11179f45e1",
+    # milestone-implement.md further updated, workflow-2.7.0
+    # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 1a calls
+    # implementing_entry_status and reports its cause and remedy --
+    # intentional content change.
+    # workflow-2.8.0 (gate-policy-and-reopening, CP1): step 4's generation-
+    # record commit stages item-scoped (stage_scoped_state), and the
+    # checkpoint (1f) and self-review (2) commits call
+    # assert_gate_policy_fields_unchanged_or_tightened after landing --
+    # intentional content change.
+    "milestone-implement.md": "09d20a57b37590fe632b60149f0ce13aa04d6b796a8671909db5dc3dd13bd128",
     # approve-review.md (WF8c item (c), same-content bundle-generation
     # republication idempotency; further updated WF8c item (b): the
     # trailing caveat naming the dedicated /recover-implementation-provenance
@@ -986,7 +1021,18 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # Implementation review round 2 (I1): step 4a reads the staged diff
     # NUL-delimited, step 6.3 calls assert_staged_path_set_within, and step
     # 6d's member-dirty check is literal -- intentional.
-    "approve-review.md": "65d60c81f4a3023d9447977f5e9d7ec892fef45254f7735dfd1c9fee70597995",
+    # approve-review.md further updated, workflow-2.7.0
+    # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 1's gate check calls
+    # plan_approval_gate_status/technical_approval_gate_status on the
+    # state re-read after the BLOCK pin, reporting the first cause in the
+    # wrapper's order; step 2's generation and bundle-bound checks run
+    # inside it -- intentional content change.
+    # workflow-2.8.0 (gate-policy-and-reopening, CP1): the technical-
+    # approval commit stages item-scoped (stage_scoped_state); the plan-
+    # approval commit keeps its whole-file pin and
+    # verify_plan_approval_commit applies the gate-policy content check --
+    # intentional content change.
+    "approve-review.md": "e760ecb36c98e271ad483af4d3b3a0bcb6469749f333742bbb993c9e93a7fb21",
     # accept-milestone.md updated, baseline-freeze correctness fix
     # (OPUS-R129-001): step 6's completion-commit instruction now states
     # the same "trailers must be the commit message's own final paragraph"
@@ -1003,7 +1049,30 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # forward instead (finish the checkpoint with /milestone-implement, or
     # route a functional finding through /apply-functional-review's
     # bounded/broad branches) -- intentional content change.
-    "accept-milestone.md": "ddf2f49aacd802d831602ac89673a4bba1d65960d4acad13fdad1578d5feff0a",
+    #
+    # accept-milestone.md further updated, Orchestration Protocol v1
+    # (workflow-2.7.0, CP6, v2.6.0-003): step 2a no longer tells the operator
+    # to finish an outstanding checkpoint with /milestone-implement, which
+    # cannot start one at AWAITING_FUNCTIONAL_REVIEW; it says no 2.6.0
+    # command completes one there, and keeps the /apply-functional-review
+    # routing -- intentional content change.
+    #
+    # accept-milestone.md further updated, workflow-2.8.0 (gate-policy-and-
+    # reopening, CP4): a pointer to /satisfy-gate acceptance, step 2a's
+    # requires_pr_approved pre-flight (only when the option is set) and step 5
+    # pinned to copy, never move (LPR-R2-003) -- intentional content change.
+    #
+    # accept-milestone.md further updated, workflow-2.8.0 (gate-policy-and-
+    # reopening, CP5): step 5 states what a re-acceptance of a reopened item
+    # does (one archive copy and one roadmap row, `acceptance_satisfaction`
+    # overwritten, `completion_obligations_accepted` kept) -- intentional
+    # content change.
+    # accept-milestone.md further updated, workflow-2.9.0 (legacy-retire-and-
+    # default-version, CP5): step 2a's non-terminal-registry bullet names the
+    # user-only /resume-implementation for a 2.1/2.2 item and drops the wrong
+    # "legacy promotion" origin -- intentional content change, outside every
+    # "1"-inert span.
+    "accept-milestone.md": "ace07f7d4ccbe3660ef477651b11562502513bd8e55aefab5deff3ec0994d1c8",
     # prepare-functional-review.md further updated, baseline-portability
     # correctness fix (OPUS-R129-001): step 3a's checklist-evidence
     # provenance commit instruction now states the same "trailers must be
@@ -1041,7 +1110,12 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # verify-plus-bind with 7'.2's regeneration removed -- intentional content
     # change, not a regression. Implementation review round 1: step 5 states
     # that a legacy-marked item must advance plan_revision -- intentional.
-    "apply-plan-review.md": "069fc470f11aa7e8b755fa2fd351662ab5c2e296f7af5ce208b7f5201acc1469",
+    # apply-plan-review.md further updated, workflow-2.7.0
+    # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 1 binds through
+    # assert_apply_review_feedback_binding (D-Apply-Binding): a two-stage
+    # REVISE stating a review_content_id is bound by content --
+    # intentional content change.
+    "apply-plan-review.md": "17c7ea54b5d98cd5267dccbe42df5b4e37ed8a1fc8be3762d34aa9b2db5a4658",
     # apply-implementation-review.md (WF8c item (c)): step 7's
     # record_bundle_generation call site widened to first resolve the
     # outcome (resolve_bundle_generation_outcome) and write the matching
@@ -1068,7 +1142,15 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # (workflow-2.6.0, CP3): the preamble states feedback_layout-keyed
     # resolution and step 1 prints the exact resolved path when
     # REVIEW_FEEDBACK.md is absent -- intentional content change.
-    "apply-implementation-review.md": "6fbec6a0ccc8a0640b1ea0e17a506ad11c349431bebc9d88b0b694c84e31b2db",
+    # apply-implementation-review.md further updated, workflow-2.7.0
+    # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 1 binds through
+    # assert_apply_review_feedback_binding (D-Apply-Binding): a 2.2 REVISE
+    # stating a review_content_id is bound by content -- intentional
+    # content change.
+    # workflow-2.8.0 (gate-policy-and-reopening, CP1): the generation-record
+    # commit stages item-scoped (stage_scoped_state) -- intentional content
+    # change.
+    "apply-implementation-review.md": "deaf93154185971241690ee4b5e0c8ec9b21a765a957e5cae78f1a66627a76ba",
     # review-plan.md/record-manual-plan-review.md further updated,
     # workflow-v2-3-followups CP3 (REQ-8/-9): the `Reviewer role:` template
     # literal, the round-computation prose, the exact-match-expectation
@@ -1100,7 +1182,13 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # (workflow-2.6.0, CP4): the bound-bundle reader
     # (validate_local_plan_review_preconditions_bound) and the CONSUMED write
     # on REVISE -- intentional content change, not a regression.
-    "review-plan.md": "232d0f54c72e8ab4d5e7299ce1b846e82fdd98748877262975547394d60f08e5",
+    # review-plan.md further updated, D-Feedback-Label (workflow-2.7.0,
+    # CP1, v2.6.0-002): step 7 names the pinned Reviewed review_content_id:
+    # label, before the first ## section -- intentional content change.
+    # review-plan.md further updated, D-Consumed-History (workflow-2.7.0,
+    # CP2, v2.6.0-001): REVISE also adds the id to the durable
+    # consumed_plan_review_content_ids history -- intentional content change.
+    "review-plan.md": "61cb286719b6f310c61f9304324d6994f74dc9c443661178b81c051e05d27e0d",
     # record-manual-plan-review.md further updated, D-Feedback-Layout
     # (workflow-2.6.0, CP3): preamble states feedback_layout-keyed
     # resolution; step 4 prints the exact resolved paste path and adds the
@@ -1110,7 +1198,16 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # Binding (workflow-2.6.0, CP4): the bound-bundle reader
     # (assert_plan_review_bundle_bound) and the CONSUMED write on REVISE --
     # intentional content change, not a regression.
-    "record-manual-plan-review.md": "1713522d5b1d116dd44429d3764b78839db023800700227421ff0a859f9421cb",
+    # record-manual-plan-review.md further updated, D-Feedback-Label
+    # (workflow-2.7.0, CP1, v2.6.0-002): step 4 names the pinned
+    # Reviewed review_content_id: label and the header-before-## rule --
+    # intentional content change.
+    # record-manual-plan-review.md further updated, D-OP-External
+    # (workflow-2.7.0, CP5): steps 2-7 are one call to the shared
+    # ingest_manual_review_verdict (two_stage_only=True), which holds
+    # state_lock through the publication; the required header fields,
+    # Round: and the absent-bundle-id advisory -- intentional content change.
+    "record-manual-plan-review.md": "f5647bdb1af514a4c89d0fdf9e6bfe098009d48ee6f124c0bf26684f2870b58f",
     # bootstrap-workflow-v2.md (WF8c scope clauses (l)/(p)/(q), GPT-R108-002/
     # OPUS-R109-004): the driver-range text made checkpoint-agnostic
     # (OPUS-R102-009), a NO_CHECKPOINT terminal-wrap-up branch added to step
@@ -1197,7 +1294,14 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # before the write; step 7's recovery text scopes the hand-created-dir
     # warning to legacy items; A7 prints the exact resolved paste path --
     # intentional content change.
-    "review-implementation.md": "19578cc8a506463b0b0b0ad9c5c60db62ab86e75478dad2d595f98db206f4bd8",
+    # review-implementation.md further updated, D-Feedback-Label
+    # (workflow-2.7.0, CP1, v2.6.0-002): step 6 and A5 write the pinned
+    # Reviewed review_content_id: label, before the first ## section --
+    # intentional content change.
+    # review-implementation.md further updated, workflow-2.7.0
+    # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 4's bundle check is
+    # verify_implementation_review_bundle -- intentional content change.
+    "review-implementation.md": "656538d4033c9a086adf1c0b387f15d18ee5a5b95af782a6267a712018d04060",
     # review-functional.md: new, workflow-v2-3 CP2 -- the first recorded
     # hash, not a change.
     #
@@ -1272,7 +1376,19 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # (workflow-2.6.0, CP4): a two-stage remediation child's publish is
     # mirror-only and its bind writes AWAITING_LOCAL_PLAN_REVIEW --
     # intentional content change, not a regression.
-    "apply-functional-review.md": "25b42a93c05e4c2f40cc3f05041878b48ddb8459b9313e9c4f9820edbda27139",
+    # workflow-2.8.0 (gate-policy-and-reopening, CP1): the generation-record
+    # commit stages item-scoped (stage_scoped_state) -- intentional content
+    # change.
+    # workflow-2.8.0 (gate-policy-and-reopening, CP4): a closing cross-reference
+    # to /satisfy-gate acceptance -- intentional content change.
+    # workflow-2.8.0 (gate-policy-and-reopening, CP5): the remediation child
+    # sequence names /apply-pr-review <child-id> for a child whose pull
+    # request turns red -- intentional content change.
+    # workflow-2.9.0 (legacy-retire-and-default-version, CP5): step 0's "An entry
+    # exists" bullet names the user-only /resume-implementation for an outstanding
+    # checkpoint at this phase -- intentional content change, outside every
+    # "1"-inert span.
+    "apply-functional-review.md": "2e1518c67823d41b3ae2a1776c5f0e95931a45d2728cf68dcd0983d94d45ead2",
 }
 
 
@@ -2999,17 +3115,27 @@ class TestAssertLocalGenerationMatchesCallSiteConformance(unittest.TestCase):
     strict-mode tests), not through a caller that does not exist. This
     assertion fails if a future change adds a call site not in
     `EXPECTED_CALL_SITES`, so that change cannot land without a human
-    deciding whether `WFR-17`/`D-Bundle-Manifest` need updating too."""
+    deciding whether `WFR-17`/`D-Bundle-Manifest` need updating too.
+    workflow-2.7.0 adds a fourth, `workflow_state.py`'s two gate wrappers
+    (`plan_approval_gate_status`/`technical_approval_gate_status`), which
+    run `/approve-review`'s check on its behalf and are repository-local
+    by construction."""
 
     EXPECTED_CALL_SITES = frozenset({
         Path(".claude/commands/approve-review.md"),
         Path(".claude/commands/review-plan.md"),
         Path(".claude/commands/review-implementation.md"),
+        # workflow-2.7.0 (`D-OP-Next`, `LPR-R1-003`): the two repository-aware
+        # gate wrappers run `/approve-review`'s generation check as their first
+        # cause; both are repository-local by construction (`WFR-17` holds).
+        # CP5 adds `ingest_manual_review_verdict` in the same file, the
+        # record-manual commands' generation check (`LPR-R2-002`).
+        Path("scripts/workflow_state.py"),
     })
 
     _CALL_RE = re.compile(r"assert_local_generation_matches\(")
 
-    def test_exactly_the_three_live_permissive_callers_exist(self):
+    def test_exactly_the_expected_live_permissive_callers_exist(self):
         repo_root = _repo_root()
         found: set[Path] = set()
         for path in sorted((repo_root / ".claude" / "commands").glob("*.md")):
@@ -6472,14 +6598,16 @@ class TestRetiredScopedRemediationLeavesNoLiveSurface(unittest.TestCase):
         and `/review-functional` without ever sectioning them here. Both
         gaps are now closed -- `workflow-2.4.0` CP3 added a sixteenth,
         `/request-plan-amendment` -- and `workflow-2.5.0` CP4 added a
-        seventeenth, `/record-manual-implementation-review` -- the
-        reference sections all 17 live commands -- and this test derives
+        seventeenth, `/record-manual-implementation-review`, and
+        `workflow-2.8.0` CP1 an eighteenth, `/adopt-gate-policy`, CP2 a
+        nineteenth, `/satisfy-gate`, and CP5 a twentieth, `/apply-pr-review` --
+        the reference sections all 20 live commands -- and this test derives
         the expected count from the real files rather than hand-maintaining
         a number that can go stale again."""
         text = (_repo_root() / "docs/ai-workflow/WORKFLOW_V2_1_OPERATOR_REFERENCE.md").read_text()
         sections = re.findall(r"(?m)^### `/([a-z0-9-]+)", text)
         on_disk = sorted(p.stem for p in (_repo_root() / ".claude" / "commands").glob("*.md"))
-        self.assertEqual(len(on_disk), 17)
+        self.assertEqual(len(on_disk), 22)
         self.assertNotIn("accept-scoped-remediation", sections)
         self.assertNotIn("accept-scoped-remediation", on_disk)
         # Every live command has exactly one section, and vice versa.
@@ -6560,6 +6688,12 @@ def _commands_naming_a_phase_writer() -> set[str]:
 #: `test_the_single_exempt_command_says_why_it_is_exempt` below.
 _TARGETING_EXEMPT_COMMANDS = frozenset({"bootstrap-workflow-v2.md"})
 
+#: Phase-advancing commands that take a work-item id (so the targeting rule
+#: above still binds them) but are not steps of a remediation child's own
+#: lifecycle: `/retire-legacy-work-item` (workflow-2.9.0) closes a dormant
+#: `LEGACY_READY` item, and a remediation child is never a legacy item.
+_CHILD_SEQUENCE_EXEMPT_COMMANDS = frozenset({"retire-legacy-work-item.md", "resume-implementation.md"})
+
 
 class TestWorkItemTargetingContract(unittest.TestCase):
 
@@ -6635,7 +6769,7 @@ class TestWorkItemTargetingContract(unittest.TestCase):
         branch hands the operator."""
         expected = {
             filename[:-3] for filename in
-            _commands_naming_a_phase_writer() - _TARGETING_EXEMPT_COMMANDS
+            _commands_naming_a_phase_writer() - _TARGETING_EXEMPT_COMMANDS - _CHILD_SEQUENCE_EXEMPT_COMMANDS
         }
         missing = expected - _broad_branch_child_commands()
         self.assertEqual(missing, set(), f"child sequence omits: {sorted(missing)}")
@@ -6956,6 +7090,12 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         "plan_approval", "plan_path", "plan_review_stages", "registry_path",
         "review_content_id", "reviewed_implementation_head", "same_content",
         "state_revision", "technical_approval", "work_item_id",
+        # workflow-2.9.0, `/retire-legacy-work-item`: a state field name and a
+        # stable refusal code, not code symbols.
+        "current_checkpoint_id", "reopen_retired_legacy_item", "registry_incomplete",
+        # workflow-2.9.0, `/resume-implementation`: the technical approval's status and a stable
+        # refusal-class prefix, not code symbols.
+        "technical_approval.status",
         "work_item_kind", "work_item_type", "work_items", "worktree_root",
         "test_the_operator_reference_command_count_matches_reality",
         # workflow-2.4.0, D-Plan-Amendment-3: amendment_history entry/
@@ -6967,6 +7107,25 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         # callable; `user_confirmation` is `plan_approval`'s own existing
         # field, first referenced by name in this release's reference text.
         "implementation_review_stages", "user_confirmation",
+        # workflow-2.7.0, D-Consumed-History (v2.6.0-001): the durable
+        # consumed history, a work-item field name, not a callable.
+        "consumed_plan_review_content_ids",
+        # workflow-2.7.0, Orchestration Protocol v1: next-action's
+        # disposition values, literal enum values, not callables.
+        "external_gate", "human_gate",
+        # workflow-2.8.0, D-GP-Policy: the two optional top-level state field
+        # names, not callables.
+        "gate_policy_adoption", "gate_policy_floor",
+        # workflow-2.8.0 CP2, D-GP-Gates: a `require` entry, the requirement
+        # id that audits the ledger, and the approval record's evidence key,
+        # not callables.
+        "distinct_reviewer_models", "review_evidence_audited", "policy_evidence",
+        # workflow-2.8.0 CP5, D-GP-Reopen: the pull-request fact's cause names,
+        # the policy keys, the refusal codes and the two key sets, literal
+        # values and field names, not callables.
+        "changes_requested", "checks_failed", "content_changed", "pr_merged",
+        "pr_review", "reopen_on", "reopen_plan_archived", "reopened_for",
+        "workflow_gh",
     })
 
     def test_every_code_symbol_the_reference_names_actually_exists(self):
@@ -7066,11 +7225,175 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         named = set(re.findall(r"/([a-z0-9-]+)(?: plan| implementation)? <child-id>", section))
         expected = {
             filename[:-3] for filename in
-            _commands_naming_a_phase_writer() - _TARGETING_EXEMPT_COMMANDS
+            _commands_naming_a_phase_writer() - _TARGETING_EXEMPT_COMMANDS - _CHILD_SEQUENCE_EXEMPT_COMMANDS
         }
         self.assertEqual(expected - named, set())
         self.assertIn("never `active_work_item_id`", section)
         self.assertIn("IncompleteChildWorkItemError", section)
+
+
+def _doc_text(name: str) -> str:
+    """A shipped document with Markdown emphasis removed and whitespace
+    collapsed, so a sentence wrapped across lines reads as one."""
+    text = (_repo_root() / "docs" / "ai-workflow" / name).read_text()
+    return " ".join(text.replace("**", "").split())
+
+
+class TestGatePolicyDocuments(unittest.TestCase):
+    """workflow-2.8.0 CP7: the operator guide (`GATE_POLICY.md`) and the
+    protocol specification state the trust boundary, the threat model and the
+    reopening residuals in the plan's words, and offer no CI-produced
+    evidence."""
+
+    GUIDE = "GATE_POLICY.md"
+    PROTOCOL = "ORCHESTRATION_PROTOCOL.md"
+
+    TRUST_BOUNDARY = (
+        "CI and pull-request facts that satisfy a gate come from GitHub",
+        "only tightens",
+        "a gate that cannot decide blocks",
+        "Review verdicts and functional evidence are trusted from the orchestrator",
+        "The Workflow guarantees binding, freshness and audit",
+        "does not guarantee provenance",
+        "Turning human approval on is the stronger mode",
+    )
+
+    def test_the_guide_and_the_protocol_state_the_trust_boundary_and_the_stronger_mode(self):
+        guide = _doc_text(self.GUIDE)
+        protocol = _doc_text(self.PROTOCOL)
+        # The guide's wording differs slightly from the protocol's in the
+        # first sentence only; each document states every other sentence.
+        for sentence in self.TRUST_BOUNDARY[1:]:
+            with self.subTest(sentence=sentence, doc="guide"):
+                self.assertIn(sentence.lower(), guide.lower())
+            with self.subTest(sentence=sentence, doc="protocol"):
+                self.assertIn(sentence.lower(), protocol.lower())
+        for text in (guide, protocol):
+            self.assertIn("CI and pull-request facts", text)
+            self.assertIn("come from GitHub", text)
+            self.assertIn("Turning human approval on is the stronger mode", text)
+        self.assertIn("verdict hash", guide)
+        self.assertIn("bundle id", guide)
+        self.assertIn("run reference", guide)
+        self.assertIn("verdict hash", protocol)
+        self.assertIn("bundle and content ids", protocol)
+        self.assertIn("run reference", protocol)
+
+    def test_the_guide_carries_the_named_threat_model_with_its_three_statements(self):
+        raw = (_repo_root() / "docs" / "ai-workflow" / self.GUIDE).read_text()
+        self.assertEqual(len(re.findall(r"^## Threat model$", raw, re.M)), 1)
+        section = " ".join(raw.split("\n## Threat model", 1)[1].split("\n## ", 1)[0].replace("**", "").split())
+        for label in ("What is guaranteed.", "What is not guaranteed.", "The safeguards that remain"):
+            self.assertIn(label, section)
+        self.assertLess(section.index("What is guaranteed."), section.index("What is not guaranteed."))
+        self.assertLess(section.index("What is not guaranteed."), section.index("The safeguards that remain"))
+        self.assertIn("deliberately forges a commit, a trailer or the state", section)
+        self.assertIn("replaces a system program", section)
+        self.assertIn("No signed commits and no GitHub-side adoption are provided", section)
+        # the resolution rule for `gh` and what it records
+        for fragment in ("absolute path", "inside the repository", "its worktrees", "temporary directory",
+                         "world-writable", "records the resolved path and the executable's sha256"):
+            self.assertIn(fragment, section)
+        # the gate-lowering event and where it is reported
+        guide = _doc_text(self.GUIDE)
+        self.assertIn("gate-lowering event", guide)
+        for place in ("`verify`", "`next-action`", "audit record"):
+            self.assertIn(place, guide)
+        self.assertIn("stronger mode", section)
+        protocol = _doc_text(self.PROTOCOL)
+        self.assertIn("D-GP-ThreatModel", protocol)
+        self.assertIn("D-GP-Trust", protocol)
+        self.assertIn("GATE_POLICY.md", protocol)
+
+    def test_neither_document_offers_ci_produced_functional_or_review_evidence(self):
+        for name in (self.GUIDE, self.PROTOCOL):
+            text = _doc_text(name)
+            self.assertIn("produced in CI is not accepted, and no policy option offers it", text, name)
+            for match in re.finditer(r"(?i)produced in CI|CI-produced|CI result kind|ci_result", text):
+                tail = text[match.start():match.end() + 80]
+                self.assertTrue(
+                    re.search(r"(?i)not accepted|no CI result kind|There is no|No CI-produced", text[max(0, match.start() - 60):match.end() + 80]),
+                    f"{name}: {tail!r}",
+                )
+
+    def test_the_guide_states_both_reopening_residuals_the_second_with_its_human_acceptance_case(self):
+        text = _doc_text(self.GUIDE)
+        # first residual: enabling a cause never reopens a completed item from a stored fact
+        self.assertIn("Enabling a reopening cause never reopens a completed item from a stored fact alone", text)
+        self.assertIn("re-queries GitHub first", text)
+        # second residual
+        self.assertIn("a same-head red reopen with no orchestrator report is never remediated", text)
+        self.assertIn("at `MILESTONE_COMPLETE`", text)
+        self.assertIn("under human acceptance without `requires_pr_approved`, at `AWAITING_FUNCTIONAL_REVIEW`", text)
+        self.assertIn("where no Workflow query runs", text)
+        self.assertIn("A human-acceptance repository must have an orchestrator report it to have it acted on", text)
+        # a reopened item is surfaced only by naming it, and keeps its completed narrative state
+        self.assertIn("A reopened item is surfaced only by naming it", text)
+        self.assertIn("/apply-pr-review", text)
+        self.assertIn("--work-item", text)
+        self.assertIn("the roadmap row stays complete and `docs/ACTIVE_MILESTONE.md` stays cleared", text)
+
+    def test_the_guide_states_the_toggles_the_floor_and_the_single_subscription_paths(self):
+        text = _doc_text(self.GUIDE)
+        raw = (_repo_root() / "docs" / "ai-workflow" / self.GUIDE).read_text()
+        self.assertIn('{"schema_version": 1, "human_approval": true}', raw)
+        self.assertIn("one-line way back to human gates", text)
+        self.assertIn("The default is different, on purpose", text)
+        for fragment in ("provenance_failed", "a new `/adopt-gate-policy` commit", "gate_policy_floor",
+                         "Automatic acceptance needs an open pull request first",
+                         "`distinct_reviewer_models` is on by default",
+                         "Record a second family at ingest", "Turn that gate human",
+                         "Adopt a policy without the requirement", "before the stage's bundle is generated",
+                         "/recover-implementation-provenance", "permanent `warn`", "gate_lowering",
+                         "anthropic/...", "openai/...", "declared and unverified",
+                         "requires_pr_approved", "Order for"):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+    def test_the_protocol_states_completion_the_default_and_the_consumer_bound(self):
+        text = _doc_text(self.PROTOCOL)
+        self.assertNotIn("No automatic action has an edge to `MILESTONE_COMPLETE`", text)
+        self.assertIn("`acceptance.satisfy` is a `validation` action", text)
+        self.assertIn("its arrival there is classed `progress`", text)
+        self.assertIn("`/accept-milestone` stays the writer only for a human gate", text)
+        self.assertIn("the default switches the gates to automatic", text)
+        self.assertIn('`"human_approval": true`, which is the one-line way back', text)
+        self.assertIn("consecutive `no_progress` results of the **same** action id at an **unchanged** `state_identity`".replace("**", ""), text)
+        # the edge table carries every .satisfy forward and same-phase edge and pr.apply_review's completed-item edges
+        raw = (_repo_root() / "docs" / "ai-workflow" / self.PROTOCOL).read_text()
+        for row in (
+            "| `plan.satisfy` | `AWAITING_PLAN_APPROVAL` | `IMPLEMENTING` | `2.1`, `2.2` |",
+            "| `plan.satisfy` | `AWAITING_PLAN_APPROVAL` | `AWAITING_PLAN_APPROVAL` | `2.1`, `2.2` |",
+            "| `implementation.satisfy` | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` | `AWAITING_FUNCTIONAL_REVIEW` | `2.2` |",
+            "| `implementation.satisfy` | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` | `2.2` |",
+            "| `acceptance.satisfy` | `AWAITING_FUNCTIONAL_REVIEW` | `MILESTONE_COMPLETE` | `1`, `2.1`, `2.2` |",
+            "| `acceptance.satisfy` | `AWAITING_FUNCTIONAL_REVIEW` | `AWAITING_FUNCTIONAL_REVIEW` | `1`, `2.1`, `2.2` |",
+            "| `pr.apply_review` | `MILESTONE_COMPLETE` | `AWAITING_FUNCTIONAL_REVIEW` | `1`, `2.1`, `2.2` |",
+            "| `pr.apply_review` | `MILESTONE_COMPLETE` | `MILESTONE_COMPLETE` | `1`, `2.1`, `2.2` |",
+        ):
+            with self.subTest(row=row):
+                self.assertIn(row, raw)
+
+    def test_the_other_gate_documents_point_at_the_guide(self):
+        for name in ("MILESTONE_WORKFLOW.md", "WORKFLOW_V2_1_OPERATOR_REFERENCE.md", "REVIEW_PROTOCOL.md",
+                     self.PROTOCOL):
+            with self.subTest(doc=name):
+                self.assertIn("GATE_POLICY.md", _doc_text(name))
+        self.assertIn("automatic by default", _doc_text("WORKFLOW_V2_1_OPERATOR_REFERENCE.md"))
+        self.assertIn("By default they are automatic", _doc_text("MILESTONE_WORKFLOW.md"))
+
+    def test_the_new_and_edited_documents_pass_the_installed_documentation_sweeps(self):
+        docs = _repo_root() / "docs" / "ai-workflow"
+        names = (self.GUIDE, self.PROTOCOL, "MILESTONE_WORKFLOW.md", "WORKFLOW_V2_1_OPERATOR_REFERENCE.md",
+                 "REVIEW_PROTOCOL.md")
+        texts = {str(docs / name): (docs / name).read_text() for name in names}
+        findings = ws.sweep_governing_version_enumeration(texts)
+        self.assertEqual(findings, [], [repr(f) for f in findings])
+        claims = ws.sweep_applying_review_feedback_version_claims(texts)
+        self.assertEqual(claims, [], [repr(f) for f in claims])
+        # the new document quotes no governing-version list at all
+        guide = texts[str(docs / self.GUIDE)]
+        self.assertNotRegex(guide, r'"1"\s*(?:,|/)\s*"2\.1"|"2\.1"\s*(?:,|/)\s*"2\.2"')
 
 
 # ---------------------------------------------------------------------------

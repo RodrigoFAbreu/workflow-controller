@@ -73,6 +73,10 @@ report it produces, or in any check it performs names a model — running it
 from any capable Claude model produces the same behavior. (For a `"2.2"`
 item at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, see the authoritative branch
 at the end of this file instead — it does enter/exit real state.)
+(That authoritative branch alone writes one model-bearing header line,
+`Reviewer model: <vendor>/<model>`, and only when the technical gate is
+`automatic` and the gate policy requires distinct reviewer models — step A5,
+workflow-2.8.0.)
 
 **Writes `<feedback_dir>/REVIEW_FEEDBACK.md`; nothing else.** This command
 writes the current `<feedback_dir>/REVIEW_FEEDBACK.md` (step 7, once every
@@ -148,52 +152,25 @@ end of this file for the `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` case.
    the user to regenerate scoped
    (`./scripts/prepare-ai-review.sh <base-sha> implementation
    <work_item_id>`).
-4. **Recompute fresh, before reporting anything**: an absent or unreadable
-   bundle is a clean refusal here, named plainly rather than left to
-   surface as a raw traceback — both candidate `<bundle_dir>` paths
-   (`.ai-review/<work_item_id>/current/` and the flat `.ai-review/current/`)
-   named in the refusal. Do not rely on the later
-   `assert_local_generation_matches` call to catch this case: its default
-   `require_metadata=False` mode reads `MANIFEST.md`'s
-   `worktree_root:`/`generation_head:` lines only if present and performs
-   **no comparison at all**, without raising, when `MANIFEST.md` is simply
-   absent (`read_manifest_generation_metadata` returns `{}` for a missing
-   file). The actual failure is the `bundle_id`/`review_content_id`
-   recompute immediately below, in this same step: `compute_bundle_id`
-   raises `MissingRequiredBundleFileError` naming the missing required
-   file(s) the moment it is called against an absent or incomplete bundle
-   directory — that is the exception this step's refusal is built around.
-   The current `bundle_id` and the implementation-stage `review_content_id`
-   (`scripts/workflow_fingerprint.py`), computed via
-   `compute_review_content_id_implementation_stage_at_commit(repo_root,
-   base=work_item["base_commit"], commit="HEAD", ...)` (or equivalently
-   `workflow_state.approval_review_content_id(..., stage="implementation",
-   base_commit=work_item["base_commit"], head="HEAD")`, which wraps it) —
-   commit-source, anchored at exactly the `base`/`head` pair
-   `workflow_state.approval_review_content_id`'s own implementation-stage
-   branch uses — **never** the worktree-source
-   `compute_review_content_id_implementation_stage` (no `head`/`commit`
-   parameter at all, scoped instead to whatever is currently dirty), which
-   would not reproduce the value `MANIFEST.md` records or `/approve-review
-   implementation` itself checks (the generator's sole writer,
-   `write_manifest_with_verified_identifiers_implementation_stage`, is
-   commit-source too) — with the resolved item's own four classification
-   mappings loaded through
-   `workflow_fingerprint.load_implementation_stage_classification(repo_root,
-   artifacts_path=workflow_fingerprint.artifacts_path_for_work_item(work_item_id))`
-   — never that function's own default `artifacts_path`, which resolves to
-   `workflow-v2-1-core`'s artifacts file and would silently compute a
-   different work item's classification. Report, rather than silently
-   proceeding past, any mismatch against what `MANIFEST.md`/`REVIEW_REQUEST.md`
-   claim. **Stale-plan-stage-manifest variant**: if `MANIFEST.md` is present
-   and otherwise looks healthy but the recomputed implementation-stage
-   `review_content_id` still disagrees with what it records, name this
-   specific cause explicitly — an unscoped implementation/post-fix bundle
-   written into a directory that already holds a plan-stage `MANIFEST.md`
-   silently reuses that plan-stage manifest, so the mismatch is comparing
-   today's implementation-stage recompute against a stale plan-stage
-   identity, not a real content discrepancy — report it as that, not as an
-   unexplained digest mismatch. This command runs inside a real, current
+4. **Verify the bundle, before reporting anything**: call
+   `workflow_state.verify_implementation_review_bundle(repo_root,
+   work_item_id)` (workflow-2.7.0, `LPR-R5-002`), this step's whole bundle
+   check as one read-only function over the resolved `<bundle_dir>`:
+   `MANIFEST.md` is present; `compute_bundle_id` succeeds (an absent or
+   incomplete directory raises `MissingRequiredBundleFileError`, chained);
+   the recomputed `bundle_id` equals the manifest's; and the manifest's
+   `review_content_id` equals the current implementation-stage one,
+   computed commit-source at `HEAD`
+   (`workflow_state.approval_review_content_id(..., stage="implementation",
+   base_commit=work_item["base_commit"], head="HEAD")`, with the item's own
+   classification through `artifacts_path_for_work_item`). On
+   `ImplementationReviewBundleUnverifiedError`, refuse cleanly and report
+   its message -- it names the bundle path (both candidate paths,
+   `.ai-review/<work_item_id>/current/` and the flat `.ai-review/current/`,
+   for an absent bundle), the failing comparison and both values, and the
+   stale-plan-stage-manifest variant by name -- whose remedy is to
+   regenerate the implementation bundle. Report the returned `bundle_id`
+   and `review_content_id`. This command runs inside a real, current
    worktree, so also call
    `workflow_fingerprint.assert_local_generation_matches(repo_root,
    <bundle_dir>/MANIFEST.md)` and stop, naming both the recorded and current
@@ -254,8 +231,10 @@ end of this file for the `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` case.
    `assert_feedback_matches_bundle` is a hard precondition of this
    command's own write in step 7 below, not a convenience for a
    hypothetical hand-copy. Also state
-   `Reviewed review content ID:` with step 4's freshly recomputed
-   implementation-stage `review_content_id` — not one of the three parsed
+   `Reviewed review_content_id:` (exactly this pinned label, workflow-2.7.0,
+   `v2.6.0-002`) with step 4's freshly recomputed
+   implementation-stage `review_content_id`, before the first `## ` section
+   — not one of the three parsed
    binding fields, so no parser or approval requirement changes; purely so
    the printed advisory opinion is easy to correlate against the exact
    reviewed implementation content.
@@ -451,11 +430,21 @@ A5. **Decide the verdict** (`Status: APPROVE | REVISE | BLOCK`) and write
     - `Reviewer role: LOCAL_MODEL_IMPLEMENTATION_REVIEW` (never a model
       name here, and never the plan-stage role's own
       `LOCAL_MODEL_PLAN_REVIEW` string);
+    - **only when** `workflow_state.review_stage_gate_context(repo_root,
+      state, work_item_id, "implementation")["requires_distinct"]` is true
+      (the technical gate is `automatic` and the effective `require` lists
+      `distinct_reviewer_models`; with the default policy it is): the line
+      `Reviewer model: <vendor>/<model>`, naming the vendor and model of this
+      reviewing session itself (for example `anthropic/claude-opus-5-5`), in
+      the header block before the first `## ` section. Write no such line
+      otherwise -- under a human gate the file is exactly 2.7.0's;
     - the three binding fields (`Reviewed bundle ID:`, `Reviewed base
       commit:`, `Work item:`) stated with the recomputed `bundle_id`,
       `base_commit`, and `work_item_id` from A3 (`WFR-03`), plus the
       recomputed implementation-stage `review_content_id` as its own
-      labelled line;
+      labelled line, with exactly the pinned label
+      `Reviewed review_content_id: <hex>` (workflow-2.7.0, `v2.6.0-002`),
+      all before the first `## ` section;
     - the round/sequence number (one more than the highest prior
       `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round on record, or `1` if none);
     - a completion timestamp.
@@ -490,7 +479,13 @@ A6. **Write set, exact.** **`REJECTED`-bundle refusal, second of two, under
       `workflow_state.state_transaction(repo_root, lambda state:
       workflow_state.record_local_implementation_review(state,
       work_item_id, verdict="APPROVE", bundle_id=<bundle_id>,
-      review_content_id=<review_content_id>, round=<round>, now=<now>))`
+      review_content_id=<review_content_id>, round=<round>, now=<now>,
+      audit=workflow_state.local_review_audit(repo_root, state, work_item_id,
+      "implementation", feedback_text=<the REVIEW_FEEDBACK.md text just
+      written>, feedback_path=<the resolved REVIEW_FEEDBACK.md path>)))`
+      (workflow-2.8.0: `audit` is `None` while the technical gate is human,
+      so the entry is 2.7.0's bytes; otherwise it adds `verdict_sha256`,
+      `run_ref` and, when the line above was written, `reviewer_model`)
       and persisting the returned state — the resolved work item's
       `LOCAL_MODEL_IMPLEMENTATION_REVIEW` ledger fields (the `Reviewer role:`
       string above and the ledger's own canonical key are deliberately the

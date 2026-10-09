@@ -30,6 +30,13 @@ argument. `<feedback_dir>` takes no stage argument at either stage.
 a `feedback_layout: "scoped"` item; the unchanged legacy scoped-else-flat
 rule for an item without the field.
 
+**Gate policy** (workflow-2.8.0): where a plan or technical gate is `automatic`
+under `docs/ai-workflow/GATE_POLICY.json` and every requirement is met,
+`/satisfy-gate` records the approval from the policy instead, citing this
+command's steps by number. This command stays the human path for every gate in
+either mode, unchanged, and records `EXTERNAL_APPROVE` or `USER_OVERRIDE`
+exactly as before; it never writes `POLICY_SATISFIED`.
+
 **This command is user-only by construction.** `disable-model-invocation:
 true` is the primary, harness-enforced control (blocks the SlashCommand
 tool). Claude must never invoke it on the user's own behalf, including as a
@@ -137,14 +144,28 @@ actually load-bearing control for the Skill exposure path, not mechanism
    now=<now>))` and persist the returned state — idempotent, exactly as
    `/apply-implementation-review` step 1's own writer call, present here
    only as a second, independent recording path in case that command's
-   own write was never reached. Then compute `pinned =
+   own write was never reached. The pin write stays here, ahead of the
+   gate check below (`LPR-R2-008`): the gate wrapper computes `pinned =
    workflow_state.is_technical_review_block_pinned(work_item, <the current
-   bundle_id>)` (re-reading the work item after the call above, so a pin
-   just recorded is already reflected) and pass it as `pinned_block` to
-   both `technical_approval_gate_reachable` below and `resolve_approval_basis`
-   in step 3. Plan stage: `pinned_block` is never computed or passed — D2a
-   is an implementation-stage-only mechanism.
-   Call
+   bundle_id>)` on the state **re-read after the call above**, so a pin
+   just recorded is already reflected, and passes it as `pinned_block` to
+   `technical_approval_gate_reachable`; pass the wrapper's
+   `inputs["pinned_block"]` to `resolve_approval_basis` in step 3. Plan
+   stage: `pinned_block` is never computed or passed — D2a is an
+   implementation-stage-only mechanism.
+   **The gate check is one call** (workflow-2.7.0, `D-OP-Next`,
+   `LPR-R1-003`): on that re-read state, call
+   `workflow_state.plan_approval_gate_status(repo_root, state,
+   work_item_id)` for the plan stage, or
+   `workflow_state.technical_approval_gate_status(repo_root, state,
+   work_item_id)` for the implementation stage -- the same read-only
+   wrappers the orchestration protocol's `next-action` reads, so the
+   command and the catalogue cannot disagree about the gate's inputs. Each
+   returns `{reachable, cause, inputs}`: it runs step 2's generation check
+   first, then, at the plan stage of a `"2.1"`/`"2.2"` item, step 2's
+   bundle-bound check, and at the implementation stage and the `"1"` plan
+   stage the computation of the current `bundle_id`, and then computes the
+   inputs below and calls the pure predicate. The wrapper calls
    `workflow_state.approval_gate_reachable(status)` for the plan stage on a
    `"1"` item (`plan_approval_gate_reachable(...)` on a `"2.1"`/`"2.2"`
    item — both governed by `TWO_STAGE_PLAN_REVIEW_VERSIONS`), or
@@ -177,7 +198,7 @@ actually load-bearing control for the Skill exposure path, not mechanism
    post-generation durability commit is always one commit ahead of the
    value it just wrote, re-breaking the equality on every round; see
    `docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s "WF8b finding disposition
-   (revision 27 → 28)"). Call
+   (revision 27 → 28)"). The wrapper calls
    `workflow_state.implementation_provenance_interval_reachable(repo_root,
    work_item, base_commit)`, which is `True` exactly when
    `workflow_state.verify_implementation_provenance_interval(...)` finds a
@@ -200,8 +221,8 @@ actually load-bearing control for the Skill exposure path, not mechanism
    `Workflow-Bundle-Generation-Record` + `Workflow-Work-Item` +
    `Workflow-Supersedes` set, and its own `Workflow-Supersedes` trailer
    names exactly the immediately preceding generation-record commit in the
-   chain). On refusal, call `verify_implementation_provenance_interval`
-   directly and report its raised exception's message — it names the
+   chain). On the `implementation_provenance_stale` cause, call
+   `verify_implementation_provenance_interval` directly and report its raised exception's message — it names the
    concrete reason (no record commit found, a further unrecorded commit
    landed past `T`, `reviewed_implementation_head` not an ancestor, a
    merge/non-first-parent interval, a protected path inside the interval,
@@ -210,8 +231,25 @@ actually load-bearing control for the Skill exposure path, not mechanism
    contract) rather than a bare boolean. A `None`
    `reviewed_implementation_head` (nothing has ever generated a bundle for
    this work item) is caught the same way, by
-   `BundleGenerationRecordNotFoundError`. A `BLOCK` status, or an unmet
-   additional condition, stops here — report why, do not proceed.
+   `BundleGenerationRecordNotFoundError`. `reachable: false` stops here —
+   report the wrapper's `cause`, the first failing input in its order:
+   `bundle_generation_mismatch` (the generation check), then
+   `plan_review_bundle_unbound` (the two-stage plan stage's bundle-bound
+   check) or `bundle_unverified` (the current bundle cannot be hashed,
+   `MissingRequiredBundleFileError`), then the predicate's own order --
+   `review_block_pinned`, `no_review_round` (no `REVIEW_FEEDBACK.md`),
+   `review_blocked` (a status other than `REVISE`/`APPROVE`, including a
+   `BLOCK`), `protected_path_dirty`, `implementation_provenance_stale`,
+   `review_ledger_stale` -- and do not proceed. **This order is a
+   deliberate change from 2.6.0** (`LPR-R3-004`), which ran the predicate
+   before step 2's checks: a predicate computed for a bundle generated at
+   another HEAD or in another worktree says nothing about this checkout,
+   so its remedy comes first. A pinned `BLOCK` with HEAD moved past
+   `generation_head` therefore reports `bundle_generation_mismatch` (the
+   remedy, for an excluded-only commit, is
+   `/recover-implementation-provenance <id>`), and after that recovery
+   `review_block_pinned`. The command refuses in both orders; only which
+   refusal is named first changed.
    *The recovered-role commit shape and its supersession-chain validation
    are implemented (`WF8c` (c), reachable via `/apply-implementation-review`'s
    and `/apply-functional-review`'s own `resolve_bundle_generation_outcome`-
@@ -244,10 +282,12 @@ actually load-bearing control for the Skill exposure path, not mechanism
    over the working tree. Display both, and the protected/excluded path
    lists, to the user. **Local worktree/HEAD staleness check**
    (`D-Bundle-Manifest`, resolves `OPUS-R6-016`): this command runs inside
-   a real, current worktree, so call
+   a real, current worktree, so step 1's gate wrapper calls
    `workflow_fingerprint.assert_local_generation_matches(repo_root,
-   <bundle_dir>/MANIFEST.md)` and stop, naming both the recorded and
-   current worktree_root/HEAD, on a `WorktreeOrHeadMismatchError` — this
+   <bundle_dir>/MANIFEST.md)` as its first check, and a
+   `WorktreeOrHeadMismatchError` has already stopped the command there as
+   `bundle_generation_mismatch`, naming both the recorded and current
+   worktree_root/HEAD (the wrapper's `inputs["generation_check"]`) — this
    is the actual first-party Milestone-8 incident (a stale bundle read
    from a different worktree). Never skip this because the recomputed
    `bundle_id` happens to still match; the two checks catch different
@@ -258,15 +298,19 @@ actually load-bearing control for the Skill exposure path, not mechanism
    the marker path and its recorded detail.
    **Plan stage, `TWO_STAGE_PLAN_REVIEW_VERSIONS` items only — bundle-bound
    check** (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0, section 5.3
-   item 4): call `workflow_state.assert_plan_review_bundle_bound(repo_root,
-   work_item_id)`, which re-runs the plan bundle verifier and requires a
+   item 4): step 1's plan gate wrapper calls
+   `workflow_state.assert_plan_review_bundle_bound(repo_root,
+   work_item_id)` right after the generation check, which re-runs the
+   plan bundle verifier and requires a
    `BOUND` `plan_review_binding` record for exactly the bundle's
    `review_content_id` (a `2.5.1` item at `AWAITING_PLAN_APPROVAL` with no
    record is accepted when its bundle verifies; nothing is written).
-   Report its returned advisory, if any: a `bundle_id` differing from
+   Report its returned advisory (the wrapper's
+   `inputs["bundle_bound_advisory"]`), if any: a `bundle_id` differing from
    `current_bundle_id` -- a wrapper-only regeneration after the bind -- is
-   advisory only and never blocks the approval. On a refusal, stop and
-   report the error's message, which names the remedy:
+   advisory only and never blocks the approval. A refusal stopped the
+   command at step 1 as `plan_review_bundle_unbound`; report the error's
+   message (`inputs["bundle_bound"]`), which names the remedy:
    `ReviewedContentDriftError` (row 4a: restore the bound bytes from
    `<bundle_dir>/files/<path>`, or withdraw with `/milestone-plan <id>`),
    `PlanReviewBundleUnverifiedError` (rows 4b/4c: regenerate, or
@@ -660,6 +704,14 @@ actually load-bearing control for the Skill exposure path, not mechanism
    technical-approval commit undiscoverable. The exact scoped trailer
    lookup is `workflow_state.discover_technical_approval_commit`
    (`WF4a-iii`).
+   **Item-scoped staging** (workflow-2.8.0, `LPR-R6-001`):
+   the technical-approval commit stages the state file with
+   `workflow_state.stage_scoped_state(repo_root, <work_item_id>)` in place of the bare
+   `git add` of that path (it returns `False`, and the ordinary single-path `git add`
+   runs, unless another work item holds uncommitted residue in the state file). The
+   plan-approval commit is not scoped: it keeps the whole-file pin, and
+   `verify_plan_approval_commit` applies
+   `assert_gate_policy_fields_unchanged_or_tightened` to it.
 
    **Implementation stage — post-commit verification of the commit this
    invocation just created** (workflow system audit, convergence pass 12,

@@ -122,7 +122,7 @@ provenance pointer.
    `record_bundle_generation`'s own legal source phases, every one of
    which transitions *into* one of them), persist the returned state, and commit it
    **alone** — stage exactly `docs/ai-workflow/WORKFLOW_STATE.json` (never
-   a broader `git add`) — as the one first-parent child of live HEAD
+   a broader `git add`; **Item-scoped staging** (workflow-2.8.0, `LPR-R6-001`): stage the state file with `workflow_state.stage_scoped_state(repo_root, <work_item_id>)` in place of the bare `git add` of that path (it returns `False`, and the ordinary single-path `git add` runs, unless another work item holds uncommitted residue in the state file).) — as the one first-parent child of live HEAD
    (never of `t`; ancestry is never rewritten), carrying exactly three
    trailers: the unchanged `Workflow-Bundle-Generation-Record:
    <work_item_id>/<implementation_revision>` value (never a new revision

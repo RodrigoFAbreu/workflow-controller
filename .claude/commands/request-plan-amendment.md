@@ -160,7 +160,9 @@ and wait.
    "AMENDING_PLAN"`. For a `TWO_STAGE_PLAN_REVIEW_VERSIONS` item it also
    writes the `CONSUMED` `plan_review_binding` record for the approved
    content being amended (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0),
-   so that content can never re-bind without an edit.
+   so that content can never re-bind without an edit. The id is also added
+   to the item's durable `consumed_plan_review_content_ids` history
+   (workflow-2.7.0), so the amendment's later rounds never release it.
 
    `AmendmentApprovalCommitUnreachableError`/
    `WrongPhaseForAmendmentRequestError`: stop and report the exception's
@@ -201,7 +203,7 @@ and wait.
    `approve-review.md` step 6.4 already state). No
    `Workflow-Bundle-Generation-Record`, `Workflow-Supersedes`,
    `Workflow-Checkpoint` or `Workflow-Plan-Approval` trailer -- this is
-   none of those.
+   none of those. This commit keeps whole-file staging. **Gate-policy content check** (workflow-2.8.0, D-GP-Policy): right after this commit, call `workflow_state.assert_gate_policy_fields_unchanged_or_tightened(repo_root, <commit>)`; it refuses a commit that changed `gate_policy_adoption` without a valid, chained record or loosened `gate_policy_floor`.
 
 4. **What happens next.** The work item now sits at `AMENDING_PLAN`; the
    very next `/milestone-plan [work-item-id]` invocation resumes it through

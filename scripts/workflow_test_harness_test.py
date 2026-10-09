@@ -200,5 +200,36 @@ class TestBaseRegistryAndMapping(unittest.TestCase):
             ws.validate_registry_mapping_coverage(registry, mapping)
 
 
+
+class TestBundleFixtures(unittest.TestCase):
+    """workflow-2.7.0: the real-bundle fixtures produce what the production
+    verifiers accept."""
+
+    def test_a_published_and_bound_plan_bundle_verifies(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, phase="PLANNING")
+            review_content_id, bundle_id = h.publish_and_bind_plan_bundle(repo)
+            state = h.read_state(repo)
+            self.assertEqual(state["work_items"]["wi"]["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+            binding = ws.verify_plan_review_bundle(repo.root, "wi")
+            self.assertEqual((binding["review_content_id"], binding["bundle_id"]), (review_content_id, bundle_id))
+
+    def test_an_implementation_bundle_verifies_and_its_record_commit_is_found(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, phase="SELF_REVIEWING_IMPLEMENTATION")
+            repo.commit("implement", filename=h.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+            review_content_id = h.generate_implementation_bundle(repo)
+            self.assertEqual(ws.verify_implementation_review_bundle(repo.root, "wi")["review_content_id"],
+                             review_content_id)
+            work_item = h.read_state(repo)["work_items"]["wi"]
+            self.assertTrue(ws.implementation_provenance_interval_reachable(repo.root, work_item, repo.base))
+
+    def test_an_approved_plan_is_an_implementing_entry(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, phase="IMPLEMENTING")
+            h.approve_plan(repo)
+            work_item = h.read_state(repo)["work_items"]["wi"]
+            self.assertTrue(ws.implementing_entry_reachable(repo.root, work_item, repo.base))
+
 if __name__ == "__main__":
     unittest.main()

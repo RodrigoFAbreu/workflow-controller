@@ -109,6 +109,14 @@ a staleness signal.
 
 ## Activating `"2.2"`
 
+> **Workflow 2.9.0 (2026-10):** a *new* installation now ships
+> `WORKFLOW_CONFIG.json` with `default_workflow_version: "2.2"` and
+> `supported_versions: ["1", "2.1", "2.2"]`, so the hand-edit below is needed
+> only by a repository bootstrapped before 2.9.0 that wants `"2.2"`. An update
+> never rewrites an existing `WORKFLOW_CONFIG.json`, and an existing work item
+> keeps its governing version. The paragraph that follows describes `2.5.0`'s
+> own shipped template and is kept as history.
+
 `"2.2"` is not enabled by a fresh `2.5.0` install: `2.5.0`'s own shipped
 `templates/docs/ai-workflow/WORKFLOW_CONFIG.json` stays at `"2.1"`,
 unchanged from `2.4.0`'s. A repository must explicitly activate `"2.2"`

@@ -8,6 +8,10 @@ review-subject: none
 
 **State-writer discipline (D1, item 354):** every `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs -- everywhere a step below says "persist the returned state" -- is performed by calling `workflow_state.state_transaction(repo_root, mutator)`, never by a separate read-then-write: `state_transaction` holds `.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`, `fcntl.flock(LOCK_EX)`) across the complete re-read -> apply-the-named-function -> canonical-serialize -> atomic-publish sequence in one process invocation, so `mutator` is the exact transition function each step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`), applied to freshly re-read state rather than to a snapshot taken before the lock was acquired.
 
+Where the gate policy makes acceptance automatic and its evidence is met,
+`/satisfy-gate acceptance` accepts the milestone from evidence in place of this
+command (`workflow-2.8.0`); this command stays the human path in either mode.
+
 Enter the `MILESTONE_COMPLETE` state of
 `docs/ai-workflow/MILESTONE_WORKFLOW.md`. Only run this after the user has
 explicitly accepted the milestone (`AWAITING_USER_ACCEPTANCE` exit
@@ -73,15 +77,22 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
       `workflow_state.milestone_complete_gate_reachable(phase=work_item["phase"],
       is_terminal=is_terminal)`. `False` stops here — report the actual
       `phase` and, if `not is_terminal`, name `outstanding_checkpoint_id`
-      and the supported ways forward (next bullet); do not proceed past
+      and what the next bullet says about it; do not proceed past
       this point.
-    - **The supported ways forward from a non-terminal registry** (ledger
+    - **A non-terminal registry** (ledger
       `I10` of the Workflow v2.x defect ledger retired the non-terminal
       acceptance command that used to be named here; its
       gate had no producer in any supported lifecycle, so it can never be
-      the answer): if the outstanding checkpoint is still part of
-      this milestone's scope, finish it with `/milestone-implement` and
-      return to the functional gate afterwards. If acceptance is being
+      the answer): an outstanding checkpoint cannot be completed from
+      `AWAITING_FUNCTIONAL_REVIEW`. `/milestone-implement` cannot start a
+      checkpoint at this phase (`transition_checkpoint_in_progress` refuses
+      outside `IMPLEMENTING`), and no command completes one here (defect
+      `v2.6.0-003`): report the outstanding checkpoint and stop. For a
+      `2.1`/`2.2` item name the user-only `/resume-implementation <id>`
+      (workflow-2.9.0), which returns it to `IMPLEMENTING` with the
+      technical approval marked `STALE`; never run it on the user's behalf.
+      Ordinary flow never reaches this phase with a checkpoint outstanding;
+      only a hand-constructed or hand-edited state does. If acceptance is being
       attempted early because of a functional-review finding, route that
       finding through `/apply-functional-review` instead — its bounded
       branch for a same-scope fix (which marks `technical_approval`
@@ -90,6 +101,17 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
       `<parent-id>-remediation-<n>` child work item running its own full
       cycle). There is no command that records functional acceptance of a
       partial round.
+    - **`requires_pr_approved` pre-flight** (`workflow-2.8.0`, `D-GP-Acceptance`;
+      added only when the effective policy sets `requires_pr_approved`, which is
+      off by default, so a repository without it behaves as 2.7.0): call
+      `workflow_state.assert_human_acceptance_pr_approved(repo_root,
+      work_item_id, now=<now>)`. It runs the Workflow's own GitHub query, stores
+      the `workflow_gh` fact it read (a successful query only, also when it then
+      refuses), and refuses with `PullRequestNotApprovedError` unless that fact
+      is current for the approved head and the pull request is approved. With
+      `gh` unavailable it refuses (`forge_unavailable`) and writes nothing.
+      Report the unmet requirements and stop. It returns `None`, having run and
+      written nothing, when the option is off.
     - Otherwise, call `workflow_state.complete_work_item(state, work_item_id,
       now=<now>, repo_root=<repo_root>)` — note the parameter change: this
       no longer accepts a caller-supplied `registry` dict at all; it
@@ -101,8 +123,9 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
       `work_item_id`; report the specific failure verbatim, this is a data-
       integrity defect, never silently treated as "nothing to check."
       `IncompleteOwnCheckpointsError` stops here — report the named
-      outstanding checkpoint and the supported ways forward the bullet
-      above lists; the exception's own message names them too.
+      outstanding checkpoint as the bullet above says. The exception's
+      own message still carries 2.6.0's `/milestone-implement` advice,
+      which cannot run at this phase.
       `UnsatisfiedCompletionObligationError` stops here too
       (`D-Completion-Obligations`, item 356(a)): every completion
       obligation the item's **own registry** declares must derive `PASS`,
@@ -142,7 +165,20 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
 4. Update `docs/ACTIVE_MILESTONE.md`: move this milestone's summary into the
    factual "complete" state, clear the active plan section.
 5. Archive this milestone's execution/reference plans to
-   `docs/milestones/completed/`.
+   `docs/milestones/completed/` by **copying** them, never moving them
+   (`LPR-R2-003`): the item's `plan_path`, registry and mapping stay where
+   `WORKFLOW_STATE.json` names them, so a later reopen of the same work item can
+   still read the plan. A re-acceptance updates, never duplicates, the archive
+   copy and the roadmap row for the work item id.
+   **A re-acceptance** (`workflow-2.8.0`, `D-GP-Reopen`: an item that
+   `/apply-pr-review` reopened into remediation and that now completes again
+   through this command or `/satisfy-gate acceptance`) finds the archive copy
+   and the roadmap row already present: it overwrites the copy with the current
+   plan and leaves the one roadmap row complete, so there is exactly one of
+   each per work item id. `complete_work_item` is unchanged: an automatic
+   re-acceptance overwrites `acceptance_satisfaction`, and
+   `completion_obligations_accepted` is kept (not rewritten) when the item
+   declares no completion obligations.
 6. Create the final completion commit if verification/doc updates are not
    already committed, carrying a `Workflow-Work-Item: <work_item_id>`
    trailer (the established convention every real completion commit to

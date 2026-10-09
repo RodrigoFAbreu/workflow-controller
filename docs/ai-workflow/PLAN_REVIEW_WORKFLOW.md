@@ -96,7 +96,11 @@ the design; operationally:
   generated, and `bind_plan_review_bundle` writes
   `AWAITING_LOCAL_PLAN_REVIEW` only for a verified bundle of that published
   content. Content already reviewed, amended away or withdrawn is
-  `CONSUMED` and never binds again without an edit.
+  `CONSUMED` and never binds again without an edit. Every consumed
+  `review_content_id` is kept in the work item's
+  `consumed_plan_review_content_ids` history (workflow-2.7.0), so a later
+  consumption does not release an earlier one: restoring withdrawn or
+  revised content byte for byte is refused, and any edit gives it a new id.
 - **Author inputs live in `plan-inputs/`.** Write the plan stage's
   `REVIEW_REQUEST.md`, `TEST_RESULTS.md` and `CONTEXT_FILES.txt` under
   `.ai-review/<work_item_id>/plan-inputs/`, never into `current/`. The

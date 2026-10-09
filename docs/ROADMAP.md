@@ -10,16 +10,14 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 **Where things stand (2026-10-09).** Controller 1.7.1 is the latest release (PR #28, squash `b2323e1`). It admits Workflow
 2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
-repository runs Workflow 2.6.0. Every milestone through C9, the Controller
+repository runs Workflow 2.9.0 with automatic gates (since 2026-10-09; it ran 2.6.0 before). Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
 that releases nothing. C9b, the patch that accepts the protocol's `warn` check status and protocol
-1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. Next (user
-decision, 2026-10-09):
-1. Moving this repository to the latest compatible Workflow at the time of the move (2.9.0 today),
-   with automatic gates.
-2. C8.
+1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. This repository
+then moved to the latest compatible Workflow, 2.9.0, with automatic gates (user decision,
+2026-10-09). C8 is next.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans

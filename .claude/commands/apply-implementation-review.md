@@ -93,11 +93,34 @@ rule for an item without the field.
    and say so, printing the exact resolved path
    (`resolve_feedback_dir(repo_root, work_item_id)`, `D-Feedback-Layout`,
    workflow-2.6.0) where the reviewer's feedback must be placed, never a
-   hard-coded flat path. Validate its binding fields
-   (`workflow_fingerprint.parse_review_feedback_binding_fields`/
-   `assert_feedback_matches_bundle` against the current recomputed
-   `bundle_id`/`base_commit`/`work_item_id`, `WFR-03`) — stale or
+   hard-coded flat path. Validate its binding with
+   `workflow_state.assert_apply_review_feedback_binding(repo_root,
+   work_item, work_item_id, stage="implementation", feedback_content=<the
+   file's content>)` (`D-Apply-Binding`, workflow-2.7.0; `WFR-03`), which
+   computes the current `bundle_id` itself. For every `"1"`/`"2.1"` item,
+   and every verdict that is not a `"2.2"` `REVISE` stating a
+   `review_content_id`, it is 2.6.0's bundle binding
+   (`assert_feedback_matches_bundle` against the current recomputed
+   `bundle_id`/`base_commit`/`work_item_id`), unchanged; so it is for a
+   bundle whose `MANIFEST.md` names no `work_item_id`. A `"2.2"` `REVISE`
+   that states a `review_content_id`, at `APPLYING_REVIEW_FEEDBACK`, is
+   bound by content: its `review_content_id` must be the one the reviewed
+   bundle's own `MANIFEST.md` records (not the moving current one -- a fix
+   you have already committed moves it), and the manifest must name this
+   item, its `base_commit` and the implementation stage; its
+   `Reviewed bundle ID:`/`Reviewed base commit:` are advisory -- report
+   the returned `advisory`, if any. Report a refusal by class and stop:
+   `ReviewBundleManifestMismatchError` or `MissingRequiredBundleFileError`
+   (the bundle on disk is not this item's reviewed bundle -- including
+   another item's bundle in the shared flat `.ai-review/current/`: run
+   from the worktree that holds it, or restore it; never regenerate it, a
+   post-fix generation is this round's exit), `FeedbackContentMismatchError`,
+   `MissingFeedbackBindingFieldError` or `FeedbackBundleMismatchError`
+   (the verdict is not for the bundle being applied) -- stale or
    mismatched feedback is a reason to stop and say so, not to apply.
+   Never edit a verdict's binding fields to make it bind: they attest to
+   what its reviewer reviewed. The `BLOCK` pin below records the
+   returned `bundle_id`.
    **`REJECTED`-bundle refusal, first of two** (`WFR-67`): also call
    `workflow_fingerprint.assert_bundle_not_rejected(repo_root,
    work_item_id)` here; a `BundleRejectedError` stops the command, naming
@@ -165,7 +188,7 @@ rule for an item without the field.
    before `/approve-review implementation` is reachable. Persist the
    returned state to `WORKFLOW_STATE.json`, and commit it **alone** —
    stage exactly that one
-   path (never a broader `git add`) and create one commit carrying, for
+   path (never a broader `git add`; **Item-scoped staging** (workflow-2.8.0, `LPR-R6-001`): stage the state file with `workflow_state.stage_scoped_state(repo_root, <work_item_id>)` in place of the bare `git add` of that path (it returns `False`, and the ordinary single-path `git add` runs, unless another work item holds uncommitted residue in the state file).) and create one commit carrying, for
    `"ordinary"`, `Workflow-Bundle-Generation-Record:
    <work_item_id>/<implementation_revision>` +
    `Workflow-Work-Item: <work_item_id>` trailers, no other trailer; for
@@ -200,7 +223,12 @@ rule for an item without the field.
    (`assert_review_request_states_review_content_id`), obtained from the
    single canonical entry point `docs/ai-workflow/REVIEW_PROTOCOL.md`'s
    "Computing `review_content_id`" names for this stage -- never a second,
-   ad hoc computation. Then
+   ad hoc computation. If the implementation stage's gate is `automatic` and the effective `require` lists
+   `distinct_reviewer_models` (`workflow_state.review_stage_gate_context(repo_root,
+   state, work_item_id, "implementation")["requires_distinct"]`), also ask the reviewer, in
+   that file, to state `Reviewer model: <vendor>/<model>` in the verdict's header
+   block, because an `APPROVE` without it is refused at ingest (workflow-2.8.0,
+   `LPR-R16-003`); under a human gate ask for nothing new. Then
    run `./scripts/prepare-ai-review.sh <base-sha> post-fix [work_item_id]`
    — required before `AWAITING_TECHNICAL_APPROVAL` can be reachable again.
 8. If any Blocking finding remains unresolved, or the fix was structurally

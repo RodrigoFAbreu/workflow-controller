@@ -11,8 +11,10 @@ Enter the `AWAITING_LOCAL_PLAN_REVIEW` state of
 `docs/ai-workflow/MILESTONE_WORKFLOW.md` (`docs/ai-workflow/WORKFLOW_V2_PLAN.md`'s
 `D-Plan-Review-Stages`). Implements the `LOCAL_MODEL_PLAN_REVIEW` **role**,
 not a specific model: nothing in this contract, the written feedback
-schema, or the state transition it produces names a model. Running it from
-any capable Claude model produces the same schema and the same transition.
+schema, or the state transition it produces names a model, except the
+`Reviewer model:` line when the gate policy requires distinct reviewer models
+(step 7, workflow-2.8.0). Running it from any capable Claude model produces the
+same schema and the same transition.
 Recommended in a **fresh session** for genuine independence from the
 session that wrote the plan — strongly recommended operational guidance,
 not a verified precondition; no check here depends on session freshness.
@@ -106,11 +108,22 @@ normative definition.
    `docs/ai-workflow/REVIEW_PROTOCOL.md`'s required structure, **plus**
    these provenance fields this role always includes:
    - `Reviewer role: LOCAL_MODEL_PLAN_REVIEW` (never a model name here);
+   - **only when** `workflow_state.review_stage_gate_context(repo_root,
+     state, work_item_id, "plan")["requires_distinct"]` is true (the plan gate
+     is `automatic` and the effective `require` lists
+     `distinct_reviewer_models`; with the default policy it is): the line
+     `Reviewer model: <vendor>/<model>`, naming the vendor and model of this
+     reviewing session itself (for example `anthropic/claude-opus-5-5`), in the
+     header block before the first `## ` section. The vendor prefix is what
+     makes the "family" a vendor; a bare model id still parses. Write no such
+     line otherwise -- under a human gate the file is exactly 2.7.0's;
    - the three binding fields `docs/ai-workflow/REVIEW_PROTOCOL.md` now
      requires on every round (`Reviewed bundle ID:`, `Reviewed base
      commit:`, `Work item:`), stated with the recomputed `bundle_id`,
      `base_commit`, and `work_item_id` from step 5 (`WFR-03`), plus the
-     recomputed plan-stage `review_content_id` as its own labelled line;
+     recomputed plan-stage `review_content_id` as its own labelled line,
+     with exactly the pinned label `Reviewed review_content_id: <hex>`
+     (workflow-2.7.0, `v2.6.0-002`), all before the first `## ` section;
    - the round/sequence number (one more than the highest prior
      `LOCAL_MODEL_PLAN_REVIEW` round on record, counting a round entry under
      either casing of the stage key, or `1` if none);
@@ -152,13 +165,21 @@ normative definition.
      `workflow_state.record_local_plan_review(..., verdict="APPROVE", ...)`
      — the resolved work item's `LOCAL_MODEL_PLAN_REVIEW` ledger fields and
      its phase transition to `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` in
-     `WORKFLOW_STATE.json`.
+     `WORKFLOW_STATE.json`. **Audit keys** (workflow-2.8.0, `D-GP-Trust`):
+     the mutator passes `audit=workflow_state.local_review_audit(repo_root,
+     state, work_item_id, "plan", feedback_text=<the REVIEW_FEEDBACK.md text
+     just written>, feedback_path=<the resolved REVIEW_FEEDBACK.md path>)` --
+     `None` while the plan gate is human (the entry is then 2.7.0's bytes),
+     otherwise `verdict_sha256`, `run_ref` (`session:local <path>`) and, when
+     the line above was written, `reviewer_model`.
    - `REVISE`: `REVIEW_FEEDBACK.md`, plus the phase transition to
      `REVISING_PLAN` (`record_local_plan_review(..., verdict="REVISE", ...)`
      — no ledger entry) and, in the same write, the `CONSUMED`
      `plan_review_binding` record for this `review_content_id`
      (workflow-2.6.0, `D-Plan-Review-Bundle-Binding`), so the reviewed
-     content can never re-bind without an edit.
+     content can never re-bind without an edit. The id is also added to
+     the item's durable `consumed_plan_review_content_ids` history
+     (workflow-2.7.0), so a later round never releases it.
    - `BLOCK`: `REVIEW_FEEDBACK.md` only — `record_local_plan_review(...,
      verdict="BLOCK", ...)` is a true no-op; the work item stays at
      `AWAITING_LOCAL_PLAN_REVIEW`.

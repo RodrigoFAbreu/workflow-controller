@@ -862,7 +862,7 @@ class TestRouteWorkItemResumeBranchDeclarationFacts(unittest.TestCase):
 
             scripts_dir = repo.root / "scripts"
             scripts_dir.mkdir(parents=True, exist_ok=True)
-            for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+            for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py", "workflow_gate_policy.py", "workflow_forge.py"):
                 dest = scripts_dir / name
                 shutil.copy(_REAL_SCRIPTS_DIR / name, dest)
             script_path = scripts_dir / "prepare-ai-review.sh"
@@ -1132,7 +1132,7 @@ class TestPrepareAiReviewShPlanStageRequiredArgument(unittest.TestCase):
     def _install_scripts(self, repo):
         scripts_dir = repo.root / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py", "workflow_gate_policy.py", "workflow_forge.py"):
             dest = scripts_dir / name
             shutil.copy(_REAL_SCRIPTS_DIR / name, dest)
         script_path = scripts_dir / "prepare-ai-review.sh"
@@ -1353,7 +1353,7 @@ class TestPrepareAiReviewShAmendmentDiffWorkingTreeAnchor(unittest.TestCase):
     def _install_scripts(self, repo):
         scripts_dir = repo.root / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py", "workflow_gate_policy.py", "workflow_forge.py"):
             shutil.copy(_REAL_SCRIPTS_DIR / name, scripts_dir / name)
         script_path = scripts_dir / "prepare-ai-review.sh"
         script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
@@ -1781,7 +1781,7 @@ class TestPrepareAiReviewShImplementationStageHeadGuard(unittest.TestCase):
     def _install_scripts(self, repo):
         scripts_dir = repo.root / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py", "workflow_gate_policy.py", "workflow_forge.py"):
             dest = scripts_dir / name
             shutil.copy(_REAL_SCRIPTS_DIR / name, dest)
         script_path = scripts_dir / "prepare-ai-review.sh"
@@ -2585,7 +2585,7 @@ class TestPrepareAiReviewShPlanStageStaging(unittest.TestCase):
     def _install_scripts(self, repo):
         scripts_dir = repo.root / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py"):
+        for name in ("prepare-ai-review.sh", "workflow_fingerprint.py", "workflow_state.py", "workflow_gate_policy.py", "workflow_forge.py"):
             shutil.copy(_REAL_SCRIPTS_DIR / name, scripts_dir / name)
         script_path = scripts_dir / "prepare-ai-review.sh"
         script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)

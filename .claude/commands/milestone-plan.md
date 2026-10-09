@@ -156,7 +156,10 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
         left, which phase it entered, that **both** recorded plan-review
         stages are discarded (a later bind of different content reads them
         as absent), and that the withdrawn content is consumed and can
-        never re-bind -- only an edit plus regeneration can. At a non-ready
+        never re-bind -- only an edit plus regeneration can. The id joins
+        the item's `consumed_plan_review_content_ids` history
+        (workflow-2.7.0), so restoring it byte for byte after a later
+        round is refused as well. At a non-ready
         phase no withdrawal is attempted, so a re-run after a crash that
         followed a withdrawal simply finds the non-ready row.
      3. **Marker, then the status, once** (`LPR-R2-001`, `LPR-R3-006`):
@@ -419,7 +422,12 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      from the single canonical entry point
      `docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Computing
      `review_content_id`" names for this stage -- never a second, ad hoc
-     computation, and never a value carried over from a previous round;
+     computation, and never a value carried over from a previous round. If the plan stage's gate is `automatic` and the effective `require` lists
+     `distinct_reviewer_models` (`workflow_state.review_stage_gate_context(repo_root,
+     state, work_item_id, "plan")["requires_distinct"]`), also ask the reviewer, in
+     that file, to state `Reviewer model: <vendor>/<model>` in the verdict's header
+     block, because an `APPROVE` without it is refused at ingest (workflow-2.8.0,
+     `LPR-R16-003`); under a human gate ask for nothing new.
    - write `<plan_inputs_dir>/TEST_RESULTS.md` **fresh for this round**,
      opening with the two labelled lines
      `assert_test_results_consistent_with_plan_review_request` requires:

@@ -60,6 +60,8 @@ import workflow_state as ws
 SCRIPT_FILES = (
     "workflow_state.py",
     "workflow_fingerprint.py",
+    "workflow_gate_policy.py",
+    "workflow_forge.py",
     "prepare-ai-review.sh",
 )
 
@@ -5121,8 +5123,10 @@ def cp4_hand_edit(item, mutate):
 
 
 def cp4_make_legacy(work_item):
-    """A `2.5.1` item: no `plan_review_binding`, a null `current_bundle_id`."""
+    """A `2.5.1` item: no `plan_review_binding`, a null `current_bundle_id`,
+    and no `consumed_plan_review_content_ids` (workflow-2.7.0's history)."""
     work_item.pop("plan_review_binding", None)
+    work_item.pop(ws.CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY, None)
     work_item["current_bundle_id"] = None
 
 
@@ -5703,7 +5707,11 @@ class PlanReviewLegacyItems(_PlanReviewBindingCase):
         item.tx(lambda state: ws.ensure_plan_review_binding_marker(state, item.wid, item.now()))
         self.assertEqual(item.entry()["plan_review_binding"]["consumed"],
                          {"review_content_id": approved, "plan_revision": 1, "legacy": False})
-        self.assertRow("11", ws.PLAN_REVIEW_STATUS_EDIT_IN_PROGRESS)
+        # workflow-2.7.0 (`v2.6.0-001`): the marker is a CONSUMED write, so it
+        # materializes the history, and the unchanged amended-away content is
+        # an id-only list hit -- row 10, not 2.6.0's row 11 (`LPR-R1-010`).
+        self.assertEqual(item.entry()[ws.CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY], [approved])
+        self.assertRow("10", ws.PLAN_REVIEW_STATUS_NEEDS_EDIT)
         # The amended-away content is refused.
         self.attempt_publish(ws.ConsumedPlanReviewContentError, plan_revision=2, review_content_id=approved)
         # The edit, at the already-advanced revision: no extra advance.

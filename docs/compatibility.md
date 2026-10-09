@@ -32,8 +32,8 @@ line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as
 `unsupported_protocol_major`.
 
-This repository itself moves to 2.9.0 in a `chore:` update pull request after the
-milestone that vendors that release's test tree, and not before.
+This repository itself runs Workflow 2.9.0, with automatic gates, since the `chore:` update pull
+request that followed the milestone that vendored that release's test tree (C9c, 2026-10-09).
 
 ## What admitted means
 

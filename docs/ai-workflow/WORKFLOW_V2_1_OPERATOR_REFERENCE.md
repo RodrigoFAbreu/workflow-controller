@@ -96,7 +96,7 @@ They are not interchangeable and neither one approves the plan.
 |---|---|---|---|
 | 1. Local model review | Claude, ideally a fresh session | `/review-plan` | Writes `REVIEW_FEEDBACK.md` itself; on `APPROVE` records the `LOCAL_MODEL_PLAN_REVIEW` ledger stage |
 | 2. Manual external review | **You** — upload the bundle to an external reviewer, paste its verdict into `REVIEW_FEEDBACK.md` | `/record-manual-plan-review` | Ingests and binds the verdict you already pasted; on `APPROVE` records the `MANUAL_EXTERNAL_PLAN_REVIEW` ledger stage |
-| 3. Approval | **You** | `/approve-review plan` | The only approval gate; requires **both** ledger stages recorded against the *current* `review_content_id` |
+| 3. Approval | **You**, or the Workflow where the gate is automatic (`/satisfy-gate plan`, `GATE_POLICY.md`) | `/approve-review plan` | The only approval gate; requires **both** ledger stages recorded against the *current* `review_content_id` |
 
 Key points:
 
@@ -124,7 +124,10 @@ Key points:
   that content. The three plan-review readers (`/review-plan`,
   `/record-manual-plan-review`, `/approve-review plan`) refuse any other
   bundle, naming the remedy. Content already reviewed, amended away or
-  withdrawn is `CONSUMED` and never binds again without an edit.
+  withdrawn is `CONSUMED` and never binds again without an edit: every
+  consumed id is kept in the work item's `consumed_plan_review_content_ids`
+  history (workflow-2.7.0), so restoring earlier content byte for byte is
+  refused, and any edit gives it a new id.
   `python3 scripts/workflow_state.py --plan-review-publication-status
   <work-item-id>` prints where an item stands (one JSON object, read-only).
 - The two ledger stage names are `LOCAL_MODEL_PLAN_REVIEW` and
@@ -179,19 +182,62 @@ exactly like `AWAITING_TECHNICAL_APPROVAL` is for both versions.
 | `AWAITING_FUNCTIONAL_REVIEW`, want a second opinion on checklist completeness first | `/review-functional` (optional) — report-only, writes nothing |
 | Functional testing produced findings | `/apply-functional-review` |
 | Functional testing clean, **all** own checkpoints `COMPLETE` | **You**: `/accept-milestone` |
-| Functional testing clean, a checkpoint still outstanding | `/milestone-implement` — finish it, then return to this gate |
+| Functional testing clean, a checkpoint still outstanding | No command completes it from this phase (`/milestone-implement` cannot start a checkpoint here; defect `v2.6.0-003`). Ordinary flow never gets here; a legacy promotion or a hand-constructed state does |
 | Review needed for work outside the gates | `/prepare-review` |
+| Not sure, or driving the item from an orchestrator | `python3 scripts/workflow_protocol.py next-action` — the protocol's own answer to this table; see [Driving the Workflow by protocol](#driving-the-workflow-by-protocol) |
 | Driving the `workflow-v2-1-core` item | `/bootstrap-workflow-v2` — its only driver, but that item is `MILESTONE_COMPLETE`, so every path through it now fails closed (ledger `O16`) |
 
 There is only one acceptance command. `/accept-milestone` refuses while the
-item's own registry has any checkpoint that is not `COMPLETE`, and its
-refusal names the outstanding checkpoint plus the three supported ways
-forward: finish the checkpoint with `/milestone-implement` if it is still
-in scope; `/apply-functional-review`'s bounded branch for a same-scope
-functional fix; its broad branch — a `<parent-id>-remediation-<n>` child
-work item — for new or wider scope. Nothing records functional acceptance
-of a partial round: `/accept-scoped-remediation` did, and was retired as an
-unreachable dead contract (ledger `I10`).
+item's own registry has any checkpoint that is not `COMPLETE`, naming the
+outstanding checkpoint. No command completes that checkpoint from
+`AWAITING_FUNCTIONAL_REVIEW`: `/milestone-implement` cannot start one at
+this phase, whatever the refusal's 2.6.0 message suggests (defect
+`v2.6.0-003`). A functional-review finding goes through
+`/apply-functional-review`: its bounded branch for a same-scope fix, its
+broad branch — a `<parent-id>-remediation-<n>` child work item — for new or
+wider scope. Nothing records functional acceptance of a partial round:
+`/accept-scoped-remediation` did, and was retired as an unreachable dead
+contract (ledger `I10`).
+
+---
+
+## Driving the Workflow by protocol
+
+Workflow 2.7.0 ships Orchestration Protocol v1,
+`scripts/workflow_protocol.py`, specified in
+`docs/ai-workflow/ORCHESTRATION_PROTOCOL.md`. It is how an orchestrator
+drives a work item without copying any of this reference, and it is also a
+quick answer to "which command do I run next?":
+
+```text
+python3 scripts/workflow_protocol.py next-action [--work-item <id>]
+```
+
+prints one JSON envelope whose result names the matching catalogue row,
+a disposition (`automatic`, `human_gate`, `external_gate`, `blocked` or
+`complete`), the action with its rendered command, and a reason with a
+remedy. It reads the state and writes nothing. The other operations are
+`describe`, `verify` (a read-only health check), `reconcile` (classifies
+what an automatic action did), `resolve-artifact` and
+`record-external-result`, which records a pasted manual verdict through
+the same ingest `/record-manual-plan-review` and
+`/record-manual-implementation-review` use.
+
+The protocol adds no gate and changes no command. A `human_gate` action is
+still a person's — the user-only commands keep their literal-confirmation
+guard — and an orchestrator runs `automatic` actions only. Where a command
+would refuse, `next-action` reports the state as `blocked` with the
+command's own remedy instead of offering it.
+
+Since Workflow 2.8.0 (protocol `1.1`) the plan approval, the technical
+approval and the milestone acceptance are **automatic by default**: the
+Workflow satisfies each from its recorded evidence (`validation` actions,
+`/satisfy-gate`), unless `docs/ai-workflow/GATE_POLICY.json` turns the gate
+human (`"human_approval": true` makes all three a person's again, as in 2.7.0).
+Everything about the policy, its evidence, its trust boundary and its threat
+model, and the reopening of an item whose pull request turns red, is in
+`docs/ai-workflow/GATE_POLICY.md`. Turning human approval on is the stronger
+mode.
 
 ---
 
@@ -254,7 +300,7 @@ test fails and is authoritative about which one moved.
   `/request-plan-amendment` from `IMPLEMENTING`); a withdrawal without the
   explicit id (`PlanReviewWithdrawalNeedsExplicitIdError`) or during an
   open plan-approval transaction (`PlanApprovalInProgressError`);
-  publishing unchanged, already-reviewed content
+  publishing unchanged or restored, already-reviewed content
   (`ConsumedPlanReviewContentError`). A generator failure after the
   publish leaves `PUBLISHED_UNBOUND`; re-run `/milestone-plan <id>`.
 - **Never**: repoints `active_work_item_id` away from another live item.
@@ -439,6 +485,84 @@ test fails and is authoritative about which one moved.
   *before* superseding anything, naming every offending id -- IMPL2-R1);
   an open plan-approval transaction; no literal confirmation/`reason` this
   turn.
+
+### `/adopt-gate-policy` — user-only
+- **When**: any time, for the repository rather than for a work item
+  (`workflow-2.8.0`, `docs/ai-workflow/GATE_POLICY.json`). It names no work
+  item, touches no work item's entry and no approval stage, and is not a
+  state of `MILESTONE_WORKFLOW.md`.
+- **Expects**: a valid `docs/ai-workflow/GATE_POLICY.json`, **committed**
+  (byte-identical to `HEAD`'s copy: the adoption commit stages only the state
+  file); an index holding
+  nothing but, possibly, `docs/ai-workflow/WORKFLOW_STATE.json`
+  (`DirtyIndexBeforeStagingError` naming the staged paths otherwise).
+- **Does**: shows the file's digest, the resolved difference from the policy
+  in effect (each loosening and tightening), the floor it resets, the
+  `lowered` label it will record and every open plan-stage and
+  implementation-stage bundle the adoption commit will stale, then stops for
+  the user's confirmation: literal text containing `gate_policy` and the
+  first 12 hexadecimal characters of the digest
+  (`validate_gate_policy_confirmation`; `disable-model-invocation: true`).
+  The effective policy is the stricter of the adopted policy, the recorded
+  floor and the file, so a file only ever tightens it; adoption is the only
+  way to loosen it.
+- **Writes**: the top-level `gate_policy_adoption` (`{sha256, adopted_at,
+  confirmation, policy, history, lowered}`) and the reset
+  `gate_policy_floor`, staged top-level-scoped, in **one** commit carrying
+  `Workflow-Gate-Policy-Adoption: <digest>` and nothing else;
+  `validate_gate_policy_adoption_commit` runs right after it.
+- **Next**: nothing automatic. An adoption keeps verifying after a squash
+  merge (both fields are verified by content and chain, never by the commit
+  message); a concurrent second adoption fails closed (every gate human) and
+  is re-adopted after updating from `main`.
+- **Refuses**: an absent or invalid file (`GatePolicyFileInvalidError`); a
+  file that differs from `HEAD`'s (`GatePolicyFileUncommittedError`: commit the
+  file, then run `/adopt-gate-policy`; nothing is written and no gate-lowering
+  event is recorded); a
+  confirmation lacking the literal or the digest prefix
+  (`GatePolicyConfirmationRejectedError`).
+
+### `/satisfy-gate <plan|implementation|acceptance> [work-item-id]` — automated validation
+- **When**: the plan or technical gate of a `"2.1"`/`"2.2"` item (the technical
+  gate: `"2.2"` only) is `automatic` under the effective gate policy
+  (`workflow-2.8.0`, `docs/ai-workflow/GATE_POLICY.json`; with no file or
+  adoption the built-in default makes both automatic) and the stage's reviews
+  are done: `AWAITING_PLAN_APPROVAL` for `plan`,
+  `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for `implementation`. It is the
+  action behind the protocol's `validation` disposition: not user-only, because
+  it records the Workflow's own decision, not a person's. `acceptance` is added
+  by the acceptance checkpoint of this release and is refused until then.
+- **Expects**: `workflow_gate_policy.evaluate_gate` reports the gate
+  `automatic` and `satisfiable`: the approval-gate wrapper is `reachable`; the
+  latest verdict is an `APPROVE` naming the current bundle (so a
+  `USER_OVERRIDE` is never automatic); each `require` entry is met
+  (`distinct_reviewer_models`: both ledger stages declare a `Reviewer model:`
+  and the two families differ); and both ledger stages carry the audit keys
+  (`review_evidence_audited`).
+- **Does**: runs `/approve-review`'s step 0 and steps 1 to 6d (plan) or 1 to 4
+  and the implementation branch of step 6 (implementation) as one transaction,
+  with these differences: no confirmation text; the basis is
+  `resolve_policy_approval_basis`, `POLICY_SATISFIED`; the record carries
+  `policy_evidence` (the policy digest and source, the file, adopted and floor
+  digests, each requirement, both ledger stages' bundle ids, verdict hashes,
+  ledger-entry hashes and run references, and the `trust` statement) and its
+  `user_confirmation` is `policy:<digest>`; the gate is re-evaluated inside the
+  transaction, so a gate turned human meanwhile writes nothing; the commit adds
+  `Workflow-Gate-Satisfied-By: policy:<first 12 digest characters>`.
+- **Writes**: `plan_approval` or `technical_approval` and the phase, in the
+  existing approval commit; then, only if the committing evaluation observed a
+  setting stricter than the recorded floor, the floor in its own commit
+  (`Workflow-Gate-Policy-Floor`). A refused or `blocked` run writes and commits
+  nothing.
+- **Next**: `IMPLEMENTING` (plan) or `AWAITING_FUNCTIONAL_REVIEW`
+  (implementation), exactly as after `/approve-review`.
+- **Refuses**: a human gate or an unsatisfiable evaluation
+  (`GateNotSatisfiableError`, naming each unmet requirement and its remedy);
+  everything `/approve-review` refuses at the cited steps. `/approve-review`
+  remains the human path in either mode.
+- **Trust**: the Workflow guarantees binding, freshness and audit of the review
+  verdicts; it does not guarantee that a review happened. Turning human
+  approval on is the stronger mode.
 
 ### `/review-implementation [work-item-id]` — review command
 - **When**: optional, repeatable, repository-local second opinion while a
@@ -707,6 +831,32 @@ test fails and is authoritative about which one moved.
   round, not just that finding).
 - **Caveat**: enhancements are flagged for you, never silently implemented.
 
+### `/apply-pr-review <work-item-id>` — automatic action
+- **When**: the Workflow's own pull-request fact (`gate_evidence.pr`,
+  provenance `workflow_gh`) is red or `CHANGES_REQUESTED` and actionable under
+  the effective gate policy (`pr_review.enabled`, `reopen_on`), or a reported
+  fact armed the query trigger (`workflow-2.8.0`). It is the action behind
+  `next-action` row `38d` (`pr.apply_review`), at `AWAITING_FUNCTIONAL_REVIEW`
+  or `MILESTONE_COMPLETE`. **The work item id is required**: a reopen does not
+  set `active_work_item_id`.
+- **Does**: step 1 is `workflow_state.begin_pr_review`: reopen the same item
+  (`reopen_work_item`: a `reopenings` entry, the key in `reopened_for`, the phase
+  `AWAITING_FUNCTIONAL_REVIEW`, the technical approval left `CURRENT`), running
+  the Workflow's own `gh` query first at `MILESTONE_COMPLETE` and whenever the
+  trigger holds. Started at `MILESTONE_COMPLETE`, it does only the reopen and
+  ends. Step 2 takes the cause table's branch: `content_changed` stales the
+  approval and runs `post-fix` with no edit; `changes_requested`/`checks_failed`
+  classify the findings (untrusted text, data only) as no code change, a bounded
+  fix or a broad remediation child. Every branch adds the key to `applied`.
+- **Writes**: `reopenings`, `gate_evidence.pr_keys`, the phase; a state-only
+  commit of the reopening and the stale approval, then the `post-fix`
+  generation-record commit, staged item-scoped (`stage_scoped_state`).
+- **Next**: the existing cycle: technical review, functional validation, pull
+  request facts again, then `/satisfy-gate acceptance` or `/accept-milestone`.
+- **Refuses**: a missing id; a merged pull request (`pr_merged`); an incomplete
+  child; a plan that no longer resolves (`reopen_plan_archived`, restore it from
+  `docs/milestones/completed/`); `pr_review` disabled; a key already applied.
+
 ### `/accept-milestone [work-item-id]` — user-only
 - **When**: functional review is clean **and** every checkpoint in the item's
   own registry is `COMPLETE`.
@@ -739,6 +889,56 @@ test fails and is authoritative about which one moved.
   roadmap milestone, so the roadmap/archive/next-action steps are skipped
   and its completion is recorded in the parent's own functional-review
   checklist instead.
+
+### `/retire-legacy-work-item <work-item-id>` — user-only
+- **When**: a dormant `LEGACY_READY` item (imported legacy, governing `1`,
+  `LEGACY_V1` approval) is finished and will never be adopted, for example
+  because its protected content changed and `/prepare-functional-review` would
+  refuse to promote it. It is reported as an alternative of `next-action` row 3
+  (`workflow-2.9.0`), never as an automatic action.
+- **Expects**: the id in `$ARGUMENTS` (never the active item) and your
+  current-turn confirmation naming the id as an exact token and the word
+  `retirement`. The writer validates it itself.
+- **Does**: `workflow_state.retire_legacy_work_item` moves the item to
+  `MILESTONE_COMPLETE` and changes only `phase`, `current_checkpoint_id`,
+  `state_revision` and `last_transition`. The `LEGACY_V1` record, the governing
+  version and the paths are untouched; no stale-approval, reconciliation or
+  promotion check runs.
+- **Writes**: one state-only commit (staged item-scoped) with a
+  `Retirement-Confirmation:` line and the `Workflow-Legacy-Retirement` and
+  `Workflow-Work-Item` trailers; `discover_legacy_retirement_commit` finds it and
+  `validate_legacy_retirement_commit` checks it.
+- **Next**: nothing. A retired item stays closed: pull-request evidence may still
+  be recorded on it but never reopens it (`reopen_retired_legacy_item`).
+- **Refuses**: a missing or wrong confirmation; an unknown id; any phase other
+  than `LEGACY_READY`; the active item; unfinished children.
+
+### `/resume-implementation <work-item-id>` — user-only
+- **When**: a `2.1`/`2.2` item sits at `AWAITING_FUNCTIONAL_REVIEW` with a registry
+  checkpoint still outstanding (`next-action` row 38c, `registry_incomplete`;
+  `v2.6.0-003`). Only a hand-constructed or hand-edited state with a `CURRENT`
+  plan approval gets there; ordinary flow cannot, and a promoted legacy item has
+  no plan approval, so the writer refuses it. It is reported as an alternative
+  of row 38c (`workflow-2.9.0`), never as an automatic action.
+- **Expects**: the id in `$ARGUMENTS` (never the active item) and your
+  current-turn confirmation naming the id as an exact token and the word
+  `resumption`. The writer validates it itself.
+- **Does**: `workflow_state.resume_implementation` holds the repository-global
+  lifecycle lock and joins the claim side of the amendment-race guard
+  (`v2.4.0-002`), then moves the item to `IMPLEMENTING` and marks its technical
+  approval `STALE`, changing only `phase`, `technical_approval.status`,
+  `state_revision` and `last_transition`. It clears nothing: earlier evidence is
+  bound to the content identity it reviewed and cannot satisfy a gate for the new
+  content. An already-`STALE` approval is accepted as it is.
+- **Writes**: one state-only commit (staged item-scoped) with a
+  `Resume-Confirmation:` line and the `Workflow-Work-Item` trailer;
+  `validate_resume_implementation_commit` checks it.
+- **Next**: `/milestone-implement <id>` runs unchanged (claim, completion,
+  self-review, bundle, both reviews, technical approval, functional review).
+- **Refuses**: a missing or wrong confirmation; an amendment in flight anywhere in
+  the repository (the claim side's lifecycle refusals); any phase other than
+  `AWAITING_FUNCTIONAL_REVIEW`; a `1` item; a missing or not `CURRENT` plan
+  approval; a terminal registry; no technical approval to stale.
 
 ### `/prepare-review <base-sha> <stage> [work-item-id]`
 - **When**: a one-off review of work that is not part of a tracked milestone
@@ -889,7 +1089,7 @@ back to `IMPLEMENTING`, one or more times.
 
 ### "Enter the `X` state" in a command file
 
-Twelve of the seventeen command files open with an `Enter ...` line naming a
+Twelve of the eighteen command files open with an `Enter ...` line naming a
 phase. It is inherited v1 wording and does **not** mean the command writes
 that phase. Three things it can mean, and which command means which —
 derived from whether the file actually calls a writer of it:
@@ -920,6 +1120,12 @@ two new implementation-review states
 places in practice — do not use the number six to predict stops for any
 version.
 
+Those stops are the gates when they are human. Under the default gate policy
+(`workflow-2.8.0`, `GATE_POLICY.md`) the plan approval, the technical approval
+and the acceptance are satisfied by the Workflow from evidence and are not
+stops unless the policy makes them human, so the number of places you stop
+depends on the policy as well as on the version.
+
 ## Remediation children: a child work item's own cycle
 
 `/apply-functional-review`'s broad branch creates
@@ -949,6 +1155,7 @@ The sequence, in full:
 /review-plan <child-id>                 → AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW
 /record-manual-plan-review <child-id>   → AWAITING_PLAN_APPROVAL
 /approve-review plan <child-id>         → IMPLEMENTING
+                                          (or /satisfy-gate plan <child-id>, where the gate is automatic)
 /milestone-implement <child-id>  (× N)  → SELF_REVIEWING_IMPLEMENTATION
                                         → AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW ("1"/"2.1")
                                         → AWAITING_LOCAL_IMPLEMENTATION_REVIEW ("2.2")
@@ -956,10 +1163,13 @@ The sequence, in full:
                                         → AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW ("2.2" only)
 /record-manual-implementation-review <child-id>  ("2.2" only) → AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW
 /approve-review implementation <child-id> → AWAITING_FUNCTIONAL_REVIEW
+                                          (or /satisfy-gate implementation <child-id>, where the gate is automatic)
 /prepare-functional-review <child-id>
 /review-functional <child-id>           (optional)
 /accept-milestone <child-id>            → MILESTONE_COMPLETE
                                           ...which unblocks the parent
+/apply-pr-review <child-id>             (only if the child's pull request turns red after completion:
+                                          reopens the child into remediation, workflow-2.8.0)
 ```
 
 A `"1"`-governed child (only possible if `default_workflow_version` was

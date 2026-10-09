@@ -44,9 +44,16 @@ working tree's state. Findings go to `.ai-review/workflow-controller-protocol-wa
 S=$(mktemp -d)
 git clone -q /home/rodrigo/Workspace/workflow-controller $S/ctl && git -C $S/ctl checkout -q milestone/workflow-controller-protocol-warn-status
 git clone -q /home/rodrigo/Workspace/workflow-controller $S/repo     # the managed repository to drive
-export XDG_CONFIG_HOME=$S/config HOME_SCRATCH=$S                      # keeps the user settings out of the test
-C="env PYTHONPATH=$S/ctl python3 -m controller"                       # run from $S/ctl; no PYTHONPATH=. in tests
+git clone -q --bare $S/repo $S/origin.git                             # a scratch origin: never the real working tree
+git -C $S/repo remote set-url origin $S/origin.git                    # `step`'s preflight pushes to origin
+mkdir -p $S/bin $S/state && ln -s $S/ctl/tests/fake_gh.py $S/bin/gh   # a fake `gh`, first on PATH
+python3 -c "from tests import fake_gh; from pathlib import Path; fake_gh.write_state(Path('$S/state/gh.json'), fake_gh.initial_state('RodrigoFAbreu/workflow-controller'))"   # run from $S/ctl
+export PATH=$S/bin:$PATH FAKE_GH_STATE=$S/state/gh.json FAKE_GH_ORIGIN=$S/origin.git
+export XDG_CONFIG_HOME=$S/config XDG_DATA_HOME=$S/data XDG_STATE_HOME=$S/state-home HOME_SCRATCH=$S   # keeps the user settings out of the test
+C="env PYTHONPATH=$S/ctl python3 -m controller --claude-binary $S/ctl/tests/fake_claude.py --runtime-dir $S/runtime"   # run from $S/ctl; no PYTHONPATH=. in tests
 ```
+Before any `step`, check `git -C $S/repo remote get-url origin` prints the scratch bare path and `command -v gh` prints
+`$S/bin/gh`. Never run `step` without both.
 Test data: in `$S/repo`, update to Workflow 2.9.0 with `workflow-manager --release-version 2.9.0 update .` and commit.
 Add and commit `docs/ai-workflow/GATE_POLICY.json` containing exactly `{"schema_version": 1, "human_approval": true}`
 (an unadopted policy, which the real `verify` reports as `warn`). Keep the shared 1.7.0 install as the "before" control.
@@ -56,11 +63,14 @@ Add and commit `docs/ai-workflow/GATE_POLICY.json` containing exactly `{"schema_
    `verify gate_policy: warn: ...` among the decision's evidence lines, in the Workflow's order.
 2. Control: the shared 1.7.0 `workflow-controller explain $S/repo` exits 20 with "protocol verify gave an answer outside
    the protocol: ... 'warn' is not one of ['pass', 'fail', 'skip']".
-3. `$C step $S/repo` (dry or with the usual scratch stubbing): not refused for the `warn`. The job record keeps the
+3. `$C step $S/repo` with the Setup above (scratch origin, fake `gh`, fake Claude binary): not refused for the `warn`. The job record keeps the
    advisory line.
-4. Make a check `fail` in the scratch repo (for example delete a managed script): `explain` shows the unhealthy gate
+4. Make a check `fail` in the scratch repo. Deleting or editing a managed script trips `workflow-manager verify` first, so
+   instead edit the `base_commit` of the active work item in `$S/repo`'s `WORKFLOW_STATE.json`, or run with a scratch
+   always-succeeding `--workflow-manager` wrapper script. `explain` shows the unhealthy gate
    listing the failing checks first, then the `warn` checks.
-5. An undefined status (edit the scratch copy of the answer, or the stub, to say `"status": "maybe"`) still refuses, exit 20.
+5. An undefined status still refuses, exit 20. Use the scratch `--workflow-manager` wrapper above (or a stub of the protocol
+   script's answer) so that `verify` says `"status": "maybe"`; editing a managed script trips `workflow-manager verify` first.
 6. With a repeated no-progress step, the no-progress gate's evidence also carries the `verify ...: warn:` line.
 
 **Flow 2: vendored Workflow 2.9.0 schema (protocol 1.2).**
@@ -68,14 +78,15 @@ Add and commit `docs/ai-workflow/GATE_POLICY.json` containing exactly `{"schema_
    published copy matches the schema's recorded digest (`c203f2b2...`), and the vendored file is byte for byte the 2.9.0 one.
 2. `python3 -m unittest tests.test_protocol_schema tests.test_protocol` in `$S/ctl`: OK.
 3. The eight new action ids are catalogue members (grep `protocol_schema.json`); `$C inspect $S/repo` against the 2.9.0
-   scratch repo prints no "does not know" advisory for them.
+   scratch repo prints no "does not know" advisory for them. It prints a "cannot launch" advisory naming only the four
+   unlaunchable ids (see Flow 3.1).
 
 **Flow 3: `inspect` and `explain` advisory lines.**
 1. `$C inspect $S/repo`: the advisory about unknown action ids names only the four ids this Controller cannot launch
    (`acceptance.satisfy`, `implementation.satisfy`, `plan.satisfy`, `pr.apply_review`) if the Workflow lists them, plus any
    invented id; it is silent for the four gates it never launches. `inspect --json` carries `unknown_action_ids`.
 2. Add a made-up id to a stub `describe` answer in the scratch repo: it is listed; nothing is refused.
-3. `$C explain $S/repo` lines read `verify <check>: warn: <detail>`; there is no `--work-item` flag (the active item resolves itself).
+3. `$C explain $S/repo` lines read `verify <check>: warn: <detail>`; no `--work-item` option is needed (the active item resolves itself).
 
 **Flow 4: documentation.**
 1. `python3 tools/check_docs.py` in `$S/ctl`: exit 0; `python3 -m unittest tests.test_docs`: OK.

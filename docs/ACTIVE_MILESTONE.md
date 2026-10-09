@@ -34,6 +34,62 @@ Plan revision 2 approved. Implementing under Workflow 2.6.0, one checkpoint per 
   `tests.test_protocol_job.LoopGuardTest` adds it. Wording: `docs/common-problems.md`'s `warn` entry no longer
   puts "For example" straight after "Upgrade to 1.7.1", where it read as an example of upgrading.
 
+## Functional review checklist (`workflow-controller-protocol-warn-status`, Controller 1.7.1)
+
+Use scratch copies only. Never touch `~/.config/workflow-controller/`, the shared pipx install or this
+working tree's state. Findings go to `.ai-review/workflow-controller-protocol-warn-status/feedback/FUNCTIONAL_REVIEW.md`.
+
+**Setup.**
+```
+S=$(mktemp -d)
+git clone -q /home/rodrigo/Workspace/workflow-controller $S/ctl && git -C $S/ctl checkout -q milestone/workflow-controller-protocol-warn-status
+git clone -q /home/rodrigo/Workspace/workflow-controller $S/repo     # the managed repository to drive
+export XDG_CONFIG_HOME=$S/config HOME_SCRATCH=$S                      # keeps the user settings out of the test
+C="env PYTHONPATH=$S/ctl python3 -m controller"                       # run from $S/ctl; no PYTHONPATH=. in tests
+```
+Test data: in `$S/repo`, update to Workflow 2.9.0 with `workflow-manager --release-version 2.9.0 update .` and commit.
+Add and commit `docs/ai-workflow/GATE_POLICY.json` containing exactly `{"schema_version": 1, "human_approval": true}`
+(an unadopted policy, which the real `verify` reports as `warn`). Keep the shared 1.7.0 install as the "before" control.
+
+**Flow 1: a `warn` check is advisory.**
+1. `$C explain $S/repo`. Expect exit 0 and a decision (next action `/milestone-implement` or the item's own), with
+   `verify gate_policy: warn: ...` among the decision's evidence lines, in the Workflow's order.
+2. Control: the shared 1.7.0 `workflow-controller explain $S/repo` exits 20 with "protocol verify gave an answer outside
+   the protocol: ... 'warn' is not one of ['pass', 'fail', 'skip']".
+3. `$C step $S/repo` (dry or with the usual scratch stubbing): not refused for the `warn`. The job record keeps the
+   advisory line.
+4. Make a check `fail` in the scratch repo (for example delete a managed script): `explain` shows the unhealthy gate
+   listing the failing checks first, then the `warn` checks.
+5. An undefined status (edit the scratch copy of the answer, or the stub, to say `"status": "maybe"`) still refuses, exit 20.
+6. With a repeated no-progress step, the no-progress gate's evidence also carries the `verify ...: warn:` line.
+
+**Flow 2: vendored Workflow 2.9.0 schema (protocol 1.2).**
+1. `sha256sum $S/ctl/controller/protocol_schema.json $S/ctl/tests/protocol_schemas/workflow-2.9.0.schema.json`: the
+   published copy matches the schema's recorded digest (`c203f2b2...`), and the vendored file is byte for byte the 2.9.0 one.
+2. `python3 -m unittest tests.test_protocol_schema tests.test_protocol` in `$S/ctl`: OK.
+3. The eight new action ids are catalogue members (grep `protocol_schema.json`); `$C inspect $S/repo` against the 2.9.0
+   scratch repo prints no "does not know" advisory for them.
+
+**Flow 3: `inspect` and `explain` advisory lines.**
+1. `$C inspect $S/repo`: the advisory about unknown action ids names only the four ids this Controller cannot launch
+   (`acceptance.satisfy`, `implementation.satisfy`, `plan.satisfy`, `pr.apply_review`) if the Workflow lists them, plus any
+   invented id; it is silent for the four gates it never launches. `inspect --json` carries `unknown_action_ids`.
+2. Add a made-up id to a stub `describe` answer in the scratch repo: it is listed; nothing is refused.
+3. `$C explain $S/repo` lines read `verify <check>: warn: <detail>`; there is no `--work-item` flag (the active item resolves itself).
+
+**Flow 4: documentation.**
+1. `python3 tools/check_docs.py` in `$S/ctl`: exit 0; `python3 -m unittest tests.test_docs`: OK.
+2. Read `docs/run.md` (Human gates), `docs/common-problems.md` (the `warn` entry and the lowered-gate entry),
+   `docs/compatibility.md`, `docs/glossary.md`, `docs/guide/troubleshooting.md`. Each header reads "Controller 1.7.1;
+   Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0". Each says 1.7.1 treats `warn` as advisory and 1.7.0 refuses with exit 20; an
+   undefined status is still refused; links and anchors resolve (the run.md `#steps` link included).
+
+**Known limitations / out of scope.** The Controller still cannot launch the four automatic action ids; it only advises.
+No moving of this repository to Workflow 2.9.0 (a later step). Two tests fail locally only under Git 2.56
+(`SquashReleaseNotesTest.test_a_trailer_paragraph_refuses_with_no_edit`, `TrailerRuleTest.test_a_bare_url_and_a_one_line_note_are_refused`;
+ROADMAP follow-up 12). The last full run (3073 tests, those two failures) is in the bundle's `TEST_RESULTS.md`.
+The release (1.7.1, tag, pipx install) is not part of this review.
+
 The sections below describe the previous milestone and are superseded as CP3 lands.
 
 ## Status

@@ -1,5 +1,17 @@
 # Active Milestone
 
+## In progress: `workflow-controller-workflow-2-9-0-move` (ROADMAP C9c)
+
+Plan revision 3, base `e6ff30b`. Implementing one checkpoint per invocation.
+
+- **CP1 complete.** `tests/workflow_releases/2.9.0/` is vendored from the published archive
+  (`archive-sha256:0f0af156…905a`); the sync subset gained `GATE_POLICY_PATHS`
+  (`scripts/workflow_forge.py`, `scripts/workflow_gate_policy.py`); the 2.5.1, 2.6.0 and 2.7.0
+  trees are unchanged. `tools/workflow_releases.py check` exits 0 and
+  `python3 -m unittest tests.test_workflow_releases` passes.
+
+---
+
 ## Status
 
 **Complete.** `workflow-controller-protocol-warn-status` (`docs/ROADMAP.md` step C9b, follow-up 11)

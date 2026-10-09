@@ -76,11 +76,15 @@ class CheckTest(unittest.TestCase):
             with self.subTest(release=release):
                 files = fixtures.workflow_release_files(release)
                 commands = [path for path in files if path.startswith(".claude/commands/")]
-                self.assertEqual(len(commands), 17)
                 expected = list(workflow_releases.VENDORED_SCRIPTS)
                 if "scripts/workflow_protocol.py" in files:
                     # A release that ships the orchestration protocol (2.7.0).
                     expected += workflow_releases.PROTOCOL_PATHS
+                if "scripts/workflow_gate_policy.py" in files:
+                    # A release that ships the gate policy (2.8.0 on).
+                    expected += workflow_releases.GATE_POLICY_PATHS
+                # 2.8.0 added three command files, 2.9.0 two more.
+                self.assertEqual(len(commands), 22 if "scripts/workflow_gate_policy.py" in files else 17)
                 self.assertEqual(sorted(set(files) - set(commands)), sorted(expected))
                 self.assertTrue(files["scripts/prepare-ai-review.sh"]["executable"])
                 tree = fixtures.workflow_release_tree(release)
@@ -261,8 +265,9 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(record["manager_commit"], "archive-sha256:" + "ab" * 32)
         self.assertEqual(record["manager_source"], f"workflow-{self.RELEASE}.tar.gz")
 
-    def test_the_protocol_files_are_vendored_when_the_release_has_them(self) -> None:
-        for target_path in workflow_releases.PROTOCOL_PATHS:
+    def test_the_protocol_and_gate_policy_files_are_vendored_when_the_release_has_them(self) -> None:
+        OPTIONAL = workflow_releases.PROTOCOL_PATHS + workflow_releases.GATE_POLICY_PATHS
+        for target_path in OPTIONAL:
             data = f"# {target_path}\n".encode()
             location = f"payload/{target_path}"
             path = self.distribution / self.RELEASE / location
@@ -274,10 +279,16 @@ class SyncTest(unittest.TestCase):
                                           "executable": False})
             self.manifest_path.write_text(json.dumps(manifest))
         fixtures.run(["git", "add", "-A"], cwd=self.manager)
-        fixtures.run(["git", "commit", "-q", "-m", "protocol"], cwd=self.manager)
+        fixtures.run(["git", "commit", "-q", "-m", "optional"], cwd=self.manager)
         dest = self._sync()
-        for target_path in workflow_releases.PROTOCOL_PATHS:
+        for target_path in OPTIONAL:
             self.assertTrue((dest / target_path).is_file(), target_path)
+        self.assertEqual(workflow_releases._check_tree(self.RELEASE, self.out), [])
+
+    def test_the_gate_policy_files_are_not_required_of_a_release_without_them(self) -> None:
+        dest = self._sync()
+        for target_path in workflow_releases.GATE_POLICY_PATHS:
+            self.assertFalse((dest / target_path).exists(), target_path)
         self.assertEqual(workflow_releases._check_tree(self.RELEASE, self.out), [])
 
     def test_a_release_that_is_not_a_dotted_version_is_refused(self) -> None:

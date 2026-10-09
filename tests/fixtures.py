@@ -635,8 +635,8 @@ def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
 
 def workflow_release_tree(release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
     """The vendored tree of the released Workflow ``release``: its
-    seventeen command files and three scripts at their target-relative
-    paths, hash-pinned by its ``RELEASE.json``. Read it, never write it."""
+    command files and scripts (plus the protocol and gate-policy scripts
+    a release ships) at their target-relative paths, hash-pinned by its ``RELEASE.json``. Read it, never write it."""
     tree = WORKFLOW_RELEASES_DIR / release
     if not (tree / "RELEASE.json").is_file():
         raise FileNotFoundError(f"no vendored Workflow tree for {release!r} under {WORKFLOW_RELEASES_DIR}")
@@ -938,7 +938,7 @@ def carry_out_plan_recovery_steps(root: Path, work_item_id: str, steps: tuple[st
 
 def copy_real_commands_dir(dest: Path, *, release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
     """A real, on-disk copy of the released Workflow ``release``'s
-    seventeen command files, from its vendored tree -- the same external
+    command files, from its vendored tree -- the same external
     artifact a target managed repository carries. Copying rather than
     pointing at the vendored tree keeps a fixture that mutates a file (the
     extra-file / discriminating-recogniser tests) from ever touching it."""
@@ -950,7 +950,7 @@ def copy_real_commands_dir(dest: Path, *, release: str = REFERENCE_WORKFLOW_RELE
 
 def write_command_file(commands_dir: Path, name: str, text: str) -> Path:
     """Write a single synthetic command file -- for the partition and
-    denylist-recogniser fixtures that need a file the real seventeen do
+    denylist-recogniser fixtures that need a file the real command files do
     not carry."""
     commands_dir.mkdir(parents=True, exist_ok=True)
     path = commands_dir / f"{name}.md"

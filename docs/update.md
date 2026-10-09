@@ -75,7 +75,7 @@ If you update the trunk while a milestone branch stays on the old release, the b
 
 ## What you should see
 
-After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal. On Workflow 2.8.0 `inspect` also prints an `advisory:` line about action ids this Controller release does not know; that is expected (see [compatibility](compatibility.md)).
+After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal. On Workflow 2.8.0 `inspect` also prints an `advisory:` line about action ids this Controller release cannot launch; that is expected (see [compatibility](compatibility.md)).
 
 ## If it fails
 

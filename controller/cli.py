@@ -845,7 +845,7 @@ def _print_repository_line(target: managed_repo.ManagedRepository) -> None:
               f"{len(target.script_digests or {})} managed scripts)")
         unknown = protocol_decision.unknown_action_ids(target.protocol_action_ids)
         if unknown:
-            print(f"advisory: the Workflow lists action ids this Controller release does not know: "
+            print(f"advisory: the Workflow lists action ids this Controller release cannot launch: "
                   f"{', '.join(unknown)}; each is blocked if it becomes the next action")
 
 

@@ -154,7 +154,7 @@ class ManagedRepository:
     script_digests: Mapping[str, str] | None = None
     #: The action ids the protocol script's ``describe`` lists (``None`` for
     #: a legacy release): ``inspect`` reports the ones this Controller
-    #: release does not know, as an advisory (orchestration-protocol-v1 C.3).
+    #: release cannot launch, as an advisory (orchestration-protocol-v1 C.3).
     protocol_action_ids: tuple[str, ...] | None = None
     #: Set only by :func:`inspect_for_resume`: the ``DriftedInstallationError``
     #: the Manager's verify/status raised. Such a repository may only end a

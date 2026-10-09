@@ -240,7 +240,7 @@ class ActionTableTest(_Case):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             cli._print_repository_line(target)
-        self.assertIn("advisory: the Workflow lists action ids this Controller release does not know: "
+        self.assertIn("advisory: the Workflow lists action ids this Controller release cannot launch: "
                       "forge.open_pr, gate.policy", out.getvalue())
 
     def test_a_2_9_0_listing_advises_of_exactly_the_four_unlaunched_automatic_ids(self) -> None:

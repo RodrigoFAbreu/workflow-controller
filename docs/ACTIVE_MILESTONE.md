@@ -74,6 +74,53 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-1.7.1 is released (PR #28) and its docs are merged (PR #29). Next, `/milestone-plan` for C9c: move
-this repository to the latest compatible Workflow (2.9.0 today), with automatic gates (ROADMAP
-follow-up 15). Then C8.
+`workflow-controller-workflow-2-9-0-move` (C9c) is in functional review (see the checklist below).
+After a clean review, `/accept-milestone` records acceptance. The `chore:` update pull request that
+moves this repository to Workflow 2.9.0 follows acceptance (D3). Then C9d, then C8.
+
+## Functional review checklist
+
+Work item `workflow-controller-workflow-2-9-0-move` (plan
+`docs/ai-workflow/CONTROLLER_WORKFLOW_2_9_0_MOVE_PLAN.md`). The milestone vendors the Workflow 2.9.0
+release tree under `tests/workflow_releases/2.9.0/`, extends `tools/workflow_releases.py` with the
+gate-policy scripts, admits a protocol release by capability in `InstalledReleaseTest`
+(`tests/test_workflow_releases.py`) and `tests/test_managed_repo.py`, adds a runnable-tree test, and
+updates the docs. It changes nothing in `controller/`.
+
+### Setup (isolation is required)
+
+- Do everything in `mktemp -d` scratch directories. Never modify the real repository or
+  `~/Workspace/workflow`, and never touch `~/.config/workflow-controller/`.
+- Set `XDG_CONFIG_HOME`, `XDG_STATE_HOME` and `XDG_CACHE_HOME` to scratch directories, except where
+  the real Workflow Manager release cache is needed (the rehearsal in flow 3).
+- Every clone must have its `origin` set to a scratch bare clone
+  (`git remote set-url origin <scratch bare>`), so nothing can push to the real remote.
+- If you use a Controller `step` or `run`, put `tests/fake_gh.py` first on `PATH` as `gh`, with
+  `FAKE_GH_STATE` and `FAKE_GH_ORIGIN` set. Prefer `explain` or `inspect`, which do not push.
+- The real `workflow-manager` and `workflow-controller` must be on `PATH`.
+
+### Flows
+
+1. **Release tree check.** Run `python3 tools/workflow_releases.py check`.
+   Expected: exit 0, and 2.9.0 is listed with its gate-policy scripts.
+2. **Targeted tests.** Run `python3 -m unittest tests.test_workflow_releases tests.test_managed_repo`
+   in the repository. Expected: pass (apart from the Git 2.56 limitation below).
+3. **Scratch rehearsal.** Clone the repository into a `mktemp` directory, point `origin` at a scratch
+   bare clone, run `workflow-manager --release-version 2.9.0 update <clone>`, and commit the result.
+   Then run `python3 -m unittest tests.test_workflow_releases tests.test_managed_repo` in the clone.
+   Expected: the update succeeds and the tests pass, including the runnable-tree test.
+4. **Same clone at `main`.** Check out `main` in a second scratch clone and run
+   `python3 -m unittest tests.test_workflow_releases.InstalledReleaseTest`. Expected: it fails, because
+   the installed release has no vendored tree there.
+5. **Explain admits the clone.** Run
+   `workflow-controller --routing-config /home/rodrigo/Workspace/workflow-controller/.controller/routing.json explain <clone from flow 3>`.
+   Expected: the repository is admitted (no protocol refusal).
+6. **A "neither" tree is rejected.** Hand-make a tree with no protocol script that is not a validated
+   release, and pass it to the admission predicate used by `InstalledReleaseTest`. Expected: rejected.
+7. **Docs.** Run `python3 tools/check_docs.py`. Expected: exit 0.
+
+### Known limitations
+
+- The actual update to 2.9.0 is a later `chore:` pull request (D3).
+- C9d removes the vendored-tree requirement.
+- Two tests fail locally on Git 2.56 (follow-up 12); they are unrelated to this milestone.

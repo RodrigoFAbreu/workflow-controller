@@ -6849,7 +6849,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-protocol-warn-status-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-protocol-warn-status-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -6922,8 +6922,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 16,
-      "last_transition": "2026-10-09T02:08:08Z",
+      "state_revision": 18,
+      "last_transition": "2026-10-09T02:37:55Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6942,6 +6942,16 @@
           "bundle_id": "0a4e962e7d17f7fd62f836330c29faa184f323aba8c0a77fd5bf0c60e5b6aba9",
           "plan_revision": 2
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "540e8a0ce579290560ef2d39418ba73f700475eebf5d2879ce6e6102e72c65fb",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "610f88541a12d5949c6ff7079bafa5d5828f324d8ea76d58e54c94ff12ee4d04",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-09T02:24:28Z"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-workflow-2-9-0-move",
+  "requirements": {
+    "R1": {
+      "description": "the Workflow 2.9.0 tree is vendored, hash-pinned and checked; the sync tool vendors the gate-policy scripts when a release has them; the older trees are unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "the installed-release test and the live-repository admission test admit a legacy release by exact validation and a release whose tree lists the protocol script, and nothing else; protocol major 1 is pinned per vendored protocol release by R3's test",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "every vendored protocol tree (2.7.0, 2.9.0) runs: its describe supports major 1, the Controller admits a seeded disposable repository installed from it in protocol mode, and its protocol verify is healthy",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "a real Workflow Manager update of a scratch clone to 2.9.0 passes the complete CI selection (Controller tests, the live-repository admission test with Manager installed, and every installed conformance suite) with this branch's tests, and fails InstalledReleaseTest without them",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "the guide and compatibility pages agree, the update is named as a later chore pull request, and check_docs and the full suite are green",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

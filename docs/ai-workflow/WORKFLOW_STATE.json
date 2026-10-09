@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-workflow-2-9-0-move",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -7100,6 +7100,97 @@
           "verdict": "APPROVE",
           "round": 4,
           "completed_at": "2026-10-09T09:47:47Z"
+        }
+      }
+    },
+    "workflow-controller-workflow-2-9-0-move": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-workflow-2-9-0-move",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_WORKFLOW_2_9_0_MOVE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-workflow-2-9-0-move-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-9-0-move-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "e6ff30b7caf6067c06cf3f8e5d1857efbedd9a8b",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "41d04a35130bc08cceecfc66f7ab7102407f6b4d8824995c46f85923c7ceb40e",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "41d04a35130bc08cceecfc66f7ab7102407f6b4d8824995c46f85923c7ceb40e",
+        "approved_review_content_id": "c6a116dec5b0b48a79ab73864add43390b0be4150b597ad9134371143cf59c49",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_WORKFLOW_2_9_0_MOVE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d65708c7646ca69bfe4f38425739730f4668d719"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-workflow-2-9-0-move-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "268dc1ec5c136acc7bf8167d55b953ac24e48b0b"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-workflow-2-9-0-move-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "65b3c496e7e3f61eaf9567c1f57dc05cba992413"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "/approve-review plan workflow-controller-workflow-2-9-0-move",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-09T16:38:53Z"
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c6a116dec5b0b48a79ab73864add43390b0be4150b597ad9134371143cf59c49",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "41d04a35130bc08cceecfc66f7ab7102407f6b4d8824995c46f85923c7ceb40e",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-09T16:27:33Z"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "41d04a35130bc08cceecfc66f7ab7102407f6b4d8824995c46f85923c7ceb40e",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-09T16:34:53Z"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 13,
+      "last_transition": "2026-10-09T16:38:53Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-09T16:22:57Z",
+        "consumed": {
+          "review_content_id": "da3a47fb2019f2ab89c998f81f3ab788ce175f39c2ddb0674f666c16324910f8",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c6a116dec5b0b48a79ab73864add43390b0be4150b597ad9134371143cf59c49",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "c6a116dec5b0b48a79ab73864add43390b0be4150b597ad9134371143cf59c49",
+          "bundle_id": "41d04a35130bc08cceecfc66f7ab7102407f6b4d8824995c46f85923c7ceb40e",
+          "plan_revision": 3
         }
       }
     }

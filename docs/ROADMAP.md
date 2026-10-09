@@ -14,8 +14,10 @@ repository runs Workflow 2.6.0. Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
-that releases nothing. Next, this repository moves to a newer Workflow with automatic gates (the
-Controller must first accept the protocol's `warn` check status), then C8.
+that releases nothing. Next (user decision, 2026-10-09):
+1. C9b, a patch that accepts the protocol's `warn` check status and protocol 1.2.
+2. Moving this repository to Workflow 2.9.0, with automatic gates.
+3. C8.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -46,6 +48,7 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
+| C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release); then this repository moves to Workflow 2.9.0 with automatic gates | — | [follow-up 11](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
@@ -135,7 +138,10 @@ These are not blockers for the baseline, but should remain visible in later mile
    anchor running when the test process is killed mid-test, because its cleanup never runs. Inside
    a Controller-launched worker those leftovers kept the job draining for the full three-hour
    bound (C4, 2026-10-02). Make the test's leftovers end with the test process, and consider
-   naming known test leftovers sooner than the drain bound.
+   naming known test leftovers sooner than the drain bound. Seen again on 2026-10-08 in D1: a
+   review worker's full test run left `tests/fake_claude.py` and its stdin anchor (working
+   directory `/tmp/controller-lifecycle-*`) running, and the job drained for 30 minutes until they
+   were ended by hand.
 9. A message from another session can land in a Controller-launched worker mid-turn (C9,
    2026-10-03). The Controller then classes the worker `AMBIGUOUS`
    (`command_lifecycle_irregular`) and fails the job, although the work was done and the state was
@@ -145,6 +151,35 @@ These are not blockers for the baseline, but should remain visible in later mile
    the guides). Both plan-review stages approved it, and the first checkpoint after `controller/`
    changed refused with `UnclassifiedPathError`, needing a plan amendment. Check, at plan review,
    that the declaration classifies every path the checkpoints name.
+11. Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20, "protocol verify gave an answer
+   outside the protocol ... 'warn'") whenever a Workflow 2.8.0 repository's `verify` reports a
+   check as `warn`. Orchestration Protocol 1.1 added that status, and
+   `controller/protocol_schema.json` allows only `pass`, `fail` and `skip`. Known causes include:
+   - an unadopted gate policy file that tightens the policy;
+   - an adoption that lowers a gate, while it is the newest adoption;
+   - a review verdict recorded without `--run-ref`.
+
+   Accept `warn` as advisory and show the check's detail. With it, vendor the newer protocol
+   schema (1.2, Workflow 2.9.0: two new user-only action ids, `legacy.retire` and
+   `implementation.resume`) and add 2.9.0 to `docs/compatibility.md`. Controller 1.7.0 already
+   admits a 2.9.0 repository by capability; this was checked on a scratch copy on 2026-10-09. This blocks moving this repository to
+   Workflow 2.8.0 or later with automatic gates, so it comes first. The fix also updates the pages
+   that document the refusal: `docs/run.md`, `docs/common-problems.md`, `docs/compatibility.md`,
+   `docs/glossary.md`, `README.md` and the troubleshooting guide. It takes up the wording notes
+   left from D1's last functional review: say "some causes" rather than "two other causes",
+   mention the `warn` case beside "refuses with exit 20 when the repository is not admitted", and
+   link the adoption-timing advice from every page that says "commit, then adopt".
+12. Git 2.56.0 no longer parses a paragraph that is only a bare URL as trailers, so the release-notes
+   "no trailer paragraph" rule, which relies on `git interpret-trailers --parse`, no longer refuses
+   one. Two tests fail on a machine with Git 2.56 and pass on CI's older Git:
+   - `test_release_notes.TrailerRuleTest.test_a_bare_url_and_a_one_line_note_are_refused`;
+   - `test_pull_request_lifecycle.SquashReleaseNotesTest.test_a_trailer_paragraph_refuses_with_no_edit`.
+
+   Make the rule independent of the Git version.
+13. With no active work item and none named, Controller 1.7.0 selects a dormant `LEGACY_READY` work
+   item and stops on it (reported 2026-10-04 on a Workflow 2.8.0 repository). `LEGACY_READY` is
+   dormant, not terminal, but it should not be chosen automatically. Treat it as "no work item".
+   Until then, pass `--work-item`.
 
 ---
 

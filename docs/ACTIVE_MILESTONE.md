@@ -39,5 +39,6 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-Merge PR #28 and release 1.7.1, then the post-1.7.1 docs pull request. Then move this repository to
-the latest compatible Workflow (2.9.0 today), with automatic gates. Then `/milestone-plan` for C8.
+1.7.1 is released (PR #28) and its docs are merged (PR #29). Next, `/milestone-plan` for C9c: move
+this repository to the latest compatible Workflow (2.9.0 today), with automatic gates (ROADMAP
+follow-up 15). Then C8.

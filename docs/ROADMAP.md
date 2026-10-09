@@ -16,9 +16,9 @@ on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was rel
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
 that releases nothing. C9b, the patch that accepts the protocol's `warn` check status and protocol
 1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. Next (user
-decision, 2026-10-09):
-1. Moving this repository to the latest compatible Workflow at the time of the move (2.9.0 today),
-   with automatic gates.
+decisions, 2026-10-09):
+1. C9c, a small milestone that moves this repository to the latest compatible Workflow at the time
+   of the move (2.9.0 today), with automatic gates.
 2. C8.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -50,7 +50,8 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
-| C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release); then this repository moves to the latest compatible Workflow at the time of the move (2.9.0 today) with automatic gates (complete) | — | [follow-up 11](#known-follow-ups-carried-forward) |
+| C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release) (complete) | — | [follow-up 11](#known-follow-ups-carried-forward) |
+| C9c | Move this repository to the latest compatible Workflow (2.9.0 today) with automatic gates: vendor that release's tree under `tests/workflow_releases/`, let the installed-release test admit a protocol release by capability, then run the Workflow Manager update (a `chore:` pull request, no release) | C9b | [follow-up 15](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
@@ -198,6 +199,15 @@ These are not blockers for the baseline, but should remain visible in later mile
    3. Record the classifier's reason and anomalies in the completed job event and the run log.
 
    Priority: later, not urgent (user decision, 2026-10-09).
+15. Moving this repository to Workflow 2.9.0 is more than a Workflow Manager update. A first try
+   (PR #30, closed) failed CI: `tests/test_workflow_releases.py`'s `InstalledReleaseTest` requires
+   the installed release to be in `managed_repo.VALIDATED_WORKFLOW_RELEASES` (2.5.1 and 2.6.0) and
+   to have a vendored tree under `tests/workflow_releases/` (2.5.1, 2.6.0 and 2.7.0 today). The fix:
+   vendor the 2.9.0 tree (`tools/workflow_releases.py sync`), and let the test accept a release
+   admitted by capability (protocol major 1) as well as a validated one. Then run
+   `workflow-manager --release-version 2.9.0 update .`. A scratch rehearsal showed that the
+   protocol `verify` passes all eight checks after the update, and that Controller 1.7.0 admits
+   the repository. The move runs as a milestone, C9c (user decision, 2026-10-09).
 
 ---
 

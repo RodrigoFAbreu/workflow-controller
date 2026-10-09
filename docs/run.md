@@ -64,6 +64,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
      what it will stale). Until it is adopted the Workflow reports the unadopted policy as
      `warn`. Controller 1.7.1 and later treat a `warn` check as advisory: nothing is refused
      and `explain` shows the detail as a `verify <check>: warn: ...` line in its evidence.
+     An undefined status is still refused with exit 20.
      Controller 1.7.0 does not know `warn` and refuses `explain`, `step` and `run` with
      exit 20 and "protocol verify gave an answer outside the protocol ... 'warn'"; upgrade
      it. Returning a gate to automatic is a lowering adoption, and while it is the newest

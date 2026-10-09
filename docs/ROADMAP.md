@@ -14,10 +14,12 @@ repository runs Workflow 2.6.0. Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
-that releases nothing. Next (user decision, 2026-10-09):
-1. C9b, a patch that accepts the protocol's `warn` check status and protocol 1.2.
-2. Moving this repository to Workflow 2.9.0, with automatic gates.
-3. C8.
+that releases nothing. C9b, the patch that accepts the protocol's `warn` check status and protocol
+1.2 (follow-up 11, accepted 2026-10-09), is complete and releases as 1.7.1 (PR #28). Next (user
+decision, 2026-10-09):
+1. Moving this repository to the latest compatible Workflow at the time of the move (2.9.0 today),
+   with automatic gates.
+2. C8.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -48,7 +50,7 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C3 | Settings file v1, the 1.4 cleanup patches, telemetry v0 (tokens, cache, cost and time per job), and release notes that follow the milestone (complete) | — | [1.4](#14-follow-up-patches-to-fold-in-where-appropriate), [8](#8-routing-and-costefficiency-improvements), [11.1.2](#1112-release-notes-follow-the-milestone) |
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
-| C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release); then this repository moves to Workflow 2.9.0 with automatic gates | — | [follow-up 11](#known-follow-ups-carried-forward) |
+| C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release); then this repository moves to Workflow 2.9.0 with automatic gates (complete) | — | [follow-up 11](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
@@ -151,7 +153,8 @@ These are not blockers for the baseline, but should remain visible in later mile
    the guides). Both plan-review stages approved it, and the first checkpoint after `controller/`
    changed refused with `UnclassifiedPathError`, needing a plan amendment. Check, at plan review,
    that the declaration classifies every path the checkpoints name.
-11. Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20, "protocol verify gave an answer
+11. **Done in C9b** (`workflow-controller-protocol-warn-status`, accepted 2026-10-09, released as
+   1.7.1). Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20, "protocol verify gave an answer
    outside the protocol ... 'warn'") whenever a Workflow 2.8.0 repository's `verify` reports a
    check as `warn`. Orchestration Protocol 1.1 added that status, and
    `controller/protocol_schema.json` allows only `pass`, `fail` and `skip`. Known causes include:

@@ -9,6 +9,13 @@ Plan revision 3, base `e6ff30b`. Implementing one checkpoint per invocation.
   (`scripts/workflow_forge.py`, `scripts/workflow_gate_policy.py`); the 2.5.1, 2.6.0 and 2.7.0
   trees are unchanged. `tools/workflow_releases.py check` exits 0 and
   `python3 -m unittest tests.test_workflow_releases` passes.
+- **CP2 complete.** `InstalledReleaseTest` admits the installed release by capability (legacy-validated,
+  or its vendored tree lists `scripts/workflow_protocol.py`) with a converse test for a tree that is
+  neither; `ProtocolAdmissionTest.test_every_vendored_protocol_release_is_runnable` installs 2.7.0 and
+  2.9.0 into seeded disposable repositories and checks `describe` major 1, protocol-mode admission and a
+  healthy `verify` (every check `pass`); the live-repository admission test accepts a legacy-validated
+  release or a protocol result. `tests.test_workflow_releases`, `test_managed_repo`, `test_protocol` and
+  `test_protocol_lifecycle` pass (the live-Manager test skips here; CP3's rehearsal runs it).
 
 ---
 

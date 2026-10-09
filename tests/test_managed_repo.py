@@ -66,7 +66,10 @@ class CleanManagedRepositoryTest(unittest.TestCase):
             (fixtures.REPO_ROOT / ".workflow-manager" / "installation.json").read_text(),
         )["workflow_version"]
         result = managed_repo.inspect(fixtures.REPO_ROOT)
-        self.assertIn(result.workflow_version, managed_repo.VALIDATED_WORKFLOW_RELEASES)
+        # Admitted by exact validation (a legacy release) or by capability
+        # (a protocol release: ``target_protocol`` is set only then).
+        self.assertTrue(result.workflow_version in managed_repo.VALIDATED_WORKFLOW_RELEASES
+                        or result.target_protocol is not None)
         self.assertEqual(result.workflow_version, declared)
         self.assertEqual(result.profile, "full")
         self.assertEqual(result.verify["returncode"], 0)
@@ -444,6 +447,35 @@ class ProtocolAdmissionTest(unittest.TestCase):
             self.assertIn("scripts/workflow_protocol.py", result.script_digests)
             self.assertIn("scripts/workflow_state.py", result.script_digests)
             self.assertNotIn("scripts/workflow_state_test.py", result.script_digests)
+
+    def test_every_vendored_protocol_release_is_runnable(self) -> None:
+        """Pins protocol major 1 per vendored protocol release: installed into
+        a seeded disposable repository its ``describe`` supports major 1, the
+        Controller admits it in protocol mode, and its ``verify`` is healthy."""
+        releases = [release for release in sorted(p.name for p in fixtures.WORKFLOW_RELEASES_DIR.iterdir() if p.is_dir())
+                    if "scripts/workflow_protocol.py" in fixtures.workflow_release_files(release)]
+        self.assertIn("2.7.0", releases)
+        for release in releases:
+            with self.subTest(release=release), tempfile.TemporaryDirectory() as td:
+                root = Path(td) / "repo"
+                fixtures.git_init(root)
+                fixtures.install_workflow_release(root, release)
+                ai_workflow = root / "docs" / "ai-workflow"
+                ai_workflow.mkdir(parents=True, exist_ok=True)
+                (ai_workflow / "WORKFLOW_CONFIG.json").write_text(json.dumps(
+                    {"schema_version": 1, "default_workflow_version": "2.2",
+                     "supported_versions": ["1", "2.1", "2.2"]}) + "\n")
+                (ai_workflow / "WORKFLOW_STATE.json").write_text(json.dumps(
+                    {"schema_version": 1, "active_work_item_id": None, "work_items": {}}) + "\n")
+                fixtures.commit_all(root, "install")
+                self.assertIn(1, protocol.describe(root).supported_protocol_majors)
+                stub = fixtures.write_stub_workflow_manager(Path(td) / "workflow-manager", release=release)
+                result = managed_repo.inspect(root, manager_bin=str(stub))
+                self.assertEqual(result.workflow_version, release)
+                self.assertEqual(result.target_protocol["major"], 1)
+                verify = protocol.verify(root)
+                self.assertTrue(verify.healthy, verify.checks)
+                self.assertEqual({check.status for check in verify.checks}, {"pass"}, verify.checks)
 
     def test_legacy_releases_have_no_protocol_identity(self) -> None:
         for release in ("2.5.1", "2.6.0"):

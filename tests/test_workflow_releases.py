@@ -48,6 +48,13 @@ def _vendored_releases() -> list[str]:
     return sorted(p.name for p in fixtures.WORKFLOW_RELEASES_DIR.iterdir() if p.is_dir())
 
 
+def _is_admitted(release: str, *, files: dict | None = None) -> bool:
+    """Legacy-validated, or a release whose tree lists the protocol script."""
+    if files is None:
+        files = fixtures.workflow_release_files(release)
+    return release in managed_repo.VALIDATED_WORKFLOW_RELEASES or "scripts/workflow_protocol.py" in files
+
+
 def _append(path: Path, data: bytes) -> None:
     with path.open("ab") as handle:
         handle.write(data)
@@ -140,7 +147,19 @@ class InstalledReleaseTest(unittest.TestCase):
         self.release = json.loads(manifest.read_text())["workflow_version"]
 
     def test_the_installed_release_is_admitted(self) -> None:
-        self.assertIn(self.release, managed_repo.VALIDATED_WORKFLOW_RELEASES)
+        """A legacy release is admitted by exact validation; a protocol
+        release by capability. The predicate checks the vendored listing
+        only: protocol major 1 is pinned per vendored protocol release by
+        ``ProtocolAdmissionTest.test_every_vendored_protocol_release_is_runnable``."""
+        self.assertTrue(_is_admitted(self.release), f"{self.release} is neither validated nor a protocol release")
+
+    def test_every_vendored_tree_is_validated_or_ships_the_protocol(self) -> None:
+        for release in _vendored_releases():
+            with self.subTest(release=release):
+                self.assertTrue(_is_admitted(release))
+
+    def test_a_tree_that_is_neither_is_not_admitted(self) -> None:
+        self.assertFalse(_is_admitted("9.9.9", files={"scripts/workflow_state.py": {}}))
 
     def test_the_installed_files_equal_the_vendored_tree(self) -> None:
         tree = fixtures.workflow_release_tree(self.release)
